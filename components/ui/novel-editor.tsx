@@ -20,8 +20,10 @@ export function Editor({
       <NovelEditor
         defaultValue={defaultValue}
         onDebouncedUpdate={({ editor }) => {
-          const html = editor.getHTML();
-          onChange?.(html);
+          if (editor) {
+            const html = editor.getHTML();
+            onChange?.(html);
+          }
         }}
         className="min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
         disableLocalStorage
