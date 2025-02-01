@@ -49,8 +49,5 @@
   },
   "overrides": {
     "react-is": "^19.0.0-rc-69d4b800-20241021"
-  },
-  "resolutions": {
-    "drizzle-orm": "^0.38.2"
   }
 }
