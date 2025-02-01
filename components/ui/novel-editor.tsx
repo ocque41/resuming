@@ -1,25 +1,25 @@
 'use client';
 
-import { Editor } from 'novel';
+import { Editor as NovelEditor } from 'novel';
 
-interface NovelEditorProps {
+interface EditorProps {
   defaultValue?: string;
   onChange?: (value: string) => void;
   placeholder?: string;
   className?: string;
 }
 
-export function NovelEditor({
+export function Editor({
   defaultValue = '',
   onChange,
   placeholder = 'Start writing...',
   className,
-}: NovelEditorProps) {
+}: EditorProps) {
   return (
     <div className={className}>
-      <Editor
+      <NovelEditor
         defaultValue={defaultValue}
-        onUpdate={({ editor }) => {
+        onDebouncedUpdate={({ editor }) => {
           const html = editor.getHTML();
           onChange?.(html);
         }}
