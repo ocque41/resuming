@@ -1,6 +1,6 @@
 'use client';
 
-import { Editor as NovelEditor, Content } from 'novel';
+import { Editor as NovelEditor } from 'novel';
 
 interface EditorProps {
   defaultValue?: string;
@@ -19,7 +19,7 @@ export function Editor({
     <div className={className}>
       <NovelEditor
         defaultValue={defaultValue}
-        onDebouncedUpdate={({ editor }: Content) => {
+        onDebouncedUpdate={({ editor }) => {
           if (editor) {
             const html = editor.getHTML();
             onChange?.(html);
