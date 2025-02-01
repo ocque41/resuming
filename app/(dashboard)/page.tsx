@@ -10,7 +10,10 @@ import {
   ArrowRight
 } from "lucide-react";
 import Link from "next/link";
-import { motion, Variants } from "framer-motion";
+import dynamic from 'next/dynamic';
+
+const motion = dynamic(() => import('framer-motion').then((mod) => mod.motion), { ssr: false });
+const Variants = dynamic(() => import('framer-motion').then((mod) => mod.Variants), { ssr: false });
 
 export default function HomePage() {
   const containerVariants: Variants = {
