@@ -19,7 +19,7 @@ export function Editor({
     <div className={className}>
       <NovelEditor
         defaultValue={defaultValue}
-        onDebouncedUpdate={({ editor }: { editor: any }) => {
+        onDebouncedUpdate={(editor) => {
           if (editor) {
             const html = editor.getHTML();
             onChange?.(html);
