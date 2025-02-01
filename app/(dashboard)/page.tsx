@@ -1,5 +1,5 @@
 "use client"
-
+import { Terminal } from './terminal';
 import { Button } from "@/components/ui/button";
 import { 
   FileText, 
