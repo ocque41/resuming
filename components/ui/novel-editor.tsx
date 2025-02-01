@@ -1,6 +1,6 @@
 'use client';
 
-import { Editor as NovelEditor } from 'novel';
+import { EditorInstance as NovelEditor } from 'novel';
 
 interface EditorProps {
   defaultValue?: string;
