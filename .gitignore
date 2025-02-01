@@ -40,3 +40,6 @@ next-env.d.ts
 postgres_data/
 .env*.local
 .aider*
+
+# Flow Mechanism Documentation
+D:\repo\cvoptimizer\next-js-saas-starter\FLOW-MECHANISM.md
