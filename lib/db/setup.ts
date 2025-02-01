@@ -27,12 +27,12 @@ async function checkStripeCLI() {
     'Step 1: Checking if Stripe CLI is installed and authenticated...'
   );
   try {
-    await execAsync('stripe --version');
+    await execAsync('pnpm exec stripe --version');
     console.log('Stripe CLI is installed.');
 
     // Check if Stripe CLI is authenticated
     try {
-      await execAsync('stripe config --list');
+      await execAsync('pnpm exec stripe config --list');
       console.log('Stripe CLI is authenticated.');
     } catch (error) {
       console.log(
@@ -51,7 +51,7 @@ async function checkStripeCLI() {
 
       // Verify authentication after user confirms login
       try {
-        await execAsync('stripe config --list');
+        await execAsync('pnpm exec stripe config --list');
         console.log('Stripe CLI authentication confirmed.');
       } catch (error) {
         console.error(
@@ -158,7 +158,7 @@ async function getStripeSecretKey(): Promise<string> {
 async function createStripeWebhook(): Promise<string> {
   console.log('Step 4: Creating Stripe webhook...');
   try {
-    const { stdout } = await execAsync('stripe listen --print-secret');
+    const { stdout } = await execAsync('pnpm exec stripe listen --print-secret');
     const match = stdout.match(/whsec_[a-zA-Z0-9]+/);
     if (!match) {
       throw new Error('Failed to extract Stripe webhook secret');
