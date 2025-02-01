@@ -1,125 +1,227 @@
-import { Button } from '@/components/ui/button';
-import { ArrowRight, CreditCard, Database } from 'lucide-react';
-import { Terminal } from './terminal';
+"use client"
 
-export default function HomePage() {
+import { createClient } from "@/utils/supabase/client";
+import { Button } from "@/components/ui/button";
+import { 
+  FileText, 
+  TrendingUp, 
+  Shield, 
+  Star, 
+  Zap,
+  ArrowRight
+} from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
+import { ThemeSwitcher } from "@/components/theme-switcher";
+import { MainNav } from "@/components/main-nav";
+import { useScrollAnimation } from "@/hooks/use-scroll-animation";
+import { motion } from "framer-motion";
+import { Logo } from "@/components/ui/logo";
+
+export default function Home() {
+  const supabase = createClient();
+  const isSupabaseConnected = true; // Always true for client-side
+
+  useScrollAnimation();
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { 
+      opacity: 1, 
+      transition: { 
+        staggerChildren: 0.1,
+        delayChildren: 0.2 
+      } 
+    }
+  };
+
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: { 
+      y: 0, 
+      opacity: 1,
+      transition: { 
+        type: "spring", 
+        stiffness: 100,
+        damping: 12  // Added damping for smoother animation
+      } 
+    }
+  };
+
   return (
-    <main>
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="lg:grid lg:grid-cols-12 lg:gap-8">
-            <div className="sm:text-center md:max-w-2xl md:mx-auto lg:col-span-6 lg:text-left">
-              <h1 className="text-4xl font-bold text-gray-900 tracking-tight sm:text-5xl md:text-6xl">
-                Build Your SaaS
-                <span className="block text-orange-500">Faster Than Ever</span>
-              </h1>
-              <p className="mt-3 text-base text-gray-500 sm:mt-5 sm:text-xl lg:text-lg xl:text-xl">
-                Launch your SaaS product in record time with our powerful,
-                ready-to-use template. Packed with modern technologies and
-                essential integrations.
-              </p>
-              <div className="mt-8 sm:max-w-lg sm:mx-auto sm:text-center lg:text-left lg:mx-0">
-                <a
-                  href="https://vercel.com/templates/next.js/next-js-saas-starter"
-                  target="_blank"
-                >
-                  <Button className="bg-white hover:bg-gray-100 text-black border border-gray-200 rounded-full text-lg px-8 py-4 inline-flex items-center justify-center">
-                    Deploy your own
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Button>
-                </a>
-              </div>
-            </div>
-            <div className="mt-12 relative sm:max-w-lg sm:mx-auto lg:mt-0 lg:max-w-none lg:mx-0 lg:col-span-6 lg:flex lg:items-center">
-              <Terminal />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="py-16 bg-white w-full">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="lg:grid lg:grid-cols-3 lg:gap-8">
-            <div>
-              <div className="flex items-center justify-center h-12 w-12 rounded-md bg-orange-500 text-white">
-                <svg viewBox="0 0 24 24" className="h-6 w-6">
-                  <path
-                    fill="currentColor"
-                    d="M14.23 12.004a2.236 2.236 0 0 1-2.235 2.236 2.236 2.236 0 0 1-2.236-2.236 2.236 2.236 0 0 1 2.235-2.236 2.236 2.236 0 0 1 2.236 2.236zm2.648-10.69c-1.346 0-3.107.96-4.888 2.622-1.78-1.653-3.542-2.602-4.887-2.602-.41 0-.783.093-1.106.278-1.375.793-1.683 3.264-.973 6.365C1.98 8.917 0 10.42 0 12.004c0 1.59 1.99 3.097 5.043 4.03-.704 3.113-.39 5.588.988 6.38.32.187.69.275 1.102.275 1.345 0 3.107-.96 4.888-2.624 1.78 1.654 3.542 2.603 4.887 2.603.41 0 .783-.09 1.106-.275 1.374-.792 1.683-3.263.973-6.365C22.02 15.096 24 13.59 24 12.004c0-1.59-1.99-3.097-5.043-4.032.704-3.11.39-5.587-.988-6.38-.318-.184-.688-.277-1.092-.278zm-.005 1.09v.006c.225 0 .406.044.558.127.666.382.955 1.835.73 3.704-.054.46-.142.945-.25 1.44-.96-.236-2.006-.417-3.107-.534-.66-.905-1.345-1.727-2.035-2.447 1.592-1.48 3.087-2.292 4.105-2.295zm-9.77.02c1.012 0 2.514.808 4.11 2.28-.686.72-1.37 1.537-2.02 2.442-1.107.117-2.154.298-3.113.538-.112-.49-.195-.964-.254-1.42-.23-1.868.054-3.32.714-3.707.19-.09.4-.127.563-.132zm4.882 3.05c.455.468.91.992 1.36 1.564-.44-.02-.89-.034-1.345-.034-.46 0-.915.01-1.36.034.44-.572.895-1.096 1.345-1.565zM12 8.1c.74 0 1.477.034 2.202.093.406.582.802 1.203 1.183 1.86.372.64.71 1.29 1.018 1.946-.308.655-.646 1.31-1.013 1.95-.38.66-.773 1.288-1.18 1.87-.728.063-1.466.098-2.21.098-.74 0-1.477-.035-2.202-.093-.406-.582-.802-1.204-1.183-1.86-.372-.64-.71-1.29-1.018-1.946.303-.657.646-1.313 1.013-1.954.38-.66.773-1.286 1.18-1.868.728-.064 1.466-.098 2.21-.098zm-3.635.254c-.24.377-.48.763-.704 1.16-.225.39-.435.782-.635 1.174-.265-.656-.49-1.31-.676-1.947.64-.15 1.315-.283 2.015-.386zm7.26 0c.695.103 1.365.23 2.006.387-.18.632-.405 1.282-.66 1.933-.2-.39-.41-.783-.64-1.174-.225-.392-.465-.774-.705-1.146zm3.063.675c.484.15.944.317 1.375.498 1.732.74 2.852 1.708 2.852 2.476-.005.768-1.125 1.74-2.857 2.475-.42.18-.88.342-1.355.493-.28-.958-.646-1.956-1.1-2.98.45-1.017.81-2.01 1.085-2.964zm-13.395.004c.278.96.645 1.957 1.1 2.98-.45 1.017-.812 2.01-1.086 2.964-.484-.15-.944-.318-1.37-.5-1.732-.737-2.852-1.706-2.852-2.474 0-.768 1.12-1.742 2.852-2.476.42-.18.88-.342 1.356-.494zm11.678 4.28c.265.657.49 1.312.676 1.948-.64.157-1.316.29-2.016.39.24-.375.48-.762.705-1.158.225-.39.435-.788.636-1.18zm-9.945.02c.2.392.41.783.64 1.175.23.39.465.772.705 1.143-.695-.102-1.365-.23-2.006-.386.18-.63.406-1.282.66-1.933zM17.92 16.32c.112.493.2.968.254 1.423.23 1.868-.054 3.32-.714 3.708-.147.09-.338.128-.563.128-1.012 0-2.514-.807-4.11-2.28.686-.72 1.37-1.536 2.02-2.44 1.107-.118 2.154-.3 3.113-.54zm-11.83.01c.96.234 2.006.415 3.107.532.66.905 1.345 1.727 2.035 2.446-1.595 1.483-3.092 2.295-4.11 2.295-.22-.005-.406-.05-.553-.132-.666-.38-.955-1.834-.73-3.703.054-.46.142-.944.25-1.438zm4.56.64c.44.02.89.034 1.345.034.46 0 .915-.01 1.36-.034-.44.572-.895 1.095-1.345 1.565-.455-.47-.91-.993-1.36-1.565z"
-                  />
-                </svg>
-              </div>
-              <div className="mt-5">
-                <h2 className="text-lg font-medium text-gray-900">
-                  Next.js and React
-                </h2>
-                <p className="mt-2 text-base text-gray-500">
-                  Leverage the power of modern web technologies for optimal
-                  performance and developer experience.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-10 lg:mt-0">
-              <div className="flex items-center justify-center h-12 w-12 rounded-md bg-orange-500 text-white">
-                <Database className="h-6 w-6" />
-              </div>
-              <div className="mt-5">
-                <h2 className="text-lg font-medium text-gray-900">
-                  Postgres and Drizzle ORM
-                </h2>
-                <p className="mt-2 text-base text-gray-500">
-                  Robust database solution with an intuitive ORM for efficient
-                  data management and scalability.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-10 lg:mt-0">
-              <div className="flex items-center justify-center h-12 w-12 rounded-md bg-orange-500 text-white">
-                <CreditCard className="h-6 w-6" />
-              </div>
-              <div className="mt-5">
-                <h2 className="text-lg font-medium text-gray-900">
-                  Stripe Integration
-                </h2>
-                <p className="mt-2 text-base text-gray-500">
-                  Seamless payment processing and subscription management with
-                  industry-leading Stripe integration.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="py-16 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:items-center">
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 sm:text-4xl">
-                Ready to launch your SaaS?
-              </h2>
-              <p className="mt-3 max-w-3xl text-lg text-gray-500">
-                Our template provides everything you need to get your SaaS up
-                and running quickly. Don't waste time on boilerplate - focus on
-                what makes your product unique.
-              </p>
-            </div>
-            <div className="mt-8 lg:mt-0 flex justify-center lg:justify-end">
-              <a
-                href="https://github.com/leerob/next-saas-starter"
-                target="_blank"
+    <div className="min-h-screen flex flex-col">
+      <MainNav />
+      <div className="container mx-auto px-4 py-16 text-center flex-grow">
+        <motion.div 
+          className="max-w-5xl mx-auto space-y-16"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <motion.section 
+            className="space-y-8"
+            variants={containerVariants}
+          >
+            <motion.h1 
+              className="text-6xl font-bold tracking-tight bg-gradient-to-r from-primary via-secondary to-tertiary bg-clip-text text-transparent dark:from-primary dark:via-secondary dark:to-tertiary animate-fade-in"
+              variants={itemVariants}
+            >
+              Craft Your Perfect CV
+            </motion.h1>
+            <motion.p 
+              className="text-2xl text-muted-foreground dark:text-primary-foreground/80 max-w-3xl mx-auto animate-fade-in-up"
+              variants={itemVariants}
+            >
+              Transform your career journey with our intelligent AI-powered CV optimization platform
+            </motion.p>
+          
+            <motion.div 
+              className="flex justify-center gap-4 animate-slide-in-right"
+              variants={itemVariants}
+            >
+              <Button 
+                asChild 
+                size="lg" 
+                className="group shadow-lg bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 text-primary-foreground transition-all duration-base ease-default dark:shadow-dark-mode"
               >
-                <Button className="bg-white hover:bg-gray-100 text-black border border-gray-200 rounded-full text-xl px-12 py-6 inline-flex items-center justify-center">
-                  View the code
-                  <ArrowRight className="ml-3 h-6 w-6" />
-                </Button>
-              </a>
-            </div>
-          </div>
+                <Link href="/sign-up" className="flex items-center">
+                  Begin Your Journey 
+                  <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
+                </Link>
+              </Button>
+              <Button 
+                asChild 
+                variant="outline" 
+                size="lg" 
+                className="shadow-lg border-2 border-primary/80 hover:bg-tertiary/10 hover:border-secondary transition-all duration-300 dark:border-primary/60"
+              >
+                <Link href="/plans">Explore Plans</Link>
+              </Button>
+            </motion.div>
+          </motion.section>
+
+          <motion.section 
+            className="grid md:grid-cols-3 gap-8"
+            variants={containerVariants}
+          >
+            {[
+              { 
+                icon: FileText, 
+                title: "AI-Powered Document Analysis", 
+                description: "Intelligent content analysis with automated scoring and format preservation" 
+              },
+              { 
+                icon: TrendingUp, 
+                title: "Job-CV Matching System", 
+                description: "Real-time CV optimization with percentage-based job compatibility scoring" 
+              },
+              { 
+                icon: Shield, 
+                title: "Geospatial Integration", 
+                description: "Location-based job mapping with interactive scoring visualization" 
+              }
+            ].map(({ icon: Icon, title, description }, index) => (
+              <motion.div 
+                key={title} 
+                className="bg-gradient-to-br from-background via-surface to-tertiary/5 p-6 rounded-lg shadow-md hover:shadow-xl hover:bg-tertiary/10 transition-all duration-base ease-default group border border-primary/20 hover:border-primary/40 dark:border-primary/30 dark:hover:border-primary/50"
+                variants={itemVariants}
+              >
+                <Icon 
+                  className="mx-auto mb-4 text-primary group-hover:scale-110 group-hover:text-secondary transition-all duration-300 dark:text-primary-foreground" 
+                  size={48} 
+                />
+                <h3 className="text-2xl font-semibold mb-4 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent dark:from-primary-foreground dark:to-secondary-foreground dark:text-transparent">{title}</h3>
+                <p className="text-muted-foreground group-hover:text-foreground dark:text-muted-foreground/80 dark:group-hover:text-primary-foreground transition-colors">{description}</p>
+              </motion.div>
+            ))}
+          </motion.section>
+
+          <motion.section 
+            className="bg-gradient-to-br from-background via-surface to-tertiary/5 rounded-lg p-8 space-y-6 border border-primary/20 hover:border-primary/40 shadow-md transition-all duration-base ease-default dark:border-primary/30 dark:hover:border-primary/50"
+            variants={containerVariants}
+          >
+            <motion.h2 
+              className="text-3xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent dark:from-primary-foreground dark:via-secondary-foreground dark:to-tertiary"
+              variants={itemVariants}
+            >
+              Elevate Your Professional Journey
+            </motion.h2>
+            <motion.div 
+              className="grid md:grid-cols-2 gap-6"
+              variants={containerVariants}
+            >
+              {[
+                { icon: Zap, text: "Format preservation during AI modifications" },
+                { icon: Star, text: "Real-time CV scoring algorithm" },
+                { icon: FileText, text: "Geographic job matching system" },
+                { icon: TrendingUp, text: "Automated CV optimization" }
+              ].map(({ icon: Icon, text },) => (
+                <motion.div 
+                  key={text} 
+                  className="flex items-center gap-4 group animate-scroll-fade"
+                  variants={itemVariants}
+                >
+                  <Icon className="text-primary group-hover:rotate-6 transition-transform dark:text-primary-foreground" />
+                  <p className="group-hover:text-primary/80 transition-colors">{text}</p>
+                </motion.div>
+              ))}
+            </motion.div>
+          </motion.section>
+        </motion.div>
+      </div>
+      <footer className="w-full border-t border-primary/20 py-16 bg-gradient-to-br from-background via-surface to-tertiary/5 dark:border-primary/30">
+        <div className="container mx-auto px-4 grid md:grid-cols-3 gap-8 items-start">
+          {/* Logo Section */}
+          <motion.div 
+            className="flex flex-col items-center"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+          >
+            <Link href="/" className="mb-4 group">
+              <Logo width={120} height={120} />
+            </Link>
+            <p className="text-sm text-muted-foreground">
+              © {new Date().getFullYear()} Resuming
+            </p>
+          </motion.div>
+
+          {/* Navigation Links */}
+          <motion.div 
+            className="flex flex-col items-center space-y-4"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+          >
+            <h4 className="text-lg font-semibold mb-2 text-primary">Quick Links</h4>
+            {[
+              { href: "/plans", text: "Plans" },
+              { href: "/mobile", text: "Mobile App" },
+              { href: "/contact", text: "Contact" }
+            ].map(({ href, text }) => (
+              <Link 
+                key={href}
+                href={href} 
+                className="text-sm hover:text-primary/80 transition-colors group flex items-center"
+              >
+                {text}
+                <ArrowRight className="ml-1 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" size={16} />
+              </Link>
+            ))}
+          </motion.div>
+
+          {/* Theme Switcher */}
+          <motion.div 
+            className="flex flex-col items-center"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.7 }}
+          >
+            <h4 className="text-lg font-semibold mb-2 text-primary">Preferences</h4>
+            <ThemeSwitcher />
+          </motion.div>
         </div>
-      </section>
-    </main>
+      </footer>
+    </div>
   );
 }
