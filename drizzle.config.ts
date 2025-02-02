@@ -6,6 +6,11 @@ export default {
   out: './lib/db/migrations',
   dialect: 'postgresql',
   dbCredentials: {
-    ...parse(process.env.POSTGRES_URL!),
+    host: parse(process.env.POSTGRES_URL!).host!,
+    port: parseInt(parse(process.env.POSTGRES_URL!).port || '5432', 10),
+    user: parse(process.env.POSTGRES_URL!).user!,
+    password: parse(process.env.POSTGRES_URL!).password,
+    database: parse(process.env.POSTGRES_URL!).database!,
+    ssl: true,
   },
 } satisfies Config;
