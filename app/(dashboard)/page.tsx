@@ -51,7 +51,7 @@ export default function HomePage() {
             variants={containerVariants}
           >
             <motion.h1 
-              className="text-6xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] to-[#2C2420] animate-fade-in"
+              className="text-6xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] via-[#B4916C] to-[#2C2420] animate-fade-in"
               variants={itemVariants}
             >
               Craft Your Perfect CV
