@@ -28,7 +28,7 @@ function Header() {
   }
 
   return (
-    <header className="border-b border-[#2C2420]/20 bg-black bg-gradient-to-br from-black via-[#0a0a0a] to-[#1a1a1a]">
+    <header className="border-b border-[#2C2420]/20 bg-transparent">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
         <Link href="/" className="flex items-center gap-2">
           <Image 
