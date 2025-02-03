@@ -24,7 +24,7 @@ export default function DashboardLayout({
   return (
     <div className="flex flex-col min-h-[calc(100dvh-68px)] max-w-7xl mx-auto w-full bg-black bg-gradient-to-br from-black via-[#0a0a0a] to-[#1a1a1a] text-white">
       {/* Mobile header */}
-      <div className="lg:hidden flex items-center justify-between bg-[#2C2420] border-b border-[#584235] p-4">
+      <div className="lg:hidden flex items-center justify-between bg-[#2C2420] border-b border-[#584235] p-4 text-[#E8DCC4]">
         <div className="flex items-center">
           <span className="font-medium">Settings</span>
         </div>
@@ -57,7 +57,7 @@ export default function DashboardLayout({
                   }`}
                   onClick={() => setIsSidebarOpen(false)}
                 >
-                  <item.icon className="mr-2 h-4 w-4" />
+                  <item.icon className="mr-2 h-4 w-4 text-[#B4916C] group-hover:text-white" />
                   {item.label}
                 </Button>
               </Link>
