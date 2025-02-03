@@ -47,11 +47,17 @@ export default async function PricingPage() {
               interval="month"
               annualPrice={6999}
               features={[
-                '20 CV uploads/month',
-                '10 ATS analyses/month',
-                '7 Optimizations/month',
-                'Priority 2 in AI processing',
+                '20 CV uploads/month ⓘ',
+                '10 ATS analyses/month ⓘ',
+                '7 Optimizations/month ⓘ',
+                'Priority 2 in AI processing ⓘ',
               ]}
+              tooltips={{
+                '20 CV uploads/month ⓘ': 'Upload up to 20 different CVs each month',
+                '10 ATS analyses/month ⓘ': 'Get ATS compatibility analysis for 10 CVs monthly',
+                '7 Optimizations/month ⓘ': 'Receive AI-powered optimization suggestions 7 times per month',
+                'Priority 2 in AI processing ⓘ': 'Your requests are processed with priority level 2'
+              }}
               highlight={false}
               priceId={proPrice?.id}
             />
@@ -81,13 +87,21 @@ export default async function PricingPage() {
               interval="month"
               annualPrice={79900}
               features={[
-                'Unlimited CV uploads',
-                'Unlimited ATS analyses',
-                'Unlimited Optimizations',
-                'Access to Analytics Suite',
-                'Early access to new features',
-                'Secure a high paying job in 3 months or money back guaranteed',
+                'Unlimited CV uploads ⓘ',
+                'Unlimited ATS analyses ⓘ',
+                'Unlimited Optimizations ⓘ',
+                'Access to Analytics Suite ⓘ',
+                'Early access to new features ⓘ',
+                'Secure a high paying job in 3 months or money back guaranteed ⓘ',
               ]}
+              tooltips={{
+                'Unlimited CV uploads ⓘ': 'No monthly limit on CV uploads',
+                'Unlimited ATS analyses ⓘ': 'Analyze your CVs against ATS systems as many times as you need',
+                'Unlimited Optimizations ⓘ': 'Get unlimited AI-powered optimization suggestions',
+                'Access to Analytics Suite ⓘ': 'Full access to advanced analytics and insights',
+                'Early access to new features ⓘ': 'Be the first to try new platform features',
+                'Secure a high paying job in 3 months or money back guaranteed ⓘ': 'Full refund if you don\'t secure a high-paying position within 3 months'
+              }}
               highlight={false}
               priceId={ceoPrice?.id}
             />
@@ -139,10 +153,11 @@ function PricingCard({
         {features.map((feature, index) => (
           <li key={index} className="flex items-start">
             <Check className={`h-5 w-5 mr-2 mt-0.5 flex-shrink-0 ${highlight ? 'text-[#E8DCC4]' : 'text-[#B4916C]'}`} />
-            <span className={`group relative ${highlight ? 'text-[#E8DCC4]' : 'text-[#B4916C]'}`}>
+            <span className={highlight ? 'text-[#E8DCC4]' : 'text-[#B4916C]'}>
               {feature}
               {tooltips?.[feature] && (
-                <span className="invisible group-hover:visible absolute left-0 -top-12 w-64 bg-black/90 text-white text-sm p-2 rounded">
+                <span className="relative inline-block">
+                  <span className="invisible hover:visible absolute left-0 -top-12 w-64 bg-black/90 text-white text-sm p-2 rounded z-10">
                   {tooltips[feature]}
                 </span>
               )}
