@@ -6,8 +6,6 @@ import { SubmitButton } from './submit-button';
 // Prices are fresh for one hour max
 export const revalidate = 3600;
 
-import { motion, Variants } from "framer-motion";
-
 export default async function PricingPage() {
   const [prices, products] = await Promise.all([
     getStripePrices(),
@@ -71,10 +69,7 @@ export default async function PricingPage() {
             </motion.p>
           </motion.section>
 
-          <motion.section 
-            className="grid md:grid-cols-2 gap-8"
-            variants={containerVariants}
-          >
+          <div className="grid md:grid-cols-2 gap-8">
             <PricingCard
               name={basePlan?.name || 'Base'}
               price={basePrice?.unitAmount || 800}
@@ -86,7 +81,6 @@ export default async function PricingPage() {
                 'Email Support',
               ]}
               priceId={basePrice?.id}
-              variants={itemVariants}
             />
             <PricingCard
               name={plusPlan?.name || 'Plus'}
@@ -99,9 +93,8 @@ export default async function PricingPage() {
                 '24/7 Support + Slack Access',
               ]}
               priceId={plusPrice?.id}
-              variants={itemVariants}
             />
-          </motion.section>
+          </div>
         </motion.div>
       </div>
     </div>
@@ -115,7 +108,6 @@ function PricingCard({
   trialDays,
   features,
   priceId,
-  variants,
 }: {
   name: string;
   price: number;
@@ -123,12 +115,10 @@ function PricingCard({
   trialDays: number;
   features: string[];
   priceId?: string;
-  variants?: any;
 }) {
   return (
-    <motion.div 
+    <div 
       className={`${name === 'Base' ? 'bg-[#2C2420]' : 'bg-[#584235]'} p-6 rounded-lg shadow-md hover:shadow-xl transition-all duration-base ease-default group border border-gray-800 hover:border-gray-700`}
-      variants={variants}
     >
       <h2 className={`text-2xl font-semibold mb-2 ${name === 'Base' ? 'text-[#B4916C]' : 'text-[#E8DCC4]'}`}>{name}</h2>
       <p className={`text-sm mb-4 ${name === 'Base' ? 'text-[#B4916C]/70' : 'text-[#E8DCC4]/70'}`}>
@@ -156,6 +146,6 @@ function PricingCard({
             : 'bg-[#2C2420] hover:bg-[#584235] text-white'}`} 
         />
       </form>
-    </motion.div>
+    </div>
   );
 }
