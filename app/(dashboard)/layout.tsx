@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { CircleIcon, Home, LogOut } from 'lucide-react';
+import { Home, LogOut } from 'lucide-react';
+import Image from 'next/image';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,7 +30,14 @@ function Header() {
   return (
     <header className="border-b border-[#2C2420]/20 bg-black bg-gradient-to-br from-black via-[#0a0a0a] to-[#1a1a1a]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-        <Link href="/" className="flex items-center">
+        <Link href="/" className="flex items-center gap-2">
+          <Image 
+            src="/resuming logo.png"
+            alt="Resuming Logo"
+            width={40}
+            height={40}
+            className="hover:opacity-90 transition-opacity"
+          />
           <span className="text-2xl font-bold text-white hover:text-transparent hover:bg-clip-text hover:bg-gradient-to-r hover:from-[#584235] hover:to-[#2C2420] transition-all duration-300">Resuming</span>
         </Link>
         <div className="flex items-center space-x-4">
