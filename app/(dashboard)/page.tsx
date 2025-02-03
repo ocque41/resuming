@@ -51,13 +51,13 @@ export default function HomePage() {
             variants={containerVariants}
           >
             <motion.h1 
-              className="text-6xl font-bold tracking-tight bg-gradient-to-r from-[#00ffff] via-[#00a2ff] to-[#7f00ff] bg-clip-text text-transparent animate-fade-in"
+              className="text-6xl font-bold tracking-tight text-white animate-fade-in"
               variants={itemVariants}
             >
               Craft Your Perfect CV
             </motion.h1>
             <motion.p 
-              className="text-2xl text-[#e0e0e0] max-w-3xl mx-auto animate-fade-in-up"
+              className="text-2xl text-gray-300 max-w-3xl mx-auto animate-fade-in-up"
               variants={itemVariants}
             >
               Transform your career journey with our intelligent AI-powered CV optimization platform
@@ -70,7 +70,7 @@ export default function HomePage() {
               <Button 
                 asChild 
                 size="lg" 
-                className="group shadow-lg bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 text-primary-foreground transition-all duration-base ease-default dark:shadow-dark-mode"
+                className="group shadow-lg bg-white text-black hover:bg-gray-100 transition-all duration-base ease-default"
               >
                 <Link href="/sign-up" className="flex items-center">
                   Begin Your Journey 
@@ -81,7 +81,7 @@ export default function HomePage() {
                 asChild 
                 variant="outline" 
                 size="lg" 
-                className="shadow-lg border-2 border-primary/80 hover:bg-tertiary/10 hover:border-secondary transition-all duration-300 dark:border-primary/60"
+                className="shadow-lg border-2 border-gray-700 text-white hover:bg-gray-800 transition-all duration-300"
               >
                 <Link href="/plans">Explore Plans</Link>
               </Button>
@@ -111,25 +111,25 @@ export default function HomePage() {
             ].map(({ icon: Icon, title, description }) => (
               <motion.div 
                 key={title} 
-                className="bg-gradient-to-br from-background via-surface to-tertiary/5 p-6 rounded-lg shadow-md hover:shadow-xl hover:bg-tertiary/10 transition-all duration-base ease-default group border border-primary/20 hover:border-primary/40 dark:border-primary/30 dark:hover:border-primary/50"
+                className="bg-[#111827] p-6 rounded-lg shadow-md hover:shadow-xl transition-all duration-base ease-default group border border-gray-800 hover:border-gray-700"
                 variants={itemVariants}
               >
                 <Icon 
-                  className="mx-auto mb-4 text-primary group-hover:scale-110 group-hover:text-secondary transition-all duration-300 dark:text-primary-foreground" 
+                  className="mx-auto mb-4 text-white group-hover:scale-110 transition-all duration-300" 
                   size={48} 
                 />
-                <h3 className="text-2xl font-semibold mb-4 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent dark:from-primary-foreground dark:to-secondary-foreground dark:text-transparent">{title}</h3>
-                <p className="text-muted-foreground group-hover:text-foreground dark:text-muted-foreground/80 dark:group-hover:text-primary-foreground transition-colors">{description}</p>
+                <h3 className="text-2xl font-semibold mb-4 text-white">{title}</h3>
+                <p className="text-gray-400 group-hover:text-gray-200 transition-colors">{description}</p>
               </motion.div>
             ))}
           </motion.section>
 
           <motion.section 
-            className="bg-gradient-to-br from-background via-surface to-tertiary/5 rounded-lg p-8 space-y-6 border border-primary/20 hover:border-primary/40 shadow-md transition-all duration-base ease-default dark:border-primary/30 dark:hover:border-primary/50"
+            className="bg-[#111827] rounded-lg p-8 space-y-6 border border-gray-800 shadow-md transition-all duration-base ease-default"
             variants={containerVariants}
           >
             <motion.h2 
-              className="text-3xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent dark:from-primary-foreground dark:via-secondary-foreground dark:to-tertiary"
+              className="text-3xl font-bold text-white"
               variants={itemVariants}
             >
               Elevate Your Professional Journey
@@ -149,8 +149,8 @@ export default function HomePage() {
                   className="flex items-center gap-4 group animate-scroll-fade"
                   variants={itemVariants}
                 >
-                  <Icon className="text-primary group-hover:rotate-6 transition-transform dark:text-primary-foreground" />
-                  <p className="group-hover:text-primary/80 transition-colors">{text}</p>
+                  <Icon className="text-white group-hover:rotate-6 transition-transform" />
+                  <p className="text-gray-300 group-hover:text-white transition-colors">{text}</p>
                 </motion.div>
               ))}
             </motion.div>
