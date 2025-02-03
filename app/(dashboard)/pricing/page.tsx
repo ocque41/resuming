@@ -139,7 +139,7 @@ function PricingCard({
         <p className={`text-sm mb-4 ${highlight ? 'text-[#E8DCC4]/70' : 'text-[#B4916C]/70'}`}>
           Annual: ${annualPrice / 100}
         </p>
-      </p>
+      )}
       <ul className="space-y-4 mb-8">
         {features.map((feature, index) => (
           <li key={index} className="flex items-start">
@@ -148,20 +148,22 @@ function PricingCard({
           </li>
         ))}
       </ul>
-      {name !== 'Free' ? (
-        <form action={checkoutAction}>
-          <input type="hidden" name="priceId" value={priceId} />
+      <div>
+        {name !== 'Free' ? (
+          <form action={checkoutAction}>
+            <input type="hidden" name="priceId" value={priceId} />
+            <SubmitButton 
+              className={`w-full ${highlight
+                ? 'bg-[#2C2420] hover:bg-[#584235] text-white' 
+                : 'bg-[#584235] hover:bg-[#2C2420] text-white'}`} 
+            />
+          </form>
+        ) : (
           <SubmitButton 
-            className={`w-full ${highlight
-              ? 'bg-[#2C2420] hover:bg-[#584235] text-white' 
-              : 'bg-[#584235] hover:bg-[#2C2420] text-white'}`} 
+            className="w-full bg-[#584235] hover:bg-[#2C2420] text-white"
           />
-        </form>
-      ) : (
-        <SubmitButton 
-          className="w-full bg-[#584235] hover:bg-[#2C2420] text-white"
-        />
-      )}
+        )}
+      </div>
     </div>
   );
 }
