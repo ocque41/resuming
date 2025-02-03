@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
   switch (event.type) {
     case 'customer.subscription.updated':
     case 'customer.subscription.deleted':
+    case 'customer.subscription.trial_will_end':
       const subscription = event.data.object as Stripe.Subscription;
       await handleSubscriptionChange(subscription);
       break;

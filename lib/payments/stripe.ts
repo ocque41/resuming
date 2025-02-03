@@ -39,7 +39,16 @@ export async function createCheckoutSession({
     client_reference_id: user.id.toString(),
     allow_promotion_codes: true,
     subscription_data: {
-      trial_period_days: 14,
+      trial_period_days: 1, // 24 hours trial
+      metadata: {
+        tier: 'pro',
+        features: JSON.stringify({
+          cv_uploads: 20,
+          ats_analyses: 10,
+          optimizations: 7,
+          priority: 2
+        })
+      }
     },
   });
 
@@ -114,6 +123,9 @@ export async function createCustomerPortalSession(team: Team) {
 export async function handleSubscriptionChange(
   subscription: Stripe.Subscription,
 ) {
+  const features = subscription.metadata?.features 
+    ? JSON.parse(subscription.metadata.features)
+    : null;
   const customerId = subscription.customer as string;
   const subscriptionId = subscription.id;
   const status = subscription.status;
