@@ -79,7 +79,7 @@ export default async function PricingPage() {
                 'Access to Analytics Suite ⓘ': 'Advanced metrics and insights about your CV performance'
               }}
               highlight={true}
-              priceId={moonlightingPrice?.id || ''}
+              priceId="price_1QoYHcFYYYXM77wGjNJer1nW"
             />
             <PricingCard
               name="CEO"
@@ -103,7 +103,7 @@ export default async function PricingPage() {
                 'Secure a high paying job in 3 months or money back guaranteed ⓘ': 'Full refund if you don\'t secure a high-paying position within 3 months'
               }}
               highlight={false}
-              priceId={ceoPrice?.id || ''}
+              priceId="price_1QoYTrFYYYXM77wGffciG20i"
             />
           </div>
         </div>
