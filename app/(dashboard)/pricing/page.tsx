@@ -42,17 +42,6 @@ export default async function PricingPage() {
 
           <div className="grid md:grid-cols-3 gap-8">
             <PricingCard
-              name="Free"
-              price={0}
-              interval="month"
-              features={[
-                '1 CV upload',
-                '1 ATS analysis',
-                '1 Optimization',
-              ]}
-              highlight={false}
-            />
-            <PricingCard
               name="Pro"
               price={proPrice?.unitAmount || 799}
               interval="month"
