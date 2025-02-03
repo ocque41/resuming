@@ -51,7 +51,7 @@ export default function HomePage() {
             variants={containerVariants}
           >
             <motion.h1 
-              className="text-6xl font-bold tracking-tight text-white animate-fade-in"
+              className="text-6xl font-bold tracking-tight text-white animate-fade-in bg-gradient-to-r from-[#584235] to-[#2C2420] px-4 py-2 rounded-lg"
               variants={itemVariants}
             >
               Craft Your Perfect CV
@@ -70,7 +70,7 @@ export default function HomePage() {
               <Button 
                 asChild 
                 size="lg" 
-                className="group shadow-lg bg-white text-black hover:bg-gray-100 transition-all duration-base ease-default"
+                className="group shadow-lg bg-[#584235] text-white hover:bg-[#2C2420] transition-all duration-base ease-default"
               >
                 <Link href="/sign-up" className="flex items-center">
                   Begin Your Journey 
@@ -81,7 +81,7 @@ export default function HomePage() {
                 asChild 
                 variant="outline" 
                 size="lg" 
-                className="shadow-lg border-2 border-gray-700 text-white hover:bg-gray-800 transition-all duration-300"
+                className="shadow-lg border-2 border-[#B4916C] text-white hover:bg-[#2C2420] transition-all duration-300"
               >
                 <Link href="/plans">Explore Plans</Link>
               </Button>
@@ -135,7 +135,7 @@ export default function HomePage() {
             variants={containerVariants}
           >
             <motion.h2 
-              className="text-3xl font-bold text-[#E8DCC4]"
+              className="text-3xl font-bold text-white bg-gradient-to-r from-[#584235] to-[#2C2420] px-4 py-2 rounded-lg inline-block"
               variants={itemVariants}
             >
               Elevate Your Professional Journey
