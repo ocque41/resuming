@@ -51,7 +51,7 @@ export default function HomePage() {
             variants={containerVariants}
           >
             <motion.h1 
-              className="text-6xl font-bold tracking-tight text-white animate-fade-in bg-gradient-to-r from-[#584235] to-[#2C2420] px-4 py-2 rounded-lg"
+              className="text-6xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] to-[#2C2420] animate-fade-in"
               variants={itemVariants}
             >
               Craft Your Perfect CV
@@ -72,7 +72,7 @@ export default function HomePage() {
                 size="lg" 
                 className="group shadow-lg bg-[#584235] text-white hover:bg-[#2C2420] transition-all duration-base ease-default"
               >
-                <Link href="/sign-up" className="flex items-center">
+                <Link href="/sign-up" className="flex items-center text-white">
                   Begin Your Journey 
                   <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
                 </Link>
@@ -81,7 +81,7 @@ export default function HomePage() {
                 asChild 
                 variant="outline" 
                 size="lg" 
-                className="shadow-lg border-2 border-[#B4916C] text-white hover:bg-[#2C2420] transition-all duration-300"
+                className="shadow-lg border-2 border-[#B4916C] text-[#B4916C] hover:bg-[#2C2420] hover:text-white transition-all duration-300"
               >
                 <Link href="/plans">Explore Plans</Link>
               </Button>
@@ -135,7 +135,7 @@ export default function HomePage() {
             variants={containerVariants}
           >
             <motion.h2 
-              className="text-3xl font-bold text-white bg-gradient-to-r from-[#584235] to-[#2C2420] px-4 py-2 rounded-lg inline-block"
+              className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#584235] to-[#2C2420]"
               variants={itemVariants}
             >
               Elevate Your Professional Journey
