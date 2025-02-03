@@ -27,7 +27,7 @@ function Header() {
   }
 
   return (
-    <header className="border-b border-[#2C2420]/20">
+    <header className="border-b border-[#2C2420]/20 bg-black bg-gradient-to-br from-black via-[#0a0a0a] to-[#1a1a1a]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
         <Link href="/" className="flex items-center">
           <CircleIcon className="h-6 w-6 text-orange-500" />
@@ -36,7 +36,7 @@ function Header() {
         <div className="flex items-center space-x-4">
           <Link
             href="/pricing"
-            className="text-sm font-medium text-[#B4916C] hover:text-[#E8DCC4] transition-colors"
+            className="text-sm font-medium text-[#B4916C] hover:text-white transition-colors"
           >
             Pricing
           </Link>
@@ -53,8 +53,8 @@ function Header() {
                   </AvatarFallback>
                 </Avatar>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="flex flex-col gap-1">
-                <DropdownMenuItem className="cursor-pointer">
+              <DropdownMenuContent align="end" className="flex flex-col gap-1 bg-[#2C2420] border-[#B4916C]/20">
+                <DropdownMenuItem className="cursor-pointer text-[#B4916C] hover:text-white hover:bg-[#584235]">
                   <Link href="/dashboard" className="flex w-full items-center">
                     <Home className="mr-2 h-4 w-4" />
                     <span>Dashboard</span>
@@ -62,7 +62,7 @@ function Header() {
                 </DropdownMenuItem>
                 <form action={handleSignOut} className="w-full">
                   <button type="submit" className="flex w-full">
-                    <DropdownMenuItem className="w-full flex-1 cursor-pointer">
+                    <DropdownMenuItem className="w-full flex-1 cursor-pointer text-[#B4916C] hover:text-white hover:bg-[#584235]">
                       <LogOut className="mr-2 h-4 w-4" />
                       <span>Sign out</span>
                     </DropdownMenuItem>
