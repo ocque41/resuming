@@ -52,7 +52,7 @@ export default async function PricingPage() {
                 '7 Optimizations/month',
                 'Priority 2 in AI processing',
               ]}
-              highlight={true}
+              highlight={false}
               priceId={proPrice?.id}
             />
             <PricingCard
@@ -61,12 +61,18 @@ export default async function PricingPage() {
               interval="month"
               annualPrice={13999}
               features={[
-                'Unlimited CV uploads/month',
-                '20 ATS analyses/month',
-                '15 Optimizations/month',
-                'Access to Analytics Suite',
+                'Unlimited CV uploads/month ⓘ',
+                '20 ATS analyses/month ⓘ',
+                '15 Optimizations/month ⓘ',
+                'Access to Analytics Suite ⓘ',
               ]}
-              highlight={false}
+              tooltips={{
+                'Unlimited CV uploads/month ⓘ': 'Upload as many CVs as you need without any monthly limits',
+                '20 ATS analyses/month ⓘ': 'Get detailed analysis of how your CV performs against ATS systems',
+                '15 Optimizations/month ⓘ': 'AI-powered suggestions to improve your CV structure and content',
+                'Access to Analytics Suite ⓘ': 'Advanced metrics and insights about your CV performance'
+              }}
+              highlight={true}
               priceId={moonlightingPrice?.id}
             />
             <PricingCard
@@ -100,6 +106,7 @@ function PricingCard({
   features,
   highlight,
   priceId,
+  tooltips,
 }: {
   name: string;
   price: number;
@@ -108,6 +115,7 @@ function PricingCard({
   features: string[];
   highlight: boolean;
   priceId?: string;
+  tooltips?: Record<string, string>;
 }) {
   return (
     <div 
@@ -131,7 +139,14 @@ function PricingCard({
         {features.map((feature, index) => (
           <li key={index} className="flex items-start">
             <Check className={`h-5 w-5 mr-2 mt-0.5 flex-shrink-0 ${highlight ? 'text-[#E8DCC4]' : 'text-[#B4916C]'}`} />
-            <span className={`${highlight ? 'text-[#E8DCC4]' : 'text-[#B4916C]'}`}>{feature}</span>
+            <span className={`group relative ${highlight ? 'text-[#E8DCC4]' : 'text-[#B4916C]'}`}>
+              {feature}
+              {tooltips?.[feature] && (
+                <span className="invisible group-hover:visible absolute left-0 -top-12 w-64 bg-black/90 text-white text-sm p-2 rounded">
+                  {tooltips[feature]}
+                </span>
+              )}
+            </span>
           </li>
         ))}
       </ul>
