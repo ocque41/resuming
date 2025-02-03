@@ -6,6 +6,9 @@ import { withTeam } from '@/lib/auth/middleware';
 
 export const checkoutAction = withTeam(async (formData, team) => {
   const priceId = formData.get('priceId') as string;
+  if (!priceId) {
+    throw new Error('Price ID is required');
+  }
   await createCheckoutSession({ team: team, priceId });
 });
 
