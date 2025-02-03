@@ -34,8 +34,8 @@ function Header() {
           <Image 
             src="/Resuming white.png"
             alt="Resuming Logo"
-            width={120}
-            height={120}
+            width={180}
+            height={180}
             className="hover:opacity-80 transition-opacity"
           />
         </Link>
