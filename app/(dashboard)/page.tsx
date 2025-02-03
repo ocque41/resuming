@@ -38,7 +38,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-black bg-gradient-to-br from-black via-[#0a0a0a] to-[#1a1a1a]">
       <div className="container mx-auto px-4 py-16 text-center flex-grow">
         <motion.div 
           className="max-w-5xl mx-auto space-y-16"
@@ -51,13 +51,13 @@ export default function HomePage() {
             variants={containerVariants}
           >
             <motion.h1 
-              className="text-6xl font-bold tracking-tight bg-gradient-to-r from-primary via-secondary to-tertiary bg-clip-text text-transparent dark:from-primary dark:via-secondary dark:to-tertiary animate-fade-in"
+              className="text-6xl font-bold tracking-tight bg-gradient-to-r from-[#00ffff] via-[#00a2ff] to-[#7f00ff] bg-clip-text text-transparent animate-fade-in"
               variants={itemVariants}
             >
               Craft Your Perfect CV
             </motion.h1>
             <motion.p 
-              className="text-2xl text-muted-foreground dark:text-primary-foreground/80 max-w-3xl mx-auto animate-fade-in-up"
+              className="text-2xl text-[#e0e0e0] max-w-3xl mx-auto animate-fade-in-up"
               variants={itemVariants}
             >
               Transform your career journey with our intelligent AI-powered CV optimization platform
