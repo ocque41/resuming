@@ -12,11 +12,14 @@ export default async function PricingPage() {
     getStripeProducts(),
   ]);
 
-  const basePlan = products.find((product) => product.name === 'Base');
-  const plusPlan = products.find((product) => product.name === 'Plus');
+  const freePlan = products.find((product) => product.name === 'Free');
+  const proPlan = products.find((product) => product.name === 'Pro');
+  const moonlightingPlan = products.find((product) => product.name === 'Moonlighting');
+  const ceoPlan = products.find((product) => product.name === 'CEO');
 
-  const basePrice = prices.find((price) => price.productId === basePlan?.id);
-  const plusPrice = prices.find((price) => price.productId === plusPlan?.id);
+  const proPrice = prices.find((price) => price.productId === proPlan?.id);
+  const moonlightingPrice = prices.find((price) => price.productId === moonlightingPlan?.id);
+  const ceoPrice = prices.find((price) => price.productId === ceoPlan?.id);
 
   return (
     <div className="min-h-screen flex flex-col bg-black bg-gradient-to-br from-black via-[#0a0a0a] to-[#1a1a1a]">
@@ -35,30 +38,60 @@ export default async function PricingPage() {
             </p>
           </section>
 
-          <div className="grid md:grid-cols-2 gap-8">
+          <div className="grid md:grid-cols-4 gap-8">
             <PricingCard
-              name={basePlan?.name || 'Base'}
-              price={basePrice?.unitAmount || 800}
-              interval={basePrice?.interval || 'month'}
-              trialDays={basePrice?.trialPeriodDays || 7}
+              name="Free"
+              price={0}
+              interval="month"
               features={[
-                'Unlimited Usage',
-                'Unlimited Workspace Members',
-                'Email Support',
+                '1 CV upload',
+                '1 ATS analysis',
+                '1 Optimization',
               ]}
-              priceId={basePrice?.id}
+              highlight={false}
             />
             <PricingCard
-              name={plusPlan?.name || 'Plus'}
-              price={plusPrice?.unitAmount || 1200}
-              interval={plusPrice?.interval || 'month'}
-              trialDays={plusPrice?.trialPeriodDays || 7}
+              name="Pro"
+              price={proPrice?.unitAmount || 799}
+              interval="month"
+              annualPrice={6999}
               features={[
-                'Everything in Base, and:',
-                'Early Access to New Features',
-                '24/7 Support + Slack Access',
+                '20 CV uploads/month',
+                '10 ATS analyses/month',
+                '7 Optimizations/month',
+                'Priority 2 in AI processing',
               ]}
-              priceId={plusPrice?.id}
+              highlight={true}
+              priceId={proPrice?.id}
+            />
+            <PricingCard
+              name="Moonlighting"
+              price={moonlightingPrice?.unitAmount || 1499}
+              interval="month"
+              annualPrice={13999}
+              features={[
+                'Unlimited CV uploads/month',
+                '20 ATS analyses/month',
+                '15 Optimizations/month',
+                'Access to Analytics Suite',
+              ]}
+              highlight={false}
+              priceId={moonlightingPrice?.id}
+            />
+            <PricingCard
+              name="CEO"
+              price={ceoPrice?.unitAmount || 9999}
+              interval="month"
+              annualPrice={79900}
+              features={[
+                'Unlimited CV uploads',
+                'Unlimited ATS analyses',
+                'Unlimited Optimizations',
+                'Access to Analytics Suite',
+                'Early access to new features',
+              ]}
+              highlight={false}
+              priceId={ceoPrice?.id}
             />
           </div>
         </div>
@@ -71,47 +104,64 @@ function PricingCard({
   name,
   price,
   interval,
-  trialDays,
+  annualPrice,
   features,
+  highlight,
   priceId,
 }: {
   name: string;
   price: number;
   interval: string;
-  trialDays: number;
+  annualPrice?: number;
   features: string[];
+  highlight: boolean;
   priceId?: string;
 }) {
   return (
     <div 
-      className={`${name === 'Base' ? 'bg-[#2C2420]' : 'bg-[#584235]'} p-6 rounded-lg shadow-md hover:shadow-xl transition-all duration-base ease-default group border border-gray-800 hover:border-gray-700`}
+      className={`p-6 rounded-lg shadow-md hover:shadow-xl transition-all duration-300 ease-in-out group border ${
+        highlight 
+          ? 'bg-[#584235] border-[#B4916C]' 
+          : 'bg-[#2C2420] border-gray-800 hover:border-gray-700'
+      }`}
     >
-      <h2 className={`text-2xl font-semibold mb-2 ${name === 'Base' ? 'text-[#B4916C]' : 'text-[#E8DCC4]'}`}>{name}</h2>
-      <p className={`text-sm mb-4 ${name === 'Base' ? 'text-[#B4916C]/70' : 'text-[#E8DCC4]/70'}`}>
-        with {trialDays} day free trial
-      </p>
-      <p className={`text-4xl font-medium mb-6 ${name === 'Base' ? 'text-[#B4916C]' : 'text-[#E8DCC4]'}`}>
-        ${price / 100}{' '}
-        <span className={`text-xl font-normal ${name === 'Base' ? 'text-[#B4916C]/70' : 'text-[#E8DCC4]/70'}`}>
-          per user / {interval}
+      <h2 className={`text-2xl font-semibold mb-2 ${highlight ? 'text-[#E8DCC4]' : 'text-[#B4916C]'}`}>
+        {name}
+        {highlight && <span className="ml-2 text-sm text-[#B4916C]">Most Popular</span>}
+      </h2>
+      <p className={`text-4xl font-medium mb-2 ${highlight ? 'text-[#E8DCC4]' : 'text-[#B4916C]'}`}>
+        ${price / 100}
+        <span className={`text-xl font-normal ${highlight ? 'text-[#E8DCC4]/70' : 'text-[#B4916C]/70'}`}>
+          /{interval}
         </span>
+      </p>
+      {annualPrice && (
+        <p className={`text-sm mb-4 ${highlight ? 'text-[#E8DCC4]/70' : 'text-[#B4916C]/70'}`}>
+          Annual: ${annualPrice / 100}
+        </p>
       </p>
       <ul className="space-y-4 mb-8">
         {features.map((feature, index) => (
           <li key={index} className="flex items-start">
-            <Check className={`h-5 w-5 mr-2 mt-0.5 flex-shrink-0 ${name === 'Base' ? 'text-[#B4916C]' : 'text-[#E8DCC4]'}`} />
-            <span className={`${name === 'Base' ? 'text-[#B4916C]' : 'text-[#E8DCC4]'}`}>{feature}</span>
+            <Check className={`h-5 w-5 mr-2 mt-0.5 flex-shrink-0 ${highlight ? 'text-[#E8DCC4]' : 'text-[#B4916C]'}`} />
+            <span className={`${highlight ? 'text-[#E8DCC4]' : 'text-[#B4916C]'}`}>{feature}</span>
           </li>
         ))}
       </ul>
-      <form action={checkoutAction}>
-        <input type="hidden" name="priceId" value={priceId} />
+      {name !== 'Free' ? (
+        <form action={checkoutAction}>
+          <input type="hidden" name="priceId" value={priceId} />
+          <SubmitButton 
+            className={`w-full ${highlight
+              ? 'bg-[#2C2420] hover:bg-[#584235] text-white' 
+              : 'bg-[#584235] hover:bg-[#2C2420] text-white'}`} 
+          />
+        </form>
+      ) : (
         <SubmitButton 
-          className={`w-full ${name === 'Base' 
-            ? 'bg-[#584235] hover:bg-[#2C2420] text-white' 
-            : 'bg-[#2C2420] hover:bg-[#584235] text-white'}`} 
+          className="w-full bg-[#584235] hover:bg-[#2C2420] text-white"
         />
-      </form>
+      )}
     </div>
   );
 }
