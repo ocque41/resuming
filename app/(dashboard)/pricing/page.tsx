@@ -59,7 +59,7 @@ export default async function PricingPage() {
                 'Priority 2 in AI processing ⓘ': 'Your requests are processed with priority level 2'
               }}
               highlight={false}
-              priceId={proPrice?.id || ''}
+              priceId="price_1QoUP9FYYYXM77wGBUVqTaiE"
             />
             <PricingCard
               name="Moonlighting"
