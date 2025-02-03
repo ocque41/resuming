@@ -30,8 +30,7 @@ function Header() {
     <header className="border-b border-[#2C2420]/20 bg-black bg-gradient-to-br from-black via-[#0a0a0a] to-[#1a1a1a]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
         <Link href="/" className="flex items-center">
-          <CircleIcon className="h-6 w-6 text-orange-500" />
-          <span className="ml-2 text-xl font-semibold text-gray-900">ACME</span>
+          <span className="text-2xl font-bold text-white hover:text-transparent hover:bg-clip-text hover:bg-gradient-to-r hover:from-[#584235] hover:to-[#2C2420] transition-all duration-300">Resuming</span>
         </Link>
         <div className="flex items-center space-x-4">
           <Link
@@ -43,9 +42,9 @@ function Header() {
           {user ? (
             <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
               <DropdownMenuTrigger>
-                <Avatar className="cursor-pointer size-9">
+                <Avatar className="cursor-pointer size-9 border-2 border-[#B4916C]/30 hover:border-[#B4916C]">
                   <AvatarImage alt={user.name || ''} />
-                  <AvatarFallback>
+                  <AvatarFallback className="bg-[#2C2420] text-[#B4916C]">
                     {user.email
                       .split(' ')
                       .map((n) => n[0])
