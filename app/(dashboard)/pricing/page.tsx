@@ -12,7 +12,6 @@ export default async function PricingPage() {
     getStripeProducts(),
   ]);
 
-  const freePlan = products.find((product) => product.name === 'Free');
   const proPlan = products.find((product) => product.name === 'Pro');
   const moonlightingPlan = products.find((product) => product.name === 'Moonlighting');
   const ceoPlan = products.find((product) => product.name === 'CEO');
@@ -36,9 +35,12 @@ export default async function PricingPage() {
             >
               Unlock the power of AI-driven CV optimization with flexible pricing
             </p>
+            <p className="text-xl text-[#B4916C] font-semibold animate-fade-in-up">
+              Start with 1 Day FREE Trial on any plan
+            </p>
           </section>
 
-          <div className="grid md:grid-cols-4 gap-8">
+          <div className="grid md:grid-cols-3 gap-8">
             <PricingCard
               name="Free"
               price={0}
@@ -89,6 +91,7 @@ export default async function PricingPage() {
                 'Unlimited Optimizations',
                 'Access to Analytics Suite',
                 'Early access to new features',
+                'Secure a high paying job in 3 months or money back guaranteed',
               ]}
               highlight={false}
               priceId={ceoPrice?.id}
@@ -135,11 +138,6 @@ function PricingCard({
           /{interval}
         </span>
       </p>
-      {annualPrice && (
-        <p className={`text-sm mb-4 ${highlight ? 'text-[#E8DCC4]/70' : 'text-[#B4916C]/70'}`}>
-          Annual: ${annualPrice / 100}
-        </p>
-      )}
       <ul className="space-y-4 mb-8">
         {features.map((feature, index) => (
           <li key={index} className="flex items-start">
