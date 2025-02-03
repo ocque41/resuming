@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next';
 import { Manrope } from 'next/font/google';
 import { UserProvider } from '@/lib/auth';
 import { getUser } from '@/lib/db/queries';
+import Head from 'next/head';
 
 export const metadata: Metadata = {
   title: 'Next.js SaaS Starter',
@@ -11,6 +12,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   maximumScale: 1,
+  viewportFit: 'cover',
 };
 
 const manrope = Manrope({ subsets: ['latin'] });
