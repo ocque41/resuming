@@ -18,56 +18,22 @@ export default async function PricingPage() {
   const basePrice = prices.find((price) => price.productId === basePlan?.id);
   const plusPrice = prices.find((price) => price.productId === plusPlan?.id);
 
-  const containerVariants: Variants = {
-    hidden: { opacity: 0 },
-    visible: { 
-      opacity: 1, 
-      transition: { 
-        staggerChildren: 0.1,
-        delayChildren: 0.2 
-      } 
-    }
-  };
-
-  const itemVariants: Variants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: { 
-      y: 0, 
-      opacity: 1,
-      transition: { 
-        type: "spring", 
-        stiffness: 100,
-        damping: 12
-      } 
-    }
-  };
-
   return (
     <div className="min-h-screen flex flex-col bg-black bg-gradient-to-br from-black via-[#0a0a0a] to-[#1a1a1a]">
       <div className="container mx-auto px-4 py-16 text-center flex-grow">
-        <motion.div 
-          className="max-w-5xl mx-auto space-y-16"
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-        >
-          <motion.section 
-            className="space-y-8"
-            variants={containerVariants}
-          >
-            <motion.h1 
+        <div className="max-w-5xl mx-auto space-y-16">
+          <section className="space-y-8">
+            <h1 
               className="text-6xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] via-[#B4916C] to-[#2C2420] animate-fade-in"
-              variants={itemVariants}
             >
               Choose Your Plan
-            </motion.h1>
-            <motion.p 
+            </h1>
+            <p 
               className="text-2xl text-gray-300 max-w-3xl mx-auto animate-fade-in-up"
-              variants={itemVariants}
             >
               Unlock the power of AI-driven CV optimization with flexible pricing
-            </motion.p>
-          </motion.section>
+            </p>
+          </section>
 
           <div className="grid md:grid-cols-2 gap-8">
             <PricingCard
@@ -95,7 +61,7 @@ export default async function PricingPage() {
               priceId={plusPrice?.id}
             />
           </div>
-        </motion.div>
+        </div>
       </div>
     </div>
   );
