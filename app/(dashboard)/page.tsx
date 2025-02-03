@@ -83,7 +83,7 @@ export default function HomePage() {
                 size="lg" 
                 className="shadow-lg border-2 border-[#B4916C] text-[#B4916C] hover:bg-[#2C2420] hover:text-white transition-all duration-300"
               >
-                <Link href="/plans">Explore Plans</Link>
+                <Link href="/pricing">Explore Plans</Link>
               </Button>
             </motion.div>
           </motion.section>
