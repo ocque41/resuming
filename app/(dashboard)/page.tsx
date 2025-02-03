@@ -135,7 +135,7 @@ export default function HomePage() {
             variants={containerVariants}
           >
             <motion.h2 
-              className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#584235] to-[#2C2420]"
+              className="text-3xl font-bold text-[#E8DCC4]"
               variants={itemVariants}
             >
               Elevate Your Professional Journey
