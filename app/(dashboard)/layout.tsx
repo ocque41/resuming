@@ -32,11 +32,11 @@ function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
         <Link href="/" className="flex items-center">
           <Image 
-            src="/resuming logo.png"
+            src="/Resuming white.png"
             alt="Resuming Logo"
-            width={60}
-            height={60}
-            className="hover:opacity-90 transition-opacity"
+            width={120}
+            height={120}
+            className="hover:opacity-80 transition-opacity"
           />
         </Link>
         <div className="flex items-center space-x-4">
