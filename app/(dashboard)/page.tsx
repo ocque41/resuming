@@ -96,40 +96,46 @@ export default function HomePage() {
               { 
                 icon: FileText, 
                 title: "AI-Powered Document Analysis", 
-                description: "Intelligent content analysis with automated scoring and format preservation" 
+                description: "Intelligent content analysis with automated scoring and format preservation",
+                bgColor: "bg-[#2C2420]",
+                textColor: "text-[#B4916C]"
               },
               { 
                 icon: TrendingUp, 
                 title: "Job-CV Matching System", 
-                description: "Real-time CV optimization with percentage-based job compatibility scoring" 
+                description: "Real-time CV optimization with percentage-based job compatibility scoring",
+                bgColor: "bg-[#584235]",
+                textColor: "text-[#E8DCC4]"
               },
               { 
                 icon: Shield, 
                 title: "Geospatial Integration", 
-                description: "Location-based job mapping with interactive scoring visualization" 
+                description: "Location-based job mapping with interactive scoring visualization",
+                bgColor: "bg-[#2C2420]",
+                textColor: "text-[#B4916C]"
               }
-            ].map(({ icon: Icon, title, description }) => (
+            ].map(({ icon: Icon, title, description, bgColor, textColor }) => (
               <motion.div 
                 key={title} 
-                className="bg-[#111827] p-6 rounded-lg shadow-md hover:shadow-xl transition-all duration-base ease-default group border border-gray-800 hover:border-gray-700"
+                className={`${bgColor} p-6 rounded-lg shadow-md hover:shadow-xl transition-all duration-base ease-default group border border-gray-800 hover:border-gray-700`}
                 variants={itemVariants}
               >
                 <Icon 
-                  className="mx-auto mb-4 text-white group-hover:scale-110 transition-all duration-300" 
+                  className={`mx-auto mb-4 ${textColor} group-hover:scale-110 transition-all duration-300`} 
                   size={48} 
                 />
-                <h3 className="text-2xl font-semibold mb-4 text-white">{title}</h3>
-                <p className="text-gray-400 group-hover:text-gray-200 transition-colors">{description}</p>
+                <h3 className={`text-2xl font-semibold mb-4 ${textColor}`}>{title}</h3>
+                <p className={`${textColor} opacity-70 group-hover:opacity-100 transition-colors`}>{description}</p>
               </motion.div>
             ))}
           </motion.section>
 
           <motion.section 
-            className="bg-[#111827] rounded-lg p-8 space-y-6 border border-gray-800 shadow-md transition-all duration-base ease-default"
+            className="bg-gradient-to-br from-[#584235] to-[#2C2420] rounded-lg p-8 space-y-6 border border-[#B4916C]/20 shadow-md transition-all duration-base ease-default"
             variants={containerVariants}
           >
             <motion.h2 
-              className="text-3xl font-bold text-white"
+              className="text-3xl font-bold text-[#E8DCC4]"
               variants={itemVariants}
             >
               Elevate Your Professional Journey
@@ -149,8 +155,8 @@ export default function HomePage() {
                   className="flex items-center gap-4 group animate-scroll-fade"
                   variants={itemVariants}
                 >
-                  <Icon className="text-white group-hover:rotate-6 transition-transform" />
-                  <p className="text-gray-300 group-hover:text-white transition-colors">{text}</p>
+                  <Icon className="text-[#B4916C] group-hover:rotate-6 transition-transform" />
+                  <p className="text-[#E8DCC4] opacity-70 group-hover:opacity-100 transition-colors">{text}</p>
                 </motion.div>
               ))}
             </motion.div>
