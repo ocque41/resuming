@@ -27,7 +27,7 @@ function Header() {
   }
 
   return (
-    <header className="border-b border-gray-200">
+    <header className="border-b border-[#2C2420]/20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
         <Link href="/" className="flex items-center">
           <CircleIcon className="h-6 w-6 text-orange-500" />
@@ -36,7 +36,7 @@ function Header() {
         <div className="flex items-center space-x-4">
           <Link
             href="/pricing"
-            className="text-sm font-medium text-gray-700 hover:text-gray-900"
+            className="text-sm font-medium text-[#B4916C] hover:text-[#E8DCC4] transition-colors"
           >
             Pricing
           </Link>
@@ -73,7 +73,7 @@ function Header() {
           ) : (
             <Button
               asChild
-              className="bg-black hover:bg-gray-800 text-white text-sm px-4 py-2 rounded-full"
+              className="bg-[#584235] hover:bg-[#2C2420] text-white text-sm px-4 py-2 rounded-full transition-colors"
             >
               <Link href="/sign-up">Sign Up</Link>
             </Button>
