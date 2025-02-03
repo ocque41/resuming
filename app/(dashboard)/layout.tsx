@@ -28,17 +28,16 @@ function Header() {
   }
 
   return (
-    <header className="border-b border-[#2C2420]/20 bg-transparent">
+    <header className="border-b border-[#2C2420]/20 bg-black">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-        <Link href="/" className="flex items-center gap-2">
+        <Link href="/" className="flex items-center">
           <Image 
             src="/resuming logo.png"
             alt="Resuming Logo"
-            width={40}
-            height={40}
+            width={60}
+            height={60}
             className="hover:opacity-90 transition-opacity"
           />
-          <span className="text-2xl font-bold text-white hover:text-transparent hover:bg-clip-text hover:bg-gradient-to-r hover:from-[#584235] hover:to-[#2C2420] transition-all duration-300">Resuming</span>
         </Link>
         <div className="flex items-center space-x-4">
           <Link
