@@ -38,7 +38,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-black bg-gradient-to-br from-black via-[#0a0a0a] to-[#1a1a1a]">
+    <div className="min-h-screen flex flex-col bg-[#050505]">
       <div className="container mx-auto px-4 py-16 text-center flex-grow">
         <motion.div 
           className="max-w-5xl mx-auto space-y-16"
@@ -164,7 +164,7 @@ export default function HomePage() {
         </motion.div>
       </div>
 
-      <footer className="bg-[#000000] text-[#E8DCC4] py-12">
+      <footer className="bg-[#050505] text-[#E8DCC4] py-12">
         <div className="container mx-auto px-4 text-center">
           <div className="flex justify-center space-x-6 mb-6">
             <a href="https://twitter.com/resumingai" target="_blank" rel="noopener noreferrer" className="text-[#B4916C] hover:text-white transition-colors">
