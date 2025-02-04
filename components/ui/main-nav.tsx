@@ -32,7 +32,7 @@ export function MainNav() {
             >
               <div className="uk-navbar-right">
                 <ul className="uk-navbar-nav">
-                  <li><Link href="/">Home</li>
+                  <li><Link href="/">Home</Link></li>
                   {user ? (
                     <>
                       <li><Link href="/dashboard">Dashboard</Link></li>
