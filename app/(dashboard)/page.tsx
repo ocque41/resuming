@@ -133,13 +133,20 @@ export default function HomePage() {
               </motion.div>
             ))}
           </motion.section>
+        </motion.div>
       </div>
 
       <div className="container mx-auto px-4 py-16">
-        <motion.section 
-          className="bg-gradient-to-br from-[#584235] to-[#2C2420] rounded-lg p-8 space-y-6 border border-[#B4916C]/20 shadow-md transition-all duration-base ease-default max-w-7xl mx-auto"
+        <motion.div 
+          className="max-w-7xl mx-auto space-y-16"
           variants={containerVariants}
+          initial="hidden"
+          animate="visible"
         >
+          <motion.section 
+            className="bg-gradient-to-br from-[#584235] to-[#2C2420] rounded-lg p-8 space-y-6 border border-[#B4916C]/20 shadow-md transition-all duration-base ease-default"
+            variants={containerVariants}
+          >
             <motion.h2 
               className="text-3xl font-bold text-[#E8DCC4]"
               variants={itemVariants}
