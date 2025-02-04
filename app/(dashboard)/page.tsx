@@ -19,8 +19,10 @@ export default function HomePage() {
     visible: { 
       opacity: 1, 
       transition: { 
-        staggerChildren: 0.1,
-        delayChildren: 0.2 
+        staggerChildren: 0.15,
+        delayChildren: 0.3,
+        duration: 0.6,
+        ease: "easeOut"
       } 
     }
   };
@@ -32,8 +34,9 @@ export default function HomePage() {
       opacity: 1,
       transition: { 
         type: "spring", 
-        stiffness: 100,
-        damping: 12
+        stiffness: 80,
+        damping: 15,
+        duration: 0.8
       } 
     }
   };
