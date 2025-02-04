@@ -4,14 +4,13 @@ import { cn } from "@/lib/utils"
 const ChakraCard = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & {
-    variant?: 'default' | 'gradient' | 'glass' | 'figma-hero'
+    variant?: 'default' | 'gradient' | 'glass'
   }
 >(({ className, variant = 'default', ...props }, ref) => {
   const variants = {
     default: "rounded-lg border border-[#584235] bg-[#2C2420]/80 backdrop-blur-sm text-card-foreground shadow-xl hover:shadow-2xl transition-all duration-300",
     gradient: "rounded-lg bg-gradient-to-br from-[#584235] via-[#2C2420] to-[#1A1614] border border-[#B4916C]/20 shadow-lg hover:shadow-2xl transition-all duration-300",
     glass: "rounded-lg bg-white/5 backdrop-blur-lg border border-white/10 shadow-2xl hover:shadow-3xl transition-all duration-300 hover:bg-white/10",
-    'figma-hero': "relative bg-gradient-to-br from-[#1A1614] via-[#2C2420] to-[#584235] transform rotate-45 aspect-square w-[800px] mx-auto overflow-hidden shadow-2xl",
     hero: "rounded-[32px] bg-gradient-to-br from-[#1A1614] via-[#2C2420] to-[#584235] border-2 border-[#B4916C]/30 shadow-2xl p-8 mx-4 md:mx-auto max-w-7xl w-full"
   }
 
