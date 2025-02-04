@@ -72,7 +72,7 @@ export default function HomePage() {
                   size="lg" 
                   className="group shadow-lg bg-[#584235] text-white hover:bg-[#2C2420] transition-all duration-base ease-default"
                 >
-                  <Link href="signin" className="flex items-center text-white">
+                  <Link href="sign-in" className="flex items-center text-white">
                     Start Here
                     <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
                   </Link>
@@ -192,7 +192,7 @@ export default function HomePage() {
                         <Check className="mr-2" /> Early access to features
                       </li>
                       <li className="flex items-center text-[#B4916C]">
-                        <Check className="mr-2" /> 3-month job guarantee
+                        <Check className="mr-2" /> The Position You Desire In 3 Months or Money Back Guaranteed
                       </li>
                     </ul>
                   </div>
