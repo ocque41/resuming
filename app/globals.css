@@ -10,3 +10,16 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes gradient-shine {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-gradient-shine {
+  animation: gradient-shine 3s infinite;
+}
