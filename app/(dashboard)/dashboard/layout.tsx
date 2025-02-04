@@ -8,17 +8,13 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col min-h-[calc(100dvh-68px)] container-xl mx-auto w-full rice-paper-bg">
+    <div className="flex flex-col min-h-[calc(100dvh-68px)] max-w-7xl mx-auto w-full bg-black bg-gradient-to-br from-black via-[#0a0a0a] to-[#1a1a1a] text-white">
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto px-4 py-8 lg:px-8 lg:py-12">
-        <div className="max-w-screen-xl mx-auto">
-          {children}
-        </div>
-      </main>
+      <main className="flex-1 overflow-y-auto p-0 lg:p-4 pb-16">{children}</main>
 
       {/* Bottom Navigation */}
       <BottomNav 
-        className="fixed bottom-0 left-0 right-0 bg-[#FAF6ED] border-t border-[#584235]/10 shadow-lg lg:hidden" 
+        className="fixed bottom-0 left-0 right-0 bg-[#2C2420] border-t border-[#584235] lg:hidden" 
         size="sm"
       />
     </div>
