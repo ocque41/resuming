@@ -15,47 +15,43 @@ export function MainNav() {
   };
 
   return (
-    <div>
-      <nav className="uk-navbar-container">
-        <div className="uk-container">
-          <div className="uk-navbar" uk-navbar>
-            <div className="uk-navbar-left">
-              <ul className="uk-navbar-nav">
-                <li className={pathname === '/dashboard' ? 'uk-active' : ''}>
-                  <Link href="/dashboard">Dashboard</Link>
-                </li>
-                <li className={pathname === '/dashboard/products' ? 'uk-active' : ''}>
-                  <Link href="/dashboard/pricing">Products</Link>
-                </li>
-                <li className={pathname === '/docs' ? 'uk-active' : ''}>
-                  <Link href="https://chromad.vercel.app/docs/products/resuming/overview" target="_blank">Docs</Link>
-                </li>
-                <li>
-                  <a href="#">Settings</a>
-                  <div className="uk-navbar-dropdown">
-                    <ul className="uk-nav uk-navbar-dropdown-nav">
-                      <li><Link href="/dashboard/profile">Profile</Link></li>
-                      <li><Link href="/dashboard/billing">Billing</Link></li>
-                      <li className="uk-nav-divider"></li>
-                      <li><button onClick={handleSignOut} className="uk-button uk-button-link">Sign Out</button></li>
-                    </ul>
-                  </div>
-                </li>
-              </ul>
-            </div>
-            
-            <div className="uk-navbar-right">
-              <ul className="uk-navbar-nav">
-                <li>
-                  <Link href="/dashboard/profile">
-                    {user?.name || 'Account'}
-                  </Link>
-                </li>
-              </ul>
-            </div>
-          </div>
+    <nav className="uk-navbar-container uk-navbar-transparent" uk-navbar>
+      <div className="uk-container uk-container-expand">
+        <div className="uk-navbar-left">
+          <ul className="uk-navbar-nav">
+            <li className={pathname === '/dashboard' ? 'uk-active' : ''}>
+              <Link href="/dashboard">Dashboard</Link>
+            </li>
+            <li className={pathname === '/dashboard/products' ? 'uk-active' : ''}>
+              <Link href="/dashboard/pricing">Products</Link>
+            </li>
+            <li className={pathname === '/docs' ? 'uk-active' : ''}>
+              <Link href="https://chromad.vercel.app/docs/products/resuming/overview" target="_blank">Docs</Link>
+            </li>
+            <li className="uk-parent">
+              <a href="#">Settings <span uk-navbar-parent-icon></span></a>
+              <div className="uk-navbar-dropdown">
+                <ul className="uk-nav uk-navbar-dropdown-nav">
+                  <li><Link href="/dashboard/profile">Profile</Link></li>
+                  <li><Link href="/dashboard/billing">Billing</Link></li>
+                  <li className="uk-nav-divider"></li>
+                  <li><button onClick={handleSignOut} className="uk-button uk-button-link">Sign Out</button></li>
+                </ul>
+              </div>
+            </li>
+          </ul>
         </div>
-      </nav>
-    </div>
+        
+        <div className="uk-navbar-right">
+          <ul className="uk-navbar-nav">
+            <li>
+              <Link href="/dashboard/profile">
+                {user?.name || 'Account'}
+              </Link>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </nav>
   );
 }
