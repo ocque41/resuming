@@ -73,7 +73,7 @@ export default function HomePage() {
                   className="group shadow-lg bg-[#584235] text-white hover:bg-[#2C2420] transition-all duration-base ease-default"
                 >
                   <Link href="/login/sign-up" className="flex items-center text-white">
-                    Begin Your Journey 
+                    Be a Pro
                     <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
                   </Link>
                 </Button>
@@ -107,7 +107,7 @@ export default function HomePage() {
           <GradientCard variant="wide" className="mx-auto flex flex-col justify-center bg-[#1A1614]/80 backdrop-blur-lg border-[#B4916C]/10">
             <Tabs defaultValue="pro" className="w-full max-w-4xl mx-auto">
               <TabsList className="grid w-full grid-cols-3 bg-[#2C2420]">
-                <TabsTrigger value="pro" className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white">Pro</TabsTrigger>
+                <TabsTrigger value="pro" className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white">Be a Pro</TabsTrigger>
                 <TabsTrigger value="moonlighting" className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white">Moonlighting</TabsTrigger>
                 <TabsTrigger value="ceo" className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white">CEO</TabsTrigger>
               </TabsList>
@@ -195,13 +195,7 @@ export default function HomePage() {
             </Tabs>
 
             <div className="mt-8 flex justify-center">
-              <Button 
-                asChild 
-                size="lg" 
-                className="shadow-lg bg-[#584235] text-white hover:bg-[#2C2420] transition-all duration-300"
-              >
-                <Link href="/dashboard/pricing">View Full Pricing Details</Link>
-              </Button>
+              {/* Removed "View Full Pricing Details" buttons from all tabs */}
             </div>
           </GradientCard>
         </motion.div>
