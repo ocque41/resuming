@@ -7,7 +7,8 @@ import {
   Shield, 
   Star, 
   Zap,
-  ArrowRight
+  ArrowRight,
+  Check
 } from "lucide-react";
 import { GradientCard } from "@/components/ui/gradient-card";
 import Link from "next/link";
@@ -179,6 +180,95 @@ export default function HomePage() {
           </motion.section>
         </motion.div>
       </div>
+
+      <section className="min-h-[80dvh] flex items-center justify-center px-4 relative">
+        <motion.div 
+          className="w-full"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <GradientCard variant="wide" className="mx-auto max-w-7xl flex flex-col justify-center">
+            <article className="uk-article mb-8">
+              <h1 className="uk-article-title text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-white mb-8">
+                Choose Your Perfect Plan
+              </h1>
+            </article>
+            
+            <div className="uk-tab-container" uk-tabs="true">
+              <ul className="uk-tab flex justify-center mb-8">
+                <li className="uk-active"><a href="#">Pro</a></li>
+                <li><a href="#">Moonlighting</a></li>
+                <li><a href="#">CEO</a></li>
+              </ul>
+
+              <ul className="uk-switcher">
+                <li>
+                  <div className="text-center space-y-6">
+                    <h3 className="text-3xl font-semibold text-[#B4916C]">Pro Plan</h3>
+                    <p className="text-xl text-[#E8DCC4]">$7.99/month</p>
+                    <ul className="space-y-4 max-w-md mx-auto">
+                      <li className="flex items-center text-[#B4916C]">
+                        <Check className="mr-2" /> 20 CV uploads/month
+                      </li>
+                      <li className="flex items-center text-[#B4916C]">
+                        <Check className="mr-2" /> 10 ATS analyses/month
+                      </li>
+                      <li className="flex items-center text-[#B4916C]">
+                        <Check className="mr-2" /> 7 Optimizations/month
+                      </li>
+                    </ul>
+                  </div>
+                </li>
+                <li>
+                  <div className="text-center space-y-6">
+                    <h3 className="text-3xl font-semibold text-[#B4916C]">Moonlighting Plan</h3>
+                    <p className="text-xl text-[#E8DCC4]">$14.99/month</p>
+                    <ul className="space-y-4 max-w-md mx-auto">
+                      <li className="flex items-center text-[#B4916C]">
+                        <Check className="mr-2" /> Unlimited CV uploads/month
+                      </li>
+                      <li className="flex items-center text-[#B4916C]">
+                        <Check className="mr-2" /> 20 ATS analyses/month
+                      </li>
+                      <li className="flex items-center text-[#B4916C]">
+                        <Check className="mr-2" /> 15 Optimizations/month
+                      </li>
+                    </ul>
+                  </div>
+                </li>
+                <li>
+                  <div className="text-center space-y-6">
+                    <h3 className="text-3xl font-semibold text-[#B4916C]">CEO Plan</h3>
+                    <p className="text-xl text-[#E8DCC4]">$99.99/month</p>
+                    <ul className="space-y-4 max-w-md mx-auto">
+                      <li className="flex items-center text-[#B4916C]">
+                        <Check className="mr-2" /> Unlimited Everything
+                      </li>
+                      <li className="flex items-center text-[#B4916C]">
+                        <Check className="mr-2" /> Early access to features
+                      </li>
+                      <li className="flex items-center text-[#B4916C]">
+                        <Check className="mr-2" /> 3-month job guarantee
+                      </li>
+                    </ul>
+                  </div>
+                </li>
+              </ul>
+            </div>
+
+            <div className="mt-8 flex justify-center">
+              <Button 
+                asChild 
+                size="lg" 
+                className="shadow-lg bg-[#584235] text-white hover:bg-[#2C2420] transition-all duration-300"
+              >
+                <Link href="/dashboard/pricing">View Full Pricing Details</Link>
+              </Button>
+            </div>
+          </GradientCard>
+        </motion.div>
+      </section>
 
       <footer className="bg-[#050505] text-[#E8DCC4] py-12 mt-16">
         <div className="container mx-auto px-4 text-center">
