@@ -1,34 +1,63 @@
-<article class="uk-article">
-  <h1 class="uk-article-title">
-    <a class="uk-link-reset" href="">Heading</a>
-  </h1>
+import * as React from "react"
 
-  <p class="uk-article-meta uk-margin">
-    Written by <a href="#">Super User</a> on 12 April 2012. Posted in
-    <a href="#">Blog</a>
-  </p>
+interface ArticleProps extends React.HTMLAttributes<HTMLElement> {
+  children?: React.ReactNode
+}
 
-  <p class="uk-margin uk-text-lead">
-    Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
-    tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam,
-    quis nostrud exercitation ullamco laboris nisi ut aliquip.
-  </p>
+export function Article({ className, children, ...props }: ArticleProps) {
+  return (
+    <article className="uk-article" {...props}>
+      {children}
+    </article>
+  )
+}
 
-  <p class="uk-margin">
-    Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
-    tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam,
-    quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
-    consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse
-    cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat
-    non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-  </p>
+export function ArticleTitle({ className, children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
+  return (
+    <h1 className="uk-article-title" {...props}>
+      {children}
+    </h1>
+  )
+}
 
-  <div class="uk-grid uk-grid-small uk-margin uk-child-width-auto" uk-grid>
-    <div>
-      <a class="uk-button uk-button-text" href="#">Read more</a>
+export function ArticleMeta({ className, children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
+  return (
+    <p className="uk-article-meta uk-margin" {...props}>
+      {children}
+    </p>
+  )
+}
+
+export function ArticleLead({ className, children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
+  return (
+    <p className="uk-margin uk-text-lead" {...props}>
+      {children}
+    </p>
+  )
+}
+
+export function ArticleContent({ className, children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
+  return (
+    <p className="uk-margin" {...props}>
+      {children}
+    </p>
+  )
+}
+
+export function ArticleActions({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className="uk-grid uk-grid-small uk-margin uk-child-width-auto" data-uk-grid {...props}>
+      {children}
     </div>
+  )
+}
+
+export function ArticleButton({ className, href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
+  return (
     <div>
-      <a class="uk-button uk-button-text" href="#">5 Comments</a>
+      <a className="uk-button uk-button-text" href={href} {...props}>
+        {children}
+      </a>
     </div>
-  </div>
-</article>
+  )
+}
