@@ -29,13 +29,11 @@ export default async function PricingPage() {
             >
               Plans and Pricing
             </h1>
-            <p 
-              className="text-2xl text-gray-300 max-w-3xl mx-auto animate-fade-in-up"
-            >
-              Start for free, then enjoy for $1 per month for 3 months
+            <p className="text-xl text-[#B4916C] font-semibold animate-fade-in-up">
+              Enjoy a 1 day free trial to see if you found your solution
             </p>
             <p className="text-xl text-[#B4916C] font-semibold animate-fade-in-up">
-              Choose the best plan for your business. Change plans as you grow.
+              Change plans as you grow.
             </p>
           </section>
 
