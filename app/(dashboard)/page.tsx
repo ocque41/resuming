@@ -1,6 +1,7 @@
 "use client"
 import { Terminal } from './terminal';
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   FileText, 
   TrendingUp, 
@@ -195,19 +196,26 @@ export default function HomePage() {
               </h1>
             </article>
             
-            <div className="uk-tab-container" uk-tabs="true">
-              <ul className="uk-tab flex justify-center mb-8">
-                <li className="uk-active"><a href="#">Pro</a></li>
-                <li><a href="#">Moonlighting</a></li>
-                <li><a href="#">CEO</a></li>
-              </ul>
-
-              <ul className="uk-switcher">
-                <li>
-                  <div className="text-center space-y-6">
-                    <h3 className="text-3xl font-semibold text-[#B4916C]">Pro Plan</h3>
-                    <p className="text-xl text-[#E8DCC4]">$7.99/month</p>
-                    <ul className="space-y-4 max-w-md mx-auto">
+            <Tabs defaultValue="pro" className="w-full max-w-4xl mx-auto">
+              <TabsList className="grid w-full grid-cols-3 bg-[#2C2420]">
+                <TabsTrigger value="pro" className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white">Pro</TabsTrigger>
+                <TabsTrigger value="moonlighting" className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white">Moonlighting</TabsTrigger>
+                <TabsTrigger value="ceo" className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white">CEO</TabsTrigger>
+              </TabsList>
+              <TabsContent value="pro">
+                <article className="uk-article text-center space-y-6 p-8">
+                  <h3 className="text-3xl font-semibold text-[#B4916C]">Pro Plan</h3>
+                  <p className="text-xl text-[#E8DCC4]">$7.99/month</p>
+                  <p className="uk-article-meta text-[#B4916C]/80">
+                    Perfect for professionals starting their career journey
+                  </p>
+                  <div className="uk-article-content space-y-4 max-w-2xl mx-auto text-[#E8DCC4]">
+                    <p>
+                      The Pro Plan is designed for individuals who are actively seeking new opportunities 
+                      and want to optimize their CV for better results. With our AI-powered tools, you'll 
+                      get everything you need to stand out in the job market.
+                    </p>
+                    <ul className="space-y-4 max-w-md mx-auto text-left">
                       <li className="flex items-center text-[#B4916C]">
                         <Check className="mr-2" /> 20 CV uploads/month
                       </li>
@@ -219,12 +227,22 @@ export default function HomePage() {
                       </li>
                     </ul>
                   </div>
-                </li>
-                <li>
-                  <div className="text-center space-y-6">
-                    <h3 className="text-3xl font-semibold text-[#B4916C]">Moonlighting Plan</h3>
-                    <p className="text-xl text-[#E8DCC4]">$14.99/month</p>
-                    <ul className="space-y-4 max-w-md mx-auto">
+                </article>
+              </TabsContent>
+              <TabsContent value="moonlighting">
+                <article className="uk-article text-center space-y-6 p-8">
+                  <h3 className="text-3xl font-semibold text-[#B4916C]">Moonlighting Plan</h3>
+                  <p className="text-xl text-[#E8DCC4]">$14.99/month</p>
+                  <p className="uk-article-meta text-[#B4916C]/80">
+                    Ideal for professionals managing multiple career paths
+                  </p>
+                  <div className="uk-article-content space-y-4 max-w-2xl mx-auto text-[#E8DCC4]">
+                    <p>
+                      The Moonlighting Plan caters to professionals who maintain multiple career tracks 
+                      or frequently apply to different types of positions. Get more flexibility and 
+                      analysis power to optimize multiple CVs for different roles.
+                    </p>
+                    <ul className="space-y-4 max-w-md mx-auto text-left">
                       <li className="flex items-center text-[#B4916C]">
                         <Check className="mr-2" /> Unlimited CV uploads/month
                       </li>
@@ -236,12 +254,22 @@ export default function HomePage() {
                       </li>
                     </ul>
                   </div>
-                </li>
-                <li>
-                  <div className="text-center space-y-6">
-                    <h3 className="text-3xl font-semibold text-[#B4916C]">CEO Plan</h3>
-                    <p className="text-xl text-[#E8DCC4]">$99.99/month</p>
-                    <ul className="space-y-4 max-w-md mx-auto">
+                </article>
+              </TabsContent>
+              <TabsContent value="ceo">
+                <article className="uk-article text-center space-y-6 p-8">
+                  <h3 className="text-3xl font-semibold text-[#B4916C]">CEO Plan</h3>
+                  <p className="text-xl text-[#E8DCC4]">$99.99/month</p>
+                  <p className="uk-article-meta text-[#B4916C]/80">
+                    For executives and leaders aiming for top positions
+                  </p>
+                  <div className="uk-article-content space-y-4 max-w-2xl mx-auto text-[#E8DCC4]">
+                    <p>
+                      The CEO Plan is our premium offering for executives and senior professionals. 
+                      With unlimited access to all features and our job guarantee, this plan ensures 
+                      you'll secure the high-level position you deserve.
+                    </p>
+                    <ul className="space-y-4 max-w-md mx-auto text-left">
                       <li className="flex items-center text-[#B4916C]">
                         <Check className="mr-2" /> Unlimited Everything
                       </li>
@@ -253,9 +281,9 @@ export default function HomePage() {
                       </li>
                     </ul>
                   </div>
-                </li>
-              </ul>
-            </div>
+                </article>
+              </TabsContent>
+            </Tabs>
 
             <div className="mt-8 flex justify-center">
               <Button 
