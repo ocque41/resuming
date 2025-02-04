@@ -9,6 +9,14 @@ import {
   Zap,
   ArrowRight
 } from "lucide-react";
+import { 
+  ChakraCard,
+  ChakraCardHeader,
+  ChakraCardTitle,
+  ChakraCardDescription,
+  ChakraCardContent,
+  ChakraCardFooter
+} from "@/components/ui/chakraCard";
 import Link from "next/link";
 import { motion, Variants } from "framer-motion";
 
@@ -46,27 +54,25 @@ export default function HomePage() {
           initial="hidden"
           animate="visible"
         >
-          <motion.section 
-            className="space-y-8"
-            variants={containerVariants}
-          >
-            <motion.h1 
-              className="text-6xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] via-[#B4916C] to-[#2C2420] animate-fade-in"
-              variants={itemVariants}
-            >
-              Craft Your Perfect CV
-            </motion.h1>
-            <motion.p 
-              className="text-2xl text-gray-300 max-w-3xl mx-auto animate-fade-in-up"
-              variants={itemVariants}
-            >
-              Transform your career journey with our intelligent AI-powered CV optimization platform
-            </motion.p>
-          
-            <motion.div 
-              className="flex justify-center gap-4 animate-slide-in-right"
-              variants={itemVariants}
-            >
+          <motion.div variants={containerVariants}>
+            <ChakraCard className="mx-auto max-w-4xl">
+              <ChakraCardHeader>
+                <ChakraCardTitle 
+                  className="text-6xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] via-[#B4916C] to-[#2C2420] animate-fade-in"
+                >
+                  Craft Your Perfect CV
+                </ChakraCardTitle>
+                <ChakraCardDescription 
+                  className="text-2xl mt-6 max-w-3xl mx-auto animate-fade-in-up"
+                >
+                  Transform your career journey with our intelligent AI-powered CV optimization platform
+                </ChakraCardDescription>
+              </ChakraCardHeader>
+              <ChakraCardContent>
+                <motion.div 
+                  className="flex justify-center gap-4 animate-slide-in-right"
+                  variants={itemVariants}
+                >
               <Button 
                 asChild 
                 size="lg" 
@@ -85,8 +91,10 @@ export default function HomePage() {
               >
                 <Link href="/pricing">Explore Plans</Link>
               </Button>
-            </motion.div>
-          </motion.section>
+                </motion.div>
+              </ChakraCardContent>
+            </ChakraCard>
+          </motion.div>
 
           <motion.section 
             className="grid md:grid-cols-3 gap-8"
