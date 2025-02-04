@@ -48,7 +48,12 @@ export default function RootLayout({
       <body className="min-h-[100dvh]">
         <ThemeProvider defaultTheme="light" storageKey="app-theme">
           <UserProvider userPromise={userPromise}>
-            <MainNav />
+            <div className="relative">
+              <MainNav />
+              <div className="fixed top-4 right-4">
+                <ThemeToggle />
+              </div>
+            </div>
             {children}
           </UserProvider>
         </ThemeProvider>
