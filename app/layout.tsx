@@ -4,6 +4,7 @@ import { Manrope } from 'next/font/google';
 import { UserProvider } from '@/lib/auth';
 import { getUser } from '@/lib/db/queries';
 import { MainNav } from '@/components/ui/main-nav';
+import { Footer } from '@/components/ui/footer';
 import { ThemeProvider } from 'app/theme-provider';
 import { I18nProvider } from '@/components/i18n-provider';
 
@@ -52,7 +53,10 @@ export default function RootLayout({
           <ThemeProvider defaultTheme="light" storageKey="app-theme">
             <UserProvider userPromise={userPromise}>
               <MainNav />
-              {children}
+              <main className="flex-grow">
+                {children}
+              </main>
+              <Footer />
             </UserProvider>
           </ThemeProvider>
         </I18nProvider>
