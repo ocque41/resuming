@@ -46,33 +46,28 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#050505]">
-      <div className="container mx-auto px-4 py-16 text-center flex-grow">
+    <div className="flex flex-col bg-[#050505]">
+      <section className="min-h-[100dvh] flex items-center justify-center px-4 relative">
         <motion.div 
-          className="max-w-5xl mx-auto space-y-16"
+          className="w-full"
           variants={containerVariants}
           initial="hidden"
           animate="visible"
         >
-          <motion.div variants={containerVariants}>
-            <ChakraCard variant="gradient">
-              <ChakraCardHeader className="space-y-8">
-                <ChakraCardTitle 
-                  className="text-5xl md:text-7xl font-bold tracking-tight text-white animate-fade-in"
-                >
+          <motion.div variants={containerVariants} className="w-full">
+            <GradientCard variant="wide" className="mx-auto max-w-7xl min-h-[80dvh] flex flex-col justify-center">
+              <div className="space-y-8 mb-12">
+                <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight text-white animate-fade-in">
                   Craft Your Perfect CV
-                </ChakraCardTitle>
-                <ChakraCardDescription 
-                  className="text-xl md:text-2xl mt-6 max-w-3xl mx-auto text-[#B4916C] animate-fade-in-up"
-                >
+                </h1>
+                <p className="text-xl md:text-2xl lg:text-3xl mt-6 max-w-3xl mx-auto text-[#B4916C] animate-fade-in-up">
                   Transform your career journey with our intelligent AI-powered CV optimization platform
-                </ChakraCardDescription>
-              </ChakraCardHeader>
-              <ChakraCardContent>
-                <motion.div 
-                  className="flex flex-col md:flex-row justify-center gap-6 animate-slide-in-right"
-                  variants={itemVariants}
-                >
+                </p>
+              </div>
+              <motion.div 
+                className="flex flex-col md:flex-row justify-center gap-6 animate-slide-in-right"
+                variants={itemVariants}
+              >
               <Button 
                 asChild 
                 size="lg" 
@@ -92,9 +87,11 @@ export default function HomePage() {
                 <Link href="/pricing">Explore Plans</Link>
               </Button>
                 </motion.div>
-              </ChakraCardContent>
-            </ChakraCard>
+              </motion.div>
+            </GradientCard>
           </motion.div>
+        </motion.div>
+      </section>
 
           <motion.section 
             className="grid md:grid-cols-3 gap-8"
