@@ -47,39 +47,41 @@ export function MainNav() {
                       </ul>
                     </div>
                   </li>
-              <li>
-                <a href="#">Parent</a>
-                <div className="uk-navbar-dropdown uk-navbar-dropdown-width-2">
-                  <div className="uk-drop-grid uk-child-width-1-2" uk-grid>
-                    <div>
-                      <ul className="uk-nav uk-navbar-dropdown-nav">
-                        <li className="uk-active"><a href="#">Active</a></li>
-                        <li><a href="#">Item</a></li>
-                        <li className="uk-nav-header">Header</li>
-                        <li><a href="#">Item</a></li>
-                        <li><a href="#">Item</a></li>
-                        <li className="uk-nav-divider"></li>
-                        <li><a href="#">Item</a></li>
-                      </ul>
+                  <li>
+                    <a href="#">Parent</a>
+                    <div className="uk-navbar-dropdown uk-navbar-dropdown-width-2">
+                      <div className="uk-drop-grid uk-child-width-1-2" uk-grid>
+                        <div>
+                          <ul className="uk-nav uk-navbar-dropdown-nav">
+                            <li className="uk-active"><a href="#">Active</a></li>
+                            <li><a href="#">Item</a></li>
+                            <li className="uk-nav-header">Header</li>
+                            <li><a href="#">Item</a></li>
+                            <li><a href="#">Item</a></li>
+                            <li className="uk-nav-divider"></li>
+                            <li><a href="#">Item</a></li>
+                          </ul>
+                        </div>
+                        <div>
+                          <ul className="uk-nav uk-navbar-dropdown-nav">
+                            <li className="uk-active"><a href="#">Active</a></li>
+                            <li><a href="#">Item</a></li>
+                            <li className="uk-nav-header">Header</li>
+                            <li><a href="#">Item</a></li>
+                            <li><a href="#">Item</a></li>
+                            <li className="uk-nav-divider"></li>
+                            <li><a href="#">Item</a></li>
+                          </ul>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <ul className="uk-nav uk-navbar-dropdown-nav">
-                        <li className="uk-active"><a href="#">Active</a></li>
-                        <li><a href="#">Item</a></li>
-                        <li className="uk-nav-header">Header</li>
-                        <li><a href="#">Item</a></li>
-                        <li><a href="#">Item</a></li>
-                        <li className="uk-nav-divider"></li>
-                        <li><a href="#">Item</a></li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              </li>
-            </ul>
+                  </li>
+                </ul>
+              </div>
+            </div>
           </div>
-        </div>
+        </nav>
       </div>
-    </nav>
-  </div>
-  )
+    </div>
+  );
+}
