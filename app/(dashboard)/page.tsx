@@ -137,7 +137,7 @@ export default function HomePage() {
                     </ul>
                   </div>
                   <div className="mt-8 flex justify-center">
-                    <Button variant="secondary">Details</Button>
+                    <Button variant="secondary" className="bg-[#050505]">Details</Button>
                   </div>
                 </article>
               </TabsContent>
