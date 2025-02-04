@@ -17,12 +17,16 @@ export function GradientCard({
     <motion.div
       className={cn(
         "relative overflow-hidden rounded-3xl p-12",
-        "bg-gradient-to-br from-[#584235] via-[#2C2420] to-[#1A1614]",
+        "bg-[#1A1614]",
         "border border-[#B4916C]/20",
         "shadow-2xl transition-all duration-300",
-        "before:absolute before:inset-0",
-        "before:bg-gradient-to-r before:from-transparent before:via-[#B4916C]/10 before:to-transparent",
-        "before:animate-gradient-shine",
+        "before:absolute before:inset-0 before:z-0",
+        "before:bg-[radial-gradient(circle_at_50%_50%,rgba(88,66,53,0.5),rgba(44,36,32,0.2),rgba(26,22,20,0))]",
+        "before:blur-xl before:animate-bubble-float",
+        "after:absolute after:inset-0 after:z-0",
+        "after:bg-[radial-gradient(circle_at_70%_30%,rgba(180,145,108,0.3),rgba(88,66,53,0.1),rgba(26,22,20,0))]",
+        "after:blur-xl after:animate-bubble-float-delayed",
+        "[&>*]:relative [&>*]:z-10",
         variant === 'default' ? 'w-80' : 'w-full',
         "text-center",
         className
