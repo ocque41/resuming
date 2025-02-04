@@ -43,7 +43,7 @@ export function MainNav() {
               <div className="uk-navbar-right">
                 <ul className="uk-navbar-nav uk-navbar-transparent">
                   <li>
-                    <Link href="/pricing" className="text-[#B4916C] hover:text-white transition-colors">
+                    <Link href="/pricing" className="text-white hover:text-white transition-colors">
                       Products
                     </Link>
                   </li>
@@ -52,13 +52,13 @@ export function MainNav() {
                       href="https://chromad.vercel.app/docs/products/resuming/overview" 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="text-[#B4916C] hover:text-white transition-colors"
+                      className="text-white hover:text-white transition-colors"
                     >
                       Documentation
                     </a>
                   </li>
                   <li>
-                    <Link href="/sign-in" className="text-[#B4916C] hover:text-white transition-colors">
+                    <Link href="/sign-in" className="text-white hover:text-white transition-colors">
                       Log In
                     </Link>
                   </li>
