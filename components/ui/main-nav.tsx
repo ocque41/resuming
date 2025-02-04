@@ -23,8 +23,11 @@ export function MainNav() {
               <li className={pathname === '/dashboard' ? 'uk-active' : ''}>
                 <Link href="/dashboard">Dashboard</Link>
               </li>
-              <li className={pathname === '/dashboard/pricing' ? 'uk-active' : ''}>
-                <Link href="/dashboard/pricing">Pricing</Link>
+              <li className={pathname === '/dashboard/products' ? 'uk-active' : ''}>
+                <Link href="/dashboard/pricing">Products</Link>
+              </li>
+              <li className={pathname === '/docs' ? 'uk-active' : ''}>
+                <Link href="https://chromad.vercel.app/docs/products/resuming/overview" target="_blank">Docs</Link>
               </li>
               <li>
                 <a href="#">Settings</a>

@@ -30,7 +30,7 @@ export default async function PricingPage() {
             <h1 
               className="text-6xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] via-[#B4916C] to-[#2C2420] animate-fade-in"
             >
-              Choose Your Plan
+              Choose Your Product
             </h1>
             <p 
               className="text-2xl text-gray-300 max-w-3xl mx-auto animate-fade-in-up"
