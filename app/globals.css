@@ -3,10 +3,38 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --background: #FAF6ED;
+    --foreground: #2C2420;
+    --primary: #584235;
+    --secondary: #B4916C;
+    --accent: #E8DCC4;
+  }
+
   * {
     @apply border-border;
   }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "ss01", "ss02", "cv01", "cv02", "cv03";
+  }
+
+  .gradient-bg {
+    background: linear-gradient(135deg, #584235 0%, #B4916C 100%);
+  }
+
+  .rice-paper-bg {
+    background: linear-gradient(135deg, #FAF6ED 0%, #E8DCC4 100%);
+  }
+}
+
+@layer components {
+  .container-xl {
+    @apply max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  
+  .text-balance {
+    text-wrap: balance;
   }
 }
