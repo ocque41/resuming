@@ -31,6 +31,15 @@ export function MainNav() {
             <div
               uk-navbar="dropbar: true; dropbar-transparent-mode: behind; dropbar-anchor: !.uk-navbar-container; target-y: !.uk-navbar-container"
             >
+              <div className="uk-navbar-left">
+                <Link href="/" className="uk-navbar-item">
+                  <img 
+                    src="/Resuming white.png" 
+                    alt="Resuming Logo" 
+                    className="h-8 w-auto"
+                  />
+                </Link>
+              </div>
               <div className="uk-navbar-right">
                 <ul className="uk-navbar-nav uk-navbar-transparent">
                   <li>
