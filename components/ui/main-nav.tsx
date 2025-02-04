@@ -30,8 +30,8 @@ export function MainNav() {
             <div
               uk-navbar="dropbar: true; dropbar-transparent-mode: behind; dropbar-anchor: !.uk-navbar-container; target-y: !.uk-navbar-container"
             >
-              <div className="uk-navbar-left">
-                <ul className="uk-navbar-nav">
+              <div className="uk-navbar-right">
+                <ul className="uk-navbar-nav uk-navbar-transparent">
                   <li className="uk-active"><a href="#">Active</a></li>
                   <li>
                     <a href="#">Parent</a>
