@@ -66,7 +66,7 @@ export default function HomePage() {
                   size="lg" 
                   className="group shadow-lg bg-[#584235] text-white hover:bg-[#2C2420] transition-all duration-base ease-default"
                 >
-                  <Link href="/sign-up" className="flex items-center text-white">
+                  <Link href="/login/sign-up" className="flex items-center text-white">
                     Begin Your Journey 
                     <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
                   </Link>
@@ -77,7 +77,7 @@ export default function HomePage() {
                   size="lg" 
                   className="shadow-lg border-2 border-[#B4916C] text-[#B4916C] hover:bg-[#2C2420] hover:text-white transition-all duration-300"
                 >
-                  <Link href="/pricing">Explore Plans</Link>
+                  <Link href="/dashboard/pricing">Explore Plans</Link>
                 </Button>
               </motion.div>
             </GradientCard>
