@@ -55,7 +55,7 @@ export default function HomePage() {
           animate="visible"
         >
           <motion.div variants={containerVariants}>
-            <ChakraCard variant="hero">
+            <ChakraCard variant="gradient">
               <ChakraCardHeader className="space-y-8">
                 <ChakraCardTitle 
                   className="text-5xl md:text-7xl font-bold tracking-tight text-white animate-fade-in"
