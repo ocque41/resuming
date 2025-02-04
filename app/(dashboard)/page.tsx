@@ -2,6 +2,7 @@
 import { Terminal } from './terminal';
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Article, ArticleTitle } from "@/components/ui/article";
 import { 
   FileText, 
   TrendingUp, 
@@ -182,19 +183,20 @@ export default function HomePage() {
         </motion.div>
       </div>
 
-      <section className="min-h-[80dvh] flex items-center justify-center px-4 relative">
+      <section className="min-h-[80dvh] px-4 relative">
         <motion.div 
-          className="w-full"
+          className="w-full max-w-7xl mx-auto"
           variants={containerVariants}
           initial="hidden"
           animate="visible"
         >
-          <GradientCard variant="wide" className="mx-auto max-w-7xl flex flex-col justify-center">
-            <article className="uk-article mb-8">
-              <h1 className="uk-article-title text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-white mb-8">
-                Choose Your Perfect Plan
-              </h1>
-            </article>
+          <Article className="mb-12">
+            <ArticleTitle className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-white">
+              Choose Your Perfect Plan
+            </ArticleTitle>
+          </Article>
+
+          <GradientCard variant="wide" className="mx-auto flex flex-col justify-center">
             
             <Tabs defaultValue="pro" className="w-full max-w-4xl mx-auto">
               <TabsList className="grid w-full grid-cols-3 bg-[#2C2420]">
