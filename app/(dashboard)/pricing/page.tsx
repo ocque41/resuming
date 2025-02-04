@@ -29,7 +29,7 @@ export default async function PricingPage() {
             >
               Plans and Pricing
             </h1>
-            <p className="text-xl text-[#B4916C] font-semibold animate-fade-in-up">
+            <p className="text-xl text-[#B4916C] font-semibold animate-fade-in-up mt-4">
               Enjoy a 1 day free trial to see if you found your solution
             </p>
             <p className="text-xl text-[#B4916C] font-semibold animate-fade-in-up">
