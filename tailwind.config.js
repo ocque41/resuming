@@ -1,3 +1,4 @@
+const {heroui} = require('@heroui/theme');
 import franken from "franken-ui/shadcn-ui/preset-quick";
 
 /** @type {import('tailwindcss').Config} */
@@ -81,8 +82,7 @@ export default {
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./lib/**/*.{js,ts,jsx,tsx,mdx}",
+    "./node_modules/@heroui/theme/dist/**/*.{js,ts,jsx,tsx}"
   ],
-  plugins: [
-    require('tailwindcss-animate'),
-  ],
+  plugins: [require('tailwindcss-animate'),heroui()],
 }
