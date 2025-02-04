@@ -1,6 +1,6 @@
 'use client';
 
-import { BottomNav } from '@/components/ui/bottom-nav';
+import { Sidebar } from '@/components/ui/sidebar';
 
 export default function DashboardLayout({
   children,
@@ -13,9 +13,8 @@ export default function DashboardLayout({
       <main className="flex-1 overflow-y-auto p-0 lg:p-4 pb-16">{children}</main>
 
       {/* Bottom Navigation */}
-      <BottomNav 
+      <Sidebar 
         className="fixed bottom-0 left-0 right-0 bg-[#2C2420] border-t border-[#584235] lg:hidden" 
-        size="sm"
       />
     </div>
   );
