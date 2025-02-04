@@ -27,19 +27,24 @@ export default async function PricingPage() {
             <h1 
               className="text-6xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] via-[#B4916C] to-[#2C2420] animate-fade-in"
             >
-              Choose Your Product
+              Planes y precios
             </h1>
             <p 
               className="text-2xl text-gray-300 max-w-3xl mx-auto animate-fade-in-up"
             >
-              Unlock the power of AI-driven CV optimization with flexible pricing
+              Comienza gratis y, luego, disfruta de por 1 € al mes por 3 meses
             </p>
             <p className="text-xl text-[#B4916C] font-semibold animate-fade-in-up">
-              Start with 1 Day FREE Trial on any plan
+              Elige el mejor plan para tu negocio. Cambia de plan a medida que crezcas.
             </p>
           </section>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="flex justify-center mb-8">
+            <button className="px-4 py-2 bg-[#584235] text-white rounded-l">Pago mensual</button>
+            <button className="px-4 py-2 bg-[#2C2420] text-white rounded-r">Pago anual (ahorra un 25%)</button>
+          </div>
+
+          <div className="grid md:grid-cols-4 gap-8">
             <PricingCard
               name="Pro"
               price={proPrice?.unitAmount || 799}
@@ -100,6 +105,28 @@ export default async function PricingPage() {
                 'Access to Analytics Suite ⓘ': 'Full access to advanced analytics and insights',
                 'Early access to new features ⓘ': 'Be the first to try new platform features',
                 'Secure a high paying job in 3 months or money back guaranteed ⓘ': 'Full refund if you don\'t secure a high-paying position within 3 months'
+              }}
+              highlight={false}
+              priceId="price_1QoYTrFYYYXM77wGffciG20i"
+            />
+            <PricingCard
+              name="Enterprise"
+              price={19999}
+              interval="month"
+              annualPrice={179900}
+              features={[
+                'Custom CV uploads ⓘ',
+                'Custom ATS analyses ⓘ',
+                'Custom Optimizations ⓘ',
+                'Dedicated Account Manager ⓘ',
+                '24/7 Support ⓘ',
+              ]}
+              tooltips={{
+                'Custom CV uploads ⓘ': 'Tailored CV upload limits based on your needs',
+                'Custom ATS analyses ⓘ': 'Custom ATS analysis tailored to your requirements',
+                'Custom Optimizations ⓘ': 'Unlimited AI-powered optimization suggestions',
+                'Dedicated Account Manager ⓘ': 'Personalized support with a dedicated account manager',
+                '24/7 Support ⓘ': 'Round-the-clock support for any issues or queries'
               }}
               highlight={false}
               priceId="price_1QoYTrFYYYXM77wGffciG20i"
