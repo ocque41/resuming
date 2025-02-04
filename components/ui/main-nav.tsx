@@ -25,7 +25,7 @@ export function MainNav() {
       >
         <nav
           className="uk-navbar-container uk-position-relative uk-position-z-index-high"
-          style={{ backgroundColor: '#050505' }}
+          style={{ backgroundColor: '#050505', borderBottom: 'none' }}
         >
           <div className="uk-container">
             <div
