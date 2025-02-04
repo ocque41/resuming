@@ -17,15 +17,15 @@ export function MainNav() {
   return (
     <div
       className="uk-preserve-color uk-inverse-light uk-background-cover"
-      style={{ backgroundColor: '#353839' }}
+      style={{ backgroundColor: '#0f0f0f' }}
     >
       <div
         uk-sticky="sel-target: .uk-navbar-container; cls-active: uk-navbar-sticky; end: ! *; offset: 80"
-        style={{ '--uk-navbar-dropdown-background': '#353839' } as React.CSSProperties}
+        style={{ '--uk-navbar-dropdown-background': '#0f0f0f' } as React.CSSProperties}
       >
         <nav
           className="uk-navbar-container uk-position-relative uk-position-z-index-high"
-          style={{ backgroundColor: '#353839' }}
+          style={{ backgroundColor: '#0f0f0f' }}
         >
           <div className="uk-container">
             <div
