@@ -137,7 +137,9 @@ export default function HomePage() {
                     </ul>
                   </div>
                   <div className="mt-8 flex justify-center">
-                    <Button variant="secondary" className="bg-[#050505]">Details</Button>
+                    <Button asChild variant="secondary" className="bg-[#050505]">
+                      <Link href="/pricing">Details</Link>
+                    </Button>
                   </div>
                 </article>
               </TabsContent>
@@ -167,7 +169,9 @@ export default function HomePage() {
                     </ul>
                   </div>
                   <div className="mt-8 flex justify-center">
-                    <Button variant="secondary" className="bg-[#050505]">"Details</Button>
+                    <Button asChild variant="secondary" className="bg-[#050505]">
+                      <Link href="/pricing">Details</Link>
+                    </Button>
                   </div>
                 </article>
               </TabsContent>
@@ -197,7 +201,9 @@ export default function HomePage() {
                     </ul>
                   </div>
                   <div className="mt-8 flex justify-center">
-                    <Button variant="secondary" className="bg-[#050505]">Details</Button>
+                    <Button asChild variant="secondary" className="bg-[#050505]">
+                      <Link href="/pricing">Details</Link>
+                    </Button>
                   </div>
                 </article>
               </TabsContent>
