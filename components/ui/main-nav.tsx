@@ -82,5 +82,4 @@ export function MainNav() {
       </div>
     </nav>
   </div>
-  );
-}
+  )
