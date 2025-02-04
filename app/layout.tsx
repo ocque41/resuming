@@ -33,6 +33,7 @@ export default function RootLayout({
       className={manrope.className}
     >
       <head>
+        <link rel="stylesheet" href="https://unpkg.com/franken-ui@1.1.0/dist/css/core.min.css" />
         <script src="https://unpkg.com/franken-ui@1.1.0/dist/js/core.iife.js"></script>
         <script src="https://unpkg.com/franken-ui@1.1.0/dist/js/icon.iife.js"></script>
         <script
