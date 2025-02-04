@@ -91,9 +91,9 @@ export default function HomePage() {
         </motion.div>
       </section>
 
-      <section className="min-h-[60dvh] px-4 relative">
+      <section className="min-h-[100dvh] flex items-center justify-center px-4 relative">
         <motion.div 
-          className="w-full max-w-7xl mx-auto"
+          className="w-full max-w-7xl mx-auto py-16"
           variants={containerVariants}
           initial="hidden"
           animate="visible"
