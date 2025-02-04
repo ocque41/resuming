@@ -23,19 +23,27 @@ export function ThemeProvider({
   storageKey = 'ui-theme',
   ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window !== 'undefined') {
-      return (localStorage.getItem(storageKey) as Theme) || defaultTheme
-    }
-    return defaultTheme
-  })
+  const [theme, setTheme] = useState<Theme>('light')
 
   useEffect(() => {
-    const root = window.document.documentElement
-    root.classList.remove('light', 'dark')
-    root.classList.add(theme)
-    root.classList.add('uk-theme-default')
-  }, [theme])
+    // Check system preference
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const updateTheme = (e: MediaQueryListEvent | MediaQueryList) => {
+      const newTheme = e.matches ? 'dark' : 'light'
+      setTheme(newTheme)
+      const root = window.document.documentElement
+      root.classList.remove('light', 'dark')
+      root.classList.add(newTheme)
+      root.classList.add('uk-theme-default')
+    }
+
+    // Initial check
+    updateTheme(mediaQuery)
+
+    // Listen for changes
+    mediaQuery.addEventListener('change', updateTheme)
+    return () => mediaQuery.removeEventListener('change', updateTheme)
+  }, [])
                                                                                                
   const value = {
     theme,
