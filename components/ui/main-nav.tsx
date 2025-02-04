@@ -33,49 +33,25 @@ export function MainNav() {
             >
               <div className="uk-navbar-right">
                 <ul className="uk-navbar-nav uk-navbar-transparent">
-                  <li className="uk-active"><a href="#">Active</a></li>
                   <li>
-                    <a href="#">Parent</a>
-                    <div className="uk-navbar-dropdown">
-                      <ul className="uk-nav uk-navbar-dropdown-nav">
-                        <li className="uk-active"><a href="#">Active</a></li>
-                        <li><a href="#">Item</a></li>
-                        <li className="uk-nav-header">Header</li>
-                        <li><a href="#">Item</a></li>
-                        <li><a href="#">Item</a></li>
-                        <li className="uk-nav-divider"></li>
-                        <li><a href="#">Item</a></li>
-                      </ul>
-                    </div>
+                    <Link href="/pricing" className="text-[#B4916C] hover:text-white transition-colors">
+                      Products
+                    </Link>
                   </li>
                   <li>
-                    <a href="#">Parent</a>
-                    <div className="uk-navbar-dropdown uk-navbar-dropdown-width-2">
-                      <div className="uk-drop-grid uk-child-width-1-2" uk-grid>
-                        <div>
-                          <ul className="uk-nav uk-navbar-dropdown-nav">
-                            <li className="uk-active"><a href="#">Active</a></li>
-                            <li><a href="#">Item</a></li>
-                            <li className="uk-nav-header">Header</li>
-                            <li><a href="#">Item</a></li>
-                            <li><a href="#">Item</a></li>
-                            <li className="uk-nav-divider"></li>
-                            <li><a href="#">Item</a></li>
-                          </ul>
-                        </div>
-                        <div>
-                          <ul className="uk-nav uk-navbar-dropdown-nav">
-                            <li className="uk-active"><a href="#">Active</a></li>
-                            <li><a href="#">Item</a></li>
-                            <li className="uk-nav-header">Header</li>
-                            <li><a href="#">Item</a></li>
-                            <li><a href="#">Item</a></li>
-                            <li className="uk-nav-divider"></li>
-                            <li><a href="#">Item</a></li>
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
+                    <a 
+                      href="https://chromad.vercel.app/docs/products/resuming/overview" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-[#B4916C] hover:text-white transition-colors"
+                    >
+                      Documentation
+                    </a>
+                  </li>
+                  <li>
+                    <Link href="/sign-in" className="text-[#B4916C] hover:text-white transition-colors">
+                      Log In
+                    </Link>
                   </li>
                 </ul>
               </div>
