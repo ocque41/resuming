@@ -32,8 +32,18 @@ export default function RootLayout({
       className={manrope.className}
     >
       <head>
-        <script src="https://unpkg.com/franken-ui@1.1.0/dist/js/core.iife.js" type="module"></script>
-        <script src="https://unpkg.com/franken-ui@1.1.0/dist/js/icon.iife.js" type="module"></script>
+        <script src="https://unpkg.com/franken-ui@1.1.0/dist/js/core.iife.js"></script>
+        <script src="https://unpkg.com/franken-ui@1.1.0/dist/js/icon.iife.js"></script>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              document.addEventListener("uikit:init", () => {
+                // Initialize Franken UI components here
+                console.log("Franken UI initialized");
+              });
+            `,
+          }}
+        />
       </head>
       <body className="min-h-[100dvh]">
         <ThemeProvider defaultTheme="light" storageKey="app-theme">
