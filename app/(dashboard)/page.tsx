@@ -132,7 +132,7 @@ export default function HomePage() {
                 <p className={`${textColor} opacity-70 group-hover:opacity-100 transition-colors`}>{description}</p>
               </motion.div>
             ))}
-        </motion.section>
+          </motion.section>
       </div>
 
       <div className="container mx-auto px-4 py-16">
@@ -170,7 +170,7 @@ export default function HomePage() {
         </motion.div>
       </div>
 
-      <footer className="bg-[#050505] text-[#E8DCC4] py-12">
+      <footer className="bg-[#050505] text-[#E8DCC4] py-12 mt-16">
         <div className="container mx-auto px-4 text-center">
           <div className="flex justify-center space-x-6 mb-6">
             <a href="https://twitter.com/resumingai" target="_blank" rel="noopener noreferrer" className="text-[#B4916C] hover:text-white transition-colors">
