@@ -2,6 +2,7 @@ import { checkoutAction } from '@/lib/payments/actions';
 import { Check } from 'lucide-react';
 import { getStripePrices, getStripeProducts } from '@/lib/payments/stripe';
 import { SubmitButton } from './submit-button';
+import { Navbar } from '@/components/ui/navbar';
 
 // Prices are fresh for one hour max
 export const revalidate = 3600;
@@ -22,6 +23,7 @@ export default async function PricingPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-black bg-gradient-to-br from-black via-[#0a0a0a] to-[#1a1a1a]">
+      <Navbar />
       <div className="container mx-auto px-4 py-16 text-center flex-grow">
         <div className="max-w-5xl mx-auto space-y-16">
           <section className="space-y-8">
