@@ -30,52 +30,20 @@ export function MainNav() {
             <div
               uk-navbar="dropbar: true; dropbar-transparent-mode: behind; dropbar-anchor: !.uk-navbar-container; target-y: !.uk-navbar-container"
             >
-              <div className="uk-navbar-left">
+              <div className="uk-navbar-right">
                 <ul className="uk-navbar-nav">
-                  <li className="uk-active"><a href="#">Active</a></li>
-                  <li>
-                    <a href="#">Parent</a>
-                    <div className="uk-navbar-dropdown">
-                      <ul className="uk-nav uk-navbar-dropdown-nav">
-                        <li className="uk-active"><a href="#">Active</a></li>
-                        <li><a href="#">Item</a></li>
-                        <li className="uk-nav-header">Header</li>
-                        <li><a href="#">Item</a></li>
-                        <li><a href="#">Item</a></li>
-                        <li className="uk-nav-divider"></li>
-                        <li><a href="#">Item</a></li>
-                      </ul>
-                    </div>
-                  </li>
-                  <li>
-                    <a href="#">Parent</a>
-                    <div className="uk-navbar-dropdown uk-navbar-dropdown-width-2">
-                      <div className="uk-drop-grid uk-child-width-1-2" uk-grid>
-                        <div>
-                          <ul className="uk-nav uk-navbar-dropdown-nav">
-                            <li className="uk-active"><a href="#">Active</a></li>
-                            <li><a href="#">Item</a></li>
-                            <li className="uk-nav-header">Header</li>
-                            <li><a href="#">Item</a></li>
-                            <li><a href="#">Item</a></li>
-                            <li className="uk-nav-divider"></li>
-                            <li><a href="#">Item</a></li>
-                          </ul>
-                        </div>
-                        <div>
-                          <ul className="uk-nav uk-navbar-dropdown-nav">
-                            <li className="uk-active"><a href="#">Active</a></li>
-                            <li><a href="#">Item</a></li>
-                            <li className="uk-nav-header">Header</li>
-                            <li><a href="#">Item</a></li>
-                            <li><a href="#">Item</a></li>
-                            <li className="uk-nav-divider"></li>
-                            <li><a href="#">Item</a></li>
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-                  </li>
+                  <li><Link href="/">Home</li>
+                  {user ? (
+                    <>
+                      <li><Link href="/dashboard">Dashboard</Link></li>
+                      <li><button onClick={handleSignOut}>Sign Out</button></li>
+                    </>
+                  ) : (
+                    <>
+                      <li><Link href="/sign-in">Sign In</Link></li>
+                      <li><Link href="/sign-up">Sign Up</Link></li>
+                    </>
+                  )}
                 </ul>
               </div>
             </div>
