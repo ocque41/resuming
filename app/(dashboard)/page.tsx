@@ -191,12 +191,12 @@ export default function HomePage() {
           animate="visible"
         >
           <Article className="mb-12">
-            <ArticleTitle className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-white">
-              Choose Your Perfect Plan
+            <ArticleTitle className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] via-[#B4916C] to-[#2C2420]">
+              Products
             </ArticleTitle>
           </Article>
 
-          <GradientCard variant="wide" className="mx-auto flex flex-col justify-center">
+          <GradientCard variant="wide" className="mx-auto flex flex-col justify-center bg-[#1A1614]/80 backdrop-blur-lg border-[#B4916C]/10">
             
             <Tabs defaultValue="pro" className="w-full max-w-4xl mx-auto">
               <TabsList className="grid w-full grid-cols-3 bg-[#2C2420]">
