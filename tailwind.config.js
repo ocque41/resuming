@@ -7,7 +7,7 @@ export default {
     franken({
       customPalette: {
         ".uk-theme-default": {
-          "--background": "0 0% 100%",
+          "--background": "0 0% 21%",
           "--foreground": "222.2 47.4% 11.2%",
           "--muted": "210 40% 96.1%",
           "--muted-foreground": "215.4 16.3% 46.9%",
@@ -41,7 +41,7 @@ export default {
           "--sidebar-ring": "217.2 91.2% 59.8%"
         },
         ".dark.uk-theme-default": {
-          "--background": "224 71% 4%",
+          "--background": "0 0% 21%",
           "--foreground": "213 31% 91%",
           "--muted": "223 47% 11%",
           "--muted-foreground": "215.4 16.3% 56.9%",
