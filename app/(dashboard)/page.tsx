@@ -136,6 +136,9 @@ export default function HomePage() {
                       </li>
                     </ul>
                   </div>
+                  <div className="mt-8 flex justify-center">
+                    <Button variant="secondary">Details</Button>
+                  </div>
                 </article>
               </TabsContent>
               <TabsContent value="moonlighting">
@@ -163,6 +166,9 @@ export default function HomePage() {
                       </li>
                     </ul>
                   </div>
+                  <div className="mt-8 flex justify-center">
+                    <Button variant="secondary">Details</Button>
+                  </div>
                 </article>
               </TabsContent>
               <TabsContent value="ceo">
@@ -189,6 +195,9 @@ export default function HomePage() {
                         <Check className="mr-2" /> 3-month job guarantee
                       </li>
                     </ul>
+                  </div>
+                  <div className="mt-8 flex justify-center">
+                    <Button variant="secondary">Details</Button>
                   </div>
                 </article>
               </TabsContent>
