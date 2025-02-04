@@ -21,7 +21,7 @@ export default async function PricingPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-black bg-gradient-to-br from-black via-[#0a0a0a] to-[#1a1a1a]">
-      <div className="container mx-auto px-4 py-16 text-center flex-grow">
+      <div className="container mx-auto px-4 py-16 text-center flex-grow flex flex-col items-center">
         <div className="max-w-5xl mx-auto space-y-16">
           <section className="space-y-8">
             <h1 
@@ -44,7 +44,7 @@ export default async function PricingPage() {
             <button className="px-4 py-3 bg-[#2C2420] text-white rounded-r">Annual Payment (save 25%)</button>
           </div>
 
-          <div className="grid md:grid-cols-4 gap-8">
+          <div className="grid md:grid-cols-3 gap-8 justify-center">
             <PricingCard
               name="Pro"
               price={proPrice?.unitAmount || 799}
@@ -170,21 +170,15 @@ function PricingCard({
           </li>
         ))}
       </ul>
-      <div>
-        {name !== 'Free' ? (
-          <form action={checkoutAction}>
-            <input type="hidden" name="priceId" value={priceId} />
-            <SubmitButton 
-              className={`w-full ${highlight
-                ? 'bg-[#2C2420] hover:bg-[#584235] text-white' 
-                : 'bg-[#584235] hover:bg-[#2C2420] text-white'}`} 
-            />
-          </form>
-        ) : (
+      <div className="flex items-end h-full">
+        <form action={checkoutAction} className="w-full">
+          <input type="hidden" name="priceId" value={priceId} />
           <SubmitButton 
-            className="w-full bg-[#584235] hover:bg-[#2C2420] text-white"
+            className={`w-full ${highlight
+              ? 'bg-[#2C2420] hover:bg-[#584235] text-white' 
+              : 'bg-[#584235] hover:bg-[#2C2420] text-white'}`} 
           />
-        )}
+        </form>
       </div>
     </div>
   );
