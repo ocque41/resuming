@@ -49,27 +49,27 @@ export function MainNav() {
                   </li>
               <li>
                 <a href="#">Parent</a>
-                <div class="uk-navbar-dropdown uk-navbar-dropdown-width-2">
-                  <div class="uk-drop-grid uk-child-width-1-2" uk-grid>
+                <div className="uk-navbar-dropdown uk-navbar-dropdown-width-2">
+                  <div className="uk-drop-grid uk-child-width-1-2" uk-grid>
                     <div>
-                      <ul class="uk-nav uk-navbar-dropdown-nav">
-                        <li class="uk-active"><a href="#">Active</a></li>
+                      <ul className="uk-nav uk-navbar-dropdown-nav">
+                        <li className="uk-active"><a href="#">Active</a></li>
                         <li><a href="#">Item</a></li>
-                        <li class="uk-nav-header">Header</li>
+                        <li className="uk-nav-header">Header</li>
                         <li><a href="#">Item</a></li>
                         <li><a href="#">Item</a></li>
-                        <li class="uk-nav-divider"></li>
+                        <li className="uk-nav-divider"></li>
                         <li><a href="#">Item</a></li>
                       </ul>
                     </div>
                     <div>
-                      <ul class="uk-nav uk-navbar-dropdown-nav">
-                        <li class="uk-active"><a href="#">Active</a></li>
+                      <ul className="uk-nav uk-navbar-dropdown-nav">
+                        <li className="uk-active"><a href="#">Active</a></li>
                         <li><a href="#">Item</a></li>
-                        <li class="uk-nav-header">Header</li>
+                        <li className="uk-nav-header">Header</li>
                         <li><a href="#">Item</a></li>
                         <li><a href="#">Item</a></li>
-                        <li class="uk-nav-divider"></li>
+                        <li className="uk-nav-divider"></li>
                         <li><a href="#">Item</a></li>
                       </ul>
                     </div>
@@ -82,13 +82,5 @@ export function MainNav() {
       </div>
     </nav>
   </div>
-
-                </ul>
-              </div>
-            </div>
-          </div>
-        </nav>
-      </div>
-    </div>
   );
 }
