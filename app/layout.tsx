@@ -5,6 +5,7 @@ import { UserProvider } from '@/lib/auth';
 import { getUser } from '@/lib/db/queries';
 import { MainNav } from '@/components/ui/main-nav';
 import { ThemeProvider } from 'app/theme-provider';
+import { I18nProvider } from '@/components/i18n-provider';
 
 export const metadata: Metadata = {
   title: 'Next.js SaaS Starter',
@@ -46,17 +47,19 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-[100dvh]">
-        <ThemeProvider defaultTheme="light" storageKey="app-theme">
-          <UserProvider userPromise={userPromise}>
-            <div className="relative">
-              <MainNav />
-              <div className="fixed top-4 right-4">
-                <ThemeToggle />
+        <I18nProvider>
+          <ThemeProvider defaultTheme="light" storageKey="app-theme">
+            <UserProvider userPromise={userPromise}>
+              <div className="relative">
+                <MainNav />
+                <div className="fixed top-4 right-4">
+                  <ThemeToggle />
+                </div>
               </div>
-            </div>
-            {children}
-          </UserProvider>
-        </ThemeProvider>
+              {children}
+            </UserProvider>
+          </ThemeProvider>
+        </I18nProvider>
       </body>
     </html>
   );
