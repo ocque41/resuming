@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import './main-nav.module.css';
 import { usePathname } from 'next/navigation';
 import { useUser } from '@/lib/auth';
 import { signOut } from '@/app/(login)/actions';
