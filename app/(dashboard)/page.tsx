@@ -98,8 +98,8 @@ export default function HomePage() {
           initial="hidden"
           animate="visible"
         >
-          <Article className="mb-8">
-            <ArticleTitle className="text-3xl md:text-4xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] via-[#B4916C] to-[#2C2420]">
+          <Article className="mb-6">
+            <ArticleTitle className="text-2xl md:text-3xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] via-[#B4916C] to-[#2C2420]">
               Products
             </ArticleTitle>
           </Article>
