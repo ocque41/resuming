@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import './main-nav.module.css';
 import { usePathname } from 'next/navigation';
 import { useUser } from '@/lib/auth';
 import { signOut } from '@/app/(login)/actions';
@@ -21,6 +22,7 @@ export function MainNav() {
     >
       <div
         uk-sticky="sel-target: .uk-navbar-container; cls-active: uk-navbar-sticky; end: ! *; offset: 80"
+        style={{ '--uk-navbar-dropdown-background': '#353839' } as React.CSSProperties}
       >
         <nav
           className="uk-navbar-container uk-navbar-transparent uk-position-relative uk-position-z-index-high"
