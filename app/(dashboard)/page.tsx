@@ -55,22 +55,22 @@ export default function HomePage() {
           animate="visible"
         >
           <motion.div variants={containerVariants}>
-            <ChakraCard variant="glass" className="mx-auto max-w-4xl">
-              <ChakraCardHeader>
+            <ChakraCard variant="hero">
+              <ChakraCardHeader className="space-y-8">
                 <ChakraCardTitle 
-                  className="text-6xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] via-[#B4916C] to-[#2C2420] animate-fade-in"
+                  className="text-5xl md:text-7xl font-bold tracking-tight text-white animate-fade-in"
                 >
                   Craft Your Perfect CV
                 </ChakraCardTitle>
                 <ChakraCardDescription 
-                  className="text-2xl mt-6 max-w-3xl mx-auto animate-fade-in-up"
+                  className="text-xl md:text-2xl mt-6 max-w-3xl mx-auto text-[#B4916C] animate-fade-in-up"
                 >
                   Transform your career journey with our intelligent AI-powered CV optimization platform
                 </ChakraCardDescription>
               </ChakraCardHeader>
               <ChakraCardContent>
                 <motion.div 
-                  className="flex justify-center gap-4 animate-slide-in-right"
+                  className="flex flex-col md:flex-row justify-center gap-6 animate-slide-in-right"
                   variants={itemVariants}
                 >
               <Button 
