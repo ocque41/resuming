@@ -13,40 +13,40 @@ export function MainNav() {
     setUser(null);
     await signOut();
   };
-};
 
-<div
-  class="uk-preserve-color uk-inverse-light uk-background-cover uk-section-secondary"
-  style="background-image: url(&quot;/images/dark.jpg&quot;)"
->
-  <div
-    uk-sticky="sel-target: .uk-navbar-container; cls-active: uk-navbar-sticky; end: ! *; offset: 80"
-  >
-    <nav
-      class="uk-navbar-container uk-navbar-transparent uk-position-relative uk-position-z-index-high"
-      uk-inverse="sel-active: .uk-navbar-transparent"
+  return (
+    <div
+      className="uk-preserve-color uk-inverse-light uk-background-cover uk-section-secondary"
+      style={{ backgroundImage: 'url("/images/dark.jpg")' }}
     >
-      <div class="uk-container">
-        <div
-          uk-navbar="dropbar: true; dropbar-transparent-mode: behind; dropbar-anchor: !.uk-navbar-container; target-y: !.uk-navbar-container"
+      <div
+        uk-sticky="sel-target: .uk-navbar-container; cls-active: uk-navbar-sticky; end: ! *; offset: 80"
+      >
+        <nav
+          className="uk-navbar-container uk-navbar-transparent uk-position-relative uk-position-z-index-high"
+          uk-inverse="sel-active: .uk-navbar-transparent"
         >
-          <div class="uk-navbar-left">
-            <ul class="uk-navbar-nav">
-              <li class="uk-active"><a href="#">Active</a></li>
-              <li>
-                <a href="#">Parent</a>
-                <div class="uk-navbar-dropdown">
-                  <ul class="uk-nav uk-navbar-dropdown-nav">
-                    <li class="uk-active"><a href="#">Active</a></li>
-                    <li><a href="#">Item</a></li>
-                    <li class="uk-nav-header">Header</li>
-                    <li><a href="#">Item</a></li>
-                    <li><a href="#">Item</a></li>
-                    <li class="uk-nav-divider"></li>
-                    <li><a href="#">Item</a></li>
-                  </ul>
-                </div>
-              </li>
+          <div className="uk-container">
+            <div
+              uk-navbar="dropbar: true; dropbar-transparent-mode: behind; dropbar-anchor: !.uk-navbar-container; target-y: !.uk-navbar-container"
+            >
+              <div className="uk-navbar-left">
+                <ul className="uk-navbar-nav">
+                  <li className="uk-active"><a href="#">Active</a></li>
+                  <li>
+                    <a href="#">Parent</a>
+                    <div className="uk-navbar-dropdown">
+                      <ul className="uk-nav uk-navbar-dropdown-nav">
+                        <li className="uk-active"><a href="#">Active</a></li>
+                        <li><a href="#">Item</a></li>
+                        <li className="uk-nav-header">Header</li>
+                        <li><a href="#">Item</a></li>
+                        <li><a href="#">Item</a></li>
+                        <li className="uk-nav-divider"></li>
+                        <li><a href="#">Item</a></li>
+                      </ul>
+                    </div>
+                  </li>
               <li>
                 <a href="#">Parent</a>
                 <div class="uk-navbar-dropdown uk-navbar-dropdown-width-2">
@@ -83,31 +83,12 @@ export function MainNav() {
     </nav>
   </div>
 
-  <div class="uk-section">
-    <div class="uk-container">
-      <p>
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
-        tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
-        veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
-        commodo consequat. Duis aute irure dolor in reprehenderit in voluptate
-        velit esse cillum.
-      </p>
-
-      <p>
-        Excepteur sint occaecat cupidatat non proident, sunt in culpa qui
-        officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet,
-        consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore
-        et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud
-        exercitation ullamco laboris.
-      </p>
-
-      <p>
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
-        tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
-        veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
-        commodo consequat. Duis aute irure dolor in reprehenderit in voluptate
-        velit esse cillum.
-      </p>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </nav>
+      </div>
     </div>
-  </div>
-</div>
+  );
+}
