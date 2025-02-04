@@ -29,6 +29,10 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`bg-white dark:bg-gray-950 text-black dark:text-white ${manrope.className}`}
     >
+      <head>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/franken-ui@latest/dist/franken-ui.min.css" />
+        <script src="https://cdn.jsdelivr.net/npm/franken-ui@latest/dist/franken-ui.min.js" defer></script>
+      </head>
       <body className="min-h-[100dvh] bg-gray-50">
         <UserProvider userPromise={userPromise}>
           {children}
