@@ -39,12 +39,7 @@ export default async function PricingPage() {
             </p>
           </section>
 
-          <div className="flex justify-center mb-8">
-            <button className="px-4 py-3 bg-[#584235] text-white rounded-l">Monthly Payment</button>
-            <button className="px-4 py-3 bg-[#2C2420] text-white rounded-r">Annual Payment (save 25%)</button>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8 justify-center">
+          <div className="grid md:grid-cols-3 gap-8 justify-center mb-8">
             <PricingCard
               name="Pro"
               price={proPrice?.unitAmount || 799}
@@ -170,16 +165,14 @@ function PricingCard({
           </li>
         ))}
       </ul>
-      <div className="flex items-end h-full">
-        <form action={checkoutAction} className="w-full">
-          <input type="hidden" name="priceId" value={priceId} />
-          <SubmitButton 
-            className={`w-full ${highlight
-              ? 'bg-[#2C2420] hover:bg-[#584235] text-white' 
-              : 'bg-[#584235] hover:bg-[#2C2420] text-white'}`} 
-          />
-        </form>
-      </div>
+      <form action={checkoutAction} className="w-full mt-auto">
+        <input type="hidden" name="priceId" value={priceId} />
+        <SubmitButton 
+          className={`w-full ${highlight
+            ? 'bg-[#2C2420] hover:bg-[#584235] text-white' 
+            : 'bg-[#584235] hover:bg-[#2C2420] text-white'}`} 
+        />
+      </form>
     </div>
   );
 }
