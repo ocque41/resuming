@@ -55,7 +55,7 @@ export default function HomePage() {
           animate="visible"
         >
           <motion.div variants={containerVariants}>
-            <ChakraCard className="mx-auto max-w-4xl">
+            <ChakraCard variant="glass" className="mx-auto max-w-4xl">
               <ChakraCardHeader>
                 <ChakraCardTitle 
                   className="text-6xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] via-[#B4916C] to-[#2C2420] animate-fade-in"
