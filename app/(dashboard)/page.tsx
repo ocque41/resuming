@@ -9,14 +9,7 @@ import {
   Zap,
   ArrowRight
 } from "lucide-react";
-import { 
-  ChakraCard,
-  ChakraCardHeader,
-  ChakraCardTitle,
-  ChakraCardDescription,
-  ChakraCardContent,
-  ChakraCardFooter
-} from "@/components/ui/chakraCard";
+import { GradientCard } from "@/components/ui/gradient-card";
 import Link from "next/link";
 import { motion, Variants } from "framer-motion";
 
@@ -68,31 +61,37 @@ export default function HomePage() {
                 className="flex flex-col md:flex-row justify-center gap-6 animate-slide-in-right"
                 variants={itemVariants}
               >
-              <Button 
-                asChild 
-                size="lg" 
-                className="group shadow-lg bg-[#584235] text-white hover:bg-[#2C2420] transition-all duration-base ease-default"
-              >
-                <Link href="/sign-up" className="flex items-center text-white">
-                  Begin Your Journey 
-                  <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
-                </Link>
-              </Button>
-              <Button 
-                asChild 
-                variant="outline" 
-                size="lg" 
-                className="shadow-lg border-2 border-[#B4916C] text-[#B4916C] hover:bg-[#2C2420] hover:text-white transition-all duration-300"
-              >
-                <Link href="/pricing">Explore Plans</Link>
-              </Button>
-                </motion.div>
+                <Button 
+                  asChild 
+                  size="lg" 
+                  className="group shadow-lg bg-[#584235] text-white hover:bg-[#2C2420] transition-all duration-base ease-default"
+                >
+                  <Link href="/sign-up" className="flex items-center text-white">
+                    Begin Your Journey 
+                    <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
+                  </Link>
+                </Button>
+                <Button 
+                  asChild 
+                  variant="outline" 
+                  size="lg" 
+                  className="shadow-lg border-2 border-[#B4916C] text-[#B4916C] hover:bg-[#2C2420] hover:text-white transition-all duration-300"
+                >
+                  <Link href="/pricing">Explore Plans</Link>
+                </Button>
               </motion.div>
             </GradientCard>
           </motion.div>
         </motion.div>
       </section>
 
+      <div className="container mx-auto px-4 py-16">
+        <motion.div 
+          className="max-w-7xl mx-auto space-y-16"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
           <motion.section 
             className="grid md:grid-cols-3 gap-8"
             variants={containerVariants}
@@ -133,12 +132,14 @@ export default function HomePage() {
                 <p className={`${textColor} opacity-70 group-hover:opacity-100 transition-colors`}>{description}</p>
               </motion.div>
             ))}
-          </motion.section>
+        </motion.section>
+      </div>
 
-          <motion.section 
-            className="bg-gradient-to-br from-[#584235] to-[#2C2420] rounded-lg p-8 space-y-6 border border-[#B4916C]/20 shadow-md transition-all duration-base ease-default"
-            variants={containerVariants}
-          >
+      <div className="container mx-auto px-4 py-16">
+        <motion.section 
+          className="bg-gradient-to-br from-[#584235] to-[#2C2420] rounded-lg p-8 space-y-6 border border-[#B4916C]/20 shadow-md transition-all duration-base ease-default max-w-7xl mx-auto"
+          variants={containerVariants}
+        >
             <motion.h2 
               className="text-3xl font-bold text-[#E8DCC4]"
               variants={itemVariants}
