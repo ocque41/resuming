@@ -7,8 +7,6 @@ import { MainNav } from '@/components/ui/main-nav';
 import { ThemeProvider } from 'app/theme-provider';
 import { I18nProvider } from '@/components/i18n-provider';
 
-const manrope = Manrope({ subsets: ['latin'] });
-
 export const metadata: Metadata = {
   title: 'Next.js SaaS Starter',
   description: 'Get started quickly with Next.js, Postgres, and Stripe.',
@@ -18,6 +16,8 @@ export const viewport: Viewport = {
   maximumScale: 1,
   viewportFit: 'cover',
 };
+
+const manrope = Manrope({ subsets: ['latin'] });
 
 export default function RootLayout({
   children,
