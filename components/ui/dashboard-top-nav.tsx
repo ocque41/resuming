@@ -55,5 +55,3 @@ export function DashboardTopNav() {
     </div>
   );
 }
-  );
-}
