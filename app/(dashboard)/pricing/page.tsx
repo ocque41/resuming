@@ -21,85 +21,91 @@ export default async function PricingPage() {
   const ceoPrice = prices.find((price) => price.productId === ceoPlan?.id);
 
   return (
-    <div>
-      <div>
-        <h1 
-          className="text-6xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] via-[#B4916C] to-[#2C2420] animate-fade-in"
-        >
-          Plans and Pricing
-        </h1>
-        <p className="text-xl text-[#B4916C] font-semibold animate-fade-in-up mt-4">
-          Enjoy a 1 day free trial to see if you found your solution
-        </p>
-        <p className="text-xl text-[#B4916C] font-semibold animate-fade-in-up">
-          Change plans as you grow.
-        </p>
-      </div>
-      <div className="grid md:grid-cols-3 gap-8 justify-center mb-8">
-        <PricingCard
-          name="Pro"
-          price={proPrice?.unitAmount || 799}
-          interval="month"
-          annualPrice={6999}
-          features={[
-            '20 CV uploads/month ⓘ',
-            '10 ATS analyses/month ⓘ',
-            '7 Optimizations/month ⓘ',
-            'Priority 2 in AI processing ⓘ',
-          ]}
-          tooltips={{
-            '20 CV uploads/month ⓘ': 'Upload up to 20 different CVs each month',
-            '10 ATS analyses/month ⓘ': 'Get ATS compatibility analysis for 10 CVs monthly',
-            '7 Optimizations/month ⓘ': 'Receive AI-powered optimization suggestions 7 times per month',
-            'Priority 2 in AI processing ⓘ': 'Your requests are processed with priority level 2'
-          }}
-          highlight={false}
-          priceId="price_1QoUP9FYYYXM77wGBUVqTaiE"
-        />
-        <PricingCard
-          name="Moonlighting"
-          price={moonlightingPrice?.unitAmount || 1499}
-          interval="month"
-          annualPrice={13999}
-          features={[
-            'Unlimited CV uploads/month ⓘ',
-            '20 ATS analyses/month ⓘ',
-            '15 Optimizations/month ⓘ',
-            'Access to Analytics Suite ⓘ',
-          ]}
-          tooltips={{
-            'Unlimited CV uploads/month ⓘ': 'Upload as many CVs as you need without any monthly limits',
-            '20 ATS analyses/month ⓘ': 'Get detailed analysis of how your CV performs against ATS systems',
-            '15 Optimizations/month ⓘ': 'AI-powered suggestions to improve your CV structure and content',
-            'Access to Analytics Suite ⓘ': 'Advanced metrics and insights about your CV performance'
-          }}
-          highlight={true}
-          priceId="price_1QoYHcFYYYXM77wGjNJer1nW"
-        />
-        <PricingCard
-          name="CEO"
-          price={ceoPrice?.unitAmount || 9999}
-          interval="month"
-          annualPrice={79900}
-          features={[
-            'Unlimited CV uploads ⓘ',
-            'Unlimited ATS analyses ⓘ',
-            'Unlimited Optimizations ⓘ',
-            'Access to Analytics Suite ⓘ',
-            'Early access to new features ⓘ',
-            'Secure a high paying job in 3 months or money back guaranteed ⓘ',
-          ]}
-          tooltips={{
-            'Unlimited CV uploads ⓘ': 'No monthly limit on CV uploads',
-            'Unlimited ATS analyses ⓘ': 'Analyze your CVs against ATS systems as many times as you need',
-            'Unlimited Optimizations ⓘ': 'Get unlimited AI-powered optimization suggestions',
-            'Access to Analytics Suite ⓘ': 'Full access to advanced analytics and insights',
-            'Early access to new features ⓘ': 'Be the first to try new platform features',
-            'Secure a high paying job in 3 months or money back guaranteed ⓘ': 'Full refund if you don\'t secure a high-paying position within 3 months'
-          }}
-          highlight={false}
-          priceId="price_1QoYTrFYYYXM77wGffciG20i"
-        />
+    <MainNav />
+    <div className="min-h-screen flex flex-col bg-black bg-gradient-to-br from-black via-[#0a0a0a] to-[#1a1a1a]">
+      <div className="container mx-auto px-4 py-16 text-center flex-grow flex flex-col items-center">
+        <div className="max-w-5xl mx-auto space-y-16">
+          <section className="space-y-8">
+            <h1 
+              className="text-6xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] via-[#B4916C] to-[#2C2420] animate-fade-in"
+            >
+              Plans and Pricing
+            </h1>
+            <p className="text-xl text-[#B4916C] font-semibold animate-fade-in-up mt-4">
+              Enjoy a 1 day free trial to see if you found your solution
+            </p>
+            <p className="text-xl text-[#B4916C] font-semibold animate-fade-in-up">
+              Change plans as you grow.
+            </p>
+          </section>
+
+          <div className="grid md:grid-cols-3 gap-8 justify-center mb-8">
+            <PricingCard
+              name="Pro"
+              price={proPrice?.unitAmount || 799}
+              interval="month"
+              annualPrice={6999}
+              features={[
+                '20 CV uploads/month ⓘ',
+                '10 ATS analyses/month ⓘ',
+                '7 Optimizations/month ⓘ',
+                'Priority 2 in AI processing ⓘ',
+              ]}
+              tooltips={{
+                '20 CV uploads/month ⓘ': 'Upload up to 20 different CVs each month',
+                '10 ATS analyses/month ⓘ': 'Get ATS compatibility analysis for 10 CVs monthly',
+                '7 Optimizations/month ⓘ': 'Receive AI-powered optimization suggestions 7 times per month',
+                'Priority 2 in AI processing ⓘ': 'Your requests are processed with priority level 2'
+              }}
+              highlight={false}
+              priceId="price_1QoUP9FYYYXM77wGBUVqTaiE"
+            />
+            <PricingCard
+              name="Moonlighting"
+              price={moonlightingPrice?.unitAmount || 1499}
+              interval="month"
+              annualPrice={13999}
+              features={[
+                'Unlimited CV uploads/month ⓘ',
+                '20 ATS analyses/month ⓘ',
+                '15 Optimizations/month ⓘ',
+                'Access to Analytics Suite ⓘ',
+              ]}
+              tooltips={{
+                'Unlimited CV uploads/month ⓘ': 'Upload as many CVs as you need without any monthly limits',
+                '20 ATS analyses/month ⓘ': 'Get detailed analysis of how your CV performs against ATS systems',
+                '15 Optimizations/month ⓘ': 'AI-powered suggestions to improve your CV structure and content',
+                'Access to Analytics Suite ⓘ': 'Advanced metrics and insights about your CV performance'
+              }}
+              highlight={true}
+              priceId="price_1QoYHcFYYYXM77wGjNJer1nW"
+            />
+            <PricingCard
+              name="CEO"
+              price={ceoPrice?.unitAmount || 9999}
+              interval="month"
+              annualPrice={79900}
+              features={[
+                'Unlimited CV uploads ⓘ',
+                'Unlimited ATS analyses ⓘ',
+                'Unlimited Optimizations ⓘ',
+                'Access to Analytics Suite ⓘ',
+                'Early access to new features ⓘ',
+                'Secure a high paying job in 3 months or money back guaranteed ⓘ',
+              ]}
+              tooltips={{
+                'Unlimited CV uploads ⓘ': 'No monthly limit on CV uploads',
+                'Unlimited ATS analyses ⓘ': 'Analyze your CVs against ATS systems as many times as you need',
+                'Unlimited Optimizations ⓘ': 'Get unlimited AI-powered optimization suggestions',
+                'Access to Analytics Suite ⓘ': 'Full access to advanced analytics and insights',
+                'Early access to new features ⓘ': 'Be the first to try new platform features',
+                'Secure a high paying job in 3 months or money back guaranteed ⓘ': 'Full refund if you don\'t secure a high-paying position within 3 months'
+              }}
+              highlight={false}
+              priceId="price_1QoYTrFYYYXM77wGffciG20i"
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
