@@ -1,6 +1,7 @@
 'use client';
 
 import { DashboardTopNav } from '@/components/ui/dashboard-top-nav';
+import { DashboardBottomNav } from '@/components/ui/dashboard-bottom-nav';
 
 
 import { SidebarProvider } from '@/components/ui/sidebar';
