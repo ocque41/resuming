@@ -4,9 +4,9 @@ import Link from 'next/link';
 
 export function DashboardTopNav() {
   return (
-    <nav className="bg-black text-white px-4 py-2">
-      <div className="flex justify-between items-center">
-        <Link href="/" className="text-lg font-bold">
+    <nav className="bg-black text-white px-4 py-4">
+      <div className="flex flex-col items-center">
+        <Link href="/" className="text-2xl font-bold mb-2">
           Resuming
         </Link>
         <div className="flex space-x-4">
