@@ -45,7 +45,6 @@ export function DashboardTopNav() {
                     >
                       Documentation
                     </a>
-                    </Link>
                   </li>
                 </ul>
               </div>
@@ -54,5 +53,7 @@ export function DashboardTopNav() {
         </nav>
       </div>
     </div>
+  );
+}
   );
 }
