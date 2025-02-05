@@ -1,4 +1,5 @@
 "use client"
+import { MainNav } from '@/components/ui/main-nav';
 import { Terminal } from './terminal';
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -46,6 +47,7 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col bg-[#050505]">
+      <MainNav />
       <section className="min-h-[100dvh] flex items-center justify-center px-4 relative">
         <motion.div 
           className="w-full"
