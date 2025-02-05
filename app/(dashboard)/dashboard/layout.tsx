@@ -2,7 +2,6 @@
 
 import { DashboardBottomNav } from '@/components/ui/dashboard-bottom-nav';
 import { DashboardNavigationBar } from '@/DashboardNavigationBar';
-import { SidebarProvider } from '@/components/ui/sidebar';
 
 export default function DashboardLayout({
   children,
