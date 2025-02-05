@@ -50,6 +50,11 @@ export function MainNav() {
                       Documentation
                     </a>
                   </li>
+                  <li>
+                    <Link href="/sign-in" className="text-white hover:text-white transition-colors">
+                      Sign in
+                    </Link>
+                  </li>
                 </ul>
               </div>
             </div>
