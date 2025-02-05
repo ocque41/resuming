@@ -1,5 +1,7 @@
 'use client';
 
+import { Sidebar } from '@/components/ui/sidebar';
+
 
 export default function DashboardLayout({
   children,
