@@ -2,17 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useUser } from '@/lib/auth';
 import { signOut } from '@/app/(login)/actions';
 
 export function MainNav() {
   const pathname = usePathname();
-  const { user, setUser } = useUser();
-
-  const handleSignOut = async () => {
-    setUser(null);
-    await signOut();
-  };
 
   return (
     <div
@@ -56,11 +49,6 @@ export function MainNav() {
                     >
                       Documentation
                     </a>
-                  </li>
-                  <li>
-                    <Link href="/sign-in" className="text-white hover:text-white transition-colors">
-                      Log In
-                    </Link>
                   </li>
                 </ul>
               </div>
