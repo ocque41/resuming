@@ -32,18 +32,19 @@ export function DashboardTopNav() {
               <div className="uk-navbar-right">
                 <ul className="uk-navbar-nav uk-navbar-transparent">
                   <li>
-                    <Link href="/dashboard" className="text-white hover:text-white transition-colors">
-                      Dashboard
+                    <Link href="/pricing" className="text-white hover:text-white transition-colors">
+                      Products
                     </Link>
                   </li>
                   <li>
-                    <Link href="/profile" className="text-white hover:text-white transition-colors">
-                      Profile
-                    </Link>
-                  </li>
-                  <li>
-                    <Link href="/settings" className="text-white hover:text-white transition-colors">
-                      Settings
+                    <a 
+                      href="https://chromad.vercel.app/docs/products/resuming/overview" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-white hover:text-white transition-colors"
+                    >
+                      Documentation
+                    </a>
                     </Link>
                   </li>
                 </ul>
