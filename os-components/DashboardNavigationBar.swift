@@ -1,4 +1,18 @@
 import UIKit
+import React
+
+@objc(DashboardNavigationManager)
+class DashboardNavigationManager: NSObject {
+  
+    @objc
+    func showNavigation() {
+        // Logic to present the DashboardNavigationController
+        let navigationController = DashboardNavigationController()
+        if let rootViewController = UIApplication.shared.keyWindow?.rootViewController {
+            rootViewController.present(navigationController, animated: true, completion: nil)
+        }
+    }
+}
 
 class DashboardNavigationController: UINavigationController {
 
