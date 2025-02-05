@@ -21,20 +21,20 @@ export default async function PricingPage() {
   const ceoPrice = prices.find((price) => price.productId === ceoPlan?.id);
 
   return (
-            <h1 
-              className="text-6xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] via-[#B4916C] to-[#2C2420] animate-fade-in"
-            >
-              Plans and Pricing
-            </h1>
-            <p className="text-xl text-[#B4916C] font-semibold animate-fade-in-up mt-4">
-              Enjoy a 1 day free trial to see if you found your solution
-            </p>
-            <p className="text-xl text-[#B4916C] font-semibold animate-fade-in-up">
-              Change plans as you grow.
-            </p>
-          </section>
-
-          <div className="grid md:grid-cols-3 gap-8 justify-center mb-8">
+    <div>
+      <h1 
+        className="text-6xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] via-[#B4916C] to-[#2C2420] animate-fade-in"
+      >
+        Plans and Pricing
+      </h1>
+      <p className="text-xl text-[#B4916C] font-semibold animate-fade-in-up mt-4">
+        Enjoy a 1 day free trial to see if you found your solution
+      </p>
+      <p className="text-xl text-[#B4916C] font-semibold animate-fade-in-up">
+        Change plans as you grow.
+      </p>
+    </div>
+    <div className="grid md:grid-cols-3 gap-8 justify-center mb-8">
             <PricingCard
               name="Pro"
               price={proPrice?.unitAmount || 799}
@@ -100,9 +100,8 @@ export default async function PricingPage() {
               priceId="price_1QoYTrFYYYXM77wGffciG20i"
             />
           </div>
-        </div>
-      </div>
-    </div>
+  );
+}
   );
 }
 
