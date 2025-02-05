@@ -21,8 +21,9 @@ export default async function PricingPage() {
   const ceoPrice = prices.find((price) => price.productId === ceoPlan?.id);
 
   return (
-    <MainNav />
-    <div className="min-h-screen flex flex-col bg-black bg-gradient-to-br from-black via-[#0a0a0a] to-[#1a1a1a]">
+    <div>
+      <MainNav />
+      <div className="min-h-screen flex flex-col bg-black bg-gradient-to-br from-black via-[#0a0a0a] to-[#1a1a1a]">
       <div className="container mx-auto px-4 py-16 text-center flex-grow flex flex-col items-center">
         <div className="max-w-5xl mx-auto space-y-16">
           <section className="space-y-8">
@@ -106,6 +107,7 @@ export default async function PricingPage() {
             />
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
