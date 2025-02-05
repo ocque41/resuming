@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Sidebar } from '@/components/ui/sidebar';
 
 export function DashboardBottomNav() {
