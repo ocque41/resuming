@@ -20,7 +20,6 @@ export default async function DashboardPage() {
     throw new Error('Team not found');
   }
 
-
   return (
     <>
       <header className="flex items-center justify-between p-4 lg:p-8 mx-auto max-w-md lg:max-w-2xl">
