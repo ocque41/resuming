@@ -23,9 +23,6 @@ export function DashboardComboboxes({ cvs, comboboxType }: { cvs: string[], comb
           }
         />
       )}
-      <Button variant="outline" size="sm" className="w-[150px]" asChild>
-        <a href="/jobs">Jobs</a>
-      </Button>
     </div>
   );
 }
