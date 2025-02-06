@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { ArticleTitle } from '@/components/ui/article';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { getTeamForUser, getUser } from '@/lib/db/queries';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,9 +24,10 @@ export default async function DashboardPage() {
     <>
       <header className="flex justify-between items-center p-4 lg:p-8">
         <ArticleTitle className="text-lg lg:text-2xl font-medium">Dashboard</ArticleTitle>
-        <a href="/dashboard/settings">
-          <img src="/icons/detectiv.svg" alt="Detectiv Icon" className="h-8 w-8 lg:h-12 lg:w-12 filter invert" />
-        </a>
+        <Avatar className="h-8 w-8 lg:h-10 lg:w-10">
+          <AvatarImage src="/path/to/avatar.jpg" alt="User Avatar" />
+          <AvatarFallback>U</AvatarFallback>
+        </Avatar>
       </header>
       <Card className="mb-8">
         <CardHeader>
