@@ -16,6 +16,7 @@ export default async function DashboardPage() {
   }
 
   const teamData = await getTeamForUser(user.id);
+  const cvs = teamData.cvs || []; // Ensure cvs is an array
 
   if (!teamData) {
     throw new Error('Team not found');
@@ -57,8 +58,8 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
       <div className="flex justify-between mt-4">
-        <ComboboxPopover label="Analyze (CV)" options={teamData.cvs || []} onSelect={(cv: string) => console.log(`Analyze ${cv}`)} />
-        <ComboboxPopover label="Optimize (CV)" options={teamData.cvs || []} onSelect={(cv: string) => window.location.href = `/cv-optimization?cv=${cv}`} />
+        <ComboboxPopover label="Analyze (CV)" options={cvs} onSelect={(cv: string) => console.log(`Analyze ${cv}`)} />
+        <ComboboxPopover label="Optimize (CV)" options={cvs} onSelect={(cv: string) => window.location.href = `/cv-optimization?cv=${cv}`} />
         <Button variant="outline" size="sm" asChild>
           <a href="/jobs">Jobs</a>
         </Button>
