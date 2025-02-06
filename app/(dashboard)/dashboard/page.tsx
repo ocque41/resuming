@@ -69,10 +69,11 @@ export default async function DashboardPage() {
           {/* Placeholder for cool analysis animation */}
           <div className="w-full h-32 bg-gray-200 animate-pulse mb-4"></div>
           <div className="w-full">
-            <DashboardComboboxes cvs={cvs} />
+            <DashboardComboboxes cvs={cvs} comboboxType="analyze" />
           </div>
         </CardContent>
       </Card>
+      <DashboardComboboxes cvs={cvs} comboboxType="other" />
     </>
   );
 }
