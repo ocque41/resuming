@@ -85,7 +85,7 @@ const jobColumns: ColumnDef<Payment>[] = [
             <Button className="mt-2" variant="outline">
               AI Write Cover Letter
             </Button>
-            <Button className="mt-2" variant="primary">
+            <Button className="mt-2" variant="default">
               Send
             </Button>
           </DialogBody>
@@ -118,11 +118,7 @@ export function DataTable() {
   const table = useReactTable({
     data: payments,
     columns: jobColumns,
-    getCoreRowModel: () => ({
-      rows: [],
-      flatRows: [],
-      rowsById: {},
-    }),
+    getCoreRowModel: getCoreRowModel(),
   });
 
   return (
