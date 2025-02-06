@@ -8,6 +8,9 @@ type Payment = {
   amount: number;
   status: "pending" | "processing" | "success" | "failed";
   email: string;
+  company: string;
+  jobTitle: string;
+  requirements: string;
 };
 
 export const payments: Payment[] = [
@@ -18,12 +21,69 @@ export const payments: Payment[] = [
     email: "m@example.com",
   },
   {
+    id: "123abc",
+    amount: 0,
+    status: "success",
+    email: "hr@company.com",
+    company: "Tech Corp",
+    jobTitle: "Software Engineer",
+    requirements: "JavaScript, React, Node.js",
+  },
+  {
     id: "489e1d42",
     amount: 125,
     status: "processing",
     email: "example@gmail.com",
   },
   // Add more payment objects as needed
+];
+
+const jobColumns: ColumnDef<Payment>[] = [
+  {
+    accessorKey: "company",
+    header: "Company",
+  },
+  {
+    accessorKey: "jobTitle",
+    header: "Job Title",
+  },
+  {
+    accessorKey: "requirements",
+    header: "Essential Requirements",
+  },
+  {
+    id: "apply",
+    header: "Apply",
+    cell: ({ row }) => (
+      <Dialog>
+        <DialogTrigger asChild>
+          <Button variant="outline">Apply</Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Apply for {row.original.jobTitle}</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            <ComboboxPopover
+              label="Select CV"
+              options={payments.map((payment) => payment.id)}
+              onSelect={(cv) => console.log(`Selected CV: ${cv}`)}
+            />
+            <textarea
+              className="w-full mt-4 p-2 border rounded"
+              placeholder="Write your cover letter here..."
+            />
+            <Button className="mt-2" variant="outline">
+              AI Write Cover Letter
+            </Button>
+            <Button className="mt-2" variant="primary">
+              Send
+            </Button>
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
+    ),
+  },
 ];
 
 const columns: ColumnDef<Payment>[] = [
@@ -48,7 +108,7 @@ const columns: ColumnDef<Payment>[] = [
 export function DataTable() {
   const table = useReactTable({
     data: payments,
-    columns,
+    columns: jobColumns,
   });
 
   return (

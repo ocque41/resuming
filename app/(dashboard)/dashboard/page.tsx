@@ -65,6 +65,14 @@ export default async function DashboardPage() {
       </Card>
       <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
         <CardHeader>
+          <CardTitle className="text-base lg:text-xl font-light">Jobs</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DataTable />
+        </CardContent>
+      </Card>
+      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
+        <CardHeader>
           <CardTitle className="text-base lg:text-xl font-light">Analyze CV</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col items-start">
