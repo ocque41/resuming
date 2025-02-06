@@ -30,7 +30,7 @@ export function ComboboxPopover({ label, options, onSelect }: { label: string, o
 
   return (
     <div className="flex items-center space-x-4">
-      <p className="text-sm text-muted-foreground">Status</p>
+      <p className="text-sm text-muted-foreground">CVs</p>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button variant="outline" className="w-[150px] justify-start">
