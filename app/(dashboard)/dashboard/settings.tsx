@@ -14,7 +14,16 @@ type ActionState = {
   success?: string;
 };
 
-export function Settings({ teamData }: { teamData: TeamDataWithMembers }) {
+import { Settings } from '../settings';
+
+export default function SettingsPage({ teamData }: { teamData: TeamDataWithMembers }) {
+  return (
+    <div className="p-4 lg:p-8">
+      <h1 className="text-lg lg:text-2xl font-medium mb-6">Settings</h1>
+      <Settings teamData={teamData} />
+    </div>
+  );
+}
   const [removeState, removeAction, isRemovePending] = useActionState<
     ActionState,
     FormData
