@@ -19,7 +19,7 @@ export function DashboardComboboxes({ cvs }: { cvs: string[] }) {
           (window.location.href = `/cv-optimization?cv=${cv}`)
         }
       />
-      <Button variant="outline" size="sm" asChild>
+      <Button variant="outline" size="sm" className="w-[150px]" asChild>
         <a href="/jobs">Jobs</a>
       </Button>
     </div>
