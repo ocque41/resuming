@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ColumnDef } from "@tanstack/react-table";
+import { ColumnDef, getCoreRowModel } from "@tanstack/react-table";
 import { useReactTable } from "@tanstack/react-table";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogBody } from "@/components/ui/dialog";
@@ -128,7 +128,7 @@ export function DataTable() {
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
-                <TableHead key={header.id}>{header.isPlaceholder ? null : header.column.columnDef.header}</TableHead>
+                <TableHead key={header.id}>{header.isPlaceholder ? null : header.column.columnDef.header?.()}</TableHead>
               ))}
             </TableRow>
           ))}
@@ -137,7 +137,7 @@ export function DataTable() {
           {table.getRowModel().rows.map((row) => (
             <TableRow key={row.id}>
               {row.getVisibleCells().map((cell) => (
-                <TableCell key={cell.id}>{cell.column.columnDef.cell({ row: cell.row })}</TableCell>
+                <TableCell key={cell.id}>{cell.column.columnDef.cell?.({ row: cell.row })}</TableCell>
               ))}
             </TableRow>
           ))}
