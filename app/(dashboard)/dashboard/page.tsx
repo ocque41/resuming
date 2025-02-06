@@ -24,7 +24,7 @@ export default async function DashboardPage() {
     <>
       <header className="flex flex-col items-center p-4 lg:p-8 space-y-4">
         <ArticleTitle className="text-lg lg:text-2xl font-medium">Dashboard</ArticleTitle>
-        <CardTitle className="text-base lg:text-xl font-light">Your Uploaded CVs</CardTitle>
+        <CardTitle className="text-base lg:text-xl font-light">My CVs</CardTitle>
         <a href="/dashboard/settings" className="h-8 w-8 lg:h-10 lg:w-10">
           <Avatar className="cursor-pointer">
             <AvatarImage src="/path/to/avatar.jpg" alt="User Avatar" />
