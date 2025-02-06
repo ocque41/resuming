@@ -97,23 +97,4 @@ export default function SettingsPage({ teamData }: { teamData: TeamDataWithMembe
                   </div>
                 </div>
                 {index > 1 ? (
-                  <button
-                    onClick={() => handleRemoveAction(member.id)}
-                    className="outline-button"
-                    disabled={isRemovePending}
-                  >
-                    {isRemovePending ? 'Removing...' : 'Remove'}
-                  </button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-          {removeState?.error && (
-            <p className="text-red-500 mt-4">{removeState.error}</p>
-          )}
-        </CardContent>
-      </Card>
-      <InviteTeamMember />
-    </section>
-  );
-}
+                    <input type="hidden" name="memberId" value={member.id} />
