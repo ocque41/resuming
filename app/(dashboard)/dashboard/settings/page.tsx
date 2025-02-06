@@ -1,6 +1,6 @@
-import { Activity } from '../activity';
-import { General } from '../general';
-import { Security } from '../security';
+import { Activity } from '../activity/page';
+import { General } from '../general/page';
+import { Security } from '../security/page';
 import { InviteTeamMember } from '../invite-team';
 import { Settings } from '../settings';
 
