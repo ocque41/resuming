@@ -19,6 +19,11 @@ import {
 
 export function ComboboxPopover({ label, options, onSelect }: { label: string, options: string[], onSelect: (value: string) => void }) {
   const [open, setOpen] = React.useState(false)
+  type Status = {
+    value: string;
+    label: string;
+  };
+
   const [selectedStatus, setSelectedStatus] = React.useState<Status | null>(
     null
   )
