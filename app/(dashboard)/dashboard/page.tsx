@@ -61,7 +61,18 @@ export default async function DashboardPage() {
           </Table>
         </CardContent>
       </Card>
-      <DashboardComboboxes cvs={cvs} />
+      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
+        <CardHeader>
+          <CardTitle className="text-base lg:text-xl font-light">Analyze CV</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col items-start">
+          {/* Placeholder for cool analysis animation */}
+          <div className="w-full h-32 bg-gray-200 animate-pulse mb-4"></div>
+          <div className="w-full">
+            <DashboardComboboxes cvs={cvs} />
+          </div>
+        </CardContent>
+      </Card>
     </>
   );
 }
