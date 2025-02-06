@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { customerPortalAction } from '@/lib/payments/actions';
-import { useActionState } from 'react';
+import { useState } from 'react';
 import { TeamDataWithMembers, User } from '@/lib/db/schema';
 import { removeTeamMember } from '@/app/(login)/actions';
 import { InviteTeamMember } from './invite-team';
@@ -16,16 +16,20 @@ type ActionState = {
 };
 
 export default function SettingsPage({ teamData }: { teamData: TeamDataWithMembers }) {
-  return (
-    <div className="p-4 lg:p-8">
-      <h1 className="text-lg lg:text-2xl font-medium mb-6">Settings</h1>
-      <Settings teamData={teamData} />
-    </div>
-  );
-  const [removeState, removeAction, isRemovePending] = useActionState<
-    ActionState,
-    FormData
-  >(removeTeamMember, { error: '', success: '' });
+  const [removeState, setRemoveState] = useState<ActionState>({ error: '', success: '' });
+  const [isRemovePending, setIsRemovePending] = useState(false);
+
+  const handleRemoveAction = async (memberId: string) => {
+    setIsRemovePending(true);
+    try {
+      await removeTeamMember(memberId);
+      setRemoveState({ success: 'Member removed successfully' });
+    } catch (error) {
+      setRemoveState({ error: 'Failed to remove member' });
+    } finally {
+      setIsRemovePending(false);
+    }
+  };
 
   const getUserDisplayName = (user: Pick<User, 'id' | 'name' | 'email'>) => {
     return user.name || user.email || 'Unknown User';
@@ -93,17 +97,13 @@ export default function SettingsPage({ teamData }: { teamData: TeamDataWithMembe
                   </div>
                 </div>
                 {index > 1 ? (
-                  <form action={removeAction}>
-                    <input type="hidden" name="memberId" value={member.id} />
-                    <Button
-                      type="submit"
-                      variant="outline"
-                      size="sm"
-                      disabled={isRemovePending}
-                    >
-                      {isRemovePending ? 'Removing...' : 'Remove'}
-                    </Button>
-                  </form>
+                  <button
+                    onClick={() => handleRemoveAction(member.id)}
+                    className="outline-button"
+                    disabled={isRemovePending}
+                  >
+                    {isRemovePending ? 'Removing...' : 'Remove'}
+                  </button>
                 ) : null}
               </li>
             ))}
