@@ -37,7 +37,7 @@ export function ComboboxPopover({ label, options, onSelect }: { label: string, o
             {selectedStatus ? <>{selectedStatus.label}</> : <>{label}</>}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="p-0" side="right" align="start">
+        <PopoverContent className="p-0" side="bottom" align="center">
           <Command>
             <CommandInput placeholder="Select CV" />
             <CommandList>
