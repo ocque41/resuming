@@ -22,19 +22,19 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <header className="flex justify-between items-center p-4 lg:p-8">
+      <header className="flex flex-col items-center p-4 lg:p-8 space-y-4">
         <ArticleTitle className="text-lg lg:text-2xl font-medium">Dashboard</ArticleTitle>
-        <Avatar className="h-8 w-8 lg:h-10 lg:w-10">
-          <AvatarImage src="/path/to/avatar.jpg" alt="User Avatar" />
-          <AvatarFallback>U</AvatarFallback>
-        </Avatar>
+        <CardTitle className="text-base lg:text-xl font-light">Your Uploaded CVs</CardTitle>
+        <a href="/dashboard/settings" className="h-8 w-8 lg:h-10 lg:w-10">
+          <Avatar className="cursor-pointer">
+            <AvatarImage src="/path/to/avatar.jpg" alt="User Avatar" />
+            <AvatarFallback>U</AvatarFallback>
+          </Avatar>
+        </a>
       </header>
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Your Uploaded CVs</CardTitle>
-        </CardHeader>
+      <Card className="mb-8 mx-auto max-w-md lg:max-w-2xl">
         <CardContent>
-          <Table>
+          <Table className="w-full">
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
