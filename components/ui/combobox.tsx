@@ -76,7 +76,7 @@ export function ComboboxPopover({ label, options, onSelect }: { label: string, o
                       setOpen(false)
                     }}
                   >
-                    {status.label}
+                    {option}
                   </CommandItem>
                 ))}
               </CommandGroup>
