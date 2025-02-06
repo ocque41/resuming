@@ -79,7 +79,7 @@ export default async function PricingPage() {
                 'Access to Analytics Suite ⓘ': 'Advanced metrics and insights about your CV performance'
               }}
               highlight={true}
-              priceId={moonlightingPrice?.id}
+              priceId="price_1QoYHcFYYYXM77wGjNJer1nW"
             />
             <PricingCard
               name="CEO"
