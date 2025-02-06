@@ -8,13 +8,12 @@ import { useActionState } from 'react';
 import { TeamDataWithMembers, User } from '@/lib/db/schema';
 import { removeTeamMember } from '@/app/(login)/actions';
 import { InviteTeamMember } from './invite-team';
+import { Settings } from '../settings';
 
 type ActionState = {
   error?: string;
   success?: string;
 };
-
-import { Settings } from '../settings';
 
 export default function SettingsPage({ teamData }: { teamData: TeamDataWithMembers }) {
   return (
