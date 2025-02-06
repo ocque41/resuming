@@ -31,12 +31,30 @@ export default async function DashboardPage() {
     <>
       <header className="flex items-center justify-between p-4 lg:p-8 mx-auto max-w-md lg:max-w-2xl">
         <ArticleTitle className="text-lg lg:text-2xl font-medium ml-2">Dashboard</ArticleTitle>
-        <a href="/dashboard/settings" className="h-8 w-8 lg:h-10 lg:w-10 ml-auto">
-          <Avatar className="cursor-pointer bg-[#584235]">
-            <AvatarImage src="/path/to/avatar.jpg" alt="User Avatar" />
-            <AvatarFallback>U</AvatarFallback>
-          </Avatar>
-        </a>
+        <Dialog>
+          <DialogTrigger asChild>
+            <Avatar className="cursor-pointer bg-[#584235]">
+              <AvatarImage src="/path/to/avatar.jpg" alt="User Avatar" />
+              <AvatarFallback>U</AvatarFallback>
+            </Avatar>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>User Menu</DialogTitle>
+            </DialogHeader>
+            <DialogBody>
+              <Button variant="outline" onClick={() => window.location.href = '/dashboard/billing'}>
+                Billing
+              </Button>
+              <Button variant="outline" onClick={() => window.location.href = '/dashboard/settings'}>
+                Settings
+              </Button>
+              <Button variant="outline" onClick={() => console.log('Log Out')}>
+                Log Out
+              </Button>
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
       </header>
       <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
         <CardHeader>
