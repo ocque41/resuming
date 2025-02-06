@@ -31,7 +31,7 @@ export default async function DashboardPage() {
           </Avatar>
         </a>
       </header>
-      <CardTitle className="text-base lg:text-xl font-light mt-6 mx-auto max-w-md lg:max-w-2xl">My CVs</CardTitle>
+      <CardTitle className="text-base lg:text-xl font-light mt-6 mx-auto max-w-md lg:max-w-2xl text-right">My CVs</CardTitle>
       <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
         <CardContent>
           <Table className="w-full">
