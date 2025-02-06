@@ -22,7 +22,7 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <header className="flex justify-between items-center p-4 lg:p-8 space-y-4">
+      <header className="flex justify-between items-center p-4 lg:p-8 mx-auto max-w-md lg:max-w-2xl space-y-4">
         <div className="flex flex-col space-y-2">
           <ArticleTitle className="text-lg lg:text-2xl font-medium">Dashboard</ArticleTitle>
           <CardTitle className="text-base lg:text-xl font-light">My CVs</CardTitle>
