@@ -47,24 +47,21 @@ export default async function DashboardPage() {
               {/* Example row, replace with dynamic data */}
               <TableRow>
                 <TableCell>John Doe CV</TableCell>
-                <TableCell>
-                  <Button variant="outline" size="sm">Analyze</Button>
-                </TableCell>
-                <TableCell>
-                  <Button variant="outline" size="sm" asChild>
-                    <a href="/cv-optimization">Optimize</a>
-                  </Button>
-                </TableCell>
-                <TableCell>
-                  <Button variant="outline" size="sm" asChild>
-                    <a href="/jobs">Jobs</a>
-                  </Button>
-                </TableCell>
+                <TableCell>85%</TableCell>
+                <TableCell>Yes</TableCell>
+                <TableCell>No</TableCell>
               </TableRow>
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+      <div className="flex justify-between mt-4">
+        <ComboboxPopover label="Analyze (CV)" options={teamData.cvs} onSelect={(cv) => console.log(`Analyze ${cv}`)} />
+        <ComboboxPopover label="Optimize (CV)" options={teamData.cvs} onSelect={(cv) => window.location.href = `/cv-optimization?cv=${cv}`} />
+        <Button variant="outline" size="sm" asChild>
+          <a href="/jobs">Jobs</a>
+        </Button>
+      </div>
     </>
   );
 }

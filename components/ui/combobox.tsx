@@ -45,7 +45,7 @@ const statuses: Status[] = [
   },
 ]
 
-export function ComboboxPopover() {
+export function ComboboxPopover({ label, options, onSelect }: { label: string, options: string[], onSelect: (value: string) => void }) {
   const [open, setOpen] = React.useState(false)
   const [selectedStatus, setSelectedStatus] = React.useState<Status | null>(
     null
@@ -57,7 +57,7 @@ export function ComboboxPopover() {
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button variant="outline" className="w-[150px] justify-start">
-            {selectedStatus ? <>{selectedStatus.label}</> : <>+ Set status</>}
+            {selectedStatus ? <>{selectedStatus.label}</> : <>{label}</>}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="p-0" side="right" align="start">
@@ -66,15 +66,13 @@ export function ComboboxPopover() {
             <CommandList>
               <CommandEmpty>No results found.</CommandEmpty>
               <CommandGroup>
-                {statuses.map((status) => (
+                {options.map((option) => (
                   <CommandItem
-                    key={status.value}
-                    value={status.value}
+                    key={option}
+                    value={option}
                     onSelect={(value) => {
-                      setSelectedStatus(
-                        statuses.find((priority) => priority.value === value) ||
-                          null
-                      )
+                      onSelect(value)
+                      setSelectedStatus({ value, label: value })
                       setOpen(false)
                     }}
                   >
