@@ -25,9 +25,6 @@ export const payments: Payment[] = [
     company: "Unknown",
     jobTitle: "Unknown",
     requirements: "Unknown",
-    company: "Unknown",
-    jobTitle: "Unknown",
-    requirements: "Unknown",
   },
   {
     id: "123abc",
@@ -43,6 +40,9 @@ export const payments: Payment[] = [
     amount: 125,
     status: "processing",
     email: "example@gmail.com",
+    company: "Unknown",
+    jobTitle: "Unknown",
+    requirements: "Unknown",
   },
   // Add more payment objects as needed
 ];
