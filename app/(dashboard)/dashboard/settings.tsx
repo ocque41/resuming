@@ -25,7 +25,7 @@ export default function SettingsPage({ teamData }: { teamData: TeamDataWithMembe
       const formData = new FormData();
       formData.append('memberId', memberId);
       await removeTeamMember(memberId, formData);
-      setRemoveState({ success: 'Member removed successfully', error: });
+      setRemoveState({ success: 'Member removed successfully', error: '' });
     } catch (error) {
       setRemoveState({ error: 'Failed to remove member' });
     } finally {
