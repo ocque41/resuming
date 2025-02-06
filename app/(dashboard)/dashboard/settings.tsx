@@ -8,7 +8,7 @@ import { useActionState } from 'react';
 import { TeamDataWithMembers, User } from '@/lib/db/schema';
 import { removeTeamMember } from '@/app/(login)/actions';
 import { InviteTeamMember } from './invite-team';
-import { Settings } from '../settings';
+import { Settings } from './settings';
 
 type ActionState = {
   error?: string;
@@ -22,7 +22,6 @@ export default function SettingsPage({ teamData }: { teamData: TeamDataWithMembe
       <Settings teamData={teamData} />
     </div>
   );
-}
   const [removeState, removeAction, isRemovePending] = useActionState<
     ActionState,
     FormData
