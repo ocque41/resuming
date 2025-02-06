@@ -128,7 +128,7 @@ export function DataTable() {
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
-                <TableHead key={header.id}>{header.isPlaceholder ? null : header.column.columnDef.header?.()}</TableHead>
+                <TableHead key={header.id}>{header.isPlaceholder ? null : header.column.columnDef.header}</TableHead>
               ))}
             </TableRow>
           ))}
@@ -137,7 +137,7 @@ export function DataTable() {
           {table.getRowModel().rows.map((row) => (
             <TableRow key={row.id}>
               {row.getVisibleCells().map((cell) => (
-                <TableCell key={cell.id}>{cell.column.columnDef.cell?.({ row: cell.row })}</TableCell>
+                <TableCell key={cell.id}>{cell.column.columnDef.cell ? cell.column.columnDef.cell({ row: cell.row }) : null}</TableCell>
               ))}
             </TableRow>
           ))}
