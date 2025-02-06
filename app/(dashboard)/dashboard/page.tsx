@@ -21,7 +21,9 @@ export default async function SettingsPage() {
     <>
       <header className="flex justify-between items-center p-4 lg:p-8">
         <ArticleTitle className="text-lg lg:text-2xl font-medium">Dashboard</ArticleTitle>
-        <img src="/icons/detectiv.svg" alt="Detectiv Icon" className="h-8 w-8 lg:h-12 lg:w-12 filter invert" />
+        <a href="/dashboard/settings">
+          <img src="/icons/detectiv.svg" alt="Detectiv Icon" className="h-8 w-8 lg:h-12 lg:w-12 filter invert" />
+        </a>
       </header>
       <Settings teamData={teamData} />
     </>
