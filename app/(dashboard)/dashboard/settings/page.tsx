@@ -8,10 +8,10 @@ export default function SettingsPage({ teamData }: { teamData: TeamDataWithMembe
   return (
     <div className="p-4 lg:p-8">
       <h1 className="text-lg lg:text-2xl font-medium mb-6">Settings</h1>
-      <General />
-      <Activity />
-      <Security />
-      <InviteTeamMember />
+      <General teamData={teamData} />
+      <Activity teamData={teamData} />
+      <Security teamData={teamData} />
+      <InviteTeamMember teamData={teamData} />
     </div>
   );
 }
