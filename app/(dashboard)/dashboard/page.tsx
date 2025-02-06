@@ -20,7 +20,7 @@ export default async function DashboardPage() {
     throw new Error('Team not found');
   }
 
-  const cvs = teamData.cvs ? teamData.cvs : []; // Ensure cvs is an array
+  const cvs = (teamData as any).cvs || [];
 
   if (!teamData) {
     throw new Error('Team not found');
