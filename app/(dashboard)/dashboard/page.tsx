@@ -32,7 +32,7 @@ export default async function DashboardPage() {
       <header className="flex items-center justify-between p-4 lg:p-8 mx-auto max-w-md lg:max-w-2xl">
         <ArticleTitle className="text-lg lg:text-2xl font-medium ml-2">Dashboard</ArticleTitle>
         <a href="/dashboard/settings" className="h-8 w-8 lg:h-10 lg:w-10 ml-auto">
-          <Avatar className="cursor-pointer">
+          <Avatar className="cursor-pointer bg-[#584235]/50">
             <AvatarImage src="/path/to/avatar.jpg" alt="User Avatar" />
             <AvatarFallback>U</AvatarFallback>
           </Avatar>
