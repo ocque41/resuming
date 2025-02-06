@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
 import { Settings } from './settings';
 import { getTeamForUser, getUser } from '@/lib/db/queries';
-import { DashboardTopNav } from '@/components/ui/dashboard-top-nav';
 
 export default async function SettingsPage() {
   const user = await getUser();
@@ -19,7 +18,6 @@ export default async function SettingsPage() {
 
   return (
     <>
-      <DashboardTopNav />
       <Settings teamData={teamData} />
     </>
   );

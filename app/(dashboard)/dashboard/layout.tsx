@@ -1,6 +1,5 @@
 'use client';
 
-import { ArticleTitle } from '@/components/ui/article';
 
 export default function DashboardLayout({
   children,
