@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 import { ColumnDef, getCoreRowModel } from "@tanstack/react-table";
 import { useReactTable } from "@tanstack/react-table";
