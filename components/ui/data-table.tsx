@@ -2,6 +2,9 @@ import * as React from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import { useReactTable } from "@tanstack/react-table";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogBody } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { ComboboxPopover } from "@/components/ui/combobox";
 
 type Payment = {
   id: string;
@@ -19,6 +22,12 @@ export const payments: Payment[] = [
     amount: 100,
     status: "pending",
     email: "m@example.com",
+    company: "Unknown",
+    jobTitle: "Unknown",
+    requirements: "Unknown",
+    company: "Unknown",
+    jobTitle: "Unknown",
+    requirements: "Unknown",
   },
   {
     id: "123abc",
@@ -109,6 +118,11 @@ export function DataTable() {
   const table = useReactTable({
     data: payments,
     columns: jobColumns,
+    getCoreRowModel: () => ({
+      rows: [],
+      flatRows: [],
+      rowsById: {},
+    }),
   });
 
   return (
