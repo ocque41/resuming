@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { Settings } from './settings';
+import SettingsPage from './settings/page';
 import { ArticleTitle } from '@/components/ui/article';
 import { getTeamForUser, getUser } from '@/lib/db/queries';
 
