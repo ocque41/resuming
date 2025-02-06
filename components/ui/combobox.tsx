@@ -45,6 +45,8 @@ const statuses: Status[] = [
   },
 ]
 
+"use client"
+
 export function ComboboxPopover({ label, options, onSelect }: { label: string, options: string[], onSelect: (value: string) => void }) {
   const [open, setOpen] = React.useState(false)
   const [selectedStatus, setSelectedStatus] = React.useState<Status | null>(
