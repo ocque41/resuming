@@ -8,12 +8,12 @@ export function DashboardComboboxes({ cvs }: { cvs: string[] }) {
   return (
     <div className="flex justify-between mt-4">
       <ComboboxPopover
-        label="Analyze (CV)"
+        label="CV"
         options={cvs}
         onSelect={(cv: string) => console.log(`Analyze ${cv}`)}
       />
       <ComboboxPopover
-        label="Optimize (CV)"
+        label="CV"
         options={cvs}
         onSelect={(cv: string) =>
           (window.location.href = `/cv-optimization?cv=${cv}`)
