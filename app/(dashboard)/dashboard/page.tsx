@@ -47,9 +47,19 @@ export default async function DashboardPage() {
               {/* Example row, replace with dynamic data */}
               <TableRow>
                 <TableCell>John Doe CV</TableCell>
-                <TableCell>85%</TableCell>
-                <TableCell>Yes</TableCell>
-                <TableCell>No</TableCell>
+                <TableCell>
+                  <Button variant="outline" size="sm">Analyze</Button>
+                </TableCell>
+                <TableCell>
+                  <Button variant="outline" size="sm" asChild>
+                    <a href="/cv-optimization">Optimize</a>
+                  </Button>
+                </TableCell>
+                <TableCell>
+                  <Button variant="outline" size="sm" asChild>
+                    <a href="/jobs">Jobs</a>
+                  </Button>
+                </TableCell>
               </TableRow>
             </TableBody>
           </Table>
