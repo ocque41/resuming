@@ -8,7 +8,7 @@ import { useActionState } from 'react';
 import { TeamDataWithMembers, User } from '@/lib/db/schema';
 import { removeTeamMember } from '@/app/(login)/actions';
 import { InviteTeamMember } from './invite-team';
-import { Settings } from './settings';
+import Settings from './settings/page';
 
 type ActionState = {
   error?: string;
