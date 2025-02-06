@@ -25,7 +25,7 @@ export default async function SettingsPage() {
           <img src="/icons/detectiv.svg" alt="Detectiv Icon" className="h-8 w-8 lg:h-12 lg:w-12 filter invert" />
         </a>
       </header>
-      <Settings teamData={teamData} />
+      <SettingsPage teamData={teamData} />
     </>
   );
 }
