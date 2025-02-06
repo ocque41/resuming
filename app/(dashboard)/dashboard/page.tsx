@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { getTeamForUser, getUser } from '@/lib/db/queries';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import Table from '@/components/ui/table';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 
 export default async function DashboardPage() {
   const user = await getUser();
@@ -35,23 +35,23 @@ export default async function DashboardPage() {
         </CardHeader>
         <CardContent>
           <Table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>ATS Score</th>
-                <th>Optimized</th>
-                <th>Sent</th>
-              </tr>
-            </thead>
-            <tbody>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>ATS Score</TableHead>
+                <TableHead>Optimized</TableHead>
+                <TableHead>Sent</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {/* Example row, replace with dynamic data */}
-              <tr>
-                <td>John Doe CV</td>
-                <td>85%</td>
-                <td>Yes</td>
-                <td>No</td>
-              </tr>
-            </tbody>
+              <TableRow>
+                <TableCell>John Doe CV</TableCell>
+                <TableCell>85%</TableCell>
+                <TableCell>Yes</TableCell>
+                <TableCell>No</TableCell>
+              </TableRow>
+            </TableBody>
           </Table>
         </CardContent>
       </Card>
