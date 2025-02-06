@@ -25,7 +25,9 @@ export default async function DashboardPage() {
     <>
       <header className="flex items-center justify-between p-4 lg:p-8 mx-auto max-w-md lg:max-w-2xl">
         <ArticleTitle className="text-lg lg:text-2xl font-medium mr-auto">Dashboard</ArticleTitle>
-        <a href="/dashboard/settings" className="h-8 w-8 lg:h-10 lg:w-10 ml-auto">
+      </header>
+      <CardTitle className="text-base lg:text-xl font-light mt-2 mx-auto max-w-md lg:max-w-2xl">My CVs</CardTitle>
+      <a href="/dashboard/settings" className="h-8 w-8 lg:h-10 lg:w-10 ml-auto">
           <Avatar className="cursor-pointer">
             <AvatarImage src="/path/to/avatar.jpg" alt="User Avatar" />
             <AvatarFallback>U</AvatarFallback>
