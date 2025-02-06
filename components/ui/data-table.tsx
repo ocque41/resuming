@@ -145,7 +145,7 @@ export function DataTable() {
               {row.getVisibleCells().map((cell) => (
                 <TableCell key={cell.id}>
                   {typeof cell.column.columnDef.cell === "function"
-                    ? cell.column.columnDef.cell({ row: cell.row })
+                    ? cell.column.columnDef.cell(cell.getContext())
                     : cell.column.columnDef.cell}
                 </TableCell>
               ))}
