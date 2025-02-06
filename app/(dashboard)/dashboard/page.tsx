@@ -16,6 +16,10 @@ export default async function DashboardPage() {
   }
 
   const teamData = await getTeamForUser(user.id);
+  if (!teamData) {
+    throw new Error('Team not found');
+  }
+
   const cvs = teamData.cvs || []; // Ensure cvs is an array
 
   if (!teamData) {
