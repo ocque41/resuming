@@ -2,7 +2,9 @@ import { redirect } from 'next/navigation';
 import { ArticleTitle } from '@/components/ui/article';
 import { getTeamForUser, getUser } from '@/lib/db/queries';
 
-export default async function SettingsPage() {
+import SettingsPage from './settings/page';
+
+export default async function DashboardPage() {
   const user = await getUser();
 
   if (!user) {
