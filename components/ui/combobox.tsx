@@ -17,36 +17,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-type Status = {
-  value: string
-  label: string
-}
-
-const statuses: Status[] = [
-  {
-    value: "backlog",
-    label: "Backlog",
-  },
-  {
-    value: "todo",
-    label: "Todo",
-  },
-  {
-    value: "in progress",
-    label: "In Progress",
-  },
-  {
-    value: "done",
-    label: "Done",
-  },
-  {
-    value: "canceled",
-    label: "Canceled",
-  },
-]
-
-"use client"
-
 export function ComboboxPopover({ label, options, onSelect }: { label: string, options: string[], onSelect: (value: string) => void }) {
   const [open, setOpen] = React.useState(false)
   const [selectedStatus, setSelectedStatus] = React.useState<Status | null>(
