@@ -22,7 +22,7 @@ export default function SettingsPage({ teamData }: { teamData: TeamDataWithMembe
   const handleRemoveAction = async (memberId: string) => {
     setIsRemovePending(true);
     try {
-      await removeTeamMember(memberId);
+      await removeTeamMember(memberId, formData);
       setRemoveState({ success: 'Member removed successfully' });
     } catch (error) {
       setRemoveState({ error: 'Failed to remove member' });
