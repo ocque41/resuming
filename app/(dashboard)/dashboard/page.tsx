@@ -73,7 +73,18 @@ export default async function DashboardPage() {
           </div>
         </CardContent>
       </Card>
-      <DashboardComboboxes cvs={cvs} comboboxType="other" />
+      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
+        <CardHeader>
+          <CardTitle className="text-base lg:text-xl font-light">Optimize CV</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col items-start">
+          {/* Placeholder for cool optimization animation */}
+          <div className="w-full h-32 bg-gray-200 animate-pulse mb-4"></div>
+          <div className="w-full">
+            <DashboardComboboxes cvs={cvs} comboboxType="other" />
+          </div>
+        </CardContent>
+      </Card>
     </>
   );
 }
