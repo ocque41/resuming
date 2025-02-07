@@ -54,6 +54,7 @@
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
     "antd": "^5.23.3",
+    "axios": "^1.7.9",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.0",
@@ -63,6 +64,7 @@
     "drizzle-kit": "^0.30.4",
     "drizzle-orm": "^0.39.1",
     "embla-carousel-react": "^8.5.2",
+    "formidable": "^3.5.2",
     "framer-motion": "^12.0.11",
     "franken-ui": "^1.1.0",
     "input-otp": "^1.4.2",
@@ -76,6 +78,7 @@
     "react": "18.2.0",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.2.0",
+    "react-dropzone": "^14.3.5",
     "react-hook-form": "^7.54.2",
     "react-resizable-panels": "^2.1.7",
     "recharts": "^2.15.1",
@@ -90,6 +93,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@types/formidable": "^3.4.5",
     "autoprefixer": "10.4.15",
     "daisyui": "^4.0.5",
     "postcss": "^8.5.1",
