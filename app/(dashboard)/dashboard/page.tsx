@@ -1,4 +1,5 @@
 // app/(dashboard)/dashboard/page.tsx
+import React from "react";
 import { redirect } from "next/navigation";
 import { ArticleTitle } from "@/components/ui/article";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
