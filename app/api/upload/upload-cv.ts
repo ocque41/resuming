@@ -37,14 +37,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     }
 
     // Access the uploaded file (the name "file" must match the formData key)
-    const uploadedFile = files.file
+    const uploadedFile = files.file as formidable.File
     if (!uploadedFile) {
       return res.status(400).json({ message: 'No file was uploaded.' })
     }
 
     // For demonstration, we read the file’s content as text.
     // In production, you might store the file in a cloud storage service or save its path in your database.
-    fs.readFile(uploadedFile.filepath, 'utf8', async (readErr, data) => {
+    fs.readFile((uploadedFile as formidable.File).filepath, 'utf8', async (readErr, data) => {
       if (readErr) {
         console.error('Error reading file:', readErr)
         return res.status(500).json({ message: 'Error reading file content.' })
