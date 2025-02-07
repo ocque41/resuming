@@ -1,5 +1,5 @@
 // components/DragAndDropUpload.tsx
-import React, { useCallback } from 'react'
+import React, { useCallback, useRef } from 'react'
 import { useDropzone } from 'react-dropzone'
 import axios from 'axios'
 
