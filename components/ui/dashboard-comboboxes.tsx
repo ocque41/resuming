@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react";
-import { Combobox } from "@/components/ui/comboboxes";
+import { Combobox, ComboboxInput, ComboboxOption, ComboboxOptions } from "@/components/ui/comboboxes";
 import { Button } from "@/components/ui/button";
 
 export function DashboardComboboxes({ cvs, comboboxType }: { cvs: string[], comboboxType?: string }) {
@@ -10,7 +10,7 @@ export function DashboardComboboxes({ cvs, comboboxType }: { cvs: string[], comb
       {comboboxType === "analyze" && (
         <Combobox
           value={cvs[0]}
-          onChange={(cv: string) => console.log(`Analyze ${cv}`)}
+          onChange={(cv) => console.log(`Analyze ${cv}`)}
         >
           <ComboboxInput
             aria-label="Analyze"
@@ -28,7 +28,7 @@ export function DashboardComboboxes({ cvs, comboboxType }: { cvs: string[], comb
       {comboboxType === "other" && (
         <Combobox
           value={cvs[0]}
-          onChange={(cv: string) =>
+          onChange={(cv) =>
             (window.location.href = `/cv-optimization?cv=${cv}`)
           }
         >

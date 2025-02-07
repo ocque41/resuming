@@ -1,4 +1,6 @@
-import { Combobox, ComboboxInput, ComboboxOption, ComboboxOptions } from '@headlessui/react'
+import { Combobox, ComboboxInput, ComboboxOption, ComboboxOptions } from '@headlessui/react';
+
+export { Combobox, ComboboxInput, ComboboxOption, ComboboxOptions };
 import { useState } from 'react'
 
 const people = [
