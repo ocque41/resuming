@@ -1,8 +1,9 @@
+// app/(dashboard)/dashboard/page.tsx
 import { redirect } from "next/navigation";
 import { ArticleTitle } from "@/components/ui/article";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getTeamForUser, getUser } from "@/lib/db/queries";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableHeader,
@@ -12,6 +13,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+// Import the client component you just created.
 import { ComboboxPopover } from "@/components/ui/combobox";
 
 export default async function DashboardPage() {
@@ -26,6 +28,7 @@ export default async function DashboardPage() {
     throw new Error("Team not found");
   }
 
+  // Get the list of CVs from team data.
   const cvs = (teamData as any).cvs || [];
 
   return (
@@ -56,7 +59,7 @@ export default async function DashboardPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {/* Example row, replace with dynamic data */}
+              {/* Example row; replace with dynamic data */}
               <TableRow>
                 <TableCell>John Doe CV</TableCell>
                 <TableCell>85%</TableCell>
