@@ -216,10 +216,6 @@ export default function HomePage() {
               {/* Removed "View Full Pricing Details" buttons from all tabs */}
             </div>
           </GradientCard>
-          <div className="mt-8">
-            <h2 className="text-2xl font-bold text-white mb-4">Upload Your CV</h2>
-            <DragAndDropUpload />
-          </div>
         </motion.div>
       </section>
 

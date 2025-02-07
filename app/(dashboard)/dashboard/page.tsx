@@ -44,6 +44,10 @@ export default async function DashboardPage() {
       <CardTitle className="text-base lg:text-xl font-light mt-2 mx-auto max-w-md lg:max-w-2xl">
         My CVs
       </CardTitle>
+      <div className="bg-black text-white p-6 rounded-lg mt-8 mx-auto max-w-md lg:max-w-2xl">
+        <h2 className="text-2xl font-bold mb-4">Upload Your CV</h2>
+        <DragAndDropUpload />
+      </div>
       <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
         <CardContent>
           <Table className="w-full">
