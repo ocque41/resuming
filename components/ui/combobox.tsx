@@ -4,17 +4,17 @@
 import { Combobox } from "@headlessui/react";
 import { useState } from "react";
 
-interface ComboboxProps {
+export interface ComboboxPopoverProps {
   label: string;
   options: string[];
   onSelect: (option: string) => void;
 }
 
-export function ComboboxPopover({ label, options, onSelect }: ComboboxProps) {
+export function ComboboxPopover({ label, options, onSelect }: ComboboxPopoverProps) {
   const [selected, setSelected] = useState("");
   const [query, setQuery] = useState("");
 
-  // Filter options based on the current query.
+  // Filter options based on the input query.
   const filteredOptions =
     query === ""
       ? options

@@ -1,4 +1,4 @@
-'use client';
+// app/(dashboard)/dashboard/page.tsx
 import { redirect } from "next/navigation";
 import { ArticleTitle } from "@/components/ui/article";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -12,9 +12,7 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-// Import the client component you just created.
-import { ComboboxPopover } from "@/components/ui/combobox";
+import DashboardComboboxes from "@/components/dashboard-comboboxes.client";
 
 export default async function DashboardPage() {
   const user = await getUser();
@@ -28,7 +26,6 @@ export default async function DashboardPage() {
     throw new Error("Team not found");
   }
 
-  // Get the list of CVs from team data.
   const cvs = (teamData as any).cvs || [];
 
   return (
@@ -70,23 +67,8 @@ export default async function DashboardPage() {
           </Table>
         </CardContent>
       </Card>
-      <div className="flex justify-between mt-4">
-        <ComboboxPopover
-          label="Analyze (CV)"
-          options={cvs}
-          onSelect={(cv: string) => console.log(`Analyze ${cv}`)}
-        />
-        <ComboboxPopover
-          label="Optimize (CV)"
-          options={cvs}
-          onSelect={(cv: string) =>
-            (window.location.href = `/cv-optimization?cv=${cv}`)
-          }
-        />
-        <Button variant="outline" size="sm" asChild>
-          <a href="/jobs">Jobs</a>
-        </Button>
-      </div>
+      {/* Pass only serializable data (cvs) to the client component */}
+      <DashboardComboboxes cvs={cvs} />
     </>
   );
 }
