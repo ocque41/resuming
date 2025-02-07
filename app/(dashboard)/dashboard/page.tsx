@@ -13,6 +13,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import DashboardComboboxes from "@/components/dashboard-comboboxes.client";
+import DragAndDropUpload from '@/components/ui/drag&drop';
 
 export default async function DashboardPage() {
   const user = await getUser();
