@@ -24,12 +24,12 @@ export default function DashboardComboboxes({ cvs }: DashboardComboboxesProps) {
   return (
     <div className="flex justify-between mt-4">
       <ComboboxPopover
-        label="Analyze (CV)"
+        label="Analyze"
         options={cvs}
         onSelect={handleAnalyze}
       />
       <ComboboxPopover
-        label="Optimize (CV)"
+        label="Optimize"
         options={cvs}
         onSelect={handleOptimize}
       />

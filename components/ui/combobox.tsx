@@ -42,7 +42,7 @@ export function ComboboxPopover({
           <div className="relative w-full cursor-default overflow-hidden rounded-lg bg-white text-left shadow-md sm:text-sm">
             <Combobox.Input
               className="w-full border-none py-2 pl-3 pr-10 leading-5 text-gray-900 focus:ring-0"
-              placeholder="Select an option"
+              placeholder="Select a CV"
               onChange={(e) => setQuery(e.target.value)}
               displayValue={(option: string) => option}
             />
