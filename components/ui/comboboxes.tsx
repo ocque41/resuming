@@ -26,7 +26,7 @@ function Example() {
     <Combobox value={selectedPerson} onChange={(value) => setSelectedPerson(value)} onClose={() => setQuery('')}>
       <ComboboxInput
         aria-label="Assignee"
-        displayValue={(person) => person ? person.name : ''}
+        displayValue={(person: { id: number; name: string } | null) => (person ? person.name : '')}
         onChange={(event) => setQuery(event.target.value)}
       />
       <ComboboxOptions anchor="bottom" className="border empty:invisible">

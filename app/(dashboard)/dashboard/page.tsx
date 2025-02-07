@@ -34,7 +34,7 @@ export default async function DashboardPage() {
         <ArticleTitle className="text-lg lg:text-2xl font-medium ml-2">Dashboard</ArticleTitle>
         <Dialog>
           <DialogTrigger asChild>
-            <Avatar className="cursor-pointer bg-[#584235]">
+            <Avatar className="cursor-pointer bg-[#000000]">
               <AvatarImage src="/path/to/avatar.jpg" alt="User Avatar" />
               <AvatarFallback>U</AvatarFallback>
             </Avatar>
