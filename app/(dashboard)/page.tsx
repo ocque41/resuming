@@ -16,6 +16,7 @@ import {
 import { GradientCard } from "@/components/ui/gradient-card";
 import Link from "next/link";
 import { motion, Variants } from "framer-motion";
+import DragAndDropUpload from '@/components/ui/drag&drop';
 
 export default function HomePage() {
   const containerVariants: Variants = {
@@ -215,6 +216,10 @@ export default function HomePage() {
               {/* Removed "View Full Pricing Details" buttons from all tabs */}
             </div>
           </GradientCard>
+          <div className="mt-8">
+            <h2 className="text-2xl font-bold text-white mb-4">Upload Your CV</h2>
+            <DragAndDropUpload />
+          </div>
         </motion.div>
       </section>
 
