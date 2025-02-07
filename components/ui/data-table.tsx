@@ -6,7 +6,7 @@ import { useReactTable } from "@tanstack/react-table";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogBody } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ComboboxPopover } from "@/components/ui/combobox";
+import { Combobox } from "@/components/ui/comboboxes";
 
 type Payment = {
   id: string;
@@ -75,11 +75,22 @@ const jobColumns: ColumnDef<Payment>[] = [
             <DialogTitle>Apply for {row.original.jobTitle}</DialogTitle>
           </DialogHeader>
           <DialogBody>
-            <ComboboxPopover
-              label="Select CV"
-              options={payments.map((payment) => payment.id)}
-              onSelect={(cv) => console.log(`Selected CV: ${cv}`)}
-            />
+            <Combobox
+              value={payments[0].id}
+              onChange={(cv) => console.log(`Selected CV: ${cv}`)}
+            >
+              <ComboboxInput
+                aria-label="Select CV"
+                displayValue={(cv) => cv}
+              />
+              <ComboboxOptions anchor="bottom" className="border empty:invisible">
+                {payments.map((payment) => (
+                  <ComboboxOption key={payment.id} value={payment.id} className="data-[focus]:bg-blue-100">
+                    {payment.id}
+                  </ComboboxOption>
+                ))}
+              </ComboboxOptions>
+            </Combobox>
             <textarea
               className="w-full mt-4 p-2 border rounded"
               placeholder="Write your cover letter here..."
