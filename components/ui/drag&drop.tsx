@@ -1,27 +1,29 @@
 // components/DragAndDropUpload.tsx
-import React, { useCallback } from 'react'
-import { useDropzone } from 'react-dropzone'
-import axios from 'axios'
+"use client"; // This ensures the component is rendered on the client side
+
+import React, { useCallback } from 'react';
+import { useDropzone } from 'react-dropzone';
+import axios from 'axios';
 
 const DragAndDropUpload: React.FC = () => {
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (!acceptedFiles || acceptedFiles.length === 0) return
+    if (!acceptedFiles || acceptedFiles.length === 0) return;
 
-    const file = acceptedFiles[0]
-    const formData = new FormData()
-    formData.append('file', file)
+    const file = acceptedFiles[0];
+    const formData = new FormData();
+    formData.append('file', file);
 
     try {
       const response = await axios.post('/api/upload-cv', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      console.log('Upload successful:', response.data)
+      });
+      console.log('Upload successful:', response.data);
     } catch (error) {
-      console.error('Error uploading file:', error)
+      console.error('Error uploading file:', error);
     }
-  }, [])
+  }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop })
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
 
   return (
     <div
@@ -44,7 +46,7 @@ const DragAndDropUpload: React.FC = () => {
         )}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default DragAndDropUpload
+export default DragAndDropUpload;
