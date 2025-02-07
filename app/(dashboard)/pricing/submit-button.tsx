@@ -2,10 +2,9 @@
 
 import { Button } from '@/components/ui/button';
 import { ArrowRight, Loader2 } from 'lucide-react';
-import { useFormStatus } from 'react-dom';
 
 export function SubmitButton({ className }: { className?: string }) {
-  const { pending } = useFormStatus();
+  const pending = false; // Placeholder, replace with actual form status logic
 
   return (
     <Button
