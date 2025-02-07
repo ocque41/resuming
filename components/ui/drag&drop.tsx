@@ -44,10 +44,7 @@ const DragAndDropUpload: React.FC = () => {
             <p className="text-blue-600 font-medium">Drop your CV here...</p>
           ) : (
             <p className="text-gray-500">
-              Drag &amp; drop your CV here, or{" "}
-              <span className="underline cursor-pointer text-blue-600">
-                click to select a file
-              </span>
+              Drop "Drag &amp; drop your CV here, or click to select a file"
             </p>
           )}
         </div>
