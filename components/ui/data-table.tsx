@@ -6,7 +6,7 @@ import { useReactTable } from "@tanstack/react-table";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogBody } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import Example from "@/components/ui/comboboxes";
+import { Combobox, ComboboxInput, ComboboxOption, ComboboxOptions } from "@headlessui/react";
 
 type Payment = {
   id: string;
@@ -77,7 +77,7 @@ const jobColumns: ColumnDef<Payment>[] = [
           <DialogBody>
             <Combobox
               value={payments[0].id}
-              onChange={(cv) => console.log(`Selected CV: ${cv}`)}
+              onChange={(cv: string) => console.log(`Selected CV: ${cv}`)}
             >
               <ComboboxInput
                 aria-label="Select CV"
