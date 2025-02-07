@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react";
-import Example from "@/components/ui/comboboxes";
+import { Combobox, ComboboxInput, ComboboxOption, ComboboxOptions } from "@/components/ui/comboboxes";
 import { Button } from "@/components/ui/button";
 
 export function DashboardComboboxes({ cvs, comboboxType }: { cvs: string[], comboboxType?: string }) {
