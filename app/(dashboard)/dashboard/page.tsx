@@ -1,66 +1,50 @@
-import { redirect } from 'next/navigation';
-import { ArticleTitle } from '@/components/ui/article';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { getTeamForUser, getUser } from '@/lib/db/queries';
-
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { DataTable } from '@/components/ui/data-table';
-import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/components/ui/dialog';
-import { DashboardComboboxes } from '@/components/ui/dashboard-comboboxes';
+import { redirect } from "next/navigation";
+import { ArticleTitle } from "@/components/ui/article";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { getTeamForUser, getUser } from "@/lib/db/queries";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { ComboboxPopover } from "@/components/ui/combobox";
 
 export default async function DashboardPage() {
   const user = await getUser();
 
   if (!user) {
-    redirect('/sign-in');
+    redirect("/sign-in");
   }
 
   const teamData = await getTeamForUser(user.id);
   if (!teamData) {
-    throw new Error('Team not found');
+    throw new Error("Team not found");
   }
 
   const cvs = (teamData as any).cvs || [];
 
-  if (!teamData) {
-    throw new Error('Team not found');
-  }
-
   return (
     <>
       <header className="flex items-center justify-between p-4 lg:p-8 mx-auto max-w-md lg:max-w-2xl">
-        <ArticleTitle className="text-lg lg:text-2xl font-medium ml-2">Dashboard</ArticleTitle>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Avatar className="cursor-pointer bg-[#000000]">
-              <AvatarImage src="/path/to/avatar.jpg" alt="User Avatar" />
-              <AvatarFallback>U</AvatarFallback>
-            </Avatar>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>User Menu</DialogTitle>
-            </DialogHeader>
-            <DialogBody>
-              <Button variant="outline" onClick={() => window.location.href = '/dashboard/billing'}>
-                Billing
-              </Button>
-              <Button variant="outline" onClick={() => window.location.href = '/dashboard/settings'}>
-                Settings
-              </Button>
-              <Button variant="outline" onClick={() => console.log('Log Out')}>
-                Log Out
-              </Button>
-            </DialogBody>
-          </DialogContent>
-        </Dialog>
+        <ArticleTitle className="text-lg lg:text-2xl font-medium ml-4">
+          Dashboard
+        </ArticleTitle>
+        <a href="/dashboard/settings" className="h-8 w-8 lg:h-10 lg:w-10 ml-auto">
+          <Avatar className="cursor-pointer">
+            <AvatarImage src="/path/to/avatar.jpg" alt="User Avatar" />
+            <AvatarFallback>U</AvatarFallback>
+          </Avatar>
+        </a>
       </header>
+      <CardTitle className="text-base lg:text-xl font-light mt-2 mx-auto max-w-md lg:max-w-2xl">
+        My CVs
+      </CardTitle>
       <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
-        <CardHeader>
-          <CardTitle className="text-base lg:text-xl font-light">General Suite</CardTitle>
-        </CardHeader>
         <CardContent>
           <Table className="w-full">
             <TableHeader>
@@ -83,38 +67,23 @@ export default async function DashboardPage() {
           </Table>
         </CardContent>
       </Card>
-      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
-        <CardHeader>
-          <CardTitle className="text-base lg:text-xl font-light">Analyze CV</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col items-start">
-          {/* Placeholder for cool analysis animation */}
-          <div className="w-full h-32 bg-gray-200 animate-pulse mb-4"></div>
-          <div className="w-full">
-            <DashboardComboboxes cvs={cvs} comboboxType="analyze" />
-          </div>
-        </CardContent>
-      </Card>
-      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
-        <CardHeader>
-          <CardTitle className="text-base lg:text-xl font-light">Optimize CV</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col items-start">
-          {/* Placeholder for cool optimization animation */}
-          <div className="w-full h-32 bg-gray-200 animate-pulse mb-4"></div>
-          <div className="w-full">
-            <DashboardComboboxes cvs={cvs} comboboxType="other" />
-          </div>
-        </CardContent>
-      </Card>
-      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
-        <CardHeader>
-          <CardTitle className="text-base lg:text-xl font-light">Jobs</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DataTable />
-        </CardContent>
-      </Card>
+      <div className="flex justify-between mt-4">
+        <ComboboxPopover
+          label="Analyze (CV)"
+          options={cvs}
+          onSelect={(cv: string) => console.log(`Analyze ${cv}`)}
+        />
+        <ComboboxPopover
+          label="Optimize (CV)"
+          options={cvs}
+          onSelect={(cv: string) =>
+            (window.location.href = `/cv-optimization?cv=${cv}`)
+          }
+        />
+        <Button variant="outline" size="sm" asChild>
+          <a href="/jobs">Jobs</a>
+        </Button>
+      </div>
     </>
   );
 }
