@@ -1,4 +1,4 @@
-// app/(dashboard)/dashboard/page.tsx
+'use client';
 import { redirect } from "next/navigation";
 import { ArticleTitle } from "@/components/ui/article";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
