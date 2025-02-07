@@ -46,10 +46,6 @@ export default async function DashboardPage() {
       <CardTitle className="text-base lg:text-xl font-light mt-2 mx-auto max-w-md lg:max-w-2xl">
         General Suite
       </CardTitle>
-      <div className="bg-black text-white p-6 rounded-lg mt-8 mx-auto max-w-md lg:max-w-2xl">
-        <h2 className="text-2xl font-bold mb-4"></h2>
-        <DragAndDropUpload />
-      </div>
       <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
         <CardContent>
           <Table className="w-full">
@@ -73,6 +69,10 @@ export default async function DashboardPage() {
           </Table>
         </CardContent>
       </Card>
+      <div className="bg-black text-white p-6 rounded-lg mt-8 mx-auto max-w-md lg:max-w-2xl h-64 flex items-center justify-center">
+        <h2 className="text-2xl font-bold mb-4">Upload Your CV</h2>
+        <DragAndDropUpload />
+      </div>
       {/* Pass only serializable data (cvs) to the client component */}
       <DashboardComboboxes cvs={cvs} />
     </>
