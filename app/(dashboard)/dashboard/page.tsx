@@ -70,7 +70,6 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
       <div className="bg-black text-white p-6 rounded-lg mt-8 mx-auto max-w-md lg:max-w-2xl h-64 flex items-center justify-center">
-        <h2 className="text-2xl font-bold mb-4">Upload Your CV</h2>
         <DragAndDropUpload />
       </div>
       {/* Pass only serializable data (cvs) to the client component */}
