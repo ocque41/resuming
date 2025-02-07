@@ -34,7 +34,7 @@ const DragAndDropUpload: React.FC = () => {
       {/* Drop area */}
       <div
         {...getRootProps()}
-        className={`w-full h-32 flex justify-center items-center border-2 border-dashed rounded-md 
+        className={`w-full h-32 flex justify-center items-center border-0 rounded-md 
           transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500
           ${isDragActive ? "border-blue-500 bg-blue-50" : "border-gray-300 bg-white/10"}`}
       >
