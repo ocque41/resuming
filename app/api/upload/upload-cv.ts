@@ -4,7 +4,7 @@ import formidable from 'formidable'
 import fs from 'fs'
 import { getSession } from 'next-auth/react'
 
-// Disable Next.js’ default body parsing so that formidable can process the form-data
+// Disable Next.js' default body parsing so that formidable can process the form-data
 export const config = {
   api: {
     bodyParser: false,
@@ -37,12 +37,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     }
 
     // Access the uploaded file (the name "file" must match the formData key)
-    const uploadedFile = files.file as formidable.File
+    const fileOrFiles = files.file;
+    const uploadedFile = Array.isArray(fileOrFiles) ? fileOrFiles[0] : fileOrFiles;
+
     if (!uploadedFile) {
       return res.status(400).json({ message: 'No file was uploaded.' })
     }
 
-    // For demonstration, we read the file’s content as text.
+    // For demonstration, we read the file's content as text.
     // In production, you might store the file in a cloud storage service or save its path in your database.
     fs.readFile((uploadedFile as formidable.File).filepath, 'utf8', async (readErr, data) => {
       if (readErr) {
