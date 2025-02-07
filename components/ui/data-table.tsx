@@ -81,7 +81,7 @@ const jobColumns: ColumnDef<Payment>[] = [
             >
               <ComboboxInput
                 aria-label="Select CV"
-                displayValue={(cv) => cv}
+                displayValue={(cv) => cv as string}
               />
               <ComboboxOptions anchor="bottom" className="border empty:invisible">
                 {payments.map((payment) => (

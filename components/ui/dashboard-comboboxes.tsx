@@ -14,7 +14,7 @@ export function DashboardComboboxes({ cvs, comboboxType }: { cvs: string[], comb
         >
           <ComboboxInput
             aria-label="Analyze"
-            displayValue={(cv) => cv}
+            displayValue={(cv) => cv as string}
           />
           <ComboboxOptions anchor="bottom" className="border empty:invisible">
             {cvs.map((cv) => (
@@ -34,7 +34,7 @@ export function DashboardComboboxes({ cvs, comboboxType }: { cvs: string[], comb
         >
           <ComboboxInput
             aria-label="Optimize"
-            displayValue={(cv) => cv}
+            displayValue={(cv) => cv as string}
           />
           <ComboboxOptions anchor="bottom" className="border empty:invisible">
             {cvs.map((cv) => (

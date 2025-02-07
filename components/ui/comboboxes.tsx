@@ -12,7 +12,7 @@ const people = [
 ]
 
 function Example() {
-  const [selectedPerson, setSelectedPerson] = useState(people[0])
+  const [selectedPerson, setSelectedPerson] = useState<{ id: number; name: string } | null>(people[0])
   const [query, setQuery] = useState('')
 
   const filteredPeople =
@@ -23,10 +23,10 @@ function Example() {
         })
 
   return (
-    <Combobox value={selectedPerson} onChange={setSelectedPerson} onClose={() => setQuery('')}>
+    <Combobox value={selectedPerson} onChange={(value) => setSelectedPerson(value)} onClose={() => setQuery('')}>
       <ComboboxInput
         aria-label="Assignee"
-        displayValue={(person) => person?.name}
+        displayValue={(person) => person ? person.name : ''}
         onChange={(event) => setQuery(event.target.value)}
       />
       <ComboboxOptions anchor="bottom" className="border empty:invisible">
