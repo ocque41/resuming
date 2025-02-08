@@ -4,7 +4,10 @@ import formidable from 'formidable'
 import fs from 'fs'
 import { getSession } from 'next-auth/react'
 
-// Disable Next.js' default body parsing so that formidable can process the form-data
+// Adjust these import paths if needed (if you prefer using path aliases, update tsconfig.json accordingly)
+import { db } from '@/lib/db/drizzle'
+import { cvs } from '@/lib/db/schema'
+
 export const config = {
   api: {
     bodyParser: false,
@@ -13,22 +16,29 @@ export const config = {
 
 type Data = {
   message: string
-  content?: string
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
-  // Ensure the user is authenticated (using NextAuth as an example)
+  // Get the session from NextAuth
   const session = await getSession({ req })
-  if (!session) {
+  
+  // Check that the session exists, and that session.user exists with an id property
+  if (!session || !session.user || !(session.user as any).id) {
     return res.status(401).json({ message: 'You must be logged in to upload your CV.' })
   }
+  
+  // Extract the user id using a type assertion
+  const userId = (session.user as { id: number }).id
 
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method not allowed' })
   }
 
-  // Use formidable to parse the incoming form (including file uploads)
-  const form = new formidable.IncomingForm()
+  // Set up formidable to save files in the "uploads" folder (make sure this folder exists)
+  const form = new formidable.IncomingForm({
+    uploadDir: './uploads',
+    keepExtensions: true,
+  })
 
   form.parse(req, async (err, fields, files) => {
     if (err) {
@@ -36,31 +46,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
       return res.status(500).json({ message: 'Error processing file upload.' })
     }
 
-    // Access the uploaded file (the name "file" must match the formData key)
-    const fileOrFiles = files.file;
-    const uploadedFile = Array.isArray(fileOrFiles) ? fileOrFiles[0] : fileOrFiles;
+    // Access the uploaded file (ensure the form field name is "file")
+    const fileOrFiles = files.file
+    const uploadedFile = Array.isArray(fileOrFiles) ? fileOrFiles[0] : fileOrFiles
 
     if (!uploadedFile) {
       return res.status(400).json({ message: 'No file was uploaded.' })
     }
 
-    // For demonstration, we read the file's content as text.
-    // In production, you might store the file in a cloud storage service or save its path in your database.
-    fs.readFile((uploadedFile as formidable.File).filepath, 'utf8', async (readErr, data) => {
-      if (readErr) {
-        console.error('Error reading file:', readErr)
-        return res.status(500).json({ message: 'Error reading file content.' })
-      }
+    // Use the file's original filename and filepath
+    const fileName = uploadedFile.originalFilename || 'UnnamedCV.pdf'
+    const filePath = uploadedFile.filepath // path where the file was saved
 
-      // TODO: Save the file (or its parsed data) to your database.
-      // For example, using Prisma:
-      // await prisma.user.update({
-      //   where: { id: session.user.id },
-      //   data: { cvContent: data }, // Or store the file path if you save it somewhere else
-      // })
+    try {
+      // Insert a record in the cvs table using Drizzle ORM
+      await db.insert(cvs).values({
+        userId: userId,
+        fileName: fileName,
+        filePath: filePath,
+      })
 
-      // For this example, we just return success.
-      return res.status(200).json({ message: 'CV uploaded successfully!', content: data })
-    })
+      return res.status(200).json({ message: 'CV uploaded successfully!' })
+    } catch (dbError) {
+      console.error('Database error:', dbError)
+      return res.status(500).json({ message: 'Error saving CV to database.' })
+    }
   })
 }

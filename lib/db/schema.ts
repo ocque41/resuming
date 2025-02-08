@@ -68,6 +68,16 @@ export const invitations = pgTable('invitations', {
   status: varchar('status', { length: 20 }).notNull().default('pending'),
 });
 
+export const cvs = pgTable('cvs', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id')
+    .notNull()
+    .references(() => users.id),
+  fileName: varchar('file_name', { length: 255 }).notNull(),
+  filePath: text('file_path').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
 export const teamsRelations = relations(teams, ({ many }) => ({
   teamMembers: many(teamMembers),
   activityLogs: many(activityLogs),
