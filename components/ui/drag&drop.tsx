@@ -13,7 +13,7 @@ const DragAndDropUpload: React.FC = () => {
     formData.append("file", file);
 
     try {
-      const response = await axios.post("/api/upload-cv", formData, {
+      const response = await axios.post("/api/upload/route", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       console.log("Upload successful:", response.data);
