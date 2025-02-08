@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Lock, Trash2, Loader2 } from 'lucide-react';
 import { startTransition } from 'react';
-import { useActionState } from 'your-correct-module-path';
+import { useActionState } from '@/lib/auth/middleware';
 import { updatePassword, deleteAccount } from '@/app/(login)/actions';
 
 type ActionState = {
