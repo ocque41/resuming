@@ -7,7 +7,6 @@ import {
   useState,
   useEffect,
 } from 'react';
-import { use } from 'react';
 import { User } from '@/lib/db/schema';
 
 type UserContextType = {
