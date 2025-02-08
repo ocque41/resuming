@@ -12,7 +12,7 @@ import {
 import { Loader2, PlusCircle } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { useActionState } from '@/lib/auth/middleware';
+import { useActionState } from '@/lib/useActionState';
 import { inviteTeamMember } from '@/app/(login)/actions';
 import { useUser } from '@/lib/auth';
 
@@ -24,10 +24,15 @@ type ActionState = {
 export function InviteTeamMember() {
   const { user } = useUser();
   const isOwner = user?.role === 'owner';
-  const [inviteState, inviteAction, isInvitePending] = useActionState<
-    ActionState,
-    FormData
-  >(inviteTeamMember, { error: '', success: '' });
+  const [inviteState, inviteAction, isInvitePending] = useActionState<ActionState, FormData>(
+    (data) => inviteTeamMember({ error: '', success: '' }, data),
+    { error: '', success: '' }
+  );
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    inviteAction(new FormData(event.currentTarget));
+  };
 
   return (
     <Card>
@@ -35,7 +40,7 @@ export function InviteTeamMember() {
         <CardTitle>Invite Team Member</CardTitle>
       </CardHeader>
       <CardContent>
-        <form action={inviteAction} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label htmlFor="email">Email</Label>
             <Input

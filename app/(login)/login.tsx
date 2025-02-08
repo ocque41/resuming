@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from '@/lib/auth/middleware';
+import { useActionState } from '@/lib/useActionState';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,14 +12,20 @@ import { motion } from 'framer-motion';
 import { signIn, signUp } from './actions';
 import { ActionState } from '@/lib/auth/middleware';
 
+// Wrap signIn to always return an ActionState
+const signInAction = (data: FormData) =>
+  signIn({ error: '', email: '', password: '' }, data).then(
+    (res) => res ?? { error: '', email: '', password: '' }
+  );
+
 export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect');
   const priceId = searchParams.get('priceId');
   const inviteId = searchParams.get('inviteId');
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
-    mode === 'signin' ? signIn : signUp,
-    { error: '' },
+    signInAction,
+    { error: '', email: '', password: '' }
   );
 
   return (
@@ -41,7 +47,13 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <form className="space-y-6" action={formAction}>
+        <form
+          className="space-y-6"
+          onSubmit={(event) => {
+            event.preventDefault();
+            formAction(new FormData(event.currentTarget));
+          }}
+        >
           <input type="hidden" name="redirect" value={redirect || ''} />
           <input type="hidden" name="priceId" value={priceId || ''} />
           <input type="hidden" name="inviteId" value={inviteId || ''} />
