@@ -1,3 +1,6 @@
+'use client';
+
+
 import { Login } from '../login';
 
 export default function SignUpPage() {
