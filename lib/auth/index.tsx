@@ -31,12 +31,11 @@ export function UserProvider({
   children: ReactNode;
   userPromise: Promise<User | null>;
 }) {
-  let initialUser = use(userPromise);
-  let [user, setUser] = useState<User | null>(initialUser);
+  let [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    setUser(initialUser);
-  }, [initialUser]);
+    userPromise.then(setUser);
+  }, [userPromise]);
 
   return (
     <UserContext.Provider value={{ user, setUser }}>
