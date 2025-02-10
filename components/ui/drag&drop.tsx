@@ -13,7 +13,8 @@ const DragAndDropUpload: React.FC = () => {
     formData.append("file", file);
 
     try {
-      const response = await axios.post("/api/upload/route", formData, {
+      // Corrected endpoint: "/api/upload"
+      const response = await axios.post("/api/upload", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       console.log("Upload successful:", response.data);
@@ -26,12 +27,9 @@ const DragAndDropUpload: React.FC = () => {
 
   return (
     <div className="space-y-1">
-      {/* Label above the drop area */}
       <label className="block text-sm font-medium text-gray-700">
         Upload A CV
       </label>
-      
-      {/* Drop area */}
       <div
         {...getRootProps()}
         className={`w-full h-32 flex justify-center items-center border-0 rounded-md 
@@ -43,9 +41,7 @@ const DragAndDropUpload: React.FC = () => {
           {isDragActive ? (
             <p className="text-blue-600 font-medium">Drop your CV here...</p>
           ) : (
-            <p className="text-white">
-              Drop
-            </p>
+            <p className="text-white">Drop</p>
           )}
         </div>
       </div>
