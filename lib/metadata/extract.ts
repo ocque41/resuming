@@ -9,8 +9,13 @@ import { streamText } from 'ai';
  * Extract text from a PDF file.
  */
 export async function extractTextFromPdf(filePath: string): Promise<string> {
-  const dataBuffer = await fs.readFile(filePath);
-  const data = await pdfParse(dataBuffer);
+  try {
+    const dataBuffer = await fs.readFile(filePath);
+    const data = await pdfParse(dataBuffer);
+  } catch (err) {
+    console.error(`Error reading PDF file at ${filePath}:`, err);
+    return null;
+  }
   return data.text;
 }
 
