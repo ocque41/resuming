@@ -14,9 +14,9 @@ export async function extractTextFromPdf(filePath: string): Promise<string> {
     const data = await pdfParse(dataBuffer);
   } catch (err) {
     console.error(`Error reading PDF file at ${filePath}:`, err);
-    return null;
+    return '';
   }
-  return data.text;
+  return data ? data.text : '';
 }
 
 /**
