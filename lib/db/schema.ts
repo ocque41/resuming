@@ -76,6 +76,7 @@ export const cvs = pgTable('cvs', {
   fileName: varchar('filename', { length: 255 }).notNull(),  // changed from 'file_name'
   filePath: text('filepath').notNull(),                      // changed from 'file_path'
   createdAt: timestamp('createdat').notNull().defaultNow(),    // changed from 'created_at'
+  metadata: text('metadata').default(null), // ensure default null
 });
 
 
