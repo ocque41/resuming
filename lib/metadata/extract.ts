@@ -1,7 +1,9 @@
 // lib/metadata/extractMetadata.ts
 import pdfParse from "pdf-parse";
 import fs from "fs/promises";
-import { openai } from "ai";
+import { openai } from "@ai-sdk/openai";
+import { streamText } from 'ai';
+
 
 /**
  * Extract text from a PDF file.
