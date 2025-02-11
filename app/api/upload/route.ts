@@ -1,7 +1,7 @@
 // app/api/upload/route.ts
 import { NextResponse } from 'next/server'
 import formidable from 'formidable'
-import { getSession } from '@/lib/auth/session' // using your custom session logic
+import { getSession } from '@/lib/auth/session'
 import { db } from '@/lib/db/drizzle'
 import { cvs } from '@/lib/db/schema'
 
@@ -10,6 +10,17 @@ export const config = {
   api: {
     bodyParser: false,
   },
+}
+
+// Handle preflight OPTIONS requests.
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  })
 }
 
 export async function POST(request: Request) {
