@@ -13,10 +13,8 @@ const DragAndDropUpload: React.FC = () => {
     formData.append("file", file);
 
     try {
-      // Corrected endpoint: "/api/upload"
-      const response = await axios.post("/api/upload", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      // Updated endpoint is "/api/upload" and no manual Content-Type header is set.
+      const response = await axios.post("/api/upload", formData);
       console.log("Upload successful:", response.data);
     } catch (error) {
       console.error("Error uploading file:", error);
