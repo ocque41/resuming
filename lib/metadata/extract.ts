@@ -32,7 +32,7 @@ CV Text:
 ${text}
     `;
     const chat = openai("gpt-4o");
-    const response = await chat.generate(prompt);
+    const response = await chat.doGenerate(prompt);
     return JSON.parse(response);
   } catch (err) {
     console.error("Error extracting metadata:", err);
