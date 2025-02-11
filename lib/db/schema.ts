@@ -73,10 +73,10 @@ export const cvs = pgTable('cvs', {
   userId: integer('user_id')
     .notNull()
     .references(() => users.id),
-  fileName: varchar('filename', { length: 255 }).notNull(),  // changed from 'file_name'
-  filePath: text('filepath').notNull(),                      // changed from 'file_path'
-  createdAt: timestamp('createdat').notNull().defaultNow(),    // changed from 'created_at'
-  metadata: text('metadata').default(null), // ensure default null
+  fileName: varchar('filename', { length: 255 }).notNull(),
+  filePath: text('filepath').notNull(),
+  createdAt: timestamp('createdat').notNull().defaultNow(),
+  metadata: text('metadata').default(null),
 });
 
 
