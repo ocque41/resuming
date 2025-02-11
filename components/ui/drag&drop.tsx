@@ -7,16 +7,20 @@ import axios from "axios";
 const DragAndDropUpload: React.FC = () => {
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (!acceptedFiles || acceptedFiles.length === 0) return;
-
+    
     const file = acceptedFiles[0];
-    console.log("File to upload:", file); // Log to verify file exists
-
+    console.log("Selected file:", file);
+    
     const formData = new FormData();
     formData.append("file", file);
+    console.log("FormData file value:", formData.get("file"));
 
     try {
-      // Do not set the Content-Type header manually!
-      const response = await axios.post("/api/upload", formData);
+      // Send the POST request without any manual header,
+      // and override transformRequest so axios doesn't change the FormData.
+      const response = await axios.post("/api/upload", formData, {
+        transformRequest: (data) => data,
+      });
       console.log("Upload successful:", response.data);
     } catch (error) {
       console.error("Error uploading file:", error);

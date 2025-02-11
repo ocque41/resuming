@@ -26,7 +26,7 @@ export async function OPTIONS() {
 export async function POST(request: Request) {
   // Retrieve the session using your custom getSession function.
   const session = await getSession();
-
+  
   // Ensure the session exists and that a user id is present.
   if (!session || !session.user || !session.user.id) {
     return NextResponse.json(
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // Access the uploaded file (ensure the form field name is "file")
+  // Access the uploaded file. (Ensure the form field name is "file")
   const fileOrFiles = files.file;
   const uploadedFile = Array.isArray(fileOrFiles) ? fileOrFiles[0] : fileOrFiles;
 
