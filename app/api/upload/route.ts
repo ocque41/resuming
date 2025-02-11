@@ -1,9 +1,9 @@
-// app/api/upload/route.ts
 import { NextResponse } from 'next/server';
 import formidable from 'formidable';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db/drizzle';
 import { cvs } from '@/lib/db/schema';
+import { Readable } from 'stream';
 
 // Disable Next.js body parsing for this route.
 export const config = {
@@ -23,10 +23,18 @@ export async function OPTIONS() {
   });
 }
 
+// Helper: convert a Buffer into a Node.js Readable stream.
+function bufferToStream(buffer: Buffer) {
+  const stream = new Readable();
+  stream.push(buffer);
+  stream.push(null);
+  return stream;
+}
+
 export async function POST(request: Request) {
   // Retrieve the session using your custom getSession function.
   const session = await getSession();
-  
+
   // Ensure the session exists and that a user id is present.
   if (!session || !session.user || !session.user.id) {
     return NextResponse.json(
@@ -35,15 +43,20 @@ export async function POST(request: Request) {
     );
   }
 
+  // Convert the Request body to a Buffer.
+  const buffer = Buffer.from(await request.arrayBuffer());
+  // Convert the Buffer to a Node.js stream.
+  const stream = bufferToStream(buffer);
+
   // Configure formidable to save files to the "uploads" folder.
   const form = formidable({
     uploadDir: './uploads',
     keepExtensions: true,
   });
 
-  // Wrap formidable's parse function in a Promise.
+  // Use formidable to parse the stream.
   const { fields, files } = await new Promise<any>((resolve, reject) => {
-    form.parse(request as any, (err, fields, files) => {
+    form.parse(stream, (err, fields, files) => {
       if (err) return reject(err);
       resolve({ fields, files });
     });
@@ -59,7 +72,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // Access the uploaded file. (Ensure the form field name is "file")
+  // Access the uploaded file (assuming the form field name is "file").
   const fileOrFiles = files.file;
   const uploadedFile = Array.isArray(fileOrFiles) ? fileOrFiles[0] : fileOrFiles;
 
