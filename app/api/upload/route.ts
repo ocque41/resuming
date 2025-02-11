@@ -1,16 +1,16 @@
 // app/api/upload/route.ts
-import { NextResponse } from 'next/server'
-import formidable from 'formidable'
-import { getSession } from '@/lib/auth/session'
-import { db } from '@/lib/db/drizzle'
-import { cvs } from '@/lib/db/schema'
+import { NextResponse } from 'next/server';
+import formidable from 'formidable';
+import { getSession } from '@/lib/auth/session';
+import { db } from '@/lib/db/drizzle';
+import { cvs } from '@/lib/db/schema';
 
 // Disable Next.js body parsing for this route.
 export const config = {
   api: {
     bodyParser: false,
   },
-}
+};
 
 // Handle preflight OPTIONS requests.
 export async function OPTIONS() {
@@ -20,59 +20,59 @@ export async function OPTIONS() {
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     },
-  })
+  });
 }
 
 export async function POST(request: Request) {
   // Retrieve the session using your custom getSession function.
-  const session = await getSession()
-  
+  const session = await getSession();
+
   // Ensure the session exists and that a user id is present.
   if (!session || !session.user || !session.user.id) {
     return NextResponse.json(
       { message: 'You must be logged in to upload your CV.' },
       { status: 401 }
-    )
+    );
   }
 
   // Configure formidable to save files to the "uploads" folder.
   const form = formidable({
     uploadDir: './uploads',
     keepExtensions: true,
-  })
+  });
 
   // Wrap formidable's parse function in a Promise.
   const { fields, files } = await new Promise<any>((resolve, reject) => {
     form.parse(request as any, (err, fields, files) => {
-      if (err) return reject(err)
-      resolve({ fields, files })
-    })
+      if (err) return reject(err);
+      resolve({ fields, files });
+    });
   }).catch((err) => {
-    console.error('Formidable parse error:', err)
-    return { fields: null, files: null }
-  })
+    console.error('Formidable parse error:', err);
+    return { fields: null, files: null };
+  });
 
   if (!files) {
     return NextResponse.json(
       { message: 'Error processing file upload.' },
       { status: 500 }
-    )
+    );
   }
 
-  // Access the uploaded file. (Ensure the form field name is "file")
-  const fileOrFiles = files.file
-  const uploadedFile = Array.isArray(fileOrFiles) ? fileOrFiles[0] : fileOrFiles
+  // Access the uploaded file (ensure the form field name is "file")
+  const fileOrFiles = files.file;
+  const uploadedFile = Array.isArray(fileOrFiles) ? fileOrFiles[0] : fileOrFiles;
 
   if (!uploadedFile) {
     return NextResponse.json(
       { message: 'No file was uploaded.' },
       { status: 400 }
-    )
+    );
   }
 
   // Use the file's original filename if available.
-  const fileName = uploadedFile.originalFilename || 'UnnamedCV.pdf'
-  const filePath = uploadedFile.filepath
+  const fileName = uploadedFile.originalFilename || 'UnnamedCV.pdf';
+  const filePath = uploadedFile.filepath;
 
   try {
     // Insert a record into the cvs table.
@@ -80,14 +80,14 @@ export async function POST(request: Request) {
       userId: session.user.id,
       fileName,
       filePath,
-    })
+    });
 
-    return NextResponse.json({ message: 'CV uploaded successfully!' })
+    return NextResponse.json({ message: 'CV uploaded successfully!' });
   } catch (dbError) {
-    console.error('Database error:', dbError)
+    console.error('Database error:', dbError);
     return NextResponse.json(
       { message: 'Error saving CV to database.' },
       { status: 500 }
-    )
+    );
   }
 }

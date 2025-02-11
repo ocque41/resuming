@@ -9,11 +9,13 @@ const DragAndDropUpload: React.FC = () => {
     if (!acceptedFiles || acceptedFiles.length === 0) return;
 
     const file = acceptedFiles[0];
+    console.log("File to upload:", file); // Log to verify file exists
+
     const formData = new FormData();
     formData.append("file", file);
 
     try {
-      // Call the correct endpoint: "/api/upload"
+      // Do not set the Content-Type header manually!
       const response = await axios.post("/api/upload", formData);
       console.log("Upload successful:", response.data);
     } catch (error) {
