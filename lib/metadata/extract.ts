@@ -35,7 +35,7 @@ ${text}
     const response = await chat.doGenerate({
       inputFormat: "prompt",
       mode: { type: "regular" },
-      prompt: { text: prompt }
+      prompt: [{ role: "system", content: prompt }]
     });
     return JSON.parse(response.text || '{}');
   } catch (err) {
