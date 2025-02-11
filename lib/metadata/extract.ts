@@ -1,7 +1,7 @@
 // lib/metadata/extractMetadata.ts
 import pdfParse from "pdf-parse";
 import fs from "fs/promises";
-import { openai } from "@ai-sdk/openai";
+import { openai } from "ai";
 
 /**
  * Extract text from a PDF file.
@@ -29,7 +29,7 @@ Return the answer in JSON format with keys "atsScore", "optimized", "sent".
 CV Text:
 ${text}
     `;
-    const chat = new openai();
+    const chat = openai("gpt-4o");
     const response = await chat.generate(prompt);
     return JSON.parse(response);
   } catch (err) {
