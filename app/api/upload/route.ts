@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db/drizzle';
 import { cvs } from '@/lib/db/schema';
 import { Readable } from 'stream';
+import { IncomingMessage } from 'http';
 
 // Disable Next.js body parsing for this route.
 export const config = {
@@ -43,10 +44,16 @@ export async function POST(request: Request) {
     );
   }
 
-  // Convert the Request body to a Buffer.
+  // Read the entire request body into a Buffer.
   const buffer = Buffer.from(await request.arrayBuffer());
-  // Convert the Buffer to a Node.js stream.
+  // Convert the Buffer into a Node.js Readable stream.
   const stream = bufferToStream(buffer);
+
+  // Create a "fake" IncomingMessage by casting the stream.
+  // We also attach the headers and method from the original Request.
+  const fakeReq = stream as unknown as IncomingMessage;
+  (fakeReq as any).headers = Object.fromEntries(request.headers.entries());
+  (fakeReq as any).method = request.method;
 
   // Configure formidable to save files to the "uploads" folder.
   const form = formidable({
@@ -54,9 +61,9 @@ export async function POST(request: Request) {
     keepExtensions: true,
   });
 
-  // Use formidable to parse the stream.
+  // Parse the "fake" IncomingMessage with formidable.
   const { fields, files } = await new Promise<any>((resolve, reject) => {
-    form.parse(stream, (err, fields, files) => {
+    form.parse(fakeReq, (err, fields, files) => {
       if (err) return reject(err);
       resolve({ fields, files });
     });
@@ -72,7 +79,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // Access the uploaded file (assuming the form field name is "file").
+  // Access the uploaded file (ensure the form field name is "file")
   const fileOrFiles = files.file;
   const uploadedFile = Array.isArray(fileOrFiles) ? fileOrFiles[0] : fileOrFiles;
 
