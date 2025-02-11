@@ -16,11 +16,8 @@ const DragAndDropUpload: React.FC = () => {
     console.log("FormData file value:", formData.get("file"));
 
     try {
-      // Send the POST request without any manual header,
-      // and override transformRequest so axios doesn't change the FormData.
-      const response = await axios.post("/api/upload", formData, {
-        transformRequest: (data) => data,
-      });
+      // Simply send the FormData without overriding transformRequest.
+      const response = await axios.post("/api/upload", formData);
       console.log("Upload successful:", response.data);
     } catch (error) {
       console.error("Error uploading file:", error);
