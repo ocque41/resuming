@@ -5,6 +5,8 @@ import { db } from '@/lib/db/drizzle';
 import { cvs } from '@/lib/db/schema';
 import { Readable } from 'stream';
 import { IncomingMessage } from 'http';
+import { extractMetadata } from '@/lib/metadata/extract';
+import { eq } from 'drizzle-orm';
 
 // Disable Next.js body parsing for this route.
 export const config = {
@@ -50,7 +52,7 @@ export async function POST(request: Request) {
   const stream = bufferToStream(buffer);
 
   // Create a "fake" IncomingMessage by casting the stream.
-  // We also attach the headers and method from the original Request.
+  // Attach headers and method from the original Request.
   const fakeReq = stream as unknown as IncomingMessage;
   (fakeReq as any).headers = Object.fromEntries(request.headers.entries());
   (fakeReq as any).method = request.method;
@@ -95,12 +97,21 @@ export async function POST(request: Request) {
   const filePath = uploadedFile.filepath;
 
   try {
-    // Insert a record into the cvs table.
-    await db.insert(cvs).values({
+    // Insert a record into the cvs table and capture the inserted record.
+    const [newCV] = await db.insert(cvs).values({
       userId: session.user.id,
       fileName,
       filePath,
-    });
+    }).returning();
+
+    // Extract metadata from the uploaded CV using the helper.
+    const metadata = await extractMetadata(filePath);
+    if (metadata) {
+      // Update the record with the extracted metadata.
+      await db.update(cvs)
+        .set({ metadata: JSON.stringify(metadata) })
+        .where(eq(cvs.id, newCV.id));
+    }
 
     return NextResponse.json({ message: 'CV uploaded successfully!' });
   } catch (dbError) {

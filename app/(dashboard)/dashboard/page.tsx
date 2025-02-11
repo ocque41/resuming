@@ -3,7 +3,7 @@ import React from "react";
 import { redirect } from "next/navigation";
 import { ArticleTitle } from "@/components/ui/article";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { getTeamForUser, getUser } from "@/lib/db/queries";
+import { getTeamForUser, getUser, getCVsForUser } from "@/lib/db/queries";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -18,7 +18,6 @@ import DragAndDropUpload from '@/components/ui/drag&drop';
 
 export default async function DashboardPage() {
   const user = await getUser();
-
   if (!user) {
     redirect("/sign-in");
   }
@@ -28,7 +27,8 @@ export default async function DashboardPage() {
     throw new Error("Team not found");
   }
 
-  const cvs = (teamData as any).cvs || [];
+  // Fetch the current user's CV records.
+  const cvs = await getCVsForUser(user.id);
 
   return (
     <>
@@ -58,13 +58,22 @@ export default async function DashboardPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {/* Example row; replace with dynamic data */}
-              <TableRow>
-                <TableCell>John Doe CV</TableCell>
-                <TableCell>85%</TableCell>
-                <TableCell>Yes</TableCell>
-                <TableCell>No</TableCell>
-              </TableRow>
+              {cvs.map((cv: any) => {
+                let metadata = null;
+                try {
+                  metadata = cv.metadata ? JSON.parse(cv.metadata) : null;
+                } catch (err) {
+                  console.error("Error parsing metadata:", err);
+                }
+                return (
+                  <TableRow key={cv.id}>
+                    <TableCell>{cv.fileName}</TableCell>
+                    <TableCell>{metadata?.atsScore || "-"}</TableCell>
+                    <TableCell>{metadata?.optimized || "-"}</TableCell>
+                    <TableCell>{metadata?.sent || "-"}</TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
@@ -72,7 +81,7 @@ export default async function DashboardPage() {
       <div className="bg-black text-white p-6 rounded-lg mt-8 mx-auto max-w-md lg:max-w-2xl h-192 flex items-center justify-center">
         <DragAndDropUpload />
       </div>
-      {/* Pass only serializable data (cvs) to the client component */}
+      {/* Pass the CV records (an array of CV objects) to the DashboardComboboxes component */}
       <DashboardComboboxes cvs={cvs} />
     </>
   );

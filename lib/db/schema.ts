@@ -68,16 +68,17 @@ export const invitations = pgTable('invitations', {
   status: varchar('status', { length: 20 }).notNull().default('pending'),
 });
 
+// Updated cvs table with metadata column.
 export const cvs = pgTable('cvs', {
   id: serial('id').primaryKey(),
   userId: integer('user_id')
     .notNull()
     .references(() => users.id),
-  fileName: varchar('filename', { length: 255 }).notNull(),  // changed from 'file_name'
-  filePath: text('filepath').notNull(),                      // changed from 'file_path'
-  createdAt: timestamp('createdat').notNull().defaultNow(),    // changed from 'created_at'
+  fileName: varchar('filename', { length: 255 }).notNull(),
+  filePath: text('filepath').notNull(),
+  createdAt: timestamp('createdat').notNull().defaultNow(),
+  metadata: text('metadata'), // This will store the extracted metadata as JSON
 });
-
 
 export const teamsRelations = relations(teams, ({ many }) => ({
   teamMembers: many(teamMembers),
