@@ -39,7 +39,7 @@ ${text}
     // Prepare call options with literal types.
     const options = {
       inputFormat: "prompt" as const,
-      prompt: prompt,
+      prompt: { text: prompt }, // Assuming LanguageModelV1Prompt requires an object with a text property
       mode: { type: "regular" as const },
     };
     // Call doGenerate with the options object.
