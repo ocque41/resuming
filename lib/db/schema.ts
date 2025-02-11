@@ -73,10 +73,11 @@ export const cvs = pgTable('cvs', {
   userId: integer('user_id')
     .notNull()
     .references(() => users.id),
-  fileName: varchar('file_name', { length: 255 }).notNull(),
-  filePath: text('file_path').notNull(),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
+  fileName: varchar('filename', { length: 255 }).notNull(),  // changed from 'file_name'
+  filePath: text('filepath').notNull(),                      // changed from 'file_path'
+  createdAt: timestamp('createdat').notNull().defaultNow(),    // changed from 'created_at'
 });
+
 
 export const teamsRelations = relations(teams, ({ many }) => ({
   teamMembers: many(teamMembers),
