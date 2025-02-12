@@ -1,3 +1,4 @@
+// app/api/upload/route.ts
 import { NextResponse } from "next/server";
 import formidable from "formidable";
 import { getSession } from "@/lib/auth/session";
@@ -45,12 +46,11 @@ export async function POST(request: Request) {
     );
   }
 
-  // Use a writable directory:
+  // Determine the upload directory.
   // In production (serverless), use the /tmp directory; in development, use process.cwd()
-  const uploadDir = path.join(
-    process.env.NODE_ENV === "production" ? "/tmp" : process.cwd(),
-    "uploads"
-  );
+  const baseDir = process.env.NODE_ENV === "production" ? "/tmp" : process.cwd();
+  const uploadDir = path.join(baseDir, "uploads");
+
   try {
     await fs.access(uploadDir);
   } catch {
@@ -99,25 +99,22 @@ export async function POST(request: Request) {
   }
 
   const fileName = uploadedFile.originalFilename || "UnnamedCV.pdf";
-  const filePath = uploadedFile.filepath;
+  const filePath = uploadedFile.filepath; // This should now be within /tmp/uploads or process.cwd()/uploads
+  console.log("File saved at:", filePath);
 
   try {
     // Insert the new CV record.
-    const [newCV] = await db
-      .insert(cvs)
-      .values({
-        userId: session.user.id,
-        fileName,
-        filePath,
-      })
-      .returning();
+    const [newCV] = await db.insert(cvs).values({
+      userId: session.user.id,
+      fileName,
+      filePath,
+    }).returning();
 
     // Import the metadata extraction helper dynamically.
     const { extractMetadata } = await import("@/lib/metadata/extract");
     const metadata = await extractMetadata(filePath);
     if (metadata) {
-      await db
-        .update(cvs)
+      await db.update(cvs)
         .set({ metadata: JSON.stringify(metadata) })
         .where(eq(cvs.id, newCV.id));
     }
