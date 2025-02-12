@@ -1,5 +1,5 @@
 // app/api/delete/[cvId]/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, NextApiHandlerContext } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/drizzle";
 import { cvs } from "@/lib/db/schema";
@@ -8,9 +8,9 @@ import fs from "fs/promises";
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { cvId: string } }
+  context: NextApiHandlerContext
 ): Promise<NextResponse> {
-  const { cvId } = params;
+  const { cvId } = context.params;
   const cvIdNumber = Number(cvId);
 
   const session = await getSession();
