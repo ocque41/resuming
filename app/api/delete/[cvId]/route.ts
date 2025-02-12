@@ -1,4 +1,4 @@
-// app/api/delete/route.ts
+// app/api/delete/[cvId]/route.ts
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/drizzle";
@@ -16,7 +16,7 @@ export async function DELETE(
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  // Convert cvId from string to number since the id column is numeric.
+  // Convert cvId from string to number (if the db column is numeric).
   const cvIdNumber = Number(params.cvId);
 
   // Retrieve the CV record from the database.
