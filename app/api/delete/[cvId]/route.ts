@@ -17,7 +17,6 @@ export async function DELETE(
   context: Context
 ): Promise<NextResponse> {
   const { cvId } = context.params;
-  const { cvId } = params;
   const cvIdNumber = Number(cvId);
 
   const session = await getSession();
