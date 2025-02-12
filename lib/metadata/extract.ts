@@ -1,3 +1,4 @@
+// lib/metadata/extract.ts
 import pdfParse from "pdf-parse";
 import fs from "fs/promises";
 import { openai } from "@ai-sdk/openai";
@@ -35,15 +36,18 @@ export function isLikelyACV(text: string): boolean {
  */
 export async function extractMetadata(filePath: string): Promise<any> {
   try {
-    // Extract full text from the PDF.
+    // Step 2.1: Extract full text from the PDF.
     const text = await extractTextFromPdf(filePath);
+    if (!text || text.trim() === "") {
+      throw new Error("The extracted text is empty.");
+    }
 
-    // Verify that the document appears to be a CV.
+    // Step 2.2: Verify that the document appears to be a CV.
     if (!isLikelyACV(text)) {
       throw new Error("Uploaded file does not appear to be a valid CV.");
     }
 
-    // Build the prompt for the AI model.
+    // Step 2.3: Build the prompt for the AI model.
     const prompt = `
 You are an expert CV reviewer. Analyze the following CV text and extract the following details:
 - "atsScore": A percentage score (e.g., "85%") indicating how well the CV is optimized for Applicant Tracking Systems.
@@ -57,16 +61,15 @@ ${text}
     `;
 
     // Create a model instance using the OpenAI function.
-    const model = openai('gpt-4o');
+    const model = openai("gpt-4o");
 
-    // Construct the tool message with all required properties.
-    // Note: The 'type' property is now set to the literal "tool-result"
+    // Construct the tool message with required properties.
     const toolMessage = {
       role: "tool" as const,
       content: [
         {
           text: prompt,
-          type: "tool-result" as const, // Required literal value
+          type: "tool-result" as const, // literal type required by the SDK
           toolCallId: "cvMetadataCall",
           toolName: "cvMetadataExtractor",
           result: ""
@@ -81,12 +84,11 @@ ${text}
       mode: { type: "regular" as const },
     };
 
-    // Call the model to generate output.
+    // Call the model to generate the output.
     const response = await model.doGenerate(options);
     if (!response.text) {
       throw new Error("No text returned from doGenerate");
     }
-
     return JSON.parse(response.text);
   } catch (err) {
     console.error("Error extracting metadata:", err);
