@@ -1,3 +1,4 @@
+// app/api/delete/[cvId]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/drizzle";
@@ -7,18 +8,16 @@ import fs from "fs/promises";
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { cvId: string } }
+  { params }: any  // Use "any" for context to avoid type conflicts.
 ): Promise<NextResponse> {
   const { cvId } = params;
   const cvIdNumber = Number(cvId);
 
-  // Retrieve the session.
   const session = await getSession();
   if (!session || !session.user || !session.user.id) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  // Retrieve the CV record from the database.
   const cvRecord = await db
     .select()
     .from(cvs)
@@ -29,22 +28,19 @@ export async function DELETE(
     return NextResponse.json({ message: "CV not found" }, { status: 404 });
   }
 
-  // Ensure the user owns this CV.
   if (cvRecord.userId !== session.user.id) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
   }
 
-  // Delete the file from the filesystem if a filePath exists.
   if (cvRecord.filePath) {
     try {
       await fs.unlink(cvRecord.filePath);
     } catch (err) {
       console.error("Error deleting file from filesystem:", err);
-      // Continue even if file deletion fails.
+      // Proceed even if file deletion fails.
     }
   }
 
-  // Delete the CV record from the database.
   try {
     await db.delete(cvs).where(eq(cvs.id, cvIdNumber));
     return NextResponse.json({ message: "CV deleted successfully" });
