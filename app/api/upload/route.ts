@@ -1,14 +1,13 @@
-// app/api/upload/route.ts
-import { NextResponse } from 'next/server';
-import formidable from 'formidable';
-import { getSession } from '@/lib/auth/session';
-import { db } from '@/lib/db/drizzle';
-import { cvs } from '@/lib/db/schema';
-import { Readable } from 'stream';
-import { IncomingMessage } from 'http';
-import fs from 'fs/promises';
-import path from 'path';
-import { eq } from 'drizzle-orm';
+import { NextResponse } from "next/server";
+import formidable from "formidable";
+import { getSession } from "@/lib/auth/session";
+import { db } from "@/lib/db/drizzle";
+import { cvs } from "@/lib/db/schema";
+import { Readable } from "stream";
+import { IncomingMessage } from "http";
+import fs from "fs/promises";
+import path from "path";
+import { eq } from "drizzle-orm";
 
 // Disable Next.js body parsing for this route.
 export const config = {
@@ -22,8 +21,8 @@ export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,
     headers: {
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
     },
   });
 }
@@ -41,13 +40,17 @@ export async function POST(request: Request) {
   const session = await getSession();
   if (!session || !session.user || !session.user.id) {
     return NextResponse.json(
-      { message: 'You must be logged in to upload your CV.' },
+      { message: "You must be logged in to upload your CV." },
       { status: 401 }
     );
   }
 
-  // Use an absolute uploads directory.
-  const uploadDir = path.join(process.cwd(), 'uploads');
+  // Use a writable directory:
+  // In production (serverless), use the /tmp directory; in development, use process.cwd()
+  const uploadDir = path.join(
+    process.env.NODE_ENV === "production" ? "/tmp" : process.cwd(),
+    "uploads"
+  );
   try {
     await fs.access(uploadDir);
   } catch {
@@ -75,13 +78,13 @@ export async function POST(request: Request) {
       resolve({ fields, files });
     });
   }).catch((err) => {
-    console.error('Formidable parse error:', err);
+    console.error("Formidable parse error:", err);
     return { fields: null, files: null };
   });
 
   if (!files) {
     return NextResponse.json(
-      { message: 'Error processing file upload.' },
+      { message: "Error processing file upload." },
       { status: 500 }
     );
   }
@@ -90,36 +93,40 @@ export async function POST(request: Request) {
   const uploadedFile = Array.isArray(fileOrFiles) ? fileOrFiles[0] : fileOrFiles;
   if (!uploadedFile) {
     return NextResponse.json(
-      { message: 'No file was uploaded.' },
+      { message: "No file was uploaded." },
       { status: 400 }
     );
   }
 
-  const fileName = uploadedFile.originalFilename || 'UnnamedCV.pdf';
+  const fileName = uploadedFile.originalFilename || "UnnamedCV.pdf";
   const filePath = uploadedFile.filepath;
 
   try {
     // Insert the new CV record.
-    const [newCV] = await db.insert(cvs).values({
-      userId: session.user.id,
-      fileName,
-      filePath,
-    }).returning();
+    const [newCV] = await db
+      .insert(cvs)
+      .values({
+        userId: session.user.id,
+        fileName,
+        filePath,
+      })
+      .returning();
 
     // Import the metadata extraction helper dynamically.
-    const { extractMetadata } = await import('@/lib/metadata/extract');
+    const { extractMetadata } = await import("@/lib/metadata/extract");
     const metadata = await extractMetadata(filePath);
     if (metadata) {
-      await db.update(cvs)
+      await db
+        .update(cvs)
         .set({ metadata: JSON.stringify(metadata) })
         .where(eq(cvs.id, newCV.id));
     }
 
-    return NextResponse.json({ message: 'CV uploaded successfully!' });
+    return NextResponse.json({ message: "CV uploaded successfully!" });
   } catch (dbError) {
-    console.error('Database error:', dbError);
+    console.error("Database error:", dbError);
     return NextResponse.json(
-      { message: 'Error saving CV to database.' },
+      { message: "Error saving CV to database." },
       { status: 500 }
     );
   }
