@@ -1,7 +1,6 @@
 // app/(dashboard)/dashboard/page.tsx
 import { redirect } from "next/navigation";
 import { getTeamForUser, getUser, getCVsForUser } from "@/lib/db/queries";
-// Other server components can remain server components.
 import { ArticleTitle } from "@/components/ui/article";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
@@ -14,8 +13,9 @@ import {
   TableCell,
 } from "@/components/ui/table";
 
-// Import the client wrapper (which is marked "use client")
+// Import the client wrapper and the new delete button component.
 import DashboardClientWrapper from "@/components/dashboard-client-wrapper";
+import DeleteCVButton from "@/components/delete-cv";
 
 export default async function DashboardPage() {
   const user = await getUser();
@@ -55,6 +55,7 @@ export default async function DashboardPage() {
                 <TableHead>ATS Score</TableHead>
                 <TableHead>Optimized</TableHead>
                 <TableHead>Sent</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -71,6 +72,9 @@ export default async function DashboardPage() {
                     <TableCell>{metadata?.atsScore || "-"}</TableCell>
                     <TableCell>{metadata?.optimized || "-"}</TableCell>
                     <TableCell>{metadata?.sent || "-"}</TableCell>
+                    <TableCell>
+                      <DeleteCVButton cvId={cv.id} />
+                    </TableCell>
                   </TableRow>
                 );
               })}
