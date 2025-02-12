@@ -93,11 +93,19 @@ export default function DashboardComboboxes({ cvs, onSelect }: DashboardCombobox
                   >
                     {({ selected: isSelected, active }) => (
                       <>
-                        <span className={`block truncate ${isSelected ? "font-medium" : "font-normal"}`}>
+                        <span
+                          className={`block truncate ${
+                            isSelected ? "font-medium" : "font-normal"
+                          }`}
+                        >
                           {cv.fileName}
                         </span>
                         {isSelected && (
-                          <span className={`absolute inset-y-0 left-0 flex items-center pl-3 ${active ? "text-white" : "text-indigo-600"}`}>
+                          <span
+                            className={`absolute inset-y-0 left-0 flex items-center pl-3 ${
+                              active ? "text-white" : "text-indigo-600"
+                            }`}
+                          >
                             <svg
                               className="h-5 w-5"
                               xmlns="http://www.w3.org/2000/svg"
