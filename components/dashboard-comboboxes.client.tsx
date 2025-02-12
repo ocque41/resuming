@@ -1,19 +1,20 @@
+// components/dashboard-comboboxes.client.tsx
 "use client";
 
 import { Combobox, Transition } from "@headlessui/react";
 import { Fragment, useState } from "react";
 
-// Define a type that matches your CV records from the database.
+// Define a type for your CV record.
+// Make metadata optional so that records without it are still assignable.
 export interface CV {
   id: number;
   userId: number;
   fileName: string;
   filePath: string;
   createdAt: Date;
-  metadata: string | null;
+  metadata?: string | null;
 }
 
-// Update the props interface so that cvs is a CV[].
 export interface DashboardComboboxesProps {
   cvs: CV[];
   onSelect?: (cv: CV) => void;
@@ -23,7 +24,6 @@ export default function DashboardComboboxes({ cvs, onSelect }: DashboardCombobox
   const [selected, setSelected] = useState<CV | null>(null);
   const [query, setQuery] = useState("");
 
-  // Filter the options by fileName.
   const filteredOptions =
     query === ""
       ? cvs
@@ -93,19 +93,11 @@ export default function DashboardComboboxes({ cvs, onSelect }: DashboardCombobox
                   >
                     {({ selected: isSelected, active }) => (
                       <>
-                        <span
-                          className={`block truncate ${
-                            isSelected ? "font-medium" : "font-normal"
-                          }`}
-                        >
+                        <span className={`block truncate ${isSelected ? "font-medium" : "font-normal"}`}>
                           {cv.fileName}
                         </span>
                         {isSelected && (
-                          <span
-                            className={`absolute inset-y-0 left-0 flex items-center pl-3 ${
-                              active ? "text-white" : "text-indigo-600"
-                            }`}
-                          >
+                          <span className={`absolute inset-y-0 left-0 flex items-center pl-3 ${active ? "text-white" : "text-indigo-600"}`}>
                             <svg
                               className="h-5 w-5"
                               xmlns="http://www.w3.org/2000/svg"

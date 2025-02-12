@@ -1,3 +1,4 @@
+// app/api/upload/route.ts
 import { NextResponse } from 'next/server';
 import formidable from 'formidable';
 import { getSession } from '@/lib/auth/session';
@@ -5,7 +6,8 @@ import { db } from '@/lib/db/drizzle';
 import { cvs } from '@/lib/db/schema';
 import { Readable } from 'stream';
 import { IncomingMessage } from 'http';
-import { extractMetadata } from '@/lib/metadata/extract';
+import fs from 'fs/promises';
+import path from 'path';
 import { eq } from 'drizzle-orm';
 
 // Disable Next.js body parsing for this route.
@@ -35,10 +37,8 @@ function bufferToStream(buffer: Buffer) {
 }
 
 export async function POST(request: Request) {
-  // Retrieve the session using your custom getSession function.
+  // Retrieve the session.
   const session = await getSession();
-
-  // Ensure the session exists and that a user id is present.
   if (!session || !session.user || !session.user.id) {
     return NextResponse.json(
       { message: 'You must be logged in to upload your CV.' },
@@ -46,24 +46,29 @@ export async function POST(request: Request) {
     );
   }
 
-  // Read the entire request body into a Buffer.
+  // Use an absolute uploads directory.
+  const uploadDir = path.join(process.cwd(), 'uploads');
+  try {
+    await fs.access(uploadDir);
+  } catch {
+    await fs.mkdir(uploadDir, { recursive: true });
+  }
+
+  // Read the request body as a Buffer and convert it into a Node.js stream.
   const buffer = Buffer.from(await request.arrayBuffer());
-  // Convert the Buffer into a Node.js Readable stream.
   const stream = bufferToStream(buffer);
 
-  // Create a "fake" IncomingMessage by casting the stream.
-  // Attach headers and method from the original Request.
+  // Create a fake IncomingMessage by casting the stream and attaching headers/method.
   const fakeReq = stream as unknown as IncomingMessage;
   (fakeReq as any).headers = Object.fromEntries(request.headers.entries());
   (fakeReq as any).method = request.method;
 
-  // Configure formidable to save files to the "uploads" folder.
+  // Configure formidable to save files in the uploads directory.
   const form = formidable({
-    uploadDir: './uploads',
+    uploadDir: uploadDir,
     keepExtensions: true,
   });
 
-  // Parse the "fake" IncomingMessage with formidable.
   const { fields, files } = await new Promise<any>((resolve, reject) => {
     form.parse(fakeReq, (err, fields, files) => {
       if (err) return reject(err);
@@ -81,10 +86,8 @@ export async function POST(request: Request) {
     );
   }
 
-  // Access the uploaded file (ensure the form field name is "file")
   const fileOrFiles = files.file;
   const uploadedFile = Array.isArray(fileOrFiles) ? fileOrFiles[0] : fileOrFiles;
-
   if (!uploadedFile) {
     return NextResponse.json(
       { message: 'No file was uploaded.' },
@@ -92,22 +95,21 @@ export async function POST(request: Request) {
     );
   }
 
-  // Use the file's original filename if available.
   const fileName = uploadedFile.originalFilename || 'UnnamedCV.pdf';
   const filePath = uploadedFile.filepath;
 
   try {
-    // Insert a record into the cvs table and capture the inserted record.
+    // Insert the new CV record.
     const [newCV] = await db.insert(cvs).values({
       userId: session.user.id,
       fileName,
       filePath,
     }).returning();
 
-    // Extract metadata from the uploaded CV using the helper.
+    // Import the metadata extraction helper dynamically.
+    const { extractMetadata } = await import('@/lib/metadata/extract');
     const metadata = await extractMetadata(filePath);
     if (metadata) {
-      // Update the record with the extracted metadata.
       await db.update(cvs)
         .set({ metadata: JSON.stringify(metadata) })
         .where(eq(cvs.id, newCV.id));

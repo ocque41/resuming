@@ -1,4 +1,3 @@
-// app/(dashboard)/dashboard/page.tsx
 import React from "react";
 import { redirect } from "next/navigation";
 import { ArticleTitle } from "@/components/ui/article";
@@ -27,7 +26,6 @@ export default async function DashboardPage() {
     throw new Error("Team not found");
   }
 
-  // Fetch the current user's CV records.
   const cvs = await getCVsForUser(user.id);
 
   return (
@@ -81,7 +79,6 @@ export default async function DashboardPage() {
       <div className="bg-black text-white p-6 rounded-lg mt-8 mx-auto max-w-md lg:max-w-2xl h-192 flex items-center justify-center">
         <DragAndDropUpload />
       </div>
-      {/* Pass the CV records (an array of CV objects) to the DashboardComboboxes component */}
       <DashboardComboboxes cvs={cvs} />
     </>
   );

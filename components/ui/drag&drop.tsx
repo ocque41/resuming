@@ -1,26 +1,52 @@
+// components/ui/drag&drop.tsx
 "use client";
 
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import axios from "axios";
 
+// Maximum file size set to 5MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB in bytes
+
 const DragAndDropUpload: React.FC = () => {
+  const [error, setError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<boolean>(false);
+
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    setError(null); // Reset previous errors
+    setUploadSuccess(false);
+
     if (!acceptedFiles || acceptedFiles.length === 0) return;
-    
+
     const file = acceptedFiles[0];
-    console.log("Selected file:", file);
     
+    // Client-side file type validation
+    if (file.type !== "application/pdf") {
+      setError("Only PDF files are allowed.");
+      return;
+    }
+    
+    // Client-side file size validation
+    if (file.size > MAX_FILE_SIZE) {
+      setError("File size exceeds the maximum limit of 5 MB.");
+      return;
+    }
+
+    console.log("Selected file:", file);
+
     const formData = new FormData();
     formData.append("file", file);
     console.log("FormData file value:", formData.get("file"));
 
     try {
-      // Simply send the FormData without overriding transformRequest.
-      const response = await axios.post("/api/upload", formData);
+      const response = await axios.post("/api/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
       console.log("Upload successful:", response.data);
+      setUploadSuccess(true);
     } catch (error) {
       console.error("Error uploading file:", error);
+      setError("Error uploading file. Please try again.");
     }
   }, []);
 
@@ -42,10 +68,20 @@ const DragAndDropUpload: React.FC = () => {
           {isDragActive ? (
             <p className="text-blue-600 font-medium">Drop your CV here...</p>
           ) : (
-            <p className="text-white">Drop</p>
+            <p className="text-white">Drag & drop your PDF here, or click to select a file.</p>
           )}
         </div>
       </div>
+      {error && (
+        <p className="mt-2 text-sm text-red-600">
+          {error}
+        </p>
+      )}
+      {uploadSuccess && (
+        <p className="mt-2 text-sm text-green-600">
+          File uploaded successfully!
+        </p>
+      )}
     </div>
   );
 };

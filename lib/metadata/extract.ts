@@ -17,12 +17,33 @@ export async function extractTextFromPdf(filePath: string): Promise<string> {
 }
 
 /**
+ * Checks if the extracted text likely represents a CV,
+ * by ensuring it contains expected keywords.
+ */
+export function isLikelyACV(text: string): boolean {
+  const keywords = ["experience", "education", "skills", "contact"];
+  const lowerText = text.toLowerCase();
+  return keywords.every(keyword => lowerText.includes(keyword));
+}
+
+/**
  * Extracts metadata from a CV PDF using the AI model.
- * The prompt instructs the model to analyze the CV and return JSON with keys "atsScore", "optimized", and "sent".
+ * The prompt instructs the model to analyze the CV and return JSON with keys:
+ * - "atsScore": A percentage score (e.g., "85%") indicating ATS optimization.
+ * - "optimized": "Yes" if optimized for ATS, otherwise "No".
+ * - "sent": "Yes" if the CV has been sent to employers, otherwise "No".
  */
 export async function extractMetadata(filePath: string): Promise<any> {
   try {
+    // Extract full text from the PDF.
     const text = await extractTextFromPdf(filePath);
+
+    // Verify that the document appears to be a CV.
+    if (!isLikelyACV(text)) {
+      throw new Error("Uploaded file does not appear to be a valid CV.");
+    }
+
+    // Build the prompt for the AI model.
     const prompt = `
 You are an expert CV reviewer. Analyze the following CV text and extract the following details:
 - "atsScore": A percentage score (e.g., "85%") indicating how well the CV is optimized for Applicant Tracking Systems.
@@ -34,20 +55,38 @@ Return the answer strictly in JSON format (do not include any extra text).
 CV Text:
 ${text}
     `;
-    // Create a model instance using the openai function.
+
+    // Create a model instance using the OpenAI function.
     const model = openai('gpt-4o');
-    // Prepare call options with literal types.
+
+    // Construct the tool message with all required properties.
+    // Note: The 'type' property is now set to the literal "tool-result"
+    const toolMessage = {
+      role: "tool" as const,
+      content: [
+        {
+          text: prompt,
+          type: "tool-result" as const, // Required literal value
+          toolCallId: "cvMetadataCall",
+          toolName: "cvMetadataExtractor",
+          result: ""
+        }
+      ]
+    };
+
+    // Set up the call options.
     const options = {
       inputFormat: "prompt" as const,
-      prompt: [{ role: "tool", content: [{ text: prompt }] as LanguageModelV1ToolResultPart[] }], // Adjusting to match LanguageModelV1Message type
+      prompt: [toolMessage],
       mode: { type: "regular" as const },
     };
-    // Call doGenerate with the options object.
+
+    // Call the model to generate output.
     const response = await model.doGenerate(options);
-    // Ensure response.text is defined.
     if (!response.text) {
       throw new Error("No text returned from doGenerate");
     }
+
     return JSON.parse(response.text);
   } catch (err) {
     console.error("Error extracting metadata:", err);
