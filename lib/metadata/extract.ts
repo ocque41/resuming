@@ -39,7 +39,7 @@ ${text}
     // Prepare call options with literal types.
     const options = {
       inputFormat: "prompt" as const,
-      prompt: [{ role: "tool", content: [{ text: prompt }] }], // Adjusting to match LanguageModelV1Message type
+      prompt: [{ role: "tool", content: [{ text: prompt }] as LanguageModelV1ToolResultPart[] }], // Adjusting to match LanguageModelV1Message type
       mode: { type: "regular" as const },
     };
     // Call doGenerate with the options object.
