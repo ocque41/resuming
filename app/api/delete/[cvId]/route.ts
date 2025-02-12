@@ -6,10 +6,14 @@ import { cvs } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import fs from "fs/promises";
 
+type Context = {
+  params: { cvId: string };
+};
+
 export async function DELETE(
   request: NextRequest,
-  context: { params: Record<string, string> }
-) {
+  context: Context
+): Promise<NextResponse> {
   const { cvId } = context.params;
   const cvIdNumber = Number(cvId);
 
