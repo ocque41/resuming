@@ -1,5 +1,5 @@
 // app/api/delete/[cvId]/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/drizzle";
 import { cvs } from "@/lib/db/schema";
@@ -7,17 +7,17 @@ import { eq } from "drizzle-orm";
 import fs from "fs/promises";
 
 export async function DELETE(
-  request: Request,
-  { params }: { params: { cvId: string } }
+  request: NextRequest,
+  context: { params: Record<string, string> }
 ) {
+  const { cvId } = context.params;
+  const cvIdNumber = Number(cvId);
+
   // Retrieve the session.
   const session = await getSession();
   if (!session || !session.user || !session.user.id) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
-
-  // Convert cvId from string to number (if the db column is numeric).
-  const cvIdNumber = Number(params.cvId);
 
   // Retrieve the CV record from the database.
   const cvRecord = await db
