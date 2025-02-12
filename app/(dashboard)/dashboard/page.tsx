@@ -40,14 +40,14 @@ export default async function DashboardPage() {
   };
 
   return (
-    <MyDialog isOpen={isDialogOpen} onClose={handleCloseDialog} title="Menu">
-      <ul className="space-y-2">
-        <li><a href="/subscription" className="text-blue-500 hover:underline">Subscription</a></li>
-        <li><a href="/settings" className="text-blue-500 hover:underline">Settings</a></li>
-        <li><a href="/logout" className="text-blue-500 hover:underline">Log Out</a></li>
-      </ul>
-    </MyDialog>
     <>
+      <MyDialog isOpen={isDialogOpen} onClose={handleCloseDialog} title="Menu">
+        <ul className="space-y-2">
+          <li><a href="/subscription" className="text-blue-500 hover:underline">Subscription</a></li>
+          <li><a href="/settings" className="text-blue-500 hover:underline">Settings</a></li>
+          <li><a href="/logout" className="text-blue-500 hover:underline">Log Out</a></li>
+        </ul>
+      </MyDialog>
       <header className="flex items-center justify-between p-4 lg:p-8 mx-auto max-w-md lg:max-w-2xl">
         <ArticleTitle className="text-lg lg:text-2xl font-medium ml-4">
           Dashboard
