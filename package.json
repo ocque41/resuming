@@ -12,6 +12,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "pdf-lib": "^1.17.1",
     "@ai-sdk/openai": "^1.1.9",
     "@chakra-ui/next-js": "^2.4.2",
     "@chakra-ui/react": "^3.6.0",
