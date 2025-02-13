@@ -58,7 +58,7 @@ Return the answer strictly in JSON format (do not include any extra text).
 CV Text:
 ${text}
     `;
-    console.log("extractMetadata: AI Prompt:", prompt.slice(0, 300)); // log first 300 characters
+    console.log("extractMetadata: AI Prompt (first 300 chars):", prompt.slice(0, 300));
 
     // Step 4: Call the AI model.
     const model = openai("gpt-4o");
@@ -82,7 +82,7 @@ ${text}
     };
 
     const response = await model.doGenerate(options);
-    console.log("extractMetadata: AI Response text:", response.text?.slice(0, 300));
+    console.log("extractMetadata: AI Response text (first 300 chars):", response.text?.slice(0, 300));
     if (!response.text) {
       throw new Error("No text returned from doGenerate");
     }
