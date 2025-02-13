@@ -1,6 +1,6 @@
 // app/api/upload/route.ts
 
-export const dynamic = "force-dynamic"; // Ensure this API route is dynamic (not statically pre-rendered)
+export const dynamic = "force-dynamic"; // Prevent pre-rendering
 
 import { NextResponse } from "next/server";
 import formidable from "formidable";
@@ -60,17 +60,16 @@ export async function POST(request: Request) {
   const buffer = Buffer.from(await request.arrayBuffer());
   const stream = bufferToStream(buffer);
 
-  // Create a fake IncomingMessage by casting the stream and attaching headers/method.
+  // Create a fake IncomingMessage by attaching headers/method.
   const fakeReq = stream as unknown as IncomingMessage;
   (fakeReq as any).headers = Object.fromEntries(request.headers.entries());
   (fakeReq as any).method = request.method;
 
-  // Configure formidable to save files in the uploads directory.
+  // Parse the form using formidable.
   const form = formidable({
     uploadDir: uploadDir,
     keepExtensions: true,
   });
-
   const { fields, files } = await new Promise<any>((resolve, reject) => {
     form.parse(fakeReq, (err, fields, files) => {
       if (err) return reject(err);
@@ -80,7 +79,6 @@ export async function POST(request: Request) {
     console.error("Formidable parse error:", err);
     return { fields: null, files: null };
   });
-
   if (!files) {
     return NextResponse.json(
       { message: "Error processing file upload." },
@@ -101,24 +99,23 @@ export async function POST(request: Request) {
   const filePath = uploadedFile.filepath;
   console.log("File saved at:", filePath);
   
-  // Extract raw text from the uploaded PDF.
+  // Extract raw text from the PDF.
   let rawText = "";
   try {
     rawText = await extractTextFromPdf(filePath);
     console.log("Extracted raw text (first 200 chars):", rawText.slice(0, 200));
   } catch (err) {
     console.error("Error extracting raw text:", err);
-    // Optionally, decide whether to fail here or continue with empty rawText.
+    // Optionally, continue with empty rawText.
   }
 
   try {
-    // Insert the new CV record.
-    // (Make sure your database schema includes a 'rawText' column if you want to store this.)
+    // Insert the new CV record with rawText and default metadata.
     const [newCV] = await db.insert(cvs).values({
       userId: session.user.id,
       fileName,
       filePath,
-      rawText, // Ensure your cvs table schema supports this column.
+      rawText,
       metadata: JSON.stringify({ atsScore: "N/A", optimized: "No", sent: "No" }),
     }).returning();
     return NextResponse.json({ message: "CV uploaded successfully!" });

@@ -1,4 +1,3 @@
-// lib/metadata/extract.ts
 import { PDFDocument } from "pdf-lib";
 import pdfParse from "pdf-parse";
 import fs from "fs/promises";
@@ -15,7 +14,7 @@ export async function loadPdfWithPdfLib(filePath: string): Promise<PDFDocument> 
  * Extracts text from a PDF using pdf-parse.
  */
 export async function extractTextFromPdf(filePath: string): Promise<string> {
-  // Validate the file is accessible.
+  // Validate the file exists.
   await loadPdfWithPdfLib(filePath);
   const fileBuffer = await fs.readFile(filePath);
   const data = await pdfParse(fileBuffer);
@@ -23,7 +22,7 @@ export async function extractTextFromPdf(filePath: string): Promise<string> {
 }
 
 /**
- * Checks if the text likely represents a CV by verifying presence of common keywords.
+ * Verifies the text likely represents a CV by checking for common keywords.
  */
 export function isLikelyACV(text: string): boolean {
   const keywords = ["experience", "education", "skills", "contact"];
@@ -32,7 +31,7 @@ export function isLikelyACV(text: string): boolean {
 
 /**
  * Extracts metadata from a CV PDF by calling OpenAI’s API directly.
- * If any step fails, returns default metadata.
+ * Returns default metadata if any step fails.
  */
 export async function extractMetadataDirect(filePath: string): Promise<any> {
   try {
@@ -64,7 +63,6 @@ ${text}
     if (!apiKey) {
       throw new Error("OPENAI_API_KEY is not defined");
     }
-    
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -72,7 +70,7 @@ ${text}
         "Authorization": `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: "gpt-4", // or "gpt-4-0314" or another variant as needed
+        model: "gpt-4",
         messages: [{
           role: "user",
           content: prompt
@@ -80,22 +78,18 @@ ${text}
         stream: false
       })
     });
-    
     if (!response.ok) {
       throw new Error(`OpenAI API error: ${response.statusText}`);
     }
-    
     const data = await response.json();
     console.log("extractMetadataDirect: API Response:", data);
     const messageContent = data.choices?.[0]?.message?.content;
     if (!messageContent) {
       throw new Error("No content returned from OpenAI API.");
     }
-    
     return JSON.parse(messageContent);
   } catch (err) {
     console.error("Error in extractMetadataDirect:", err);
-    // Return default metadata if extraction fails.
     return {
       atsScore: "N/A",
       optimized: "No",

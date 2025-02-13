@@ -68,17 +68,23 @@ export const invitations = pgTable('invitations', {
   status: varchar('status', { length: 20 }).notNull().default('pending'),
 });
 
-export const cvs = pgTable('cvs', {
-  id: serial('id').primaryKey(),
-  userId: integer('user_id')
-    .notNull()
-    .references(() => users.id),
-  fileName: varchar('filename', { length: 255 }).notNull(),
-  filePath: text('filepath').notNull(),
-  createdAt: timestamp('createdat').notNull().defaultNow(),
-  metadata: text('metadata').default(''),
-  rawText: text("rawText"),
+export const cvs = pgTable("cvs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  fileName: varchar("filename", { length: 255 }).notNull(),
+  filePath: text("filepath").notNull(),
+  rawText: text("rawText"), // New column for storing extracted text
+  createdAt: timestamp("createdat").notNull().defaultNow(),
+  metadata: text("metadata").default(""),
 });
+
+// Define any relations if needed.
+export const cvsRelations = relations(cvs, ({ one }) => ({
+  user: one(users, {
+    fields: [cvs.userId],
+    references: [users.id],
+  }),
+}));
 
 
 export const teamsRelations = relations(teams, ({ many }) => ({
