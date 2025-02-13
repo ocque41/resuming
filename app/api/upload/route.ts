@@ -1,3 +1,4 @@
+// app/api/upload/route.ts
 import { NextResponse } from "next/server";
 import formidable from "formidable";
 import { getSession } from "@/lib/auth/session";
@@ -8,6 +9,7 @@ import { IncomingMessage } from "http";
 import fs from "fs/promises";
 import path from "path";
 import { eq } from "drizzle-orm";
+import { extractTextFromPdf } from "@/lib/metadata/extract";
 
 // Disable Next.js body parsing for this route.
 export const config = {
@@ -16,7 +18,6 @@ export const config = {
   },
 };
 
-// Handle preflight OPTIONS requests.
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,
@@ -27,7 +28,6 @@ export async function OPTIONS() {
   });
 }
 
-// Helper: convert a Buffer into a Node.js Readable stream.
 function bufferToStream(buffer: Buffer) {
   const stream = new Readable();
   stream.push(buffer);
@@ -46,10 +46,8 @@ export async function POST(request: Request) {
   }
 
   // Determine the upload directory.
-  // In production, use /tmp; in development, use process.cwd()
   const baseDir = process.env.NODE_ENV === "production" ? "/tmp" : process.cwd();
   const uploadDir = path.join(baseDir, "uploads");
-
   try {
     await fs.access(uploadDir);
   } catch {
@@ -100,28 +98,27 @@ export async function POST(request: Request) {
   const fileName = uploadedFile.originalFilename || "UnnamedCV.pdf";
   const filePath = uploadedFile.filepath;
   console.log("File saved at:", filePath);
-  console.log("Passing filePath to extractMetadata:", filePath);
+  
+  // Extract raw text from the uploaded PDF.
+  let rawText = "";
+  try {
+    rawText = await extractTextFromPdf(filePath);
+    console.log("Extracted raw text (first 200 chars):", rawText.slice(0, 200));
+  } catch (err) {
+    console.error("Error extracting raw text:", err);
+    // Optionally, you can decide whether to fail the upload or continue.
+  }
 
   try {
-    // Insert the new CV record.
+    // Insert the new CV record, including rawText.
+    // Ensure that your cvs table schema has been updated to include a 'rawText' column.
     const [newCV] = await db.insert(cvs).values({
       userId: session.user.id,
       fileName,
       filePath,
+      rawText, // New column for storing the extracted text.
+      metadata: JSON.stringify({ atsScore: "N/A", optimized: "No", sent: "No" }),
     }).returning();
-
-    // Import the metadata extraction helper dynamically.
-    const { extractMetadata } = await import("@/lib/metadata/extract");
-    const metadata = await extractMetadata(filePath);
-    console.log("Extracted metadata:", metadata);
-
-    // Update the record with the metadata (default metadata is returned on error).
-    if (metadata) {
-      await db.update(cvs)
-        .set({ metadata: JSON.stringify(metadata) })
-        .where(eq(cvs.id, newCV.id));
-    }
-
     return NextResponse.json({ message: "CV uploaded successfully!" });
   } catch (dbError) {
     console.error("Database error:", dbError);

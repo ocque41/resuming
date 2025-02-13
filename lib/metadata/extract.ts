@@ -1,76 +1,49 @@
-// lib/metadata/extract.ts
 import { PDFDocument } from "pdf-lib";
 import pdfParse from "pdf-parse";
 import fs from "fs/promises";
 import { openai } from "@ai-sdk/openai";
 
-/**
- * Loads a PDF document using pdf-lib. This serves as a check to ensure the file is valid.
- */
+// Validate file using pdf-lib.
 export async function loadPdfWithPdfLib(filePath: string): Promise<PDFDocument> {
   const fileBuffer = await fs.readFile(filePath);
-  const pdfDoc = await PDFDocument.load(fileBuffer);
-  return pdfDoc;
+  return PDFDocument.load(fileBuffer);
 }
 
-/**
- * Extracts text from a PDF file using pdf-parse.
- */
+// Extract text using pdf-parse.
 export async function extractTextFromPdf(filePath: string): Promise<string> {
-  // Validate file exists using pdf-lib.
-  await loadPdfWithPdfLib(filePath);
+  await loadPdfWithPdfLib(filePath); // Validate file.
   const fileBuffer = await fs.readFile(filePath);
   const data = await pdfParse(fileBuffer);
   return data.text;
 }
 
-/**
- * Verifies if the extracted text likely represents a CV by checking for common keywords.
- */
+// Basic check for CV keywords.
 export function isLikelyACV(text: string): boolean {
   const keywords = ["experience", "education", "skills", "contact"];
-  const lowerText = text.toLowerCase();
-  return keywords.every(keyword => lowerText.includes(keyword));
+  return keywords.every(keyword => text.toLowerCase().includes(keyword));
 }
 
-/**
- * Extracts metadata from a CV PDF.
- * - Loads the PDF (via pdf-lib) to validate the file.
- * - Extracts text (via pdf-parse) and verifies that it contains typical CV keywords.
- * - Builds a prompt and calls an AI model to extract metadata.
- * - Returns default metadata if any step fails.
- */
-export async function extractMetadata(filePath: string): Promise<any> {
+// Asynchronously extract metadata from raw text via AI.
+export async function extractMetadataFromText(text: string): Promise<any> {
   try {
-    // Step 1: Validate the file by loading it with pdf-lib.
-    await loadPdfWithPdfLib(filePath);
-    
-    // Step 2: Extract text from the PDF.
-    const text = await extractTextFromPdf(filePath);
     if (!text || text.trim() === "") {
-      throw new Error("The extracted text is empty.");
+      throw new Error("The provided text is empty.");
     }
-    
-    // Step 3: Verify the document appears to be a CV.
     if (!isLikelyACV(text)) {
-      throw new Error("Uploaded file does not appear to be a valid CV.");
+      throw new Error("The text does not appear to be a valid CV.");
     }
-    
-    // Step 4: Build the prompt for the AI model.
     const prompt = `
 You are an expert CV reviewer. Analyze the following CV text and extract the following details:
 - "atsScore": A percentage score (e.g., "85%") indicating how well the CV is optimized for Applicant Tracking Systems.
 - "optimized": "Yes" if the CV is optimized for ATS, otherwise "No".
 - "sent": "Yes" if the CV has been sent to employers, otherwise "No".
 
-Return the answer strictly in JSON format (do not include any extra text).
+Return the answer strictly in JSON format.
 
 CV Text:
 ${text}
     `;
-    console.log("extractMetadata: AI Prompt (first 300 chars):", prompt.slice(0, 300));
-    
-    // Step 5: Call the AI model.
+    console.log("extractMetadataFromText: AI Prompt (first 300 chars):", prompt.slice(0, 300));
     const model = openai("gpt-4o");
     const toolMessage = {
       role: "tool" as const,
@@ -84,27 +57,19 @@ ${text}
         }
       ]
     };
-    
     const options = {
       inputFormat: "prompt" as const,
       prompt: [toolMessage],
       mode: { type: "regular" as const },
     };
-    
     const response = await model.doGenerate(options);
-    console.log("extractMetadata: AI Response text (first 300 chars):", response.text?.slice(0, 300));
+    console.log("extractMetadataFromText: AI Response (first 300 chars):", response.text?.slice(0, 300));
     if (!response.text) {
-      throw new Error("No text returned from doGenerate");
+      throw new Error("No response from AI");
     }
-    
     return JSON.parse(response.text);
   } catch (err) {
-    console.error("Error extracting metadata:", err);
-    // Return default metadata if extraction fails.
-    return {
-      atsScore: "N/A",
-      optimized: "No",
-      sent: "No"
-    };
+    console.error("Error extracting metadata from text:", err);
+    return { atsScore: "N/A", optimized: "No", sent: "No" };
   }
 }

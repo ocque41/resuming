@@ -77,6 +77,7 @@ export const cvs = pgTable('cvs', {
   filePath: text('filepath').notNull(),
   createdAt: timestamp('createdat').notNull().defaultNow(),
   metadata: text('metadata').default(''),
+  rawText: text("rawText"),
 });
 
 
