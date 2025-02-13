@@ -1,75 +1,105 @@
+// lib/metadata/extract.ts
 import { PDFDocument } from "pdf-lib";
 import pdfParse from "pdf-parse";
 import fs from "fs/promises";
-import { openai } from "@ai-sdk/openai";
 
-// Validate file using pdf-lib.
+/**
+ * Loads a PDF document using pdf-lib (for validation).
+ */
 export async function loadPdfWithPdfLib(filePath: string): Promise<PDFDocument> {
   const fileBuffer = await fs.readFile(filePath);
   return PDFDocument.load(fileBuffer);
 }
 
-// Extract text using pdf-parse.
+/**
+ * Extracts text from a PDF using pdf-parse.
+ */
 export async function extractTextFromPdf(filePath: string): Promise<string> {
-  await loadPdfWithPdfLib(filePath); // Validate file.
+  // Validate the file is accessible.
+  await loadPdfWithPdfLib(filePath);
   const fileBuffer = await fs.readFile(filePath);
   const data = await pdfParse(fileBuffer);
   return data.text;
 }
 
-// Basic check for CV keywords.
+/**
+ * Checks if the text likely represents a CV by verifying presence of common keywords.
+ */
 export function isLikelyACV(text: string): boolean {
   const keywords = ["experience", "education", "skills", "contact"];
   return keywords.every(keyword => text.toLowerCase().includes(keyword));
 }
 
-// Asynchronously extract metadata from raw text via AI.
-export async function extractMetadataFromText(text: string): Promise<any> {
+/**
+ * Extracts metadata from a CV PDF by calling OpenAI’s API directly.
+ * If any step fails, returns default metadata.
+ */
+export async function extractMetadataDirect(filePath: string): Promise<any> {
   try {
+    // Step 1: Extract text from the PDF.
+    const text = await extractTextFromPdf(filePath);
     if (!text || text.trim() === "") {
-      throw new Error("The provided text is empty.");
+      throw new Error("The extracted text is empty.");
     }
+    // Step 2: Verify the document appears to be a CV.
     if (!isLikelyACV(text)) {
-      throw new Error("The text does not appear to be a valid CV.");
+      throw new Error("Uploaded file does not appear to be a valid CV.");
     }
+    // Step 3: Build the prompt.
     const prompt = `
 You are an expert CV reviewer. Analyze the following CV text and extract the following details:
 - "atsScore": A percentage score (e.g., "85%") indicating how well the CV is optimized for Applicant Tracking Systems.
 - "optimized": "Yes" if the CV is optimized for ATS, otherwise "No".
 - "sent": "Yes" if the CV has been sent to employers, otherwise "No".
 
-Return the answer strictly in JSON format.
+Return the answer strictly in JSON format (do not include any extra text).
 
 CV Text:
 ${text}
     `;
-    console.log("extractMetadataFromText: AI Prompt (first 300 chars):", prompt.slice(0, 300));
-    const model = openai("gpt-4o");
-    const toolMessage = {
-      role: "tool" as const,
-      content: [
-        {
-          text: prompt,
-          type: "tool-result" as const,
-          toolCallId: "cvMetadataCall",
-          toolName: "cvMetadataExtractor",
-          result: ""
-        }
-      ]
-    };
-    const options = {
-      inputFormat: "prompt" as const,
-      prompt: [toolMessage],
-      mode: { type: "regular" as const },
-    };
-    const response = await model.doGenerate(options);
-    console.log("extractMetadataFromText: AI Response (first 300 chars):", response.text?.slice(0, 300));
-    if (!response.text) {
-      throw new Error("No response from AI");
+    console.log("extractMetadataDirect: Prompt (first 300 chars):", prompt.slice(0, 300));
+    
+    // Step 4: Call OpenAI's API directly using fetch.
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error("OPENAI_API_KEY is not defined");
     }
-    return JSON.parse(response.text);
+    
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4", // or "gpt-4-0314" or another variant as needed
+        messages: [{
+          role: "user",
+          content: prompt
+        }],
+        stream: false
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    console.log("extractMetadataDirect: API Response:", data);
+    const messageContent = data.choices?.[0]?.message?.content;
+    if (!messageContent) {
+      throw new Error("No content returned from OpenAI API.");
+    }
+    
+    return JSON.parse(messageContent);
   } catch (err) {
-    console.error("Error extracting metadata from text:", err);
-    return { atsScore: "N/A", optimized: "No", sent: "No" };
+    console.error("Error in extractMetadataDirect:", err);
+    // Return default metadata if extraction fails.
+    return {
+      atsScore: "N/A",
+      optimized: "No",
+      sent: "No"
+    };
   }
 }
