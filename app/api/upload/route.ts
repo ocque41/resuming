@@ -1,4 +1,7 @@
 // app/api/upload/route.ts
+
+export const dynamic = "force-dynamic"; // Ensure this API route is dynamic (not statically pre-rendered)
+
 import { NextResponse } from "next/server";
 import formidable from "formidable";
 import { getSession } from "@/lib/auth/session";
@@ -11,7 +14,6 @@ import path from "path";
 import { eq } from "drizzle-orm";
 import { extractTextFromPdf } from "@/lib/metadata/extract";
 
-// Disable Next.js body parsing for this route.
 export const config = {
   api: {
     bodyParser: false,
@@ -106,17 +108,17 @@ export async function POST(request: Request) {
     console.log("Extracted raw text (first 200 chars):", rawText.slice(0, 200));
   } catch (err) {
     console.error("Error extracting raw text:", err);
-    // Optionally, you can decide whether to fail the upload or continue.
+    // Optionally, decide whether to fail here or continue with empty rawText.
   }
 
   try {
-    // Insert the new CV record, including rawText.
-    // Ensure that your cvs table schema has been updated to include a 'rawText' column.
+    // Insert the new CV record.
+    // (Make sure your database schema includes a 'rawText' column if you want to store this.)
     const [newCV] = await db.insert(cvs).values({
       userId: session.user.id,
       fileName,
       filePath,
-      rawText, // New column for storing the extracted text.
+      rawText, // Ensure your cvs table schema supports this column.
       metadata: JSON.stringify({ atsScore: "N/A", optimized: "No", sent: "No" }),
     }).returning();
     return NextResponse.json({ message: "CV uploaded successfully!" });
