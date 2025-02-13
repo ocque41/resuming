@@ -1,3 +1,4 @@
+// lib/metadata/extract.ts
 import pdfParse from "pdf-parse";
 import fs from "fs/promises";
 import { openai } from "@ai-sdk/openai";
@@ -7,12 +8,14 @@ import { openai } from "@ai-sdk/openai";
  */
 export async function extractTextFromPdf(filePath: string): Promise<string> {
   try {
+    console.log("extractTextFromPdf: accessing file at", filePath);
     await fs.access(filePath);
   } catch (err) {
     throw new Error(`File does not exist: ${filePath}`);
   }
   const dataBuffer = await fs.readFile(filePath);
   const data = await pdfParse(dataBuffer);
+  console.log("extractTextFromPdf: extracted text (first 200 chars):", data.text.slice(0, 200));
   return data.text;
 }
 
@@ -32,18 +35,18 @@ export function isLikelyACV(text: string): boolean {
  */
 export async function extractMetadata(filePath: string): Promise<any> {
   try {
-    // Extract text from the PDF.
+    // Step 1: Extract full text from the PDF.
     const text = await extractTextFromPdf(filePath);
     if (!text || text.trim() === "") {
       throw new Error("The extracted text is empty.");
     }
 
-    // Verify that the document appears to be a CV.
+    // Step 2: Verify that the document appears to be a CV.
     if (!isLikelyACV(text)) {
       throw new Error("Uploaded file does not appear to be a valid CV.");
     }
 
-    // Build the prompt for the AI model.
+    // Step 3: Build the prompt for the AI model.
     const prompt = `
 You are an expert CV reviewer. Analyze the following CV text and extract the following details:
 - "atsScore": A percentage score (e.g., "85%") indicating how well the CV is optimized for Applicant Tracking Systems.
@@ -55,7 +58,9 @@ Return the answer strictly in JSON format (do not include any extra text).
 CV Text:
 ${text}
     `;
+    console.log("extractMetadata: AI Prompt:", prompt.slice(0, 300)); // log first 300 characters
 
+    // Step 4: Call the AI model.
     const model = openai("gpt-4o");
     const toolMessage = {
       role: "tool" as const,
@@ -77,6 +82,7 @@ ${text}
     };
 
     const response = await model.doGenerate(options);
+    console.log("extractMetadata: AI Response text:", response.text?.slice(0, 300));
     if (!response.text) {
       throw new Error("No text returned from doGenerate");
     }
