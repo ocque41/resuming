@@ -11,7 +11,9 @@ export default function BillingButton() {
   const handleBilling = async () => {
     setIsLoading(true);
     try {
-      await customerPortalAction();
+      const formData = new FormData();
+      // Add necessary data to formData if required
+      await customerPortalAction(formData);
     } catch (error) {
       console.error('Failed to redirect to billing portal:', error);
     } finally {
