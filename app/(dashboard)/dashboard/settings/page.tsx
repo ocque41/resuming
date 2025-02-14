@@ -22,9 +22,9 @@ export default async function SettingsPage() {
       </header>
       <div className="space-y-8 mx-auto max-w-md lg:max-w-2xl">
         <GeneralPage />
-        <SecurityPage />
         <InviteTeamMember />
         <ActivityPage />
+        <SecurityPage />
       </div>
     </section>
   );
