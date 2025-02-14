@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getTeamForUser, getUser, getCVsForUser } from "@/lib/db/queries";
 import { ArticleTitle } from "@/components/ui/article";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogBody } from "@/components/ui/dialog";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -36,12 +37,31 @@ export default async function DashboardPage() {
         <ArticleTitle className="text-lg lg:text-2xl font-medium ml-4">
           Dashboard
         </ArticleTitle>
-        <a href="/dashboard/settings" className="h-8 w-8 lg:h-10 lg:w-10 ml-auto">
-          <Avatar className="cursor-pointer">
-            <AvatarImage src="/path/to/avatar.jpg" alt="User Avatar" />
-            <AvatarFallback>U</AvatarFallback>
-          </Avatar>
-        </a>
+        <Dialog>
+          <DialogTrigger asChild>
+            <Avatar className="cursor-pointer h-8 w-8 lg:h-10 lg:w-10 ml-auto">
+              <AvatarImage src="/path/to/avatar.jpg" alt="User Avatar" />
+              <AvatarFallback>U</AvatarFallback>
+            </Avatar>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogBody>
+                <ul className="space-y-2">
+                  <li>
+                    <a href="/billing" className="block text-center">Billing</a>
+                  </li>
+                  <li>
+                    <a href="/dashboard/settings" className="block text-center">Settings</a>
+                  </li>
+                  <li>
+                    <button className="block w-full text-center">Log Out</button>
+                  </li>
+                </ul>
+              </DialogBody>
+            </DialogHeader>
+          </DialogContent>
+        </Dialog>
       </header>
       <CardTitle className="text-sm text-gray-500 text-center mt-2 mx-auto max-w-md lg:max-w-2xl">
         General Suite
