@@ -37,7 +37,7 @@ export function InviteTeamMember() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base text-gray-400">Invite Team Member</CardTitle>
+        <CardTitle className="text-base text-gray-400"></CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
