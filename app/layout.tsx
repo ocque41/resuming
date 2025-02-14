@@ -7,8 +7,8 @@ import { ThemeProvider } from 'app/theme-provider';
 import { I18nProvider } from '@/components/i18n-provider';
 
 export const metadata: Metadata = {
-  title: 'Next.js SaaS Starter',
-  description: 'Get started quickly with Next.js, Postgres, and Stripe.',
+  title: 'Resuming',
+  description: 'Transform your career with our AI-powered CV optimization platform',
 };
 
 export const viewport: Viewport = {
