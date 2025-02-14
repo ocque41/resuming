@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    ppr: false
+    ppr: false,
+    serverComponentsExternalPackages: ['pdf-parse']
   }
 };
 
