@@ -5,6 +5,9 @@
 @layer base {
   * {
     @apply border-border;
+    --avatar-gradient-from: 26 10% 8%;
+    --avatar-gradient-via: 17 12% 13%;
+    --avatar-gradient-to: 34 25% 21%;
   }
   body {
     @apply bg-background text-foreground;
