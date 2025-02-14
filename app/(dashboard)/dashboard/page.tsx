@@ -36,12 +36,12 @@ export default async function DashboardPage() {
   return (
     <>
       <header className="flex items-center justify-between p-4 lg:p-8 mx-auto max-w-md lg:max-w-2xl">
-        <ArticleTitle className="text-lg lg:text-2xl font-medium ml-4">
+        <ArticleTitle className="text-md lg:text-xl font-medium ml-4">
           Dashboard
         </ArticleTitle>
         <Dialog>
           <DialogTrigger asChild>
-            <Avatar className={cn("cursor-pointer h-8 w-8 lg:h-10 lg:w-10 ml-auto", "bg-[#584235]")}>
+            <Avatar className={cn("cursor-pointer h-10 w-10 lg:h-12 lg:w-12 ml-auto", "bg-[#584235]")}>
               <AvatarImage src="/path/to/avatar.jpg" alt="User Avatar" />
               <AvatarFallback>U</AvatarFallback>
             </Avatar>
@@ -76,7 +76,6 @@ export default async function DashboardPage() {
                 <TableHead>Name</TableHead>
                 <TableHead>ATS Score</TableHead>
                 <TableHead>Optimized</TableHead>
-                <TableHead>Sent</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -93,7 +92,6 @@ export default async function DashboardPage() {
                     <TableCell>{cv.fileName}</TableCell>
                     <TableCell>{metadata?.atsScore || "-"}</TableCell>
                     <TableCell>{metadata?.optimized || "-"}</TableCell>
-                    <TableCell>{metadata?.sent || "-"}</TableCell>
                     <TableCell>
                       <DeleteCVButton cvId={cv.id} />
                     </TableCell>

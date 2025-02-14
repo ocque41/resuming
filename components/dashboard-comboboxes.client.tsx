@@ -39,7 +39,7 @@ export default function DashboardComboboxes({ cvs, onSelect }: DashboardCombobox
   };
 
   return (
-    <div className="w-72">
+    <div className="w-64">
       <Combobox value={selected} onChange={handleChange}>
         <Combobox.Label className="block text-sm font-medium text-gray-700">
           Select a CV
