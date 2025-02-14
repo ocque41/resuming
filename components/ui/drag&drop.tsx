@@ -3,12 +3,14 @@
 import React, { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import axios from "axios";
+import { useRouter } from "next/navigation";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 
 const DragAndDropUpload: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<boolean>(false);
+  const router = useRouter();
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     setError(null);
@@ -37,11 +39,12 @@ const DragAndDropUpload: React.FC = () => {
       });
       console.log("Upload successful:", response.data);
       setUploadSuccess(true);
+      router.refresh(); // This triggers a re-fetch of the server component data
     } catch (error: any) {
       console.error("Error uploading file:", error);
       setError("Error uploading file. Please try again.");
     }
-  }, []);
+  }, [router]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
 
