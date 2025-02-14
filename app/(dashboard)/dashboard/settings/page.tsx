@@ -25,16 +25,22 @@ export default async function SettingsPage() {
           </div>
         </header>
         <GeneralPage />
-        <div className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
-          <CardTitle className="text-base text-gray-400 text-center">Subscription</CardTitle>
-          <div className="flex justify-center">
+        <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
+          <CardHeader>
+            <CardTitle className="text-base text-gray-400 text-center">Subscription</CardTitle>
+          </CardHeader>
+          <CardContent className="flex justify-center">
             <BillingButton />
-          </div>
-        </div>
-        <div className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
-          <CardTitle className="text-base text-gray-400 text-center">Invite Team Member</CardTitle>
-          <InviteTeamMember />
-        </div>
+          </CardContent>
+        </Card>
+        <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
+          <CardHeader>
+            <CardTitle className="text-base text-gray-400 text-center">Invite Team Member</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <InviteTeamMember />
+          </CardContent>
+        </Card>
         <ActivityPage />
         <SecurityPage />
       </div>
