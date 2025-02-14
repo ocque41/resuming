@@ -33,7 +33,11 @@ export default async function SettingsPage() {
             <BillingButton />
           </CardContent>
         </Card>
-        <InviteTeamMember />
+        <Card className="mx-auto max-w-md lg:max-w-2xl">
+          <CardContent className="flex justify-center">
+            <InviteTeamMember />
+          </CardContent>
+        </Card>
         <ActivityPage />
         <SecurityPage />
       </div>
