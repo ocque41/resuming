@@ -11,7 +11,7 @@ export default async function SettingsPage() {
   return (
     <section className="flex-1 p-4 lg:p-8 bg-black text-white min-h-screen">
       <header className="flex items-center justify-between p-4 lg:p-8 mx-auto max-w-md lg:max-w-2xl">
-        <h1 className="text-lg lg:text-2xl font-medium text-white">
+        <h1 className="text-lg lg:text-2xl font-medium text-orange-500">
           User Settings
         </h1>
       </header>
