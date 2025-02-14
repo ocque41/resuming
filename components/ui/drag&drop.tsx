@@ -64,8 +64,8 @@ const DragAndDropUpload: React.FC = () => {
           {isDragActive ? (
             <p className="text-blue-600 font-medium">Drop your CV here...</p>
           ) : (
-            <p className="text-gray-700">
-              Drag & drop your PDF here, or click to select a file.
+            <p className="text-white">
+              Drop Your CV
             </p>
           )}
         </div>
