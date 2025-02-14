@@ -73,12 +73,11 @@ export const cvs = pgTable("cvs", {
   userId: integer("user_id").notNull().references(() => users.id),
   fileName: varchar("filename", { length: 255 }).notNull(),
   filePath: text("filepath").notNull(),
-  rawText: text("rawText"), // New column for storing extracted text
+  rawText: text("rawText"), // new column for extracted text
   createdAt: timestamp("createdat").notNull().defaultNow(),
   metadata: text("metadata").default(""),
 });
 
-// Define any relations if needed.
 export const cvsRelations = relations(cvs, ({ one }) => ({
   user: one(users, {
     fields: [cvs.userId],

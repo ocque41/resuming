@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // Determine upload directory.
+  // Determine the upload directory.
   const baseDir = process.env.NODE_ENV === "production" ? "/tmp" : process.cwd();
   const uploadDir = path.join(baseDir, "uploads");
   try {
@@ -56,13 +56,16 @@ export async function POST(request: Request) {
     await fs.mkdir(uploadDir, { recursive: true });
   }
 
-  // Parse the form.
+  // Read the request body as a Buffer and convert it to a stream.
   const buffer = Buffer.from(await request.arrayBuffer());
   const stream = bufferToStream(buffer);
+
+  // Create a fake IncomingMessage by attaching headers/method.
   const fakeReq = stream as unknown as IncomingMessage;
   (fakeReq as any).headers = Object.fromEntries(request.headers.entries());
   (fakeReq as any).method = request.method;
 
+  // Parse the form using formidable.
   const form = formidable({
     uploadDir: uploadDir,
     keepExtensions: true,
@@ -95,7 +98,7 @@ export async function POST(request: Request) {
   const fileName = uploadedFile.originalFilename || "UnnamedCV.pdf";
   const filePath = uploadedFile.filepath;
   console.log("File saved at:", filePath);
-
+  
   // Extract raw text from the PDF.
   let rawText = "";
   try {
@@ -103,11 +106,11 @@ export async function POST(request: Request) {
     console.log("Extracted raw text (first 200 chars):", rawText.slice(0, 200));
   } catch (err) {
     console.error("Error extracting raw text:", err);
-    // You can choose to fail the upload or continue with empty rawText.
+    // Continue with empty rawText if extraction fails.
   }
 
   try {
-    // Insert the new CV record (including rawText and default metadata).
+    // Insert the new CV record with rawText and default metadata.
     const [newCV] = await db.insert(cvs).values({
       userId: session.user.id,
       fileName,

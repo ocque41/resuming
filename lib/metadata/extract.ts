@@ -3,7 +3,7 @@ import pdfParse from "pdf-parse";
 import fs from "fs/promises";
 
 /**
- * Loads a PDF document using pdf-lib (for validation).
+ * Loads a PDF document using pdf-lib for validation.
  */
 export async function loadPdfWithPdfLib(filePath: string): Promise<PDFDocument> {
   const fileBuffer = await fs.readFile(filePath);
@@ -14,14 +14,15 @@ export async function loadPdfWithPdfLib(filePath: string): Promise<PDFDocument> 
  * Extracts text from a PDF using pdf-parse.
  */
 export async function extractTextFromPdf(filePath: string): Promise<string> {
-  await loadPdfWithPdfLib(filePath); // Validate the file
+  // Validate the file exists.
+  await loadPdfWithPdfLib(filePath);
   const fileBuffer = await fs.readFile(filePath);
   const data = await pdfParse(fileBuffer);
   return data.text;
 }
 
 /**
- * Verifies the text likely represents a CV by checking for common keywords.
+ * Checks if the text likely represents a CV by verifying common keywords.
  */
 export function isLikelyACV(text: string): boolean {
   const keywords = ["experience", "education", "skills", "contact"];
@@ -29,18 +30,56 @@ export function isLikelyACV(text: string): boolean {
 }
 
 /**
- * Extracts metadata from a CV PDF by calling OpenAI’s API directly.
+ * Calls OpenAI’s API directly via fetch to analyze the CV prompt.
+ */
+export async function analyzeCVWithAI(prompt: string): Promise<any> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not defined");
+  }
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "gpt-4",
+      messages: [{
+        role: "user",
+        content: prompt,
+      }],
+      stream: false,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`OpenAI API error: ${response.statusText}`);
+  }
+  const data = await response.json();
+  const messageContent = data.choices?.[0]?.message?.content;
+  if (!messageContent) {
+    throw new Error("No content returned from OpenAI API.");
+  }
+  return JSON.parse(messageContent);
+}
+
+/**
+ * Extracts metadata from a CV PDF by processing the file, verifying its content,
+ * building a prompt, and then calling OpenAI’s API directly.
  * Returns default metadata if any step fails.
  */
 export async function extractMetadataDirect(filePath: string): Promise<any> {
   try {
+    // Extract text from the PDF.
     const text = await extractTextFromPdf(filePath);
     if (!text || text.trim() === "") {
       throw new Error("The extracted text is empty.");
     }
+    // Verify that the text appears to be a CV.
     if (!isLikelyACV(text)) {
       throw new Error("Uploaded file does not appear to be a valid CV.");
     }
+    // Build the prompt using the extracted text.
     const prompt = `
 You are an expert CV reviewer. Analyze the following CV text and extract the following details:
 - "atsScore": A percentage score (e.g., "85%") indicating how well the CV is optimized for Applicant Tracking Systems.
@@ -53,18 +92,15 @@ CV Text:
 ${text}
     `;
     console.log("extractMetadataDirect: Prompt (first 300 chars):", prompt.slice(0, 300));
-    
-    // Instead of using the Vercel AI SDK, use the direct fetch approach via analyzeCVWithAI:
+    // Call OpenAI API directly.
     const metadata = await analyzeCVWithAI(prompt);
     return metadata;
   } catch (err) {
     console.error("Error in extractMetadataDirect:", err);
-    return { atsScore: "N/A", optimized: "No", sent: "No" };
+    return {
+      atsScore: "N/A",
+      optimized: "No",
+      sent: "No",
+    };
   }
-}
-
-// Import the direct analysis function dynamically so that it's only loaded at runtime.
-async function analyzeCVWithAI(prompt: string): Promise<any> {
-  const { analyzeCVWithAI } = await import("./analyze");
-  return analyzeCVWithAI(prompt);
 }
