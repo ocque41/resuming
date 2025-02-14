@@ -8,7 +8,7 @@ export default {
     franken({
       customPalette: {
         ".uk-theme-default": {
-          "--background": "0 0% 0%",
+          "--background": "34 25% 21%",
           "--foreground": "222.2 47.4% 11.2%",
           "--muted": "210 40% 96.1%",
           "--muted-foreground": "215.4 16.3% 46.9%",
