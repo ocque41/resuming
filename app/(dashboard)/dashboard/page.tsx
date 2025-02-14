@@ -50,9 +50,11 @@ export default async function DashboardPage() {
             <DialogHeader>
               <DialogBody>
                 <div className="flex flex-col items-center space-y-2">
-                  <a href="/dashboard/settings" className="text-blue-600 hover:underline">Settings</a>
+                  <a href="/dashboard/settings" className="text-white hover:underline">Settings</a>
                   <span className="text-gray-400">|</span>
-                  <a href="#" className="text-blue-600 hover:underline">Log Out</a>
+                  <a href="#" className="text-white hover:underline">Log Out</a>
+                  <span className="text-gray-400">|</span>
+                  <a href="/manage-subscription" className="text-white hover:underline">Manage Subscription</a>
                 </div>
               </DialogBody>
             </DialogHeader>
