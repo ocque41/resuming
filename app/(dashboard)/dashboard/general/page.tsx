@@ -37,7 +37,7 @@ export default function GeneralPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm text-gray-500">Account Information</CardTitle>
+          <CardTitle className="text-base text-gray-400">Account Information</CardTitle>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>
@@ -63,10 +63,10 @@ export default function GeneralPage() {
               />
             </div>
             {state.error && (
-              <p className="text-red-500 text-sm">{state.error}</p>
+              <p className="text-red-400 text-sm">{state.error}</p>
             )}
             {state.success && (
-              <p className="text-green-500 text-sm">{state.success}</p>
+              <p className="text-green-400 text-sm">{state.success}</p>
             )}
             <Button
               type="submit"

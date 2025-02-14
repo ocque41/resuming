@@ -37,7 +37,7 @@ export function InviteTeamMember() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Invite Team Member</CardTitle>
+        <CardTitle className="text-base text-gray-400">Invite Team Member</CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -71,10 +71,10 @@ export function InviteTeamMember() {
             </RadioGroup>
           </div>
           {inviteState?.error && (
-            <p className="text-red-500">{inviteState.error}</p>
+            <p className="text-red-400">{inviteState.error}</p>
           )}
           {inviteState?.success && (
-            <p className="text-green-500">{inviteState.success}</p>
+            <p className="text-green-400">{inviteState.success}</p>
           )}
           <Button
             type="submit"
@@ -97,7 +97,7 @@ export function InviteTeamMember() {
       </CardContent>
       {!isOwner && (
         <CardFooter>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-gray-300">
             You must be a team owner to invite new members.
           </p>
         </CardFooter>
