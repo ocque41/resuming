@@ -22,10 +22,10 @@ export default async function SettingsPage() {
         </div>
       </header>
       <div className="space-y-8 mx-auto max-w-md lg:max-w-2xl">
+        <GeneralPage />
         <div className="flex justify-center mb-8">
           <BillingButton />
         </div>
-        <GeneralPage />
         <InviteTeamMember />
         <ActivityPage />
         <SecurityPage />
