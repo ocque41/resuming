@@ -24,7 +24,7 @@ export default async function SettingsPage() {
         </div>
       </header>
       <div className="space-y-8 mx-auto max-w-md lg:max-w-2xl">
-        <GeneralPage className="mx-auto max-w-md lg:max-w-lg" />
+        <GeneralPage />
         <Card className="mx-auto max-w-md lg:max-w-lg">
           <CardHeader>
             <CardTitle className="text-base text-gray-400">Subscription</CardTitle>
