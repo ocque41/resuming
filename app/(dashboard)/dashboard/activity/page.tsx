@@ -73,7 +73,7 @@ export default async function ActivityPage() {
 
   return (
     <section className="flex-1 p-4 lg:p-8">
-      <h1 className="text-lg lg:text-2xl font-medium text-orange-500 mb-6">
+      <h1 className="text-lg lg:text-2xl font-medium text-[#584235] mb-6">
         Activity Log
       </h1>
       <Card>

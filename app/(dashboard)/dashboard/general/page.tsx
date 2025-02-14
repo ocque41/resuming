@@ -31,7 +31,7 @@ export default function GeneralPage() {
 
   return (
     <section className="flex-1 p-4 lg:p-8">
-      <h1 className="text-lg lg:text-2xl font-medium text-orange-500 mb-6">
+      <h1 className="text-lg lg:text-2xl font-medium text-[#584235] mb-6">
         General Settings
       </h1>
 
@@ -70,7 +70,7 @@ export default function GeneralPage() {
             )}
             <Button
               type="submit"
-              className="bg-orange-500 hover:bg-orange-600 text-white"
+              className="bg-[#584235] hover:bg-[#6b4f3b] text-white"
               disabled={isPending}
             >
               {isPending ? (
