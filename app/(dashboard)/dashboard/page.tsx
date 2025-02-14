@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { getTeamForUser, getUser, getCVsForUser } from "@/lib/db/queries";
 import { ArticleTitle } from "@/components/ui/article";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogBody } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogBody, DialogFooter } from "@/components/ui/dialog";
+import BillingButton from './billing-button';
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -39,7 +40,7 @@ export default async function DashboardPage() {
         </ArticleTitle>
         <Dialog>
           <DialogTrigger asChild>
-            <Avatar className="cursor-pointer h-8 w-8 lg:h-10 lg:w-10 ml-auto">
+            <Avatar className="cursor-pointer h-8 w-8 lg:h-10 lg:w-10 ml-auto bg-black">
               <AvatarImage src="/path/to/avatar.jpg" alt="User Avatar" />
               <AvatarFallback>U</AvatarFallback>
             </Avatar>
@@ -49,7 +50,7 @@ export default async function DashboardPage() {
               <DialogBody>
                 <ul className="space-y-2">
                   <li>
-                    <a href="/billing" className="block text-center">Billing</a>
+                    <BillingButton />
                   </li>
                   <li>
                     <a href="/dashboard/settings" className="block text-center">Settings</a>
