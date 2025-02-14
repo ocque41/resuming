@@ -30,7 +30,7 @@ export function isLikelyACV(text: string): boolean {
 }
 
 /**
- * Calls OpenAI’s API directly via fetch to analyze the CV prompt.
+ * Calls OpenAI’s API directly using fetch.
  */
 export async function analyzeCVWithAI(prompt: string): Promise<any> {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -64,22 +64,19 @@ export async function analyzeCVWithAI(prompt: string): Promise<any> {
 }
 
 /**
- * Extracts metadata from a CV PDF by processing the file, verifying its content,
- * building a prompt, and then calling OpenAI’s API directly.
+ * Extracts metadata from a CV PDF by processing the file,
+ * verifying its content, and then calling OpenAI’s API directly.
  * Returns default metadata if any step fails.
  */
 export async function extractMetadataDirect(filePath: string): Promise<any> {
   try {
-    // Extract text from the PDF.
     const text = await extractTextFromPdf(filePath);
     if (!text || text.trim() === "") {
       throw new Error("The extracted text is empty.");
     }
-    // Verify that the text appears to be a CV.
     if (!isLikelyACV(text)) {
       throw new Error("Uploaded file does not appear to be a valid CV.");
     }
-    // Build the prompt using the extracted text.
     const prompt = `
 You are an expert CV reviewer. Analyze the following CV text and extract the following details:
 - "atsScore": A percentage score (e.g., "85%") indicating how well the CV is optimized for Applicant Tracking Systems.
@@ -92,7 +89,6 @@ CV Text:
 ${text}
     `;
     console.log("extractMetadataDirect: Prompt (first 300 chars):", prompt.slice(0, 300));
-    // Call OpenAI API directly.
     const metadata = await analyzeCVWithAI(prompt);
     return metadata;
   } catch (err) {

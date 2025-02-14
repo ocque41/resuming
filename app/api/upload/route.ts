@@ -1,6 +1,6 @@
 // app/api/upload/route.ts
 
-export const dynamic = "force-dynamic"; // Prevent build-time pre-rendering
+export const dynamic = "force-dynamic"; // Prevent pre-rendering at build time
 
 import { NextResponse } from "next/server";
 import formidable from "formidable";
@@ -106,7 +106,7 @@ export async function POST(request: Request) {
     console.log("Extracted raw text (first 200 chars):", rawText.slice(0, 200));
   } catch (err) {
     console.error("Error extracting raw text:", err);
-    // Continue with empty rawText if extraction fails.
+    // Optionally, continue with empty rawText.
   }
 
   try {
