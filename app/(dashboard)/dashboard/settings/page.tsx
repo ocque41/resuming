@@ -3,6 +3,7 @@ import ActivityPage from '../activity/page';
 import GeneralPage from '../general/page';
 import SecurityPage from '../security/page';
 import { InviteTeamMember } from '../invite-team';
+import BillingButton from '../billing-button';
 
 export default async function SettingsPage() {
   // Pass the required teamId
@@ -21,6 +22,9 @@ export default async function SettingsPage() {
         </div>
       </header>
       <div className="space-y-8 mx-auto max-w-md lg:max-w-2xl">
+        <div className="flex justify-center mb-8">
+          <BillingButton />
+        </div>
         <GeneralPage />
         <InviteTeamMember />
         <ActivityPage />
