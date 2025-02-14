@@ -40,7 +40,7 @@ export default async function DashboardPage() {
         </ArticleTitle>
         <Dialog>
           <DialogTrigger asChild>
-            <Avatar className="cursor-pointer h-8 w-8 lg:h-10 lg:w-10 ml-auto bg-black">
+            <Avatar className="cursor-pointer h-8 w-8 lg:h-10 lg:w-10 ml-auto bg-indigo-600">
               <AvatarImage src="/path/to/avatar.jpg" alt="User Avatar" />
               <AvatarFallback>U</AvatarFallback>
             </Avatar>
@@ -48,15 +48,15 @@ export default async function DashboardPage() {
           <DialogContent>
             <DialogHeader>
               <DialogBody>
-                <ul className="space-y-2">
+                <ul className="space-y-2 flex flex-col items-center">
                   <li>
                     <BillingButton />
                   </li>
                   <li>
-                    <a href="/dashboard/settings" className="block text-center">Settings</a>
+                    <a href="/dashboard/settings" className="block text-center bg-indigo-600 text-white py-2 px-4 rounded-md">Settings</a>
                   </li>
                   <li>
-                    <button className="block w-full text-center">Log Out</button>
+                    <button className="block w-full text-center bg-indigo-600 text-white py-2 px-4 rounded-md">Log Out</button>
                   </li>
                 </ul>
               </DialogBody>
