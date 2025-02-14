@@ -41,7 +41,7 @@ export default async function DashboardPage() {
         </ArticleTitle>
         <Dialog>
           <DialogTrigger asChild>
-            <Avatar className={cn("cursor-pointer h-8 w-8 lg:h-10 lg:w-10 ml-auto", "bg-indigo-600")}>
+            <Avatar className={cn("cursor-pointer h-8 w-8 lg:h-10 lg:w-10 ml-auto", "bg-[#584235]")}>
               <AvatarImage src="/path/to/avatar.jpg" alt="User Avatar" />
               <AvatarFallback>U</AvatarFallback>
             </Avatar>
