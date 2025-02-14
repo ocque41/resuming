@@ -83,10 +83,10 @@ export default async function DashboardPage() {
                 }
                 return (
                   <TableRow key={cv.id}>
-                    <TableCell>{cv.fileName}</TableCell>
-                    <TableCell>{metadata?.atsScore || "-"}</TableCell>
-                    <TableCell>{metadata?.optimized || "-"}</TableCell>
-                    <TableCell>
+                    <TableCell className="text-sm lg:text-base">{cv.fileName}</TableCell>
+                    <TableCell className="text-sm lg:text-base">{metadata?.atsScore || "-"}</TableCell>
+                    <TableCell className="text-sm lg:text-base">{metadata?.optimized || "-"}</TableCell>
+                    <TableCell className="text-sm lg:text-base">
                       <DeleteCVButton cvId={cv.id} />
                     </TableCell>
                   </TableRow>
