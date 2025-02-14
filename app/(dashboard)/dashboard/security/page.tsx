@@ -75,8 +75,6 @@ export default function SecurityPage() {
                 type="password"
                 className="border-gray-700"
                 autoComplete="current-password"
-                className="border-gray-700"
-                className="border-gray-700"
                 required
                 minLength={8}
                 maxLength={100}
