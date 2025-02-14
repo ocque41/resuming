@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { customerPortalAction } from '@/lib/payments/actions';
 
-export default function BillingButton() {
+export default function BillingButton({ variant = "primary" }) {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleBilling = async () => {
@@ -21,10 +21,14 @@ export default function BillingButton() {
     }
   };
 
+  const buttonStyles = variant === "primary"
+    ? "bg-[#584235] hover:bg-[#6b4f3b] text-white"
+    : "bg-gray-300 text-black";
+
   return (
     <Button
       onClick={handleBilling}
-      className="bg-[#584235] hover:bg-[#6b4f3b] text-white"
+      className={`${buttonStyles} py-2 px-4 rounded-md ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
       disabled={isLoading}
     >
       {isLoading ? (
