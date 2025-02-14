@@ -24,9 +24,14 @@ export default async function SettingsPage() {
       </header>
       <div className="space-y-8 mx-auto max-w-md lg:max-w-2xl">
         <GeneralPage />
-        <div className="flex justify-center mb-8">
-          <BillingButton />
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base text-gray-400">Subscription</CardTitle>
+          </CardHeader>
+          <CardContent className="flex justify-center">
+            <BillingButton />
+          </CardContent>
+        </Card>
         <InviteTeamMember />
         <ActivityPage />
         <SecurityPage />
