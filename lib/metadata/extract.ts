@@ -14,14 +14,14 @@ export async function loadPdfWithPdfLib(filePath: string): Promise<PDFDocument> 
  * Extracts text from a PDF using pdf-parse.
  */
 export async function extractTextFromPdf(filePath: string): Promise<string> {
-  await loadPdfWithPdfLib(filePath); // validate the file
+  await loadPdfWithPdfLib(filePath); // Validate the file
   const fileBuffer = await fs.readFile(filePath);
   const data = await pdfParse(fileBuffer);
   return data.text;
 }
 
 /**
- * Checks if the text likely represents a CV by verifying common keywords.
+ * Verifies the text likely represents a CV by checking for common keywords.
  */
 export function isLikelyACV(text: string): boolean {
   const keywords = ["experience", "education", "skills", "contact"];
@@ -34,16 +34,13 @@ export function isLikelyACV(text: string): boolean {
  */
 export async function extractMetadataDirect(filePath: string): Promise<any> {
   try {
-    // Step 1: Extract text.
     const text = await extractTextFromPdf(filePath);
     if (!text || text.trim() === "") {
       throw new Error("The extracted text is empty.");
     }
-    // Step 2: Verify CV.
     if (!isLikelyACV(text)) {
       throw new Error("Uploaded file does not appear to be a valid CV.");
     }
-    // Step 3: Build prompt.
     const prompt = `
 You are an expert CV reviewer. Analyze the following CV text and extract the following details:
 - "atsScore": A percentage score (e.g., "85%") indicating how well the CV is optimized for Applicant Tracking Systems.
@@ -57,42 +54,17 @@ ${text}
     `;
     console.log("extractMetadataDirect: Prompt (first 300 chars):", prompt.slice(0, 300));
     
-    // Step 4: Call OpenAI API directly via fetch.
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error("OPENAI_API_KEY is not defined");
-    }
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: "gpt-4",
-        messages: [{
-          role: "user",
-          content: prompt
-        }],
-        stream: false
-      })
-    });
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.statusText}`);
-    }
-    const data = await response.json();
-    console.log("extractMetadataDirect: API Response:", data);
-    const messageContent = data.choices?.[0]?.message?.content;
-    if (!messageContent) {
-      throw new Error("No content returned from OpenAI API.");
-    }
-    return JSON.parse(messageContent);
+    // Instead of using the Vercel AI SDK, use the direct fetch approach via analyzeCVWithAI:
+    const metadata = await analyzeCVWithAI(prompt);
+    return metadata;
   } catch (err) {
     console.error("Error in extractMetadataDirect:", err);
-    return {
-      atsScore: "N/A",
-      optimized: "No",
-      sent: "No"
-    };
+    return { atsScore: "N/A", optimized: "No", sent: "No" };
   }
+}
+
+// Import the direct analysis function dynamically so that it's only loaded at runtime.
+async function analyzeCVWithAI(prompt: string): Promise<any> {
+  const { analyzeCVWithAI } = await import("./analyze");
+  return analyzeCVWithAI(prompt);
 }
