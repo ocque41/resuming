@@ -24,37 +24,19 @@ export default async function SettingsPage() {
             </a>
           </div>
         </header>
-        <Card className="mx-auto max-w-md lg:max-w-lg">
-          <CardContent>
-            <GeneralPage />
-          </CardContent>
-        </Card>
-        <Card className="mx-auto max-w-md lg:max-w-lg">
-          <CardHeader>
-            <CardTitle className="text-base text-gray-400">Subscription</CardTitle>
-          </CardHeader>
-          <CardContent className="flex justify-center">
+        <GeneralPage />
+        <div className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
+          <CardTitle className="text-base text-gray-400 text-center">Subscription</CardTitle>
+          <div className="flex justify-center">
             <BillingButton />
-          </CardContent>
-        </Card>
-        <Card className="mx-auto max-w-md lg:max-w-lg">
-          <CardHeader>
-            <CardTitle className="text-base text-gray-400">Invite Team Member</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <InviteTeamMember />
-          </CardContent>
-        </Card>
-        <Card className="mx-auto max-w-md lg:max-w-lg">
-          <CardContent>
-            <ActivityPage />
-          </CardContent>
-        </Card>
-        <Card className="mx-auto max-w-md lg:max-w-lg">
-          <CardContent>
-            <SecurityPage />
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+        <div className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
+          <CardTitle className="text-base text-gray-400 text-center">Invite Team Member</CardTitle>
+          <InviteTeamMember />
+        </div>
+        <ActivityPage />
+        <SecurityPage />
       </div>
     </section>
   );
