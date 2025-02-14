@@ -48,6 +48,7 @@ export function InviteTeamMember() {
               name="email"
               type="email"
               placeholder="Enter email"
+              className="border-gray-700"
               required
               disabled={!isOwner}
             />

@@ -73,7 +73,10 @@ export default function SecurityPage() {
                 id="current-password"
                 name="currentPassword"
                 type="password"
+                className="border-gray-700"
                 autoComplete="current-password"
+                className="border-gray-700"
+                className="border-gray-700"
                 required
                 minLength={8}
                 maxLength={100}
@@ -85,6 +88,7 @@ export default function SecurityPage() {
                 id="new-password"
                 name="newPassword"
                 type="password"
+                className="border-gray-700"
                 autoComplete="new-password"
                 required
                 minLength={8}

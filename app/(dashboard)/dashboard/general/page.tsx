@@ -46,6 +46,7 @@ export default function GeneralPage() {
               <Input
                 id="name"
                 name="name"
+                className="border-gray-700"
                 placeholder="Enter your name"
                 defaultValue={user?.name || ''}
                 required
@@ -57,6 +58,7 @@ export default function GeneralPage() {
                 id="email"
                 name="email"
                 type="email"
+                className="border-gray-700"
                 placeholder="Enter your email"
                 defaultValue={user?.email || ''}
                 required
