@@ -50,7 +50,7 @@ const DragAndDropUpload: React.FC = () => {
 
   return (
     <div className="space-y-1">
-      <label className="block text-sm font-medium text-gray-700">
+      <label className="block text-sm font-medium bg-gradient-to-br from-[#584235] via-[#2C2420] to-[#1A1614] text-transparent bg-clip-text animate-gradient">
         Upload A CV
       </label>
       <div
