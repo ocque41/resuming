@@ -55,7 +55,7 @@ const DragAndDropUpload: React.FC = () => {
       </label>
       <div
         {...getRootProps()}
-        className={`w-full h-32 flex justify-center items-center border rounded-lg shadow-md
+        className={`w-full max-w-md lg:max-w-2xl h-32 flex justify-center items-center border rounded-lg shadow-md
           transition-all duration-200 cursor-pointer focus:outline-none focus:ring-0
           ${isDragActive ? "border-indigo-600" : "border-gray-300"} bg-gradient-to-br from-[#584235] via-[#2C2420] to-[#1A1614]`}
       >
