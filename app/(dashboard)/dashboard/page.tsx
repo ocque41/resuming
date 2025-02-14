@@ -49,17 +49,11 @@ export default async function DashboardPage() {
           <DialogContent>
             <DialogHeader>
               <DialogBody>
-                <ul className="space-y-2 flex flex-col items-center">
-                  <li>
-                    <BillingButton />
-                  </li>
-                  <li>
-                    <a href="/dashboard/settings" className="block text-center bg-indigo-600 text-white py-2 px-4 rounded-md">Settings</a>
-                  </li>
-                  <li>
-                    <button className="block w-full text-center bg-indigo-600 text-white py-2 px-4 rounded-md">Log Out</button>
-                  </li>
-                </ul>
+                <div className="flex flex-col items-center space-y-2">
+                  <a href="/dashboard/settings" className="text-blue-600 hover:underline">Settings</a>
+                  <span className="text-gray-400">|</span>
+                  <a href="#" className="text-blue-600 hover:underline">Log Out</a>
+                </div>
               </DialogBody>
             </DialogHeader>
           </DialogContent>
