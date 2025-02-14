@@ -1,5 +1,4 @@
 // lib/metadata/analyze.ts
-import { openai } from "@ai-sdk/openai";
 
 /**
  * Analyzes the given CV prompt using the AI model and returns the parsed JSON response.
@@ -7,11 +6,9 @@ import { openai } from "@ai-sdk/openai";
  * @returns Parsed JSON output from the AI model.
  */
 export async function analyzeCVWithAI(prompt: string): Promise<any> {
-  // Create the model instance.
-  const model = openai("gpt-4o");
+  // Use a dynamic import to load the OpenAI SDK at runtime.
+  const { openai } = await import("@ai-sdk/openai");
 
-  // Construct the tool message.
-  // The 'type' property is set to the literal "tool-result" as required.
   const toolMessage = {
     role: "tool" as const,
     content: [
@@ -25,15 +22,13 @@ export async function analyzeCVWithAI(prompt: string): Promise<any> {
     ]
   };
 
-  // Build the call options.
   const options = {
     inputFormat: "prompt" as const,
     prompt: [toolMessage],
     mode: { type: "regular" as const }
   };
 
-  // Call the model to generate output.
-  const response = await model.doGenerate(options);
+  const response = await openai("gpt-4o").doGenerate(options);
   if (!response.text) {
     throw new Error("No text returned from AI analysis.");
   }
