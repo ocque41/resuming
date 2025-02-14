@@ -3,6 +3,7 @@ import ActivityPage from '../activity/page';
 import GeneralPage from '../general/page';
 import SecurityPage from '../security/page';
 import { InviteTeamMember } from '../invite-team';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import BillingButton from '../billing-button';
 import { ArticleTitle } from '@/components/ui/article';
 
