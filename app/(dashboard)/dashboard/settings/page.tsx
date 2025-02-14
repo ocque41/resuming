@@ -25,7 +25,7 @@ export default async function SettingsPage() {
       </header>
       <div className="space-y-8 mx-auto max-w-md lg:max-w-2xl">
         <GeneralPage />
-        <Card>
+        <Card className="mx-auto max-w-md lg:max-w-2xl">
           <CardHeader>
             <CardTitle className="text-base text-gray-400">Subscription</CardTitle>
           </CardHeader>
@@ -33,7 +33,7 @@ export default async function SettingsPage() {
             <BillingButton />
           </CardContent>
         </Card>
-        <InviteTeamMember />
+        <InviteTeamMember className="mx-auto max-w-md lg:max-w-2xl" />
         <ActivityPage />
         <SecurityPage />
       </div>
