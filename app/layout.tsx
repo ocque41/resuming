@@ -46,7 +46,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-[100dvh] bg-[#050505]">
+      <body className="min-h-[100dvh] bg-black">
         <I18nProvider>
           <ThemeProvider defaultTheme="light" storageKey="app-theme">
             <UserProvider userPromise={userPromise}>
