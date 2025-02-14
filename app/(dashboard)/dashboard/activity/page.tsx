@@ -78,7 +78,7 @@ export default async function ActivityPage() {
       </h1>
       <Card>
         <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
+          <CardTitle className="text-sm text-gray-500">Recent Activity</CardTitle>
         </CardHeader>
         <CardContent>
           {logs.length > 0 ? (

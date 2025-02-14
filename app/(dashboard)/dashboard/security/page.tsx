@@ -63,7 +63,7 @@ export default function SecurityPage() {
       </h1>
       <Card className="mb-8">
         <CardHeader>
-          <CardTitle>Password</CardTitle>
+          <CardTitle className="text-sm text-gray-500">Password</CardTitle>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handlePasswordSubmit}>
@@ -110,7 +110,7 @@ export default function SecurityPage() {
             )}
             <Button
               type="submit"
-              className="bg-orange-500 hover:bg-orange-600 text-white"
+              className="bg-[#584235] hover:bg-[#6b4f3b] text-white"
               disabled={isPasswordPending}
             >
               {isPasswordPending ? (
