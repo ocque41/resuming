@@ -25,7 +25,7 @@ export default async function SettingsPage() {
       </header>
       <div className="space-y-8 mx-auto max-w-md lg:max-w-2xl">
         <GeneralPage />
-        <Card className="mx-auto max-w-md lg:max-w-2xl">
+        <Card className="mx-auto max-w-md lg:max-w-lg">
           <CardHeader>
             <CardTitle className="text-base text-gray-400">Subscription</CardTitle>
           </CardHeader>
@@ -33,7 +33,10 @@ export default async function SettingsPage() {
             <BillingButton />
           </CardContent>
         </Card>
-        <Card className="mx-auto max-w-md lg:max-w-2xl">
+        <Card className="mx-auto max-w-md lg:max-w-lg">
+          <CardHeader>
+            <CardTitle className="text-base text-gray-400">Invite Team Member</CardTitle>
+          </CardHeader>
           <CardContent className="flex justify-center">
             <InviteTeamMember />
           </CardContent>
