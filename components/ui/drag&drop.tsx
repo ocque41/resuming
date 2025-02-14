@@ -55,9 +55,9 @@ const DragAndDropUpload: React.FC = () => {
       </label>
       <div
         {...getRootProps()}
-        className={`w-full h-32 flex justify-center items-center border rounded-md 
-          transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500
-          ${isDragActive ? "border-blue-500 bg-blue-50" : "border-gray-300 bg-white"}`}
+        className={`w-full h-32 flex justify-center items-center border rounded-lg shadow-md
+          transition-all duration-200 cursor-pointer focus:outline-none focus:ring-0
+          ${isDragActive ? "border-indigo-600 bg-indigo-50" : "border-gray-300 bg-white"}`}
       >
         <input {...getInputProps()} className="hidden" />
         <div className="space-y-1 text-center">
