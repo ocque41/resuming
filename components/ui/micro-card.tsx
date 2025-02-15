@@ -22,9 +22,6 @@ const MicroCard = React.forwardRef<
       )}
       {...props}
     >
-      <a href="/manage-subscription" className="block text-center">Manage Subscription</a>
-      <a href="/dashboard/settings" className="block text-center">Settings</a>
-      <a href="/logout" className="block text-center">Log Out</a>
     </div>
   );
 });
