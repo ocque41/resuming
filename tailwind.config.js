@@ -102,7 +102,7 @@ export default {
             },
             to: {
               height: '0'
-            }
+            },
             avatar: {
               gradientFrom: "hsl(var(--avatar-gradient-from))",
               gradientVia: "hsl(var(--avatar-gradient-via))",
