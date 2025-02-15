@@ -63,7 +63,7 @@ export default async function DashboardPage() {
       <CardTitle className="text-sm text-gray-500 text-center mt-2 mx-auto max-w-md lg:max-w-2xl">
         General Suite
       </CardTitle>
-      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
+      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border-transparent">
         <CardContent>
           <Table className="w-full">
             <TableHeader>
