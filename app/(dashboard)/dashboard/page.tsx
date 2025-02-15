@@ -2,7 +2,7 @@
 import { redirect } from "next/navigation";
 import { getTeamForUser, getUser, getCVsForUser } from "@/lib/db/queries";
 import { ArticleTitle } from "@/components/ui/article";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { MicroCard } from "@/components/ui/micro-card";
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { cn } from '@/lib/utils';
 import BillingButton from './billing-button';
@@ -41,10 +41,9 @@ export default async function DashboardPage() {
         </ArticleTitle>
         <Dialog>
           <DialogTrigger asChild>
-            <Avatar className={cn("cursor-pointer h-10 w-10 lg:h-12 lg:w-12 ml-auto", "bg-[#584235]")}>
-              <AvatarImage src="/path/to/avatar.jpg" alt="User Avatar" />
-              <AvatarFallback>U</AvatarFallback>
-            </Avatar>
+            <MicroCard className={cn("cursor-pointer ml-auto", "bg-[#584235]")}>
+              <img src="/path/to/avatar.jpg" alt="User Avatar" className="h-full w-full rounded-full" />
+            </MicroCard>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
