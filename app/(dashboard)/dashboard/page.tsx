@@ -42,7 +42,7 @@ export default async function DashboardPage() {
         <Dialog>
           <DialogTrigger asChild>
             <MicroCard className={cn("cursor-pointer ml-auto", "bg-[#584235]")}>
-              <img src="/path/to/avatar.jpg" alt="User Avatar" className="h-full w-full rounded-full" />
+              <span className="flex items-center justify-center h-full w-full rounded-full text-white text-lg">U</span>
             </MicroCard>
           </DialogTrigger>
           <DialogContent>
