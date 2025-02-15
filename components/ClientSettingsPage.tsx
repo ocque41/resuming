@@ -1,5 +1,4 @@
 // components/ClientSettingsDialogContent.tsx
-"use client";
 
 import ActivityPage from "app/(dashboard)/dashboard/activity/page";
 import GeneralPage from "app/(dashboard)/dashboard/general/page";
