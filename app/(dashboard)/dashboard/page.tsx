@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getTeamForUser, getUser, getCVsForUser } from "@/lib/db/queries";
+import { getTeamForUser, getUser, getCVsForUser } from "@/lib/db/queries.server";
 import { ArticleTitle } from "@/components/ui/article";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import {

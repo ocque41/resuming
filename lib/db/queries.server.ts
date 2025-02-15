@@ -1,4 +1,4 @@
-// lib/db/queries.ts
+// lib/db/queries.server.ts
 import { desc, and, eq, isNull } from 'drizzle-orm';
 import { db } from './drizzle';
 import { activityLogs, teamMembers, teams, users, cvs } from './schema';
@@ -129,7 +129,6 @@ export async function getTeamForUser(userId: number) {
   return result?.teamMembers[0]?.team || null;
 }
 
-// New query to get the CVs for a given user
 export async function getCVsForUser(userId: number) {
   return await db.select().from(cvs).where(eq(cvs.userId, userId));
 }
