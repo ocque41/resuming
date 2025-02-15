@@ -102,12 +102,13 @@ export default {
             },
             to: {
               height: '0'
-            },
-            avatar: {
-              gradientFrom: "hsl(var(--avatar-gradient-from))",
-              gradientVia: "hsl(var(--avatar-gradient-via))",
-              gradientTo: "hsl(var(--avatar-gradient-to))",
-            },
+            }
+          },
+          avatar: {
+            gradientFrom: "hsl(var(--avatar-gradient-from))",
+            gradientVia: "hsl(var(--avatar-gradient-via))",
+            gradientTo: "hsl(var(--avatar-gradient-to))",
+          }
         },
         animation: {
           'accordion-down': 'accordion-down 0.2s ease-out',
