@@ -1,3 +1,4 @@
+// components/UserMenu.tsx
 "use client";
 
 import { useState, Fragment } from "react";
@@ -5,15 +6,29 @@ import { Menu, Transition } from "@headlessui/react";
 import { useRouter } from "next/navigation";
 import { MicroCard } from "@/components/ui/micro-card";
 import MyDialog from "@/components/ui/dialogui";
-import ClientSettingsPage from "@/components/ClientSettingsPage";
+import ClientSettingsDialogContent from "@/components/ClientSettingsPage";
 
 export default function UserMenu({ teamData }: { teamData: any }) {
   const router = useRouter();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const handleLogout = () => {
-    // Redirect to the home page outside the app.
     window.location.href = "/";
+  };
+
+  const handleManageSubscription = async () => {
+    try {
+      // Call your API route which returns a JSON with a valid "url" for the Stripe portal
+      const res = await fetch("/api/billing-portal", { method: "POST" });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        console.error("No URL returned for billing portal");
+      }
+    } catch (error) {
+      console.error("Error redirecting to billing portal:", error);
+    }
   };
 
   return (
@@ -35,15 +50,14 @@ export default function UserMenu({ teamData }: { teamData: any }) {
           leaveFrom="transform opacity-100 scale-100"
           leaveTo="transform opacity-0 scale-95"
         >
-          <Menu.Items className="absolute right-0 mt-2 w-56 origin-top-right bg-black text-white divide-y divide-gray-700 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+          {/* Set dropdown background to #050505 */}
+          <Menu.Items className="absolute right-0 mt-2 w-56 origin-top-right bg-[#050505] text-white divide-y divide-gray-700 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
             <div className="py-1">
               <Menu.Item>
                 {({ active }) => (
                   <button
-                    onClick={() => router.push("/manage-subscription")}
-                    className={`${
-                      active ? "bg-gray-700" : ""
-                    } block w-full text-left px-4 py-2 text-sm`}
+                    onClick={handleManageSubscription}
+                    className={`${active ? "bg-gray-700" : ""} block w-full text-left px-4 py-2 text-sm`}
                   >
                     Manage Subscription
                   </button>
@@ -53,9 +67,7 @@ export default function UserMenu({ teamData }: { teamData: any }) {
                 {({ active }) => (
                   <button
                     onClick={() => setIsSettingsOpen(true)}
-                    className={`${
-                      active ? "bg-gray-700" : ""
-                    } block w-full text-left px-4 py-2 text-sm`}
+                    className={`${active ? "bg-gray-700" : ""} block w-full text-left px-4 py-2 text-sm`}
                   >
                     Settings
                   </button>
@@ -65,9 +77,7 @@ export default function UserMenu({ teamData }: { teamData: any }) {
                 {({ active }) => (
                   <button
                     onClick={handleLogout}
-                    className={`${
-                      active ? "bg-gray-700" : ""
-                    } block w-full text-left px-4 py-2 text-sm`}
+                    className={`${active ? "bg-gray-700" : ""} block w-full text-left px-4 py-2 text-sm`}
                   >
                     Log Out
                   </button>
@@ -77,13 +87,13 @@ export default function UserMenu({ teamData }: { teamData: any }) {
           </Menu.Items>
         </Transition>
       </Menu>
-      {/* Settings dialog which uses MyDialog */}
       <MyDialog
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         title="User Settings"
+        panelClassName="max-w-4xl bg-transparent p-0"
       >
-        <ClientSettingsPage teamData={teamData} />
+        <ClientSettingsDialogContent teamData={teamData} onClose={() => setIsSettingsOpen(false)} />
       </MyDialog>
     </>
   );

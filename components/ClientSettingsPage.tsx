@@ -1,40 +1,53 @@
+// components/ClientSettingsDialogContent.tsx
 "use client";
 
-import { useState } from "react";
-import { TeamDataWithMembers, User } from "@/lib/db/schema";
-import { removeTeamMember } from "@/app/(login)/actions";
+import ActivityPage from "app/(dashboard)/dashboard/activity/page";
+import GeneralPage from "app/(dashboard)/dashboard/general/page";
+import SecurityPage from "app/(dashboard)/dashboard/security/page";
+import { InviteTeamMember } from "app/(dashboard)/dashboard/invite-team";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import BillingButton from "app/(dashboard)/dashboard/billing-button";
+import { ArticleTitle } from "@/components/ui/article";
 
-type ActionState = {
-  error?: string;
-  success?: string;
-};
+interface ClientSettingsDialogContentProps {
+  teamData: any;
+  onClose: () => void;
+}
 
-export default function ClientSettingsPage({ teamData }: { teamData: TeamDataWithMembers }) {
-  const [removeState, setRemoveState] = useState<ActionState>({ error: "", success: "" });
-  const [isRemovePending, setIsRemovePending] = useState(false);
-
-  const handleRemoveAction = async (memberId: string) => {
-    setIsRemovePending(true);
-    try {
-      const formData = new FormData();
-      formData.append("memberId", memberId);
-      await removeTeamMember({ error: "", success: "" }, formData);
-      setRemoveState({ success: "Member removed successfully", error: "" });
-    } catch (error) {
-      setRemoveState({ error: "Failed to remove member", success: "" });
-    } finally {
-      setIsRemovePending(false);
-    }
-  };
-
-  const getUserDisplayName = (user: Pick<User, "id" | "name" | "email">) => {
-    return user.name || user.email || "Unknown User";
-  };
-
+export default function ClientSettingsDialogContent({ teamData, onClose }: ClientSettingsDialogContentProps) {
   return (
-    <section>
-      {/* Your interactive settings content goes here */}
-      <p>Settings content goes here.</p>
+    <section className="flex-1 p-4 lg:p-8 bg-black text-white min-h-screen">
+      <div className="space-y-8 mx-auto max-w-md lg:max-w-2xl">
+        <header className="flex items-center justify-between p-4 lg:p-8">
+          <div className="flex items-center justify-between w-full">
+            <ArticleTitle className="text-lg lg:text-2xl font-medium ml-4">
+              User Settings
+            </ArticleTitle>
+            <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">
+              Go Back
+            </button>
+          </div>
+        </header>
+        <GeneralPage />
+        <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border-transparent">
+          <CardHeader>
+            <CardTitle className="text-base text-gray-400 text-center">Subscription</CardTitle>
+          </CardHeader>
+          <CardContent className="flex justify-center">
+            <BillingButton />
+          </CardContent>
+        </Card>
+        <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border-transparent">
+          <CardHeader>
+            <CardTitle className="text-base text-gray-400 text-center">Invite Team Member</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <InviteTeamMember />
+          </CardContent>
+        </Card>
+        <ActivityPage />
+        <SecurityPage />
+      </div>
     </section>
   );
 }

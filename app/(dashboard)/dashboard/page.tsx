@@ -1,5 +1,6 @@
+// app/(dashboard)/dashboard/page.tsx
 import { redirect } from "next/navigation";
-import { getTeamForUser, getUser, getCVsForUser } from "@/lib/db/queries.server";
+import { getUser, getTeamForUser, getCVsForUser } from "@/lib/db/queries.server"; // your server queries file
 import { ArticleTitle } from "@/components/ui/article";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import {
@@ -11,11 +12,8 @@ import {
   TableCell,
 } from "@/components/ui/table";
 
-// Import the client wrapper and the delete button component.
 import DashboardClientWrapper from "@/components/dashboard-client-wrapper";
 import DeleteCVButton from "@/components/delete-cv";
-
-// Import the new user menu dropdown component.
 import UserMenu from "@/components/UserMenu";
 
 export default async function DashboardPage() {
@@ -23,12 +21,10 @@ export default async function DashboardPage() {
   if (!user) {
     redirect("/sign-in");
   }
-
   const teamData = await getTeamForUser(user.id);
   if (!teamData) {
     throw new Error("Team not found");
   }
-
   const cvs = await getCVsForUser(user.id);
 
   return (
@@ -37,7 +33,7 @@ export default async function DashboardPage() {
         <ArticleTitle className="text-md lg:text-xl font-medium ml-4">
           Dashboard
         </ArticleTitle>
-        {/* Use the new headless UI dropdown */}
+        {/* Pass teamData as a prop so that UserMenu (and the Settings dialog) have the required info */}
         <UserMenu teamData={teamData} />
       </header>
       <CardTitle className="text-sm text-gray-500 text-center mt-2 mx-auto max-w-md lg:max-w-2xl">
@@ -83,7 +79,6 @@ export default async function DashboardPage() {
           </Table>
         </CardContent>
       </Card>
-      {/* Render client-only interactive components */}
       <DashboardClientWrapper cvs={cvs} />
     </>
   );
