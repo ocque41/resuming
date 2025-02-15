@@ -4,7 +4,7 @@ import { useState, Fragment } from "react";
 import { Menu, Transition } from "@headlessui/react";
 import { useRouter } from "next/navigation";
 import { MicroCard } from "@/components/ui/micro-card";
-import MyDialog from "@/components/ui/dialog";
+import MyDialog from "@/components/ui/dialogui";
 import ClientSettingsPage from "@/components/ClientSettingsPage";
 
 export default function UserMenu({ teamData }: { teamData: any }) {
