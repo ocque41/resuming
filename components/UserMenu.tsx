@@ -6,7 +6,7 @@ import { Menu, Transition } from "@headlessui/react";
 import { useRouter } from "next/navigation";
 import { MicroCard } from "@/components/ui/micro-card";
 import MyDialog from "@/components/ui/dialogui";
-import ClientSettingsDialogContent from "@/components/ClientSettingsDialogContent";
+import ClientSettingsDialogContent from "@/components/ClientSettingsPage";
 import { customerPortalAction } from "@/lib/payments/actions";
 
 interface UserMenuProps {
