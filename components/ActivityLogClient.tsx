@@ -89,7 +89,6 @@ export default function ActivityLogClient({ logs }: ActivityLogClientProps) {
           {logs.length > 0 ? (
             <ul className="space-y-4">
               {logs.map((log) => {
-                // Explicitly cast log.action to ActivityType
                 const Icon = iconMap[log.action as ActivityType] || Settings;
                 const formattedAction = formatAction(log.action);
                 return (

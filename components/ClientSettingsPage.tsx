@@ -5,25 +5,19 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import BillingButton from "app/(dashboard)/dashboard/billing-button";
 import { ArticleTitle } from "@/components/ui/article";
 import { InviteTeamMember } from "app/(dashboard)/dashboard/invite-team";
-
-// Import new client-presentational components
+import GeneralPage from "app/(dashboard)/dashboard/general/page";
+import SecurityPage from "app/(dashboard)/dashboard/security/page";
 import ActivityLogClient from "@/components/ActivityLogClient";
-import GeneralSettingsClient from "@/components/GeneralSettingsClient";
-import SecuritySettingsClient from "@/components/SecuritySettingsClient";
 
 interface ClientSettingsDialogContentProps {
   teamData: any;
   activityLogs: any[];
-  generalSettings: any;
-  securitySettings: any;
   onClose: () => void;
 }
 
 export default function ClientSettingsDialogContent({
   teamData,
   activityLogs,
-  generalSettings,
-  securitySettings,
   onClose,
 }: ClientSettingsDialogContentProps) {
   return (
@@ -39,7 +33,7 @@ export default function ClientSettingsDialogContent({
             </button>
           </div>
         </header>
-        <GeneralSettingsClient data={generalSettings} />
+        <GeneralPage />
         <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border-transparent">
           <CardHeader>
             <CardTitle className="text-base text-gray-400 text-center">Subscription</CardTitle>
@@ -57,7 +51,7 @@ export default function ClientSettingsDialogContent({
           </CardContent>
         </Card>
         <ActivityLogClient logs={activityLogs} />
-        <SecuritySettingsClient data={securitySettings} />
+        <SecurityPage />
       </div>
     </section>
   );

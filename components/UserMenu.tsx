@@ -6,39 +6,32 @@ import { Menu, Transition } from "@headlessui/react";
 import { useRouter } from "next/navigation";
 import { MicroCard } from "@/components/ui/micro-card";
 import MyDialog from "@/components/ui/dialogui";
-import ClientSettingsDialogContent from "@/components/ClientSettingsPage";
+import ClientSettingsDialogContent from "@/components/ClientSettingsDialogContent";
+import { customerPortalAction } from "@/lib/payments/actions";
 
 interface UserMenuProps {
   teamData: any;
   activityLogs: any[];
-  generalSettings: any;
-  securitySettings: any;
 }
 
-export default function UserMenu({
-  teamData,
-  activityLogs,
-  generalSettings,
-  securitySettings,
-}: UserMenuProps) {
+export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
   const router = useRouter();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isBillingLoading, setIsBillingLoading] = useState(false);
 
   const handleLogout = () => {
     window.location.href = "/";
   };
 
   const handleManageSubscription = async () => {
+    setIsBillingLoading(true);
     try {
-      const res = await fetch("/api/billing-portal", { method: "POST" });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        console.error("No URL returned for billing portal");
-      }
+      // Use the same customer portal action as the BillingButton
+      await customerPortalAction(new FormData());
     } catch (error) {
       console.error("Error redirecting to billing portal:", error);
+    } finally {
+      setIsBillingLoading(false);
     }
   };
 
@@ -68,8 +61,9 @@ export default function UserMenu({
                   <button
                     onClick={handleManageSubscription}
                     className={`${active ? "bg-gray-700" : ""} block w-full text-left px-4 py-2 text-sm`}
+                    disabled={isBillingLoading}
                   >
-                    Manage Subscription
+                    {isBillingLoading ? "Loading..." : "Manage Subscription"}
                   </button>
                 )}
               </Menu.Item>
@@ -101,13 +95,11 @@ export default function UserMenu({
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         title="User Settings"
-        panelClassName="max-w-4xl bg-transparent p-0"
+        panelClassName="max-w-4xl bg-transparent p-0 border-0 shadow-none"
       >
         <ClientSettingsDialogContent
           teamData={teamData}
           activityLogs={activityLogs}
-          generalSettings={generalSettings}
-          securitySettings={securitySettings}
           onClose={() => setIsSettingsOpen(false)}
         />
       </MyDialog>

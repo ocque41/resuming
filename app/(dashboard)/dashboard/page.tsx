@@ -27,9 +27,6 @@ export default async function DashboardPage() {
   }
   const cvs = await getCVsForUser(user.id);
   const activityLogs = await getActivityLogs(); // Fetch activity logs for UserMenu
-  // Dummy settings data; replace with real settings as needed.
-  const generalSettings = {};
-  const securitySettings = {};
 
   return (
     <>
@@ -40,8 +37,6 @@ export default async function DashboardPage() {
         <UserMenu 
           teamData={teamData}
           activityLogs={activityLogs}
-          generalSettings={generalSettings}
-          securitySettings={securitySettings}
         />
       </header>
       <CardTitle className="text-sm text-gray-500 text-center mt-2 mx-auto max-w-md lg:max-w-2xl">
