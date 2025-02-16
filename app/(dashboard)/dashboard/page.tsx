@@ -1,6 +1,6 @@
 // app/(dashboard)/dashboard/page.tsx
 import { redirect } from "next/navigation";
-import { getUser, getTeamForUser, getCVsForUser } from "@/lib/db/queries.server"; // your server queries file
+import { getUser, getTeamForUser, getCVsForUser, getActivityLogs } from "@/lib/db/queries.server";
 import { ArticleTitle } from "@/components/ui/article";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import {
@@ -26,6 +26,10 @@ export default async function DashboardPage() {
     throw new Error("Team not found");
   }
   const cvs = await getCVsForUser(user.id);
+  const activityLogs = await getActivityLogs(); // Fetch activity logs for UserMenu
+  // Dummy settings data; replace with real settings as needed.
+  const generalSettings = {};
+  const securitySettings = {};
 
   return (
     <>
@@ -33,8 +37,12 @@ export default async function DashboardPage() {
         <ArticleTitle className="text-md lg:text-xl font-medium ml-4">
           Dashboard
         </ArticleTitle>
-        {/* Pass teamData as a prop so that UserMenu (and the Settings dialog) have the required info */}
-        <UserMenu teamData={teamData} />
+        <UserMenu 
+          teamData={teamData}
+          activityLogs={activityLogs}
+          generalSettings={generalSettings}
+          securitySettings={securitySettings}
+        />
       </header>
       <CardTitle className="text-sm text-gray-500 text-center mt-2 mx-auto max-w-md lg:max-w-2xl">
         General Suite

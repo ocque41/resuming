@@ -8,7 +8,19 @@ import { MicroCard } from "@/components/ui/micro-card";
 import MyDialog from "@/components/ui/dialogui";
 import ClientSettingsDialogContent from "@/components/ClientSettingsPage";
 
-export default function UserMenu({ teamData }: { teamData: any }) {
+interface UserMenuProps {
+  teamData: any;
+  activityLogs: any[];
+  generalSettings: any;
+  securitySettings: any;
+}
+
+export default function UserMenu({
+  teamData,
+  activityLogs,
+  generalSettings,
+  securitySettings,
+}: UserMenuProps) {
   const router = useRouter();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -18,7 +30,6 @@ export default function UserMenu({ teamData }: { teamData: any }) {
 
   const handleManageSubscription = async () => {
     try {
-      // Call your API route which returns a JSON with a valid "url" for the Stripe portal
       const res = await fetch("/api/billing-portal", { method: "POST" });
       const data = await res.json();
       if (data.url) {
@@ -50,7 +61,6 @@ export default function UserMenu({ teamData }: { teamData: any }) {
           leaveFrom="transform opacity-100 scale-100"
           leaveTo="transform opacity-0 scale-95"
         >
-          {/* Set dropdown background to #050505 */}
           <Menu.Items className="absolute right-0 mt-2 w-56 origin-top-right bg-[#050505] text-white divide-y divide-gray-700 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
             <div className="py-1">
               <Menu.Item>
@@ -93,7 +103,13 @@ export default function UserMenu({ teamData }: { teamData: any }) {
         title="User Settings"
         panelClassName="max-w-4xl bg-transparent p-0"
       >
-        <ClientSettingsDialogContent teamData={teamData} onClose={() => setIsSettingsOpen(false)} />
+        <ClientSettingsDialogContent
+          teamData={teamData}
+          activityLogs={activityLogs}
+          generalSettings={generalSettings}
+          securitySettings={securitySettings}
+          onClose={() => setIsSettingsOpen(false)}
+        />
       </MyDialog>
     </>
   );
