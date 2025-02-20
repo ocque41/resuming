@@ -11,7 +11,10 @@ export async function GET(request: Request) {
   }
 
   // Use non-null assertion operator to ensure fileName is a string.
-  const cvRecord = await getCVByFileName(fileName!);
+  if (!fileName) {
+    return NextResponse.json({ error: 'Missing fileName parameter' }, { status: 400 });
+  }
+  const cvRecord = await getCVByFileName(fileName);
   if (!cvRecord) {
     return NextResponse.json({ error: 'CV not found' }, { status: 404 });
   }
