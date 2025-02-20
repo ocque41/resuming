@@ -45,8 +45,8 @@ export default function AnalyzeCVCard({ cvs }: AnalyzeCVCardProps) {
   return (
     <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border-transparent">
       <CardContent>
-        <div className="flex justify-center items-center h-32 bg-gray-100 rounded-lg mb-4">
-          {/* Pure decorative animation */}
+        <div className="flex justify-center items-center h-24 bg-gray-100 rounded-lg mb-4">
+          {/* Decorative animation */}
           <span className="text-gray-500">Animation Placeholder</span>
         </div>
         <ComboboxPopover
@@ -57,27 +57,33 @@ export default function AnalyzeCVCard({ cvs }: AnalyzeCVCardProps) {
             handleAnalyze(selectedCV);
           }}
         />
-        {loading && <p className="mt-4">Analyzing CV...</p>}
-        {error && <p className="mt-4 text-red-500">{error}</p>}
+        {loading && <p className="mt-4 text-sm">Analyzing CV...</p>}
+        {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
         {analysis && (
-          <Article className="mt-4">
-            <ArticleTitle>CV Analysis Results</ArticleTitle>
-            <ArticleMeta>ATS Score: {analysis.atsScore}%</ArticleMeta>
-            <ArticleContent>
+          <Article className="mt-4 p-4 border rounded shadow-sm">
+            <ArticleTitle className="text-base mb-2">CV Analysis</ArticleTitle>
+            <ArticleMeta className="text-xs text-gray-600 mb-2">
+              ATS Score: {analysis.atsScore}%
+            </ArticleMeta>
+            <ArticleContent className="text-sm mb-2">
               <strong>Strengths:</strong>
-              <ul>
+              <ul className="list-disc ml-4 mt-1">
                 {analysis.strengths.map((s, idx) => (
                   <li key={idx}>{s}</li>
                 ))}
               </ul>
+            </ArticleContent>
+            <ArticleContent className="text-sm mb-2">
               <strong>Weaknesses:</strong>
-              <ul>
+              <ul className="list-disc ml-4 mt-1">
                 {analysis.weaknesses.map((w, idx) => (
                   <li key={idx}>{w}</li>
                 ))}
               </ul>
+            </ArticleContent>
+            <ArticleContent className="text-sm">
               <strong>Recommendations:</strong>
-              <ul>
+              <ul className="list-disc ml-4 mt-1">
                 {analysis.recommendations.map((r, idx) => (
                   <li key={idx}>{r}</li>
                 ))}

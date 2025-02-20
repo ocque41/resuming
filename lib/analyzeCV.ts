@@ -1,9 +1,8 @@
 // lib/analyzeCV.ts
 export async function analyzeCV(rawText: string): Promise<any> {
-    // Clean the text: remove extra whitespace
     const cleanedText = rawText.trim().replace(/\s+/g, ' ');
   
-    // Construct a prompt that instructs the AI to output JSON
+    // Construct a prompt that instructs the AI to output JSON.
     const prompt = `You are an expert CV reviewer. Please analyze the following CV content and provide:
   - ATS Score (as a percentage)
   - A list of strengths
@@ -22,8 +21,7 @@ export async function analyzeCV(rawText: string): Promise<any> {
         'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        // For faster response within the 10s limit, you might use a lighter model.
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-3.5-turbo',  // Using a lighter model for faster response
         messages: [{ role: 'user', content: prompt }],
         stream: false,
       }),

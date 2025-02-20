@@ -132,3 +132,30 @@ export async function getTeamForUser(userId: number) {
 export async function getCVsForUser(userId: number) {
   return await db.select().from(cvs).where(eq(cvs.userId, userId));
 }
+
+// ------------------------------
+// New functions for CV analysis
+// ------------------------------
+
+/**
+ * Retrieves a CV record by its fileName.
+ */
+export async function getCVByFileName(fileName: string) {
+  const result = await db
+    .select()
+    .from(cvs)
+    .where(eq(cvs.fileName, fileName))
+    .limit(1);
+  return result.length ? result[0] : null;
+}
+
+/**
+ * Updates the CV record with new analysis metadata.
+ * @param cvId - The ID of the CV record.
+ * @param metadata - The analysis metadata as a JSON string.
+ * @returns A promise that resolves to true when the update is complete.
+ */
+export async function updateCVAnalysis(cvId: number, metadata: string): Promise<boolean> {
+  await db.update(cvs).set({ metadata }).where(eq(cvs.id, cvId));
+  return true;
+}

@@ -19,6 +19,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'CV not found' }, { status: 404 });
   }
 
+  if (!cvRecord.rawText) {
+    return NextResponse.json({ error: 'CV text content not found' }, { status: 400 });
+  }
+
   try {
     // Use the rawText from the retrieved CV record for analysis.
     const analysis = await analyzeCV(cvRecord.rawText);
