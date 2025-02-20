@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getUser, getTeamForUser, getCVsForUser, getActivityLogs } from "@/lib/db/queries.server";
 import { ArticleTitle } from "@/components/ui/article";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
+import { ComboboxPopover } from "@/components/ui/combobox";
 import {
   Table,
   TableHeader,
@@ -94,7 +95,7 @@ export default async function DashboardPage() {
           <ComboboxPopover
             label="Select a CV"
             options={cvs.map((cv) => cv.fileName)}
-            onSelect={(selectedCV) => console.log("Selected CV:", selectedCV)}
+            onSelect={(selectedCV: string) => console.log("Selected CV:", selectedCV)}
           />
         </CardContent>
       </Card>
