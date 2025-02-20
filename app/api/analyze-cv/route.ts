@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   if (!fileName) {
     return NextResponse.json({ error: 'Missing fileName parameter' }, { status: 400 });
   }
-  const cvRecord = await getCVByFileName(fileName);
+  const cvRecord = await getCVByFileName(fileName as string);
   if (!cvRecord) {
     return NextResponse.json({ error: 'CV not found' }, { status: 404 });
   }
