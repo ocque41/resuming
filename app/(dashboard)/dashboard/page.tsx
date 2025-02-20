@@ -52,7 +52,7 @@ export default async function DashboardPage() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>ATS Score</TableHead>
-                <TableHead>Analysis</TableHead>
+                <TableHead>Optimized</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -73,28 +73,9 @@ export default async function DashboardPage() {
                       {metadata?.atsScore ? `${metadata.atsScore}%` : "-"}
                     </TableCell>
                     <TableCell className="text-sm lg:text-base">
-                      {metadata ? (
-                        <div>
-                          <strong>Strengths:</strong>
-                          <ul>
-                            {metadata.strengths?.map((s: string, i: number) => (
-                              <li key={i}>{s}</li>
-                            ))}
-                          </ul>
-                          <strong>Weaknesses:</strong>
-                          <ul>
-                            {metadata.weaknesses?.map((w: string, i: number) => (
-                              <li key={i}>{w}</li>
-                            ))}
-                          </ul>
-                          <strong>Recommendations:</strong>
-                          <ul>
-                            {metadata.recommendations?.map((r: string, i: number) => (
-                              <li key={i}>{r}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : "-"}
+                      {metadata?.optimized 
+                        ? `Yes (${metadata.optimizedTimes || 1})` 
+                        : "No"}
                     </TableCell>
                     <TableCell className="text-sm lg:text-base">
                       <DeleteCVButton cvId={cv.id} />
