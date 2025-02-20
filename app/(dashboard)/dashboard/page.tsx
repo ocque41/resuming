@@ -52,7 +52,7 @@ export default async function DashboardPage() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>ATS Score</TableHead>
-                <TableHead>Optimized</TableHead>
+                <TableHead>Analysis</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -70,10 +70,31 @@ export default async function DashboardPage() {
                       {cv.fileName}
                     </TableCell>
                     <TableCell className="text-sm lg:text-base">
-                      {metadata?.atsScore || "-"}
+                      {metadata?.atsScore ? `${metadata.atsScore}%` : "-"}
                     </TableCell>
                     <TableCell className="text-sm lg:text-base">
-                      {metadata?.optimized || "-"}
+                      {metadata ? (
+                        <div>
+                          <strong>Strengths:</strong>
+                          <ul>
+                            {metadata.strengths?.map((s: string, i: number) => (
+                              <li key={i}>{s}</li>
+                            ))}
+                          </ul>
+                          <strong>Weaknesses:</strong>
+                          <ul>
+                            {metadata.weaknesses?.map((w: string, i: number) => (
+                              <li key={i}>{w}</li>
+                            ))}
+                          </ul>
+                          <strong>Recommendations:</strong>
+                          <ul>
+                            {metadata.recommendations?.map((r: string, i: number) => (
+                              <li key={i}>{r}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : "-"}
                     </TableCell>
                     <TableCell className="text-sm lg:text-base">
                       <DeleteCVButton cvId={cv.id} />
