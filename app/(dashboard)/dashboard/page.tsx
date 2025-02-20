@@ -84,11 +84,11 @@ export default async function DashboardPage() {
           </Table>
         </CardContent>
       </Card>
+      <DashboardClientWrapper cvs={cvs} />
       <CardTitle className="text-sm text-gray-500 text-center mt-2 mx-auto max-w-md lg:max-w-2xl">
         Analyze CV
       </CardTitle>
       <AnalyzeCVCard cvs={cvs.map((cv) => cv.fileName)} />
-      <DashboardClientWrapper cvs={cvs} />
     </>
   );
 }
