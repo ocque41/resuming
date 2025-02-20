@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { ComboboxPopover } from "@/components/ui/combobox";
+import { Article, ArticleTitle, ArticleMeta, ArticleContent } from "@/components/ui/article";
 
 interface AnalysisResult {
   atsScore: number | string;
@@ -45,7 +46,7 @@ export default function AnalyzeCVCard({ cvs }: AnalyzeCVCardProps) {
     <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border-transparent">
       <CardContent>
         <div className="flex justify-center items-center h-32 bg-gray-100 rounded-lg mb-4">
-          {/* Pure decorative animation placeholder */}
+          {/* Pure decorative animation */}
           <span className="text-gray-500">Animation Placeholder</span>
         </div>
         <ComboboxPopover
@@ -59,12 +60,30 @@ export default function AnalyzeCVCard({ cvs }: AnalyzeCVCardProps) {
         {loading && <p className="mt-4">Analyzing CV...</p>}
         {error && <p className="mt-4 text-red-500">{error}</p>}
         {analysis && (
-          <div className="mt-4 text-sm">
-            <p><strong>ATS Score:</strong> {analysis.atsScore}%</p>
-            <p><strong>Strengths:</strong> {analysis.strengths.join(", ")}</p>
-            <p><strong>Weaknesses:</strong> {analysis.weaknesses.join(", ")}</p>
-            <p><strong>Recommendations:</strong> {analysis.recommendations.join(", ")}</p>
-          </div>
+          <Article className="mt-4">
+            <ArticleTitle>CV Analysis Results</ArticleTitle>
+            <ArticleMeta>ATS Score: {analysis.atsScore}%</ArticleMeta>
+            <ArticleContent>
+              <strong>Strengths:</strong>
+              <ul>
+                {analysis.strengths.map((s, idx) => (
+                  <li key={idx}>{s}</li>
+                ))}
+              </ul>
+              <strong>Weaknesses:</strong>
+              <ul>
+                {analysis.weaknesses.map((w, idx) => (
+                  <li key={idx}>{w}</li>
+                ))}
+              </ul>
+              <strong>Recommendations:</strong>
+              <ul>
+                {analysis.recommendations.map((r, idx) => (
+                  <li key={idx}>{r}</li>
+                ))}
+              </ul>
+            </ArticleContent>
+          </Article>
         )}
       </CardContent>
     </Card>

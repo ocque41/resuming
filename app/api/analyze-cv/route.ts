@@ -9,13 +9,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Missing fileName parameter' }, { status: 400 });
   }
 
-  // In production, retrieve the actual CV text based on the fileName.
-  // For testing, we simulate extracted CV text.
-  const simulatedCVText = `John Doe
-  Experienced software engineer with expertise in JavaScript, TypeScript, and cloud services.
-  Education: B.Sc. in Computer Science.
-  Professional experience includes roles at innovative tech companies.
-  Skills: React, Node.js, Express, and AWS.`;
+  // For testing, simulate extracted CV text. 
+  // In production, retrieve the actual CV text for the given fileName.
+  const simulatedCVText = `
+    John Doe
+    Experienced software engineer with expertise in JavaScript, TypeScript, and cloud services.
+    Education: B.Sc. in Computer Science.
+    Professional experience includes roles at innovative tech companies.
+    Skills: React, Node.js, Express, and AWS.
+  `;
 
   try {
     const analysis = await analyzeCV(simulatedCVText);
