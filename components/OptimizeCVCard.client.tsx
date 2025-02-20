@@ -1,3 +1,4 @@
+// Optimize cv card.client.tsx
 "use client";
 
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
