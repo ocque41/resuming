@@ -4,6 +4,7 @@ import { getUser, getTeamForUser, getCVsForUser, getActivityLogs } from "@/lib/d
 import { ArticleTitle } from "@/components/ui/article";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { ComboboxPopover } from "@/components/ui/combobox";
+import AnalyzeCVCard from "@/components/AnalyzeCVCard.client";
 import {
   Table,
   TableHeader,
@@ -86,19 +87,7 @@ export default async function DashboardPage() {
       <CardTitle className="text-sm text-gray-500 text-center mt-2 mx-auto max-w-md lg:max-w-2xl">
         Analyze CV
       </CardTitle>
-      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border-transparent">
-        <CardContent>
-          <div className="flex justify-center items-center h-32 bg-gray-100 rounded-lg mb-4">
-            {/* Placeholder for animation */}
-            <span className="text-gray-500">Animation Placeholder</span>
-          </div>
-          <ComboboxPopover
-            label="Select a CV"
-            options={cvs.map((cv) => cv.fileName)}
-            onSelect={(selectedCV: string) => console.log("Selected CV:", selectedCV)}
-          />
-        </CardContent>
-      </Card>
+      <AnalyzeCVCard cvs={cvs.map((cv) => cv.fileName)} />
       <DashboardClientWrapper cvs={cvs} />
     </>
   );
