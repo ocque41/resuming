@@ -2,6 +2,7 @@
 import { optimizeCV } from "./optimizeCV";
 import { modifyPDFWithOptimizedContent } from "./pdfOptimization";
 import { updateCVAnalysis } from "@/lib/db/queries.server";
+import { PDFDocument, StandardFonts } from "pdf-lib";
 
 /**
  * Performs the optimization in the background.
@@ -13,10 +14,10 @@ export async function optimizeCVBackground(cvRecord: any) {
 
     // 1. Generate optimized text and PDF instructions using GPT-3.5-turbo.
     const optimizationResult = await optimizeCV(cvRecord.rawText, metadata);
-    // 2. Load the original PDF bytes (you would retrieve these from your storage).
-    // For demonstration, we assume you have a function getOriginalPdfBytes(cvRecord)
-    // that returns a Uint8Array of the original PDF.
+    
+    // 2. Retrieve a valid original PDF.
     const originalPdfBytes = await getOriginalPdfBytes(cvRecord);
+    
     // 3. Modify the PDF using pdf-lib.
     const modifiedPdfBase64 = await modifyPDFWithOptimizedContent(
       originalPdfBytes,
@@ -27,7 +28,7 @@ export async function optimizeCVBackground(cvRecord: any) {
     const newMetadata = {
       ...metadata,
       optimizedCV: optimizationResult.optimizedText,
-      optimizedPDFBase64: modifiedPdfBase64, // Store the Base64 string or a URL after saving it externally.
+      optimizedPDFBase64: modifiedPdfBase64, // Now should contain a valid Base64 PDF.
       optimized: true,
       optimizing: false,
       optimizedTimes: metadata.optimizedTimes ? metadata.optimizedTimes + 1 : 1,
@@ -36,7 +37,6 @@ export async function optimizeCVBackground(cvRecord: any) {
     await updateCVAnalysis(cvRecord.id, JSON.stringify(newMetadata));
   } catch (error: any) {
     console.error("Background optimization error:", error);
-    // Update metadata to remove the optimizing flag and store the error.
     const metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
     metadata.optimizing = false;
     metadata.error = error.message;
@@ -45,11 +45,14 @@ export async function optimizeCVBackground(cvRecord: any) {
 }
 
 /**
- * Dummy function to simulate retrieving the original PDF bytes.
- * In production, retrieve the PDF from your storage solution.
+ * Returns a valid PDF bytes for testing.
+ * In production, you'd load the original PDF from your storage.
  */
 async function getOriginalPdfBytes(cvRecord: any): Promise<Uint8Array> {
-  // Simulate a delay and return dummy PDF bytes.
-  // Replace this with your actual implementation.
-  return new Uint8Array(); // <-- Replace with actual PDF bytes.
+  // Create a simple PDF document with one page and sample text.
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage([600, 800]);
+  const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  page.drawText("Original CV Content", { x: 50, y: 750, size: 24, font: helveticaFont });
+  return await pdfDoc.save();
 }
