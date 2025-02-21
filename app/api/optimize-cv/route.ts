@@ -1,55 +1,39 @@
 // app/api/optimize-cv/route.ts
 import { NextResponse } from "next/server";
 import { getCVByFileName, updateCVAnalysis } from "@/lib/db/queries.server";
-import { optimizeCV } from "@/lib/optimizeCV";
+import { optimizeCVBackground } from "@/lib/optimizeCVBackground";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const fileName = searchParams.get("fileName");
   if (!fileName) {
-    return NextResponse.json(
-      { error: "Missing fileName parameter" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Missing fileName parameter" }, { status: 400 });
   }
 
-  // Use non-null assertion since we've checked fileName exists.
+  // Ensure fileName is non-null.
   const cvRecord = await getCVByFileName(fileName!);
   if (!cvRecord) {
     return NextResponse.json({ error: "CV not found" }, { status: 404 });
   }
 
-  // Ensure the CV has been analyzed already (analysis stored in metadata).
+  // Ensure the CV has been analyzed (metadata should include analysis).
   const metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : null;
   if (!metadata || !metadata.atsScore) {
-    return NextResponse.json(
-      { error: "CV has not been analyzed yet." },
-      { status: 400 }
-    );
-  }
-
-  if (!cvRecord.rawText) {
-    return NextResponse.json({ error: 'CV text content not found' }, { status: 400 });
+    return NextResponse.json({ error: "CV has not been analyzed yet." }, { status: 400 });
   }
 
   try {
-    // Generate optimized CV using rawText and existing analysis.
-    const optimizationResult = await optimizeCV(cvRecord.rawText, metadata);
+    // Mark the CV record as "optimizing" so the frontend can show progress.
+    const updatedMetadata = { ...metadata, optimizing: true };
+    await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedMetadata));
 
-    // Merge new optimization data into metadata.
-    const newMetadata = {
-      ...metadata,
-      optimizedCV: optimizationResult.optimizedText,
-      optimizedPDFUrl: optimizationResult.optimizedPDFUrl,
-      optimized: true,
-      optimizedTimes: metadata.optimizedTimes ? metadata.optimizedTimes + 1 : 1,
-    };
+    // Fire-and-forget the background optimization process.
+    optimizeCVBackground(cvRecord);
 
-    // Update the CV record in the database.
-    await updateCVAnalysis(cvRecord.id, JSON.stringify(newMetadata));
-    return NextResponse.json(newMetadata);
+    // Return an immediate response indicating that optimization has started.
+    return NextResponse.json({ message: "Optimization started. Please check back later." });
   } catch (error: any) {
-    console.error("Error during CV optimization:", error);
+    console.error("Error initiating optimization:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

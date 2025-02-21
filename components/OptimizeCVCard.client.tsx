@@ -1,7 +1,7 @@
 // OptimizeCVCard.client.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { ComboboxPopover } from "@/components/ui/combobox";
 
@@ -11,37 +11,42 @@ interface OptimizeCVCardProps {
 
 export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   const [selectedCV, setSelectedCV] = useState<string | null>(null);
-  const [optimizedResult, setOptimizedResult] = useState<{
-    optimizedCV: string;
-    optimizedPDFUrl: string;
-  } | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [optimizationStatus, setOptimizationStatus] = useState<string>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState<boolean>(false);
+  const [optimizedPDFBase64, setOptimizedPDFBase64] = useState<string | null>(null);
 
   async function handleOptimize(cv: string) {
     setSelectedCV(cv);
-    setLoading(true);
     setError(null);
+    setOptimizationStatus("pending");
     try {
-      const response = await fetch(
-        `/api/optimize-cv?fileName=${encodeURIComponent(cv)}`
-      );
+      const response = await fetch(`/api/optimize-cv?fileName=${encodeURIComponent(cv)}`);
       const data = await response.json();
       if (data.error) {
         setError(data.error);
+        setOptimizationStatus("error");
       } else {
-        setOptimizedResult({
-          optimizedCV: data.optimizedCV,
-          optimizedPDFUrl: data.optimizedPDFUrl,
-        });
-        setShowModal(true);
+        setOptimizationStatus("processing");
+        // Start polling for status updates.
+        pollOptimizationStatus(cv);
       }
     } catch (err: any) {
-      setError("Failed to optimize CV.");
-    } finally {
-      setLoading(false);
+      setError("Failed to initiate optimization.");
+      setOptimizationStatus("error");
     }
+  }
+
+  // Poll for status (simulate by checking updated CV metadata from the dashboard API).
+  async function pollOptimizationStatus(cv: string) {
+    const intervalId = setInterval(async () => {
+      const res = await fetch(`/api/get-cv-status?fileName=${encodeURIComponent(cv)}`);
+      const statusData = await res.json();
+      if (statusData.optimized) {
+        setOptimizedPDFBase64(statusData.optimizedPDFBase64);
+        setOptimizationStatus("complete");
+        clearInterval(intervalId);
+      }
+    }, 3000); // Poll every 3 seconds.
   }
 
   return (
@@ -58,29 +63,29 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
             handleOptimize(cv);
           }}
         />
-        {loading && <p className="mt-4">Optimizing CV...</p>}
-        {error && <p className="mt-4 text-red-500">{error}</p>}
-        {showModal && optimizedResult && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-            <div className="bg-white p-6 rounded shadow-lg max-w-md w-full">
-              <h2 className="text-xl font-bold mb-4">Optimized CV Preview</h2>
-              <p className="mb-4 text-sm">{optimizedResult.optimizedCV}</p>
-              <a
-                href={optimizedResult.optimizedPDFUrl}
-                download="optimized-cv.pdf"
-                className="bg-blue-500 text-white px-4 py-2 rounded inline-block"
-              >
-                Download Optimized CV
-              </a>
-              <button
-                className="mt-4 text-gray-600"
-                onClick={() => setShowModal(false)}
-              >
-                Close
-              </button>
-            </div>
+        {optimizationStatus === "pending" && (
+          <p className="mt-4 text-sm">Optimization initiated. Waiting for processing...</p>
+        )}
+        {optimizationStatus === "processing" && (
+          <p className="mt-4 text-sm">Optimizing CV... Please wait.</p>
+        )}
+        {optimizationStatus === "complete" && optimizedPDFBase64 && (
+          <div className="mt-4 text-sm">
+            <h3 className="font-bold mb-2">Optimized CV Ready</h3>
+            <iframe
+              className="w-full h-96 border"
+              src={`data:application/pdf;base64,${optimizedPDFBase64}`}
+            />
+            <a
+              href={`data:application/pdf;base64,${optimizedPDFBase64}`}
+              download="optimized-cv.pdf"
+              className="bg-blue-500 text-white px-4 py-2 rounded inline-block mt-2"
+            >
+              Download Optimized CV
+            </a>
           </div>
         )}
+        {error && <p className="mt-4 text-red-500">{error}</p>}
       </CardContent>
     </Card>
   );
