@@ -14,6 +14,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   const [optimizationStatus, setOptimizationStatus] = useState<string>("idle");
   const [error, setError] = useState<string | null>(null);
   const [optimizedPDFBase64, setOptimizedPDFBase64] = useState<string | null>(null);
+  const maxRetries = 10;
 
   async function handleOptimize(cv: string) {
     setSelectedCV(cv);
@@ -27,7 +28,6 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         setOptimizationStatus("error");
       } else {
         setOptimizationStatus("processing");
-        // Start polling for status updates.
         pollOptimizationStatus(cv);
       }
     } catch (err: any) {
@@ -36,8 +36,9 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
     }
   }
 
-  // Poll for updated metadata every 3 seconds.
+  // Poll for updated CV status with a maximum number of retries.
   async function pollOptimizationStatus(cv: string) {
+    let localRetryCount = 0;
     const intervalId = setInterval(async () => {
       try {
         const res = await fetch(`/api/get-cv-status?fileName=${encodeURIComponent(cv)}`);
@@ -46,6 +47,13 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
           setOptimizedPDFBase64(statusData.optimizedPDFBase64);
           setOptimizationStatus("complete");
           clearInterval(intervalId);
+        } else {
+          localRetryCount++;
+          if (localRetryCount >= maxRetries) {
+            clearInterval(intervalId);
+            setError("Optimization timed out. Please try again later.");
+            setOptimizationStatus("error");
+          }
         }
       } catch (error) {
         console.error("Error polling CV status:", error);
@@ -68,7 +76,9 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
           }}
         />
         {optimizationStatus === "pending" && (
-          <p className="mt-4 text-sm">Optimization initiated. Waiting for processing...</p>
+          <p className="mt-4 text-sm">
+            Optimization initiated. Waiting for processing...
+          </p>
         )}
         {optimizationStatus === "processing" && (
           <p className="mt-4 text-sm">Optimizing CV... Please wait.</p>
@@ -79,7 +89,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
             <iframe
               className="w-full h-96 border"
               src={`data:application/pdf;base64,${optimizedPDFBase64}`}
-            />
+            ></iframe>
             <a
               href={`data:application/pdf;base64,${optimizedPDFBase64}`}
               download="optimized-cv.pdf"
