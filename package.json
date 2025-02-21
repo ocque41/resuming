@@ -66,6 +66,7 @@
     "dotenv": "^16.3.1",
     "drizzle-kit": "^0.18.1",
     "drizzle-orm": "^0.39.3",
+    "dropbox": "^10.34.0",
     "embla-carousel-react": "^8.5.2",
     "formidable": "^3.5.2",
     "framer-motion": "^12.0.11",
