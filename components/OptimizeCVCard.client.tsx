@@ -11,21 +11,31 @@ interface OptimizeCVCardProps {
 
 export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   const [selectedCV, setSelectedCV] = useState<string | null>(null);
-  const [optimizedResult, setOptimizedResult] = useState<string | null>(null);
+  const [optimizedResult, setOptimizedResult] = useState<{
+    optimizedCV: string;
+    optimizedPDFUrl: string;
+  } | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState<boolean>(false);
 
   async function handleOptimize(cv: string) {
     setSelectedCV(cv);
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/optimize-cv?fileName=${encodeURIComponent(cv)}`);
+      const response = await fetch(
+        `/api/optimize-cv?fileName=${encodeURIComponent(cv)}`
+      );
       const data = await response.json();
       if (data.error) {
         setError(data.error);
       } else {
-        setOptimizedResult(data.optimizedCV);
+        setOptimizedResult({
+          optimizedCV: data.optimizedCV,
+          optimizedPDFUrl: data.optimizedPDFUrl,
+        });
+        setShowModal(true);
       }
     } catch (err: any) {
       setError("Failed to optimize CV.");
@@ -50,10 +60,25 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         />
         {loading && <p className="mt-4">Optimizing CV...</p>}
         {error && <p className="mt-4 text-red-500">{error}</p>}
-        {optimizedResult && (
-          <div className="mt-4 text-sm">
-            <h3 className="font-bold mb-2">Optimized CV:</h3>
-            <p>{optimizedResult}</p>
+        {showModal && optimizedResult && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+            <div className="bg-white p-6 rounded shadow-lg max-w-md w-full">
+              <h2 className="text-xl font-bold mb-4">Optimized CV Preview</h2>
+              <p className="mb-4 text-sm">{optimizedResult.optimizedCV}</p>
+              <a
+                href={optimizedResult.optimizedPDFUrl}
+                download="optimized-cv.pdf"
+                className="bg-blue-500 text-white px-4 py-2 rounded inline-block"
+              >
+                Download Optimized CV
+              </a>
+              <button
+                className="mt-4 text-gray-600"
+                onClick={() => setShowModal(false)}
+              >
+                Close
+              </button>
+            </div>
           </div>
         )}
       </CardContent>
