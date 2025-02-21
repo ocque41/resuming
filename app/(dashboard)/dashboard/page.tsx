@@ -47,44 +47,44 @@ export default async function DashboardPage() {
       </CardTitle>
       <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border-transparent">
         <CardContent>
-          <Table className="w-full">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>ATS Score</TableHead>
-                <TableHead>Optimized</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {cvs.map((cv: any) => {
-                let metadata = null;
-                try {
-                  metadata = cv.metadata ? JSON.parse(cv.metadata) : null;
-                } catch (err) {
-                  console.error("Error parsing metadata:", err);
-                }
-                return (
-                  <TableRow key={cv.id}>
-                    <TableCell className="text-sm lg:text-base">
-                      {cv.fileName}
-                    </TableCell>
-                    <TableCell className="text-sm lg:text-base">
-                      {metadata?.atsScore ? `${metadata.atsScore}%` : "-"}
-                    </TableCell>
-                    <TableCell className="text-sm lg:text-base">
-                      {metadata?.optimized 
-                        ? `Yes (${metadata.optimizedTimes || 1})` 
-                        : "No"}
-                    </TableCell>
-                    <TableCell className="text-sm lg:text-base">
-                      <DeleteCVButton cvId={cv.id} />
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+<Table className="w-full">
+  <TableHeader>
+    <TableRow>
+      <TableHead>Name</TableHead>
+      <TableHead>ATS Score</TableHead>
+      <TableHead>Optimized</TableHead>
+      <TableHead>Actions</TableHead>
+    </TableRow>
+  </TableHeader>
+  <TableBody>
+    {cvs.map((cv: any) => {
+      let metadata = null;
+      try {
+        metadata = cv.metadata ? JSON.parse(cv.metadata) : null;
+      } catch (err) {
+        console.error("Error parsing metadata:", err);
+      }
+      return (
+        <TableRow key={cv.id}>
+          <TableCell className="text-sm lg:text-base">
+            {cv.fileName}
+          </TableCell>
+          <TableCell className="text-sm lg:text-base">
+            {metadata?.atsScore ? `${metadata.atsScore}%` : "-"}
+          </TableCell>
+          <TableCell className="text-sm lg:text-base">
+            {metadata?.optimized
+              ? `Yes (${metadata.optimizedTimes || 1})`
+              : "No"}
+          </TableCell>
+          <TableCell className="text-sm lg:text-base">
+            <DeleteCVButton cvId={cv.id} />
+          </TableCell>
+        </TableRow>
+      );
+    })}
+  </TableBody>
+</Table>
         </CardContent>
       </Card>
       <DashboardClientWrapper cvs={cvs} />
