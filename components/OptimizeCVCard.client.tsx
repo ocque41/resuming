@@ -1,7 +1,7 @@
 // OptimizeCVCard.client.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { ComboboxPopover } from "@/components/ui/combobox";
 
@@ -36,17 +36,21 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
     }
   }
 
-  // Poll for status (simulate by checking updated CV metadata from the dashboard API).
+  // Poll for updated metadata every 3 seconds.
   async function pollOptimizationStatus(cv: string) {
     const intervalId = setInterval(async () => {
-      const res = await fetch(`/api/get-cv-status?fileName=${encodeURIComponent(cv)}`);
-      const statusData = await res.json();
-      if (statusData.optimized) {
-        setOptimizedPDFBase64(statusData.optimizedPDFBase64);
-        setOptimizationStatus("complete");
-        clearInterval(intervalId);
+      try {
+        const res = await fetch(`/api/get-cv-status?fileName=${encodeURIComponent(cv)}`);
+        const statusData = await res.json();
+        if (statusData.optimized && statusData.optimizedPDFBase64) {
+          setOptimizedPDFBase64(statusData.optimizedPDFBase64);
+          setOptimizationStatus("complete");
+          clearInterval(intervalId);
+        }
+      } catch (error) {
+        console.error("Error polling CV status:", error);
       }
-    }, 3000); // Poll every 3 seconds.
+    }, 3000);
   }
 
   return (

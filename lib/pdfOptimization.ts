@@ -1,5 +1,41 @@
 // lib/pdfOptimization.ts
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, PDFFont } from "pdf-lib";
+import { getOverlayCoordinates } from "./templateMatching";
+
+/**
+ * Wraps the given text into lines that do not exceed maxWidth.
+ *
+ * @param text - The text to wrap.
+ * @param font - The PDF font used.
+ * @param fontSize - The font size.
+ * @param maxWidth - The maximum width in points.
+ * @returns An array of lines.
+ */
+function wrapText(
+  text: string,
+  font: PDFFont,
+  fontSize: number,
+  maxWidth: number
+): string[] {
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    const testLineWidth = font.widthOfTextAtSize(testLine, fontSize);
+    if (testLineWidth > maxWidth && currentLine !== "") {
+      lines.push(currentLine);
+      currentLine = word;
+    } else {
+      currentLine = testLine;
+    }
+  }
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+  return lines;
+}
 
 /**
  * Overlays the optimized CV text onto the original PDF.
@@ -15,59 +51,69 @@ export async function modifyPDFWithOptimizedContent(
   // Load the original PDF document.
   const pdfDoc = await PDFDocument.load(originalPdfBytes);
 
-  // Choose a page to modify.
-  // For this example, if the original PDF has more than one page, we modify page 2.
-  // Otherwise, we modify page 1.
-  let pageToModify = pdfDoc.getPageCount() >= 2 ? pdfDoc.getPage(1) : pdfDoc.getPage(0);
+  // Use template matching to see if we can target a known region (e.g., "Experience" section).
+  const coordinates = await getOverlayCoordinates(originalPdfBytes);
 
-  // Alternatively, if you prefer to create a new page for the optimized version:
-  // const { width, height } = pdfDoc.getPage(0).getSize();
-  // const pageToModify = pdfDoc.addPage([width, height]);
+  let pageToModify;
+  if (coordinates) {
+    // If coordinates are found, use the first page.
+    pageToModify = pdfDoc.getPage(0);
+  } else {
+    // Fallback: create a new page for the optimized content.
+    const { width, height } = pdfDoc.getPage(0).getSize();
+    pageToModify = pdfDoc.addPage([width, height]);
+  }
 
   // Embed a standard font.
   const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-
-  // Define text formatting and positioning.
   const { width, height } = pageToModify.getSize();
   const margin = 50;
-  const fontSize = 10;
+  const fontSize = 12;
   const lineHeight = fontSize * 1.2;
+  const maxWidth = width - margin * 2;
 
-  // We want to overlay the optimized text in a defined region.
-  // For simplicity, we assume the region starts at (margin, height - margin) and has a width of (width - 2*margin).
-  // A more robust implementation would use text extraction heuristics to determine where to replace text.
-  let startY = height - margin;
+  // Determine the starting Y coordinate.
+  let startY = coordinates ? coordinates.experienceY : height - margin;
 
-  // Split the optimized text into lines.
-  // You can implement more advanced word-wrapping logic if necessary.
-  const lines = optimizedText.split("\n");
-
-  // Clear or cover the original text area if needed.
-  // Here, we simply overlay the new text.
-  for (let i = 0; i < lines.length; i++) {
-    const textLine = lines[i];
-    // If text exceeds the designated region, optionally add a new page.
-    if (startY - lineHeight * i < margin) {
-      // Add a new page and reset coordinates.
-      const newPage = pdfDoc.addPage([width, height]);
-      pageToModify = newPage;
-      startY = height - margin;
-      i = 0; // Reset the loop for new page drawing.
-    }
-    pageToModify.drawText(textLine, {
+  // If a target region was identified, clear that area by drawing a white rectangle.
+  if (coordinates) {
+    // Adjust the rectangle dimensions as needed.
+    pageToModify.drawRectangle({
       x: margin,
-      y: startY - lineHeight * i,
-      size: fontSize,
-      font: helveticaFont,
-      color: rgb(0, 0, 0),
-      maxWidth: width - margin * 2,
+      y: startY - 200, // clear an area 200 points high
+      width: maxWidth,
+      height: 200,
+      color: rgb(1, 1, 1),
     });
   }
 
-  // Serialize the modified PDF document.
-  const modifiedPdfBytes = await pdfDoc.save();
+  // Wrap the optimized text into lines.
+  const lines = wrapText(optimizedText, helveticaFont, fontSize, maxWidth);
 
-  // Convert the bytes to a Base64-encoded string (for immediate frontend display or download).
+  let currentPage = pageToModify;
+  let currentY = startY;
+
+  // Draw each line; if text exceeds the available space, add a new page.
+  for (const line of lines) {
+    if (currentY - lineHeight < margin) {
+      // Add a new page and reset Y coordinate.
+      currentPage = pdfDoc.addPage([width, height]);
+      currentY = height - margin;
+    }
+    currentPage.drawText(line, {
+      x: margin,
+      y: currentY,
+      size: fontSize,
+      font: helveticaFont,
+      color: rgb(0, 0, 0),
+      maxWidth,
+    });
+    currentY -= lineHeight;
+  }
+
+  // Serialize the modified PDF.
+  const modifiedPdfBytes = await pdfDoc.save();
+  // Convert the bytes to a Base64-encoded string.
   const base64String = Buffer.from(modifiedPdfBytes).toString("base64");
   return base64String;
 }
