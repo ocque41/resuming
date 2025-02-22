@@ -123,7 +123,7 @@ export async function POST(request: Request) {
     const [newCV] = await db.insert(cvs).values({
       userId: session.user.id,
       fileName,
-      filePath: dropboxUrl, // Use the Dropbox URL here
+      filePath: dropboxUrl, // Updated: use filePath (camelCase) as per schema
       rawText,
       metadata: JSON.stringify({ atsScore: "N/A", optimized: "No", sent: "No" }),
     }).returning();
