@@ -1,9 +1,9 @@
 // lib/dropboxAdmin.ts
-import fetch from 'node-fetch';
+import { fetch as crossFetch } from 'cross-fetch';
 
-// Ensure global fetch is defined, with a type cast to bypass incompatibility.
+// Ensure global fetch is defined.
 if (!globalThis.fetch) {
-  globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
+  globalThis.fetch = crossFetch;
 }
 console.log("Global fetch defined:", !!globalThis.fetch);
 
