@@ -13,6 +13,7 @@ import fs from "fs/promises";
 import path from "path";
 import { eq } from "drizzle-orm";
 import { extractTextFromPdf } from "@/lib/metadata/extract";
+import { uploadFileToDropbox } from "@/lib/dropboxStorage";  // Added Dropbox import
 
 export const config = {
   api: {
@@ -96,17 +97,25 @@ export async function POST(request: Request) {
   }
 
   const fileName = uploadedFile.originalFilename || "UnnamedCV.pdf";
-  const filePath = uploadedFile.filepath;
-  console.log("File saved at:", filePath);
+  const localFilePath = uploadedFile.filepath;
+  console.log("File saved at:", localFilePath);
   
-  // Extract raw text from the PDF.
+  // **New Step:** Upload the file to Dropbox
+  let dropboxUrl = localFilePath;
+  try {
+    dropboxUrl = await uploadFileToDropbox(localFilePath, fileName);
+    console.log("Dropbox URL:", dropboxUrl);
+  } catch (err) {
+    console.error("Dropbox upload error, using local file path:", err);
+  }
+  
+  // Extract raw text from the PDF using the local file (if needed)
   let rawText = "";
   try {
-    rawText = await extractTextFromPdf(filePath);
+    rawText = await extractTextFromPdf(localFilePath);
     console.log("Extracted raw text (first 200 chars):", rawText.slice(0, 200));
   } catch (err) {
     console.error("Error extracting raw text:", err);
-    // Optionally, continue with empty rawText.
   }
 
   try {
@@ -114,7 +123,7 @@ export async function POST(request: Request) {
     const [newCV] = await db.insert(cvs).values({
       userId: session.user.id,
       fileName,
-      filePath,
+      filePath: dropboxUrl, // Use the Dropbox URL here
       rawText,
       metadata: JSON.stringify({ atsScore: "N/A", optimized: "No", sent: "No" }),
     }).returning();
