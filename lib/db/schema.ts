@@ -72,7 +72,7 @@ export const cvs = pgTable("cvs", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id),
   fileName: varchar("filename", { length: 255 }).notNull(),
-  filePath: text("filepath").notNull(),
+  filepath: text("filepath").notNull(),
   rawText: text("rawText"), // New column for extracted PDF text
   createdAt: timestamp("createdat").notNull().defaultNow(),
   metadata: text("metadata").default(""),

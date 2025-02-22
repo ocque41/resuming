@@ -35,9 +35,9 @@ export async function DELETE(
     return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
   }
 
-  if (cvRecord.filePath) {
+  if (cvRecord.filepath) {
     try {
-      await fs.unlink(cvRecord.filePath);
+      await fs.unlink(cvRecord.filepath);
     } catch (err) {
       console.error("Error deleting file from filesystem:", err);
       // Proceed even if file deletion fails.

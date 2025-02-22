@@ -126,7 +126,7 @@ export async function POST(request: Request) {
     const [newCV] = await db.insert(cvs).values({
       userId: session.user.id,
       fileName,
-      filePath: dropboxUrl,
+      filepath: dropboxUrl,
       rawText,
       metadata: JSON.stringify({ atsScore: "N/A", optimized: "No", sent: "No" }),
     }).returning();

@@ -1,11 +1,13 @@
 // lib/dropboxAdmin.ts
-import { Dropbox } from 'dropbox';
-import fetch, { RequestInfo } from 'node-fetch';
+import fetch from 'node-fetch';
 
-// Ensure that global fetch is defined.
+// Ensure global fetch is defined, with a type cast to bypass incompatibility.
 if (!globalThis.fetch) {
-  globalThis.fetch = fetch as unknown as typeof global.fetch;
+  globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
 }
+console.log("Global fetch defined:", !!globalThis.fetch);
+
+import { Dropbox } from 'dropbox';
 
 const dbx = new Dropbox({
   accessToken: process.env.DROPBOX_ACCESS_TOKEN as string,
