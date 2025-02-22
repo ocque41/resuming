@@ -13,7 +13,7 @@ import fs from "fs/promises";
 import path from "path";
 import { eq } from "drizzle-orm";
 import { extractTextFromPdf } from "@/lib/metadata/extract";
-import { uploadFileToDropbox } from "@/lib/dropboxStorage";  // Added Dropbox import
+import { uploadFileToDropbox } from "@/lib/dropboxStorage";  // Dropbox upload function
 
 export const config = {
   api: {
@@ -100,13 +100,16 @@ export async function POST(request: Request) {
   const localFilePath = uploadedFile.filepath;
   console.log("File saved at:", localFilePath);
   
-  // **New Step:** Upload the file to Dropbox
+  // **Dropbox Upload with Detailed Logging**
   let dropboxUrl = localFilePath;
+  console.log("Starting Dropbox upload for file:", localFilePath, "with filename:", fileName);
   try {
     dropboxUrl = await uploadFileToDropbox(localFilePath, fileName);
-    console.log("Dropbox URL:", dropboxUrl);
+    console.log("Dropbox upload successful. Received URL:", dropboxUrl);
   } catch (err) {
-    console.error("Dropbox upload error, using local file path:", err);
+    console.error("Dropbox upload error:", err);
+    // Optionally, you might choose to stop the process here:
+    // return NextResponse.json({ error: "Dropbox upload failed" }, { status: 500 });
   }
   
   // Extract raw text from the PDF using the local file (if needed)
@@ -123,10 +126,11 @@ export async function POST(request: Request) {
     const [newCV] = await db.insert(cvs).values({
       userId: session.user.id,
       fileName,
-      filePath: dropboxUrl, // Updated: use filePath (camelCase) as per schema
+      filePath: dropboxUrl,
       rawText,
       metadata: JSON.stringify({ atsScore: "N/A", optimized: "No", sent: "No" }),
     }).returning();
+    console.log("CV record inserted successfully:", newCV);
     return NextResponse.json({ message: "CV uploaded successfully!" });
   } catch (dbError) {
     console.error("Database error:", dbError);
