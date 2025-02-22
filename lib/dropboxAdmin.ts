@@ -1,8 +1,11 @@
 // lib/dropboxAdmin.ts
 import { Dropbox } from 'dropbox';
+import fetch, { RequestInfo } from 'node-fetch';
 
-// Ensure you have set the following environment variables:
-// DROPBOX_APP_KEY, DROPBOX_SECRET_KEY, DROPBOX_ACCESS_TOKEN
+// Ensure that global fetch is defined.
+if (!globalThis.fetch) {
+  globalThis.fetch = fetch as unknown as typeof global.fetch;
+}
 
 const dbx = new Dropbox({
   accessToken: process.env.DROPBOX_ACCESS_TOKEN as string,
