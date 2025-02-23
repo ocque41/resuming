@@ -1,39 +1,50 @@
-import { Dropbox } from 'dropbox';
-import fs from 'fs/promises';
-import path from 'path';
-import { dbx } from 'lib/dropboxAdmin';
+// lib/storage.ts
+import fs from "fs/promises";
+import path from "path";
+import crossFetch from "cross-fetch";
 
-/**
- * Uploads a file to Dropbox and returns the shared link.
- * @param localFilePath - The local file path of the uploaded file.
- * @param filename - The desired filename in Dropbox.
- * @returns A Promise that resolves with the shared URL of the file.
- */
-export async function uploadFileToDropbox(localFilePath: string, filename: string): Promise<string> {
-  // Read the file from the local file system.
-  const fileContents = await fs.readFile(localFilePath);
+const pdfCache = new Map<string, Uint8Array>();
+
+// Ensure global fetch is defined.
+if (!globalThis.fetch) {
+  globalThis.fetch = crossFetch;
+}
+
+export async function getOriginalPdfBytes(cvRecord: any): Promise<Uint8Array> {
+  let filePath: string = cvRecord.filepath; // Ensure your database column is "filepath" (all lowercase)
   
-  // Define the destination path in Dropbox (e.g., "/pdfs/filename")
-  const dropboxPath = path.join('/pdfs', filename);
-  
-  // Build options with selectUser if available.
-  const options: { selectUser?: string } = {};
-  if (process.env.DROPBOX_SELECT_USER) {
-    options.selectUser = process.env.DROPBOX_SELECT_USER;
+  // If the filePath is missing or empty, fall back to a default PDF.
+  if (!filePath || filePath.trim() === "") {
+    console.warn("No valid PDF path found for CV record", cvRecord.id, "- using default PDF.");
+    filePath = "https://next-js-saas-starter-three-resuming.vercel.app/pdfs/default.pdf";
   }
   
-  // Upload the file using the proper WriteMode format and pass options.
-  await dbx.filesUpload({
-    path: dropboxPath,
-    contents: fileContents,
-    mode: { ".tag": "overwrite" }
-  }, options);
+  // Check cache
+  if (pdfCache.has(filePath)) {
+    return pdfCache.get(filePath)!;
+  }
+
+  let pdfBytes: Uint8Array;
+  if (filePath.startsWith("http://") || filePath.startsWith("https://")) {
+    // Download from URL.
+    const res = await fetch(filePath);
+    if (!res.ok) {
+      throw new Error(`Failed to download PDF from URL: ${filePath}`);
+    }
+    const arrayBuffer = await res.arrayBuffer();
+    pdfBytes = new Uint8Array(arrayBuffer);
+  } else {
+    // Read from the local file system.
+    pdfBytes = await fs.readFile(filePath);
+  }
   
-  // Create a shared link for the file.
-  const sharedLinkResult = await dbx.sharingCreateSharedLinkWithSettings({ path: dropboxPath });
-  
-  // Modify the shared link to force direct access (adjust as needed).
-  const sharedLink = sharedLinkResult.result.url.replace('?dl=0', '?raw=1');
-  
-  return sharedLink;
+  pdfCache.set(filePath, pdfBytes);
+  return pdfBytes;
+}
+
+export async function extractTextFromPdf(pdfBytes: Uint8Array): Promise<string> {
+  const buffer = Buffer.from(pdfBytes);
+  const pdfParse = (await import("pdf-parse")).default;
+  const data = await pdfParse(buffer);
+  return data.text;
 }
