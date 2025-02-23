@@ -1,10 +1,11 @@
+// lib/customFetch.ts
 import crossFetch from "cross-fetch";
 
-export async function customFetch(input: RequestInfo, init?: RequestInit): Promise<Response> {
+export async function customFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const selectUser = process.env.DROPBOX_SELECT_USER;
   let headers: Record<string, string> = {};
 
-  // Convert init.headers into a plain record.
+  // Convert init.headers to a plain object.
   if (init && init.headers) {
     if (init.headers instanceof Headers) {
       init.headers.forEach((value, key) => {
@@ -19,17 +20,20 @@ export async function customFetch(input: RequestInfo, init?: RequestInit): Promi
     }
   }
 
-  // Add the Dropbox-API-Select-User header if available.
+  // Inject the Dropbox-API-Select-User header if available.
   if (selectUser) {
     headers["Dropbox-API-Select-User"] = selectUser;
   }
 
-  // Reassign headers to init.
+  // Set headers back into init.
   if (init) {
     init.headers = headers;
   } else {
     init = { headers };
   }
+
+  // Optionally log outgoing headers for debugging.
+  console.log("customFetch - outgoing headers:", headers);
 
   return crossFetch(input, init);
 }
