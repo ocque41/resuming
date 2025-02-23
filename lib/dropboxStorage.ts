@@ -4,12 +4,12 @@ import path from 'path';
 import { dbx } from 'lib/dropboxAdmin';
 
 /**
- * Uploads a file to Dropbox and returns a direct shared link.
- * The direct link is obtained by converting the shared link into a raw file URL.
+ * Uploads a file to Dropbox and returns a temporary direct link.
+ * This link points directly to the file’s content (PDF bytes).
  *
  * @param localFilePath - The local file path of the uploaded file.
- * @param originalFilename - The original filename of the uploaded file.
- * @returns A Promise that resolves with the direct shared URL of the file.
+ * @param originalFilename - The desired filename in Dropbox.
+ * @returns A Promise that resolves with the temporary direct URL of the file.
  */
 export async function uploadFileToDropbox(localFilePath: string, originalFilename: string): Promise<string> {
   // Generate a unique filename to avoid conflicts.
@@ -28,15 +28,9 @@ export async function uploadFileToDropbox(localFilePath: string, originalFilenam
     mode: { ".tag": "overwrite" }
   });
   
-  // Create a shared link for the file.
-  const sharedLinkResult = await dbx.sharingCreateSharedLinkWithSettings({ path: dropboxPath });
-  const sharedLink = sharedLinkResult.result.url;
-  
-  // Convert the shared link into a direct link:
-  // Replace "www.dropbox.com" with "dl.dropboxusercontent.com" and remove query parameters.
-  const directLink = sharedLink
-    .replace("www.dropbox.com", "dl.dropboxusercontent.com")
-    .replace(/\?.*$/, "");
+  // Get a temporary direct link for the file.
+  const tempLinkResult = await dbx.filesGetTemporaryLink({ path: dropboxPath });
+  const directLink = tempLinkResult.result.link;
   
   return directLink;
 }
