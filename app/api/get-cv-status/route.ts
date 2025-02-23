@@ -1,4 +1,3 @@
-// app/api/get-cv-status/route.ts
 import { NextResponse } from 'next/server';
 import { getCVByFileName } from '@/lib/db/queries.server';
 
@@ -14,7 +13,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'CV not found' }, { status: 404 });
   }
 
-  // Return the metadata stored with the CV (or an empty object if none)
   const metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
   return NextResponse.json(metadata);
 }

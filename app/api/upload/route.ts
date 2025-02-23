@@ -1,5 +1,3 @@
-// app/api/upload/route.ts
-
 export const dynamic = "force-dynamic"; // Prevent pre-rendering at build time
 
 import { NextResponse } from "next/server";
@@ -13,7 +11,7 @@ import fs from "fs/promises";
 import path from "path";
 import { eq } from "drizzle-orm";
 import { extractTextFromPdf } from "@/lib/metadata/extract";
-import { uploadFileToDropbox } from "@/lib/dropboxStorage";  // Dropbox upload function
+import { uploadFileToDropbox } from "@/lib/dropboxStorage"; // Dropbox upload function
 
 export const config = {
   api: {
@@ -108,8 +106,8 @@ export async function POST(request: Request) {
     console.log("Dropbox upload successful. Received URL:", dropboxUrl);
   } catch (err) {
     console.error("Dropbox upload error:", err);
-    // Optionally, you might choose to stop the process here:
-    // return NextResponse.json({ error: "Dropbox upload failed" }, { status: 500 });
+    // Optionally, you may choose to return an error instead of falling back.
+    return NextResponse.json({ error: "Dropbox upload failed" }, { status: 500 });
   }
   
   // Extract raw text from the PDF using the local file (if needed)
@@ -123,6 +121,7 @@ export async function POST(request: Request) {
 
   try {
     // Insert the new CV record with rawText and default metadata.
+    // IMPORTANT: Use 'filepath' (all lowercase) to match your database schema.
     const [newCV] = await db.insert(cvs).values({
       userId: session.user.id,
       fileName,

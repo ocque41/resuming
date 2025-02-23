@@ -2,36 +2,23 @@ import { PDFDocument } from "pdf-lib";
 import pdfParse from "pdf-parse";
 import fs from "fs/promises";
 
-/**
- * Loads a PDF document using pdf-lib for validation.
- */
 export async function loadPdfWithPdfLib(filePath: string): Promise<PDFDocument> {
   const fileBuffer = await fs.readFile(filePath);
   return PDFDocument.load(fileBuffer);
 }
 
-/**
- * Extracts text from a PDF using pdf-parse.
- */
 export async function extractTextFromPdf(filePath: string): Promise<string> {
-  // Validate the file exists.
   await loadPdfWithPdfLib(filePath);
   const fileBuffer = await fs.readFile(filePath);
   const data = await pdfParse(fileBuffer);
   return data.text;
 }
 
-/**
- * Checks if the text likely represents a CV by verifying common keywords.
- */
 export function isLikelyACV(text: string): boolean {
   const keywords = ["experience", "education", "skills", "contact"];
   return keywords.every(keyword => text.toLowerCase().includes(keyword));
 }
 
-/**
- * Calls OpenAI’s API directly using fetch.
- */
 export async function analyzeCVWithAI(prompt: string): Promise<any> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -63,11 +50,6 @@ export async function analyzeCVWithAI(prompt: string): Promise<any> {
   return JSON.parse(messageContent);
 }
 
-/**
- * Extracts metadata from a CV PDF by processing the file,
- * verifying its content, and then calling OpenAI’s API directly.
- * Returns default metadata if any step fails.
- */
 export async function extractMetadataDirect(filePath: string): Promise<any> {
   try {
     const text = await extractTextFromPdf(filePath);
