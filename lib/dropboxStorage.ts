@@ -1,7 +1,7 @@
-import { Dropbox } from 'dropbox';
-import fs from 'fs/promises';
-import path from 'path';
-import { dbx } from 'lib/dropboxAdmin';
+// lib/dropboxStorage.ts
+import fs from "fs/promises";
+import path from "path";
+import { dbx } from "lib/dropboxAdmin";
 
 /**
  * Uploads a file to Dropbox and returns the shared link.
@@ -16,20 +16,12 @@ export async function uploadFileToDropbox(localFilePath: string, filename: strin
   // Define the destination path in Dropbox (e.g., "/pdfs/filename")
   const dropboxPath = path.join('/pdfs', filename);
   
-  // Build the upload parameters.
-  const uploadParams: any = {
+  // Upload the file using the Dropbox SDK.
+  await dbx.filesUpload({
     path: dropboxPath,
     contents: fileContents,
     mode: { ".tag": "overwrite" }
-  };
-
-  // Use the team member ID if available.
-  if (process.env.DROPBOX_SELECT_USER) {
-    uploadParams.selectUser = process.env.DROPBOX_SELECT_USER;
-  }
-  
-  // Upload the file.
-  await dbx.filesUpload(uploadParams);
+  });
   
   // Create a shared link for the file.
   const sharedLinkResult = await dbx.sharingCreateSharedLinkWithSettings({ path: dropboxPath });
