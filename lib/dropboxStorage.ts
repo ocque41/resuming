@@ -17,17 +17,23 @@ export async function uploadFileToDropbox(localFilePath: string, filename: strin
   // Define the destination path in Dropbox (e.g., "/pdfs/filename")
   const dropboxPath = path.join('/pdfs', filename);
   
-  // Upload the file using the proper WriteMode format.
-  await dbx.filesUpload({
+  // Build the upload parameters. Include select_user if available.
+  const uploadParams: any = {
     path: dropboxPath,
     contents: fileContents,
     mode: { ".tag": "overwrite" }
-  });
+  };
+  if (process.env.DROPBOX_SELECT_USER) {
+    uploadParams.select_user = process.env.DROPBOX_SELECT_USER;
+  }
+  
+  // Upload the file using a single parameter object.
+  await dbx.filesUpload(uploadParams);
   
   // Create a shared link for the file.
   const sharedLinkResult = await dbx.sharingCreateSharedLinkWithSettings({ path: dropboxPath });
   
-  // Modify the shared link to force direct access (adjust as needed).
+  // Modify the shared link to force direct access.
   const sharedLink = sharedLinkResult.result.url.replace('?dl=0', '?raw=1');
   
   return sharedLink;
