@@ -1,5 +1,5 @@
 // lib/dropboxAdmin.ts
-import "../../polyfill"; // Adjust the path if necessary so that polyfill.ts is imported first
+import "lib/polyfill"; // Adjust the path if necessary so that polyfill.ts is imported first
 
 import { Dropbox } from 'dropbox';
 
