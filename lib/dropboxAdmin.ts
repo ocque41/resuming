@@ -1,11 +1,5 @@
 // lib/dropboxAdmin.ts
-import { fetch as crossFetch } from 'cross-fetch';
-
-// Ensure global fetch is defined.
-if (!globalThis.fetch) {
-  globalThis.fetch = crossFetch;
-}
-console.log("Global fetch defined:", !!globalThis.fetch);
+import "../../polyfill"; // Adjust the path if necessary so that polyfill.ts is imported first
 
 import { Dropbox } from 'dropbox';
 
