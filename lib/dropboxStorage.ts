@@ -1,4 +1,3 @@
-// lib/dropboxStorage.ts
 import { Dropbox } from 'dropbox';
 import fs from 'fs/promises';
 import path from 'path';
@@ -17,17 +16,19 @@ export async function uploadFileToDropbox(localFilePath: string, filename: strin
   // Define the destination path in Dropbox (e.g., "/pdfs/filename")
   const dropboxPath = path.join('/pdfs', filename);
   
-  // Build the upload parameters. Include select_user if available.
+  // Build the upload parameters.
   const uploadParams: any = {
     path: dropboxPath,
     contents: fileContents,
     mode: { ".tag": "overwrite" }
   };
+
+  // Use the team member ID if available.
   if (process.env.DROPBOX_SELECT_USER) {
-    uploadParams.select_user = process.env.DROPBOX_SELECT_USER;
+    uploadParams.selectUser = process.env.DROPBOX_SELECT_USER;
   }
   
-  // Upload the file using a single parameter object.
+  // Upload the file.
   await dbx.filesUpload(uploadParams);
   
   // Create a shared link for the file.
