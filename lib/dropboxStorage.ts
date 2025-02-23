@@ -6,35 +6,44 @@ import { dbx } from 'lib/dropboxAdmin';
 
 /**
  * Uploads a file to Dropbox and returns the shared link.
+ * Generates a unique filename to avoid conflicts.
+ *
  * @param localFilePath - The local file path of the uploaded file.
- * @param filename - The desired filename in Dropbox.
+ * @param originalFilename - The original filename of the uploaded file.
  * @returns A Promise that resolves with the shared URL of the file.
  */
-export async function uploadFileToDropbox(localFilePath: string, filename: string): Promise<string> {
+export async function uploadFileToDropbox(localFilePath: string, originalFilename: string): Promise<string> {
+  // Generate a unique filename to avoid conflicts (append a timestamp).
+  const uniqueFileName = `${path.parse(originalFilename).name}-${Date.now()}${path.extname(originalFilename)}`;
+  
   // Read the file from the local file system.
   const fileContents = await fs.readFile(localFilePath);
   
-  // Define the destination path in Dropbox (e.g., "/pdfs/filename")
-  const dropboxPath = path.join('/pdfs', filename);
+  // Define the destination path in Dropbox (e.g., "/pdfs/uniqueFileName")
+  const dropboxPath = path.join('/pdfs', uniqueFileName);
   
-  // Build the upload parameters.
-  const uploadParams: any = {
-    path: dropboxPath,
-    contents: fileContents,
-    mode: { ".tag": "overwrite" }
-  };
-
-  // (Team member header is handled via our custom fetch in dropboxAdmin.ts)
-
-  // Upload the file.
-  await dbx.filesUpload(uploadParams);
+  try {
+    // Upload the file using the Dropbox SDK.
+    await dbx.filesUpload({
+      path: dropboxPath,
+      contents: fileContents,
+      mode: { ".tag": "overwrite" }
+    });
+  } catch (uploadError) {
+    // Log detailed error and rethrow.
+    console.error("Dropbox filesUpload error:", JSON.stringify(uploadError, null, 2));
+    throw uploadError;
+  }
   
-  // Create a shared link for the file.
-  const sharedLinkResult = await dbx.sharingCreateSharedLinkWithSettings({ path: dropboxPath });
-  
-  // Replace the dl parameter to force direct download.
-  // Using '?dl=1' should return the raw file content.
-  const sharedLink = sharedLinkResult.result.url.replace('?dl=0', '?dl=1');
-  
-  return sharedLink;
+  try {
+    // Create a shared link for the file.
+    const sharedLinkResult = await dbx.sharingCreateSharedLinkWithSettings({ path: dropboxPath });
+    
+    // Modify the shared link to force direct download.
+    const sharedLink = sharedLinkResult.result.url.replace('?dl=0', '?dl=1');
+    return sharedLink;
+  } catch (sharingError) {
+    console.error("Dropbox sharingCreateSharedLinkWithSettings error:", JSON.stringify(sharingError, null, 2));
+    throw sharingError;
+  }
 }
