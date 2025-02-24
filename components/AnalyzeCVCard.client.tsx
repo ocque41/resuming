@@ -49,7 +49,7 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
       <CardContent>
         <div className="flex justify-center items-center h-24 bg-gray-100 rounded-lg mb-4">
           <Lottie
-            animationData={require('../public/animations/leap.lottie')}
+            animationData={require('@/animations/leap.lottie')}
             loop
             autoplay
             style={{ width: '100%', height: 'auto', objectFit: 'cover' }}
