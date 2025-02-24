@@ -51,6 +51,11 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
             className="w-full h-auto"
             controls
             src="/animations/Leap Back In copy.mp4"
+            loop
+            muted
+            autoPlay
+            playsInline
+            style={{ objectFit: "cover" }}
           />
         </div>
         <ComboboxPopover
