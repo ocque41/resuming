@@ -2,7 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import crossFetch from "cross-fetch";
 import { getDropboxClient } from "./dropboxAdmin";
-import pdfParse from 'pdf-parse';
+import pdfParse from "pdf-parse";
 
 const pdfCache = new Map<string, Uint8Array>();
 
@@ -21,57 +21,64 @@ async function fetchWithRetry(url: string, retries = 1): Promise<Response> {
       throw new Error(`Failed to download PDF from URL: ${url}`);
     }
   }
-  throw new Error(`Failed to download PDF from URL: ${url}`); // Fallback (should not reach here)
+  throw new Error(`Failed to download PDF from URL: ${url}`); // Should not reach here.
 }
 
 /**
  * Retrieves the original PDF bytes for a given CV record.
  * If the record's filepath is missing, uses a default PDF.
  * If the filepath is a Dropbox path (e.g., "/pdfs/filename.pdf"),
- * generates a fresh temporary link via Dropbox API before downloading.
+ * obtains a fresh temporary link via Dropbox API before downloading.
  *
  * @param cvRecord - The CV record object from the database.
  * @returns A Promise that resolves with the PDF bytes as a Uint8Array.
  */
 export async function getOriginalPdfBytes(cvRecord: any): Promise<Uint8Array> {
-  let filePath: string = cvRecord.filepath;
+  let storedPath: string = cvRecord.filepath;
   
-  // If filePath is missing or empty, fall back to a default PDF.
-  if (!filePath || filePath.trim() === "") {
+  // If storedPath is missing or empty, fall back to a default PDF.
+  if (!storedPath || storedPath.trim() === "") {
     console.warn("No valid PDF path found for CV record", cvRecord.id, "- using default PDF.");
-    filePath = "https://next-js-saas-starter-three-resuming.vercel.app/pdfs/default.pdf";
+    storedPath = "https://next-js-saas-starter-three-resuming.vercel.app/pdfs/default.pdf";
   }
   
-  // If filePath is a Dropbox path (e.g., starts with "/pdfs/"), obtain a fresh temporary link.
-  if (filePath.startsWith("/pdfs/")) {
+  // If storedPath is a Dropbox path (starts with "/pdfs/"), get a fresh temporary link.
+  let fileUrl: string;
+  if (storedPath.startsWith("/pdfs/")) {
     const dbx = getDropboxClient();
     try {
-      const tempLinkResult = await dbx.filesGetTemporaryLink({ path: filePath });
-      filePath = tempLinkResult.result.link;
-      console.log("Fresh temporary link obtained:", filePath);
+      const tempLinkResult = await dbx.filesGetTemporaryLink({ path: storedPath });
+      fileUrl = tempLinkResult.result.link;
+      console.log("Fresh temporary link obtained:", fileUrl);
     } catch (err) {
       console.error("Error getting temporary link for Dropbox file:", err);
-      throw new Error(`Failed to get temporary link for Dropbox file at path: ${filePath}`);
+      throw new Error(`Failed to get temporary link for Dropbox file at path: ${storedPath}`);
+    }
+  } else {
+    fileUrl = storedPath;
+  }
+  
+  // Do not cache Dropbox temporary links.
+  if (!fileUrl.startsWith("http") || !fileUrl.includes("dl.dropboxusercontent.com")) {
+    if (pdfCache.has(fileUrl)) {
+      return pdfCache.get(fileUrl)!;
     }
   }
   
-  // Return from cache if available.
-  if (pdfCache.has(filePath)) {
-    return pdfCache.get(filePath)!;
-  }
-  
-  // Use fetch with retry to download the PDF.
   let response;
   try {
-    response = await fetchWithRetry(filePath, 1);
+    response = await fetchWithRetry(fileUrl, 1);
   } catch (err) {
     console.error("Error fetching PDF from URL:", err);
-    throw new Error(`Failed to download PDF from URL: ${filePath}`);
+    throw new Error(`Failed to download PDF from URL: ${fileUrl}`);
   }
   
   const arrayBuffer = await response.arrayBuffer();
   const pdfBytes = new Uint8Array(arrayBuffer);
-  pdfCache.set(filePath, pdfBytes);
+  // Cache non-Dropbox URLs if desired.
+  if (!fileUrl.includes("dl.dropboxusercontent.com")) {
+    pdfCache.set(fileUrl, pdfBytes);
+  }
   return pdfBytes;
 }
 
