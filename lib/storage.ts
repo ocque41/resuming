@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import crossFetch from "cross-fetch";
 import { getDropboxClient } from "./dropboxAdmin";
+import pdfParse from 'pdf-parse';
 
 const pdfCache = new Map<string, Uint8Array>();
 
@@ -25,7 +26,7 @@ async function fetchWithRetry(url: string, retries = 1): Promise<Response> {
 
 /**
  * Retrieves the original PDF bytes for a given CV record.
- * If the record’s filepath is missing, uses a default PDF.
+ * If the record's filepath is missing, uses a default PDF.
  * If the filepath is a Dropbox path (e.g., "/pdfs/filename.pdf"),
  * generates a fresh temporary link via Dropbox API before downloading.
  *
@@ -81,7 +82,6 @@ export async function getOriginalPdfBytes(cvRecord: any): Promise<Uint8Array> {
  */
 export async function extractTextFromPdf(pdfBytes: Uint8Array): Promise<string> {
   const buffer = Buffer.from(pdfBytes);
-  const pdfParse = (await import("pdf-parse")).default;
   const data = await pdfParse(buffer);
   return data.text;
 }
