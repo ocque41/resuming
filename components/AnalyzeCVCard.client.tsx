@@ -46,7 +46,7 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
   return (
     <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border-transparent">
       <CardContent>
-        <div className="flex justify-center items-center h-24 bg-gray-100 rounded-lg mb-4">
+        <div className="flex justify-center items-center h-64 bg-gray-100 rounded-lg mb-4">
           <img
             src="/animations/leep.gif"
             alt="Animation"
