@@ -65,7 +65,11 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
     <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border-transparent">
       <CardContent>
         <div className="flex justify-center items-center h-32 bg-gray-100 rounded-lg mb-4">
-          <span className="text-gray-500">Animation Placeholder</span>
+          <img
+            src="/animations/leep.gif"
+            alt="Animation"
+            className="w-full h-full object-cover"
+          />
         </div>
         <ComboboxPopover
           label="Select a CV to Optimize"

@@ -2,7 +2,6 @@
 "use client";
 
 import { useState } from "react";
-import Lottie from "lottie-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { ComboboxPopover } from "@/components/ui/combobox";
 import { Article, ArticleTitle, ArticleMeta, ArticleContent } from "@/components/ui/article";
@@ -48,11 +47,10 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
     <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border-transparent">
       <CardContent>
         <div className="flex justify-center items-center h-24 bg-gray-100 rounded-lg mb-4">
-          <Lottie
-            animationData={require('@/animations/leap.lottie')}
-            loop
-            autoplay
-            style={{ width: '100%', height: 'auto', objectFit: 'cover' }}
+          <img
+            src="/animations/leep.gif"
+            alt="Animation"
+            className="w-full h-full object-cover"
           />
         </div>
         <ComboboxPopover
