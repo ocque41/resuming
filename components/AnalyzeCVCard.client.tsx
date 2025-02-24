@@ -15,6 +15,7 @@ interface AnalysisResult {
 
 interface AnalyzeCVCardProps {
   cvs: string[];
+  children?: React.ReactNode;
 }
 
 export default function AnalyzeCVCard({ cvs }: AnalyzeCVCardProps) {

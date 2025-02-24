@@ -91,13 +91,7 @@ export default async function DashboardPage() {
       <CardTitle className="text-sm text-gray-500 text-center mt-2 mx-auto max-w-md lg:max-w-2xl">
         Analyze CV
       </CardTitle>
-      <AnalyzeCVCard cvs={cvs.map((cv) => cv.fileName)}>
-        <video
-          className="w-full h-auto"
-          controls
-          src="/animations/Leap Back In copy.mp4"
-        />
-      </AnalyzeCVCard>
+      <AnalyzeCVCard cvs={cvs.map((cv) => cv.fileName)} />
       <CardTitle className="text-sm text-gray-500 text-center mt-2 mx-auto max-w-md lg:max-w-2xl">
         Optimize CV
       </CardTitle>
