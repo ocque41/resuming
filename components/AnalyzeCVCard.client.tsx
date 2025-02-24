@@ -18,7 +18,7 @@ interface AnalyzeCVCardProps {
   children?: React.ReactNode;
 }
 
-export default function AnalyzeCVCard({ cvs }: AnalyzeCVCardProps) {
+export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
   const [selectedCV, setSelectedCV] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -92,6 +92,7 @@ export default function AnalyzeCVCard({ cvs }: AnalyzeCVCardProps) {
             </ArticleContent>
           </Article>
         )}
+        {children}
       </CardContent>
     </Card>
   );
