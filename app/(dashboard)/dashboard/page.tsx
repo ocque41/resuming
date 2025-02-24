@@ -33,6 +33,11 @@ export default async function DashboardPage() {
 
   return (
     <>
+      <video
+        className="w-full h-auto"
+        controls
+        src="/animations/Leap Back In copy.mp4"
+      />
       <header className="flex items-center justify-between p-4 lg:p-8 mx-auto max-w-md lg:max-w-2xl">
         <ArticleTitle className="text-md lg:text-xl font-medium ml-4">
           Dashboard
