@@ -47,15 +47,11 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
     <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border-transparent">
       <CardContent>
         <div className="flex justify-center items-center h-24 bg-gray-100 rounded-lg mb-4">
-          <video
-            className="w-full h-auto"
-            controls
-            src="/animations/Leap Back In copy.mp4"
+          <Lottie
+            animationData={require('/animations/leap.lottie')}
             loop
-            muted
-            autoPlay
-            playsInline
-            style={{ objectFit: "cover" }}
+            autoplay
+            style={{ width: '100%', height: 'auto', objectFit: 'cover' }}
           />
         </div>
         <ComboboxPopover
