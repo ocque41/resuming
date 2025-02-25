@@ -23,7 +23,7 @@ import { motion, Variants } from "framer-motion";
 import DragAndDropUpload from '@/components/ui/drag&drop';
 
 const safiroFont = localFont({
-  src: '/fonts/Safiro-Medium.otf',
+  src: '../public/fonts/Safiro-Medium.otf',
   display: 'swap',
 });
 
