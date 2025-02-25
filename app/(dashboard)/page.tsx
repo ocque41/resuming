@@ -1,6 +1,6 @@
 "use client";
 
-import { Navbar } from "@/components/ui/navbar"; // adjust the path if needed
+import { Navbar } from "@/components/ui/navbar"; // Adjust path as needed
 import { Article, ArticleTitle, ArticleContent } from "@/components/ui/article";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -39,7 +39,7 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col bg-[#050505]">
-      {/* Navbar Import */}
+      {/* Navbar */}
       <Navbar />
 
       {/* Hero Section */}
@@ -53,7 +53,11 @@ export default function HomePage() {
           </ArticleContent>
         </Article>
         <div className="flex justify-center space-x-4 mb-8">
-          <Button asChild size="lg" className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition">
+          <Button
+            asChild
+            size="lg"
+            className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition"
+          >
             <Link href="/sign-up">Try For Free</Link>
           </Button>
           <Button
@@ -83,17 +87,25 @@ export default function HomePage() {
               Products
             </ArticleTitle>
           </Article>
-
           <GradientCard className="mx-auto flex flex-col justify-center bg-[#1A1614]/80 backdrop-blur-lg border-[#B4916C]/10">
             <Tabs defaultValue="pro" className="w-full max-w-4xl mx-auto">
               <TabsList className="grid w-full grid-cols-3 bg-[#2C2420]">
-                <TabsTrigger value="pro" className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white">
+                <TabsTrigger
+                  value="pro"
+                  className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white"
+                >
                   Pro
                 </TabsTrigger>
-                <TabsTrigger value="moonlighting" className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white">
+                <TabsTrigger
+                  value="moonlighting"
+                  className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white"
+                >
                   Moonlighting
                 </TabsTrigger>
-                <TabsTrigger value="ceo" className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white">
+                <TabsTrigger
+                  value="ceo"
+                  className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white"
+                >
                   CEO
                 </TabsTrigger>
               </TabsList>

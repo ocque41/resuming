@@ -1,10 +1,22 @@
 "use client";
-import { useState } from "react";
+
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 
 export function Navbar() {
+  const [isMobile, setIsMobile] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Detect mobile screen using window.innerWidth
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    handleResize(); // set initial value
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   return (
     <nav className="bg-[#050505] border-b border-gray-700 relative">
@@ -16,34 +28,34 @@ export function Navbar() {
           </Link>
           <span className="ml-2 text-white text-xl font-bold"></span>
         </div>
-        {/* Desktop Navigation Links */}
-        <div className="hidden md:flex items-center space-x-8">
-          <Link
-            href="/dashboard/pricing"
-            className="text-white hover:text-gray-300 px-3 py-2 rounded-md text-sm font-medium"
-          >
-            Product
-          </Link>
-          <Link
-            href="https://chromad.vercel.app/docs/products/resuming/overview"
-            className="text-white hover:text-gray-300 px-3 py-2 rounded-md text-sm font-medium"
-          >
-            Documentation
-          </Link>
-          <Link
-            href="https://next-js-saas-starter-three-resuming.vercel.app/sign-in"
-            className="bg-white text-black hover:bg-gray-200 px-3 py-2 rounded-md text-sm font-medium"
-          >
-            Log in
-          </Link>
-        </div>
-        {/* Mobile Hamburger Button */}
-        <div className="md:hidden">
+        {/* Render Desktop Inline Navigation if NOT mobile */}
+        {!isMobile ? (
+          <div className="flex items-center space-x-8">
+            <Link
+              href="/dashboard/pricing"
+              className="text-white hover:text-gray-300 px-3 py-2 rounded-md text-sm font-medium"
+            >
+              Product
+            </Link>
+            <Link
+              href="https://chromad.vercel.app/docs/products/resuming/overview"
+              className="text-white hover:text-gray-300 px-3 py-2 rounded-md text-sm font-medium"
+            >
+              Documentation
+            </Link>
+            <Link
+              href="https://next-js-saas-starter-three-resuming.vercel.app/sign-in"
+              className="bg-white text-black hover:bg-gray-200 px-3 py-2 rounded-md text-sm font-medium"
+            >
+              Log in
+            </Link>
+          </div>
+        ) : (
+          // Otherwise, on mobile, show a hamburger button
           <button
             onClick={() => setIsMobileMenuOpen((prev) => !prev)}
             className="text-white focus:outline-none"
           >
-            {/* Hamburger Icon */}
             <svg
               className="w-6 h-6"
               fill="none"
@@ -55,11 +67,11 @@ export function Navbar() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-        </div>
+        )}
       </div>
       {/* Mobile Dropdown Menu */}
-      {isMobileMenuOpen && (
-        <div className="md:hidden absolute right-4 top-full bg-[#050505] border border-gray-700 rounded-md shadow-lg w-48">
+      {isMobile && isMobileMenuOpen && (
+        <div className="absolute right-4 top-full bg-[#050505] border border-gray-700 rounded-md shadow-lg w-48">
           <div className="py-2">
             <Link
               href="/dashboard/pricing"
