@@ -1,15 +1,14 @@
 "use client";
+
+import { Navbar } from "@/components/ui/navbar"; // Adjust the path if needed
 import { useState, useEffect } from "react";
-import Image from "next/image";
 import Link from "next/link";
-import { Menu, MenuButton, MenuItems, MenuItem } from "@headlessui/react";
-import { Button } from "@/components/ui/button";
 import { Article, ArticleTitle, ArticleContent } from "@/components/ui/article";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, TrendingUp, Shield, Check } from "lucide-react";
 import { GradientCard } from "@/components/ui/gradient-card";
 import { motion, Variants } from "framer-motion";
-import DragAndDropUpload from "@/components/ui/drag&drop";
 
 export default function HomePage() {
   const containerVariants: Variants = {
@@ -39,91 +38,10 @@ export default function HomePage() {
     },
   };
 
-  const [isScrolled, setIsScrolled] = useState(false);
-  useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 0);
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
   return (
     <div className="flex flex-col bg-[#050505]">
-      {/* Navbar */}
-      <header
-        className={`sticky top-0 z-50 transition-all duration-300 ${
-          isScrolled ? "bg-black/50 backdrop-blur-md" : "bg-[#050505]"
-        }`}
-      >
-        {/* Desktop Navbar: visible on md and up */}
-        <div className="hidden md:flex max-w-7xl mx-auto px-4 sm:px-6 py-4 items-center justify-between">
-          {/* Logo */}
-          <div className="flex items-center">
-            <Image src="/white.png" alt="Logo" width={140} height={140} className="mr-4" />
-          </div>
-          {/* Navigation Links */}
-          <nav className="flex items-center space-x-8">
-            <Link href="/dashboard/pricing" className="text-white hover:text-gray-300">
-              Product
-            </Link>
-            <Link
-              href="https://chromad.vercel.app/docs/products/resuming/overview"
-              className="text-white hover:text-gray-300"
-            >
-              Documentation
-            </Link>
-            <Link
-              href="https://next-js-saas-starter-three-resuming.vercel.app/sign-in"
-              className="bg-white text-black px-4 py-2 rounded hover:bg-gray-200"
-            >
-              Log in
-            </Link>
-          </nav>
-        </div>
-
-        {/* Mobile Navbar: visible on screens below md */}
-        <div className="flex md:hidden px-4 py-4 items-center justify-between">
-          {/* Logo */}
-          <div className="flex items-center">
-            <Image src="/white.png" alt="Logo" width={100} height={100} className="mr-2" />
-          </div>
-          {/* Mobile Dropdown Menu */}
-          <Menu as="div" className="relative">
-            <MenuButton className="text-white">Menu</MenuButton>
-            <MenuItems className="absolute right-0 mt-2 w-48 origin-top-right bg-[#050505] text-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none rounded-lg">
-              <MenuItem>
-                {({ active }) => (
-                  <Link
-                    href="/dashboard/pricing"
-                    className={`block px-4 py-2 ${active ? "bg-gray-700" : ""}`}
-                  >
-                    Product
-                  </Link>
-                )}
-              </MenuItem>
-              <MenuItem>
-                {({ active }) => (
-                  <Link
-                    href="https://chromad.vercel.app/docs/products/resuming/overview"
-                    className={`block px-4 py-2 ${active ? "bg-gray-700" : ""}`}
-                  >
-                    Documentation
-                  </Link>
-                )}
-              </MenuItem>
-              <MenuItem>
-                {({ active }) => (
-                  <Link
-                    href="https://next-js-saas-starter-three-resuming.vercel.app/sign-in"
-                    className={`block px-4 py-2 ${active ? "bg-gray-700" : ""}`}
-                  >
-                    Log in
-                  </Link>
-                )}
-              </MenuItem>
-            </MenuItems>
-          </Menu>
-        </div>
-      </header>
+      {/* Navbar Component */}
+      <Navbar />
 
       {/* Hero Section */}
       <section className="min-h-screen flex flex-col items-center justify-center px-4 bg-[#050505] text-center">
@@ -136,11 +54,7 @@ export default function HomePage() {
           </ArticleContent>
         </Article>
         <div className="flex justify-center space-x-4 mb-8">
-          <Button
-            asChild
-            size="lg"
-            className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition"
-          >
+          <Button asChild size="lg" className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition">
             <Link href="/sign-up">Try For Free</Link>
           </Button>
           <Button
@@ -276,7 +190,7 @@ export default function HomePage() {
               </TabsContent>
             </Tabs>
             <div className="mt-8 flex justify-center">
-              {/* Removed extra buttons */}
+              {/* Additional Buttons if needed */}
             </div>
           </GradientCard>
         </motion.div>
@@ -284,12 +198,7 @@ export default function HomePage() {
 
       {/* Additional Content Section */}
       <div className="container mx-auto px-4 py-16">
-        <motion.div
-          className="max-w-7xl mx-auto space-y-16"
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-        >
+        <motion.div className="max-w-7xl mx-auto space-y-16" variants={containerVariants} initial="hidden" animate="visible">
           <motion.section className="grid md:grid-cols-3 gap-8" variants={containerVariants}>
             {[
               {
