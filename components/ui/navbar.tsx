@@ -36,7 +36,7 @@ export function Navbar() {
           <Link href="/">
             <Image src="/white.png" alt="Logo" width={170} height={170} />
           </Link>
-          <span className="ml-2 text-white text-xl font-bold">ResumeAI</span>
+          <span className="ml-2 text-white text-xl font-bold"></span>
         </div>
         {/* Desktop Navigation */}
         {!isMobile && (
