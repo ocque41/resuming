@@ -3,6 +3,7 @@ import { Terminal } from './terminal';
 import { Popover } from '@headlessui/react';
 import Image from 'next/image';
 import { Button } from "@/components/ui/button";
+import { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Article, ArticleTitle } from "@/components/ui/article";
 import { 
@@ -47,9 +48,20 @@ export default function HomePage() {
     }
   };
 
-  return (
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 0);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
     <div className="flex flex-col bg-[#050505]">
-      <nav className="flex items-center justify-between p-4 bg-gray-800">
+      <nav className={`flex items-center justify-between p-4 sticky top-0 z-50 transition-all duration-300 ${isScrolled ? 'bg-black/50 backdrop-blur-md' : 'bg-[#050505]'}`}>
         <div className="flex items-center">
           <Image
             src="/Resuming white.png"
