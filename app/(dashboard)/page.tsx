@@ -5,7 +5,6 @@ import Image from 'next/image';
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from 'react';
 import { Article, ArticleTitle, ArticleContent } from "@/components/ui/article";
-import localFont from 'next/font/local';
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
@@ -22,10 +21,6 @@ import Link from "next/link";
 import { motion, Variants } from "framer-motion";
 import DragAndDropUpload from '@/components/ui/drag&drop';
 
-const safiroFont = localFont({
-  src: '/fonts/Safiro-Medium.otf',
-  display: 'swap',
-});
 
 export default function HomePage() {
   const containerVariants: Variants = {
@@ -68,7 +63,7 @@ export default function HomePage() {
     };
   }, []);
   return (
-    <div className={`flex flex-col bg-[#050505] ${safiroFont.className}`}>
+    <div className="flex flex-col bg-[#050505]">
       <nav className={`flex items-center justify-between p-4 sticky top-0 z-50 transition-all duration-300 ${isScrolled ? 'bg-black/50 backdrop-blur-md' : 'bg-[#050505]'}`}>
         <div className="flex items-center">
           <Image
