@@ -67,8 +67,8 @@ export default function HomePage() {
           <Image
             src="/Resuming white.png"
             alt="Logo"
-            width={50}
-            height={50}
+            width={80}
+            height={80}
             className="mr-4"
           />
         </div>
