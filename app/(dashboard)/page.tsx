@@ -17,9 +17,9 @@ export default function HomePage() {
         staggerChildren: 0.15,
         delayChildren: 0.3,
         duration: 0.6,
-        ease: "easeOut"
-      }
-    }
+        ease: "easeOut",
+      },
+    },
   };
 
   const itemVariants: Variants = {
@@ -31,9 +31,9 @@ export default function HomePage() {
         type: "spring",
         stiffness: 80,
         damping: 15,
-        duration: 0.8
-      }
-    }
+        duration: 0.8,
+      },
+    },
   };
 
   return (
@@ -77,22 +77,22 @@ export default function HomePage() {
               </Button>
             </div>
           </Article>
-          {/* Image Placeholder */}
+          {/* Larger Image Placeholder */}
           <div className="mt-8 flex justify-center">
             <div className="w-full max-w-2xl h-96 bg-gray-300 rounded-lg"></div>
           </div>
         </div>
       </section>
 
-      {/* Product (Steps) Section */}
-      <section className="py-16 px-4">
+      {/* How It Works Section */}
+      <section className="relative min-h-screen py-16 px-4">
         <div className="max-w-4xl mx-auto text-left">
           <Article>
             <ArticleTitle className="text-3xl md:text-4xl font-bold text-white">
               How It Works
             </ArticleTitle>
             <ArticleContent className="mt-4 text-lg md:text-xl text-gray-300">
-              Follow these simple steps to land your dream job: Upload your CV, let our AI analyze and optimize it, then apply at scale.
+              Upload &rarr; Analyze &rarr; Optimize &rarr; Apply
             </ArticleContent>
           </Article>
           <motion.div
@@ -101,7 +101,7 @@ export default function HomePage() {
             initial="hidden"
             animate="visible"
           >
-            {/* Feature Card 1: CV Analysis */}
+            {/* Card 1: CV Analysis */}
             <motion.div
               className="bg-[#050505] p-6 rounded-lg shadow-md transition-all duration-base ease-default group border border-[#E8DCC4]"
               variants={itemVariants}
@@ -110,13 +110,13 @@ export default function HomePage() {
                 <FileText className="w-6 h-6 text-[#E8DCC4]" />
                 <h3 className="text-xl font-semibold text-[#E8DCC4]">CV Analysis</h3>
               </div>
-              {/* Animation placeholder between title and description */}
+              {/* Animated divider placeholder */}
               <div className="my-2 h-1 w-16 bg-[#E8DCC4] animate-pulse"></div>
               <p className="text-gray-300">
-                Our custom-trained AI reviews your CV to extract key insights and identify areas for improvement.
+                Our custom-trained AI reviews your CV to extract insights and identify key improvement areas.
               </p>
             </motion.div>
-            {/* Feature Card 2: CV Optimization */}
+            {/* Card 2: CV Optimization */}
             <motion.div
               className="bg-[#050505] p-6 rounded-lg shadow-md transition-all duration-base ease-default group border border-[#E8DCC4]"
               variants={itemVariants}
@@ -127,10 +127,10 @@ export default function HomePage() {
               </div>
               <div className="my-2 h-1 w-16 bg-[#E8DCC4] animate-pulse"></div>
               <p className="text-gray-300">
-                Receive personalized suggestions to fine-tune your CV and boost your marketability.
+                Receive personalized suggestions that fine-tune your CV to stand out in today’s competitive market.
               </p>
             </motion.div>
-            {/* Feature Card 3: Job Matching & Mapping */}
+            {/* Card 3: Job Matching & Mapping */}
             <motion.div
               className="bg-[#050505] p-6 rounded-lg shadow-md transition-all duration-base ease-default group border border-[#E8DCC4]"
               variants={itemVariants}
@@ -141,10 +141,20 @@ export default function HomePage() {
               </div>
               <div className="my-2 h-1 w-16 bg-[#E8DCC4] animate-pulse"></div>
               <p className="text-gray-300">
-                Discover curated job listings with compatibility scores and view them on an interactive map.
+                Discover curated job listings with compatibility scores, and explore them on an interactive map.
               </p>
             </motion.div>
           </motion.div>
+          {/* Centered Try For Free Button */}
+          <div className="mt-12 flex justify-center">
+            <Button
+              asChild
+              size="lg"
+              className="bg-[#584235] text-white px-8 py-4 rounded-md hover:bg-[#584235]/90 transition"
+            >
+              <Link href="/sign-up">Try For Free</Link>
+            </Button>
+          </div>
         </div>
       </section>
 
