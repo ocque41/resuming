@@ -23,9 +23,9 @@ import { motion, Variants } from "framer-motion";
 import DragAndDropUpload from '@/components/ui/drag&drop';
 
 const safiroFont = localFont({
-});
   src: '/fonts/Safiro-Medium.otf',
   display: 'swap',
+});
 });
 
 export default function HomePage() {
@@ -123,9 +123,9 @@ export default function HomePage() {
         </div>
       </nav>
       
-      <section className="min-h-screen flex flex-col items-center justify-center px-4 bg-white text-center">
+      <section className="min-h-screen flex flex-col items-center justify-center px-4 bg-[#050505] text-center">
         <Article className="text-center">
-          <ArticleTitle className="text-5xl font-bold text-gray-900 mb-4">
+          <ArticleTitle className="text-5xl font-bold text-white mb-4">
             AI based CV Analysis and Optimization with job mapping and list scoring for job exclusive opportunities and company status.
           </ArticleTitle>
           <ArticleContent className="text-xl text-gray-600 mb-8">
