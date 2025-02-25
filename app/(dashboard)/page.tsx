@@ -60,6 +60,7 @@ export default function HomePage() {
       window.removeEventListener('scroll', handleScroll);
     };
   }, []);
+  return (
     <div className="flex flex-col bg-[#050505]">
       <nav className={`flex items-center justify-between p-4 sticky top-0 z-50 transition-all duration-300 ${isScrolled ? 'bg-black/50 backdrop-blur-md' : 'bg-[#050505]'}`}>
         <div className="flex items-center">
