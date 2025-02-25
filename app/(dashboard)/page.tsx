@@ -85,37 +85,32 @@ export default function HomePage() {
         </div>
       </nav>
       
-      <section className="min-h-screen flex items-center justify-center px-4 relative">
-        <GradientCard className="w-full max-w-7xl min-h-screen flex flex-col justify-center bg-gradient-to-r from-[#584235] via-[#E8DCC4] to-[#B4916C] backdrop-blur-lg">
-          <div className="space-y-8 mb-12 text-center">
-            <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight text-white">
-              Craft Your Perfect CV
-            </h1>
-            <p className="text-xl md:text-2xl lg:text-3xl mt-6 max-w-3xl mx-auto text-[#FAF6ED]">
-              Transform your career journey with our intelligent AI-powered CV optimization platform
-            </p>
-          </div>
-          <div className="flex flex-col md:flex-row justify-center gap-6">
+      <section className="min-h-screen flex items-center justify-center px-4 bg-white">
+        <div className="w-full max-w-4xl text-center space-y-8">
+          <h1 className="text-6xl font-bold text-gray-900">
+            Elevate Your Career
+          </h1>
+          <p className="text-lg text-gray-600">
+            Experience the future of CV optimization with our AI-powered platform.
+          </p>
+          <div className="flex justify-center space-x-4">
             <Button 
               asChild 
               size="lg" 
-              className="group shadow-lg bg-[#584235] text-white hover:bg-[#2C2420] transition-all duration-base ease-default"
+              className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition"
             >
-              <Link href="sign-in" className="flex items-center text-white">
-                Start Here
-                <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
-              </Link>
+              <Link href="/sign-up">Get Started</Link>
             </Button>
             <Button 
               asChild 
               variant="outline" 
               size="lg" 
-              className="shadow-lg border-2 border-[#B4916C] text-[#B4916C] hover:bg-[#2C2420] hover:text-white transition-all duration-300"
+              className="border border-blue-600 text-blue-600 px-6 py-3 rounded-md hover:bg-blue-600 hover:text-white transition"
             >
-              <Link href="/dashboard/pricing">Explore Plans</Link>
+              <Link href="/learn-more">Learn More</Link>
             </Button>
           </div>
-        </GradientCard>
+        </div>
       </section>
 
       <section className="min-h-[100dvh] flex items-center justify-center px-4 relative">
