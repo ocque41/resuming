@@ -1,5 +1,7 @@
 "use client"
 import { Terminal } from './terminal';
+import { Popover } from '@headlessui/react';
+import Image from 'next/image';
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Article, ArticleTitle } from "@/components/ui/article";
@@ -47,6 +49,29 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col bg-[#050505]">
+      <nav className="flex items-center justify-between p-4 bg-gray-800">
+        <div className="flex items-center">
+          <Image
+            src="/Resuming white.png"
+            alt="Logo"
+            width={50}
+            height={50}
+            className="mr-4"
+          />
+        </div>
+        <div className="flex items-center space-x-4">
+          <Link href="/product" className="text-white">
+            Product
+          </Link>
+          <Link href="/documentation" className="text-white">
+            Documentation
+          </Link>
+          <Link href="/login" className="bg-white text-black px-4 py-2 rounded">
+            Log in
+          </Link>
+        </div>
+      </nav>
+      
       <section className="min-h-[100dvh] flex items-center justify-center px-4 relative">
         <motion.div 
           className="w-full"
