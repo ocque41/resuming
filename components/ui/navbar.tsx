@@ -32,7 +32,7 @@ export function Navbar() {
         {!isMobile ? (
           <div className="flex items-center space-x-8">
             <Link
-              href="/dashboard/pricing"
+              href="/pricing"
               className="text-white hover:text-gray-300 px-3 py-2 rounded-md text-sm font-medium"
             >
               Product
@@ -74,7 +74,7 @@ export function Navbar() {
         <div className="absolute right-4 top-full bg-[#050505] border border-gray-700 rounded-md shadow-lg w-48">
           <div className="py-2">
             <Link
-              href="/dashboard/pricing"
+              href="/pricing"
               onClick={() => setIsMobileMenuOpen(false)}
               className="block px-4 py-2 text-sm text-white hover:bg-gray-700"
             >
