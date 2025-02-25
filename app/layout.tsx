@@ -1,6 +1,12 @@
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
 import { Manrope } from 'next/font/google';
+import localFont from 'next/font/local';
+
+const safiroFont = localFont({
+  src: '/fonts/Safiro-Medium.otf',
+  display: 'swap',
+});
 import { UserProvider } from '@/lib/auth';
 import { getUser } from '@/lib/db/queries.server';
 import { ThemeProvider } from 'app/theme-provider';
@@ -29,7 +35,6 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={manrope.className}
       className={`${manrope.className} ${safiroFont.className}`}
     >
       <head>
