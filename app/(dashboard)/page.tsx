@@ -4,6 +4,7 @@ import { Popover } from '@headlessui/react';
 import Image from 'next/image';
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from 'react';
+import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Article, ArticleTitle } from "@/components/ui/article";
 import { 
@@ -72,7 +73,7 @@ export default function HomePage() {
             className="mr-4"
           />
         </div>
-        <div className="flex items-center space-x-4">
+        <div className="hidden md:flex items-center space-x-4">
           <Link href="/product" className="text-white">
             Product
           </Link>
@@ -82,6 +83,36 @@ export default function HomePage() {
           <Link href="/login" className="bg-white text-black px-4 py-2 rounded">
             Log in
           </Link>
+        </div>
+        <div className="md:hidden">
+          <Menu>
+            <MenuButton className="text-white">
+              Menu
+            </MenuButton>
+            <MenuItems className="bg-[#050505] text-white">
+              <MenuItem>
+                {({ active }) => (
+                  <Link href="/product" className={`${active ? 'bg-gray-700' : ''} block px-4 py-2`}>
+                    Product
+                  </Link>
+                )}
+              </MenuItem>
+              <MenuItem>
+                {({ active }) => (
+                  <Link href="/documentation" className={`${active ? 'bg-gray-700' : ''} block px-4 py-2`}>
+                    Documentation
+                  </Link>
+                )}
+              </MenuItem>
+              <MenuItem>
+                {({ active }) => (
+                  <Link href="/login" className={`${active ? 'bg-gray-700' : ''} block px-4 py-2`}>
+                    Log in
+                  </Link>
+                )}
+              </MenuItem>
+            </MenuItems>
+          </Menu>
         </div>
       </nav>
       
