@@ -19,7 +19,7 @@ export const viewport: Viewport = {
 
 const manrope = Manrope({ subsets: ['latin'] });
 const safiroFont = localFont({
-  src: '/fonts/Safiro-Medium.otf',
+  src: './fonts/Safiro-Medium.otf', // make sure this file exists relative to layout.tsx
   display: 'swap',
 });
 
@@ -37,9 +37,12 @@ export default function RootLayout({
       className={`${manrope.className} ${safiroFont.className}`}
     >
       <head>
-        <link rel="stylesheet" href="https://unpkg.com/franken-ui@1.1.0/dist/css/core.min.css" />
-        <script src="https://unpkg.com/franken-ui@1.1.0/dist/js/core.iife.js"></script>
-        <script src="https://unpkg.com/franken-ui@1.1.0/dist/js/icon.iife.js"></script>
+        <link
+          rel="stylesheet"
+          href="https://unpkg.com/franken-ui@1.1.0/dist/css/core.min.css"
+        />
+        <script src="https://unpkg.com/franken-ui@1.1.0/dist/js/core.iife.js" />
+        <script src="https://unpkg.com/franken-ui@1.1.0/dist/js/icon.iife.js" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -55,9 +58,7 @@ export default function RootLayout({
         <I18nProvider>
           <ThemeProvider defaultTheme="light" storageKey="app-theme">
             <UserProvider userPromise={userPromise}>
-              <main className="flex-grow">
-                {children}
-              </main>
+              <main className="flex-grow">{children}</main>
             </UserProvider>
           </ThemeProvider>
         </I18nProvider>

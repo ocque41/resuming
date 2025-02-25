@@ -11,6 +11,8 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Remove this font-family declaration if you want to use Next.js’s injected font-face */
+    /* font-family: 'Safiro', sans-serif; */
   }
   :root {
     --sidebar-background: 0, 0%, 98%;
@@ -34,20 +36,21 @@
   }
 }
 
+/* Optional: Remove this block if Next.js’s font loader is handling the font */
+/*
+@font-face {
+  font-family: 'Safiro';
+  src: url('/fonts/Safiro-Medium.otf') format('opentype');
+  font-display: swap;
+}
+*/
+
 @keyframes bubble-float-1 {
   0% { transform: translate(0%, 0%) scale(1); opacity: 0.5; }
   25% { transform: translate(-2%, -2%) scale(1.1); opacity: 0.7; }
   50% { transform: translate(1%, -3%) scale(0.95); opacity: 0.6; }
   75% { transform: translate(2%, 2%) scale(1.05); opacity: 0.5; }
   100% { transform: translate(0%, 0%) scale(1); opacity: 0.5; }
-}
-@font-face {
-  font-family: 'Safiro';
-  src: url('/fonts/Safiro-Medium.otf') format('opentype');
-  font-display: swap;
-}
-body {
-  font-family: 'Safiro', sans-serif;
 }
 
 @keyframes bubble-float-2 {
