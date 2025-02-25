@@ -5,10 +5,9 @@ import Image from 'next/image';
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from 'react';
 import { Article, ArticleTitle, ArticleContent } from "@/components/ui/article";
-import localFont from 'next/font/local';
+import { useFont } from 'next/font';
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Article, ArticleTitle } from "@/components/ui/article";
 import { 
   FileText, 
   TrendingUp, 
@@ -23,7 +22,7 @@ import Link from "next/link";
 import { motion, Variants } from "framer-motion";
 import DragAndDropUpload from '@/components/ui/drag&drop';
 
-const safiroFont = localFont({
+const safiroFont = useFont({
   src: '/fonts/Safiro-Medium.otf',
   display: 'swap',
 });
@@ -130,7 +129,7 @@ export default function HomePage() {
             AI based CV Analysis and Optimization with job mapping and list scoring for job exclusive opportunities and company status.
           </ArticleTitle>
           <ArticleContent className="text-xl text-gray-600 mb-8">
-            Experience the future of CV optimization with our AI-powered platform.
+            Router.so is headless form handling and lead routing for marketing-minded developers.
           </ArticleContent>
         </Article>
         <div className="flex justify-center space-x-4 mb-8">
