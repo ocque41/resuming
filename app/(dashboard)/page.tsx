@@ -4,9 +4,6 @@ import { Navbar } from "@/components/ui/navbar";
 import { Badge } from "@/components/ui/badge";
 import { Article, ArticleTitle, ArticleContent } from "@/components/ui/article";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileText, TrendingUp, Shield, Check } from "lucide-react";
-import { GradientCard } from "@/components/ui/gradient-card";
 import { motion, Variants } from "framer-motion";
 import Link from "next/link";
 
@@ -44,12 +41,12 @@ export default function HomePage() {
       <Navbar />
 
       {/* Hero Section */}
-      <section className="relative flex items-center bg-black pt-2">
+      <section className="relative h-screen flex items-center bg-black pt-16">
         {/* Background overlay */}
         <div className="absolute inset-0 bg-[url('/hero-bg.jpg')] bg-cover bg-center opacity-30"></div>
-        <div className="relative z-10 max-w-4xl mx-auto px-4 md:px-8 text-left">
+        <div className="relative z-10 max-w-4xl mx-auto px-4 md:px-8 text-left space-y-8">
           {/* Badge above title with link */}
-          <div className="mb-2">
+          <div>
             <Link href="https://chromad.vercel.app/docs/products/resuming">
               <Badge variant="outline">Documentation -&gt;</Badge>
             </Link>
@@ -73,188 +70,18 @@ export default function HomePage() {
                 asChild
                 variant="outline"
                 size="lg"
-                className="border border-[#2C2420] text-[#2C2420] px-8 py-4 rounded-md hover:bg-[#2C2420] hover:text-white transition"
+                className="border border-[#2C2420] text-white px-8 py-4 rounded-md hover:bg-[#2C2420] transition"
               >
                 <Link href="/pricing">Learn More</Link>
               </Button>
             </div>
           </Article>
-          {/* Image placeholder below buttons */}
-          <div className="mt-8 w-full max-w-md h-64 bg-gray-300 rounded-lg"></div>
+          {/* Image Placeholder */}
+          <div className="mt-12 flex justify-center">
+            <div className="w-full max-w-2xl h-96 bg-gray-300 rounded-lg"></div>
+          </div>
         </div>
       </section>
-
-      {/* Products Section */}
-      <section className="min-h-[100dvh] flex items-center justify-center px-4 py-8">
-        <motion.div
-          className="w-full max-w-7xl mx-auto py-16"
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-        >
-          <Article className="mb-6 text-center">
-            <ArticleTitle className="text-2xl md:text-3xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] via-[#B4916C] to-[#2C2420]">
-              Products
-            </ArticleTitle>
-          </Article>
-          <GradientCard className="mx-auto flex flex-col justify-center bg-[#1A1614]/80 backdrop-blur-lg border border-[#E8DCC4]">
-            <Tabs defaultValue="pro" className="w-full max-w-4xl mx-auto">
-              <TabsList className="grid w-full grid-cols-3 bg-[#2C2420]">
-                <TabsTrigger value="pro" className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white">
-                  Pro
-                </TabsTrigger>
-                <TabsTrigger value="moonlighting" className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white">
-                  Moonlighting
-                </TabsTrigger>
-                <TabsTrigger value="ceo" className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white">
-                  CEO
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="pro">
-                <article className="uk-article text-center space-y-6 p-8">
-                  <h3 className="text-3xl font-semibold text-[#B4916C]">Pro Plan</h3>
-                  <p className="text-xl text-[#E8DCC4]">$7.99/month</p>
-                  <p className="uk-article-meta text-[#B4916C]/80">
-                    Perfect for professionals starting their career journey
-                  </p>
-                  <div className="uk-article-content space-y-4 max-w-2xl mx-auto text-[#E8DCC4]">
-                    <p>
-                      The Pro Plan is designed for individuals who are actively seeking new opportunities and want to optimize their CV for better results.
-                    </p>
-                    <ul className="space-y-4 max-w-md mx-auto text-left">
-                      <li className="flex items-center text-[#B4916C]">
-                        <Check className="mr-2" /> 20 CV uploads/month
-                      </li>
-                      <li className="flex items-center text-[#B4916C]">
-                        <Check className="mr-2" /> 10 ATS analyses/month
-                      </li>
-                      <li className="flex items-center text-[#B4916C]">
-                        <Check className="mr-2" /> 7 Optimizations/month
-                      </li>
-                    </ul>
-                  </div>
-                  <div className="mt-8 flex justify-center">
-                    <Button asChild variant="secondary" className="bg-[#050505]">
-                      <Link href="/pricing">Details</Link>
-                    </Button>
-                  </div>
-                </article>
-              </TabsContent>
-              <TabsContent value="moonlighting">
-                <article className="uk-article text-center space-y-6 p-8">
-                  <h3 className="text-3xl font-semibold text-[#B4916C]">Moonlighting Plan</h3>
-                  <p className="text-xl text-[#E8DCC4]">$14.99/month</p>
-                  <p className="uk-article-meta text-[#B4916C]/80">
-                    Ideal for professionals managing multiple career paths
-                  </p>
-                  <div className="uk-article-content space-y-4 max-w-2xl mx-auto text-[#E8DCC4]">
-                    <p>
-                      The Moonlighting Plan caters to professionals who maintain multiple career tracks or frequently apply to different types of positions.
-                    </p>
-                    <ul className="space-y-4 max-w-md mx-auto text-left">
-                      <li className="flex items-center text-[#B4916C]">
-                        <Check className="mr-2" /> Unlimited CV uploads/month
-                      </li>
-                      <li className="flex items-center text-[#B4916C]">
-                        <Check className="mr-2" /> 20 ATS analyses/month
-                      </li>
-                      <li className="flex items-center text-[#B4916C]">
-                        <Check className="mr-2" /> 15 Optimizations/month
-                      </li>
-                    </ul>
-                  </div>
-                  <div className="mt-8 flex justify-center">
-                    <Button asChild variant="secondary" className="bg-[#050505]">
-                      <Link href="/pricing">Details</Link>
-                    </Button>
-                  </div>
-                </article>
-              </TabsContent>
-              <TabsContent value="ceo">
-                <article className="uk-article text-center space-y-6 p-8">
-                  <h3 className="text-3xl font-semibold text-[#B4916C]">CEO Plan</h3>
-                  <p className="text-xl text-[#E8DCC4]">$99.99/month</p>
-                  <p className="uk-article-meta text-[#B4916C]/80">
-                    For executives and leaders aiming for top positions
-                  </p>
-                  <div className="uk-article-content space-y-4 max-w-2xl mx-auto text-[#E8DCC4]">
-                    <p>
-                      The CEO Plan is our premium offering for executives and senior professionals. With unlimited access to all features and our job guarantee, this plan ensures you'll secure the high-level position you deserve.
-                    </p>
-                    <ul className="space-y-4 max-w-md mx-auto text-left">
-                      <li className="flex items-center text-[#B4916C]">
-                        <Check className="mr-2" /> Unlimited Everything
-                      </li>
-                      <li className="flex items-center text-[#B4916C]">
-                        <Check className="mr-2" /> Early access to features
-                      </li>
-                      <li className="flex items-center text-[#B4916C]">
-                        <Check className="mr-2" /> The Position You Desire In 3 Months or Money Back Guaranteed
-                      </li>
-                    </ul>
-                  </div>
-                  <div className="mt-8 flex justify-center">
-                    <Button asChild variant="secondary" className="bg-[#050505]">
-                      <Link href="/pricing">Details</Link>
-                    </Button>
-                  </div>
-                </article>
-              </TabsContent>
-            </Tabs>
-            <div className="mt-8 flex justify-center">
-              {/* Additional Buttons if needed */}
-            </div>
-          </GradientCard>
-        </motion.div>
-      </section>
-
-      {/* Additional Content Section */}
-      <div className="container mx-auto px-4 py-16">
-        <motion.div
-          className="max-w-7xl mx-auto space-y-16"
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-        >
-          <motion.section className="grid md:grid-cols-3 gap-8" variants={containerVariants}>
-            {[
-              {
-                icon: FileText,
-                title: "AI-Powered Document Analysis",
-                description: "Intelligent content analysis with automated scoring and format preservation",
-                bgColor: "bg-[#2C2420]",
-                textColor: "text-[#B4916C]",
-              },
-              {
-                icon: TrendingUp,
-                title: "Job-CV Matching System",
-                description: "Real-time CV optimization with percentage-based job compatibility scoring",
-                bgColor: "bg-[#584235]",
-                textColor: "text-[#E8DCC4]",
-              },
-              {
-                icon: Shield,
-                title: "Geospatial Integration",
-                description: "Location-based job mapping with interactive scoring visualization",
-                bgColor: "bg-[#2C2420]",
-                textColor: "text-[#B4916C]",
-              },
-            ].map(({ icon: Icon, title, description, bgColor, textColor }) => (
-              <motion.div
-                key={title}
-                className={`${bgColor} p-6 rounded-lg shadow-md hover:shadow-xl transition-all duration-base ease-default group border border-[#E8DCC4] hover:border-[#E8DCC4]`}
-                variants={itemVariants}
-              >
-                <Icon className={`mx-auto mb-4 ${textColor} group-hover:scale-110 transition-all duration-300`} size={48} />
-                <h3 className={`text-2xl font-semibold mb-4 ${textColor}`}>{title}</h3>
-                <p className={`${textColor} opacity-70 group-hover:opacity-100 transition-colors`}>
-                  {description}
-                </p>
-              </motion.div>
-            ))}
-          </motion.section>
-        </motion.div>
-      </div>
 
       {/* Footer */}
       <footer className="bg-[#050505] text-[#E8DCC4] py-12 mt-16">

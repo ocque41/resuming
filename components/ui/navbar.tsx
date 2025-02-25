@@ -6,8 +6,9 @@ import Image from "next/image";
 export function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
 
-  // Set isMobile based on window width (<768px)
+  // Update mobile state based on window width
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     handleResize();
@@ -15,17 +16,29 @@ export function Navbar() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // Update isScrolled state based on scroll position
+  useEffect(() => {
+    const handleScroll = () => setIsScrolled(window.scrollY > 0);
+    handleScroll();
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
   return (
-    <nav className="bg-[#050505] border-b border-[#E8DCC4] relative">
+    <nav
+      className={`sticky top-0 w-full z-50 transition-all ${
+        isScrolled ? "bg-[#050505] bg-opacity-90 backdrop-blur-sm" : "bg-transparent"
+      }`}
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
         {/* Logo Section */}
         <div className="flex items-center">
           <Link href="/">
             <Image src="/white.png" alt="Logo" width={170} height={170} />
           </Link>
-          <span className="ml-2 text-white text-xl font-bold"></span>
+          <span className="ml-2 text-white text-xl font-bold">ResumeAI</span>
         </div>
-        {/* Desktop Navigation Links */}
+        {/* Desktop Navigation */}
         {!isMobile && (
           <div className="flex items-center space-x-8">
             <Link
