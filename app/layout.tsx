@@ -30,6 +30,7 @@ export default function RootLayout({
       lang="en"
       suppressHydrationWarning
       className={manrope.className}
+      className={`${manrope.className} ${safiroFont.className}`}
     >
       <head>
         <link rel="stylesheet" href="https://unpkg.com/franken-ui@1.1.0/dist/css/core.min.css" />
