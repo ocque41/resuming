@@ -15,7 +15,7 @@ import {
   ArrowRight,
   Check
 } from "lucide-react";
-import { GradientCard } from "@/components/ui/gradient-card";
+import { Card } from "@/components/ui/card";
 import Link from "next/link";
 import { motion, Variants } from "framer-motion";
 import DragAndDropUpload from '@/components/ui/drag&drop';
@@ -85,49 +85,37 @@ export default function HomePage() {
         </div>
       </nav>
       
-      <section className="min-h-[100dvh] flex items-center justify-center px-4 relative">
-        <motion.div 
-          className="w-full"
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-        >
-          <motion.div variants={containerVariants} className="w-full">
-            <GradientCard variant="wide" className="mx-auto max-w-7xl min-h-[80dvh] flex flex-col justify-center">
-              <div className="space-y-8 mb-12">
-                <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight text-white animate-fade-in">
-                  Craft Your Perfect CV
-                </h1>
-                <p className="text-xl md:text-2xl lg:text-3xl mt-6 max-w-3xl mx-auto text-[#B4916C] animate-fade-in-up">
-                  Transform your career journey with our intelligent AI-powered CV optimization platform
-                </p>
-              </div>
-              <motion.div 
-                className="flex flex-col md:flex-row justify-center gap-6 animate-slide-in-right"
-                variants={itemVariants}
-              >
-                <Button 
-                  asChild 
-                  size="lg" 
-                  className="group shadow-lg bg-[#584235] text-white hover:bg-[#2C2420] transition-all duration-base ease-default"
-                >
-                  <Link href="sign-in" className="flex items-center text-white">
-                    Start Here
-                    <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
-                  </Link>
-                </Button>
-                <Button 
-                  asChild 
-                  variant="outline" 
-                  size="lg" 
-                  className="shadow-lg border-2 border-[#B4916C] text-[#B4916C] hover:bg-[#2C2420] hover:text-white transition-all duration-300"
-                >
-                  <Link href="/dashboard/pricing">Explore Plans</Link>
-                </Button>
-              </motion.div>
-            </GradientCard>
-          </motion.div>
-        </motion.div>
+      <section className="min-h-screen flex items-center justify-center px-4 relative">
+        <Card className="w-full max-w-7xl min-h-screen flex flex-col justify-center bg-gradient-to-r from-[#584235] via-[#E8DCC4] to-[#B4916C] backdrop-blur-lg">
+          <div className="space-y-8 mb-12 text-center">
+            <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight text-white">
+              Craft Your Perfect CV
+            </h1>
+            <p className="text-xl md:text-2xl lg:text-3xl mt-6 max-w-3xl mx-auto text-[#FAF6ED]">
+              Transform your career journey with our intelligent AI-powered CV optimization platform
+            </p>
+          </div>
+          <div className="flex flex-col md:flex-row justify-center gap-6">
+            <Button 
+              asChild 
+              size="lg" 
+              className="group shadow-lg bg-[#584235] text-white hover:bg-[#2C2420] transition-all duration-base ease-default"
+            >
+              <Link href="sign-in" className="flex items-center text-white">
+                Start Here
+                <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
+              </Link>
+            </Button>
+            <Button 
+              asChild 
+              variant="outline" 
+              size="lg" 
+              className="shadow-lg border-2 border-[#B4916C] text-[#B4916C] hover:bg-[#2C2420] hover:text-white transition-all duration-300"
+            >
+              <Link href="/dashboard/pricing">Explore Plans</Link>
+            </Button>
+          </div>
+        </Card>
       </section>
 
       <section className="min-h-[100dvh] flex items-center justify-center px-4 relative">
