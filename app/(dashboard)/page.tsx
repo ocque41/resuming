@@ -84,12 +84,12 @@ export default function HomePage() {
             Log in
           </Link>
         </div>
-        <div className="md:hidden">
+        <div className="md:hidden relative">
           <Menu>
             <MenuButton className="text-white">
               Menu
             </MenuButton>
-            <MenuItems className="bg-[#050505] text-white">
+            <MenuItems className="absolute right-0 mt-2 w-48 origin-top-right bg-[#050505] text-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
               <MenuItem>
                 {({ active }) => (
                   <Link href="/product" className={`${active ? 'bg-gray-700' : ''} block px-4 py-2`}>
