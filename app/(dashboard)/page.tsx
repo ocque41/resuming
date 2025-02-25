@@ -1,14 +1,13 @@
 "use client";
 
-import { Navbar } from "@/components/ui/navbar"; // adjust path if needed
-import { useState, useEffect } from "react";
-import Link from "next/link";
+import { Navbar } from "@/components/ui/navbar"; // adjust the path if needed
 import { Article, ArticleTitle, ArticleContent } from "@/components/ui/article";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, TrendingUp, Shield, Check } from "lucide-react";
 import { GradientCard } from "@/components/ui/gradient-card";
 import { motion, Variants } from "framer-motion";
+import Link from "next/link";
 
 export default function HomePage() {
   const containerVariants: Variants = {
@@ -54,11 +53,7 @@ export default function HomePage() {
           </ArticleContent>
         </Article>
         <div className="flex justify-center space-x-4 mb-8">
-          <Button
-            asChild
-            size="lg"
-            className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition"
-          >
+          <Button asChild size="lg" className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition">
             <Link href="/sign-up">Try For Free</Link>
           </Button>
           <Button
@@ -213,21 +208,24 @@ export default function HomePage() {
               {
                 icon: FileText,
                 title: "AI-Powered Document Analysis",
-                description: "Intelligent content analysis with automated scoring and format preservation",
+                description:
+                  "Intelligent content analysis with automated scoring and format preservation",
                 bgColor: "bg-[#2C2420]",
                 textColor: "text-[#B4916C]",
               },
               {
                 icon: TrendingUp,
                 title: "Job-CV Matching System",
-                description: "Real-time CV optimization with percentage-based job compatibility scoring",
+                description:
+                  "Real-time CV optimization with percentage-based job compatibility scoring",
                 bgColor: "bg-[#584235]",
                 textColor: "text-[#E8DCC4]",
               },
               {
                 icon: Shield,
                 title: "Geospatial Integration",
-                description: "Location-based job mapping with interactive scoring visualization",
+                description:
+                  "Location-based job mapping with interactive scoring visualization",
                 bgColor: "bg-[#2C2420]",
                 textColor: "text-[#B4916C]",
               },

@@ -1,22 +1,23 @@
 "use client";
-
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Menu } from "@headlessui/react";
 
 export function Navbar() {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   return (
-    <nav className="bg-[#050505] border-b border-gray-700">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col md:flex-row items-center justify-between">
+    <nav className="bg-[#050505] border-b border-gray-700 relative">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
         {/* Logo Section */}
-        <div className="flex items-center mb-4 md:mb-0">
+        <div className="flex items-center">
           <Link href="/">
             <Image src="/white.png" alt="Logo" width={180} height={180} />
           </Link>
           <span className="ml-2 text-white text-xl font-bold"></span>
         </div>
         {/* Desktop Navigation Links */}
-        <div className="hidden md:flex space-x-8 items-center">
+        <div className="hidden md:flex items-center space-x-8">
           <Link
             href="/dashboard/pricing"
             className="text-white hover:text-gray-300 px-3 py-2 rounded-md text-sm font-medium"
@@ -36,53 +37,54 @@ export function Navbar() {
             Log in
           </Link>
         </div>
-        {/* Mobile Dropdown Navigation */}
-        <div className="md:hidden w-full">
-          <Menu as="div" className="relative">
-            <Menu.Button className="w-full bg-[#050505] text-white px-3 py-2 rounded-md text-sm font-medium text-left">
-              Menu
-            </Menu.Button>
-            <Menu.Items className="absolute right-0 mt-2 w-full origin-top-right bg-[#050505] border border-gray-700 rounded-md shadow-lg focus:outline-none">
-              <Menu.Item>
-                {({ active }) => (
-                  <Link
-                    href="/dashboard/pricing"
-                    className={`block px-4 py-2 text-sm text-white ${
-                      active ? "bg-gray-700" : ""
-                    }`}
-                  >
-                    Product
-                  </Link>
-                )}
-              </Menu.Item>
-              <Menu.Item>
-                {({ active }) => (
-                  <Link
-                    href="https://chromad.vercel.app/docs/products/resuming/overview"
-                    className={`block px-4 py-2 text-sm text-white ${
-                      active ? "bg-gray-700" : ""
-                    }`}
-                  >
-                    Documentation
-                  </Link>
-                )}
-              </Menu.Item>
-              <Menu.Item>
-                {({ active }) => (
-                  <Link
-                    href="https://next-js-saas-starter-three-resuming.vercel.app/sign-in"
-                    className={`block px-4 py-2 text-sm text-white ${
-                      active ? "bg-gray-700" : ""
-                    }`}
-                  >
-                    Log in
-                  </Link>
-                )}
-              </Menu.Item>
-            </Menu.Items>
-          </Menu>
+        {/* Mobile Hamburger Button */}
+        <div className="md:hidden">
+          <button
+            onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+            className="text-white focus:outline-none"
+          >
+            {/* Hamburger Icon */}
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
         </div>
       </div>
+      {/* Mobile Dropdown Menu */}
+      {isMobileMenuOpen && (
+        <div className="md:hidden absolute right-4 top-full bg-[#050505] border border-gray-700 rounded-md shadow-lg w-48">
+          <div className="py-2">
+            <Link
+              href="/dashboard/pricing"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="block px-4 py-2 text-sm text-white hover:bg-gray-700"
+            >
+              Product
+            </Link>
+            <Link
+              href="https://chromad.vercel.app/docs/products/resuming/overview"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="block px-4 py-2 text-sm text-white hover:bg-gray-700"
+            >
+              Documentation
+            </Link>
+            <Link
+              href="https://next-js-saas-starter-three-resuming.vercel.app/sign-in"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="block px-4 py-2 text-sm text-white hover:bg-gray-700"
+            >
+              Log in
+            </Link>
+          </div>
+        </div>
+      )}
     </nav>
   );
 }
