@@ -6,7 +6,7 @@ import { Article, ArticleTitle, ArticleContent } from "@/components/ui/article";
 import { Button } from "@/components/ui/button";
 import { motion, Variants } from "framer-motion";
 import Link from "next/link";
-import { FileText, TrendingUp, MapPin } from "lucide-react";
+import { FileText, TrendingUp, MapPin, Check } from "lucide-react";
 
 export default function HomePage() {
   const containerVariants: Variants = {
@@ -59,7 +59,7 @@ export default function HomePage() {
             <ArticleContent className="mt-4 text-xl md:text-2xl text-gray-300">
               AI-powered CV Analysis &amp; Optimization unlocking exclusive career opportunities.
             </ArticleContent>
-            <div className="mt-8 flex flex-col md:flex-row gap-4">
+            <div className="mt-8 flex flex-col md:flex-row gap-4 items-start">
               <Button
                 asChild
                 size="lg"
@@ -77,7 +77,7 @@ export default function HomePage() {
               </Button>
             </div>
           </Article>
-          {/* Larger Image Placeholder */}
+          {/* Large Image Placeholder */}
           <div className="mt-8 flex justify-center">
             <div className="w-full max-w-2xl h-96 bg-gray-300 rounded-lg"></div>
           </div>
@@ -85,8 +85,8 @@ export default function HomePage() {
       </section>
 
       {/* How It Works Section */}
-      <section className="relative min-h-screen py-16 px-4">
-        <div className="max-w-4xl mx-auto text-left">
+      <section className="py-16 px-4">
+        <div className="max-w-4xl mx-auto text-left space-y-8">
           <Article>
             <ArticleTitle className="text-3xl md:text-4xl font-bold text-white">
               How It Works
@@ -96,7 +96,7 @@ export default function HomePage() {
             </ArticleContent>
           </Article>
           <motion.div
-            className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-8"
+            className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-8"
             variants={containerVariants}
             initial="hidden"
             animate="visible"
@@ -145,8 +145,90 @@ export default function HomePage() {
               </p>
             </motion.div>
           </motion.div>
-          {/* Centered Try For Free Button */}
-          <div className="mt-12 flex justify-center">
+          <div className="mt-8 flex justify-start">
+            <Button
+              asChild
+              size="lg"
+              className="bg-[#584235] text-white px-8 py-4 rounded-md hover:bg-[#584235]/90 transition"
+            >
+              <Link href="/sign-up">Try For Free</Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* Use Cases Section */}
+      <section className="py-16 px-4">
+        <div className="max-w-4xl mx-auto text-left space-y-8">
+          <Article>
+            <ArticleTitle className="text-3xl md:text-4xl font-bold text-white">
+              Use Cases
+            </ArticleTitle>
+            <ArticleContent className="mt-4 text-lg md:text-xl text-gray-300">
+              Empowering your career journey with actionable insights.
+            </ArticleContent>
+          </Article>
+          <motion.div
+            className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8"
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+          >
+            {/* Card 1: Resuming Mechanism */}
+            <motion.div
+              className="bg-[#050505] p-6 rounded-lg shadow-md transition-all duration-base ease-default group border border-[#E8DCC4]"
+              variants={itemVariants}
+            >
+              <h3 className="text-xl font-semibold text-[#E8DCC4] mb-2">Resuming Mechanism</h3>
+              <ArticleContent className="text-sm text-gray-300 mb-2">
+                <strong>Specialized Areas</strong>
+              </ArticleContent>
+              <ul className="list-disc list-inside text-gray-300 mb-4">
+                <li className="flex items-center gap-1">
+                  <Check className="w-4 h-4 text-[#E8DCC4]" /> Analyze PDF Document
+                </li>
+                <li className="flex items-center gap-1">
+                  <Check className="w-4 h-4 text-[#E8DCC4]" /> Compare To Perfect CVs
+                </li>
+                <li className="flex items-center gap-1">
+                  <Check className="w-4 h-4 text-[#E8DCC4]" /> Wanted Job Description Injection
+                </li>
+              </ul>
+              <ArticleContent className="text-sm text-gray-300 mb-2">
+                <strong>Trained Model "Resuming"</strong>
+              </ArticleContent>
+              <ul className="list-disc list-inside text-gray-300">
+                <li className="flex items-center gap-1">
+                  <Check className="w-4 h-4 text-[#E8DCC4]" /> Knowledge On High Level CV Building
+                </li>
+                <li className="flex items-center gap-1">
+                  <Check className="w-4 h-4 text-[#E8DCC4]" /> Job Compatibility Scoring
+                </li>
+                <li className="flex items-center gap-1">
+                  <Check className="w-4 h-4 text-[#E8DCC4]" /> Customizable Path For Each User
+                </li>
+              </ul>
+            </motion.div>
+            {/* Card 2: Current Training Process */}
+            <motion.div
+              className="bg-[#050505] p-6 rounded-lg shadow-md transition-all duration-base ease-default group border border-[#E8DCC4]"
+              variants={itemVariants}
+            >
+              <h3 className="text-xl font-semibold text-[#E8DCC4] mb-2">Current Training Process</h3>
+              <ul className="list-disc list-inside text-gray-300">
+                <li>
+                  <span className="font-semibold">CV Industry Recognition:</span> For less description injection and a more seamless path.
+                </li>
+                <li>
+                  <span className="font-semibold">Analytics Suite:</span> For users who want Resuming to guide their career choices.
+                </li>
+                <li>
+                  <span className="font-semibold">Portfolio Optimization:</span> Enhance and organize your portfolio to represent your best image for companies, tailored for Artists and Finance professionals.
+                </li>
+              </ul>
+            </motion.div>
+          </motion.div>
+          <div className="mt-8 flex justify-start">
             <Button
               asChild
               size="lg"
