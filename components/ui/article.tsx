@@ -6,7 +6,7 @@ interface ArticleProps extends React.HTMLAttributes<HTMLElement> {
 
 export function Article({ className, children, ...props }: ArticleProps) {
   return (
-    <article className="uk-article" {...props}>
+    <article className={`uk-article ${className}`} {...props}>
       {children}
     </article>
   )
@@ -14,7 +14,7 @@ export function Article({ className, children, ...props }: ArticleProps) {
 
 export function ArticleTitle({ className, children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
   return (
-    <h1 className="uk-article-title" {...props}>
+    <h1 className={`uk-article-title ${className}`} {...props}>
       {children}
     </h1>
   )
@@ -22,7 +22,7 @@ export function ArticleTitle({ className, children, ...props }: React.HTMLAttrib
 
 export function ArticleMeta({ className, children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
   return (
-    <p className="uk-article-meta uk-margin" {...props}>
+    <p className={`uk-article-meta uk-margin ${className}`} {...props}>
       {children}
     </p>
   )
@@ -30,7 +30,7 @@ export function ArticleMeta({ className, children, ...props }: React.HTMLAttribu
 
 export function ArticleLead({ className, children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
   return (
-    <p className="uk-margin uk-text-lead" {...props}>
+    <p className={`uk-margin uk-text-lead ${className}`} {...props}>
       {children}
     </p>
   )
@@ -38,7 +38,7 @@ export function ArticleLead({ className, children, ...props }: React.HTMLAttribu
 
 export function ArticleContent({ className, children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
   return (
-    <p className="uk-margin" {...props}>
+    <p className={`uk-margin ${className}`} {...props}>
       {children}
     </p>
   )
@@ -46,7 +46,7 @@ export function ArticleContent({ className, children, ...props }: React.HTMLAttr
 
 export function ArticleActions({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className="uk-grid uk-grid-small uk-margin uk-child-width-auto" data-uk-grid {...props}>
+    <div className={`uk-grid uk-grid-small uk-margin uk-child-width-auto ${className}`} data-uk-grid {...props}>
       {children}
     </div>
   )
@@ -55,7 +55,7 @@ export function ArticleActions({ className, children, ...props }: React.HTMLAttr
 export function ArticleButton({ className, href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
   return (
     <div>
-      <a className="uk-button uk-button-text" href={href} {...props}>
+      <a className={`uk-button uk-button-text ${className}`} href={href} {...props}>
         {children}
       </a>
     </div>
