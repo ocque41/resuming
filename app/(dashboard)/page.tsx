@@ -12,13 +12,8 @@ export default function HomePage() {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
-      transition: {
-        staggerChildren: 0.15,
-        delayChildren: 0.3,
-        duration: 0.6,
-        ease: "easeOut"
-      }
-    }
+      transition: { staggerChildren: 0.15, delayChildren: 0.3, duration: 0.6, ease: "easeOut" },
+    },
   };
 
   const itemVariants: Variants = {
@@ -26,13 +21,8 @@ export default function HomePage() {
     visible: {
       y: 0,
       opacity: 1,
-      transition: {
-        type: "spring",
-        stiffness: 80,
-        damping: 15,
-        duration: 0.8
-      }
-    }
+      transition: { type: "spring", stiffness: 80, damping: 15, duration: 0.8 },
+    },
   };
 
   return (
@@ -45,7 +35,7 @@ export default function HomePage() {
         {/* Background overlay */}
         <div className="absolute inset-0 bg-[url('/hero-bg.jpg')] bg-cover bg-center opacity-30"></div>
         <div className="relative z-10 max-w-4xl mx-auto px-4 md:px-8 text-left space-y-8">
-          {/* Badge above title with link */}
+          {/* Badge above title */}
           <div>
             <Link href="https://chromad.vercel.app/docs/products/resuming">
               <Badge variant="outline">Documentation -&gt;</Badge>
@@ -83,8 +73,59 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Product (Steps) Section */}
+      <section className="py-16 px-4">
+        <div className="max-w-4xl mx-auto text-center">
+          <Article>
+            <ArticleTitle className="text-3xl md:text-4xl font-bold text-white">
+              How It Works
+            </ArticleTitle>
+            <ArticleContent className="mt-4 text-lg md:text-xl text-gray-300">
+              Follow our simple steps to land your dream job: Upload your CV, let our AI analyze and optimize it, then apply with confidence.
+            </ArticleContent>
+          </Article>
+          <motion.div
+            className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-8"
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+          >
+            {/* Feature Card 1: CV Analysis */}
+            <motion.div
+              className="bg-[#2C2420] p-6 rounded-lg shadow-md hover:shadow-xl transition-all duration-base ease-default border border-[#E8DCC4]"
+              variants={itemVariants}
+            >
+              <h3 className="text-xl font-semibold text-[#B4916C] mb-2">CV Analysis</h3>
+              <p className="text-gray-300">
+                Our custom-trained AI meticulously reviews your CV to identify strengths and opportunities for improvement.
+              </p>
+            </motion.div>
+            {/* Feature Card 2: CV Optimization */}
+            <motion.div
+              className="bg-[#2C2420] p-6 rounded-lg shadow-md hover:shadow-xl transition-all duration-base ease-default border border-[#E8DCC4]"
+              variants={itemVariants}
+            >
+              <h3 className="text-xl font-semibold text-[#B4916C] mb-2">CV Optimization</h3>
+              <p className="text-gray-300">
+                Leverage our tailored suggestions to fine-tune your CV, ensuring it stands out in today's competitive market.
+              </p>
+            </motion.div>
+            {/* Feature Card 3: Job Matching & Mapping */}
+            <motion.div
+              className="bg-[#2C2420] p-6 rounded-lg shadow-md hover:shadow-xl transition-all duration-base ease-default border border-[#E8DCC4]"
+              variants={itemVariants}
+            >
+              <h3 className="text-xl font-semibold text-[#B4916C] mb-2">Job Matching &amp; Mapping</h3>
+              <p className="text-gray-300">
+                Discover curated job listings and an interactive map with compatibility scores to streamline your application process.
+              </p>
+            </motion.div>
+          </motion.div>
+        </div>
+      </section>
+
       {/* Footer */}
-      <footer className="bg-[#050505] text-[#E8DCC4] py-12 mt-16">
+      <footer className="bg-[#050505] text-[#E8DCC4] py-12">
         <div className="container mx-auto px-4 text-center">
           <div className="flex justify-center space-x-6 mb-6">
             <a

@@ -8,7 +8,7 @@ export function Navbar() {
   const [isMobile, setIsMobile] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
-  // Update mobile state based on window width
+  // Update isMobile based on window width (<768px)
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     handleResize();
@@ -16,7 +16,7 @@ export function Navbar() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Update isScrolled state based on scroll position
+  // Update scroll state to apply background blur when scrolled
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 0);
     handleScroll();
