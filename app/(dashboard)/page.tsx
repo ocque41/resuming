@@ -1,19 +1,25 @@
 "use client";
 
-import { Navbar } from "@/components/ui/navbar";
-import { Badge } from "@/components/ui/badge";
+import { Navbar } from "@/components/Navbar";
+import { Badge } from "@/components/Badge";
 import { Article, ArticleTitle, ArticleContent } from "@/components/ui/article";
 import { Button } from "@/components/ui/button";
 import { motion, Variants } from "framer-motion";
 import Link from "next/link";
+import { FileText, TrendingUp, MapPin } from "lucide-react";
 
 export default function HomePage() {
   const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
-      transition: { staggerChildren: 0.15, delayChildren: 0.3, duration: 0.6, ease: "easeOut" },
-    },
+      transition: {
+        staggerChildren: 0.15,
+        delayChildren: 0.3,
+        duration: 0.6,
+        ease: "easeOut"
+      }
+    }
   };
 
   const itemVariants: Variants = {
@@ -21,8 +27,13 @@ export default function HomePage() {
     visible: {
       y: 0,
       opacity: 1,
-      transition: { type: "spring", stiffness: 80, damping: 15, duration: 0.8 },
-    },
+      transition: {
+        type: "spring",
+        stiffness: 80,
+        damping: 15,
+        duration: 0.8
+      }
+    }
   };
 
   return (
@@ -75,13 +86,13 @@ export default function HomePage() {
 
       {/* Product (Steps) Section */}
       <section className="py-16 px-4">
-        <div className="max-w-4xl mx-auto text-center">
+        <div className="max-w-4xl mx-auto text-left">
           <Article>
             <ArticleTitle className="text-3xl md:text-4xl font-bold text-white">
               How It Works
             </ArticleTitle>
             <ArticleContent className="mt-4 text-lg md:text-xl text-gray-300">
-              Follow our simple steps to land your dream job: Upload your CV, let our AI analyze and optimize it, then apply with confidence.
+              Follow these simple steps to land your dream job: Upload your CV, let our AI analyze and optimize it, then apply at scale.
             </ArticleContent>
           </Article>
           <motion.div
@@ -92,32 +103,45 @@ export default function HomePage() {
           >
             {/* Feature Card 1: CV Analysis */}
             <motion.div
-              className="bg-[#2C2420] p-6 rounded-lg shadow-md hover:shadow-xl transition-all duration-base ease-default border border-[#E8DCC4]"
+              className="bg-[#050505] p-6 rounded-lg shadow-md transition-all duration-base ease-default group border border-[#E8DCC4]"
               variants={itemVariants}
             >
-              <h3 className="text-xl font-semibold text-[#B4916C] mb-2">CV Analysis</h3>
+              <div className="flex items-center gap-2">
+                <FileText className="w-6 h-6 text-[#E8DCC4]" />
+                <h3 className="text-xl font-semibold text-[#E8DCC4]">CV Analysis</h3>
+              </div>
+              {/* Animation placeholder between title and description */}
+              <div className="my-2 h-1 w-16 bg-[#E8DCC4] animate-pulse"></div>
               <p className="text-gray-300">
-                Our custom-trained AI meticulously reviews your CV to identify strengths and opportunities for improvement.
+                Our custom-trained AI reviews your CV to extract key insights and identify areas for improvement.
               </p>
             </motion.div>
             {/* Feature Card 2: CV Optimization */}
             <motion.div
-              className="bg-[#2C2420] p-6 rounded-lg shadow-md hover:shadow-xl transition-all duration-base ease-default border border-[#E8DCC4]"
+              className="bg-[#050505] p-6 rounded-lg shadow-md transition-all duration-base ease-default group border border-[#E8DCC4]"
               variants={itemVariants}
             >
-              <h3 className="text-xl font-semibold text-[#B4916C] mb-2">CV Optimization</h3>
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-6 h-6 text-[#E8DCC4]" />
+                <h3 className="text-xl font-semibold text-[#E8DCC4]">CV Optimization</h3>
+              </div>
+              <div className="my-2 h-1 w-16 bg-[#E8DCC4] animate-pulse"></div>
               <p className="text-gray-300">
-                Leverage our tailored suggestions to fine-tune your CV, ensuring it stands out in today's competitive market.
+                Receive personalized suggestions to fine-tune your CV and boost your marketability.
               </p>
             </motion.div>
             {/* Feature Card 3: Job Matching & Mapping */}
             <motion.div
-              className="bg-[#2C2420] p-6 rounded-lg shadow-md hover:shadow-xl transition-all duration-base ease-default border border-[#E8DCC4]"
+              className="bg-[#050505] p-6 rounded-lg shadow-md transition-all duration-base ease-default group border border-[#E8DCC4]"
               variants={itemVariants}
             >
-              <h3 className="text-xl font-semibold text-[#B4916C] mb-2">Job Matching &amp; Mapping</h3>
+              <div className="flex items-center gap-2">
+                <MapPin className="w-6 h-6 text-[#E8DCC4]" />
+                <h3 className="text-xl font-semibold text-[#E8DCC4]">Job Matching &amp; Mapping</h3>
+              </div>
+              <div className="my-2 h-1 w-16 bg-[#E8DCC4] animate-pulse"></div>
               <p className="text-gray-300">
-                Discover curated job listings and an interactive map with compatibility scores to streamline your application process.
+                Discover curated job listings with compatibility scores and view them on an interactive map.
               </p>
             </motion.div>
           </motion.div>
@@ -132,7 +156,7 @@ export default function HomePage() {
               href="https://twitter.com/resumingai"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[#B4916C] hover:text-white transition-colors"
+              className="text-[#E8DCC4] hover:text-white transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" className="fill-current">
                 <path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H1.474l8.6-9.83L0 1.154h7.594l5.243 6.932L18.901 1.153Z" />
@@ -142,7 +166,7 @@ export default function HomePage() {
               href="https://linkedin.com/company/resuming"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[#B4916C] hover:text-white transition-colors"
+              className="text-[#E8DCC4] hover:text-white transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" className="fill-current">
                 <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5Zm-11 19h-3v-11h3v11Zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.784 1.764-1.75 1.764Z" />
@@ -152,7 +176,7 @@ export default function HomePage() {
               href="https://instagram.com/resuming"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[#B4916C] hover:text-white transition-colors"
+              className="text-[#E8DCC4] hover:text-white transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" className="fill-current">
                 <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.148 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.148-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069Zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.197-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.948-.073Zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162Zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4Zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44Z" />
