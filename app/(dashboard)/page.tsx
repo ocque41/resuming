@@ -131,7 +131,7 @@ export default function HomePage() {
             </ArticleTitle>
           </Article>
 
-          <GradientCard variant="wide" className="mx-auto flex flex-col justify-center bg-[#1A1614]/80 backdrop-blur-lg border-[#B4916C]/10">
+          <Card className="mx-auto flex flex-col justify-center bg-[#1A1614]/80 backdrop-blur-lg border-[#B4916C]/10">
             <Tabs defaultValue="pro" className="w-full max-w-4xl mx-auto">
               <TabsList className="grid w-full grid-cols-3 bg-[#2C2420]">
                 <TabsTrigger value="pro" className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white">Pro</TabsTrigger>
