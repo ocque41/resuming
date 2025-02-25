@@ -46,6 +46,9 @@
   src: url('/fonts/Safiro-Medium.otf') format('opentype');
   font-display: swap;
 }
+body {
+  font-family: 'Safiro', sans-serif;
+}
 
 @keyframes bubble-float-2 {
   0% { transform: translate(0%, 0%) scale(0.9); opacity: 0.3; }
