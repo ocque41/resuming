@@ -4,6 +4,8 @@ import { Popover } from '@headlessui/react';
 import Image from 'next/image';
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from 'react';
+import { Article, ArticleTitle, ArticleContent } from "@/components/ui/article";
+import { useFont } from 'next/font';
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Article, ArticleTitle } from "@/components/ui/article";
@@ -21,7 +23,13 @@ import Link from "next/link";
 import { motion, Variants } from "framer-motion";
 import DragAndDropUpload from '@/components/ui/drag&drop';
 
+const safiroFont = useFont({
+  src: '/fonts/Safiro-Medium.otf',
+  display: 'swap',
+});
+
 export default function HomePage() {
+  useFont(safiroFont);
   const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: { 
@@ -62,7 +70,7 @@ export default function HomePage() {
     };
   }, []);
   return (
-    <div className="flex flex-col bg-[#050505]">
+    <div className={`flex flex-col bg-[#050505] ${safiroFont.className}`}>
       <nav className={`flex items-center justify-between p-4 sticky top-0 z-50 transition-all duration-300 ${isScrolled ? 'bg-black/50 backdrop-blur-md' : 'bg-[#050505]'}`}>
         <div className="flex items-center">
           <Image
@@ -89,7 +97,7 @@ export default function HomePage() {
             <MenuButton className="text-white">
               Menu
             </MenuButton>
-            <MenuItems className="absolute right-0 mt-2 w-48 origin-top-right bg-[#050505] text-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+            <MenuItems className="absolute right-0 mt-2 w-48 origin-top-right bg-[#050505] text-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none rounded-lg">
               <MenuItem>
                 {({ active }) => (
                   <Link href="/product" className={`${active ? 'bg-gray-700' : ''} block px-4 py-2`}>
@@ -117,12 +125,14 @@ export default function HomePage() {
       </nav>
       
       <section className="min-h-screen flex flex-col items-center justify-center px-4 bg-white text-center">
-        <h1 className="text-5xl font-bold text-gray-900 mb-4">
-          The Open Source Option to Manage your Forms and Capture Leads
-        </h1>
-        <p className="text-xl text-gray-600 mb-8">
-          Router.so is headless form handling and lead routing for marketing-minded developers.
-        </p>
+        <Article className="text-center">
+          <ArticleTitle className="text-5xl font-bold text-gray-900 mb-4">
+            AI based CV Analysis and Optimization with job mapping and list scoring for job exclusive opportunities and company status.
+          </ArticleTitle>
+          <ArticleContent className="text-xl text-gray-600 mb-8">
+            Router.so is headless form handling and lead routing for marketing-minded developers.
+          </ArticleContent>
+        </Article>
         <div className="flex justify-center space-x-4 mb-8">
           <Button 
             asChild 
