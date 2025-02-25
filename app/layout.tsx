@@ -2,11 +2,6 @@ import './globals.css';
 import type { Metadata, Viewport } from 'next';
 import { Manrope } from 'next/font/google';
 import localFont from 'next/font/local';
-
-const safiroFont = localFont({
-  src: '/fonts/Safiro-Medium.otf',
-  display: 'swap',
-});
 import { UserProvider } from '@/lib/auth';
 import { getUser } from '@/lib/db/queries.server';
 import { ThemeProvider } from 'app/theme-provider';
@@ -23,6 +18,10 @@ export const viewport: Viewport = {
 };
 
 const manrope = Manrope({ subsets: ['latin'] });
+const safiroFont = localFont({
+  src: '/fonts/Safiro-Medium.otf',
+  display: 'swap',
+});
 
 export default function RootLayout({
   children,
