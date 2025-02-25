@@ -9,7 +9,7 @@ type ThemeProviderProps = {
   defaultTheme?: Theme
   storageKey?: string
 }
-                                                                                               
+
 type ThemeProviderState = {
   theme: Theme
   setTheme: (theme: Theme) => void
@@ -23,10 +23,9 @@ export function ThemeProvider({
   storageKey = 'ui-theme',
   ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>('light')
+  const [theme, setTheme] = useState<Theme>(defaultTheme)
 
   useEffect(() => {
-    // Check system preference
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const updateTheme = (e: MediaQueryListEvent | MediaQueryList) => {
       const newTheme = e.matches ? 'dark' : 'light'
@@ -34,17 +33,12 @@ export function ThemeProvider({
       const root = window.document.documentElement
       root.classList.remove('light', 'dark')
       root.classList.add(newTheme)
-      root.classList.add('uk-theme-default')
     }
-
-    // Initial check
     updateTheme(mediaQuery)
-
-    // Listen for changes
     mediaQuery.addEventListener('change', updateTheme)
     return () => mediaQuery.removeEventListener('change', updateTheme)
   }, [])
-                                                                                               
+
   const value = {
     theme,
     setTheme: (theme: Theme) => {
@@ -52,19 +46,17 @@ export function ThemeProvider({
       setTheme(theme)
     },
   }
-                                                                                               
+
   return (
     <ThemeProviderContext.Provider {...props} value={value}>
       {children}
     </ThemeProviderContext.Provider>
   )
 }
-                                                                                               
+
 export const useTheme = () => {
   const context = useContext(ThemeProviderContext)
-
   if (context === undefined)
     throw new Error("useTheme must be used within a ThemeProvider")
-
   return context
 }

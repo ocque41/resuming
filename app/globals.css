@@ -10,9 +10,15 @@
     --avatar-gradient-to: 34, 25%, 21%;
   }
   body {
-    @apply bg-background text-foreground;
-    /* Remove this font-family declaration if you want to use Next.js’s injected font-face */
-    /* font-family: 'Safiro', sans-serif; */
+    background-color: var(--brand-background);
+    color: var(--brand-foreground);
+    border-color: var(--brand-border);
+  }
+  :root {
+    --brand-background: #050505;
+    --brand-foreground: #ffffff;
+    --brand-accent: #E8DCC4;
+    --brand-border: #E8DCC4;
   }
   :root {
     --sidebar-background: 0, 0%, 98%;
