@@ -13,7 +13,12 @@ export default function HomePage() {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
-      transition: { staggerChildren: 0.15, delayChildren: 0.3, duration: 0.6, ease: "easeOut" },
+      transition: {
+        staggerChildren: 0.15,
+        delayChildren: 0.3,
+        duration: 0.6,
+        ease: "easeOut",
+      },
     },
   };
 
@@ -22,7 +27,12 @@ export default function HomePage() {
     visible: {
       y: 0,
       opacity: 1,
-      transition: { type: "spring", stiffness: 80, damping: 15, duration: 0.8 },
+      transition: {
+        type: "spring",
+        stiffness: 80,
+        damping: 15,
+        duration: 0.8,
+      },
     },
   };
 
@@ -53,7 +63,7 @@ export default function HomePage() {
               <Button
                 asChild
                 size="lg"
-                className="bg-[#FAF6ED] text-[#050505] px-8 py-4 rounded-md hover:bg-[#FAF6ED]/90 transition"
+                className="bg-[#584235] text-white px-8 py-4 rounded-md hover:bg-[#584235]/90 transition"
               >
                 <Link href="/sign-up">Try For Free</Link>
               </Button>
@@ -61,13 +71,13 @@ export default function HomePage() {
                 asChild
                 variant="outline"
                 size="lg"
-                className="border border-[#2C2420] text-[#050505] px-8 py-4 rounded-md hover:bg-[#2C2420] transition"
+                className="border border-[#2C2420] text-white px-8 py-4 rounded-md hover:bg-[#2C2420] transition"
               >
                 <Link href="/pricing">Learn More</Link>
               </Button>
             </div>
           </Article>
-          {/* Larger Image Placeholder */}
+          {/* Large Image Placeholder */}
           <div className="mt-8 flex justify-center">
             <div className="w-full max-w-2xl h-96 bg-gray-300 rounded-lg"></div>
           </div>
@@ -135,6 +145,16 @@ export default function HomePage() {
               </p>
             </motion.div>
           </motion.div>
+          {/* Try For Free Button for How It Works */}
+          <div className="mt-8 flex justify-start">
+            <Button
+              asChild
+              size="lg"
+              className="bg-[#584235] text-white px-8 py-4 rounded-md hover:bg-[#584235]/90 transition"
+            >
+              <Link href="/sign-up">Try For Free</Link>
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -149,7 +169,6 @@ export default function HomePage() {
               Empowering your career journey with actionable insights.
             </ArticleContent>
           </Article>
-          {/* Stack the cards vertically */}
           <motion.div
             className="mt-8 space-y-8"
             variants={containerVariants}
