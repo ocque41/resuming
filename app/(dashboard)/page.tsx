@@ -15,7 +15,7 @@ import {
   ArrowRight,
   Check
 } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { GradientCard } from "@/components/ui/gradient-card";
 import Link from "next/link";
 import { motion, Variants } from "framer-motion";
 import DragAndDropUpload from '@/components/ui/drag&drop';
