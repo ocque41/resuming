@@ -26,7 +26,6 @@ const safiroFont = localFont({
   src: '/fonts/Safiro-Medium.otf',
   display: 'swap',
 });
-});
 
 export default function HomePage() {
   const containerVariants: Variants = {
