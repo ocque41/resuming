@@ -116,31 +116,32 @@ export default function HomePage() {
         </div>
       </nav>
       
-      <section className="min-h-screen flex items-center justify-center px-4 bg-white">
-        <div className="w-full max-w-4xl text-center space-y-8">
-          <h1 className="text-6xl font-bold text-gray-900">
-            Elevate Your Career
-          </h1>
-          <p className="text-lg text-gray-600">
-            Experience the future of CV optimization with our AI-powered platform.
-          </p>
-          <div className="flex justify-center space-x-4">
-            <Button 
-              asChild 
-              size="lg" 
-              className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition"
-            >
-              <Link href="/sign-up">Get Started</Link>
-            </Button>
-            <Button 
-              asChild 
-              variant="outline" 
-              size="lg" 
-              className="border border-blue-600 text-blue-600 px-6 py-3 rounded-md hover:bg-blue-600 hover:text-white transition"
-            >
-              <Link href="/learn-more">Learn More</Link>
-            </Button>
-          </div>
+      <section className="min-h-screen flex flex-col items-center justify-center px-4 bg-white text-center">
+        <h1 className="text-5xl font-bold text-gray-900 mb-4">
+          The Open Source Option to Manage your Forms and Capture Leads
+        </h1>
+        <p className="text-xl text-gray-600 mb-8">
+          Router.so is headless form handling and lead routing for marketing-minded developers.
+        </p>
+        <div className="flex justify-center space-x-4 mb-8">
+          <Button 
+            asChild 
+            size="lg" 
+            className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition"
+          >
+            <Link href="/sign-up">Get Started</Link>
+          </Button>
+          <Button 
+            asChild 
+            variant="outline" 
+            size="lg" 
+            className="border border-blue-600 text-blue-600 px-6 py-3 rounded-md hover:bg-blue-600 hover:text-white transition"
+          >
+            <Link href="/pricing">See Pricing</Link>
+          </Button>
+        </div>
+        <div className="w-full max-w-md h-64 bg-gray-200 rounded-lg">
+          {/* Placeholder for image */}
         </div>
       </section>
 
