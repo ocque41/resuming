@@ -1,6 +1,6 @@
 "use client";
 
-import { Navbar } from "@/components/ui/navbar"; // Adjust the path if needed
+import { Navbar } from "@/components/ui/navbar"; // adjust path if needed
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Article, ArticleTitle, ArticleContent } from "@/components/ui/article";
@@ -40,7 +40,7 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col bg-[#050505]">
-      {/* Imported Navbar */}
+      {/* Navbar Import */}
       <Navbar />
 
       {/* Hero Section */}
