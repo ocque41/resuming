@@ -19,9 +19,9 @@ export default function HomePage() {
         staggerChildren: 0.15,
         delayChildren: 0.3,
         duration: 0.6,
-        ease: "easeOut",
-      },
-    },
+        ease: "easeOut"
+      }
+    }
   };
 
   const itemVariants: Variants = {
@@ -33,9 +33,9 @@ export default function HomePage() {
         type: "spring",
         stiffness: 80,
         damping: 15,
-        duration: 0.8,
-      },
-    },
+        duration: 0.8
+      }
+    }
   };
 
   return (
@@ -44,15 +44,15 @@ export default function HomePage() {
       <Navbar />
 
       {/* Hero Section */}
-      <section className="relative min-h-screen flex items-center bg-black">
+      <section className="relative flex items-center bg-black pt-2">
         {/* Background overlay */}
         <div className="absolute inset-0 bg-[url('/hero-bg.jpg')] bg-cover bg-center opacity-30"></div>
         <div className="relative z-10 max-w-4xl mx-auto px-4 md:px-8 text-left">
-          {/* Badge above title */}
-          <div className="mb-4">
-            <Badge variant="outline">
-              Documentation -&gt;
-            </Badge>
+          {/* Badge above title with link */}
+          <div className="mb-2">
+            <Link href="https://chromad.vercel.app/docs/products/resuming">
+              <Badge variant="outline">Documentation -&gt;</Badge>
+            </Link>
           </div>
           <Article>
             <ArticleTitle className="text-5xl md:text-7xl font-bold text-white">
@@ -79,23 +79,25 @@ export default function HomePage() {
               </Button>
             </div>
           </Article>
+          {/* Image placeholder below buttons */}
+          <div className="mt-8 w-full max-w-md h-64 bg-gray-300 rounded-lg"></div>
         </div>
       </section>
 
       {/* Products Section */}
-      <section className="min-h-[100dvh] flex items-center justify-center px-4 relative">
+      <section className="min-h-[100dvh] flex items-center justify-center px-4 py-8">
         <motion.div
           className="w-full max-w-7xl mx-auto py-16"
           variants={containerVariants}
           initial="hidden"
           animate="visible"
         >
-          <Article className="mb-6">
+          <Article className="mb-6 text-center">
             <ArticleTitle className="text-2xl md:text-3xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] via-[#B4916C] to-[#2C2420]">
               Products
             </ArticleTitle>
           </Article>
-          <GradientCard className="mx-auto flex flex-col justify-center bg-[#1A1614]/80 backdrop-blur-lg border-[#B4916C]/10">
+          <GradientCard className="mx-auto flex flex-col justify-center bg-[#1A1614]/80 backdrop-blur-lg border border-[#E8DCC4]">
             <Tabs defaultValue="pro" className="w-full max-w-4xl mx-auto">
               <TabsList className="grid w-full grid-cols-3 bg-[#2C2420]">
                 <TabsTrigger value="pro" className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white">
@@ -117,7 +119,7 @@ export default function HomePage() {
                   </p>
                   <div className="uk-article-content space-y-4 max-w-2xl mx-auto text-[#E8DCC4]">
                     <p>
-                      The Pro Plan is designed for individuals who are actively seeking new opportunities and want to optimize their CV for better results. With our AI-powered tools, you'll get everything you need to stand out in the job market.
+                      The Pro Plan is designed for individuals who are actively seeking new opportunities and want to optimize their CV for better results.
                     </p>
                     <ul className="space-y-4 max-w-md mx-auto text-left">
                       <li className="flex items-center text-[#B4916C]">
@@ -147,7 +149,7 @@ export default function HomePage() {
                   </p>
                   <div className="uk-article-content space-y-4 max-w-2xl mx-auto text-[#E8DCC4]">
                     <p>
-                      The Moonlighting Plan caters to professionals who maintain multiple career tracks or frequently apply to different types of positions. Get more flexibility and analysis power to optimize multiple CVs for different roles.
+                      The Moonlighting Plan caters to professionals who maintain multiple career tracks or frequently apply to different types of positions.
                     </p>
                     <ul className="space-y-4 max-w-md mx-auto text-left">
                       <li className="flex items-center text-[#B4916C]">
@@ -240,7 +242,7 @@ export default function HomePage() {
             ].map(({ icon: Icon, title, description, bgColor, textColor }) => (
               <motion.div
                 key={title}
-                className={`${bgColor} p-6 rounded-lg shadow-md hover:shadow-xl transition-all duration-base ease-default group border border-gray-800 hover:border-gray-700`}
+                className={`${bgColor} p-6 rounded-lg shadow-md hover:shadow-xl transition-all duration-base ease-default group border border-[#E8DCC4] hover:border-[#E8DCC4]`}
                 variants={itemVariants}
               >
                 <Icon className={`mx-auto mb-4 ${textColor} group-hover:scale-110 transition-all duration-300`} size={48} />

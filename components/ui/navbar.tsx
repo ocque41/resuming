@@ -7,6 +7,7 @@ export function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
+  // Set isMobile based on window width (<768px)
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     handleResize();
@@ -15,7 +16,7 @@ export function Navbar() {
   }, []);
 
   return (
-    <nav className="bg-[#050505] border-b border-gray-700 relative">
+    <nav className="bg-[#050505] border-b border-[#E8DCC4] relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
         {/* Logo Section */}
         <div className="flex items-center">
@@ -62,7 +63,7 @@ export function Navbar() {
       </div>
       {/* Mobile Dropdown Menu */}
       {isMobile && isMobileMenuOpen && (
-        <div className="absolute right-4 top-full bg-[#050505] border border-gray-700 rounded-md shadow-lg w-48">
+        <div className="absolute right-4 top-full bg-[#050505] border border-[#E8DCC4] rounded-md shadow-lg w-48">
           <div className="py-2">
             <Link
               href="/dashboard/pricing"
