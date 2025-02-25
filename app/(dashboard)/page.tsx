@@ -13,12 +13,7 @@ export default function HomePage() {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
-      transition: {
-        staggerChildren: 0.15,
-        delayChildren: 0.3,
-        duration: 0.6,
-        ease: "easeOut",
-      },
+      transition: { staggerChildren: 0.15, delayChildren: 0.3, duration: 0.6, ease: "easeOut" },
     },
   };
 
@@ -27,12 +22,7 @@ export default function HomePage() {
     visible: {
       y: 0,
       opacity: 1,
-      transition: {
-        type: "spring",
-        stiffness: 80,
-        damping: 15,
-        duration: 0.8,
-      },
+      transition: { type: "spring", stiffness: 80, damping: 15, duration: 0.8 },
     },
   };
 
@@ -63,7 +53,7 @@ export default function HomePage() {
               <Button
                 asChild
                 size="lg"
-                className="bg-[#584235] text-white px-8 py-4 rounded-md hover:bg-[#584235]/90 transition"
+                className="bg-[#FAF6ED] text-[#050505] px-8 py-4 rounded-md hover:bg-[#FAF6ED]/90 transition"
               >
                 <Link href="/sign-up">Try For Free</Link>
               </Button>
@@ -71,13 +61,13 @@ export default function HomePage() {
                 asChild
                 variant="outline"
                 size="lg"
-                className="border border-[#2C2420] text-white px-8 py-4 rounded-md hover:bg-[#2C2420] transition"
+                className="border border-[#2C2420] text-[#050505] px-8 py-4 rounded-md hover:bg-[#2C2420] transition"
               >
                 <Link href="/pricing">Learn More</Link>
               </Button>
             </div>
           </Article>
-          {/* Large Image Placeholder */}
+          {/* Larger Image Placeholder */}
           <div className="mt-8 flex justify-center">
             <div className="w-full max-w-2xl h-96 bg-gray-300 rounded-lg"></div>
           </div>
@@ -145,15 +135,6 @@ export default function HomePage() {
               </p>
             </motion.div>
           </motion.div>
-          <div className="mt-8 flex justify-start">
-            <Button
-              asChild
-              size="lg"
-              className="bg-[#584235] text-white px-8 py-4 rounded-md hover:bg-[#584235]/90 transition"
-            >
-              <Link href="/sign-up">Try For Free</Link>
-            </Button>
-          </div>
         </div>
       </section>
 
@@ -168,8 +149,9 @@ export default function HomePage() {
               Empowering your career journey with actionable insights.
             </ArticleContent>
           </Article>
+          {/* Stack the cards vertically */}
           <motion.div
-            className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8"
+            className="mt-8 space-y-8"
             variants={containerVariants}
             initial="hidden"
             animate="visible"
@@ -217,24 +199,25 @@ export default function HomePage() {
               <h3 className="text-xl font-semibold text-[#E8DCC4] mb-2">Current Training Process</h3>
               <ul className="list-disc list-inside text-gray-300">
                 <li>
-                  <span className="font-semibold">CV Industry Recognition:</span> For less description injection and a more seamless path.
+                  <strong>CV Industry Recognition:</strong> For less description injection and a more seamless path.
                 </li>
                 <li>
-                  <span className="font-semibold">Analytics Suite:</span> For users who want Resuming to guide their career choices.
+                  <strong>Analytics Suite:</strong> For users who want Resuming to guide their career choices.
                 </li>
                 <li>
-                  <span className="font-semibold">Portfolio Optimization:</span> Enhance and organize your portfolio to represent your best image for companies, tailored for Artists and Finance professionals.
+                  <strong>Portfolio Optimization:</strong> Enhance and organize your portfolio to represent your best image, tailored for Artists and Finance professionals.
                 </li>
               </ul>
             </motion.div>
           </motion.div>
+          {/* Use Cases Section Button */}
           <div className="mt-8 flex justify-start">
             <Button
               asChild
               size="lg"
-              className="bg-[#584235] text-white px-8 py-4 rounded-md hover:bg-[#584235]/90 transition"
+              className="bg-[#FAF6ED] text-[#050505] px-8 py-4 rounded-md hover:bg-[#FAF6ED]/90 transition"
             >
-              <Link href="/sign-up">Try For Free</Link>
+              <Link href="https://chromad.vercel.app/">Be There First</Link>
             </Button>
           </div>
         </div>
