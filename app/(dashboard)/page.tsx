@@ -42,9 +42,7 @@ export default function HomePage() {
 
   const [isScrolled, setIsScrolled] = useState(false);
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 0);
-    };
+    const handleScroll = () => setIsScrolled(window.scrollY > 0);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
@@ -73,20 +71,18 @@ export default function HomePage() {
               </div>
               {/* Navigation Links */}
               <nav className="flex items-center space-x-8">
-                <Popover.Button
-                  as={Link}
+                <Link
                   href="/dashboard/pricing"
                   className="text-white hover:text-gray-300"
                 >
                   Product
-                </Popover.Button>
-                <Popover.Button
-                  as={Link}
+                </Link>
+                <Link
                   href="https://chromad.vercel.app/docs/products/resuming/overview"
                   className="text-white hover:text-gray-300"
                 >
                   Documentation
-                </Popover.Button>
+                </Link>
                 <Link
                   href="https://next-js-saas-starter-three-resuming.vercel.app/sign-in"
                   className="bg-white text-black px-4 py-2 rounded hover:bg-gray-200"
@@ -110,7 +106,7 @@ export default function HomePage() {
               className="mr-2"
             />
           </div>
-          {/* Menu */}
+          {/* Mobile Dropdown Menu */}
           <Menu as="div" className="relative">
             <MenuButton className="text-white">Menu</MenuButton>
             <MenuItems className="absolute right-0 mt-2 w-48 origin-top-right bg-[#050505] text-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none rounded-lg">
@@ -194,17 +190,25 @@ export default function HomePage() {
               Products
             </ArticleTitle>
           </Article>
-
           <GradientCard className="mx-auto flex flex-col justify-center bg-[#1A1614]/80 backdrop-blur-lg border-[#B4916C]/10">
             <Tabs defaultValue="pro" className="w-full max-w-4xl mx-auto">
               <TabsList className="grid w-full grid-cols-3 bg-[#2C2420]">
-                <TabsTrigger value="pro" className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white">
+                <TabsTrigger
+                  value="pro"
+                  className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white"
+                >
                   Pro
                 </TabsTrigger>
-                <TabsTrigger value="moonlighting" className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white">
+                <TabsTrigger
+                  value="moonlighting"
+                  className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white"
+                >
                   Moonlighting
                 </TabsTrigger>
-                <TabsTrigger value="ceo" className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white">
+                <TabsTrigger
+                  value="ceo"
+                  className="text-[#B4916C] data-[state=active]:bg-[#584235] data-[state=active]:text-white"
+                >
                   CEO
                 </TabsTrigger>
               </TabsList>
@@ -300,7 +304,7 @@ export default function HomePage() {
               </TabsContent>
             </Tabs>
             <div className="mt-8 flex justify-center">
-              {/* Removed "View Full Pricing Details" buttons from all tabs */}
+              {/* Removed extra buttons */}
             </div>
           </GradientCard>
         </motion.div>
@@ -319,21 +323,24 @@ export default function HomePage() {
               {
                 icon: FileText,
                 title: "AI-Powered Document Analysis",
-                description: "Intelligent content analysis with automated scoring and format preservation",
+                description:
+                  "Intelligent content analysis with automated scoring and format preservation",
                 bgColor: "bg-[#2C2420]",
                 textColor: "text-[#B4916C]",
               },
               {
                 icon: TrendingUp,
                 title: "Job-CV Matching System",
-                description: "Real-time CV optimization with percentage-based job compatibility scoring",
+                description:
+                  "Real-time CV optimization with percentage-based job compatibility scoring",
                 bgColor: "bg-[#584235]",
                 textColor: "text-[#E8DCC4]",
               },
               {
                 icon: Shield,
                 title: "Geospatial Integration",
-                description: "Location-based job mapping with interactive scoring visualization",
+                description:
+                  "Location-based job mapping with interactive scoring visualization",
                 bgColor: "bg-[#2C2420]",
                 textColor: "text-[#B4916C]",
               },
@@ -367,7 +374,13 @@ export default function HomePage() {
               rel="noopener noreferrer"
               className="text-[#B4916C] hover:text-white transition-colors"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" className="fill-current">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                className="fill-current"
+              >
                 <path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H1.474l8.6-9.83L0 1.154h7.594l5.243 6.932L18.901 1.153Z" />
               </svg>
             </a>
@@ -377,7 +390,13 @@ export default function HomePage() {
               rel="noopener noreferrer"
               className="text-[#B4916C] hover:text-white transition-colors"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" className="fill-current">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                className="fill-current"
+              >
                 <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5Zm-11 19h-3v-11h3v11Zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.784 1.764-1.75 1.764Z" />
               </svg>
             </a>
@@ -387,7 +406,13 @@ export default function HomePage() {
               rel="noopener noreferrer"
               className="text-[#B4916C] hover:text-white transition-colors"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" className="fill-current">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                className="fill-current"
+              >
                 <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.148 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.148-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069Zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.197-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.948-.073Zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162Zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4Zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44Z" />
               </svg>
             </a>
