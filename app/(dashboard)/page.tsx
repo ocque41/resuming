@@ -1,7 +1,7 @@
 "use client";
 
-import { Navbar } from "@/components/Navbar";
-import { Badge } from "@/components/Badge";
+import { Navbar } from "@/components/ui/navbar";
+import { Badge } from "@/components/ui/badge";
 import { Article, ArticleTitle, ArticleContent } from "@/components/ui/article";
 import { Button } from "@/components/ui/button";
 import { motion, Variants } from "framer-motion";
