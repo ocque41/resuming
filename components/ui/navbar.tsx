@@ -12,7 +12,8 @@ export function Navbar() {
           {/* Logo */}
           <div className="flex-shrink-0">
             <Link href="/">
-              <Image src="/white.png" alt="Logo" width={140} height={140} />
+              {/* Reduced logo size for desktop */}
+              <Image src="/white.png" alt="Logo" width={80} height={80} />
             </Link>
           </div>
           {/* Desktop Navigation */}
