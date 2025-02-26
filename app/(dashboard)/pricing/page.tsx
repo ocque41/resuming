@@ -167,8 +167,8 @@ function PricingCard({
         <SubmitButton
           className={`w-full ${
             highlight
-              ? "bg-[#2C2420] hover:bg-[#584235] text-white"
-              : "bg-[#584235] hover:bg-[#2C2420] text-white"
+              ? "bg-[#050505] hover:bg-[#E8DCC4] text-white"
+              : "bg-[#E8DCC4] hover:bg-[#FAF6ED] text-black"
           }`}
         />
       </form>

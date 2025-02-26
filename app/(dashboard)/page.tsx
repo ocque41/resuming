@@ -63,7 +63,7 @@ export default function HomePage() {
               <Button
                 asChild
                 size="lg"
-                className="bg-[#E8DCC4] text-black px-8 py-4 rounded-md hover:bg-[#E8DCC4]/90 transition"
+                className="bg-[#E8DCC4] text-black px-8 py-4 rounded-md hover:bg-[#FAF6ED]/90 transition"
               >
                 <Link href="/sign-up">Try For Free</Link>
               </Button>
@@ -71,7 +71,7 @@ export default function HomePage() {
                 asChild
                 variant="outline"
                 size="lg"
-                className="border border-[#2C2420] text-white px-8 py-4 rounded-md hover:bg-[#2C2420] transition"
+                className="border border-[#2C2420] text-white px-8 py-4 rounded-md hover:bg-[#E8DCC4] transition"
               >
                 <Link href="/pricing">Learn More</Link>
               </Button>
@@ -150,7 +150,7 @@ export default function HomePage() {
             <Button
               asChild
               size="lg"
-              className="bg-[#E8DCC4] text-black px-8 py-4 rounded-md hover:bg-[#E8DCC4]/90 transition"
+              className="bg-[#E8DCC4] text-black px-8 py-4 rounded-md hover:bg-[#FAF6ED]/90 transition"
             >
               <Link href="/sign-up">Try For Free</Link>
             </Button>
@@ -234,7 +234,7 @@ export default function HomePage() {
             <Button
               asChild
               size="lg"
-              className="bg-[#FAF6ED] text-[#050505] px-8 py-4 rounded-md hover:bg-[#FAF6ED]/90 transition"
+              className="bg-[#E8DCC4] text-[#050505] px-8 py-4 rounded-md hover:bg-[#FAF6ED]/90 transition"
             >
               <Link href="https://chromad.vercel.app/">Be There First</Link>
             </Button>
