@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import Image from "next/image";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardHeader, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
 import { signIn } from "./actions";
 import { ActionState } from "@/lib/auth/middleware";
@@ -52,7 +51,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
             defaultValue={state.email}
             required
             maxLength={50}
-            className="appearance-none rounded-full block w-full px-3 py-2 border border-[#B4916C]/30 placeholder-[#B4916C] text-white bg-[#2C2420] focus:outline-none focus:ring-[#584235] focus:border-[#584235] sm:text-sm"
+            className="appearance-none rounded-full block w-full px-3 py-2 border border-[#B4916C]/30 placeholder-[#B4916C] text-white bg-[#B4916C] focus:outline-none focus:ring-[#B4916C] focus:border-[#B4916C] sm:text-sm"
             placeholder="Enter your email"
           />
         </div>
@@ -72,7 +71,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
             required
             minLength={8}
             maxLength={100}
-            className="appearance-none rounded-full block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-white bg-[#2C2420] focus:outline-none focus:ring-[#584235] focus:border-[#584235] sm:text-sm"
+            className="appearance-none rounded-full block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-white bg-[#B4916C] focus:outline-none focus:ring-[#B4916C] focus:border-[#B4916C] sm:text-sm"
             placeholder="Enter your password"
           />
         </div>
@@ -118,31 +117,28 @@ export function Login({ mode = "signin" }: { mode?: "signin" | "signup" }) {
             </CardTitle>
           </CardHeader>
           <CardContent className="px-6">
-            <Tabs defaultValue={mode}>
-              <TabsList className="w-full justify-center">
-                <TabsTrigger
-                  value="signin"
-                  onClick={() => {
-                    if (mode !== "signin") router.push("/sign-in");
-                  }}
-                  className="w-full transition-colors duration-300 hover:bg-[#B4916C]/75 data-[state=active]:bg-[#B4916C]/50"
-                >
-                  Sign In
-                </TabsTrigger>
-                <TabsTrigger
-                  value="signup"
-                  onClick={() => {
-                    if (mode !== "signup") router.push("/sign-up");
-                  }}
-                  className="w-full transition-colors duration-300 hover:bg-[#B4916C]/75 data-[state=active]:bg-[#B4916C]/50"
-                >
-                  Sign Up
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value={mode}>
-                <AuthForm mode={mode} />
-              </TabsContent>
-            </Tabs>
+            {/* Replace Tabs with a custom link-based tab header */}
+            <div className="flex w-full justify-center space-x-2 mb-4">
+              <Link
+                href="/sign-in"
+                className={`w-full text-center py-2 px-4 rounded-md transition-colors duration-300 hover:bg-[#B4916C]/75 ${
+                  mode === "signin" ? "bg-[#B4916C]/50" : ""
+                }`}
+              >
+                Sign In
+              </Link>
+              <Link
+                href="/sign-up"
+                className={`w-full text-center py-2 px-4 rounded-md transition-colors duration-300 hover:bg-[#B4916C]/75 ${
+                  mode === "signup" ? "bg-[#B4916C]/50" : ""
+                }`}
+              >
+                Sign Up
+              </Link>
+            </div>
+            <div>
+              <AuthForm mode={mode} />
+            </div>
           </CardContent>
           <CardFooter className="p-6">
             <div className="text-sm text-white">
