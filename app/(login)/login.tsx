@@ -1,33 +1,34 @@
 "use client";
 
-import Link from 'next/link';
-import { useActionState } from '@/lib/useActionState';
-import { useSearchParams } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Loader2 } from 'lucide-react';
-import Image from 'next/image';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Card, CardHeader, CardContent, CardFooter, CardTitle } from '@/components/ui/card';
-import { signIn } from './actions';
-import { ActionState } from '@/lib/auth/middleware';
+import Link from "next/link";
+import { useActionState } from "@/lib/useActionState";
+import { useSearchParams } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Loader2 } from "lucide-react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardHeader, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
+import { signIn } from "./actions";
+import { ActionState } from "@/lib/auth/middleware";
 
 // Wrap signIn to always return an ActionState
 const signInAction = (data: FormData) =>
-  signIn({ error: '', email: '', password: '' }, data).then(
-    (res) => res ?? { error: '', email: '', password: '' }
+  signIn({ error: "", email: "", password: "" }, data).then(
+    (res) => res ?? { error: "", email: "", password: "" }
   );
 
-// The form component for both Sign In and Sign Up
-function AuthForm({ mode }: { mode: 'signin' | 'signup' }) {
+function AuthForm({ mode }: { mode: "signin" | "signup" }) {
   const searchParams = useSearchParams();
-  const redirect = searchParams.get('redirect');
-  const priceId = searchParams.get('priceId');
-  const inviteId = searchParams.get('inviteId');
+  const router = useRouter();
+  const redirect = searchParams.get("redirect");
+  const priceId = searchParams.get("priceId");
+  const inviteId = searchParams.get("inviteId");
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     signInAction,
-    { error: '', email: '', password: '' }
+    { error: "", email: "", password: "" }
   );
 
   return (
@@ -38,9 +39,9 @@ function AuthForm({ mode }: { mode: 'signin' | 'signup' }) {
         formAction(new FormData(event.currentTarget));
       }}
     >
-      <input type="hidden" name="redirect" value={redirect || ''} />
-      <input type="hidden" name="priceId" value={priceId || ''} />
-      <input type="hidden" name="inviteId" value={inviteId || ''} />
+      <input type="hidden" name="redirect" value={redirect || ""} />
+      <input type="hidden" name="priceId" value={priceId || ""} />
+      <input type="hidden" name="inviteId" value={inviteId || ""} />
       <div>
         <Label htmlFor="email" className="block text-sm font-medium text-white">
           Email
@@ -59,6 +60,7 @@ function AuthForm({ mode }: { mode: 'signin' | 'signup' }) {
           />
         </div>
       </div>
+
       <div>
         <Label htmlFor="password" className="block text-sm font-medium text-white">
           Password
@@ -68,19 +70,20 @@ function AuthForm({ mode }: { mode: 'signin' | 'signup' }) {
             id="password"
             name="password"
             type="password"
-            autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+            autoComplete={mode === "signin" ? "current-password" : "new-password"}
             defaultValue={state.password}
             required
             minLength={8}
             maxLength={100}
-            className="appearance-none rounded-full block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 bg-[#2C2420] focus:outline-none focus:ring-[#584235] focus:border-[#584235] sm:text-sm"
+            // Updated text color to white here:
+            className="appearance-none rounded-full block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-white bg-[#2C2420] focus:outline-none focus:ring-[#584235] focus:border-[#584235] sm:text-sm"
             placeholder="Enter your password"
           />
         </div>
       </div>
-      {state?.error && (
-        <div className="text-red-500 text-sm">{state.error}</div>
-      )}
+
+      {state?.error && <div className="text-red-500 text-sm">{state.error}</div>}
+
       <div>
         <Button
           type="submit"
@@ -92,10 +95,10 @@ function AuthForm({ mode }: { mode: 'signin' | 'signup' }) {
               <Loader2 className="animate-spin mr-2 h-4 w-4" />
               Loading...
             </>
-          ) : mode === 'signin' ? (
-            'Sign in'
+          ) : mode === "signin" ? (
+            "Sign in"
           ) : (
-            'Sign up'
+            "Sign up"
           )}
         </Button>
       </div>
@@ -103,13 +106,15 @@ function AuthForm({ mode }: { mode: 'signin' | 'signup' }) {
   );
 }
 
-export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
+export function Login({ mode = "signin" }: { mode?: "signin" | "signup" }) {
+  const router = useRouter();
+  // The tabs will simply redirect when clicked
   return (
     <div className="min-h-[100dvh] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 bg-[#050505]">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center mb-6">
           <Image
-            src="/Resuming white.png"
+            src="/white.png"
             alt="Resuming Logo"
             width={120}
             height={120}
@@ -118,35 +123,45 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
         <Card className="sm:max-w-md w-full">
           <CardHeader className="p-6">
             <CardTitle className="text-3xl font-bold">
-              {mode === 'signin'
-                ? 'Sign in to your account'
-                : 'Create your account'}
+              {mode === "signin" ? "Sign in to your account" : "Create your account"}
             </CardTitle>
           </CardHeader>
           <CardContent className="px-6">
             <Tabs defaultValue={mode}>
-              <TabsList>
-                <TabsTrigger value="signin">Sign In</TabsTrigger>
-                <TabsTrigger value="signup">Sign Up</TabsTrigger>
+              <TabsList className="w-full justify-center">
+                <TabsTrigger
+                  value="signin"
+                  onClick={() => {
+                    if (mode !== "signin") router.push("/sign-in");
+                  }}
+                  className="w-full transition-colors duration-300 hover:bg-[#E8DCC4]/75 data-[state=active]:bg-[#E8DCC4]/50"
+                >
+                  Sign In
+                </TabsTrigger>
+                <TabsTrigger
+                  value="signup"
+                  onClick={() => {
+                    if (mode !== "signup") router.push("/sign-up");
+                  }}
+                  className="w-full transition-colors duration-300 hover:bg-[#E8DCC4]/75 data-[state=active]:bg-[#E8DCC4]/50"
+                >
+                  Sign Up
+                </TabsTrigger>
               </TabsList>
-              <TabsContent value="signin">
-                <AuthForm mode="signin" />
-              </TabsContent>
-              <TabsContent value="signup">
-                <AuthForm mode="signup" />
+              {/* We keep the AuthForm rendered for the default tab */}
+              <TabsContent value={mode}>
+                <AuthForm mode={mode} />
               </TabsContent>
             </Tabs>
           </CardContent>
           <CardFooter className="p-6">
             <div className="text-sm text-white">
-              {mode === 'signin'
-                ? 'New to our platform? '
-                : 'Already have an account? '}
+              {mode === "signin" ? "New to our platform? " : "Already have an account? "}
               <Link
-                href={mode === 'signin' ? '/sign-up' : '/sign-in'}
+                href={mode === "signin" ? "/sign-up" : "/sign-in"}
                 className="text-[#B4916C] hover:underline"
               >
-                {mode === 'signin' ? 'Create an account' : 'Sign in to your account'}
+                {mode === "signin" ? "Create an account" : "Sign in to your account"}
               </Link>
             </div>
           </CardFooter>
