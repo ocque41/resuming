@@ -24,11 +24,11 @@ export default async function PricingPage() {
   return (
     <div className="flex flex-col bg-[#050505] min-h-screen">
       <Navbar />
-      <div className="container mx-auto px-4 pt-24 pb-16 text-left flex-grow">
+      <div className="container mx-auto px-4 py-16 text-left flex-grow">
         <div className="max-w-5xl mx-auto space-y-16">
           <section className="space-y-8">
-            <h1
-              className="text-6xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#584235] via-[#B4916C] to-[#2C2420] animate-fade-in"
+            <h1 
+              className="text-6xl font-bold text-white animate-fade-in"
             >
               Plans and Pricing
             </h1>
@@ -97,8 +97,7 @@ export default async function PricingPage() {
                 "Unlimited Optimizations ⓘ": "Get unlimited AI-powered optimization suggestions",
                 "Access to Analytics Suite ⓘ": "Full access to advanced analytics and insights",
                 "Early access to new features ⓘ": "Be the first to try new platform features",
-                "Secure a high paying job in 3 months or money back guaranteed ⓘ":
-                  "Full refund if you don't secure a high-paying position within 3 months",
+                "Secure a high paying job in 3 months or money back guaranteed ⓘ": "Full refund if you don't secure a high-paying position within 3 months",
               }}
               highlight={false}
               priceId="price_1QoYTrFYYYXM77wGffciG20i"
@@ -127,8 +126,8 @@ function PricingCard({
   priceId?: string;
   tooltips?: Record<string, string>;
 }) {
-  // For side cards: use background #050505, border #E8DCC4, text white.
-  // For the highlighted card (middle): use background #E8DCC4, border #050505, text #050505.
+  // For side cards: bg: #050505, border: #E8DCC4, text white.
+  // For highlighted card: bg: #E8DCC4, border: #050505, text: #050505.
   const cardClass = highlight
     ? "bg-[#E8DCC4] border border-[#050505] mx-auto"
     : "bg-[#050505] border border-[#E8DCC4]";
