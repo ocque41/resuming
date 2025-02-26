@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import Image from "next/image";
 import { Card, CardHeader, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
+
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { signIn } from "./actions";
 import { ActionState } from "@/lib/auth/middleware";
 
@@ -51,7 +53,8 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
             defaultValue={state.email}
             required
             maxLength={50}
-            className="appearance-none rounded-full block w-full px-3 py-2 border border-[#B4916C]/30 placeholder-[#B4916C] text-white bg-[#B4916C] focus:outline-none focus:ring-[#B4916C] focus:border-[#B4916C] sm:text-sm"
+            // Changed input background to a darker shade
+            className="appearance-none rounded-full block w-full px-3 py-2 border border-[#B4916C]/30 placeholder-[#B4916C] text-white bg-[#9E7C57] focus:outline-none focus:ring-[#B4916C] focus:border-[#B4916C] sm:text-sm"
             placeholder="Enter your email"
           />
         </div>
@@ -71,7 +74,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
             required
             minLength={8}
             maxLength={100}
-            className="appearance-none rounded-full block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-white bg-[#B4916C] focus:outline-none focus:ring-[#B4916C] focus:border-[#B4916C] sm:text-sm"
+            className="appearance-none rounded-full block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-white bg-[#9E7C57] focus:outline-none focus:ring-[#B4916C] focus:border-[#B4916C] sm:text-sm"
             placeholder="Enter your password"
           />
         </div>
@@ -117,7 +120,7 @@ export function Login({ mode = "signin" }: { mode?: "signin" | "signup" }) {
             </CardTitle>
           </CardHeader>
           <CardContent className="px-6">
-            {/* Replace Tabs with a custom link-based tab header */}
+            {/* Tabs replaced by link-based navigation */}
             <div className="flex w-full justify-center space-x-2 mb-4">
               <Link
                 href="/sign-in"
