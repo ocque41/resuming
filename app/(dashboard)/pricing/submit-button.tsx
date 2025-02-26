@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Loader2 } from "lucide-react";
 
 export function SubmitButton({ className }: { className?: string }) {
-  const pending = false; // Replace with actual pending logic
+  const pending = false; // Replace with actual form status logic
 
   return (
     <Button

@@ -24,7 +24,7 @@ export default async function PricingPage() {
   return (
     <div className="flex flex-col bg-[#050505] min-h-screen">
       <Navbar />
-      <div className="container mx-auto px-4 py-16 text-center flex-grow">
+      <div className="container mx-auto px-4 py-16 text-left flex-grow">
         <div className="max-w-5xl mx-auto space-y-16">
           <section className="space-y-8">
             <h1
@@ -32,10 +32,10 @@ export default async function PricingPage() {
             >
               Plans and Pricing
             </h1>
-            <p className="text-xl text-[#B4916C] font-semibold animate-fade-in-up mt-4">
+            <p className="text-xl text-white font-semibold animate-fade-in-up mt-4">
               Enjoy a 1 day free trial to see if you found your solution
             </p>
-            <p className="text-xl text-[#B4916C] font-semibold animate-fade-in-up">
+            <p className="text-xl text-white font-semibold animate-fade-in-up">
               Change plans as you grow.
             </p>
           </section>
@@ -126,17 +126,18 @@ function PricingCard({
   priceId?: string;
   tooltips?: Record<string, string>;
 }) {
-  // For the highlighted (middle) card, swap colors:
+  // Side cards: bg: #050505, border: trustworthy accent (#E8DCC4), text white.
+  // Middle card (highlight): bg: trustworthy accent (#E8DCC4), border: #050505, text: #050505.
   const cardClass = highlight
-    ? "bg-[#E8DCC4] border border-[#050505]"
-    : "bg-[#050505] border border-[#E8DCC4] hover:border-[#E8DCC4]";
-  const textClass = highlight ? "text-[#050505]" : "text-[#B4916C]";
+    ? "bg-[#E8DCC4] border border-[#050505] mx-auto"
+    : "bg-[#050505] border border-[#E8DCC4]";
+  const textClass = highlight ? "text-[#050505]" : "text-white";
 
   return (
     <div className={`p-6 rounded-lg shadow-md transition-all duration-300 ease-in-out group ${cardClass}`}>
       <h2 className={`text-2xl font-semibold mb-2 ${textClass}`}>
         {name}
-        {highlight && <span className="ml-2 text-sm text-[#B4916C]">Most Popular</span>}
+        {highlight && <span className="ml-2 text-sm text-[#050505]">Most Popular</span>}
       </h2>
       <p className={`text-4xl font-medium mb-2 ${textClass}`}>
         ${price / 100}
