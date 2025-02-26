@@ -13,7 +13,6 @@ import { Card, CardHeader, CardContent, CardFooter, CardTitle } from "@/componen
 import { signIn } from "./actions";
 import { ActionState } from "@/lib/auth/middleware";
 
-// Wrap signIn to always return an ActionState
 const signInAction = (data: FormData) =>
   signIn({ error: "", email: "", password: "" }, data).then(
     (res) => res ?? { error: "", email: "", password: "" }
@@ -84,7 +83,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
       <div>
         <Button
           type="submit"
-          className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-white bg-[#584235] hover:bg-[#2C2420] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#B4916C]"
+          className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-white bg-[#B4916C] hover:bg-[#B4916C]/75 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#B4916C]"
           disabled={pending}
         >
           {pending ? (
@@ -110,12 +109,7 @@ export function Login({ mode = "signin" }: { mode?: "signin" | "signup" }) {
     <div className="min-h-[100dvh] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 bg-[#050505]">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center mb-6">
-          <Image
-            src="/white.png"
-            alt="Resuming Logo"
-            width={120}
-            height={120}
-          />
+          <Image src="/white.png" alt="Resuming Logo" width={150} height={150} />
         </div>
         <Card className="sm:max-w-md w-full">
           <CardHeader className="p-6">
@@ -131,7 +125,7 @@ export function Login({ mode = "signin" }: { mode?: "signin" | "signup" }) {
                   onClick={() => {
                     if (mode !== "signin") router.push("/sign-in");
                   }}
-                  className="w-full transition-colors duration-300 hover:bg-[#E8DCC4]/75 data-[state=active]:bg-[#E8DCC4]/50"
+                  className="w-full transition-colors duration-300 hover:bg-[#B4916C]/75 data-[state=active]:bg-[#B4916C]/50"
                 >
                   Sign In
                 </TabsTrigger>
@@ -140,7 +134,7 @@ export function Login({ mode = "signin" }: { mode?: "signin" | "signup" }) {
                   onClick={() => {
                     if (mode !== "signup") router.push("/sign-up");
                   }}
-                  className="w-full transition-colors duration-300 hover:bg-[#E8DCC4]/75 data-[state=active]:bg-[#E8DCC4]/50"
+                  className="w-full transition-colors duration-300 hover:bg-[#B4916C]/75 data-[state=active]:bg-[#B4916C]/50"
                 >
                   Sign Up
                 </TabsTrigger>
