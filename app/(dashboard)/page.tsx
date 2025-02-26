@@ -63,7 +63,7 @@ export default function HomePage() {
               <Button
                 asChild
                 size="lg"
-                className="bg-[#584235] text-white px-8 py-4 rounded-md hover:bg-[#584235]/90 transition"
+                className="bg-[#E8DCC4] text-black px-8 py-4 rounded-md hover:bg-[#E8DCC4]/90 transition"
               >
                 <Link href="/sign-up">Try For Free</Link>
               </Button>
@@ -150,7 +150,7 @@ export default function HomePage() {
             <Button
               asChild
               size="lg"
-              className="bg-[#584235] text-white px-8 py-4 rounded-md hover:bg-[#584235]/90 transition"
+              className="bg-[#E8DCC4] text-black px-8 py-4 rounded-md hover:bg-[#E8DCC4]/90 transition"
             >
               <Link href="/sign-up">Try For Free</Link>
             </Button>
