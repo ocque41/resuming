@@ -2,14 +2,13 @@
 
 import Link from "next/link";
 import { useActionState } from "@/lib/useActionState";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardHeader, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
 import { signIn } from "./actions";
 import { ActionState } from "@/lib/auth/middleware";
@@ -22,7 +21,6 @@ const signInAction = (data: FormData) =>
 
 function AuthForm({ mode }: { mode: "signin" | "signup" }) {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const redirect = searchParams.get("redirect");
   const priceId = searchParams.get("priceId");
   const inviteId = searchParams.get("inviteId");
@@ -75,7 +73,6 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
             required
             minLength={8}
             maxLength={100}
-            // Updated text color to white here:
             className="appearance-none rounded-full block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-white bg-[#2C2420] focus:outline-none focus:ring-[#584235] focus:border-[#584235] sm:text-sm"
             placeholder="Enter your password"
           />
@@ -108,7 +105,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
 
 export function Login({ mode = "signin" }: { mode?: "signin" | "signup" }) {
   const router = useRouter();
-  // The tabs will simply redirect when clicked
+
   return (
     <div className="min-h-[100dvh] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 bg-[#050505]">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
@@ -148,7 +145,6 @@ export function Login({ mode = "signin" }: { mode?: "signin" | "signup" }) {
                   Sign Up
                 </TabsTrigger>
               </TabsList>
-              {/* We keep the AuthForm rendered for the default tab */}
               <TabsContent value={mode}>
                 <AuthForm mode={mode} />
               </TabsContent>
