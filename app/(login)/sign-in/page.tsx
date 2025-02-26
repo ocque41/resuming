@@ -1,10 +1,9 @@
-// app/(login)/sign-in/page.tsx
 'use client';
 
 import React, { Suspense } from 'react';
 import { Login } from '../login';
 
-export const dynamic = 'force-dynamic'; // Ensures the page is not statically prerendered
+export const dynamic = 'force-dynamic';
 
 export default function SignInPage() {
   return (

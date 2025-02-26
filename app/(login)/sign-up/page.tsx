@@ -1,4 +1,3 @@
-// app/(login)/sign-up/page.tsx
 'use client';
 
 import React, { Suspense } from 'react';
