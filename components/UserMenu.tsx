@@ -1,4 +1,3 @@
-// components/UserMenu.tsx
 "use client";
 
 import { useState, Fragment } from "react";
@@ -26,7 +25,6 @@ export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
   const handleManageSubscription = async () => {
     setIsBillingLoading(true);
     try {
-      // Use the same customer portal action as the BillingButton
       await customerPortalAction(new FormData());
     } catch (error) {
       console.error("Error redirecting to billing portal:", error);
@@ -39,8 +37,8 @@ export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
     <>
       <Menu as="div" className="relative inline-block text-left">
         <Menu.Button as={Fragment}>
-          <MicroCard className="cursor-pointer ml-auto bg-[#584235]">
-            <span className="flex items-center justify-center h-full w-full rounded-full text-white text-lg">
+          <MicroCard className="cursor-pointer ml-auto bg-[#050505]">
+            <span className="flex items-center justify-center h-full w-full rounded-full text-white text-lg font-manrope">
               U
             </span>
           </MicroCard>
@@ -54,7 +52,7 @@ export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
           leaveFrom="transform opacity-100 scale-100"
           leaveTo="transform opacity-0 scale-95"
         >
-          <Menu.Items className="absolute right-0 mt-2 w-56 origin-top-right bg-[#050505] text-white divide-y divide-gray-700 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+          <Menu.Items className="absolute right-4 mt-2 w-48 origin-top-right bg-[#050505] border border-[#E8DCC4] text-white rounded-md shadow-lg focus:outline-none">
             <div className="py-1">
               <Menu.Item>
                 {({ active }) => (
