@@ -1,11 +1,9 @@
-// components/dashboard-comboboxes.client.tsx
 "use client";
 
 import { Combobox, Transition } from "@headlessui/react";
 import { Fragment, useState } from "react";
 
 // Define a type for your CV record.
-// Make metadata optional so that records without it are still assignable.
 export interface CV {
   id: number;
   userId: number;
@@ -18,9 +16,10 @@ export interface CV {
 export interface DashboardComboboxesProps {
   cvs: CV[];
   onSelect?: (cv: CV) => void;
+  placeholder?: string;
 }
 
-export default function DashboardComboboxes({ cvs, onSelect }: DashboardComboboxesProps) {
+export default function DashboardComboboxes({ cvs, onSelect, placeholder = "Analyze CV" }: DashboardComboboxesProps) {
   const [selected, setSelected] = useState<CV | null>(null);
   const [query, setQuery] = useState("");
 
@@ -41,20 +40,18 @@ export default function DashboardComboboxes({ cvs, onSelect }: DashboardCombobox
   return (
     <div className="w-64">
       <Combobox value={selected} onChange={handleChange}>
-        <Combobox.Label className="block text-sm font-medium text-gray-700">
-          Select a CV
-        </Combobox.Label>
+        {/* Label removed */}
         <div className="relative mt-1">
-          <div className="relative w-full cursor-default overflow-hidden rounded-lg bg-white text-left shadow-md sm:text-sm">
+          <div className="relative w-full cursor-default overflow-hidden rounded-lg bg-[#050505] border border-[#B4916C] text-left shadow-md sm:text-sm">
             <Combobox.Input
-              className="w-full border-none py-2 pl-3 pr-10 leading-5 text-white focus:ring-0"
-              placeholder="Select a CV"
+              className="w-full border-none py-2 pl-3 pr-10 leading-5 text-white bg-[#050505] focus:ring-0"
+              placeholder={placeholder}
               onChange={(e) => setQuery(e.target.value)}
               displayValue={(cv: CV) => (cv ? cv.fileName : "")}
             />
             <Combobox.Button className="absolute inset-y-0 right-0 flex items-center pr-2">
               <svg
-                className="h-5 w-5 text-gray-400"
+                className="h-5 w-5 text-white"
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 20 20"
                 fill="currentColor"
@@ -75,9 +72,9 @@ export default function DashboardComboboxes({ cvs, onSelect }: DashboardCombobox
             leaveTo="opacity-0"
             afterLeave={() => setQuery("")}
           >
-            <Combobox.Options className="absolute mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
+            <Combobox.Options className="absolute mt-1 max-h-60 w-full overflow-auto rounded-md bg-[#050505] border border-[#B4916C] py-1 text-base shadow-lg focus:outline-none sm:text-sm text-white">
               {filteredOptions.length === 0 && query !== "" ? (
-                <div className="relative cursor-default select-none py-2 px-4 text-gray-700">
+                <div className="relative cursor-default select-none py-2 px-4 text-white">
                   Nothing found.
                 </div>
               ) : (
@@ -87,25 +84,17 @@ export default function DashboardComboboxes({ cvs, onSelect }: DashboardCombobox
                     value={cv}
                     className={({ active }) =>
                       `relative cursor-pointer select-none py-2 pl-10 pr-4 ${
-                        active ? "bg-indigo-600 text-white" : "text-gray-900"
+                        active ? "bg-[#B4916C] text-white" : "text-white"
                       }`
                     }
                   >
                     {({ selected: isSelected, active }) => (
                       <>
-                        <span
-                          className={`block truncate ${
-                            isSelected ? "font-medium" : "font-normal"
-                          }`}
-                        >
+                        <span className={`block truncate ${isSelected ? "font-medium" : "font-normal"}`}>
                           {cv.fileName}
                         </span>
                         {isSelected && (
-                          <span
-                            className={`absolute inset-y-0 left-0 flex items-center pl-3 ${
-                              active ? "text-white" : "text-indigo-600"
-                            }`}
-                          >
+                          <span className={`absolute inset-y-0 left-0 flex items-center pl-3 ${active ? "text-white" : "text-[#B4916C]"}`}>
                             <svg
                               className="h-5 w-5"
                               xmlns="http://www.w3.org/2000/svg"

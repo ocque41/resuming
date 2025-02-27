@@ -34,7 +34,7 @@ export default function ClientSettingsDialogContent({
           </div>
         </header>
         <GeneralPage />
-        <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border-transparent">
+        <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C] border-[1px]">
           <CardHeader>
             <CardTitle className="text-base text-gray-400 text-center">Subscription</CardTitle>
           </CardHeader>
@@ -42,7 +42,7 @@ export default function ClientSettingsDialogContent({
             <BillingButton />
           </CardContent>
         </Card>
-        <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border-transparent">
+        <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C] border-[1px]">
           <CardHeader>
             <CardTitle className="text-base text-gray-400 text-center">Invite Team Member</CardTitle>
           </CardHeader>
