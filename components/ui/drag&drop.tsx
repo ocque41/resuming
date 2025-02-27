@@ -39,7 +39,7 @@ const DragAndDropUpload: React.FC = () => {
       });
       console.log("Upload successful:", response.data);
       setUploadSuccess(true);
-      router.refresh(); // This triggers a re-fetch of the server component data
+      router.refresh();
     } catch (error: any) {
       console.error("Error uploading file:", error);
       setError("Error uploading file. Please try again.");
@@ -50,23 +50,16 @@ const DragAndDropUpload: React.FC = () => {
 
   return (
     <div className="space-y-1">
-      <label className="block text-sm font-medium bg-gradient-to-br from-[#584235] via-[#2C2420] to-[#1A1614] text-transparent bg-clip-text animate-gradient">
-        Upload A CV
-      </label>
       <div
         {...getRootProps()}
-        className={`w-full max-w-md lg:max-w-2xl h-32 flex justify-center items-center border rounded-lg shadow-md
-          transition-all duration-200 cursor-pointer focus:outline-none focus:ring-0
-          ${isDragActive ? "border-indigo-600" : "border-gray-300"} bg-gradient-to-br from-[#584235] via-[#2C2420] to-[#1A1614]`}
+        className="w-full max-w-md lg:max-w-2xl h-48 flex justify-center items-center border rounded-lg shadow-md transition-all duration-200 cursor-pointer focus:outline-none focus:ring-0 border-[#B4916C] bg-[#050505]"
       >
         <input {...getInputProps()} className="hidden" />
-        <div className="space-y-1 text-center">
+        <div className="text-center">
           {isDragActive ? (
             <p className="text-blue-600 font-medium">Drop your CV here...</p>
           ) : (
-            <p className="text-white mx-16">
-              Drop Your CV
-            </p>
+            <p className="text-white">Drop Your CV</p>
           )}
         </div>
       </div>
