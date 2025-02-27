@@ -52,7 +52,7 @@ const DragAndDropUpload: React.FC = () => {
     <div className="space-y-1">
       <div
         {...getRootProps()}
-        className="w-full max-w-4xl h-48 flex justify-center items-center border rounded-lg shadow-md transition-all duration-200 cursor-pointer focus:outline-none focus:ring-0 border-[#B4916C] bg-[#050505]"
+        className="w-full h-48 flex justify-center items-center border rounded-lg shadow-md transition-all duration-200 cursor-pointer focus:outline-none focus:ring-0 border-[#B4916C] bg-[#050505]"
       >
         <input {...getInputProps()} className="hidden" />
         <div className="text-center px-4">
