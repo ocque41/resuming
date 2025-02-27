@@ -3,7 +3,7 @@ import localFont from "next/font/local";
 
 const manrope = Manrope({ subsets: ["latin"] });
 const safiroFont = localFont({
-  src: "/fonts/Safiro-Medium.otf",
+  src: "../../fonts/Safiro-Medium.otf",
   display: "swap",
 });
 
