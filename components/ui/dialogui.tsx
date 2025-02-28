@@ -11,7 +11,13 @@ interface MyDialogProps {
   panelClassName?: string;
 }
 
-export default function MyDialog({ isOpen, onClose, title, children, panelClassName }: MyDialogProps) {
+export default function MyDialog({
+  isOpen,
+  onClose,
+  title,
+  children,
+  panelClassName,
+}: MyDialogProps) {
   return (
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-10" onClose={onClose}>

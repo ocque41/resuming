@@ -38,7 +38,7 @@ export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
       <Menu as="div" className="relative inline-block text-left">
         <Menu.Button as={Fragment}>
           <MicroCard className="cursor-pointer ml-auto bg-[#050505]">
-            <span className="flex items-center justify-center h-full w-full rounded-full text-white text-lg font-manrope">
+            <span className="flex items-center justify-center h-full w-full rounded-full text-white text-lg font-safiro">
               U
             </span>
           </MicroCard>
@@ -92,7 +92,7 @@ export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
       <MyDialog
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-        title="User Settings"
+        title=""
         panelClassName="max-w-4xl bg-transparent p-0 border-0 shadow-none"
       >
         <ClientSettingsDialogContent

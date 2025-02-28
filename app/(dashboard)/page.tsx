@@ -45,7 +45,7 @@ export default function HomePage() {
       <section className="relative h-screen flex items-center bg-black pt-8">
         {/* Background overlay */}
         <div className="absolute inset-0 bg-[url('/hero-bg.jpg')] bg-cover bg-center opacity-30"></div>
-        <div className="relative z-10 max-w-4xl mx-auto px-4 md:px-8 text-left space-y-8">
+        <div className="relative z-10 max-w-4xl mx-auto px-4 md:px-8 text-left space-y-20">
           {/* Badge above title */}
           <div>
             <Link href="https://chromad.vercel.app/docs/products/resuming">
@@ -56,7 +56,7 @@ export default function HomePage() {
             <ArticleTitle className="text-5xl md:text-7xl font-bold text-white">
               The Jobs Playground
             </ArticleTitle>
-            <ArticleContent className="mt-4 text-xl md:text-2xl text-gray-300">
+            <ArticleContent className="mt-10 text-xl md:text-2xl text-gray-300">
               AI-powered CV Analysis &amp; Optimization unlocking exclusive career opportunities.
             </ArticleContent>
             <div className="mt-8 flex flex-col md:flex-row gap-4 items-start">

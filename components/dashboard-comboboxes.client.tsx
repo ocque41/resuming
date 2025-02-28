@@ -19,7 +19,11 @@ export interface DashboardComboboxesProps {
   placeholder?: string;
 }
 
-export default function DashboardComboboxes({ cvs, onSelect, placeholder = "Analyze CV" }: DashboardComboboxesProps) {
+export default function DashboardComboboxes({
+  cvs,
+  onSelect,
+  placeholder = "Analyze CV",
+}: DashboardComboboxesProps) {
   const [selected, setSelected] = useState<CV | null>(null);
   const [query, setQuery] = useState("");
 
@@ -38,7 +42,7 @@ export default function DashboardComboboxes({ cvs, onSelect, placeholder = "Anal
   };
 
   return (
-    <div className="w-64">
+    <div className="w-full">
       <Combobox value={selected} onChange={handleChange}>
         <div className="relative mt-1">
           <div className="relative w-full cursor-default overflow-hidden rounded-lg bg-[#050505] border border-[#B4916C] text-left shadow-md sm:text-sm">
