@@ -28,9 +28,9 @@ export default async function PricingPage() {
       <div className="min-h-screen pt-40 pb-16 container mx-auto px-4 text-left flex-grow">
         <div className="max-w-5xl mx-auto space-y-16">
           <section className="space-y-8">
-            <h1 className="text-6xl font-bold text-white animate-fade-in">
+            <h2 className="text-6xl font-bold text-white animate-fade-in">
               Plans and Pricing
-            </h1>
+            </h2>
             <p className="text-xl text-white font-semibold animate-fade-in-up mt-4">
               Enjoy a 1 day free trial to see if you found your solution
             </p>
