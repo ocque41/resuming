@@ -54,7 +54,7 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
           />
         </div>
         <ComboboxPopover
-          label="Select a CV"
+          label="Analyze"
           options={cvs}
           onSelect={(selectedCV: string) => {
             console.log("Selected CV for analysis:", selectedCV);

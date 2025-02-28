@@ -72,7 +72,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
           />
         </div>
         <ComboboxPopover
-          label="Select a CV to Optimize"
+          label="Optimize"
           options={cvs}
           onSelect={(cv: string) => {
             console.log("Selected CV for optimization:", cv);

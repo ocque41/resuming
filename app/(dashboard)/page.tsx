@@ -56,7 +56,7 @@ export default function HomePage() {
             <ArticleTitle className="text-5xl md:text-7xl font-bold text-white">
               The Jobs Playground
             </ArticleTitle>
-            <ArticleContent className="mt-10 text-xl md:text-2xl text-gray-300">
+            <ArticleContent className="mt-4 text-xl md:text-2xl text-gray-300">
               AI-powered CV Analysis &amp; Optimization unlocking exclusive career opportunities.
             </ArticleContent>
             <div className="mt-8 flex flex-col md:flex-row gap-4 items-start">
