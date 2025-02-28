@@ -40,7 +40,6 @@ export default function DashboardComboboxes({ cvs, onSelect, placeholder = "Anal
   return (
     <div className="w-64">
       <Combobox value={selected} onChange={handleChange}>
-        {/* Label removed */}
         <div className="relative mt-1">
           <div className="relative w-full cursor-default overflow-hidden rounded-lg bg-[#050505] border border-[#B4916C] text-left shadow-md sm:text-sm">
             <Combobox.Input
