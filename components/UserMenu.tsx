@@ -1,3 +1,4 @@
+// components/UserMenu.tsx
 "use client";
 
 import { useState, Fragment } from "react";
@@ -37,8 +38,8 @@ export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
     <>
       <Menu as="div" className="relative inline-block text-left">
         <Menu.Button as={Fragment}>
-          <MicroCard className="cursor-pointer ml-auto bg-[#050505]">
-            <span className="flex items-center justify-center h-full w-full rounded-full text-white text-lg font-safiro">
+          <MicroCard variant="custom" className="cursor-pointer ml-auto">
+            <span className="flex items-center justify-center h-full w-full rounded-full text-white font-safiro">
               U
             </span>
           </MicroCard>

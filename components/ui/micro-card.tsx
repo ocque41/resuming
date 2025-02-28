@@ -1,10 +1,9 @@
-// components/ui/micro-card.tsx
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const MicroCard = React.forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> & { variant?: "default" | "gradient" | "glass" }
+  React.HTMLAttributes<HTMLDivElement> & { variant?: "default" | "gradient" | "glass" | "custom" }
 >(({ className, variant = "default", ...props }, ref) => {
   const variants = {
     default:
@@ -13,6 +12,8 @@ const MicroCard = React.forwardRef<
       "rounded-full bg-gradient-to-br from-[#584235] via-[#2C2420] to-[#1A1614] border border-[#B4916C] shadow-lg hover:shadow-2xl transition-all duration-300 h-10 w-10",
     glass:
       "rounded-full bg-white backdrop-blur-lg border border-white shadow-2xl hover:shadow-3xl transition-all duration-300 hover:bg-white h-10 w-10",
+    custom:
+      "rounded-full border border-[#B4916C] bg-[#050505] backdrop-blur-sm text-card-foreground shadow-xl hover:shadow-2xl transition-all duration-300 h-10 w-10",
   };
 
   return <div ref={ref} className={cn(variants[variant], className)} {...props} />;

@@ -52,7 +52,7 @@ const DragAndDropUpload: React.FC = () => {
     <div className="space-y-1">
       <div
         {...getRootProps()}
-        className="w-full h-48 flex justify-center items-center border rounded-lg shadow-md transition-all duration-200 cursor-pointer focus:outline-none focus:ring-0 border-[#B4916C] bg-[#050505]"
+        className="w-70 h-52 flex justify-center items-center border rounded-lg shadow-md transition-all duration-200 cursor-pointer focus:outline-none focus:ring-0 border-[#B4916C] bg-[#050505]"
       >
         <input {...getInputProps()} className="hidden" />
         <div className="text-center px-4">
@@ -63,9 +63,9 @@ const DragAndDropUpload: React.FC = () => {
           )}
         </div>
       </div>
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
       {uploadSuccess && (
-        <p className="mt-2 text-sm text-green-600">
+        <p className="mt-3 text-sm text-green-600">
           File uploaded successfully!
         </p>
       )}
