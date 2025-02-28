@@ -88,7 +88,7 @@ export default async function PricingPage() {
                 "Unlimited Optimizations ⓘ",
                 "Access to Analytics Suite ⓘ",
                 "Early access to new features ⓘ",
-                "Secure a high paying job in 3 months or money back guaranteed ⓘ",
+                
               ]}
               tooltips={{
                 "Unlimited CV uploads ⓘ": "No monthly limit on CV uploads",
@@ -96,8 +96,6 @@ export default async function PricingPage() {
                 "Unlimited Optimizations ⓘ": "Get unlimited AI-powered optimization suggestions",
                 "Access to Analytics Suite ⓘ": "Full access to advanced analytics and insights",
                 "Early access to new features ⓘ": "Be the first to try new platform features",
-                "Secure a high paying job in 3 months or money back guaranteed ⓘ":
-                  "Full refund if you don't secure a high-paying position within 3 months",
               }}
               highlight={false}
               priceId="price_1QoYTrFYYYXM77wGffciG20i"
