@@ -53,7 +53,7 @@ export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
           leaveFrom="transform opacity-100 scale-100"
           leaveTo="transform opacity-0 scale-95"
         >
-          <Menu.Items className="absolute right-4 mt-2 w-56 origin-top-right bg-[#050505] border border-[#B4916C] text-white rounded-md shadow-lg focus:outline-none">
+          <Menu.Items className="absolute right-4 mt-2 w-56 origin-top-right bg-[#050505] border border-[#B4916C] text-white rounded-md shadow-lg focus:outline-none z-50">
             <div className="py-1">
               <Menu.Item>
                 {({ active }) => (
