@@ -153,7 +153,7 @@ function PricingCard({
               {feature}
               {tooltips?.[feature] && (
                 <span className="relative inline-block">
-                  <span className="invisible hover:visible absolute left-0 -top-12 w-64 bg-black/90 text-white text-sm p-2 rounded z-10">
+                  <span className="opacity-0 group-hover:opacity-100 absolute left-0 -top-12 w-64 bg-black/90 text-white text-sm p-2 rounded z-10 transition-opacity duration-300">
                     {tooltips[feature]}
                   </span>
                 </span>
