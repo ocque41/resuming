@@ -224,7 +224,7 @@ export async function modifyPDFWithOptimizedContent(
   const optimizedSections = parseOptimizedText(optimizedText);
   
   // Get the first page
-  const page = pdfDoc.getPage(0);
+  let page = pdfDoc.getPage(0);
   const { width, height } = page.getSize();
   const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
