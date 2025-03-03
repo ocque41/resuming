@@ -5,8 +5,14 @@ export async function optimizeCV(
   ): Promise<{ optimizedText: string; optimizedPDFUrl: string }> {
     // Build a prompt for GPT-3.5-turbo that instructs it to generate both optimized text and PDF editing instructions.
     const prompt = `You are an expert CV optimizer. Based on the following analysis and original CV content, generate a JSON response with two keys:
-  - "optimizedText": a revised version of the CV text that improves clarity, formatting, and overall impact.
+  - "optimizedText": a revised version of the CV text that improves clarity, formatting, and overall impact. Structure the text with section headers using ## (e.g., ## Experience, ## Education) and maintain paragraph breaks with blank lines.
   - "pdfInstructions": a concise instruction set for a PDF editing tool to transform the original CV PDF accordingly.
+  
+  For the optimizedText, maintain the original CV structure but improve:
+  1. Bullet points to be more achievement-oriented
+  2. Keywords relevant to the job market
+  3. Clear section organization
+  4. Concise language that highlights accomplishments
   
   CV Analysis:
   ATS Score: ${analysis.atsScore}%

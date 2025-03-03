@@ -2,6 +2,30 @@ import { PDFDocument, StandardFonts, rgb, PDFFont } from "pdf-lib";
 import { getOverlayCoordinates } from "./templateMatching";
 
 /**
+ * Parses structured optimized text into sections
+ */
+function parseOptimizedText(optimizedText: string): Record<string, string> {
+  const sections: Record<string, string> = {};
+  
+  // Split by section headers (assuming they're marked with ## or similar)
+  const sectionRegex = /##\s*([^#\n]+)\s*\n([\s\S]*?)(?=##\s*[^#\n]+\s*\n|$)/g;
+  let match;
+  
+  while ((match = sectionRegex.exec(optimizedText)) !== null) {
+    const sectionName = match[1].trim();
+    const sectionContent = match[2].trim();
+    sections[sectionName] = sectionContent;
+  }
+  
+  // If no sections found, treat the whole text as one section
+  if (Object.keys(sections).length === 0) {
+    sections["Content"] = optimizedText;
+  }
+  
+  return sections;
+}
+
+/**
  * Wraps the given text into lines that do not exceed maxWidth.
  *
  * @param text - The text to wrap.
@@ -47,74 +71,89 @@ export async function modifyPDFWithOptimizedContent(
   originalPdfBytes: Uint8Array,
   optimizedText: string
 ): Promise<string> {
-  // Remove newline characters (and other problematic ones) from the optimized text.
-  optimizedText = optimizedText.replace(/\r?\n/g, " ");
-
-  // Load the original PDF document.
+  // Load the original PDF document
   const pdfDoc = await PDFDocument.load(originalPdfBytes);
-
-  // Use template matching to see if we can target a known region (e.g., "Experience" section).
+  
+  // Parse the optimized text into sections
+  const sections = parseOptimizedText(optimizedText);
+  
+  // Get coordinates for known sections if possible
   const coordinates = await getOverlayCoordinates(originalPdfBytes);
-
-  let pageToModify;
-  if (coordinates) {
-    // If coordinates are found, use the first page.
-    pageToModify = pdfDoc.getPage(0);
-  } else {
-    // Fallback: create a new page for the optimized content.
-    const { width, height } = pdfDoc.getPage(0).getSize();
-    pageToModify = pdfDoc.addPage([width, height]);
-  }
-
-  // Embed a standard font.
+  
+  // Get the first page
+  const page = pdfDoc.getPage(0);
+  const { width, height } = page.getSize();
   const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const { width, height } = pageToModify.getSize();
+  const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  
+  // Default margins and styling
   const margin = 50;
-  const fontSize = 12;
+  const fontSize = 10;
+  const headerFontSize = 12;
   const lineHeight = fontSize * 1.2;
   const maxWidth = width - margin * 2;
-
-  // Determine the starting Y coordinate.
-  let startY = coordinates ? coordinates.experienceY : height - margin;
-
-  // If a target region was identified, clear that area by drawing a white rectangle.
-  if (coordinates) {
-    // Adjust the rectangle dimensions as needed.
-    pageToModify.drawRectangle({
-      x: margin,
-      y: startY - 200, // clear an area 200 points high
-      width: maxWidth,
-      height: 200,
-      color: rgb(1, 1, 1),
-    });
-  }
-
-  // Wrap the optimized text into lines.
-  const lines = wrapText(optimizedText, helveticaFont, fontSize, maxWidth);
-
-  let currentPage = pageToModify;
-  let currentY = startY;
-
-  // Draw each line; if text exceeds the available space, add a new page.
-  for (const line of lines) {
-    if (currentY - lineHeight < margin) {
-      currentPage = pdfDoc.addPage([width, height]);
-      currentY = height - margin;
+  
+  // Starting position - either from coordinates or default
+  let currentY = coordinates?.experienceY || height - margin;
+  
+  // Process each section
+  for (const [sectionName, sectionContent] of Object.entries(sections)) {
+    // Find section-specific coordinates if available
+    const sectionY = getSectionCoordinates(sectionName, coordinates);
+    if (sectionY) {
+      currentY = sectionY;
     }
-    currentPage.drawText(line, {
+    
+    // Draw section header
+    page.drawText(sectionName, {
       x: margin,
       y: currentY,
-      size: fontSize,
-      font: helveticaFont,
+      size: headerFontSize,
+      font: helveticaBold,
       color: rgb(0, 0, 0),
-      maxWidth,
     });
+    
+    currentY -= lineHeight * 1.5;
+    
+    // Process section content with proper paragraph breaks
+    const paragraphs = sectionContent.split('\n\n');
+    for (const paragraph of paragraphs) {
+      const lines = wrapText(paragraph, helveticaFont, fontSize, maxWidth);
+      
+      for (const line of lines) {
+        page.drawText(line, {
+          x: margin,
+          y: currentY,
+          size: fontSize,
+          font: helveticaFont,
+          color: rgb(0, 0, 0),
+        });
+        currentY -= lineHeight;
+      }
+      
+      // Add space between paragraphs
+      currentY -= lineHeight * 0.5;
+    }
+    
+    // Add space between sections
     currentY -= lineHeight;
   }
-
-  // Serialize the modified PDF.
+  
+  // Serialize the modified PDF
   const modifiedPdfBytes = await pdfDoc.save();
-  // Convert the bytes to a Base64-encoded string.
-  const base64String = Buffer.from(modifiedPdfBytes).toString("base64");
-  return base64String;
+  return Buffer.from(modifiedPdfBytes).toString("base64");
+}
+
+// Helper function to get section-specific coordinates
+function getSectionCoordinates(sectionName: string, coordinates: any): number | null {
+  if (!coordinates) return null;
+  
+  const sectionMap: Record<string, number | undefined> = {
+    "Experience": coordinates.experienceY,
+    "Education": coordinates.educationY,
+    "Skills": coordinates.skillsY,
+    // Add more mappings as needed
+  };
+  
+  return sectionMap[sectionName] || null;
 }

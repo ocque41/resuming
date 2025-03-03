@@ -13,10 +13,19 @@ export async function optimizeCVBackground(cvRecord: any) {
 
     const optimizationResult = await optimizeCV(cvRecord.rawText, metadata);
     const originalPdfBytes = await getOriginalPdfBytes(cvRecord);
+    
+    if (!originalPdfBytes || originalPdfBytes.length === 0) {
+      throw new Error("Failed to retrieve original PDF content");
+    }
+    
     const modifiedPdfBase64 = await modifyPDFWithOptimizedContent(
       originalPdfBytes,
       optimizationResult.optimizedText
     );
+    
+    if (!modifiedPdfBase64) {
+      throw new Error("PDF modification failed to produce output");
+    }
 
     const newMetadata = {
       ...metadata,
@@ -31,9 +40,13 @@ export async function optimizeCVBackground(cvRecord: any) {
     await updateCVAnalysis(cvRecord.id, JSON.stringify(newMetadata));
   } catch (error: any) {
     console.error("Background optimization error:", error);
+    console.error("CV Record ID:", cvRecord.id);
+    console.error("Error stack:", error.stack);
+    
     const metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
     metadata.optimizing = false;
     metadata.error = error.message;
+    metadata.errorTimestamp = new Date().toISOString();
     await updateCVAnalysis(cvRecord.id, JSON.stringify(metadata));
   }
 }
