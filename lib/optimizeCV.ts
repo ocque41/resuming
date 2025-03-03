@@ -3,6 +3,9 @@ export async function optimizeCV(
     rawText: string,
     analysis: any
   ): Promise<{ optimizedText: string; optimizedPDFUrl: string }> {
+    // Extract potential sections from the raw text to guide the AI
+    const potentialSections = extractPotentialSections(rawText);
+    
     // Build a prompt for GPT-3.5-turbo that instructs it to generate both optimized text and PDF editing instructions.
     const prompt = `You are an expert CV optimizer. Based on the following analysis and original CV content, generate a JSON response with two keys:
   - "optimizedText": a revised version of the CV text that improves clarity, formatting, and overall impact. Structure the text with section headers using ## (e.g., ## Experience, ## Education) and maintain paragraph breaks with blank lines.
@@ -13,6 +16,11 @@ export async function optimizeCV(
   2. Keywords relevant to the job market
   3. Clear section organization
   4. Concise language that highlights accomplishments
+  
+  I've identified these potential sections in the CV:
+  ${potentialSections.map(section => `- ${section}`).join('\n')}
+  
+  Please organize your optimized text using these section headers where appropriate, adding ## before each section name.
   
   CV Analysis:
   ATS Score: ${analysis.atsScore}%
@@ -49,6 +57,26 @@ export async function optimizeCV(
     // Simulate calling a PDF parsing tool that uses the provided instructions to generate an optimized PDF.
     const optimizedPDFUrl = await editPDF(optimizedData.pdfInstructions);
     return { optimizedText: optimizedData.optimizedText, optimizedPDFUrl };
+  }
+  
+  // Helper function to extract potential sections from the raw text
+  function extractPotentialSections(rawText: string): string[] {
+    const commonSections = [
+      "PROFILE", "OBJECTIVE", "SUMMARY", "EXPERIENCE", "WORK EXPERIENCE", 
+      "EDUCATION", "SKILLS", "LANGUAGES", "CERTIFICATIONS", "PROJECTS",
+      "INTERESTS", "REFERENCES", "PUBLICATIONS", "AWARDS", "VOLUNTEER"
+    ];
+    
+    const foundSections = [];
+    
+    for (const section of commonSections) {
+      const regex = new RegExp(`(^|\\s)${section}[\\s:]*`, 'i');
+      if (regex.test(rawText)) {
+        foundSections.push(section);
+      }
+    }
+    
+    return foundSections.length > 0 ? foundSections : ["Content"];
   }
   
   // Simulated PDF editing function.

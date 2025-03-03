@@ -20,7 +20,8 @@ export async function optimizeCVBackground(cvRecord: any) {
     
     const modifiedPdfBase64 = await modifyPDFWithOptimizedContent(
       originalPdfBytes,
-      optimizationResult.optimizedText
+      optimizationResult.optimizedText,
+      cvRecord.rawText
     );
     
     if (!modifiedPdfBase64) {
