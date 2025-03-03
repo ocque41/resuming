@@ -12,7 +12,7 @@ export async function optimizeCV(
   - "pdfInstructions": a concise instruction set for a PDF editing tool to transform the original CV PDF accordingly.
   
   For the optimizedText, maintain the original CV structure but improve:
-  1. Bullet points to be more achievement-oriented
+  1. Bullet points to be more achievement-oriented (use "• " for bullet points)
   2. Keywords relevant to the job market
   3. Clear section organization
   4. Concise language that highlights accomplishments
@@ -21,6 +21,8 @@ export async function optimizeCV(
   ${potentialSections.map(section => `- ${section}`).join('\n')}
   
   Please organize your optimized text using these section headers where appropriate, adding ## before each section name.
+  
+  IMPORTANT: For each bullet point in lists, start with "• " (bullet character followed by a space).
   
   CV Analysis:
   ATS Score: ${analysis.atsScore}%
