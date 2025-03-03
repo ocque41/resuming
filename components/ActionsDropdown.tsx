@@ -1,11 +1,12 @@
 "use client";
 
-// Add this line to fix the TypeScript error
-declare module '@heroicons/react/outline';
+// Remove this line as we'll use the correct import path
+// declare module '@heroicons/react/outline';
 
 import { useState } from "react";
 import { Menu } from "@headlessui/react";
-import { ChevronDownIcon, TrashIcon, DownloadIcon } from "@heroicons/react/outline";
+// Update the import path for Heroicons v2
+import { ChevronDownIcon, TrashIcon, ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 import DeleteCVButton from "@/components/delete-cv";
 
 interface ActionsDropdownProps {
@@ -82,7 +83,7 @@ export default function ActionsDropdown({ cv }: ActionsDropdownProps) {
                 } group flex rounded-md items-center w-full px-2 py-2 text-sm text-white`}
                 onClick={handleDownload}
               >
-                <DownloadIcon className="w-5 h-5 mr-2" aria-hidden="true" />
+                <ArrowDownTrayIcon className="w-5 h-5 mr-2" aria-hidden="true" />
                 Download
               </button>
             )}
