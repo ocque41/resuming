@@ -18,7 +18,13 @@ export default function ActionsDropdown({ cv }: ActionsDropdownProps) {
   const handleDownload = async () => {
     try {
       // Get the metadata to check if there's an optimized version
-      const metadata = cv.metadata ? JSON.parse(cv.metadata) : null;
+      let metadata = null;
+      try {
+        metadata = cv.metadata ? JSON.parse(cv.metadata) : null;
+      } catch (parseError) {
+        console.error('Error parsing metadata:', parseError);
+        metadata = null;
+      }
       
       // Determine which file to download (original or optimized)
       const endpoint = metadata?.optimized 
