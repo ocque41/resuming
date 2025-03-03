@@ -16,6 +16,7 @@ import {
 import DashboardClientWrapper from "@/components/dashboard-client-wrapper";
 import DeleteCVButton from "@/components/delete-cv";
 import UserMenu from "@/components/UserMenu";
+import ActionsDropdown from "@/components/ActionsDropdown";
 
 export default async function DashboardPage() {
   const user = await getUser();
@@ -72,7 +73,7 @@ export default async function DashboardPage() {
                       {metadata?.optimized ? `Yes (${metadata.optimizedTimes || 1})` : "No"}
                     </TableCell>
                     <TableCell className="text-sm lg:text-base text-white">
-                      <DeleteCVButton cvId={cv.id} />
+                      <ActionsDropdown cv={cv} />
                     </TableCell>
                   </TableRow>
                 );
