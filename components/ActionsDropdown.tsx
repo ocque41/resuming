@@ -1,5 +1,8 @@
 "use client";
 
+// Add this line to fix the TypeScript error
+declare module '@heroicons/react/outline';
+
 import { useState } from "react";
 import { Menu } from "@headlessui/react";
 import { ChevronDownIcon, TrashIcon, DownloadIcon } from "@heroicons/react/outline";
