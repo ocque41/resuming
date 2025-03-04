@@ -59,15 +59,20 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     
     // Pass template information to the PDF modification function
     console.log("Generating optimized PDF...");
-    const modifiedPdfBase64 = await modifyPDFWithOptimizedContent(
+    const pdfBuffer = await modifyPDFWithOptimizedContent(
       optimizationResult.optimizedText,
       cvRecord.rawText,
       selectedTemplate
     );
     
-    if (!modifiedPdfBase64) {
+    if (!pdfBuffer) {
       throw new Error("PDF modification failed to produce output");
     }
+    
+    // Convert buffer to base64 string
+    const modifiedPdfBase64 = Buffer.isBuffer(pdfBuffer) 
+      ? pdfBuffer.toString('base64')
+      : Buffer.from(JSON.stringify(pdfBuffer)).toString('base64');
     
     console.log(`Generated optimized PDF (${modifiedPdfBase64.length} base64 characters)`);
 

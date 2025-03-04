@@ -202,8 +202,22 @@ ${rawText}`;
           template
         );
         
+        // Add logging to check the type of pdfBuffer
+        console.log("PDF Buffer type:", typeof pdfBuffer);
+        console.log("PDF Buffer is Buffer?", Buffer.isBuffer(pdfBuffer));
+        
         // Convert buffer to base64 for URL
-        const base64Pdf = pdfBuffer.toString('base64');
+        let base64Pdf;
+        if (Buffer.isBuffer(pdfBuffer)) {
+          base64Pdf = pdfBuffer.toString('base64');
+        } else if (typeof pdfBuffer === 'object') {
+          // If it's not a Buffer but an object, try to convert it
+          console.log("PDF Buffer is not a Buffer, attempting to convert");
+          base64Pdf = Buffer.from(JSON.stringify(pdfBuffer)).toString('base64');
+        } else {
+          throw new Error("PDF generation returned an invalid type");
+        }
+        
         const optimizedPDFUrl = `data:application/pdf;base64,${base64Pdf}`;
         
         return {
@@ -229,8 +243,22 @@ ${rawText}`;
           template
         );
         
+        // Add logging to check the type of fallbackPdfBuffer
+        console.log("Fallback PDF Buffer type:", typeof fallbackPdfBuffer);
+        console.log("Fallback PDF Buffer is Buffer?", Buffer.isBuffer(fallbackPdfBuffer));
+        
         // Convert buffer to base64 for URL
-        const base64Pdf = fallbackPdfBuffer.toString('base64');
+        let base64Pdf;
+        if (Buffer.isBuffer(fallbackPdfBuffer)) {
+          base64Pdf = fallbackPdfBuffer.toString('base64');
+        } else if (typeof fallbackPdfBuffer === 'object') {
+          // If it's not a Buffer but an object, try to convert it
+          console.log("Fallback PDF Buffer is not a Buffer, attempting to convert");
+          base64Pdf = Buffer.from(JSON.stringify(fallbackPdfBuffer)).toString('base64');
+        } else {
+          throw new Error("Fallback PDF generation returned an invalid type");
+        }
+        
         const optimizedPDFUrl = `data:application/pdf;base64,${base64Pdf}`;
         
         return {
