@@ -1,15 +1,17 @@
 // lib/optimizeCV.ts
+import { CVTemplate } from "@/types/templates";
+
 export async function optimizeCV(
     rawText: string,
-    analysis: any
+    analysis: any,
+    template?: CVTemplate
   ): Promise<{ optimizedText: string; optimizedPDFUrl: string }> {
     try {
       // Get potential sections
       const potentialSections = extractPotentialSections(rawText);
       
-      // Build a prompt for GPT-4 that instructs it to generate both optimized text and PDF editing instructions.
-      const prompt = `You are a professional CV writer who specializes in transforming basic CVs into polished, high-impact documents. The user has uploaded a CV that needs a complete redesign in both content and format, with the goal of creating a modern, professional document that will significantly increase their chances of getting interviews.
-
+      // Customize prompt based on template if available
+      let formattingInstructions = `
 Your task is to completely rewrite and restructure this CV to match a modern two-column layout with the following sections:
 
 LEFT COLUMN (narrow):
@@ -21,7 +23,28 @@ LEFT COLUMN (narrow):
 RIGHT COLUMN (main content):
 - Professional Profile (3-4 compelling sentences highlighting unique value proposition)
 - Professional Experience (achievement-oriented bullet points, with metrics and results)
-- Additional Skills & Certifications (if applicable)
+- Additional Skills & Certifications (if applicable)`;
+
+      // If template is provided, adapt formatting instructions
+      if (template) {
+        // Add template-specific formatting instructions
+        formattingInstructions = `
+Your task is to completely rewrite and restructure this CV following the ${template.name} style (${template.company} preferred format) with the following characteristics:
+
+${template.description}
+
+The layout should incorporate:
+- ${template.metadata.preferredFonts.join(', ')} fonts
+- Color scheme matching ${template.company}'s brand
+- ${template.metadata.layout} layout
+- Emphasis on skills: ${template.metadata.keywordsEmphasis.join(', ')}
+- Section order: ${template.metadata.sectionOrder.join(' → ')}`;
+      }
+      
+      // Build a prompt for GPT-4 that instructs it to generate both optimized text and PDF editing instructions.
+      const prompt = `You are a professional CV writer who specializes in transforming basic CVs into polished, high-impact documents. The user has uploaded a CV that needs a complete redesign in both content and format, with the goal of creating a modern, professional document that will significantly increase their chances of getting interviews.
+
+${formattingInstructions}
 
 I need you to:
 
@@ -53,6 +76,8 @@ Weaknesses: ${analysis.weaknesses && Array.isArray(analysis.weaknesses) ? analys
 Recommendations: ${analysis.recommendations && Array.isArray(analysis.recommendations) ? analysis.recommendations.join(", ") : 'None provided'}
 Industry Insight: ${analysis.industryInsight || 'None provided'}
 Target Roles: ${analysis.targetRoles && Array.isArray(analysis.targetRoles) ? analysis.targetRoles.join(", ") : 'None provided'}
+
+${template ? `Selected Template: ${template.name} (${template.company} style)` : ''}
 
 CV Content:
 ${rawText}
@@ -103,7 +128,8 @@ Please generate a JSON response with two keys:
         const pdfInstructions = parsedResponse.pdfInstructions || "";
         
         // Generate an optimized PDF using the pdfInstructions and optimizedText
-        const optimizedPDFUrl = await editPDF(optimizedText);
+        // Pass template information if available
+        const optimizedPDFUrl = await editPDF(pdfInstructions, template);
         
         return {
           optimizedText,
@@ -114,7 +140,7 @@ Please generate a JSON response with two keys:
         
         // Fallback: If JSON parsing fails, treat the entire response as the optimized text
         const optimizedText = processFormattingMarkers(responseContent);
-        const optimizedPDFUrl = await editPDF(optimizedText);
+        const optimizedPDFUrl = await editPDF(optimizedText, template);
         
         return {
           optimizedText,
@@ -274,7 +300,7 @@ Please generate a JSON response with two keys:
   }
   
   // Simulated PDF editing function.
-  async function editPDF(pdfInstructions: string): Promise<string> {
+  async function editPDF(pdfInstructions: string, template?: CVTemplate): Promise<string> {
     // In a real scenario, you'd call your PDF parsing/editing tool here.
     // Parse the instructions to format them for the PDF generator
     let parsedInstructions = pdfInstructions;
@@ -282,6 +308,18 @@ Please generate a JSON response with two keys:
     try {
       // If the instructions are provided as a JSON string, parse them
       const instructionsObj = JSON.parse(pdfInstructions);
+      
+      // If template is provided, apply template-specific styling
+      if (template) {
+        // Add template information to the instructions
+        instructionsObj.template = {
+          name: template.name,
+          company: template.company,
+          preferredFonts: template.metadata.preferredFonts,
+          colorScheme: template.metadata.colorScheme,
+          layout: template.metadata.layout
+        };
+      }
       
       // Enhanced processing logic can be added here based on the structure of instructionsObj
       // For example, extracting color schemes, font styles, layout templates, etc.
@@ -291,6 +329,13 @@ Please generate a JSON response with two keys:
     } catch (error) {
       // If it's not valid JSON, use as is
       console.log("PDF instructions are not in JSON format, using as plain text");
+      
+      // If template is provided but instructions aren't JSON, append template info
+      if (template) {
+        parsedInstructions += `\n\nTemplate: ${template.name} (${template.company})\n`;
+        parsedInstructions += `Fonts: ${template.metadata.preferredFonts.join(', ')}\n`;
+        parsedInstructions += `Layout: ${template.metadata.layout}\n`;
+      }
     }
     
     // Simulate processing delay

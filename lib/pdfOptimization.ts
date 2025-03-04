@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb, PDFFont } from "pdf-lib";
 import { getOverlayCoordinates } from "./templateMatching";
+import { CVTemplate } from "@/types/templates";
 
 /**
  * Parses structured optimized text into sections
@@ -310,12 +311,13 @@ function sanitizeText(text: string): string {
 }
 
 /**
- * Creates a new PDF with the optimized content rather than trying to modify the original
+ * Creates a new PDF with optimized content
  */
 export async function modifyPDFWithOptimizedContent(
   originalPdfBytes: Uint8Array,
   optimizedText: string,
-  rawText?: string
+  rawText?: string,
+  template?: CVTemplate
 ): Promise<string> {
   try {
     // Create a new PDF document
@@ -331,12 +333,44 @@ export async function modifyPDFWithOptimizedContent(
     let page = newPdfDoc.addPage([612, 792]); // Letter size
     const { width, height } = page.getSize();
     
-    // Brand colors from the design system
-    const primaryColor = rgb(88/255, 66/255, 53/255); // Rich Walnut: #584235
-    const secondaryColor = rgb(232/255, 220/255, 196/255); // Aged Paper: #E8DCC4
-    const accentColor = rgb(180/255, 145/255, 108/255); // Bamboo: #B4916C
-    const backgroundColor = rgb(250/255, 246/255, 237/255); // Rice Paper: #FAF6ED
-    const textColor = rgb(44/255, 36/255, 32/255); // Ink Stone: #2C2420
+    // Default brand colors from the design system
+    let primaryColor = rgb(88/255, 66/255, 53/255); // Rich Walnut: #584235
+    let secondaryColor = rgb(232/255, 220/255, 196/255); // Aged Paper: #E8DCC4
+    let accentColor = rgb(180/255, 145/255, 108/255); // Bamboo: #B4916C
+    let backgroundColor = rgb(250/255, 246/255, 237/255); // Rice Paper: #FAF6ED
+    let textColor = rgb(44/255, 36/255, 32/255); // Ink Stone: #2C2420
+    
+    // Apply template-specific styling if template is provided
+    if (template) {
+      console.log(`Applying template: ${template.name} (${template.company})`);
+      
+      // Apply template-specific colors if defined
+      if (template.metadata.colorScheme) {
+        try {
+          const colors = template.metadata.colorScheme;
+          
+          // Convert hex to RGB for pdf-lib
+          const hexToRgb = (hex: string) => {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? rgb(
+              parseInt(result[1], 16) / 255,
+              parseInt(result[2], 16) / 255,
+              parseInt(result[3], 16) / 255
+            ) : null;
+          };
+          
+          // Apply colors if provided in the template
+          if (colors.primary) primaryColor = hexToRgb(colors.primary) || primaryColor;
+          if (colors.secondary) secondaryColor = hexToRgb(colors.secondary) || secondaryColor;
+          if (colors.accent) accentColor = hexToRgb(colors.accent) || accentColor;
+          if (colors.background) backgroundColor = hexToRgb(colors.background) || backgroundColor;
+          if (colors.text) textColor = hexToRgb(colors.text) || textColor;
+        } catch (error) {
+          console.error("Error applying template colors:", error);
+          // Continue with default colors if there's an error
+        }
+      }
+    }
     
     // Enhanced styling and layout
     const margin = 50;

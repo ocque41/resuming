@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { ComboboxPopover } from "@/components/ui/combobox";
+import TemplateSelector from "./TemplateSelector";
 
 interface OptimizeCVCardProps {
   cvs: string[];
@@ -11,21 +12,49 @@ interface OptimizeCVCardProps {
 
 export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   const [selectedCV, setSelectedCV] = useState<string | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [optimizationStatus, setOptimizationStatus] = useState<string>("idle");
   const [error, setError] = useState<string | null>(null);
   const [optimizedPDFBase64, setOptimizedPDFBase64] = useState<string | null>(null);
   const [pollingAttempts, setPollingAttempts] = useState(0);
+  const [showTemplates, setShowTemplates] = useState(false);
   const maxRetries = 20;
   const pollingInterval = 5000;
 
-  async function handleOptimize(cv: string) {
+  function handleCVSelect(cv: string) {
     setSelectedCV(cv);
+    setShowTemplates(true);
+    setError(null);
+    setOptimizationStatus("idle");
+    setOptimizedPDFBase64(null);
+  }
+
+  function handleTemplateSelect(templateId: string) {
+    setSelectedTemplate(templateId);
+  }
+
+  async function handleOptimize() {
+    if (!selectedCV || !selectedTemplate) {
+      setError("Please select both a CV and a template.");
+      return;
+    }
+
     setError(null);
     setOptimizationStatus("pending");
     setPollingAttempts(0);
     
     try {
-      const response = await fetch(`/api/optimize-cv?fileName=${encodeURIComponent(cv)}`);
+      const response = await fetch(`/api/optimize-cv`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileName: selectedCV,
+          templateId: selectedTemplate
+        }),
+      });
+      
       const data = await response.json();
       
       if (data.error) {
@@ -33,7 +62,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         setOptimizationStatus("error");
       } else {
         setOptimizationStatus("processing");
-        setTimeout(() => pollOptimizationStatus(cv), 2000);
+        setTimeout(() => pollOptimizationStatus(selectedCV), 2000);
       }
     } catch (err: any) {
       setError("Failed to initiate optimization.");
@@ -96,14 +125,47 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
             className="w-full h-full object-cover"
           />
         </div>
-        <ComboboxPopover
-          label="Optimize"
-          options={cvs}
-          onSelect={(cv: string) => {
-            console.log("Selected CV for optimization:", cv);
-            handleOptimize(cv);
-          }}
-        />
+        
+        <h2 className="text-xl font-bold mb-4">Optimize Your CV</h2>
+        
+        {/* Step 1: Select CV */}
+        <div className="mb-6">
+          <h3 className="font-semibold mb-2">Step 1: Select your CV</h3>
+          <ComboboxPopover
+            label="Select CV"
+            options={cvs}
+            onSelect={handleCVSelect}
+          />
+        </div>
+        
+        {/* Step 2: Select Template (only shown after CV is selected) */}
+        {showTemplates && (
+          <div className="mb-6">
+            <h3 className="font-semibold mb-2">Step 2: Choose a template</h3>
+            <TemplateSelector 
+              onSelect={handleTemplateSelect}
+              selectedTemplateId={selectedTemplate || undefined}
+            />
+          </div>
+        )}
+        
+        {/* Step 3: Optimize Button (only enabled when both CV and template are selected) */}
+        {selectedCV && selectedTemplate && (
+          <div className="mb-6">
+            <h3 className="font-semibold mb-2">Step 3: Start optimization</h3>
+            <button
+              className="bg-blue-500 text-white px-4 py-2 rounded w-full disabled:bg-gray-300 disabled:cursor-not-allowed"
+              onClick={handleOptimize}
+              disabled={optimizationStatus === "pending" || optimizationStatus === "processing"}
+            >
+              {optimizationStatus === "pending" || optimizationStatus === "processing" 
+                ? "Optimizing..." 
+                : "Optimize CV"}
+            </button>
+          </div>
+        )}
+        
+        {/* Status Messages */}
         {optimizationStatus === "pending" && (
           <p className="mt-4 text-sm">
             Optimization initiated. Waiting for processing...
@@ -114,6 +176,8 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
             Optimizing CV... Please wait. (Attempt {pollingAttempts + 1}/{maxRetries})
           </p>
         )}
+        
+        {/* Result Display */}
         {optimizationStatus === "complete" && optimizedPDFBase64 && (
           <div className="mt-4 text-sm">
             <h3 className="font-bold mb-2">Optimized CV Ready</h3>
@@ -130,6 +194,8 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
             </a>
           </div>
         )}
+        
+        {/* Error Message */}
         {error && <p className="mt-4 text-red-500">{error}</p>}
       </CardContent>
     </Card>
