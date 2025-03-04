@@ -225,6 +225,17 @@ function wrapText(
 }
 
 /**
+ * Add this helper function at the top of the file
+ */
+function sanitizeText(text: string): string {
+  return text
+    .replace(/\r?\n/g, ' ')         // Replace all newlines with spaces
+    .replace(/[\u0000-\u001F]/g, ' ')  // Replace control characters
+    .replace(/\s+/g, ' ')           // Replace multiple spaces with a single space
+    .trim();                        // Trim leading/trailing whitespace
+}
+
+/**
  * Creates a new PDF with the optimized content rather than trying to modify the original
  */
 export async function modifyPDFWithOptimizedContent(
@@ -232,6 +243,9 @@ export async function modifyPDFWithOptimizedContent(
   optimizedText: string,
   rawText?: string
 ): Promise<string> {
+  // Sanitize the optimized text first
+  optimizedText = sanitizeText(optimizedText);
+  
   // Load the original PDF document to get its dimensions
   const originalPdfDoc = await PDFDocument.load(originalPdfBytes);
   const firstPage = originalPdfDoc.getPage(0);
@@ -260,14 +274,13 @@ export async function modifyPDFWithOptimizedContent(
   
   // Add contact information at the top (assuming it's in the first few lines of rawText)
   if (rawText) {
-    const contactLines = rawText.split('\n').slice(0, 3).join('\n');
+    const contactLines = sanitizeText(rawText.split('\n').slice(0, 3).join(' '));
     page.drawText(contactLines, {
       x: margin,
       y: currentY,
       size: fontSize,
       font: helveticaFont,
       color: rgb(0, 0, 0),
-      lineHeight: lineHeight,
     });
     
     currentY -= lineHeight * 4; // Move down after contact info
@@ -275,8 +288,11 @@ export async function modifyPDFWithOptimizedContent(
   
   // Process each section
   for (const [sectionName, sectionContent] of Object.entries(optimizedSections)) {
+    // Sanitize the section name
+    const sanitizedSectionName = sanitizeText(sectionName);
+    
     // Draw section header
-    page.drawText(sectionName.toUpperCase(), {
+    page.drawText(sanitizedSectionName.toUpperCase(), {
       x: margin,
       y: currentY,
       size: headerFontSize,
@@ -287,17 +303,12 @@ export async function modifyPDFWithOptimizedContent(
     currentY -= lineHeight * 1.5;
     
     // Process section content with proper paragraph breaks
-    const paragraphs = sectionContent.split('\n\n');
+    const paragraphs = sanitizeText(sectionContent).split('  ').map(p => p.trim()).filter(Boolean);
     for (const paragraph of paragraphs) {
-      // Sanitize the paragraph text to remove problematic characters
-      const sanitizedParagraph = paragraph
-        .replace(/[\u0000-\u001F]/g, ' ')  // Replace control characters with spaces
-        .replace(/\n/g, ' ');  // Replace newlines with spaces
-      
       // Handle bullet points
-      if (sanitizedParagraph.includes('• ') || sanitizedParagraph.includes('- ')) {
+      if (paragraph.includes('• ') || paragraph.includes('- ')) {
         // Split by bullet points, being careful with the regex
-        const bulletPoints = sanitizedParagraph
+        const bulletPoints = paragraph
           .split(/(?:^|\s)(?:•|-)\s+/)
           .filter(Boolean)
           .map(point => point.trim());
@@ -345,7 +356,7 @@ export async function modifyPDFWithOptimizedContent(
       } else {
         // Regular paragraph
         try {
-          const lines = wrapText(sanitizedParagraph, helveticaFont, fontSize, maxWidth);
+          const lines = wrapText(paragraph, helveticaFont, fontSize, maxWidth);
           
           for (const line of lines) {
             // Check if we need a new page
