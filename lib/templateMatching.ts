@@ -111,7 +111,7 @@ export function getTemplateLayout(templateId: string): {
     sidebarWidth: 180,
     mainColumnWidth: 380,
     sectionSpacing: 20,
-    headerStyle: 'modern' as const
+    headerStyle: 'modern' as 'modern' | 'traditional' | 'minimal'
   };
   
   // Template-specific layouts

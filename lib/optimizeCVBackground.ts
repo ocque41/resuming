@@ -60,7 +60,6 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     // Pass template information to the PDF modification function
     console.log("Generating optimized PDF...");
     const modifiedPdfBase64 = await modifyPDFWithOptimizedContent(
-      originalPdfBytes,
       optimizationResult.optimizedText,
       cvRecord.rawText,
       selectedTemplate
