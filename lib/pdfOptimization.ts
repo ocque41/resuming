@@ -318,23 +318,18 @@ export async function modifyPDFWithOptimizedContent(
   rawText?: string
 ): Promise<string> {
   try {
-    // Sanitize the optimized text first - be extra careful
-    optimizedText = sanitizeText(optimizedText);
-    
-    // Load the original PDF document to get its dimensions
-    const originalPdfDoc = await PDFDocument.load(originalPdfBytes);
-    const firstPage = originalPdfDoc.getPage(0);
-    const { width, height } = firstPage.getSize();
-    
-    // Create a new PDF document with the same dimensions
+    // Create a new PDF document
     const newPdfDoc = await PDFDocument.create();
-    let page = newPdfDoc.addPage([width, height]);
     
-    // Embed professional fonts
+    // Load fonts
     const helveticaFont = await newPdfDoc.embedFont(StandardFonts.Helvetica);
     const helveticaBold = await newPdfDoc.embedFont(StandardFonts.HelveticaBold);
     const timesRoman = await newPdfDoc.embedFont(StandardFonts.TimesRoman);
     const timesBold = await newPdfDoc.embedFont(StandardFonts.TimesRomanBold);
+    
+    // Add a page
+    let page = newPdfDoc.addPage([612, 792]); // Letter size
+    const { width, height } = page.getSize();
     
     // Brand colors from the design system
     const primaryColor = rgb(88/255, 66/255, 53/255); // Rich Walnut: #584235
@@ -354,9 +349,21 @@ export async function modifyPDFWithOptimizedContent(
     const maxWidth = width - margin * 2;
     const mainColumnWidth = width - margin - sidebarWidth - margin; // Width of main content area
     
+    // Make sure optimizedText is a string
+    if (typeof optimizedText !== 'string') {
+      console.error("optimizedText is not a string:", optimizedText);
+      optimizedText = String(optimizedText || ''); // Convert to string or use empty string
+    }
+    
+    // Make sure rawText is a string if provided
+    if (rawText !== undefined && typeof rawText !== 'string') {
+      console.error("rawText is not a string:", rawText);
+      rawText = String(rawText || ''); // Convert to string or use empty string
+    }
+    
     // Parse the optimized text into sections
     const optimizedSections = parseOptimizedText(sanitizeText(optimizedText));
-    
+
     // Fill page with subtle background color
     page.drawRectangle({
       x: 0,

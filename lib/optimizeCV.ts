@@ -47,12 +47,12 @@ I've identified these potential sections in the CV:
 ${potentialSections.map(section => `- ${section}`).join('\n')}
 
 CV Analysis:
-ATS Score: ${analysis.atsScore}
-Strengths: ${analysis.strengths.join(", ")}
-Weaknesses: ${analysis.weaknesses.join(", ")}
-Recommendations: ${analysis.recommendations.join(", ")}
-Industry Insight: ${analysis.industryInsight}
-Target Roles: ${analysis.targetRoles.join(", ")}
+ATS Score: ${analysis.atsScore || 'N/A'}
+Strengths: ${analysis.strengths && Array.isArray(analysis.strengths) ? analysis.strengths.join(", ") : 'None provided'}
+Weaknesses: ${analysis.weaknesses && Array.isArray(analysis.weaknesses) ? analysis.weaknesses.join(", ") : 'None provided'}
+Recommendations: ${analysis.recommendations && Array.isArray(analysis.recommendations) ? analysis.recommendations.join(", ") : 'None provided'}
+Industry Insight: ${analysis.industryInsight || 'None provided'}
+Target Roles: ${analysis.targetRoles && Array.isArray(analysis.targetRoles) ? analysis.targetRoles.join(", ") : 'None provided'}
 
 CV Content:
 ${rawText}
@@ -129,23 +129,73 @@ Please generate a JSON response with two keys:
   
   // Function to fix common JSON string issues
   function fixJsonString(jsonString: string): string {
-    // Try to extract the JSON object from the response if there's extra text
-    const jsonMatch = jsonString.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      jsonString = jsonMatch[0];
+    if (!jsonString || typeof jsonString !== 'string') {
+      console.warn("fixJsonString: Invalid input - jsonString is not a string");
+      return "{}"; // Return empty JSON object as fallback
     }
     
-    // Replace literal newlines with escaped newlines in the optimizedText field
-    let fixed = jsonString.replace(/"optimizedText"\s*:\s*"([\s\S]*?)(?=",\s*"pdfInstructions")/, (match, p1) => {
-      // Replace all literal newlines with escaped newlines
-      const escaped = p1.replace(/\n/g, '\\n');
-      return `"optimizedText":"${escaped}`;
-    });
-    
-    // Fix any trailing commas in arrays or objects
-    fixed = fixed.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
-    
-    return fixed;
+    try {
+      // Try parsing as-is first
+      JSON.parse(jsonString);
+      return jsonString; // If it parses successfully, return it unchanged
+    } catch (e) {
+      // If parsing fails, attempt to fix common issues
+      let fixedString = jsonString;
+      
+      // Check if the string is wrapped with markdown code blocks and remove them
+      fixedString = fixedString.replace(/^```json\s+/, '').replace(/\s+```$/, '');
+      
+      // Check for single quotes instead of double quotes for object keys
+      fixedString = fixedString.replace(/'([^']+)'(\s*:)/g, '"$1"$2');
+      
+      // Fix unescaped quotes in JSON values
+      let inString = false;
+      let result = '';
+      let lastChar = '';
+      
+      for (let i = 0; i < fixedString.length; i++) {
+        const char = fixedString[i];
+        
+        if (char === '"' && lastChar !== '\\') {
+          inString = !inString;
+        }
+        
+        if (inString && char === '\n') {
+          result += '\\n'; // Replace newlines in strings with escaped newlines
+        } else if (inString && char === '\t') {
+          result += '\\t'; // Replace tabs in strings with escaped tabs
+        } else {
+          result += char;
+        }
+        
+        lastChar = char;
+      }
+      
+      fixedString = result;
+      
+      // Try parsing again after fixes
+      try {
+        JSON.parse(fixedString);
+        return fixedString;
+      } catch (e2) {
+        // If it still fails, try a more aggressive approach: 
+        // Extract anything that looks like valid JSON using regex
+        const jsonMatch = fixedString.match(/\{[\s\S]*\}/);
+        if (jsonMatch && jsonMatch[0]) {
+          try {
+            JSON.parse(jsonMatch[0]);
+            return jsonMatch[0];
+          } catch (e3) {
+            // If all attempts fail, return a minimal valid JSON object
+            console.error("Failed to fix JSON string after multiple attempts:", e3);
+            return '{"optimizedText":"Could not parse the AI response. Please try again."}';
+          }
+        } else {
+          // If no object-like structure is found, return a minimal valid JSON
+          return '{"optimizedText":"Could not parse the AI response. Please try again."}';
+        }
+      }
+    }
   }
   
   // Process formatting markers in the text
@@ -162,18 +212,60 @@ Please generate a JSON response with two keys:
   
   // Helper function to extract potential sections from the raw text
   function extractPotentialSections(rawText: string): string[] {
+    if (!rawText || typeof rawText !== 'string') {
+      console.warn("extractPotentialSections: Invalid input - rawText is not a string");
+      return ["Content"];
+    }
+
+    // Common CV section headers to look for
     const commonSections = [
-      "PROFILE", "OBJECTIVE", "SUMMARY", "EXPERIENCE", "WORK EXPERIENCE", 
-      "EDUCATION", "SKILLS", "LANGUAGES", "CERTIFICATIONS", "PROJECTS",
-      "INTERESTS", "REFERENCES", "PUBLICATIONS", "AWARDS", "VOLUNTEER",
-      "ACHIEVEMENTS", "PROFESSIONAL SUMMARY"
+      "Profile", "Summary", "Professional Summary", "Career Objective",
+      "Experience", "Work Experience", "Professional Experience", "Employment History",
+      "Education", "Academic Background", "Qualifications",
+      "Skills", "Technical Skills", "Core Competencies", "Key Skills",
+      "Projects", "Key Projects", "Professional Projects",
+      "Certifications", "Professional Certifications", "Licenses",
+      "Languages", "Language Proficiency",
+      "Publications", "Research", "Awards", "Achievements", "Honors",
+      "Volunteer Experience", "Community Service",
+      "Interests", "Hobbies", "Activities",
+      "References", "Professional References"
     ];
     
-    const foundSections = [];
+    // Clean the text for more accurate detection
+    const cleanedText = rawText.replace(/\s+/g, ' ').trim();
     
+    // Find potential sections in the CV
+    const foundSections: string[] = [];
+    
+    // Simple method: look for lines that could be section headers
+    const lines = cleanedText.split(/\n+/);
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      
+      // If the line is short, all caps, or followed by a colon, it might be a section header
+      if (
+        (trimmedLine.length < 30 && trimmedLine.length > 2 && 
+         trimmedLine === trimmedLine.toUpperCase()) ||
+        trimmedLine.endsWith(':')
+      ) {
+        // Extract just the text without the colon
+        const potentialSection = trimmedLine.replace(/:$/, '').trim();
+        
+        // Add if it's not already in our list
+        if (potentialSection && !foundSections.includes(potentialSection)) {
+          foundSections.push(potentialSection);
+        }
+      }
+    }
+    
+    // Add any common sections that contain keywords from our list
     for (const section of commonSections) {
-      const regex = new RegExp(`(^|\\s)${section}[\\s:]*`, 'i');
-      if (regex.test(rawText)) {
+      if (
+        cleanedText.includes(section) && 
+        !foundSections.includes(section) &&
+        !foundSections.some(s => s.includes(section) || section.includes(s))
+      ) {
         foundSections.push(section);
       }
     }
