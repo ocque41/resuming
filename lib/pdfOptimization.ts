@@ -621,9 +621,80 @@ async function createPDFWithSections(
     let currentPage = doc.addPage([595, 842]); // A4 size
     const { width, height } = currentPage.getSize();
     
-    // Define margins
-    const margin = 50;
-    const columnGap = 20;
+    // Define margins - increase for more whitespace
+    const margin = 60; // Increased from 50
+    const columnGap = 30; // Increased from 20
+    
+    // Define starting positions
+    let leftColumnY = height - margin;
+    let rightColumnY = height - margin;
+    
+    // Add a modern header bar
+    if (layout !== "traditional") {
+      // Add a colored header bar at the top
+      currentPage.drawRectangle({
+        x: 0,
+        y: height - 20,
+        width: width,
+        height: 20,
+        color: primaryColor,
+      });
+      
+      // Try to extract name and contact info for a modern header
+      try {
+        // Extract name from first line of raw text
+        const lines = rawText.split('\n');
+        const name = lines[0].trim();
+        
+        // Look for contact info in the first few lines
+        let contactInfo = '';
+        for (let i = 1; i < Math.min(10, lines.length); i++) {
+          const line = lines[i].trim();
+          if (line.includes('@') || line.includes('phone') || line.includes('tel') || 
+              /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(line)) { // Simple phone regex
+            contactInfo += line + ' | ';
+          }
+        }
+        
+        if (contactInfo.endsWith(' | ')) {
+          contactInfo = contactInfo.substring(0, contactInfo.length - 3);
+        }
+        
+        // Draw name in large font below the header bar
+        if (name) {
+          const nameWidth = titleFont.widthOfTextAtSize(name.toUpperCase(), 20);
+          currentPage.drawText(name.toUpperCase(), {
+            x: (width - nameWidth) / 2,
+            y: height - margin,
+            size: 20,
+            font: titleFont,
+            color: primaryColor,
+          });
+          
+          // Draw contact info below name
+          if (contactInfo) {
+            const contactWidth = regularFont.widthOfTextAtSize(contactInfo, 10);
+            currentPage.drawText(contactInfo, {
+              x: (width - contactWidth) / 2,
+              y: height - margin - 25,
+              size: 10,
+              font: regularFont,
+              color: textColor,
+            });
+            
+            // Adjust starting positions
+            leftColumnY = height - margin - 50;
+            rightColumnY = height - margin - 50;
+          } else {
+            // Adjust starting positions
+            leftColumnY = height - margin - 30;
+            rightColumnY = height - margin - 30;
+          }
+        }
+      } catch (error: any) {
+        console.warn("Error adding modern header:", error.message);
+      }
+    }
     
     // Calculate column widths based on layout
     let leftColumnWidth = (width - 2 * margin - columnGap) * 0.3; // Default: 30% of available width
@@ -643,65 +714,40 @@ async function createPDFWithSections(
       rightColumnWidth = (width - 2 * margin - columnGap) * 0.6;
     }
     
-    // Define starting positions
-    let leftColumnY = height - margin;
-    let rightColumnY = height - margin;
-    
-    // For traditional layout, add a name header at the top
-    if (layout === "traditional" && rawText) {
-      try {
-        // Extract name from first line of raw text
-        const name = rawText.split('\n')[0].trim();
-        if (name) {
-          // Draw name centered at top
-          const nameWidth = titleFont.widthOfTextAtSize(name.toUpperCase(), 24);
-          currentPage.drawText(name.toUpperCase(), {
-            x: (width - nameWidth) / 2,
-            y: height - margin,
-            size: 24,
-            font: titleFont,
-            color: primaryColor,
-          });
-          
-          // Add underline
-          currentPage.drawLine({
-            start: { x: (width - nameWidth) / 2, y: height - margin - 30 },
-            end: { x: (width + nameWidth) / 2, y: height - margin - 30 },
-            thickness: 1,
-            color: accentColor,
-          });
-          
-          // Adjust starting positions
-          leftColumnY -= 50;
-          rightColumnY -= 50;
-        }
-      } catch (error: any) {
-        console.warn("Error adding name header:", error.message);
-      }
-    }
-    
     // Draw left column sections
     for (const section of leftColumnSections) {
       // Draw section header
       currentPage.drawText(section.title.toUpperCase(), {
         x: margin,
         y: leftColumnY,
-        size: 12,
+        size: 14, // Increased from 12
         font: titleFont,
         color: primaryColor,
       });
       
-      // Add underline for section header
+      // Add underline or background for section header
       if (layout === "traditional") {
         currentPage.drawLine({
           start: { x: margin, y: leftColumnY - 5 },
           end: { x: margin + leftColumnWidth * 0.8, y: leftColumnY - 5 },
-          thickness: 1,
+          thickness: 1.5, // Increased from 1
           color: accentColor,
+        });
+      } else {
+        // Modern style: add a subtle background rectangle for the header
+        currentPage.drawRectangle({
+          x: margin - 5,
+          y: leftColumnY - 15,
+          width: leftColumnWidth + 5,
+          height: 20,
+          color: rgb(primaryColor.red * 0.95, primaryColor.green * 0.95, primaryColor.blue * 0.95),
+          borderColor: accentColor,
+          borderWidth: 0.5,
+          borderOpacity: 0.3,
         });
       }
       
-      leftColumnY -= 20; // Space after header
+      leftColumnY -= 25; // Increased space after header from 20
       
       // Draw section content
       const contentLines = section.content.split('\n');
@@ -710,8 +756,18 @@ async function createPDFWithSections(
         
         // Check if line is a bullet point
         if (line.trim().startsWith('•')) {
-          // Draw bullet point
-          currentPage.drawText(line, {
+          // Draw bullet point with improved styling
+          currentPage.drawText('•', {
+            x: margin,
+            y: leftColumnY,
+            size: 10,
+            font: bodyFont,
+            color: accentColor, // Use accent color for bullets
+          });
+          
+          // Draw the text after the bullet
+          const bulletText = line.trim().substring(1).trim();
+          currentPage.drawText(bulletText, {
             x: margin + 10, // Indent bullet points
             y: leftColumnY,
             size: 10,
@@ -720,14 +776,27 @@ async function createPDFWithSections(
             maxWidth: leftColumnWidth - 10,
           });
         } else if (line.trim().startsWith('<strong>') && line.trim().endsWith('</strong>')) {
-          // Draw subheader (bold text)
+          // Draw subheader (bold text) with improved styling
           const subheaderText = line.replace('<strong>', '').replace('</strong>', '').trim();
+          
+          // Add a subtle highlight for subheaders
+          if (layout === "modern") {
+            currentPage.drawRectangle({
+              x: margin - 2,
+              y: leftColumnY - 12,
+              width: leftColumnWidth,
+              height: 14,
+              color: rgb(accentColor.red * 0.95, accentColor.green * 0.95, accentColor.blue * 0.95),
+              opacity: 0.1,
+            });
+          }
+          
           currentPage.drawText(subheaderText, {
             x: margin,
             y: leftColumnY,
             size: 11,
             font: titleFont,
-            color: textColor,
+            color: primaryColor, // Use primary color for subheaders
             maxWidth: leftColumnWidth,
           });
         } else {
@@ -742,7 +811,7 @@ async function createPDFWithSections(
           });
         }
         
-        leftColumnY -= 15; // Space between lines
+        leftColumnY -= 18; // Increased space between lines from 15
         
         // Add a new page if we're near the bottom
         if (leftColumnY < margin) {
@@ -763,36 +832,45 @@ async function createPDFWithSections(
         }
       }
       
-      leftColumnY -= 30; // Space between sections
+      leftColumnY -= 15; // Add extra space between sections
     }
     
     // Draw right column sections
     for (const section of rightColumnSections) {
-      // Calculate x position based on layout
-      const xPosition = layout === "one-column" 
-        ? margin 
-        : margin + leftColumnWidth + columnGap;
+      const xPosition = margin + (layout === "one-column" ? 0 : leftColumnWidth + columnGap);
       
       // Draw section header
       currentPage.drawText(section.title.toUpperCase(), {
         x: xPosition,
         y: rightColumnY,
-        size: 12,
+        size: 14, // Increased from 12
         font: titleFont,
         color: primaryColor,
       });
       
-      // Add underline for section header
+      // Add underline or background for section header
       if (layout === "traditional") {
         currentPage.drawLine({
           start: { x: xPosition, y: rightColumnY - 5 },
           end: { x: xPosition + rightColumnWidth * 0.8, y: rightColumnY - 5 },
-          thickness: 1,
+          thickness: 1.5, // Increased from 1
           color: accentColor,
+        });
+      } else {
+        // Modern style: add a subtle background rectangle for the header
+        currentPage.drawRectangle({
+          x: xPosition - 5,
+          y: rightColumnY - 15,
+          width: rightColumnWidth + 5,
+          height: 20,
+          color: rgb(primaryColor.red * 0.95, primaryColor.green * 0.95, primaryColor.blue * 0.95),
+          borderColor: accentColor,
+          borderWidth: 0.5,
+          borderOpacity: 0.3,
         });
       }
       
-      rightColumnY -= 20; // Space after header
+      rightColumnY -= 25; // Increased space after header from 20
       
       // Draw section content
       const contentLines = section.content.split('\n');
@@ -801,8 +879,18 @@ async function createPDFWithSections(
         
         // Check if line is a bullet point
         if (line.trim().startsWith('•')) {
-          // Draw bullet point
-          currentPage.drawText(line, {
+          // Draw bullet point with improved styling
+          currentPage.drawText('•', {
+            x: xPosition,
+            y: rightColumnY,
+            size: 10,
+            font: bodyFont,
+            color: accentColor, // Use accent color for bullets
+          });
+          
+          // Draw the text after the bullet
+          const bulletText = line.trim().substring(1).trim();
+          currentPage.drawText(bulletText, {
             x: xPosition + 10, // Indent bullet points
             y: rightColumnY,
             size: 10,
@@ -811,14 +899,27 @@ async function createPDFWithSections(
             maxWidth: rightColumnWidth - 10,
           });
         } else if (line.trim().startsWith('<strong>') && line.trim().endsWith('</strong>')) {
-          // Draw subheader (bold text)
+          // Draw subheader (bold text) with improved styling
           const subheaderText = line.replace('<strong>', '').replace('</strong>', '').trim();
+          
+          // Add a subtle highlight for subheaders
+          if (layout === "modern") {
+            currentPage.drawRectangle({
+              x: xPosition - 2,
+              y: rightColumnY - 12,
+              width: rightColumnWidth,
+              height: 14,
+              color: rgb(accentColor.red * 0.95, accentColor.green * 0.95, accentColor.blue * 0.95),
+              opacity: 0.1,
+            });
+          }
+          
           currentPage.drawText(subheaderText, {
             x: xPosition,
             y: rightColumnY,
             size: 11,
             font: titleFont,
-            color: textColor,
+            color: primaryColor, // Use primary color for subheaders
             maxWidth: rightColumnWidth,
           });
         } else {
@@ -833,7 +934,7 @@ async function createPDFWithSections(
           });
         }
         
-        rightColumnY -= 15; // Space between lines
+        rightColumnY -= 18; // Increased space between lines from 15
         
         // Add a new page if we're near the bottom
         if (rightColumnY < margin) {
@@ -854,7 +955,7 @@ async function createPDFWithSections(
         }
       }
       
-      rightColumnY -= 30; // Space between sections
+      rightColumnY -= 15; // Add extra space between sections
     }
     
     // Draw a line between columns on the last page if using two-column layout
@@ -867,16 +968,60 @@ async function createPDFWithSections(
       });
     }
     
-    // Add footer with page numbers
+    // Add column divider if using two-column layout
+    if (layout !== "one-column") {
+      // Draw a more stylish column divider
+      if (layout === "modern") {
+        // For modern layout, use a gradient-like effect with multiple lines
+        const dividerX = margin + leftColumnWidth + columnGap/2;
+        const dividerColors = [
+          { color: secondaryColor, opacity: 0.2 },
+          { color: secondaryColor, opacity: 0.5 },
+          { color: secondaryColor, opacity: 0.8 },
+          { color: accentColor, opacity: 0.5 },
+          { color: secondaryColor, opacity: 0.8 },
+          { color: secondaryColor, opacity: 0.5 },
+          { color: secondaryColor, opacity: 0.2 },
+        ];
+        
+        dividerColors.forEach((style, index) => {
+          const offset = (index - 3) * 0.5; // Center the accent color
+          currentPage.drawLine({
+            start: { x: dividerX + offset, y: height - margin },
+            end: { x: dividerX + offset, y: margin },
+            thickness: 0.5,
+            color: style.color,
+            opacity: style.opacity,
+          });
+        });
+      } else {
+        // For traditional layout, use a simple line
+        currentPage.drawLine({
+          start: { x: margin + leftColumnWidth + columnGap/2, y: height - margin },
+          end: { x: margin + leftColumnWidth + columnGap/2, y: margin },
+          thickness: 1,
+          color: secondaryColor,
+        });
+      }
+    }
+    
+    // Add page number at the bottom
     const pageCount = doc.getPageCount();
     for (let i = 0; i < pageCount; i++) {
       const page = doc.getPage(i);
-      page.drawText(`Page ${i + 1} of ${pageCount}`, {
-        x: width - margin - 60,
-        y: margin / 2,
+      const { width, height } = page.getSize();
+      
+      // Add page number
+      const pageText = `Page ${i + 1} of ${pageCount}`;
+      const textWidth = regularFont.widthOfTextAtSize(pageText, 8);
+      
+      page.drawText(pageText, {
+        x: (width - textWidth) / 2,
+        y: margin / 3,
         size: 8,
-        font: bodyFont,
-        color: rgb(0.5, 0.5, 0.5),
+        font: regularFont,
+        color: textColor,
+        opacity: 0.7,
       });
     }
     
