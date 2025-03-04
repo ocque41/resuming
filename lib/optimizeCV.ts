@@ -10,7 +10,7 @@ export async function optimizeCV(
     const prompt = `You are an expert CV optimizer specializing in creating professional, job-winning resumes. Your goal is to help the user GET A JOB NOW, not give general career advice.
 
 Based on the following analysis and original CV content, generate a JSON response with two keys:
-- "optimizedText": a revised version of the CV text that improves clarity, formatting, and overall impact. Structure the text with clear section headers.
+- "optimizedText": a STRING containing the complete revised CV text with proper formatting. Do not use a nested object structure - the value must be a single string with line breaks.
 - "pdfInstructions": a concise instruction set for a PDF editing tool to transform the original CV PDF accordingly.
 
 IMPORTANT: The user is actively job hunting RIGHT NOW. Do not suggest getting more experience or education - they need this CV to land interviews immediately.
@@ -32,6 +32,9 @@ IMPORTANT FORMATTING RULES:
 - Use a clean, readable font style throughout
 - Maintain appropriate spacing between sections
 - Ensure the document has a professional, polished appearance
+
+CRITICAL: The "optimizedText" value MUST be a single string with line breaks, NOT a nested JSON object. For example:
+"optimizedText": "MIGUEL OCQUE\\n\\nPROFESSIONAL SUMMARY\\nMeticulous and analytical professional with a strong foundation in Investment & Trading...\\n\\nOBJECTIVE\\nSeeking to leverage my diverse skill set..."
 
 I've identified these potential sections in the CV:
 ${potentialSections.map(section => `- ${section}`).join('\n')}
@@ -65,16 +68,72 @@ Return your answer strictly as JSON without additional text.`;
     });
     const result = await response.json();
     const message = result.choices[0].message.content;
-    let optimizedData: { optimizedText: string; pdfInstructions: string };
+    let optimizedData: { optimizedText: string; pdfInstructions: string | object };
+    
     try {
       optimizedData = JSON.parse(message);
+      
+      // Handle case where optimizedText is an object instead of a string
+      if (typeof optimizedData.optimizedText === 'object') {
+        // Convert the nested object to a formatted string
+        const formattedText = formatNestedObjectToString(optimizedData.optimizedText);
+        optimizedData.optimizedText = formattedText;
+      }
+      
     } catch (error) {
+      console.error("Failed to parse optimization response:", message);
       throw new Error("Failed to parse optimization response: " + message);
     }
   
     // Simulate calling a PDF parsing tool that uses the provided instructions to generate an optimized PDF.
-    const optimizedPDFUrl = await editPDF(optimizedData.pdfInstructions);
+    const optimizedPDFUrl = await editPDF(
+      typeof optimizedData.pdfInstructions === 'string' 
+        ? optimizedData.pdfInstructions 
+        : JSON.stringify(optimizedData.pdfInstructions)
+    );
+    
     return { optimizedText: optimizedData.optimizedText, optimizedPDFUrl };
+  }
+  
+  // Helper function to convert a nested object to a formatted string
+  function formatNestedObjectToString(obj: any): string {
+    let result = '';
+    
+    // Process each section
+    for (const [sectionName, content] of Object.entries(obj)) {
+      // Add section header
+      result += `${sectionName.toUpperCase()}\n\n`;
+      
+      // Process section content
+      if (typeof content === 'string') {
+        // Simple string content
+        result += `${content}\n\n`;
+      } else if (content && typeof content === 'object') {
+        // Nested object content (check that content is not null)
+        for (const [subheading, subcontent] of Object.entries(content as Record<string, any>)) {
+          // Add subheading
+          result += `${subheading}\n`;
+          
+          // Process subcontent
+          if (Array.isArray(subcontent)) {
+            // Array of bullet points
+            for (const point of subcontent) {
+              result += `• ${point}\n`;
+            }
+          } else if (typeof subcontent === 'string') {
+            // String content
+            result += `${subcontent}\n`;
+          }
+          
+          result += '\n';
+        }
+      } else if (content === null) {
+        // Handle null content
+        result += 'No information provided\n\n';
+      }
+    }
+    
+    return result;
   }
   
   // Helper function to extract potential sections from the raw text
