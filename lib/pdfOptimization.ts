@@ -259,58 +259,131 @@ export async function modifyPDFWithOptimizedContent(
     const newPdfDoc = await PDFDocument.create();
     let page = newPdfDoc.addPage([width, height]);
     
-    // Embed fonts
+    // Embed professional fonts
     const helveticaFont = await newPdfDoc.embedFont(StandardFonts.Helvetica);
     const helveticaBold = await newPdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const timesRoman = await newPdfDoc.embedFont(StandardFonts.TimesRoman);
+    const timesBold = await newPdfDoc.embedFont(StandardFonts.TimesRomanBold);
     
-    // Default margins and styling
+    // Brand colors from the design system
+    const primaryColor = rgb(88/255, 66/255, 53/255); // Rich Walnut: #584235
+    const secondaryColor = rgb(232/255, 220/255, 196/255); // Aged Paper: #E8DCC4
+    const accentColor = rgb(180/255, 145/255, 108/255); // Bamboo: #B4916C
+    const backgroundColor = rgb(250/255, 246/255, 237/255); // Rice Paper: #FAF6ED
+    const textColor = rgb(44/255, 36/255, 32/255); // Ink Stone: #2C2420
+    
+    // Enhanced styling and layout
     const margin = 50;
     const fontSize = 10;
-    const headerFontSize = 12;
-    const lineHeight = fontSize * 1.2;
+    const headerFontSize = 14;
+    const subheaderFontSize = 12;
+    const nameSize = 24; // Larger size for the name
+    const lineHeight = fontSize * 1.4; // Increased for better readability
     const maxWidth = width - margin * 2;
     
-    // Parse the optimized text into sections - sanitize again to be safe
+    // Parse the optimized text into sections
     const optimizedSections = parseOptimizedText(sanitizeText(optimizedText));
     
-    // Start at the top of the page
-    let currentY = height - margin;
+    // Fill page with subtle background color
+    page.drawRectangle({
+      x: 0,
+      y: 0,
+      width: width,
+      height: height,
+      color: backgroundColor,
+    });
     
-    // Add contact information at the top (assuming it's in the first few lines of rawText)
+    // Add header bar at the top
+    page.drawRectangle({
+      x: 0,
+      y: height - 120,
+      width: width,
+      height: 120,
+      color: primaryColor,
+    });
+    
+    // Start at the top of the page
+    let currentY = height - 70;
+    
+    // Extract name from the first line of rawText if available
+    let candidateName = '';
     if (rawText) {
-      // Extra sanitization for contact info
-      const contactLines = sanitizeText(rawText.split('\n').slice(0, 3).join(' '));
+      candidateName = sanitizeText(rawText.split('\n')[0]);
       
-      // Draw contact info
-      page.drawText(contactLines, {
+      // Draw the name prominently in the header bar
+      page.drawText(candidateName.toUpperCase(), {
         x: margin,
-        y: currentY,
-        size: fontSize,
-        font: helveticaFont,
-        color: rgb(0, 0, 0),
+        y: height - 80,
+        size: nameSize,
+        font: timesBold,
+        color: secondaryColor,
       });
       
-      currentY -= lineHeight * 4; // Move down after contact info
+      // Extract contact information (email, phone, etc.)
+      const contactInfo = sanitizeText(rawText.split('\n').slice(1, 3).join(' '));
+      
+      // Draw contact info below the name
+      page.drawText(contactInfo, {
+        x: margin,
+        y: height - 110,
+        size: fontSize,
+        font: helveticaFont,
+        color: secondaryColor,
+      });
     }
     
-    // Process each section with extra sanitization
+    // Start content below the header bar
+    currentY = height - 140;
+    
+    // Process each section with enhanced styling
     for (const [sectionName, sectionContent] of Object.entries(optimizedSections)) {
       // Sanitize the section name
       const sanitizedSectionName = sanitizeText(sectionName);
       
-      // Draw section header
-      page.drawText(sanitizedSectionName.toUpperCase(), {
-        x: margin,
-        y: currentY,
-        size: headerFontSize,
-        font: helveticaBold,
-        color: rgb(0, 0, 0),
+      // Check if we need a new page
+      if (currentY < margin + 50) {
+        page = newPdfDoc.addPage([width, height]);
+        
+        // Add subtle background color to new page
+        page.drawRectangle({
+          x: 0,
+          y: 0,
+          width: width,
+          height: height,
+          color: backgroundColor,
+        });
+        
+        currentY = height - margin;
+      }
+      
+      // Draw decorative element before section header
+      page.drawLine({
+        start: { x: margin, y: currentY + 5 },
+        end: { x: margin + 20, y: currentY + 5 },
+        thickness: 3,
+        color: accentColor,
       });
       
-      currentY -= lineHeight * 1.5;
+      // Draw section header with modern styling
+      page.drawText(sanitizedSectionName.toUpperCase(), {
+        x: margin + 30,
+        y: currentY,
+        size: headerFontSize,
+        font: timesBold,
+        color: primaryColor,
+      });
+      
+      // Add thin line after the header
+      page.drawLine({
+        start: { x: margin + 30 + sanitizedSectionName.length * (headerFontSize/2), y: currentY + 5 },
+        end: { x: width - margin, y: currentY + 5 },
+        thickness: 1,
+        color: accentColor,
+      });
+      
+      currentY -= lineHeight * 2;
       
       // Process section content with proper paragraph breaks
-      // Use double spaces as paragraph delimiters instead of newlines
       const sanitizedContent = sanitizeText(sectionContent);
       const paragraphs = sanitizedContent.split('  ').map(p => sanitizeText(p)).filter(Boolean);
       
@@ -318,7 +391,7 @@ export async function modifyPDFWithOptimizedContent(
         // Extra sanitization for each paragraph
         const cleanParagraph = sanitizeText(paragraph);
         
-        // Handle bullet points
+        // Handle bullet points with enhanced styling
         if (cleanParagraph.includes('• ') || cleanParagraph.includes('- ')) {
           // Split by bullet points, being careful with the regex
           const bulletPoints = cleanParagraph
@@ -328,85 +401,193 @@ export async function modifyPDFWithOptimizedContent(
           
           for (const point of bulletPoints) {
             try {
+              // Check if we need a new page
+              if (currentY < margin + 20) {
+                page = newPdfDoc.addPage([width, height]);
+                
+                // Add subtle background color to new page
+                page.drawRectangle({
+                  x: 0,
+                  y: 0,
+                  width: width,
+                  height: height,
+                  color: backgroundColor,
+                });
+                
+                currentY = height - margin;
+              }
+              
               // Extra sanitization for each bullet point
               const cleanPoint = sanitizeText(point);
-              const lines = wrapText(cleanPoint, helveticaFont, fontSize, maxWidth - 15);
+              const lines = wrapText(cleanPoint, helveticaFont, fontSize, maxWidth - 20);
               
-              // Draw bullet
-              page.drawText('•', {
-                x: margin,
-                y: currentY,
-                size: fontSize,
-                font: helveticaFont,
-                color: rgb(0, 0, 0),
+              // Draw stylized bullet
+              page.drawCircle({
+                x: margin + 4,
+                y: currentY + 3,
+                size: 2.5,
+                color: accentColor,
               });
               
               // Draw bullet point text
               for (const line of lines) {
-                // Check if we need a new page
-                if (currentY < margin) {
-                  // Add a new page
-                  const newPage = newPdfDoc.addPage([width, height]);
-                  page = newPage;
-                  currentY = height - margin;
-                }
-                
-                // Final sanitization before drawing
-                const cleanLine = sanitizeText(line);
-                page.drawText(cleanLine, {
-                  x: margin + 15, // Indent for bullets
+                // Draw text with slight indent for bullets
+                page.drawText(sanitizeText(line), {
+                  x: margin + 15,
                   y: currentY,
                   size: fontSize,
                   font: helveticaFont,
-                  color: rgb(0, 0, 0),
+                  color: textColor,
                 });
+                
                 currentY -= lineHeight;
+                
+                // Check if we need a new page
+                if (currentY < margin) {
+                  page = newPdfDoc.addPage([width, height]);
+                  
+                  // Add subtle background color to new page
+                  page.drawRectangle({
+                    x: 0,
+                    y: 0,
+                    width: width,
+                    height: height,
+                    color: backgroundColor,
+                  });
+                  
+                  currentY = height - margin;
+                }
               }
-              
-              // Add space between bullet points
-              currentY -= lineHeight * 0.3;
-            } catch (error: any) {
-              console.error(`Error processing bullet point: ${error}`);
-              // Continue with next bullet point
+            } catch (error) {
+              console.error("Error processing bullet point:", error);
+              // Continue with next point even if there's an error
+              currentY -= lineHeight;
             }
           }
         } else {
-          // Regular paragraph
-          try {
-            const lines = wrapText(cleanParagraph, helveticaFont, fontSize, maxWidth);
+          // Regular paragraph text (not a bullet point)
+          // Check if this looks like a subheader (all caps, or ends with a colon)
+          const isSubheader = paragraph === paragraph.toUpperCase() || paragraph.endsWith(':');
+          
+          if (isSubheader) {
+            // Check if we need a new page
+            if (currentY < margin + 30) {
+              page = newPdfDoc.addPage([width, height]);
+              
+              // Add subtle background color to new page
+              page.drawRectangle({
+                x: 0,
+                y: 0,
+                width: width,
+                height: height,
+                color: backgroundColor,
+              });
+              
+              currentY = height - margin;
+            }
+            
+            // Draw as subheader with accent color
+            page.drawText(sanitizeText(paragraph), {
+              x: margin,
+              y: currentY,
+              size: subheaderFontSize,
+              font: helveticaBold,
+              color: accentColor,
+            });
+            
+            currentY -= lineHeight * 1.5;
+          } else {
+            // Wrap the paragraph text
+            const lines = wrapText(paragraph, helveticaFont, fontSize, maxWidth);
             
             for (const line of lines) {
               // Check if we need a new page
               if (currentY < margin) {
-                // Add a new page
-                const newPage = newPdfDoc.addPage([width, height]);
-                page = newPage;
+                page = newPdfDoc.addPage([width, height]);
+                
+                // Add subtle background color to new page
+                page.drawRectangle({
+                  x: 0,
+                  y: 0,
+                  width: width,
+                  height: height,
+                  color: backgroundColor,
+                });
+                
                 currentY = height - margin;
               }
               
-              // Final sanitization before drawing
-              const cleanLine = sanitizeText(line);
-              page.drawText(cleanLine, {
+              // Draw the line of text
+              page.drawText(sanitizeText(line), {
                 x: margin,
                 y: currentY,
                 size: fontSize,
                 font: helveticaFont,
-                color: rgb(0, 0, 0),
+                color: textColor,
               });
+              
               currentY -= lineHeight;
             }
-          } catch (error) {
-            console.error(`Error processing paragraph: ${error}`);
-            // Continue with next paragraph
+            
+            // Add extra space after paragraphs
+            currentY -= lineHeight * 0.5;
           }
         }
         
-        // Add space between paragraphs
-        currentY -= lineHeight * 0.5;
+        // Add a subtle divider after each section (except the last one)
+        if (Object.keys(optimizedSections).indexOf(sectionName) < Object.keys(optimizedSections).length - 1) {
+          // Check if we need a new page
+          if (currentY < margin + 20) {
+            page = newPdfDoc.addPage([width, height]);
+            
+            // Add subtle background color to new page
+            page.drawRectangle({
+              x: 0,
+              y: 0,
+              width: width,
+              height: height,
+              color: backgroundColor,
+            });
+            
+            currentY = height - margin;
+          }
+          
+          // Draw a subtle divider line
+          page.drawLine({
+            start: { x: margin, y: currentY - 10 },
+            end: { x: width - margin, y: currentY - 10 },
+            thickness: 0.5,
+            color: accentColor,
+          });
+          
+          currentY -= lineHeight * 2;
+        }
       }
+    }
+    
+    // Add a professional footer to each page
+    const pageCount = newPdfDoc.getPageCount();
+    for (let i = 0; i < pageCount; i++) {
+      const page = newPdfDoc.getPage(i);
+      const { width, height } = page.getSize();
       
-      // Add space between sections
-      currentY -= lineHeight;
+      // Draw subtle footer line
+      page.drawLine({
+        start: { x: margin, y: 30 },
+        end: { x: width - margin, y: 30 },
+        thickness: 0.5,
+        color: accentColor,
+      });
+      
+      // Add page number and date
+      const currentDate = new Date().toLocaleDateString();
+      page.drawText(`Page ${i + 1} of ${pageCount} | Updated: ${currentDate}`, {
+        x: margin,
+        y: 15,
+        size: 8,
+        font: helveticaFont,
+        color: primaryColor,
+      });
     }
     
     // Embed the full text content as metadata in the PDF for easier extraction later
@@ -430,8 +611,8 @@ export async function modifyPDFWithOptimizedContent(
     const newPdfBytes = await newPdfDoc.save();
     return Buffer.from(newPdfBytes).toString("base64");
   } catch (error) {
-    console.error("Error in PDF modification:", error);
-    throw new Error(`PDF modification failed: ${(error as Error).message}`);
+    console.error("Error in PDF generation:", error);
+    throw new Error(`Failed to modify PDF: ${error}`);
   }
 }
 

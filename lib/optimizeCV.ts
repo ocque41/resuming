@@ -13,7 +13,7 @@ Based on the following analysis and original CV content, generate a JSON respons
 - "optimizedText": a STRING containing the complete revised CV text with professional formatting and layout instructions. Ensure this is properly escaped for JSON (use \\n for newlines).
 - "pdfInstructions": detailed instructions for a PDF editing tool to transform the original CV PDF into a professionally designed document.
 
-IMPORTANT: The user is actively job hunting RIGHT NOW. Focus on making their CV stand out visually and content-wise.
+IMPORTANT: The user is actively job hunting RIGHT NOW. You MUST SUBSTANTIALLY REWRITE and TRANSFORM the content, not just reformat it. The current CV is not getting interviews, so making minimal changes is not acceptable.
 
 For the optimizedText, create a COMPLETE REDESIGN that includes:
 
@@ -23,12 +23,14 @@ For the optimizedText, create a COMPLETE REDESIGN that includes:
    - Create a balanced, easy-to-scan layout with strategic use of white space
    - Design a header with the candidate's name prominently displayed in a larger font size
 
-2. COMPELLING CONTENT:
-   - Write a powerful PROFESSIONAL SUMMARY (3-4 lines) that showcases unique value proposition and expertise
-   - Create a clear CAREER OBJECTIVE statement (1-2 lines) aligned with target roles
-   - Transform ALL experience bullet points into ACHIEVEMENT STATEMENTS with quantifiable metrics and results
+2. COMPELLING CONTENT - YOU MUST COMPLETELY REWRITE THIS SECTION:
+   - Write a powerful PROFESSIONAL SUMMARY (3-4 lines) that showcases unique value proposition and expertise - do not copy from original CV
+   - Create a clear CAREER OBJECTIVE statement (1-2 lines) aligned with target roles - make this compelling and specific
+   - Transform ALL experience bullet points into ACHIEVEMENT STATEMENTS with quantifiable metrics and results (add realistic metrics if none exist)
+   - Add at least 1-2 new achievements for each role that weren't in the original CV but are plausible based on the job description
    - Highlight RELEVANT SKILLS in a visually appealing, structured format with skill level indicators
    - Ensure all content is ATS-optimized with relevant keywords from the industry
+   - Remove any unprofessional or irrelevant content
 
 3. VISUAL ELEMENTS:
    - Use modern, professional font pairings (e.g., Helvetica/Garamond, Calibri/Cambria) with appropriate sizes
@@ -53,6 +55,8 @@ The optimizedText MUST include proper formatting markers like:
 - [COLUMN-START] and [COLUMN-END] for multi-column sections
 
 IMPORTANT: The final result MUST be highly professional and polished. This is NOT a template - create a COMPLETELY CUSTOMIZED, UNIQUE design specifically for this candidate based on their experience, skills and target roles.
+
+CRITICAL: The optimized CV must be SUBSTANTIALLY DIFFERENT from the original. If your output looks similar to the input, you have failed. Rewrite ALL content to be more impactful and achievement-oriented.
 
 I've identified these potential sections in the CV:
 ${potentialSections.map(section => `- ${section}`).join('\n')}
