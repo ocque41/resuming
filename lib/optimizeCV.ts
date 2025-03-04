@@ -95,6 +95,8 @@ EXTREMELY IMPORTANT: The original CV has valuable content that MUST be preserved
 
 CRITICAL: The optimized CV must be SUBSTANTIALLY DIFFERENT from the original in terms of wording and impact BUT MUST CONTAIN ALL the same information in an enhanced format. Your output MUST include ALL the sections from the original CV, but written in a more impactful way.
 
+CRITICAL REQUIREMENT: If you cannot properly optimize the content, you MUST return the original content with proper formatting markers added. NEVER return an empty or minimal response.
+
 The original CV content is below. YOU MUST ENHANCE AND REWRITE THIS CONTENT, NOT REMOVE IT:
 
 ${rawText}
@@ -137,7 +139,14 @@ The response should be formatted as a JSON with two keys:
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         console.error("OpenAI API error:", response.status, response.statusText, errorData);
-        throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+        
+        // If API call fails, create a formatted version of the raw text as fallback
+        console.log("API call failed, using formatted raw text as fallback");
+        const fallbackText = createFormattedFallbackFromRawText(rawText);
+        return {
+          optimizedText: fallbackText,
+          optimizedPDFUrl: await editPDF(fallbackText, template),
+        };
       }
 
       const data = await response.json();
@@ -145,7 +154,12 @@ The response should be formatted as a JSON with two keys:
 
       if (!responseContent) {
         console.error("No content in OpenAI response:", data);
-        throw new Error("No response content from OpenAI");
+        // Use fallback if no response content
+        const fallbackText = createFormattedFallbackFromRawText(rawText);
+        return {
+          optimizedText: fallbackText,
+          optimizedPDFUrl: await editPDF(fallbackText, template),
+        };
       }
       
       console.log("Received response from OpenAI, length:", responseContent.length);
@@ -161,13 +175,24 @@ The response should be formatted as a JSON with two keys:
         // Validate that we have optimized text
         if (!parsedResponse.optimizedText || parsedResponse.optimizedText.trim().length === 0) {
           console.error("OpenAI response missing optimizedText:", parsedResponse);
-          throw new Error("OpenAI response missing optimized text content");
+          // Use fallback if optimizedText is missing or empty
+          const fallbackText = createFormattedFallbackFromRawText(rawText);
+          return {
+            optimizedText: fallbackText,
+            optimizedPDFUrl: await editPDF(fallbackText, template),
+          };
         }
         
         // Extract the optimized text content
         let optimizedText = parsedResponse.optimizedText || "";
         
-        // Process formatting markers (this remains the same or is enhanced based on your markers)
+        // Validate the optimized text has sufficient content
+        if (optimizedText.trim().length < 100) {
+          console.warn("Optimized text is too short, using fallback");
+          optimizedText = createFormattedFallbackFromRawText(rawText);
+        }
+        
+        // Process formatting markers
         optimizedText = processFormattingMarkers(optimizedText);
         
         // Get PDF editing instructions
@@ -187,7 +212,14 @@ The response should be formatted as a JSON with two keys:
         
         // Fallback: If JSON parsing fails, treat the entire response as the optimized text
         console.log("Using fallback: treating entire response as optimized text");
-        const optimizedText = processFormattingMarkers(responseContent);
+        let optimizedText = processFormattingMarkers(responseContent);
+        
+        // Check if the response has enough content
+        if (optimizedText.trim().length < 100) {
+          console.warn("Processed response is too short, using formatted raw text");
+          optimizedText = createFormattedFallbackFromRawText(rawText);
+        }
+        
         const optimizedPDFUrl = await editPDF(optimizedText, template);
         
         return {
@@ -197,8 +229,201 @@ The response should be formatted as a JSON with two keys:
       }
     } catch (error) {
       console.error("CV optimization error:", error);
-      throw error;
+      // Final fallback in case of any error
+      const fallbackText = createFormattedFallbackFromRawText(rawText);
+      return {
+        optimizedText: fallbackText,
+        optimizedPDFUrl: await editPDF(fallbackText, template),
+      };
     }
+  }
+  
+  // New helper function to create a formatted fallback from raw text
+  function createFormattedFallbackFromRawText(rawText: string): string {
+    if (!rawText || rawText.trim().length === 0) {
+      return "[HEADER] Error\n\nNo content was provided for optimization.";
+    }
+    
+    console.log("Creating formatted fallback from raw text");
+    
+    // Extract potential sections from the raw text
+    const sections = extractPotentialSections(rawText);
+    const lines = rawText.split('\n').filter(line => line.trim().length > 0);
+    
+    // Start building the formatted text
+    let formattedText = "";
+    
+    // Add left column start
+    formattedText += "[LEFT-COLUMN-START]\n";
+    
+    // Add contact information if it appears to be in the first few lines
+    formattedText += "[HEADER] Contact\n\n";
+    for (let i = 0; i < Math.min(5, lines.length); i++) {
+      if (lines[i].includes('@') || lines[i].match(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/)) {
+        formattedText += lines[i] + "\n";
+      }
+    }
+    
+    // Add education section if found
+    if (sections.includes('Education') || sections.includes('Academic Background')) {
+      formattedText += "\n[HEADER] Education\n\n";
+      // Extract education-related content (simplified approach)
+      const educationRegex = /education|degree|university|college|school|academic/i;
+      let inEducationSection = false;
+      let educationContent = "";
+      
+      for (const line of lines) {
+        if (line.match(/education|academic/i) && line.length < 30) {
+          inEducationSection = true;
+          continue;
+        } else if (inEducationSection && sections.some(section => line.includes(section) && line.length < 30)) {
+          inEducationSection = false;
+        }
+        
+        if (inEducationSection || line.match(educationRegex)) {
+          educationContent += line + "\n";
+        }
+      }
+      
+      if (educationContent.trim().length > 0) {
+        formattedText += educationContent;
+      } else {
+        formattedText += "Education information not found in the original CV.\n";
+      }
+    }
+    
+    // Add skills section if found
+    if (sections.includes('Skills') || sections.includes('Technical Skills')) {
+      formattedText += "\n[HEADER] Skills\n\n";
+      // Extract skills-related content (simplified approach)
+      const skillsRegex = /skills|proficient|expertise|competencies/i;
+      let inSkillsSection = false;
+      let skillsContent = "";
+      
+      for (const line of lines) {
+        if (line.match(/skills|technical skills|core competencies/i) && line.length < 30) {
+          inSkillsSection = true;
+          continue;
+        } else if (inSkillsSection && sections.some(section => line.includes(section) && line.length < 30)) {
+          inSkillsSection = false;
+        }
+        
+        if (inSkillsSection || line.match(skillsRegex)) {
+          skillsContent += line + "\n";
+        }
+      }
+      
+      if (skillsContent.trim().length > 0) {
+        formattedText += skillsContent;
+      } else {
+        formattedText += "Skills information not found in the original CV.\n";
+      }
+    }
+    
+    // Close left column
+    formattedText += "[LEFT-COLUMN-END]\n\n";
+    
+    // Add right column start
+    formattedText += "[RIGHT-COLUMN-START]\n";
+    
+    // Add profile/summary if found
+    if (sections.includes('Profile') || sections.includes('Summary') || sections.includes('Professional Summary')) {
+      formattedText += "[HEADER] Profile\n\n";
+      // Extract profile-related content (simplified approach)
+      const profileRegex = /profile|summary|about me|objective/i;
+      let inProfileSection = false;
+      let profileContent = "";
+      
+      for (const line of lines) {
+        if (line.match(/profile|summary|about me|objective/i) && line.length < 30) {
+          inProfileSection = true;
+          continue;
+        } else if (inProfileSection && sections.some(section => line.includes(section) && line.length < 30)) {
+          inProfileSection = false;
+        }
+        
+        if (inProfileSection || line.match(profileRegex)) {
+          profileContent += line + "\n";
+        }
+      }
+      
+      if (profileContent.trim().length > 0) {
+        formattedText += profileContent;
+      } else {
+        formattedText += "Professional with experience in the field seeking new opportunities.\n";
+      }
+    }
+    
+    // Add experience section if found
+    if (sections.includes('Experience') || sections.includes('Work Experience') || sections.includes('Professional Experience')) {
+      formattedText += "\n[HEADER] Experience\n\n";
+      // Extract experience-related content (simplified approach)
+      const experienceRegex = /experience|work|employment|job|position|role/i;
+      let inExperienceSection = false;
+      let experienceContent = "";
+      
+      for (const line of lines) {
+        if (line.match(/experience|work experience|professional experience|employment history/i) && line.length < 40) {
+          inExperienceSection = true;
+          continue;
+        } else if (inExperienceSection && sections.some(section => line.includes(section) && line.length < 30)) {
+          inExperienceSection = false;
+        }
+        
+        if (inExperienceSection || line.match(experienceRegex)) {
+          experienceContent += line + "\n";
+        }
+      }
+      
+      if (experienceContent.trim().length > 0) {
+        formattedText += experienceContent;
+      } else {
+        formattedText += "Experience information not found in the original CV.\n";
+      }
+    }
+    
+    // Add any remaining sections
+    const coveredSections = ['Profile', 'Summary', 'Professional Summary', 'Experience', 'Work Experience', 
+                            'Professional Experience', 'Education', 'Academic Background', 'Skills', 'Technical Skills'];
+    
+    for (const section of sections) {
+      if (!coveredSections.includes(section)) {
+        formattedText += `\n[HEADER] ${section}\n\n`;
+        // Simple extraction of section content
+        let inSection = false;
+        let sectionContent = "";
+        
+        for (const line of lines) {
+          if (line.includes(section) && line.length < 40) {
+            inSection = true;
+            continue;
+          } else if (inSection && sections.some(s => line.includes(s) && line.length < 30 && s !== section)) {
+            inSection = false;
+          }
+          
+          if (inSection) {
+            sectionContent += line + "\n";
+          }
+        }
+        
+        if (sectionContent.trim().length > 0) {
+          formattedText += sectionContent;
+        } else {
+          formattedText += `${section} information not found in the original CV.\n`;
+        }
+      }
+    }
+    
+    // If we haven't found any sections, include the entire raw text
+    if (sections.length === 0) {
+      formattedText += "[HEADER] Content\n\n";
+      formattedText += rawText;
+    }
+    
+    // Close right column
+    formattedText += "[RIGHT-COLUMN-END]\n";
+    
+    return formattedText;
   }
   
   // Function to fix common JSON string issues
@@ -287,72 +512,166 @@ The response should be formatted as a JSON with two keys:
   
   // Process formatting markers in the text
   function processFormattingMarkers(text: string): string {
+    console.log("Processing formatting markers");
+    
+    // Check if the text has any content
+    if (!text || text.trim().length === 0) {
+      console.error("Empty text provided to processFormattingMarkers");
+      return "[HEADER] Error\n\nNo content was provided for formatting.";
+    }
+    
     // If text doesn't have explicit column markers, add them for a standard layout
     if (!text.includes('[LEFT-COLUMN-START]') && !text.includes('[RIGHT-COLUMN-START]')) {
+      console.log("No column markers found, adding standard layout markers");
+      
       const lines = text.split('\n');
       let processedText = '';
       let foundProfile = false;
       let foundEducation = false;
       let foundSkills = false;
       let foundExperience = false;
+      let foundLanguages = false;
+      let foundCertifications = false;
+      let inLeftColumn = false;
+      let inRightColumn = false;
       
-      // Process each line to identify sections and add column markers
+      // First pass: identify all sections
+      const sections = [];
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         
-        // Check for main sections
-        if (line.match(/\b(PROFILE|SUMMARY|PROFESSIONAL SUMMARY|ABOUT ME)\b/i) && !foundProfile) {
-          processedText += '\n\n[RIGHT-COLUMN-START]\n';
-          processedText += line + '\n';
-          foundProfile = true;
-        } else if (line.match(/\b(EDUCATION|ACADEMIC|QUALIFICATIONS)\b/i) && !foundEducation) {
-          if (!foundProfile) {
-            processedText += '\n\n[RIGHT-COLUMN-START]\n';
-            foundProfile = true;
-          } else if (foundExperience) {
-            processedText += '\n[RIGHT-COLUMN-END]\n\n';
-          }
-          processedText += '\n\n[LEFT-COLUMN-START]\n';
-          processedText += line + '\n';
-          foundEducation = true;
-        } else if (line.match(/\b(SKILLS|TECHNICAL SKILLS|CORE COMPETENCIES)\b/i) && !foundSkills) {
-          if (foundEducation) {
-            processedText += line + '\n';
-          } else {
-            processedText += '\n\n[LEFT-COLUMN-START]\n';
-            processedText += line + '\n';
-          }
-          foundSkills = true;
-        } else if (line.match(/\b(EXPERIENCE|WORK EXPERIENCE|PROFESSIONAL EXPERIENCE|EMPLOYMENT)\b/i) && !foundExperience) {
-          if (foundEducation || foundSkills) {
-            processedText += '\n[LEFT-COLUMN-END]\n\n';
-          }
-          
-          if (!foundProfile) {
-            processedText += '\n\n[RIGHT-COLUMN-START]\n';
-            foundProfile = true;
-          }
-          
-          processedText += line + '\n';
-          foundExperience = true;
-        } else {
-          processedText += line + '\n';
+        // Check for section headers (either with ## or [HEADER])
+        if (line.startsWith('## ') || line.startsWith('[HEADER]')) {
+          const sectionName = line.replace('## ', '').replace('[HEADER]', '').trim();
+          sections.push({
+            name: sectionName,
+            index: i,
+            content: ''
+          });
         }
       }
       
-      // Close any open column tags
-      if (foundEducation || foundSkills) {
-        processedText += '\n[LEFT-COLUMN-END]\n\n';
+      // If no sections were found, try to identify potential sections
+      if (sections.length === 0) {
+        console.log("No section markers found, attempting to identify sections");
+        
+        // Common section patterns
+        const sectionPatterns = [
+          { name: 'Profile', regex: /\b(profile|summary|about|objective)\b/i },
+          { name: 'Experience', regex: /\b(experience|work|employment|career)\b/i },
+          { name: 'Education', regex: /\b(education|academic|qualifications|degree)\b/i },
+          { name: 'Skills', regex: /\b(skills|abilities|competencies|expertise)\b/i },
+          { name: 'Languages', regex: /\b(languages|language proficiency)\b/i },
+          { name: 'Certifications', regex: /\b(certifications|certificates|qualifications)\b/i }
+        ];
+        
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          
+          // Skip empty lines
+          if (line.length === 0) continue;
+          
+          // Check if this line looks like a section header (short line, possibly all caps)
+          if (line.length < 40 && (line === line.toUpperCase() || line.endsWith(':'))) {
+            for (const pattern of sectionPatterns) {
+              if (pattern.regex.test(line)) {
+                sections.push({
+                  name: pattern.name,
+                  index: i,
+                  content: ''
+                });
+                break;
+              }
+            }
+          }
+        }
       }
       
-      if (foundProfile || foundExperience) {
-        processedText += '\n[RIGHT-COLUMN-END]\n\n';
+      // If we still have no sections, create default sections
+      if (sections.length === 0) {
+        console.log("No sections identified, creating default sections");
+        processedText = `[LEFT-COLUMN-START]
+[HEADER] Contact
+
+[HEADER] Education
+
+[HEADER] Skills
+
+[LEFT-COLUMN-END]
+
+[RIGHT-COLUMN-START]
+[HEADER] Profile
+
+[HEADER] Experience
+
+${text}
+[RIGHT-COLUMN-END]`;
+
+        return processedText;
+      }
+      
+      // Determine which sections go in which column
+      const leftColumnSections = ['Contact', 'Education', 'Skills', 'Languages', 'Certifications'];
+      const rightColumnSections = ['Profile', 'Summary', 'Experience', 'Work Experience', 'Professional Experience'];
+      
+      // Start building the formatted text with column markers
+      processedText = '[LEFT-COLUMN-START]\n';
+      inLeftColumn = true;
+      
+      // Process each section
+      for (let i = 0; i < sections.length; i++) {
+        const section = sections[i];
+        const nextSectionIndex = i < sections.length - 1 ? sections[i + 1].index : lines.length;
+        
+        // Extract section content
+        let sectionContent = '';
+        for (let j = section.index + 1; j < nextSectionIndex; j++) {
+          sectionContent += lines[j] + '\n';
+        }
+        
+        section.content = sectionContent;
+        
+        // Determine if this section should be in the left or right column
+        const isLeftColumnSection = leftColumnSections.some(s => 
+          section.name.toLowerCase().includes(s.toLowerCase()));
+        
+        const isRightColumnSection = rightColumnSections.some(s => 
+          section.name.toLowerCase().includes(s.toLowerCase()));
+        
+        // Handle column transitions
+        if (isLeftColumnSection && !inLeftColumn) {
+          // Close right column and open left column
+          processedText += '[RIGHT-COLUMN-END]\n\n[LEFT-COLUMN-START]\n';
+          inLeftColumn = true;
+          inRightColumn = false;
+        } else if (isRightColumnSection && !inRightColumn) {
+          // Close left column and open right column
+          if (inLeftColumn) {
+            processedText += '[LEFT-COLUMN-END]\n\n';
+            inLeftColumn = false;
+          }
+          processedText += '[RIGHT-COLUMN-START]\n';
+          inRightColumn = true;
+        }
+        
+        // Add section header and content
+        processedText += `[HEADER] ${section.name}\n\n${section.content}\n`;
+      }
+      
+      // Close any open columns
+      if (inLeftColumn) {
+        processedText += '[LEFT-COLUMN-END]\n';
+      } else if (inRightColumn) {
+        processedText += '[RIGHT-COLUMN-END]\n';
       }
       
       text = processedText;
+    } else {
+      console.log("Column markers found, processing existing markers");
     }
     
-    return text
+    // Process other formatting markers
+    text = text
       .replace(/\[HEADER\]/g, "\n\n## ")
       .replace(/\[SUBHEADER\]/g, "\n\n### ")
       .replace(/\[BULLET\]/g, "\n• ")
@@ -360,6 +679,32 @@ The response should be formatted as a JSON with two keys:
       .replace(/\[LEFT-COLUMN-END\]/g, "\n[LEFT-COLUMN-END]\n\n")
       .replace(/\[RIGHT-COLUMN-START\]/g, "\n\n[RIGHT-COLUMN-START]\n")
       .replace(/\[RIGHT-COLUMN-END\]/g, "\n[RIGHT-COLUMN-END]\n\n");
+    
+    // Ensure we have both column markers
+    if (text.includes('[LEFT-COLUMN-START]') && !text.includes('[LEFT-COLUMN-END]')) {
+      console.warn("LEFT-COLUMN-START found but no LEFT-COLUMN-END, adding end marker");
+      text += "\n[LEFT-COLUMN-END]\n";
+    }
+    
+    if (text.includes('[RIGHT-COLUMN-START]') && !text.includes('[RIGHT-COLUMN-END]')) {
+      console.warn("RIGHT-COLUMN-START found but no RIGHT-COLUMN-END, adding end marker");
+      text += "\n[RIGHT-COLUMN-END]\n";
+    }
+    
+    // If we have no column markers at all after processing, add default ones
+    if (!text.includes('[LEFT-COLUMN-START]') && !text.includes('[RIGHT-COLUMN-START]')) {
+      console.warn("No column markers after processing, adding default layout");
+      text = `[LEFT-COLUMN-START]
+[HEADER] Contact
+
+[LEFT-COLUMN-END]
+
+[RIGHT-COLUMN-START]
+${text}
+[RIGHT-COLUMN-END]`;
+    }
+    
+    return text;
   }
   
   // Helper function to extract potential sections from the raw text

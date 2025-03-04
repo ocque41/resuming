@@ -66,6 +66,7 @@ function parseOptimizedText(text: string): { [key: string]: string } {
   }
   
   let fallbackContent = ""; // Collect all content as fallback
+  let allSectionHeaders: string[] = []; // Track all section headers we find
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -141,7 +142,7 @@ function parseOptimizedText(text: string): { [key: string]: string } {
     }
     
     // Check for section headers (either ## or [HEADER])
-    if (line.startsWith('## ') || line.startsWith('[HEADER]')) {
+    if (line.startsWith('## ') || line.includes('[HEADER]')) {
       // Save previous section if it exists
       if (currentSection && currentContent.length > 0) {
         if (inLeftColumn) {
@@ -155,6 +156,7 @@ function parseOptimizedText(text: string): { [key: string]: string } {
       
       // Start new section
       currentSection = line.replace('## ', '').replace('[HEADER]', '').trim();
+      allSectionHeaders.push(currentSection); // Track all section headers
       currentContent = [];
     } else if (line.length > 0) {
       // Process subheaders, bullets, etc.
@@ -192,44 +194,62 @@ function parseOptimizedText(text: string): { [key: string]: string } {
         { name: "Profile", regex: /\b(profile|summary|about|objective)\b/i },
         { name: "Experience", regex: /\b(experience|work|employment|career)\b/i },
         { name: "Education", regex: /\b(education|academic|qualifications|degree)\b/i },
-        { name: "Skills", regex: /\b(skills|abilities|competencies|expertise)\b/i }
+        { name: "Skills", regex: /\b(skills|abilities|competencies|expertise)\b/i },
+        { name: "Languages", regex: /\b(languages|language proficiency)\b/i },
+        { name: "Certifications", regex: /\b(certifications|certificates|qualifications)\b/i },
+        { name: "Projects", regex: /\b(projects|portfolio|achievements)\b/i },
+        { name: "Contact", regex: /\b(contact|email|phone|address)\b/i }
       ];
       
       let foundAnySections = false;
       const fallbackLines = fallbackContent.split('\n');
       
-      for (const section of potentialSections) {
-        // Look for lines that might contain section headers
-        for (let i = 0; i < fallbackLines.length; i++) {
-          const line = fallbackLines[i].trim();
-          
-          if (section.regex.test(line) && line.length < 50) {
-            // This could be a section header
-            const sectionContent = [];
-            
-            // Collect content until the next potential section header
-            for (let j = i + 1; j < fallbackLines.length; j++) {
-              const contentLine = fallbackLines[j].trim();
+      // First pass: look for clear section headers
+      for (let i = 0; i < fallbackLines.length; i++) {
+        const line = fallbackLines[i].trim();
+        
+        // Skip empty lines
+        if (line.length === 0) continue;
+        
+        // Check if this line looks like a section header (short line, possibly all caps)
+        if (line.length < 40 && (line === line.toUpperCase() || line.endsWith(':'))) {
+          for (const section of potentialSections) {
+            if (section.regex.test(line)) {
+              // This could be a section header
+              const sectionContent = [];
               
-              // Stop if we hit another potential section
-              let isAnotherSection = false;
-              for (const otherSection of potentialSections) {
-                if (otherSection.regex.test(contentLine) && contentLine.length < 50) {
-                  isAnotherSection = true;
-                  break;
+              // Collect content until the next potential section header
+              for (let j = i + 1; j < fallbackLines.length; j++) {
+                const contentLine = fallbackLines[j].trim();
+                
+                // Stop if we hit another potential section
+                let isAnotherSection = false;
+                for (const otherSection of potentialSections) {
+                  if (otherSection.regex.test(contentLine) && contentLine.length < 40 && 
+                      (contentLine === contentLine.toUpperCase() || contentLine.endsWith(':'))) {
+                    isAnotherSection = true;
+                    break;
+                  }
+                }
+                
+                if (isAnotherSection) break;
+                
+                if (contentLine.length > 0) {
+                  sectionContent.push(contentLine);
                 }
               }
               
-              if (isAnotherSection) break;
-              
-              if (contentLine.length > 0) {
-                sectionContent.push(contentLine);
+              if (sectionContent.length > 0) {
+                // Determine if this should be in left or right column
+                if (['Contact', 'Education', 'Skills', 'Languages', 'Certifications'].includes(section.name)) {
+                  leftColumnContent[section.name] = sectionContent.join('\n');
+                } else {
+                  rightColumnContent[section.name] = sectionContent.join('\n');
+                }
+                foundAnySections = true;
               }
-            }
-            
-            if (sectionContent.length > 0) {
-              sections[section.name] = sectionContent.join('\n');
-              foundAnySections = true;
+              
+              break;
             }
           }
         }
@@ -237,12 +257,86 @@ function parseOptimizedText(text: string): { [key: string]: string } {
       
       // If we still couldn't identify sections, use the whole content
       if (!foundAnySections) {
-        sections['Content'] = fallbackContent;
+        // Try to split the content into logical chunks
+        let contactInfo = "";
+        let mainContent = "";
+        let hasFoundMainContent = false;
+        
+        // First few lines are likely contact info
+        for (let i = 0; i < Math.min(10, fallbackLines.length); i++) {
+          const line = fallbackLines[i].trim();
+          if (line.length === 0) continue;
+          
+          // If line contains email or phone, it's likely contact info
+          if (line.includes('@') || line.match(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/)) {
+            contactInfo += line + "\n";
+          } else if (!hasFoundMainContent && line.length > 50) {
+            // First long line is likely the start of main content
+            hasFoundMainContent = true;
+            mainContent += line + "\n";
+          } else if (hasFoundMainContent) {
+            mainContent += line + "\n";
+          } else {
+            contactInfo += line + "\n";
+          }
+        }
+        
+        // Add remaining lines to main content
+        for (let i = 10; i < fallbackLines.length; i++) {
+          mainContent += fallbackLines[i] + "\n";
+        }
+        
+        // Create basic sections
+        if (contactInfo.trim().length > 0) {
+          leftColumnContent['Contact'] = contactInfo;
+        }
+        
+        if (mainContent.trim().length > 0) {
+          rightColumnContent['Content'] = mainContent;
+        } else {
+          // If we couldn't split it, just use everything as content
+          rightColumnContent['Content'] = fallbackContent;
+        }
       }
     } else {
       console.log("No content found at all, creating default section with message");
       sections['Content'] = "No content was provided for the CV. Please try again.";
     }
+  }
+  
+  // Check if we have any content in the columns
+  const hasLeftColumnContent = Object.keys(leftColumnContent).length > 0;
+  const hasRightColumnContent = Object.keys(rightColumnContent).length > 0;
+  
+  // If we have no content in either column but have sections, distribute them
+  if (!hasLeftColumnContent && !hasRightColumnContent && Object.keys(sections).length > 0) {
+    console.log("Redistributing sections to columns");
+    
+    // Determine which sections go in which column
+    const leftColumnSectionNames = ['Contact', 'Education', 'Skills', 'Languages', 'Certifications'];
+    const rightColumnSectionNames = ['Profile', 'Summary', 'Experience', 'Work Experience', 'Professional Experience'];
+    
+    for (const [key, value] of Object.entries(sections)) {
+      // Check if this section should be in left column
+      const isLeftSection = leftColumnSectionNames.some(name => 
+        key.toLowerCase().includes(name.toLowerCase()));
+      
+      // Check if this section should be in right column
+      const isRightSection = rightColumnSectionNames.some(name => 
+        key.toLowerCase().includes(name.toLowerCase()));
+      
+      if (isLeftSection) {
+        leftColumnContent[key] = value;
+      } else if (isRightSection) {
+        rightColumnContent[key] = value;
+      } else {
+        // Default to right column for unknown sections
+        rightColumnContent[key] = value;
+      }
+    }
+    
+    // Clear the sections object since we've redistributed everything
+    Object.keys(sections).forEach(key => delete sections[key]);
   }
   
   // Merge column content with main sections
@@ -256,7 +350,14 @@ function parseOptimizedText(text: string): { [key: string]: string } {
     sections[key] = value;
   }
   
+  // Final check - if we still have no sections, create a default one with the fallback content
+  if (Object.keys(sections).length === 0) {
+    console.warn("WARNING: No sections found after all processing, using fallback content");
+    sections['Content'] = fallbackContent || "No content was provided for the CV. Please try again.";
+  }
+  
   console.log(`Finished parsing, found ${Object.keys(sections).length} total sections`);
+  console.log(`Section headers found: ${allSectionHeaders.join(', ')}`);
   
   return sections;
 }
