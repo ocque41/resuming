@@ -17,12 +17,17 @@ export async function optimizeCV(
   3. Clear section organization
   4. Concise language that highlights accomplishments
   
+  IMPORTANT FORMATTING RULES:
+  - Use only ASCII characters
+  - For bullet points, use the "• " character (bullet followed by space)
+  - Avoid using special characters or symbols that might cause encoding issues
+  - Use blank lines to separate paragraphs, not just line breaks
+  - Do not use tabs or other special whitespace characters
+  
   I've identified these potential sections in the CV:
   ${potentialSections.map(section => `- ${section}`).join('\n')}
   
   Please organize your optimized text using these section headers where appropriate, adding ## before each section name.
-  
-  IMPORTANT: For each bullet point in lists, start with "• " (bullet character followed by a space).
   
   CV Analysis:
   ATS Score: ${analysis.atsScore}%

@@ -14,21 +14,26 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   const [optimizationStatus, setOptimizationStatus] = useState<string>("idle");
   const [error, setError] = useState<string | null>(null);
   const [optimizedPDFBase64, setOptimizedPDFBase64] = useState<string | null>(null);
-  const maxRetries = 10;
+  const [pollingAttempts, setPollingAttempts] = useState(0);
+  const maxRetries = 20;
+  const pollingInterval = 5000;
 
   async function handleOptimize(cv: string) {
     setSelectedCV(cv);
     setError(null);
     setOptimizationStatus("pending");
+    setPollingAttempts(0);
+    
     try {
       const response = await fetch(`/api/optimize-cv?fileName=${encodeURIComponent(cv)}`);
       const data = await response.json();
+      
       if (data.error) {
         setError(data.error);
         setOptimizationStatus("error");
       } else {
         setOptimizationStatus("processing");
-        pollOptimizationStatus(cv);
+        setTimeout(() => pollOptimizationStatus(cv), 2000);
       }
     } catch (err: any) {
       setError("Failed to initiate optimization.");
@@ -38,27 +43,47 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
 
   // Poll for updated CV status with a maximum number of retries.
   async function pollOptimizationStatus(cv: string) {
-    let localRetryCount = 0;
-    const intervalId = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/get-cv-status?fileName=${encodeURIComponent(cv)}`);
-        const statusData = await res.json();
-        if (statusData.optimized && statusData.optimizedPDFBase64) {
-          setOptimizedPDFBase64(statusData.optimizedPDFBase64);
-          setOptimizationStatus("complete");
-          clearInterval(intervalId);
-        } else {
-          localRetryCount++;
-          if (localRetryCount >= maxRetries) {
-            clearInterval(intervalId);
-            setError("Optimization timed out. Please try again later.");
-            setOptimizationStatus("error");
-          }
-        }
-      } catch (error) {
-        console.error("Error polling CV status:", error);
+    try {
+      const res = await fetch(`/api/get-cv-status?fileName=${encodeURIComponent(cv)}`);
+      
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}: ${res.statusText}`);
       }
-    }, 3000);
+      
+      const statusData = await res.json();
+      
+      if (statusData.optimized && statusData.optimizedPDFBase64) {
+        setOptimizedPDFBase64(statusData.optimizedPDFBase64);
+        setOptimizationStatus("complete");
+        return;
+      }
+      
+      if (statusData.error) {
+        setError(`Optimization error: ${statusData.error}`);
+        setOptimizationStatus("error");
+        return;
+      }
+      
+      setPollingAttempts(prev => prev + 1);
+      
+      if (pollingAttempts >= maxRetries) {
+        setError("Optimization timed out. The process may still be running in the background. Please refresh and check again in a few moments.");
+        setOptimizationStatus("error");
+      } else {
+        setTimeout(() => pollOptimizationStatus(cv), pollingInterval);
+      }
+    } catch (error: any) {
+      console.error("Error polling CV status:", error);
+      
+      setPollingAttempts(prev => prev + 1);
+      
+      if (pollingAttempts >= maxRetries) {
+        setError(`Polling error: ${error.message}. The optimization may still be running in the background.`);
+        setOptimizationStatus("error");
+      } else {
+        setTimeout(() => pollOptimizationStatus(cv), pollingInterval);
+      }
+    }
   }
 
   return (
@@ -85,7 +110,9 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
           </p>
         )}
         {optimizationStatus === "processing" && (
-          <p className="mt-4 text-sm">Optimizing CV... Please wait.</p>
+          <p className="mt-4 text-sm">
+            Optimizing CV... Please wait. (Attempt {pollingAttempts + 1}/{maxRetries})
+          </p>
         )}
         {optimizationStatus === "complete" && optimizedPDFBase64 && (
           <div className="mt-4 text-sm">

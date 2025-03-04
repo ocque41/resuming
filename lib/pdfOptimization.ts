@@ -184,23 +184,43 @@ function wrapText(
   fontSize: number,
   maxWidth: number
 ): string[] {
-  const words = text.split(" ");
+  // Replace newlines with spaces to avoid encoding issues
+  const sanitizedText = text.replace(/\n/g, ' ');
+  const words = sanitizedText.split(" ");
   const lines: string[] = [];
   let currentLine = "";
 
   for (const word of words) {
+    // Skip empty words that might result from multiple spaces
+    if (!word) continue;
+    
     const testLine = currentLine ? `${currentLine} ${word}` : word;
-    const testLineWidth = font.widthOfTextAtSize(testLine, fontSize);
-    if (testLineWidth > maxWidth && currentLine !== "") {
-      lines.push(currentLine);
-      currentLine = word;
-    } else {
-      currentLine = testLine;
+    
+    try {
+      const testLineWidth = font.widthOfTextAtSize(testLine, fontSize);
+      
+      if (testLineWidth > maxWidth && currentLine !== "") {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    } catch (error) {
+      console.warn(`Error measuring text width for "${testLine}": ${error}`);
+      // If we can't measure, just add the word and move on
+      if (currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = word;
+      }
     }
   }
+  
   if (currentLine) {
     lines.push(currentLine);
   }
+  
   return lines;
 }
 
@@ -269,22 +289,64 @@ export async function modifyPDFWithOptimizedContent(
     // Process section content with proper paragraph breaks
     const paragraphs = sectionContent.split('\n\n');
     for (const paragraph of paragraphs) {
+      // Sanitize the paragraph text to remove problematic characters
+      const sanitizedParagraph = paragraph
+        .replace(/[\u0000-\u001F]/g, ' ')  // Replace control characters with spaces
+        .replace(/\n/g, ' ');  // Replace newlines with spaces
+      
       // Handle bullet points
-      if (paragraph.includes('• ') || paragraph.includes('- ')) {
-        const bulletPoints = paragraph.split(/(?:^|\n)(?:•|-)\s+/).filter(Boolean);
+      if (sanitizedParagraph.includes('• ') || sanitizedParagraph.includes('- ')) {
+        // Split by bullet points, being careful with the regex
+        const bulletPoints = sanitizedParagraph
+          .split(/(?:^|\s)(?:•|-)\s+/)
+          .filter(Boolean)
+          .map(point => point.trim());
+        
         for (const point of bulletPoints) {
-          const lines = wrapText(point, helveticaFont, fontSize, maxWidth - 15); // Indent for bullets
+          try {
+            const lines = wrapText(point, helveticaFont, fontSize, maxWidth - 15); // Indent for bullets
+            
+            // Draw bullet
+            page.drawText('•', {
+              x: margin,
+              y: currentY,
+              size: fontSize,
+              font: helveticaFont,
+              color: rgb(0, 0, 0),
+            });
+            
+            // Draw bullet point text
+            for (const line of lines) {
+              // Check if we need a new page
+              if (currentY < margin) {
+                // Add a new page
+                const newPage = newPdfDoc.addPage([width, height]);
+                page = newPage;
+                currentY = height - margin;
+              }
+              
+              page.drawText(line, {
+                x: margin + 15, // Indent for bullets
+                y: currentY,
+                size: fontSize,
+                font: helveticaFont,
+                color: rgb(0, 0, 0),
+              });
+              currentY -= lineHeight;
+            }
+            
+            // Add space between bullet points
+            currentY -= lineHeight * 0.3;
+          } catch (error) {
+            console.error(`Error processing bullet point: ${error}`);
+            // Continue with next bullet point
+          }
+        }
+      } else {
+        // Regular paragraph
+        try {
+          const lines = wrapText(sanitizedParagraph, helveticaFont, fontSize, maxWidth);
           
-          // Draw bullet
-          page.drawText('•', {
-            x: margin,
-            y: currentY,
-            size: fontSize,
-            font: helveticaFont,
-            color: rgb(0, 0, 0),
-          });
-          
-          // Draw bullet point text
           for (const line of lines) {
             // Check if we need a new page
             if (currentY < margin) {
@@ -295,7 +357,7 @@ export async function modifyPDFWithOptimizedContent(
             }
             
             page.drawText(line, {
-              x: margin + 15, // Indent for bullets
+              x: margin,
               y: currentY,
               size: fontSize,
               font: helveticaFont,
@@ -303,31 +365,9 @@ export async function modifyPDFWithOptimizedContent(
             });
             currentY -= lineHeight;
           }
-          
-          // Add space between bullet points
-          currentY -= lineHeight * 0.3;
-        }
-      } else {
-        // Regular paragraph
-        const lines = wrapText(paragraph, helveticaFont, fontSize, maxWidth);
-        
-        for (const line of lines) {
-          // Check if we need a new page
-          if (currentY < margin) {
-            // Add a new page
-            const newPage = newPdfDoc.addPage([width, height]);
-            page = newPage;
-            currentY = height - margin;
-          }
-          
-          page.drawText(line, {
-            x: margin,
-            y: currentY,
-            size: fontSize,
-            font: helveticaFont,
-            color: rgb(0, 0, 0),
-          });
-          currentY -= lineHeight;
+        } catch (error) {
+          console.error(`Error processing paragraph: ${error}`);
+          // Continue with next paragraph
         }
       }
       
