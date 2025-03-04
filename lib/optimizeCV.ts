@@ -10,7 +10,7 @@ export async function optimizeCV(
     const prompt = `You are an expert CV designer and content strategist specializing in creating professional, visually appealing resumes that get interviews. Your goal is to help the user GET A JOB NOW.
 
 Based on the following analysis and original CV content, generate a JSON response with two keys:
-- "optimizedText": a STRING containing the complete revised CV text with professional formatting and layout instructions.
+- "optimizedText": a STRING containing the complete revised CV text with professional formatting and layout instructions. Ensure this is properly escaped for JSON (use \\n for newlines).
 - "pdfInstructions": detailed instructions for a PDF editing tool to transform the original CV PDF into a professionally designed document.
 
 IMPORTANT: The user is actively job hunting RIGHT NOW. Focus on making their CV stand out visually and content-wise.
@@ -48,6 +48,8 @@ The optimizedText should include formatting markers like:
 - [DIVIDER] for section separators
 - [COLUMN-START] and [COLUMN-END] for multi-column sections
 
+IMPORTANT: Make sure to properly escape all newlines in the optimizedText with \\n to ensure valid JSON.
+
 I've identified these potential sections in the CV:
 ${potentialSections.map(section => `- ${section}`).join('\n')}
 
@@ -82,7 +84,14 @@ Return your answer strictly as JSON without additional text.`;
     let optimizedData: { optimizedText: string; pdfInstructions: string | object };
     
     try {
-      optimizedData = JSON.parse(message);
+      // Try to parse the JSON response
+      try {
+        optimizedData = JSON.parse(message);
+      } catch (jsonError) {
+        // If parsing fails, try to fix common JSON issues
+        const fixedMessage = fixJsonString(message);
+        optimizedData = JSON.parse(fixedMessage);
+      }
       
       // Handle case where optimizedText is an object instead of a string
       if (typeof optimizedData.optimizedText === 'object') {
@@ -109,6 +118,27 @@ Return your answer strictly as JSON without additional text.`;
     );
     
     return { optimizedText: optimizedData.optimizedText, optimizedPDFUrl };
+  }
+  
+  // Function to fix common JSON string issues
+  function fixJsonString(jsonString: string): string {
+    // Try to extract the JSON object from the response if there's extra text
+    const jsonMatch = jsonString.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      jsonString = jsonMatch[0];
+    }
+    
+    // Replace literal newlines with escaped newlines in the optimizedText field
+    let fixed = jsonString.replace(/"optimizedText"\s*:\s*"([\s\S]*?)(?=",\s*"pdfInstructions")/, (match, p1) => {
+      // Replace all literal newlines with escaped newlines
+      const escaped = p1.replace(/\n/g, '\\n');
+      return `"optimizedText":"${escaped}`;
+    });
+    
+    // Fix any trailing commas in arrays or objects
+    fixed = fixed.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
+    
+    return fixed;
   }
   
   // Process formatting markers in the text to create a more visually appealing document

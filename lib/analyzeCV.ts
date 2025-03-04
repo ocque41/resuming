@@ -17,7 +17,7 @@ Analyze the CV to determine:
 4. How their CV can be immediately improved to stand out to employers
 
 Return a JSON object with the following keys:
-- "atsScore": A percentage (example: 85%) indicating how well the CV is optimized for Applicant Tracking Systems.
+- "atsScore": A percentage as a number without the % symbol (example: 85)
 - "strengths": An array of 3-5 key strengths that make the candidate immediately employable in their field.
 - "weaknesses": An array of 3-5 specific issues in the CV that are hurting their chances of getting interviews RIGHT NOW (focus on presentation, not suggesting more experience).
 - "recommendations": An array of 3 specific, actionable recommendations that will immediately improve their chances of getting interviews. Focus on:
@@ -52,6 +52,20 @@ ${cleanedText}`;
 
   try {
     const analysis = JSON.parse(message);
+    
+    // Format the ATS score to include the % symbol consistently
+    if (typeof analysis.atsScore === 'number' || !isNaN(parseInt(analysis.atsScore))) {
+      analysis.atsScore = `${analysis.atsScore}%`;
+    } else if (typeof analysis.atsScore === 'string') {
+      // Remove any existing % symbols
+      let score = analysis.atsScore.replace(/%/g, '');
+      // Convert to number, then back to string with a single % symbol
+      score = parseInt(score);
+      if (!isNaN(score)) {
+        analysis.atsScore = `${score}%`;
+      }
+    }
+    
     return analysis;
   } catch (error) {
     throw new Error('Failed to parse AI response: ' + message);
