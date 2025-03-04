@@ -2,6 +2,7 @@ import { PDFDocument, StandardFonts, rgb, PDFFont } from "pdf-lib";
 import { getOverlayCoordinates } from "./templateMatching";
 import { CVTemplate } from "@/types/templates";
 import { Buffer } from "buffer";
+import { getTemplateLayout } from './templateMatching';
 
 // Add Section interface at the top of the file
 export interface Section {
@@ -466,6 +467,31 @@ function sanitizeText(text: string): string {
     .trim();                        // Trim leading/trailing whitespace
 }
 
+// Helper function to split text into lines that fit within a given width
+function splitTextIntoLines(text: string, maxWidth: number, font: any, fontSize: number): string[] {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let currentLine = '';
+  
+  for (const word of words) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    const width = font.widthOfTextAtSize(testLine, fontSize);
+    
+    if (width <= maxWidth) {
+      currentLine = testLine;
+    } else {
+      lines.push(currentLine);
+      currentLine = word;
+    }
+  }
+  
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+  
+  return lines;
+}
+
 /**
  * Creates a new PDF with optimized content
  */
@@ -473,99 +499,47 @@ export async function modifyPDFWithOptimizedContent(
   optimizedText: string,
   rawText: string,
   template?: CVTemplate
-): Promise<Buffer> {
-  console.log("Starting PDF generation with optimized content");
-  
-  // Debug check: verify that optimizedText is not empty
-  if (!optimizedText || optimizedText.trim().length === 0) {
-    console.error("ERROR: Empty optimizedText provided to modifyPDFWithOptimizedContent");
-    
-    // Fallback to rawText if available
-    if (rawText && rawText.trim().length > 0) {
-      console.log("Using rawText as fallback for PDF generation");
-      optimizedText = rawText;
-    } else {
-      throw new Error("No content available for PDF generation");
-    }
-  }
-  
-  // Log the length of the optimizedText for debugging
-  console.log(`Optimized text length: ${optimizedText.length} characters`);
-  console.log(`First 200 characters: ${optimizedText.substring(0, 200)}...`);
-  
-  // Parse the optimizedText into sections
-  const { leftColumnSections, rightColumnSections } = parseOptimizedText(optimizedText);
-  
-  // Log the number of sections parsed
-  console.log(`Parsed ${leftColumnSections.length} left column sections and ${rightColumnSections.length} right column sections`);
-  
-  // Log character count for each section for debugging
-  leftColumnSections.forEach(section => {
-    console.log(`Left column section "${section.title}": ${section.content.length} characters`);
-  });
-  
-  rightColumnSections.forEach(section => {
-    console.log(`Right column section "${section.title}": ${section.content.length} characters`);
-  });
-  
-  // Sanity check: if total content is minimal, use rawText as fallback
-  const totalContentLength = 
-    leftColumnSections.reduce((sum, section) => sum + section.content.length, 0) +
-    rightColumnSections.reduce((sum, section) => sum + section.content.length, 0);
-  
-  if (totalContentLength < 100 && rawText && rawText.length > 0) {
-    console.warn("WARNING: Minimal content detected, using rawText as fallback");
-    const { leftColumnSections: fallbackLeft, rightColumnSections: fallbackRight } = parseOptimizedText(rawText);
-    
-    // Only use fallback if it has more content
-    const fallbackContentLength = 
-      fallbackLeft.reduce((sum, section) => sum + section.content.length, 0) +
-      fallbackRight.reduce((sum, section) => sum + section.content.length, 0);
-    
-    if (fallbackContentLength > totalContentLength) {
-      console.log(`Using fallback content with ${fallbackContentLength} characters`);
-      return createPDFWithSections(fallbackLeft, fallbackRight, rawText, template);
-    }
-  }
-  
-  // Create PDF with the parsed sections
-  return createPDFWithSections(leftColumnSections, rightColumnSections, rawText, template);
-}
-
-async function createPDFWithSections(
-  leftColumnSections: Section[],
-  rightColumnSections: Section[],
-  rawText: string,
-  template?: CVTemplate
-): Promise<Buffer> {
+): Promise<Uint8Array> {
   try {
+    console.log("Starting PDF generation with optimized content");
+    
+    // Parse the optimized text to extract sections
+    const { leftColumnSections: originalLeftSections, rightColumnSections: originalRightSections } = parseOptimizedText(optimizedText);
+    
+    // Create mutable copies of the sections
+    let leftColumnSections = [...originalLeftSections];
+    let rightColumnSections = [...originalRightSections];
+    
     // Create a new PDF document
     const doc = await PDFDocument.create();
     
-    // Embed fonts
-    const regularFont = await doc.embedFont(StandardFonts.Helvetica);
-    const boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
-    let titleFont = boldFont;
-    let bodyFont = regularFont;
+    // Load fonts
+    let regularFont = await doc.embedFont(StandardFonts.Helvetica);
+    let boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
+    let italicFont = await doc.embedFont(StandardFonts.HelveticaOblique);
+    let titleFont = await doc.embedFont(StandardFonts.HelveticaBold);
     
-    // Try to load template-specific fonts if available
-    if (template?.metadata?.preferredFonts) {
+    // Try to load preferred fonts based on template
+    if (template && template.metadata) {
       try {
-        const preferredFonts = template.metadata.preferredFonts;
+        const fontPreferences = template.metadata.preferredFonts || [];
         
-        // Use Times Roman for more traditional templates
-        if (preferredFonts.includes('Times') || preferredFonts.includes('Serif')) {
+        // Load custom fonts based on preferences
+        if (fontPreferences.includes('Times') || fontPreferences.includes('Serif')) {
+          regularFont = await doc.embedFont(StandardFonts.TimesRoman);
+          boldFont = await doc.embedFont(StandardFonts.TimesRomanBold);
+          italicFont = await doc.embedFont(StandardFonts.TimesRomanItalic);
           titleFont = await doc.embedFont(StandardFonts.TimesRomanBold);
-          bodyFont = await doc.embedFont(StandardFonts.TimesRoman);
           console.log("Using Times Roman fonts for template");
-        }
-        
-        // Use Courier for monospaced templates
-        if (preferredFonts.includes('Courier') || preferredFonts.includes('Monospace')) {
+        } else if (fontPreferences.includes('Courier') || fontPreferences.includes('Monospace')) {
+          regularFont = await doc.embedFont(StandardFonts.Courier);
+          boldFont = await doc.embedFont(StandardFonts.CourierBold);
+          italicFont = await doc.embedFont(StandardFonts.CourierOblique);
           titleFont = await doc.embedFont(StandardFonts.CourierBold);
-          bodyFont = await doc.embedFont(StandardFonts.Courier);
           console.log("Using Courier fonts for template");
         }
+        
+        console.log(`Loaded preferred fonts from template: ${template.name}`);
       } catch (error: any) {
         console.warn("Could not load preferred fonts:", error.message);
         // Continue with default fonts
@@ -617,6 +591,18 @@ async function createPDFWithSections(
       console.log(`Using template layout: ${layout}`);
     }
     
+    // Get header style from template if available
+    let headerStyle = 'modern';
+    if (template?.id) {
+      try {
+        const templateLayout = getTemplateLayout(template.id);
+        headerStyle = templateLayout.headerStyle;
+        console.log(`Using template header style: ${headerStyle}`);
+      } catch (error: any) {
+        console.warn("Error getting template header style:", error.message);
+      }
+    }
+    
     // Add a page to the document
     let currentPage = doc.addPage([595, 842]); // A4 size
     const { width, height } = currentPage.getSize();
@@ -625,12 +611,17 @@ async function createPDFWithSections(
     const margin = 60; // Increased from 50
     const columnGap = 30; // Increased from 20
     
+    // Define line spacing based on template style
+    const lineSpacing = headerStyle === 'minimal' ? 22 : (headerStyle === 'traditional' ? 20 : 18);
+    const sectionSpacing = headerStyle === 'minimal' ? 30 : (headerStyle === 'traditional' ? 25 : 20);
+    const headerSpacing = headerStyle === 'minimal' ? 30 : (headerStyle === 'traditional' ? 28 : 25);
+    
     // Define starting positions
     let leftColumnY = height - margin;
     let rightColumnY = height - margin;
     
-    // Add a modern header bar
-    if (layout !== "traditional") {
+    // Add header based on style
+    if (headerStyle === 'modern') {
       // Add a colored header bar at the top
       currentPage.drawRectangle({
         x: 0,
@@ -694,6 +685,126 @@ async function createPDFWithSections(
       } catch (error: any) {
         console.warn("Error adding modern header:", error.message);
       }
+    } else if (headerStyle === 'minimal') {
+      // Minimal header style - just name and contact in a clean layout
+      try {
+        const lines = rawText.split('\n');
+        const name = lines[0].trim();
+        
+        // Look for contact info in the first few lines
+        let contactInfo = '';
+        for (let i = 1; i < Math.min(10, lines.length); i++) {
+          const line = lines[i].trim();
+          if (line.includes('@') || line.includes('phone') || line.includes('tel') || 
+              /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(line)) {
+            contactInfo += line + ' · ';
+          }
+        }
+        
+        if (contactInfo.endsWith(' · ')) {
+          contactInfo = contactInfo.substring(0, contactInfo.length - 3);
+        }
+        
+        // Draw a thin line at the top
+        currentPage.drawLine({
+          start: { x: margin, y: height - margin + 10 },
+          end: { x: width - margin, y: height - margin + 10 },
+          thickness: 1,
+          color: accentColor,
+        });
+        
+        // Draw name in large font
+        if (name) {
+          currentPage.drawText(name, {
+            x: margin,
+            y: height - margin,
+            size: 18,
+            font: titleFont,
+            color: textColor,
+          });
+          
+          // Draw contact info to the right
+          if (contactInfo) {
+            currentPage.drawText(contactInfo, {
+              x: width - margin - regularFont.widthOfTextAtSize(contactInfo, 9),
+              y: height - margin,
+              size: 9,
+              font: regularFont,
+              color: textColor,
+            });
+          }
+          
+          // Draw a thin line below
+          currentPage.drawLine({
+            start: { x: margin, y: height - margin - 10 },
+            end: { x: width - margin, y: height - margin - 10 },
+            thickness: 1,
+            color: accentColor,
+          });
+          
+          // Adjust starting positions
+          leftColumnY = height - margin - 30;
+          rightColumnY = height - margin - 30;
+        }
+      } catch (error: any) {
+        console.warn("Error adding minimal header:", error.message);
+      }
+    } else if (headerStyle === 'traditional') {
+      // Traditional header style - centered name with contact below
+      try {
+        const lines = rawText.split('\n');
+        const name = lines[0].trim();
+        
+        // Collect contact info
+        const contactLines = [];
+        for (let i = 1; i < Math.min(10, lines.length); i++) {
+          const line = lines[i].trim();
+          if (line.includes('@') || line.includes('phone') || line.includes('tel') || 
+              /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(line)) {
+            contactLines.push(line);
+          }
+        }
+        
+        // Draw name in large font centered
+        if (name) {
+          const nameWidth = titleFont.widthOfTextAtSize(name, 22);
+          currentPage.drawText(name, {
+            x: (width - nameWidth) / 2,
+            y: height - margin,
+            size: 22,
+            font: titleFont,
+            color: textColor,
+          });
+          
+          // Draw contact info centered below name
+          let contactY = height - margin - 20;
+          for (const line of contactLines) {
+            const lineWidth = regularFont.widthOfTextAtSize(line, 10);
+            currentPage.drawText(line, {
+              x: (width - lineWidth) / 2,
+              y: contactY,
+              size: 10,
+              font: regularFont,
+              color: textColor,
+            });
+            contactY -= 15;
+          }
+          
+          // Draw a horizontal line below contact info
+          currentPage.drawLine({
+            start: { x: margin, y: contactY - 10 },
+            end: { x: width - margin, y: contactY - 10 },
+            thickness: 1,
+            color: textColor,
+          });
+          
+          // Adjust starting positions
+          leftColumnY = contactY - 25;
+          rightColumnY = contactY - 25;
+        }
+      } catch (error: any) {
+        console.warn("Error adding traditional header:", error.message);
+      }
     }
     
     // Calculate column widths based on layout
@@ -720,314 +831,334 @@ async function createPDFWithSections(
       currentPage.drawText(section.title.toUpperCase(), {
         x: margin,
         y: leftColumnY,
-        size: 14, // Increased from 12
-        font: titleFont,
+        size: 12,
+        font: boldFont,
         color: primaryColor,
       });
       
-      // Add underline or background for section header
-      if (layout === "traditional") {
+      // Draw underline for section header based on header style
+      if (headerStyle === 'traditional') {
         currentPage.drawLine({
           start: { x: margin, y: leftColumnY - 5 },
-          end: { x: margin + leftColumnWidth * 0.8, y: leftColumnY - 5 },
-          thickness: 1.5, // Increased from 1
+          end: { x: margin + leftColumnWidth, y: leftColumnY - 5 },
+          thickness: 1,
+          color: textColor,
+        });
+      } else if (headerStyle === 'modern') {
+        currentPage.drawLine({
+          start: { x: margin, y: leftColumnY - 5 },
+          end: { x: margin + 50, y: leftColumnY - 5 },
+          thickness: 2,
           color: accentColor,
         });
-      } else {
-        // Modern style: add a subtle background rectangle for the header
-        currentPage.drawRectangle({
-          x: margin - 5,
-          y: leftColumnY - 15,
-          width: leftColumnWidth + 5,
-          height: 20,
-          color: rgb(primaryColor.red * 0.95, primaryColor.green * 0.95, primaryColor.blue * 0.95),
-          borderColor: accentColor,
-          borderWidth: 0.5,
-          borderOpacity: 0.3,
-        });
+      } else if (headerStyle === 'minimal') {
+        // No underline for minimal style
       }
       
-      leftColumnY -= 25; // Increased space after header from 20
+      // Move down after header
+      leftColumnY -= headerSpacing; // Increased space after header from 20
       
       // Draw section content
       const contentLines = section.content.split('\n');
-      for (const line of contentLines) {
-        if (line.trim().length === 0) continue;
+      for (let i = 0; i < contentLines.length; i++) {
+        const line = contentLines[i].trim();
+        if (!line) continue; // Skip empty lines
         
         // Check if line is a bullet point
-        if (line.trim().startsWith('•')) {
-          // Draw bullet point with improved styling
-          currentPage.drawText('•', {
-            x: margin,
-            y: leftColumnY,
-            size: 10,
-            font: bodyFont,
-            color: accentColor, // Use accent color for bullets
-          });
-          
-          // Draw the text after the bullet
-          const bulletText = line.trim().substring(1).trim();
-          currentPage.drawText(bulletText, {
-            x: margin + 10, // Indent bullet points
-            y: leftColumnY,
-            size: 10,
-            font: bodyFont,
-            color: textColor,
-            maxWidth: leftColumnWidth - 10,
-          });
-        } else if (line.trim().startsWith('<strong>') && line.trim().endsWith('</strong>')) {
-          // Draw subheader (bold text) with improved styling
-          const subheaderText = line.replace('<strong>', '').replace('</strong>', '').trim();
-          
-          // Add a subtle highlight for subheaders
-          if (layout === "modern") {
-            currentPage.drawRectangle({
-              x: margin - 2,
-              y: leftColumnY - 12,
-              width: leftColumnWidth,
-              height: 14,
-              color: rgb(accentColor.red * 0.95, accentColor.green * 0.95, accentColor.blue * 0.95),
-              opacity: 0.1,
-            });
-          }
-          
+        const isBullet = line.startsWith('•') || line.startsWith('-') || line.startsWith('*');
+        
+        // Check if line is a subheader (bold text)
+        const isSubheader = line.startsWith('**') && line.endsWith('**');
+        
+        if (isSubheader) {
+          // Draw subheader in bold
+          const subheaderText = line.substring(2, line.length - 2);
           currentPage.drawText(subheaderText, {
             x: margin,
             y: leftColumnY,
             size: 11,
-            font: titleFont,
-            color: primaryColor, // Use primary color for subheaders
-            maxWidth: leftColumnWidth,
+            font: boldFont,
+            color: textColor,
           });
-        } else {
-          // Draw regular text
-          currentPage.drawText(line, {
+        } else if (isBullet) {
+          // Draw bullet point
+          currentPage.drawText('•', {
             x: margin,
             y: leftColumnY,
-            size: 10,
-            font: bodyFont,
-            color: textColor,
-            maxWidth: leftColumnWidth,
+            size: 11,
+            font: regularFont,
+            color: accentColor,
           });
+          
+          // Draw bullet text with indent
+          const bulletText = line.substring(1).trim();
+          const bulletLines = splitTextIntoLines(bulletText, leftColumnWidth - 10, regularFont, 11);
+          
+          for (let j = 0; j < bulletLines.length; j++) {
+            currentPage.drawText(bulletLines[j], {
+              x: margin + 10,
+              y: leftColumnY - (j * lineSpacing * 0.8),
+              size: 11,
+              font: regularFont,
+              color: textColor,
+            });
+            
+            // Only add extra space after the last line of this bullet point
+            if (j === bulletLines.length - 1) {
+              leftColumnY -= lineSpacing * bulletLines.length;
+            }
+          }
+        } else {
+          // Draw regular text
+          const textLines = splitTextIntoLines(line, leftColumnWidth, regularFont, 11);
+          
+          for (let j = 0; j < textLines.length; j++) {
+            currentPage.drawText(textLines[j], {
+              x: margin,
+              y: leftColumnY - (j * lineSpacing * 0.8),
+              size: 11,
+              font: regularFont,
+              color: textColor,
+            });
+            
+            // Only add extra space after the last line of this paragraph
+            if (j === textLines.length - 1) {
+              leftColumnY -= lineSpacing * textLines.length;
+            }
+          }
         }
         
-        leftColumnY -= 18; // Increased space between lines from 15
-        
-        // Add a new page if we're near the bottom
-        if (leftColumnY < margin) {
-          // Add column divider if using two-column layout
-          if (layout !== "one-column") {
-            currentPage.drawLine({
-              start: { x: margin + leftColumnWidth + columnGap/2, y: height - margin },
-              end: { x: margin + leftColumnWidth + columnGap/2, y: margin },
-              thickness: 1,
-              color: secondaryColor,
-            });
-          }
-          
-          // Add new page
-          currentPage = doc.addPage([595, 842]);
-          leftColumnY = height - margin;
-          rightColumnY = height - margin;
+        // Add space between paragraphs
+        if (i < contentLines.length - 1 && contentLines[i+1].trim()) {
+          leftColumnY -= lineSpacing; // Increased space between lines from 15
         }
       }
       
-      leftColumnY -= 15; // Add extra space between sections
+      // Add extra space between sections
+      leftColumnY -= sectionSpacing; // Add extra space between sections
+      
+      // Check if we need to add a new page
+      if (leftColumnY < margin) {
+        currentPage = doc.addPage([595, 842]);
+        leftColumnY = height - margin;
+        rightColumnY = height - margin;
+        
+        // Add page number
+        const pageCount = doc.getPageCount();
+        currentPage.drawText(`Page ${pageCount}`, {
+          x: width - margin - 40,
+          y: margin / 2,
+          size: 9,
+          font: regularFont,
+          color: textColor,
+        });
+      }
+    }
+    
+    // Draw a vertical divider between columns if using two-column layout
+    if (layout !== "one-column" && leftColumnSections.length > 0 && rightColumnSections.length > 0) {
+      const dividerX = margin + leftColumnWidth + (columnGap / 2);
+      const topY = Math.max(height - margin - 50, height - 100);
+      const bottomY = margin + 50;
+      
+      if (headerStyle === 'modern') {
+        // Modern style: dotted line
+        for (let y = topY; y >= bottomY; y -= 5) {
+          currentPage.drawCircle({
+            x: dividerX,
+            y,
+            size: 1,
+            color: secondaryColor,
+          });
+        }
+      } else if (headerStyle === 'traditional') {
+        // Traditional style: solid line
+        currentPage.drawLine({
+          start: { x: dividerX, y: topY },
+          end: { x: dividerX, y: bottomY },
+          thickness: 1,
+          color: secondaryColor,
+        });
+      } else if (headerStyle === 'minimal') {
+        // Minimal style: no divider
+      }
     }
     
     // Draw right column sections
     for (const section of rightColumnSections) {
-      const xPosition = margin + (layout === "one-column" ? 0 : leftColumnWidth + columnGap);
+      // Calculate x position based on layout
+      const xPos = layout === "one-column" ? margin : margin + leftColumnWidth + columnGap;
       
       // Draw section header
       currentPage.drawText(section.title.toUpperCase(), {
-        x: xPosition,
+        x: xPos,
         y: rightColumnY,
-        size: 14, // Increased from 12
-        font: titleFont,
+        size: 12,
+        font: boldFont,
         color: primaryColor,
       });
       
-      // Add underline or background for section header
-      if (layout === "traditional") {
+      // Draw underline for section header based on header style
+      if (headerStyle === 'traditional') {
         currentPage.drawLine({
-          start: { x: xPosition, y: rightColumnY - 5 },
-          end: { x: xPosition + rightColumnWidth * 0.8, y: rightColumnY - 5 },
-          thickness: 1.5, // Increased from 1
+          start: { x: xPos, y: rightColumnY - 5 },
+          end: { x: xPos + rightColumnWidth, y: rightColumnY - 5 },
+          thickness: 1,
+          color: textColor,
+        });
+      } else if (headerStyle === 'modern') {
+        currentPage.drawLine({
+          start: { x: xPos, y: rightColumnY - 5 },
+          end: { x: xPos + 50, y: rightColumnY - 5 },
+          thickness: 2,
           color: accentColor,
         });
-      } else {
-        // Modern style: add a subtle background rectangle for the header
-        currentPage.drawRectangle({
-          x: xPosition - 5,
-          y: rightColumnY - 15,
-          width: rightColumnWidth + 5,
-          height: 20,
-          color: rgb(primaryColor.red * 0.95, primaryColor.green * 0.95, primaryColor.blue * 0.95),
-          borderColor: accentColor,
-          borderWidth: 0.5,
-          borderOpacity: 0.3,
-        });
+      } else if (headerStyle === 'minimal') {
+        // No underline for minimal style
       }
       
-      rightColumnY -= 25; // Increased space after header from 20
+      // Move down after header
+      rightColumnY -= headerSpacing; // Increased space after header from 20
       
       // Draw section content
       const contentLines = section.content.split('\n');
-      for (const line of contentLines) {
-        if (line.trim().length === 0) continue;
+      for (let i = 0; i < contentLines.length; i++) {
+        const line = contentLines[i].trim();
+        if (!line) continue; // Skip empty lines
         
         // Check if line is a bullet point
-        if (line.trim().startsWith('•')) {
-          // Draw bullet point with improved styling
-          currentPage.drawText('•', {
-            x: xPosition,
-            y: rightColumnY,
-            size: 10,
-            font: bodyFont,
-            color: accentColor, // Use accent color for bullets
-          });
-          
-          // Draw the text after the bullet
-          const bulletText = line.trim().substring(1).trim();
-          currentPage.drawText(bulletText, {
-            x: xPosition + 10, // Indent bullet points
-            y: rightColumnY,
-            size: 10,
-            font: bodyFont,
-            color: textColor,
-            maxWidth: rightColumnWidth - 10,
-          });
-        } else if (line.trim().startsWith('<strong>') && line.trim().endsWith('</strong>')) {
-          // Draw subheader (bold text) with improved styling
-          const subheaderText = line.replace('<strong>', '').replace('</strong>', '').trim();
-          
-          // Add a subtle highlight for subheaders
-          if (layout === "modern") {
-            currentPage.drawRectangle({
-              x: xPosition - 2,
-              y: rightColumnY - 12,
-              width: rightColumnWidth,
-              height: 14,
-              color: rgb(accentColor.red * 0.95, accentColor.green * 0.95, accentColor.blue * 0.95),
-              opacity: 0.1,
-            });
-          }
-          
+        const isBullet = line.startsWith('•') || line.startsWith('-') || line.startsWith('*');
+        
+        // Check if line is a subheader (bold text)
+        const isSubheader = line.startsWith('**') && line.endsWith('**');
+        
+        if (isSubheader) {
+          // Draw subheader in bold
+          const subheaderText = line.substring(2, line.length - 2);
           currentPage.drawText(subheaderText, {
-            x: xPosition,
+            x: xPos,
             y: rightColumnY,
             size: 11,
-            font: titleFont,
-            color: primaryColor, // Use primary color for subheaders
-            maxWidth: rightColumnWidth,
+            font: boldFont,
+            color: textColor,
           });
+        } else if (isBullet) {
+          // Draw bullet point
+          currentPage.drawText('•', {
+            x: xPos,
+            y: rightColumnY,
+            size: 11,
+            font: regularFont,
+            color: accentColor,
+          });
+          
+          // Draw bullet text with indent
+          const bulletText = line.substring(1).trim();
+          const bulletLines = splitTextIntoLines(bulletText, rightColumnWidth - 10, regularFont, 11);
+          
+          for (let j = 0; j < bulletLines.length; j++) {
+            currentPage.drawText(bulletLines[j], {
+              x: xPos + 10,
+              y: rightColumnY - (j * lineSpacing * 0.8),
+              size: 11,
+              font: regularFont,
+              color: textColor,
+            });
+            
+            // Only add extra space after the last line of this bullet point
+            if (j === bulletLines.length - 1) {
+              rightColumnY -= lineSpacing * bulletLines.length;
+            }
+          }
         } else {
           // Draw regular text
-          currentPage.drawText(line, {
-            x: xPosition,
-            y: rightColumnY,
-            size: 10,
-            font: bodyFont,
-            color: textColor,
-            maxWidth: rightColumnWidth,
-          });
+          const textLines = splitTextIntoLines(line, rightColumnWidth, regularFont, 11);
+          
+          for (let j = 0; j < textLines.length; j++) {
+            currentPage.drawText(textLines[j], {
+              x: xPos,
+              y: rightColumnY - (j * lineSpacing * 0.8),
+              size: 11,
+              font: regularFont,
+              color: textColor,
+            });
+            
+            // Only add extra space after the last line of this paragraph
+            if (j === textLines.length - 1) {
+              rightColumnY -= lineSpacing * textLines.length;
+            }
+          }
         }
         
-        rightColumnY -= 18; // Increased space between lines from 15
-        
-        // Add a new page if we're near the bottom
-        if (rightColumnY < margin) {
-          // Add column divider if using two-column layout
-          if (layout !== "one-column") {
-            currentPage.drawLine({
-              start: { x: margin + leftColumnWidth + columnGap/2, y: height - margin },
-              end: { x: margin + leftColumnWidth + columnGap/2, y: margin },
-              thickness: 1,
-              color: secondaryColor,
-            });
-          }
-          
-          // Add new page
-          currentPage = doc.addPage([595, 842]);
-          leftColumnY = height - margin;
-          rightColumnY = height - margin;
+        // Add space between paragraphs
+        if (i < contentLines.length - 1 && contentLines[i+1].trim()) {
+          rightColumnY -= lineSpacing; // Increased space between lines from 15
         }
       }
       
-      rightColumnY -= 15; // Add extra space between sections
-    }
-    
-    // Draw a line between columns on the last page if using two-column layout
-    if (layout !== "one-column") {
-      currentPage.drawLine({
-        start: { x: margin + leftColumnWidth + columnGap/2, y: height - margin },
-        end: { x: margin + leftColumnWidth + columnGap/2, y: margin },
-        thickness: 1,
-        color: secondaryColor,
-      });
-    }
-    
-    // Add column divider if using two-column layout
-    if (layout !== "one-column") {
-      // Draw a more stylish column divider
-      if (layout === "modern") {
-        // For modern layout, use a gradient-like effect with multiple lines
-        const dividerX = margin + leftColumnWidth + columnGap/2;
-        const dividerColors = [
-          { color: secondaryColor, opacity: 0.2 },
-          { color: secondaryColor, opacity: 0.5 },
-          { color: secondaryColor, opacity: 0.8 },
-          { color: accentColor, opacity: 0.5 },
-          { color: secondaryColor, opacity: 0.8 },
-          { color: secondaryColor, opacity: 0.5 },
-          { color: secondaryColor, opacity: 0.2 },
-        ];
+      // Add extra space between sections
+      rightColumnY -= sectionSpacing; // Add extra space between sections
+      
+      // Check if we need to add a new page
+      if (rightColumnY < margin) {
+        currentPage = doc.addPage([595, 842]);
+        leftColumnY = height - margin;
+        rightColumnY = height - margin;
         
-        dividerColors.forEach((style, index) => {
-          const offset = (index - 3) * 0.5; // Center the accent color
-          currentPage.drawLine({
-            start: { x: dividerX + offset, y: height - margin },
-            end: { x: dividerX + offset, y: margin },
-            thickness: 0.5,
-            color: style.color,
-            opacity: style.opacity,
-          });
-        });
-      } else {
-        // For traditional layout, use a simple line
-        currentPage.drawLine({
-          start: { x: margin + leftColumnWidth + columnGap/2, y: height - margin },
-          end: { x: margin + leftColumnWidth + columnGap/2, y: margin },
-          thickness: 1,
-          color: secondaryColor,
+        // Add page number
+        const pageCount = doc.getPageCount();
+        currentPage.drawText(`Page ${pageCount}`, {
+          x: width - margin - 40,
+          y: margin / 2,
+          size: 9,
+          font: regularFont,
+          color: textColor,
         });
       }
     }
     
-    // Add page number at the bottom
+    // Add page numbers to all pages
     const pageCount = doc.getPageCount();
     for (let i = 0; i < pageCount; i++) {
       const page = doc.getPage(i);
       const { width, height } = page.getSize();
       
-      // Add page number
-      const pageText = `Page ${i + 1} of ${pageCount}`;
-      const textWidth = regularFont.widthOfTextAtSize(pageText, 8);
+      // Add page number at the bottom
+      if (pageCount > 1) {
+        page.drawText(`${i + 1} / ${pageCount}`, {
+          x: width - margin - 40,
+          y: margin / 2,
+          size: 9,
+          font: regularFont,
+          color: textColor,
+        });
+      }
       
-      page.drawText(pageText, {
-        x: (width - textWidth) / 2,
-        y: margin / 3,
-        size: 8,
-        font: regularFont,
-        color: textColor,
-        opacity: 0.7,
-      });
+      // Add a footer line based on header style
+      if (headerStyle === 'modern') {
+        // Modern footer: colored bar
+        page.drawRectangle({
+          x: 0,
+          y: 0,
+          width: width,
+          height: 10,
+          color: primaryColor,
+        });
+      } else if (headerStyle === 'minimal') {
+        // Minimal footer: thin line
+        page.drawLine({
+          start: { x: margin, y: margin / 2 },
+          end: { x: width - margin, y: margin / 2 },
+          thickness: 1,
+          color: accentColor,
+        });
+      }
     }
     
     // Serialize the PDFDocument to bytes
     const pdfBytes = await doc.save();
-    return Buffer.from(pdfBytes);
+    console.log("PDF generation completed successfully");
+    return pdfBytes;
   } catch (error: any) {
     console.error("Error generating PDF:", error.message);
     throw new Error(`Failed to generate PDF: ${error.message}`);
