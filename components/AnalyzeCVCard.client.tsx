@@ -67,7 +67,7 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
           <Article className="mt-4 p-4 border rounded shadow-sm">
             <ArticleTitle className="text-base mb-2">CV Analysis</ArticleTitle>
             <ArticleMeta className="text-xs text-gray-600 mb-2">
-              ATS Score: {analysis.atsScore}%
+              ATS Score: {analysis.atsScore}
             </ArticleMeta>
             <ArticleContent className="text-sm mb-2">
               <strong>Strengths:</strong>

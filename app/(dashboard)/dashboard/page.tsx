@@ -67,7 +67,7 @@ export default async function DashboardPage() {
                       {cv.fileName}
                     </TableCell>
                     <TableCell className="text-sm lg:text-base text-white">
-                      {metadata?.atsScore ? `${metadata.atsScore}%` : "-"}
+                      {metadata?.atsScore ? `${metadata.atsScore}` : "-"}
                     </TableCell>
                     <TableCell className="text-sm lg:text-base text-white">
                       {metadata?.optimized ? `Yes (${metadata.optimizedTimes || 1})` : "No"}

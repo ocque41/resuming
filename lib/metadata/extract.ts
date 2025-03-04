@@ -61,7 +61,7 @@ export async function extractMetadataDirect(filePath: string): Promise<any> {
     }
     const prompt = `
 You are an expert CV reviewer. Analyze the following CV text and extract the following details:
-- "atsScore": A percentage score (e.g., "85%") indicating how well the CV is optimized for Applicant Tracking Systems.
+- "atsScore": A number between 1-100 representing how well the CV is optimized for Applicant Tracking Systems (do not include any symbols like %).
 - "optimized": "Yes" if the CV is optimized for ATS, otherwise "No".
 - "sent": "Yes" if the CV has been sent to employers, otherwise "No".
 

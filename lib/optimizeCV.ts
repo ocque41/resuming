@@ -18,29 +18,33 @@ IMPORTANT: The user is actively job hunting RIGHT NOW. Focus on making their CV 
 For the optimizedText, create a COMPLETE REDESIGN that includes:
 
 1. PROFESSIONAL LAYOUT: Create a modern, clean design with proper spacing, alignment, and visual hierarchy
-   - Include clear section for contact information at the top
-   - Use appropriate margins and spacing between sections
-   - Create a balanced, easy-to-scan layout
+   - Include clear section for contact information at the top with elegant icons for email, phone, website
+   - Use appropriate margins and spacing between sections (at least 0.75-inch margins)
+   - Create a balanced, easy-to-scan layout with strategic use of white space
+   - Design a header with the candidate's name prominently displayed in a larger font size
 
 2. COMPELLING CONTENT:
-   - Write a powerful PROFESSIONAL SUMMARY (3-4 lines) that highlights key strengths
-   - Create a clear CAREER OBJECTIVE statement (1-2 lines)
-   - Transform experience into ACHIEVEMENT STATEMENTS with metrics (e.g., "Increased efficiency by 20%")
-   - Highlight RELEVANT SKILLS with visual organization (e.g., skill bars or categories)
+   - Write a powerful PROFESSIONAL SUMMARY (3-4 lines) that showcases unique value proposition and expertise
+   - Create a clear CAREER OBJECTIVE statement (1-2 lines) aligned with target roles
+   - Transform ALL experience bullet points into ACHIEVEMENT STATEMENTS with quantifiable metrics and results
+   - Highlight RELEVANT SKILLS in a visually appealing, structured format with skill level indicators
+   - Ensure all content is ATS-optimized with relevant keywords from the industry
 
 3. VISUAL ELEMENTS:
-   - Suggest appropriate font pairings (one for headings, one for body text)
-   - Recommend a professional color scheme (2-3 colors maximum)
-   - Include formatting instructions for section headers, subheadings, and body text
-   - Add visual dividers between sections
+   - Use modern, professional font pairings (e.g., Helvetica/Garamond, Calibri/Cambria) with appropriate sizes
+   - Implement a sophisticated color scheme (primary brand color + 1-2 complementary colors)
+   - Format section headers with color, capitalization, and/or subtle styling (e.g., bottom border)
+   - Add elegant visual dividers and structural elements
+   - Consider a subtle sidebar or header background color for visual interest
 
 4. CONTENT ORGANIZATION:
-   - Arrange information in order of relevance to target positions
-   - Group related skills and experiences
-   - Use white space effectively to improve readability
-   - Create a logical flow of information
+   - Arrange sections in order of relevance to target positions (most relevant first)
+   - Group related skills into clear categories (technical, soft, industry-specific)
+   - Ensure consistent formatting for dates, job titles, and companies
+   - Create a logical flow that tells a compelling career story
+   - Remove any irrelevant or outdated information
 
-The optimizedText should include formatting markers like:
+The optimizedText MUST include proper formatting markers like:
 - [HEADER] for main section headers
 - [SUBHEADER] for subsections
 - [BOLD] for emphasized text
@@ -48,7 +52,7 @@ The optimizedText should include formatting markers like:
 - [DIVIDER] for section separators
 - [COLUMN-START] and [COLUMN-END] for multi-column sections
 
-IMPORTANT: Make sure to properly escape all newlines in the optimizedText with \\n to ensure valid JSON.
+IMPORTANT: The final result MUST be highly professional and polished. This is NOT a template - create a COMPLETELY CUSTOMIZED, UNIQUE design specifically for this candidate based on their experience, skills and target roles.
 
 I've identified these potential sections in the CV:
 ${potentialSections.map(section => `- ${section}`).join('\n')}
@@ -152,19 +156,31 @@ Return your answer strictly as JSON without additional text.`;
       .replace(/\[BOLD\]/g, '')
       .replace(/\[\/BOLD\]/g, '')
       .replace(/\[BULLET\]/g, '• ')
-      .replace(/\[DIVIDER\]/g, '\n-------------------------------------------\n')
+      .replace(/\[DIVIDER\]/g, '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
       .replace(/\[COLUMN-START\]/g, '')
       .replace(/\[COLUMN-END\]/g, '')
       .replace(/\n{3,}/g, '\n\n'); // Replace multiple newlines with just two
     
-    // Add proper spacing around section headers
+    // Add proper spacing and formatting around section headers
     processed = processed.replace(/([A-Z\s]+)\n\n/g, '\n\n$1\n\n');
     
-    // Ensure bullet points are properly indented and formatted
-    processed = processed.replace(/•\s+/g, '•  ');
+    // Ensure bullet points are properly indented and formatted with better spacing
+    processed = processed.replace(/•\s+/g, '•   ');
+    processed = processed.replace(/•   ([A-Z])/g, '•   $1'); // Capitalize first letter of bullet points
     
-    // Add proper spacing after contact information
-    processed = processed.replace(/(email|phone|portfolio|linkedin)/gi, '\n$1');
+    // Add proper spacing and formatting for contact information
+    processed = processed.replace(/(email|phone|portfolio|linkedin|website|github)/gi, '\n$1');
+    processed = processed.replace(/(Email|Phone|Portfolio|LinkedIn|Website|GitHub):/gi, '$1:  ');
+    
+    // Better formatting for dates and locations
+    processed = processed.replace(/(\d{4}\s*-\s*\d{4}|\d{4}\s*-\s*Present)/g, '  $1  ');
+    processed = processed.replace(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}/gi, '  $&  ');
+    
+    // Remove extra whitespace before punctuation
+    processed = processed.replace(/\s+([.,;:])/g, '$1');
+    
+    // Ensure consistent spacing after punctuation
+    processed = processed.replace(/([.,;:])(?!\s|$)/g, '$1 ');
     
     return processed;
   }
@@ -175,8 +191,8 @@ Return your answer strictly as JSON without additional text.`;
     
     // Process each section
     for (const [sectionName, content] of Object.entries(obj)) {
-      // Add section header
-      result += `[HEADER]${sectionName.toUpperCase()}[HEADER]\n\n`;
+      // Add section header with proper formatting
+      result += `[HEADER]${sectionName.toUpperCase()}[/HEADER]\n\n`;
       
       // Process section content
       if (typeof content === 'string') {
@@ -185,14 +201,47 @@ Return your answer strictly as JSON without additional text.`;
       } else if (content && typeof content === 'object') {
         // Nested object content (check that content is not null)
         for (const [subheading, subcontent] of Object.entries(content as Record<string, any>)) {
-          // Add subheading
-          result += `[SUBHEADER]${subheading}[SUBHEADER]\n`;
+          // Add subheading with proper formatting
+          result += `[SUBHEADER]${subheading}[/SUBHEADER]\n`;
           
           // Process subcontent
           if (Array.isArray(subcontent)) {
             // Array of bullet points
             for (const point of subcontent) {
-              result += `[BULLET]${point}\n`;
+              // If point is already a string, just add as bullet
+              if (typeof point === 'string') {
+                result += `[BULLET]${point}\n`;
+              } 
+              // If point is an object (e.g. for experience entries with dates, roles, etc.)
+              else if (typeof point === 'object' && point !== null) {
+                let bulletContent = '';
+                // Handle common fields like role, date, company, description
+                if (point.role) bulletContent += `[BOLD]${point.role}[/BOLD]`;
+                if (point.company) bulletContent += bulletContent ? ` at ${point.company}` : `${point.company}`;
+                if (point.date) bulletContent += ` | ${point.date}`;
+                if (point.location) bulletContent += ` | ${point.location}`;
+                
+                if (bulletContent) {
+                  result += `${bulletContent}\n`;
+                }
+                
+                // Handle description or achievements as nested bullets
+                if (point.description) {
+                  if (typeof point.description === 'string') {
+                    result += `${point.description}\n`;
+                  } else if (Array.isArray(point.description)) {
+                    for (const desc of point.description) {
+                      result += `[BULLET]${desc}\n`;
+                    }
+                  }
+                }
+                
+                if (point.achievements && Array.isArray(point.achievements)) {
+                  for (const achievement of point.achievements) {
+                    result += `[BULLET]${achievement}\n`;
+                  }
+                }
+              }
             }
           } else if (typeof subcontent === 'string') {
             // String content
@@ -204,6 +253,11 @@ Return your answer strictly as JSON without additional text.`;
       } else if (content === null) {
         // Handle null content
         result += 'No information provided\n\n';
+      }
+      
+      // Add a divider after each major section except the last one
+      if (Object.keys(obj).indexOf(sectionName) < Object.keys(obj).length - 1) {
+        result += '[DIVIDER]\n';
       }
     }
     
@@ -234,8 +288,32 @@ Return your answer strictly as JSON without additional text.`;
   // Simulated PDF editing function.
   async function editPDF(pdfInstructions: string): Promise<string> {
     // In a real scenario, you'd call your PDF parsing/editing tool here.
-    // For now, we simulate with a delay and return a dummy URL.
-    await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate processing delay.
+    // Parse the instructions to format them for the PDF generator
+    let parsedInstructions = pdfInstructions;
+    
+    try {
+      // If the instructions are provided as a JSON string, parse them
+      const instructionsObj = JSON.parse(pdfInstructions);
+      
+      // Enhanced processing logic can be added here based on the structure of instructionsObj
+      // For example, extracting color schemes, font styles, layout templates, etc.
+      
+      // Convert back to string with improved formatting
+      parsedInstructions = JSON.stringify(instructionsObj, null, 2);
+    } catch (error) {
+      // If it's not valid JSON, use as is
+      console.log("PDF instructions are not in JSON format, using as plain text");
+    }
+    
+    // Simulate processing delay
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    
+    // In the real implementation, you would:
+    // 1. Use a PDF generation library (e.g., PDFKit, jsPDF)
+    // 2. Apply the styling and layout based on parsedInstructions
+    // 3. Generate and save the PDF
+    // 4. Return the URL to the saved PDF
+    
     return "https://example.com/path/to/optimized-cv.pdf";
   }
   

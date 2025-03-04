@@ -59,10 +59,9 @@ ${cleanedText}`;
       const score = parseInt(String(analysis.atsScore));
       analysis.atsScore = `${score}%`;
     } else if (typeof analysis.atsScore === 'string') {
-      // Remove any existing % symbols
-      let score = analysis.atsScore.replace(/%/g, '');
-      // Convert to number, then back to string with a single % symbol
-      score = parseInt(score);
+      // Remove any existing % symbols, then add just one
+      const scoreStr = analysis.atsScore.replace(/%/g, '').trim();
+      const score = parseInt(scoreStr);
       if (!isNaN(score)) {
         analysis.atsScore = `${score}%`;
       }
