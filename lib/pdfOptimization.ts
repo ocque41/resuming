@@ -409,7 +409,24 @@ export async function modifyPDFWithOptimizedContent(
       currentY -= lineHeight;
     }
     
-    // Serialize the new PDF
+    // Embed the full text content as metadata in the PDF for easier extraction later
+    const metadata = {
+      fullText: sanitizeText(optimizedText),
+      generatedAt: new Date().toISOString(),
+      isOptimized: true
+    };
+
+    // Set PDF metadata using the methods that are available in pdf-lib
+    newPdfDoc.setTitle("Optimized CV");
+    newPdfDoc.setSubject("CV optimized with AI");
+    newPdfDoc.setKeywords(["CV", "resume", "optimized"]);
+    newPdfDoc.setProducer("CV Optimizer");
+    newPdfDoc.setCreator("CV Optimizer AI");
+
+    // Store the full text in the Subject field since custom metadata isn't available
+    newPdfDoc.setSubject(JSON.stringify(metadata));
+
+    // Serialize the PDF with metadata
     const newPdfBytes = await newPdfDoc.save();
     return Buffer.from(newPdfBytes).toString("base64");
   } catch (error) {
