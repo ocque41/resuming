@@ -3,74 +3,80 @@ import { CVTemplate } from "@/types/templates";
 import { modifyPDFWithOptimizedContent } from "./pdfOptimization";
 
 export async function optimizeCV(
-    rawText: string,
-    analysis: any,
-    template?: CVTemplate
-  ): Promise<{ optimizedText: string; optimizedPDFUrl: string }> {
-    try {
-      console.log("Starting CV optimization process");
+  rawText: string,
+  analysis: any,
+  template?: CVTemplate
+): Promise<{ optimizedText: string; optimizedPDFUrl: string }> {
+  try {
+    console.log("Starting CV optimization process");
+    
+    // Input validation
+    if (!rawText || rawText.trim().length === 0) {
+      console.error("Empty raw text provided to optimizeCV");
+      throw new Error("No CV text content provided for optimization");
+    }
+    
+    // Log the start of the process
+    console.log(`Optimizing CV with ${rawText.length} characters`);
+    
+    // Identify potential sections from the raw text
+    const potentialSections = extractPotentialSections(rawText);
+    console.log(`Identified ${potentialSections.length} potential sections in the CV`);
+    
+    // Customize the prompt based on the provided CV template
+    let formattingInstructions = '';
+    let industryInstructions = '';
+    
+    if (template) {
+      console.log(`Using template: ${template.name} (${template.company})`);
       
-      // Validate input
-      if (!rawText || rawText.trim().length === 0) {
-        console.error("ERROR: Empty raw text provided to optimizeCV");
-        throw new Error("No CV content was provided for optimization");
+      // Adjust formatting instructions based on template layout
+      if (template.metadata.layout === 'one-column') {
+        formattingInstructions = `
+FORMAT THE CV IN A SINGLE COLUMN LAYOUT with the following sections:
+- Contact Information at the top
+- Professional Summary/Profile
+- Work Experience (with detailed bullet points for each role)
+- Skills (organized by category)
+- Education
+- Additional sections as appropriate (Projects, Certifications, etc.)`;
+      } else if (template.metadata.layout === 'traditional') {
+        formattingInstructions = `
+FORMAT THE CV IN A TRADITIONAL LAYOUT with clear section headers:
+- Contact Information centered at the top
+- Professional Summary/Profile
+- Work Experience (with company, title, dates, and detailed bullet points)
+- Skills (organized in a clean, scannable format)
+- Education
+- Additional sections as needed (Certifications, Languages, etc.)`;
+      } else {
+        // Default to modern two-column layout
+        formattingInstructions = `
+FORMAT THE CV WITH LEFT AND RIGHT COLUMNS using the following markers:
+[LEFT COLUMN START]
+- Profile/Summary
+- Skills
+- Education
+- Languages
+- Certifications
+- References (if provided)
+[LEFT COLUMN END]
+
+[RIGHT COLUMN START]
+- Work Experience (with detailed bullet points)
+- Projects
+- Achievements
+- Additional relevant sections
+[RIGHT COLUMN END]`;
       }
       
-      // Get potential sections
-      const potentialSections = extractPotentialSections(rawText);
-      console.log(`Identified potential sections: ${potentialSections.join(', ')}`);
-      
-      // Customize prompt based on template if available
-      let formattingInstructions = `
-Your task is to completely rewrite and restructure this CV to match a modern two-column layout with the following sections:
-
-LEFT COLUMN (narrow):
-- Contact Information (short, concise)
-- Education (formatted with years and institutions prominently displayed)
-- Languages (with proficiency levels)
-- Technical Skills (separated by category)
-
-RIGHT COLUMN (main content):
-- Professional Profile (3-4 compelling sentences highlighting unique value proposition)
-- Professional Experience (achievement-oriented bullet points, with metrics and results)
-- Additional Skills & Certifications (if applicable)`;
-
-      // If template is provided, customize the formatting instructions
-      if (template) {
-        console.log(`Using template: ${template.name} (${template.company})`);
-        
-        // Adjust formatting based on template layout
-        if (template.metadata.layout === 'one-column') {
-          formattingInstructions = `
-Your task is to completely rewrite and restructure this CV to match a clean one-column layout with the following sections in order:
-- Professional Profile (3-4 compelling sentences highlighting unique value proposition)
-- Professional Experience (achievement-oriented bullet points, with metrics and results)
-- Education (formatted with years and institutions prominently displayed)
-- Skills (separated by category)
-- Languages (with proficiency levels)
-- Additional Certifications (if applicable)`;
-        } else if (template.metadata.layout === 'traditional') {
-          formattingInstructions = `
-Your task is to completely rewrite and restructure this CV to match a traditional layout with the following sections in order:
-- Contact Information (centered at top)
-- Professional Summary (3-4 compelling sentences highlighting unique value proposition)
-- Professional Experience (achievement-oriented bullet points, with metrics and results)
-- Education (formatted with years and institutions prominently displayed)
-- Skills (separated by category)
-- References (if provided)`;
-        }
-        
-        // Add template-specific keywords to emphasize
-        if (template.metadata.keywordsEmphasis && template.metadata.keywordsEmphasis.length > 0) {
-          formattingInstructions += `\n\nEmphasize these keywords throughout the CV: ${template.metadata.keywordsEmphasis.join(', ')}`;
-        }
+      // Add template-specific keywords to emphasize
+      if (template.metadata.keywordsEmphasis && template.metadata.keywordsEmphasis.length > 0) {
+        formattingInstructions += `\n\nEmphasize these keywords throughout the CV: ${template.metadata.keywordsEmphasis.join(', ')}`;
       }
-
+      
       // Industry-specific instructions
-      let industryInstructions = '';
-      
-      // If template is provided, use its industry-specific guidance
-      if (template?.metadata?.industrySpecific) {
+      if (template.metadata.industrySpecific) {
         const industryInfo = template.metadata.industrySpecific;
         
         industryInstructions = `
@@ -93,795 +99,482 @@ ${industryInfo.achievementFormat}
 
 You MUST follow this exact format for achievements and include specific, measurable results relevant to this industry.`;
       }
-      
-      // Build a prompt for GPT-4 that instructs it to generate both optimized text and PDF editing instructions.
-      const prompt = `You are a professional CV writer who specializes in transforming basic CVs into polished, high-impact documents. The user has uploaded a CV that needs a complete redesign in both content and format, with the goal of creating a modern, professional document that will significantly increase their chances of getting interviews.
+    }
+    
+    // Build a comprehensive prompt for the OpenAI API
+    const prompt = `You are a professional CV writer and career coach with 15+ years of experience helping job seekers create impactful, ATS-optimized CVs that stand out to recruiters. Your task is to completely rewrite and restructure the provided CV to maximize its impact and effectiveness.
+
+IMPORTANT INSTRUCTIONS:
+1. PRESERVE ALL RELEVANT CONTENT from the original CV - including work history, education, skills, and achievements.
+2. EXPAND AND ENHANCE the content by:
+   - Adding powerful action verbs and industry-specific keywords
+   - Quantifying achievements with specific metrics and results (e.g., "increased sales by 25%")
+   - Highlighting relevant skills and experiences that align with industry standards
+   - Removing generic or vague statements and replacing them with specific, impactful content
+3. IMPROVE STRUCTURE AND FORMATTING:
+   - Create clear, well-organized sections with descriptive headings
+   - Use bullet points for achievements and responsibilities
+   - Ensure consistent formatting throughout
+   - Optimize for both human readers and ATS systems
+4. ADD MISSING SECTIONS if appropriate (e.g., Professional Summary, Technical Skills, etc.)
+5. MAINTAIN PROFESSIONAL LANGUAGE and eliminate first-person pronouns
 
 ${formattingInstructions}
 
 ${industryInstructions}
 
-I need you to:
+FORMATTING MARKERS:
+- Use "**Section Title**" format for section headers (with asterisks)
+- Use bullet points (•) for listing items
+- For subsections or job titles, use bold formatting
+- Maintain clear hierarchy and organization
 
-1. REWRITE ALL CONTENT to be impact-focused and achievement-oriented.
-2. Create a COMPELLING PROFESSIONAL PROFILE summary (3-4 lines) that showcases the candidate's unique value and expertise.
-3. Transform ALL experience bullet points into ACHIEVEMENT STATEMENTS with metrics (add plausible metrics if none exist).
-4. Format EDUCATION with clear hierarchy (institution name, degree, year).
-5. Categorize SKILLS into logical groups (e.g., Technical, Software, Languages, Soft Skills).
-6. Ensure all content is keyword-optimized for ATS systems.
+HERE IS THE ORIGINAL CV TEXT TO OPTIMIZE:
+${rawText}
 
-The optimizedText MUST include proper formatting markers like:
-- [HEADER] for main section headers
-- [SUBHEADER] for subsections
-- [BULLET] for bullet points
-- [LEFT-COLUMN-START] and [LEFT-COLUMN-END] for sidebar content
-- [RIGHT-COLUMN-START] and [RIGHT-COLUMN-END] for main content
+IMPORTANT: Your response must be ONLY the optimized CV text with appropriate formatting markers. Do not include explanations, introductions, or any text outside the CV content itself.`;
 
-EXTREMELY IMPORTANT: The original CV has valuable content that MUST be preserved and enhanced in the optimized version. You MUST include ALL relevant sections including profile, work experience, skills, education, and other important information. DO NOT omit any experiences, qualifications or skills.
-
-CRITICAL: The optimized CV must be SUBSTANTIALLY DIFFERENT from the original in terms of wording and impact BUT MUST CONTAIN ALL the same information in an enhanced format. Your output MUST include ALL the sections from the original CV, but written in a more impactful way.
-
-CRITICAL REQUIREMENT: If you cannot properly optimize the content, you MUST return the original content with proper formatting markers added. NEVER return an empty or minimal response.
-
-Here is the CV to optimize:
-
-${rawText}`;
-
-      console.log("Sending optimization request to OpenAI");
-      
-      // Call OpenAI API
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4",
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.7,
-          max_tokens: 4000,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("OpenAI API error:", errorData);
-        throw new Error(`OpenAI API error: ${errorData.error?.message || 'Unknown error'}`);
-      }
-
-      const data = await response.json();
-      
-      // Validate the response
-      if (!data.choices || data.choices.length === 0 || !data.choices[0].message) {
-        console.error("Invalid response from OpenAI:", data);
-        throw new Error("Failed to get a valid response from the AI service");
-      }
-
-      // Extract the optimized text from the response
-      let optimizedText = data.choices[0].message.content;
-      
-      // Validate the optimized text
-      if (!optimizedText || optimizedText.trim().length === 0) {
-        console.error("Empty optimized text received from OpenAI");
-        // Use a fallback approach - format the original text
-        optimizedText = createFormattedFallbackFromRawText(rawText);
-        console.log("Using formatted fallback from raw text");
-      } else {
-        console.log(`Received optimized text (${optimizedText.length} characters)`);
-        
-        // Check if the optimized text has the required formatting markers
-        if (!optimizedText.includes('[HEADER]') || 
-            (!optimizedText.includes('[LEFT-COLUMN-START]') && !optimizedText.includes('[RIGHT-COLUMN-START]'))) {
-          console.warn("Optimized text is missing required formatting markers, processing...");
-          optimizedText = processFormattingMarkers(optimizedText);
-        }
-        
-        // Verify that the optimized text contains key information from the original
-        const contentPreservationCheck = verifyContentPreservation(rawText, optimizedText);
-        if (!contentPreservationCheck.preserved) {
-          console.warn(`Content preservation check failed: ${contentPreservationCheck.missingItems.join(', ')}`);
-          
-          // If critical content is missing, use the fallback
-          if (contentPreservationCheck.missingItems.length > 3) {
-            console.error("Too many missing items, using fallback");
-            optimizedText = createFormattedFallbackFromRawText(rawText);
+    console.log("Sending request to OpenAI API");
+    
+    // Call the OpenAI API using fetch
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4",
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert CV writer who specializes in creating impactful, ATS-optimized CVs that highlight a candidate's strengths and achievements."
+          },
+          {
+            role: "user",
+            content: prompt
           }
-        }
-      }
-
-      // Process the optimized text to ensure it has proper formatting markers
-      const processedText = processFormattingMarkers(optimizedText);
+        ],
+        temperature: 0.7,
+        max_tokens: 4000
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("OpenAI API error:", errorData);
+      throw new Error(`OpenAI API error: ${errorData.error?.message || 'Unknown error'}`);
+    }
+    
+    const data = await response.json();
+    
+    // Check if we got a valid response
+    if (!data.choices || data.choices.length === 0 || !data.choices[0].message) {
+      console.error("Invalid response from OpenAI API:", data);
+      throw new Error("Failed to get a valid response from the AI service");
+    }
+    
+    // Extract the optimized text from the response
+    let optimizedText = data.choices[0].message.content || "";
+    
+    // Log the response for debugging
+    console.log(`Received optimized text (${optimizedText.length} characters)`);
+    console.log(`First 200 characters: ${optimizedText.substring(0, 200)}...`);
+    
+    // Validate the optimized text
+    if (!optimizedText || optimizedText.trim().length === 0) {
+      console.error("Empty optimized text received from OpenAI API");
+      throw new Error("No content was generated during optimization");
+    }
+    
+    // Check if the optimized text has the required formatting markers
+    const hasFormattingMarkers = 
+      optimizedText.includes("**") || // Section headers
+      optimizedText.includes("•") || // Bullet points
+      optimizedText.includes("[LEFT COLUMN") || // Column markers
+      optimizedText.includes("[RIGHT COLUMN");
+    
+    if (!hasFormattingMarkers) {
+      console.warn("Optimized text lacks formatting markers, applying basic formatting");
+      optimizedText = processFormattingMarkers(rawText);
+    }
+    
+    // Verify that key content has been preserved
+    const contentVerification = verifyContentPreservation(rawText, optimizedText);
+    
+    if (!contentVerification.preserved) {
+      console.warn(`Content preservation check failed. Missing items: ${contentVerification.missingItems.join(', ')}`);
       
-      // Generate PDF with the optimized content
-      console.log("Generating PDF with optimized content");
-      try {
-        const pdfBuffer = await modifyPDFWithOptimizedContent(
-          processedText,
-          rawText,
-          template
-        );
-        
-        // Add logging to check the type of pdfBuffer
-        console.log("PDF Buffer type:", typeof pdfBuffer);
-        console.log("PDF Buffer is Buffer?", Buffer.isBuffer(pdfBuffer));
-        
-        // Convert buffer to base64 for URL
-        let base64Pdf;
-        if (Buffer.isBuffer(pdfBuffer)) {
-          base64Pdf = pdfBuffer.toString('base64');
-        } else if (typeof pdfBuffer === 'object') {
-          // If it's not a Buffer but an object, try to convert it
-          console.log("PDF Buffer is not a Buffer, attempting to convert");
-          base64Pdf = Buffer.from(JSON.stringify(pdfBuffer)).toString('base64');
-        } else {
-          throw new Error("PDF generation returned an invalid type");
-        }
-        
-        const optimizedPDFUrl = `data:application/pdf;base64,${base64Pdf}`;
-        
-        return {
-          optimizedText: processedText,
-          optimizedPDFUrl: optimizedPDFUrl,
-        };
-      } catch (error: any) {
-        console.error("PDF generation error:", error);
-        throw new Error(`PDF generation failed: ${error.message || 'Unknown error'}`);
+      // If too many items are missing, use a fallback approach
+      if (contentVerification.missingItems.length > 3) {
+        console.log("Too many items missing, using fallback formatting");
+        optimizedText = createFormattedFallbackFromRawText(rawText);
       }
+    }
+    
+    // Process any formatting markers in the optimized text
+    optimizedText = processFormattingMarkers(optimizedText);
+    
+    // Generate a PDF with the optimized content
+    console.log("Generating PDF with optimized content");
+    let pdfBuffer;
+    try {
+      pdfBuffer = await modifyPDFWithOptimizedContent(optimizedText, rawText, template);
     } catch (error: any) {
-      console.error("Error in optimizeCV:", error);
+      console.error("Error generating PDF:", error.message);
       
-      // Create a fallback response with the original text
+      // Try with fallback text if PDF generation fails
+      console.log("Attempting to generate PDF with fallback text");
       const fallbackText = createFormattedFallbackFromRawText(rawText);
+      pdfBuffer = await modifyPDFWithOptimizedContent(fallbackText, rawText, template);
+    }
+    
+    // For now, we're not storing the PDF anywhere, so just return a placeholder URL
+    // In a real implementation, you would upload the PDF to a storage service and return the URL
+    const optimizedPDFUrl = "placeholder-url.pdf";
+    
+    return {
+      optimizedText,
+      optimizedPDFUrl
+    };
+  } catch (error: any) {
+    console.error("Error in optimizeCV:", error.message);
+    throw new Error(`CV optimization failed: ${error.message}`);
+  }
+}
+
+// Helper function to extract potential sections from raw CV text
+function extractPotentialSections(rawText: string): string[] {
+  // Common section headers in CVs
+  const commonSectionHeaders = [
+    "EDUCATION", "EXPERIENCE", "WORK EXPERIENCE", "EMPLOYMENT", "SKILLS",
+    "TECHNICAL SKILLS", "PROFESSIONAL EXPERIENCE", "PROJECTS", "CERTIFICATIONS",
+    "ACHIEVEMENTS", "LANGUAGES", "INTERESTS", "SUMMARY", "PROFILE", "OBJECTIVE",
+    "PROFESSIONAL SUMMARY", "QUALIFICATIONS", "PUBLICATIONS", "REFERENCES"
+  ];
+  
+  // Split the text into lines
+  const lines = rawText.split('\n');
+  const potentialSections: string[] = [];
+  
+  // Look for lines that might be section headers
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    
+    // Skip empty lines
+    if (!line) continue;
+    
+    // Check if the line is all uppercase or matches common section headers
+    if (
+      line === line.toUpperCase() || 
+      commonSectionHeaders.some(header => 
+        line.toUpperCase().includes(header) || 
+        line.toUpperCase().startsWith(header)
+      )
+    ) {
+      // Get the content of this section (until the next potential section header)
+      let sectionContent = line;
+      let j = i + 1;
       
-      // Try to generate a PDF with the fallback text
-      try {
-        console.log("Attempting to generate PDF with fallback content");
-        const fallbackPdfBuffer = await modifyPDFWithOptimizedContent(
-          fallbackText,
-          rawText,
-          template
-        );
+      while (j < lines.length) {
+        const nextLine = lines[j].trim();
         
-        // Add logging to check the type of fallbackPdfBuffer
-        console.log("Fallback PDF Buffer type:", typeof fallbackPdfBuffer);
-        console.log("Fallback PDF Buffer is Buffer?", Buffer.isBuffer(fallbackPdfBuffer));
-        
-        // Convert buffer to base64 for URL
-        let base64Pdf;
-        if (Buffer.isBuffer(fallbackPdfBuffer)) {
-          base64Pdf = fallbackPdfBuffer.toString('base64');
-        } else if (typeof fallbackPdfBuffer === 'object') {
-          // If it's not a Buffer but an object, try to convert it
-          console.log("Fallback PDF Buffer is not a Buffer, attempting to convert");
-          base64Pdf = Buffer.from(JSON.stringify(fallbackPdfBuffer)).toString('base64');
-        } else {
-          throw new Error("Fallback PDF generation returned an invalid type");
+        // Stop if we hit another potential section header
+        if (
+          nextLine === nextLine.toUpperCase() && 
+          nextLine.length > 3 && 
+          commonSectionHeaders.some(header => 
+            nextLine.toUpperCase().includes(header) || 
+            nextLine.toUpperCase().startsWith(header)
+          )
+        ) {
+          break;
         }
         
-        const optimizedPDFUrl = `data:application/pdf;base64,${base64Pdf}`;
-        
-        return {
-          optimizedText: fallbackText,
-          optimizedPDFUrl: optimizedPDFUrl,
-        };
-      } catch (fallbackError) {
-        console.error("Fallback PDF generation failed:", fallbackError);
-        throw new Error(`CV optimization failed: ${error.message}`);
+        sectionContent += '\n' + nextLine;
+        j++;
       }
+      
+      potentialSections.push(sectionContent);
     }
   }
   
-  // New helper function to create a formatted fallback from raw text
-  function createFormattedFallbackFromRawText(rawText: string): string {
-    if (!rawText || rawText.trim().length === 0) {
-      return "[HEADER] Error\n\nNo content was provided for optimization.";
+  return potentialSections;
+}
+
+// Helper function to verify that key content has been preserved
+function verifyContentPreservation(originalText: string, optimizedText: string): { 
+  preserved: boolean; 
+  missingItems: string[] 
+} {
+  const missingItems: string[] = [];
+  
+  // Extract key information from the original text
+  const originalLines = originalText.split('\n');
+  
+  // Check for name (usually at the top)
+  const potentialName = originalLines[0]?.trim();
+  if (potentialName && potentialName.length > 0 && !optimizedText.includes(potentialName)) {
+    missingItems.push('Name');
+  }
+  
+  // Check for contact information (email, phone)
+  const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+  const phoneRegex = /(\+\d{1,3}[ -]?)?\(?\d{3}\)?[ -]?\d{3}[ -]?\d{4}/g;
+  
+  const originalEmails = originalText.match(emailRegex) || [];
+  const originalPhones = originalText.match(phoneRegex) || [];
+  
+  const optimizedEmails = optimizedText.match(emailRegex) || [];
+  const optimizedPhones = optimizedText.match(phoneRegex) || [];
+  
+  if (originalEmails.length > 0 && optimizedEmails.length === 0) {
+    missingItems.push('Email');
+  }
+  
+  if (originalPhones.length > 0 && optimizedPhones.length === 0) {
+    missingItems.push('Phone');
+  }
+  
+  // Check for key sections
+  const keySections = ['education', 'experience', 'skills'];
+  
+  for (const section of keySections) {
+    const sectionRegex = new RegExp(`\\b${section}\\b`, 'i');
+    if (sectionRegex.test(originalText) && !sectionRegex.test(optimizedText)) {
+      missingItems.push(`${section.charAt(0).toUpperCase() + section.slice(1)} section`);
     }
-    
-    console.log("Creating formatted fallback from raw text");
-    
-    // Extract potential sections from the raw text
-    const sections = extractPotentialSections(rawText);
-    const lines = rawText.split('\n').filter(line => line.trim().length > 0);
-    
-    // Start building the formatted text
-    let formattedText = "";
-    
-    // Add left column start
-    formattedText += "[LEFT-COLUMN-START]\n";
-    
-    // Add contact information if it appears to be in the first few lines
-    formattedText += "[HEADER] Contact\n\n";
-    for (let i = 0; i < Math.min(5, lines.length); i++) {
-      if (lines[i].includes('@') || lines[i].match(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/)) {
-        formattedText += lines[i] + "\n";
+  }
+  
+  // Check for company names and job titles (more complex, simplified approach)
+  const potentialCompanies = extractPotentialSections(originalText)
+    .filter(section => /experience|employment/i.test(section))
+    .flatMap(section => {
+      const lines = section.split('\n');
+      return lines.filter(line => 
+        line.length > 0 && 
+        !line.match(/^\s*•/) && // Not a bullet point
+        !line.match(/^\d{4}/) && // Not a year
+        line !== line.toUpperCase() // Not all uppercase (likely not a section header)
+      );
+    });
+  
+  // Check if at least some company names are preserved
+  if (potentialCompanies.length > 0) {
+    let companiesFound = false;
+    for (const company of potentialCompanies) {
+      if (optimizedText.includes(company)) {
+        companiesFound = true;
+        break;
       }
     }
     
-    // Add education section if found
-    if (sections.includes('Education') || sections.includes('Academic Background')) {
-      formattedText += "\n[HEADER] Education\n\n";
-      // Extract education-related content (simplified approach)
-      const educationRegex = /education|degree|university|college|school|academic/i;
-      let inEducationSection = false;
-      let educationContent = "";
+    if (!companiesFound) {
+      missingItems.push('Company names');
+    }
+  }
+  
+  return {
+    preserved: missingItems.length === 0,
+    missingItems
+  };
+}
+
+// Helper function to create a formatted fallback from raw text
+function createFormattedFallbackFromRawText(rawText: string): string {
+  // Split the text into lines
+  const lines = rawText.split('\n');
+  let formattedText = '';
+  
+  // Identify potential sections
+  const sections = extractPotentialSections(rawText);
+  
+  // If we couldn't identify sections, apply basic formatting
+  if (sections.length === 0) {
+    // Assume the first line is the name
+    if (lines.length > 0) {
+      formattedText += `**${lines[0].trim()}**\n\n`;
+    }
+    
+    // Look for contact information
+    const contactLines = lines.slice(1, 5).filter(line => 
+      line.includes('@') || // Email
+      line.match(/\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/) || // Phone
+      line.includes('linkedin.com') // LinkedIn
+    );
+    
+    if (contactLines.length > 0) {
+      formattedText += contactLines.join('\n') + '\n\n';
+    }
+    
+    // Add a summary section
+    formattedText += "**Professional Summary**\n\n";
+    
+    // Add an experience section
+    formattedText += "**Work Experience**\n\n";
+    
+    // Add remaining content with some basic formatting
+    const remainingLines = lines.slice(5);
+    let inBulletSection = false;
+    
+    for (const line of remainingLines) {
+      const trimmedLine = line.trim();
       
-      for (const line of lines) {
-        if (line.match(/education|academic/i) && line.length < 30) {
-          inEducationSection = true;
-          continue;
-        } else if (inEducationSection && sections.some(section => line.includes(section) && line.length < 30)) {
-          inEducationSection = false;
-        }
-        
-        if (inEducationSection || line.match(educationRegex)) {
-          educationContent += line + "\n";
-        }
-      }
-      
-      if (educationContent.trim().length > 0) {
-        formattedText += educationContent;
+      if (trimmedLine.length === 0) {
+        formattedText += '\n';
+        inBulletSection = false;
+      } else if (trimmedLine === trimmedLine.toUpperCase() && trimmedLine.length > 3) {
+        // Potential section header
+        formattedText += `\n**${trimmedLine}**\n`;
+        inBulletSection = false;
+      } else if (trimmedLine.match(/^\d{4}/) || trimmedLine.includes(' - ')) {
+        // Potential date range or job title
+        formattedText += `\n**${trimmedLine}**\n`;
+        inBulletSection = false;
       } else {
-        formattedText += "Education information not found in the original CV.\n";
-      }
-    }
-    
-    // Add skills section if found
-    if (sections.includes('Skills') || sections.includes('Technical Skills')) {
-      formattedText += "\n[HEADER] Skills\n\n";
-      // Extract skills-related content (simplified approach)
-      const skillsRegex = /skills|proficient|expertise|competencies/i;
-      let inSkillsSection = false;
-      let skillsContent = "";
-      
-      for (const line of lines) {
-        if (line.match(/skills|technical skills|core competencies/i) && line.length < 30) {
-          inSkillsSection = true;
-          continue;
-        } else if (inSkillsSection && sections.some(section => line.includes(section) && line.length < 30)) {
-          inSkillsSection = false;
-        }
-        
-        if (inSkillsSection || line.match(skillsRegex)) {
-          skillsContent += line + "\n";
-        }
-      }
-      
-      if (skillsContent.trim().length > 0) {
-        formattedText += skillsContent;
+        // Regular content, add bullet points for readability
+        if (!inBulletSection) {
+          formattedText += '• ' + trimmedLine + '\n';
+          inBulletSection = true;
       } else {
-        formattedText += "Skills information not found in the original CV.\n";
-      }
-    }
-    
-    // Close left column
-    formattedText += "[LEFT-COLUMN-END]\n\n";
-    
-    // Add right column start
-    formattedText += "[RIGHT-COLUMN-START]\n";
-    
-    // Add profile/summary if found
-    if (sections.includes('Profile') || sections.includes('Summary') || sections.includes('Professional Summary')) {
-      formattedText += "[HEADER] Profile\n\n";
-      // Extract profile-related content (simplified approach)
-      const profileRegex = /profile|summary|about me|objective/i;
-      let inProfileSection = false;
-      let profileContent = "";
-      
-      for (const line of lines) {
-        if (line.match(/profile|summary|about me|objective/i) && line.length < 30) {
-          inProfileSection = true;
-          continue;
-        } else if (inProfileSection && sections.some(section => line.includes(section) && line.length < 30)) {
-          inProfileSection = false;
-        }
-        
-        if (inProfileSection || line.match(profileRegex)) {
-          profileContent += line + "\n";
-        }
-      }
-      
-      if (profileContent.trim().length > 0) {
-        formattedText += profileContent;
-      } else {
-        formattedText += "Professional with experience in the field seeking new opportunities.\n";
-      }
-    }
-    
-    // Add experience section if found
-    if (sections.includes('Experience') || sections.includes('Work Experience') || sections.includes('Professional Experience')) {
-      formattedText += "\n[HEADER] Experience\n\n";
-      // Extract experience-related content (simplified approach)
-      const experienceRegex = /experience|work|employment|job|position|role/i;
-      let inExperienceSection = false;
-      let experienceContent = "";
-      
-      for (const line of lines) {
-        if (line.match(/experience|work experience|professional experience|employment history/i) && line.length < 40) {
-          inExperienceSection = true;
-          continue;
-        } else if (inExperienceSection && sections.some(section => line.includes(section) && line.length < 30)) {
-          inExperienceSection = false;
-        }
-        
-        if (inExperienceSection || line.match(experienceRegex)) {
-          experienceContent += line + "\n";
-        }
-      }
-      
-      if (experienceContent.trim().length > 0) {
-        formattedText += experienceContent;
-      } else {
-        formattedText += "Experience information not found in the original CV.\n";
-      }
-    }
-    
-    // Add any remaining sections
-    const coveredSections = ['Profile', 'Summary', 'Professional Summary', 'Experience', 'Work Experience', 
-                            'Professional Experience', 'Education', 'Academic Background', 'Skills', 'Technical Skills'];
-    
-    for (const section of sections) {
-      if (!coveredSections.includes(section)) {
-        formattedText += `\n[HEADER] ${section}\n\n`;
-        // Simple extraction of section content
-        let inSection = false;
-        let sectionContent = "";
-        
-        for (const line of lines) {
-          if (line.includes(section) && line.length < 40) {
-            inSection = true;
-            continue;
-          } else if (inSection && sections.some(s => line.includes(s) && line.length < 30 && s !== section)) {
-            inSection = false;
-          }
-          
-          if (inSection) {
-            sectionContent += line + "\n";
-          }
-        }
-        
-        if (sectionContent.trim().length > 0) {
-          formattedText += sectionContent;
-        } else {
-          formattedText += `${section} information not found in the original CV.\n`;
+          formattedText += '• ' + trimmedLine + '\n';
         }
       }
     }
-    
-    // If we haven't found any sections, include the entire raw text
-    if (sections.length === 0) {
-      formattedText += "[HEADER] Content\n\n";
-      formattedText += rawText;
-    }
-    
-    // Close right column
-    formattedText += "[RIGHT-COLUMN-END]\n";
     
     return formattedText;
   }
   
-  // Function to fix common JSON string issues
-  function fixJsonString(jsonString: string): string {
-    if (!jsonString || typeof jsonString !== 'string') {
-      console.warn("fixJsonString: Invalid input - jsonString is not a string");
-      return "{}"; // Return empty JSON object as fallback
-    }
+  // Process identified sections
+  for (const section of sections) {
+    const sectionLines = section.split('\n');
+    const sectionHeader = sectionLines[0].trim();
     
-    try {
-      // Try parsing as-is first
-      JSON.parse(jsonString);
-      return jsonString; // If it parses successfully, return it unchanged
-    } catch (e) {
-      // If parsing fails, attempt to fix common issues
-      let fixedString = jsonString;
-      
-      // Check if the string is wrapped with markdown code blocks and remove them
-      fixedString = fixedString.replace(/^```json\s+/, '').replace(/\s+```$/, '');
-      fixedString = fixedString.replace(/^```\s+/, '').replace(/\s+```$/, '');
-      
-      // Check for single quotes instead of double quotes for object keys
-      fixedString = fixedString.replace(/'([^']+)'(\s*:)/g, '"$1"$2');
-      
-      // Fix unescaped quotes in JSON values
-      let inString = false;
-      let result = '';
-      let lastChar = '';
-      
-      for (let i = 0; i < fixedString.length; i++) {
-        const char = fixedString[i];
-        
-        if (char === '"' && lastChar !== '\\') {
-          inString = !inString;
-        }
-        
-        if (inString && char === '\n') {
-          result += '\\n'; // Replace newlines in strings with escaped newlines
-        } else if (inString && char === '\t') {
-          result += '\\t'; // Replace tabs in strings with escaped tabs
-        } else {
-          result += char;
-        }
-        
-        lastChar = char;
-      }
-      
-      fixedString = result;
-      
-      // Try parsing again after fixes
-      try {
-        JSON.parse(fixedString);
-        return fixedString;
-      } catch (e2) {
-        console.error("First JSON parsing attempt failed:", e2);
-        
-        // If it still fails, try a more aggressive approach: 
-        // Extract anything that looks like valid JSON using regex
-        const jsonMatch = fixedString.match(/\{[\s\S]*\}/);
-        if (jsonMatch && jsonMatch[0]) {
-          try {
-            JSON.parse(jsonMatch[0]);
-            return jsonMatch[0];
-          } catch (e3) {
-            // If all attempts fail, return a minimal valid JSON object
-            console.error("Failed to fix JSON string after multiple attempts:", e3);
-            
-            // Create a basic JSON with the content wrapped in optimizedText
-            console.log("Creating basic JSON with the content as optimizedText");
-            return JSON.stringify({
-              optimizedText: fixedString,
-              pdfInstructions: ""
-            });
-          }
-        } else {
-          // If no object-like structure is found, return a minimal valid JSON
-          console.log("No JSON-like structure found, creating basic JSON");
-          return JSON.stringify({
-            optimizedText: fixedString,
-            pdfInstructions: ""
-          });
-        }
-      }
-    }
-  }
-  
-  // Process formatting markers in the text
-  function processFormattingMarkers(text: string): string {
-    console.log("Processing formatting markers");
+    // Add formatted section header
+    formattedText += `**${sectionHeader}**\n\n`;
     
-    // Handle empty text
-    if (!text || text.trim().length === 0) {
-      console.error("ERROR: Empty text provided to processFormattingMarkers");
-      return "[HEADER] Error\n\nNo content was provided for processing.";
-    }
+    // Process section content
+    let inBulletSection = false;
     
-    let processedText = text;
-    const lines = text.split('\n');
-    
-    // Check if we have column markers
-    const hasLeftColumnStart = text.includes('[LEFT-COLUMN-START]');
-    const hasRightColumnStart = text.includes('[RIGHT-COLUMN-START]');
-    const hasLeftColumnEnd = text.includes('[LEFT-COLUMN-END]');
-    const hasRightColumnEnd = text.includes('[RIGHT-COLUMN-END]');
-    
-    // Track sections for better organization
-    const sections: Array<{ name: string; index: number; content: string }> = [];
-    
-    // First pass: identify sections by looking for headers
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
+    for (let i = 1; i < sectionLines.length; i++) {
+      const line = sectionLines[i].trim();
       
-      // Skip empty lines
-      if (line.length === 0) continue;
-      
-      // Check for section headers (either ## or [HEADER])
-      if (line.startsWith('## ') || line.includes('[HEADER]')) {
-        // Extract section name
-        const sectionName = line.replace('## ', '').replace('[HEADER]', '').trim();
-        sections.push({
-          name: sectionName,
-          index: i,
-          content: ''
-        });
-      }
-    }
-    
-    console.log(`Found ${sections.length} sections in the text`);
-    
-    // If no sections were found, try to identify potential sections
-    if (sections.length === 0) {
-      console.log("No section markers found, attempting to identify sections");
-      
-      // Common section patterns
-      const sectionPatterns = [
-        { name: 'Profile', regex: /\b(profile|summary|about|objective)\b/i },
-          { name: 'Experience', regex: /\b(experience|work|employment|career)\b/i },
-          { name: 'Education', regex: /\b(education|academic|qualifications|degree)\b/i },
-          { name: 'Skills', regex: /\b(skills|abilities|competencies|expertise)\b/i },
-          { name: 'Languages', regex: /\b(languages|language proficiency)\b/i },
-          { name: 'Certifications', regex: /\b(certifications|certificates|qualifications)\b/i }
-      ];
-      
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        
-        // Skip empty lines
-        if (line.length === 0) continue;
-        
-        // Check if this line looks like a section header (short line, possibly all caps)
-        if (line.length < 40 && (line === line.toUpperCase() || line.endsWith(':'))) {
-          for (const pattern of sectionPatterns) {
-            if (pattern.regex.test(line)) {
-              sections.push({
-                name: pattern.name,
-                index: i,
-                content: ''
-              });
-              break;
-            }
-          }
-        }
-      }
-    }
-    
-    // If we still have no sections, create default sections
-    if (sections.length === 0) {
-      console.log("No sections identified, creating default sections");
-      processedText = `[LEFT-COLUMN-START]
-[HEADER] Contact
-
-[HEADER] Education
-
-[HEADER] Skills
-
-[LEFT-COLUMN-END]
-
-[RIGHT-COLUMN-START]
-[HEADER] Profile
-
-[HEADER] Experience
-
-${text}
-[RIGHT-COLUMN-END]`;
-
-      return processedText;
-    }
-    
-    // Determine which sections should go in which column
-    const leftColumnSections = ['Contact', 'Education', 'Skills', 'Languages', 'Certifications'];
-    const rightColumnSections = ['Profile', 'Summary', 'Experience', 'Work Experience', 'Projects', 'Achievements'];
-    
-    // Check if we need to add column markers
-    if (!hasLeftColumnStart && !hasRightColumnStart) {
-      console.log("No column markers found, adding standard layout markers");
-      
-      // Build new text with proper column markers
-      let leftColumnContent = '';
-      let rightColumnContent = '';
-      
-      // Sort sections into columns
-      for (const section of sections) {
-        // Determine which column this section belongs in
-        const sectionName = section.name;
-        let isLeftColumn = false;
-        
-        // Check if this section should be in the left column
-        for (const leftSection of leftColumnSections) {
-          if (sectionName.toLowerCase().includes(leftSection.toLowerCase())) {
-            isLeftColumn = true;
-            break;
-          }
-        }
-        
-        // Extract section content
-        let sectionContent = '';
-        const startIndex = section.index;
-        let endIndex = lines.length;
-        
-        // Find the end of this section (next section or end of text)
-        for (let i = 0; i < sections.length; i++) {
-          if (sections[i].index > startIndex && sections[i].index < endIndex) {
-            endIndex = sections[i].index;
-          }
-        }
-        
-        // Get the content between start and end
-        for (let i = startIndex + 1; i < endIndex; i++) {
-          if (i < lines.length) {
-            sectionContent += lines[i] + '\n';
-          }
-        }
-        
-        // Add to appropriate column
-        if (isLeftColumn) {
-          leftColumnContent += `[HEADER] ${sectionName}\n\n${sectionContent}\n`;
-        } else {
-          rightColumnContent += `[HEADER] ${sectionName}\n\n${sectionContent}\n`;
-        }
-      }
-      
-      // Combine columns into final text
-      processedText = `[LEFT-COLUMN-START]\n${leftColumnContent}[LEFT-COLUMN-END]\n\n[RIGHT-COLUMN-START]\n${rightColumnContent}[RIGHT-COLUMN-END]`;
-    } else {
-      // We have some column markers, but check if they're complete
-      if (hasLeftColumnStart && !hasLeftColumnEnd) {
-        console.warn("WARNING: Found [LEFT-COLUMN-START] but missing [LEFT-COLUMN-END], adding end marker");
-        
-        // Find the right position to add the end marker
-        if (hasRightColumnStart) {
-          // Add end marker right before right column start
-          const rightStartIndex = processedText.indexOf('[RIGHT-COLUMN-START]');
-          processedText = processedText.substring(0, rightStartIndex) + 
-                         '[LEFT-COLUMN-END]\n\n' + 
-                         processedText.substring(rightStartIndex);
-        } else {
-          // Add end marker at the end
-          processedText += '\n[LEFT-COLUMN-END]';
-        }
-      }
-      
-      if (hasRightColumnStart && !hasRightColumnEnd) {
-        console.warn("WARNING: Found [RIGHT-COLUMN-START] but missing [RIGHT-COLUMN-END], adding end marker");
-        processedText += '\n[RIGHT-COLUMN-END]';
-      }
-      
-      // If we have left column end but no start, add start at beginning
-      if (hasLeftColumnEnd && !hasLeftColumnStart) {
-        console.warn("WARNING: Found [LEFT-COLUMN-END] but missing [LEFT-COLUMN-START], adding start marker");
-        processedText = '[LEFT-COLUMN-START]\n' + processedText;
-      }
-      
-      // If we have right column end but no start, add start after left column end
-      if (hasRightColumnEnd && !hasRightColumnStart) {
-        console.warn("WARNING: Found [RIGHT-COLUMN-END] but missing [RIGHT-COLUMN-START], adding start marker");
-        
-        if (hasLeftColumnEnd) {
-          const leftEndIndex = processedText.indexOf('[LEFT-COLUMN-END]');
-          processedText = processedText.substring(0, leftEndIndex + '[LEFT-COLUMN-END]'.length) + 
-                         '\n\n[RIGHT-COLUMN-START]\n' + 
-                         processedText.substring(leftEndIndex + '[LEFT-COLUMN-END]'.length);
-        } else {
-          // Add right column start at an appropriate position
-          processedText = processedText.replace('[RIGHT-COLUMN-END]', '[RIGHT-COLUMN-START]\n[RIGHT-COLUMN-END]');
-        }
-      }
-    }
-    
-    // Replace any remaining markdown-style headers with our format
-    processedText = processedText.replace(/^##\s+(.+)$/gm, '[HEADER] $1');
-    processedText = processedText.replace(/^###\s+(.+)$/gm, '[SUBHEADER] $1');
-    
-    // Replace bullet points
-    processedText = processedText.replace(/^\s*[-*]\s+(.+)$/gm, '[BULLET] $1');
-    
-    // Final check - ensure we have both column markers
-    if (!processedText.includes('[LEFT-COLUMN-START]')) {
-      console.warn("WARNING: Final text still missing [LEFT-COLUMN-START], adding at beginning");
-      processedText = '[LEFT-COLUMN-START]\n[HEADER] Contact\n\n[LEFT-COLUMN-END]\n\n' + processedText;
-    }
-    
-    if (!processedText.includes('[RIGHT-COLUMN-START]')) {
-      console.warn("WARNING: Final text still missing [RIGHT-COLUMN-START], adding after left column");
-      
-      if (processedText.includes('[LEFT-COLUMN-END]')) {
-        const leftEndIndex = processedText.indexOf('[LEFT-COLUMN-END]');
-        processedText = processedText.substring(0, leftEndIndex + '[LEFT-COLUMN-END]'.length) + 
-                       '\n\n[RIGHT-COLUMN-START]\n' + 
-                       processedText.substring(leftEndIndex + '[LEFT-COLUMN-END]'.length);
+      if (line.length === 0) {
+        formattedText += '\n';
+        inBulletSection = false;
+      } else if (line.match(/^\d{4}/) || line.includes(' - ')) {
+        // Potential date range or job title
+        formattedText += `\n**${line}**\n`;
+        inBulletSection = false;
       } else {
-        processedText += '\n\n[RIGHT-COLUMN-START]\n[RIGHT-COLUMN-END]';
-      }
-    }
-    
-    return processedText;
-  }
-  
-  // Helper function to extract potential sections from the raw text
-  function extractPotentialSections(rawText: string): string[] {
-    if (!rawText || typeof rawText !== 'string') {
-      console.warn("extractPotentialSections: Invalid input - rawText is not a string");
-      return ["Content"];
-    }
-
-    // Common CV section headers to look for
-    const commonSections = [
-      "Profile", "Summary", "Professional Summary", "Career Objective",
-      "Experience", "Work Experience", "Professional Experience", "Employment History",
-      "Education", "Academic Background", "Qualifications",
-      "Skills", "Technical Skills", "Core Competencies", "Key Skills",
-      "Projects", "Key Projects", "Professional Projects",
-      "Certifications", "Professional Certifications", "Licenses",
-      "Languages", "Language Proficiency",
-      "Publications", "Research", "Awards", "Achievements", "Honors",
-      "Volunteer Experience", "Community Service",
-      "Interests", "Hobbies", "Activities",
-      "References", "Professional References"
-    ];
-    
-    // Clean the text for more accurate detection
-    const cleanedText = rawText.replace(/\s+/g, ' ').trim();
-    
-    // Find potential sections in the CV
-    const foundSections: string[] = [];
-    
-    // Simple method: look for lines that could be section headers
-    const lines = cleanedText.split(/\n+/);
-    for (const line of lines) {
-      const trimmedLine = line.trim();
-      
-      // If the line is short, all caps, or followed by a colon, it might be a section header
-      if (
-        (trimmedLine.length < 30 && trimmedLine.length > 2 && 
-         trimmedLine === trimmedLine.toUpperCase()) ||
-        trimmedLine.endsWith(':')
-      ) {
-        // Extract just the text without the colon
-        const potentialSection = trimmedLine.replace(/:$/, '').trim();
-        
-        // Add if it's not already in our list
-        if (potentialSection && !foundSections.includes(potentialSection)) {
-          foundSections.push(potentialSection);
+        // Regular content, add bullet points for readability
+        if (!inBulletSection) {
+          formattedText += '• ' + line + '\n';
+          inBulletSection = true;
+        } else {
+          formattedText += '• ' + line + '\n';
         }
       }
     }
     
-    // Add any common sections that contain keywords from our list
-    for (const section of commonSections) {
-      if (
-        cleanedText.includes(section) && 
-        !foundSections.includes(section) &&
-        !foundSections.some(s => s.includes(section) || section.includes(s))
-      ) {
-        foundSections.push(section);
-      }
-    }
-    
-    return foundSections.length > 0 ? foundSections : ["Content"];
+    formattedText += '\n\n';
   }
   
-  // New helper function to verify content preservation
-  function verifyContentPreservation(originalText: string, optimizedText: string): { 
-    preserved: boolean; 
-    missingItems: string[] 
-  } {
-    const missingItems: string[] = [];
+  return formattedText;
+}
+
+// Helper function to process formatting markers in the optimized text
+function processFormattingMarkers(text: string): string {
+  if (!text || text.trim().length === 0) {
+    console.error("Empty text provided to processFormattingMarkers");
+    return text;
+  }
+  
+  let processedText = text;
+  
+  // Check for column markers
+  const hasLeftColumn = text.includes('[LEFT COLUMN START]');
+  const hasRightColumn = text.includes('[RIGHT COLUMN START]');
+  
+  if (hasLeftColumn && hasRightColumn) {
+    // Extract column content
+    const leftColumnMatch = text.match(/\[LEFT COLUMN START\]([\s\S]*?)\[LEFT COLUMN END\]/);
+    const rightColumnMatch = text.match(/\[RIGHT COLUMN START\]([\s\S]*?)\[RIGHT COLUMN END\]/);
     
-    // Extract key information from the original text
-    const nameMatch = originalText.split('\n')[0];
-    if (nameMatch && !optimizedText.includes(nameMatch)) {
-      missingItems.push('Name');
+    if (leftColumnMatch && rightColumnMatch) {
+      const leftColumnContent = leftColumnMatch[1].trim();
+      const rightColumnContent = rightColumnMatch[1].trim();
+      
+      // Format the content with column markers
+      processedText = `[LEFT COLUMN START]\n${leftColumnContent}\n[LEFT COLUMN END]\n\n[RIGHT COLUMN START]\n${rightColumnContent}\n[RIGHT COLUMN END]`;
     }
+  } else {
+    // If no column markers, try to identify sections and distribute them
+    const sections = [];
+    const lines = text.split('\n');
+    let currentSection = '';
+    let inSection = false;
     
-    // Check for email
-    const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
-    const originalEmailMatch = originalText.match(emailRegex);
-    if (originalEmailMatch && !optimizedText.includes(originalEmailMatch[0])) {
-      missingItems.push('Email');
-    }
-    
-    // Check for phone number
-    const phoneRegex = /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/;
-    const originalPhoneMatch = originalText.match(phoneRegex);
-    if (originalPhoneMatch && !optimizedText.includes(originalPhoneMatch[0])) {
-      missingItems.push('Phone');
-    }
-    
-    // Check for key sections
-    const sectionPatterns = [
-      { name: 'Profile/Summary', regex: /\b(profile|summary|about|objective)\b/i },
-      { name: 'Experience', regex: /\b(experience|work|employment|career)\b/i },
-      { name: 'Education', regex: /\b(education|academic|qualifications|degree)\b/i },
-      { name: 'Skills', regex: /\b(skills|abilities|competencies|expertise)\b/i }
-    ];
-    
-    for (const pattern of sectionPatterns) {
-      if (pattern.regex.test(originalText) && !pattern.regex.test(optimizedText)) {
-        missingItems.push(pattern.name);
+    for (const line of lines) {
+      // Check if this line is a section header
+      if (line.match(/^\s*\*\*.*\*\*\s*$/) || line.match(/^[A-Z\s]+:$/)) {
+        // If we were in a section, save it
+        if (inSection) {
+          sections.push(currentSection);
+          currentSection = '';
+        }
+        
+        // Start a new section
+        currentSection = line + '\n';
+        inSection = true;
+      } else if (inSection) {
+        // Add to current section
+        currentSection += line + '\n';
+      } else {
+        // Not in a section yet, might be contact info
+        currentSection += line + '\n';
       }
     }
     
-    return {
-      preserved: missingItems.length === 0,
-      missingItems
-    };
+    // Add the last section if there is one
+    if (currentSection) {
+      sections.push(currentSection);
+    }
+    
+    // If we identified sections, distribute them into columns
+    if (sections.length > 1) {
+      // Determine which sections go in which column
+      const leftColumnSections = [];
+      const rightColumnSections = [];
+      
+      // Common sections for left column
+      const leftColumnKeywords = ['profile', 'summary', 'skills', 'education', 'languages', 'certifications', 'references'];
+      
+      // Common sections for right column
+      const rightColumnKeywords = ['experience', 'employment', 'projects', 'achievements'];
+      
+      for (const section of sections) {
+        const sectionLower = section.toLowerCase();
+        
+        if (leftColumnKeywords.some(keyword => sectionLower.includes(keyword))) {
+          leftColumnSections.push(section);
+        } else if (rightColumnKeywords.some(keyword => sectionLower.includes(keyword))) {
+          rightColumnSections.push(section);
+        } else {
+          // If we can't determine, put shorter sections in left column
+          if (section.length < 500) {
+            leftColumnSections.push(section);
+      } else {
+            rightColumnSections.push(section);
+          }
+        }
+      }
+      
+      // Format the content with column markers
+      processedText = `[LEFT COLUMN START]\n${leftColumnSections.join('\n')}\n[LEFT COLUMN END]\n\n[RIGHT COLUMN START]\n${rightColumnSections.join('\n')}\n[RIGHT COLUMN END]`;
+    }
   }
+  
+  return processedText;
+}
   

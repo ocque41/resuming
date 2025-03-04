@@ -398,51 +398,21 @@ function mapSectionsForReplacement(
   return mappings.sort((a, b) => a.startIndex - b.startIndex);
 }
 
-/**
- * Wraps the given text into lines that do not exceed maxWidth.
- *
- * @param text - The text to wrap.
- * @param font - The PDF font used.
- * @param fontSize - The font size.
- * @param maxWidth - The maximum width in points.
- * @returns An array of lines.
- */
-function wrapText(
-  text: string,
-  font: PDFFont,
-  fontSize: number,
-  maxWidth: number
-): string[] {
-  // Replace newlines with spaces to avoid encoding issues
-  const sanitizedText = text.replace(/\n/g, ' ');
-  const words = sanitizedText.split(" ");
+// Helper function to wrap text to fit within a given width
+function wrapText(text: string, font: PDFFont, fontSize: number, maxWidth: number): string[] {
+  const words = text.split(' ');
   const lines: string[] = [];
-  let currentLine = "";
+  let currentLine = '';
 
   for (const word of words) {
-    // Skip empty words that might result from multiple spaces
-    if (!word) continue;
-    
     const testLine = currentLine ? `${currentLine} ${word}` : word;
+    const width = font.widthOfTextAtSize(testLine, fontSize);
     
-    try {
-      const testLineWidth = font.widthOfTextAtSize(testLine, fontSize);
-      
-      if (testLineWidth > maxWidth && currentLine !== "") {
-        lines.push(currentLine);
-        currentLine = word;
-      } else {
-        currentLine = testLine;
-      }
-    } catch (error) {
-      console.warn(`Error measuring text width for "${testLine}": ${error}`);
-      // If we can't measure, just add the word and move on
-      if (currentLine) {
-        lines.push(currentLine);
-        currentLine = word;
-      } else {
-        currentLine = word;
-      }
+    if (width <= maxWidth) {
+      currentLine = testLine;
+    } else {
+      lines.push(currentLine);
+      currentLine = word;
     }
   }
   
@@ -503,200 +473,234 @@ export async function modifyPDFWithOptimizedContent(
   try {
     console.log("Starting PDF generation with optimized content");
     
-    // Parse the optimized text to extract sections
-    const { leftColumnSections: originalLeftSections, rightColumnSections: originalRightSections } = parseOptimizedText(optimizedText);
-    
-    // Create mutable copies of the sections
-    let leftColumnSections = [...originalLeftSections];
-    let rightColumnSections = [...originalRightSections];
-    
     // Create a new PDF document
     const doc = await PDFDocument.create();
     
-    // Load fonts
-    let regularFont = await doc.embedFont(StandardFonts.Helvetica);
-    let boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
-    let italicFont = await doc.embedFont(StandardFonts.HelveticaOblique);
-    let titleFont = await doc.embedFont(StandardFonts.HelveticaBold);
+    // Add a page to the document
+    const page = doc.addPage([595, 842]); // A4 size
+    const { width, height } = page.getSize();
     
-    // Try to load preferred fonts based on template
-    if (template && template.metadata) {
-      try {
-        const fontPreferences = template.metadata.preferredFonts || [];
-        
-        // Load custom fonts based on preferences
-        if (fontPreferences.includes('Times') || fontPreferences.includes('Serif')) {
-          regularFont = await doc.embedFont(StandardFonts.TimesRoman);
-          boldFont = await doc.embedFont(StandardFonts.TimesRomanBold);
-          italicFont = await doc.embedFont(StandardFonts.TimesRomanItalic);
-          titleFont = await doc.embedFont(StandardFonts.TimesRomanBold);
-          console.log("Using Times Roman fonts for template");
-        } else if (fontPreferences.includes('Courier') || fontPreferences.includes('Monospace')) {
-          regularFont = await doc.embedFont(StandardFonts.Courier);
-          boldFont = await doc.embedFont(StandardFonts.CourierBold);
-          italicFont = await doc.embedFont(StandardFonts.CourierOblique);
-          titleFont = await doc.embedFont(StandardFonts.CourierBold);
-          console.log("Using Courier fonts for template");
-        }
-        
-        console.log(`Loaded preferred fonts from template: ${template.name}`);
-      } catch (error: any) {
-        console.warn("Could not load preferred fonts:", error.message);
-        // Continue with default fonts
-      }
-    }
+    // Set default margin
+    const defaultMargin = 50;
+    let margin = defaultMargin;
     
-    // Define default brand colors
-    let primaryColor = rgb(0.2, 0.4, 0.6); // Default blue
-    let secondaryColor = rgb(0.8, 0.8, 0.8); // Default light gray
-    let textColor = rgb(0.1, 0.1, 0.1); // Near black
-    let accentColor = rgb(0.4, 0.6, 0.8); // Light blue
+    // Parse the optimized text into sections
+    const { leftColumnSections, rightColumnSections } = parseOptimizedText(optimizedText);
     
-    // If template is provided, try to apply template-specific colors
-    if (template && template.metadata && template.metadata.colorScheme) {
-      try {
+    // Get template layout if available
+    let layout = 'two-column';
+    let headerStyle = 'modern';
+    let fontFamily = 'Helvetica';
+    let primaryColor = rgb(0.1, 0.1, 0.1); // Default dark gray
+    let accentColor = rgb(0.2, 0.4, 0.8); // Default blue
+    let backgroundColor = rgb(1, 1, 1); // Default white
+    let columnGap = 20;
+    
+    if (template) {
+      console.log(`Applying template: ${template.name}`);
+      
+      // Get layout from template metadata
+      layout = template.metadata.layout || layout;
+      
+      // Get template-specific layout from templateMatching
+      const templateLayout = getTemplateLayout(template.id);
+      headerStyle = templateLayout.headerStyle || headerStyle;
+      
+      // Set colors based on template metadata
+      if (template.metadata.colorScheme) {
         const colorScheme = template.metadata.colorScheme;
         
         if (colorScheme.primary) {
-          const { r, g, b } = hexToRgb(colorScheme.primary);
-          primaryColor = rgb(r/255, g/255, b/255);
-        }
-        
-        if (colorScheme.secondary) {
-          const { r, g, b } = hexToRgb(colorScheme.secondary);
-          secondaryColor = rgb(r/255, g/255, b/255);
-        }
-        
-        if (colorScheme.text) {
-          const { r, g, b } = hexToRgb(colorScheme.text);
-          textColor = rgb(r/255, g/255, b/255);
+          // Convert hex to RGB
+          const r = parseInt(colorScheme.primary.substring(1, 3), 16) / 255;
+          const g = parseInt(colorScheme.primary.substring(3, 5), 16) / 255;
+          const b = parseInt(colorScheme.primary.substring(5, 7), 16) / 255;
+          primaryColor = rgb(r, g, b);
         }
         
         if (colorScheme.accent) {
-          const { r, g, b } = hexToRgb(colorScheme.accent);
-          accentColor = rgb(r/255, g/255, b/255);
+          // Convert hex to RGB
+          const r = parseInt(colorScheme.accent.substring(1, 3), 16) / 255;
+          const g = parseInt(colorScheme.accent.substring(3, 5), 16) / 255;
+          const b = parseInt(colorScheme.accent.substring(5, 7), 16) / 255;
+          accentColor = rgb(r, g, b);
         }
         
-        console.log(`Applied color scheme from template: ${template.name}`);
-      } catch (error: any) {
-        console.error("Error applying template colors:", error.message);
-        // Continue with default colors
+        if (colorScheme.background) {
+          // Convert hex to RGB
+          const r = parseInt(colorScheme.background.substring(1, 3), 16) / 255;
+          const g = parseInt(colorScheme.background.substring(3, 5), 16) / 255;
+          const b = parseInt(colorScheme.background.substring(5, 7), 16) / 255;
+          backgroundColor = rgb(r, g, b);
+        }
+      }
+      
+      // Apply template-specific styling
+      if (template.name === 'Apple Minimal' || template.id === 'apple-minimal') {
+        // Minimal template has more whitespace and lighter colors
+        margin = 60;
+        columnGap = 30;
+        primaryColor = rgb(0.3, 0.3, 0.3); // Lighter text
+        accentColor = rgb(0.5, 0.5, 0.5); // Gray accent
+      } else if (template.name === 'Google Modern' || template.id === 'google-modern') {
+        // Modern template has bold colors and less margin
+        margin = 40;
+        columnGap = 25;
+        // Keep default colors which are bolder
+      } else if (template.name === 'Amazon Leadership' || template.id === 'amazon-leadership') {
+        // Traditional template has serif fonts and classic colors
+        fontFamily = 'Times-Roman';
+        primaryColor = rgb(0.05, 0.05, 0.2); // Dark blue-black
+        accentColor = rgb(0.5, 0.1, 0.1); // Dark red accent
+      } else if (template.name === 'Meta Impact' || template.id === 'meta-impact') {
+        // Creative template has unique colors and layout
+        accentColor = rgb(0.8, 0.3, 0.3); // Reddish accent
+        backgroundColor = rgb(0.98, 0.98, 1); // Very light blue background
+        
+        // Add a decorative element for creative template
+        page.drawRectangle({
+          x: 0,
+          y: height - 100,
+          width: width,
+          height: 100,
+          color: rgb(0.95, 0.95, 1),
+        });
+        
+        // Add a decorative line
+        page.drawLine({
+          start: { x: 0, y: height - 100 },
+          end: { x: width, y: height - 100 },
+          thickness: 3,
+          color: accentColor,
+        });
+      } else if (template.name === 'Microsoft Professional' || template.id === 'microsoft-professional') {
+        // Professional template has clean lines and professional colors
+        primaryColor = rgb(0.05, 0.2, 0.4); // Dark blue
+        accentColor = rgb(0.4, 0.6, 0.8); // Medium blue
+        
+        // Add a thin header bar
+        page.drawRectangle({
+          x: 0,
+          y: height - 30,
+          width: width,
+          height: 30,
+          color: rgb(0.05, 0.2, 0.4),
+        });
       }
     }
     
-    // Determine layout based on template
-    let layout = "two-column"; // Default layout
-    if (template?.metadata?.layout) {
-      layout = template.metadata.layout;
-      console.log(`Using template layout: ${layout}`);
+    // Set text color based on primary color
+    const textColor = primaryColor;
+    
+    // Load fonts
+    let regularFont;
+    let boldFont;
+    let titleFont;
+    
+    // Select fonts based on template
+    if (fontFamily === 'Times-Roman') {
+      regularFont = await doc.embedFont(StandardFonts.TimesRoman);
+      boldFont = await doc.embedFont(StandardFonts.TimesRomanBold);
+      titleFont = await doc.embedFont(StandardFonts.TimesRomanBold);
+    } else if (fontFamily === 'Courier') {
+      regularFont = await doc.embedFont(StandardFonts.Courier);
+      boldFont = await doc.embedFont(StandardFonts.CourierBold);
+      titleFont = await doc.embedFont(StandardFonts.CourierBold);
+    } else {
+      // Default to Helvetica
+      regularFont = await doc.embedFont(StandardFonts.Helvetica);
+      boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
+      titleFont = await doc.embedFont(StandardFonts.HelveticaBold);
     }
     
-    // Get header style from template if available
-    let headerStyle = 'modern';
-    if (template?.id) {
-      try {
-        const templateLayout = getTemplateLayout(template.id);
-        headerStyle = templateLayout.headerStyle;
-        console.log(`Using template header style: ${headerStyle}`);
-      } catch (error: any) {
-        console.warn("Error getting template header style:", error.message);
-      }
+    // Fill background if not white
+    const isWhiteBackground = 
+      backgroundColor.toString() === rgb(1, 1, 1).toString();
+
+    if (!isWhiteBackground) {
+      page.drawRectangle({
+        x: 0,
+        y: 0,
+        width,
+        height,
+        color: backgroundColor,
+      });
     }
     
-    // Add a page to the document
-    let currentPage = doc.addPage([595, 842]); // A4 size
-    const { width, height } = currentPage.getSize();
-    
-    // Define margins - increase for more whitespace
-    const margin = 60; // Increased from 50
-    const columnGap = 30; // Increased from 20
-    
-    // Define line spacing based on template style
-    const lineSpacing = headerStyle === 'minimal' ? 22 : (headerStyle === 'traditional' ? 20 : 18);
-    const sectionSpacing = headerStyle === 'minimal' ? 30 : (headerStyle === 'traditional' ? 25 : 20);
-    const headerSpacing = headerStyle === 'minimal' ? 30 : (headerStyle === 'traditional' ? 28 : 25);
-    
-    // Define starting positions
+    // Set starting positions for columns
     let leftColumnY = height - margin;
     let rightColumnY = height - margin;
+    const rightColumnX = margin + (width - 2 * margin) * 0.3 + columnGap;
     
-    // Add header based on style
+    // Reference to current page for multi-page support
+    let currentPage = page;
+    
+    // Add header based on template style
     if (headerStyle === 'modern') {
-      // Add a colored header bar at the top
-      currentPage.drawRectangle({
-        x: 0,
-        y: height - 20,
-        width: width,
-        height: 20,
-        color: primaryColor,
-      });
-      
-      // Try to extract name and contact info for a modern header
       try {
-        // Extract name from first line of raw text
-        const lines = rawText.split('\n');
-        const name = lines[0].trim();
-        
-        // Look for contact info in the first few lines
+        // Extract name and contact info from the first few lines
+        const lines = rawText.split('\n').slice(0, 5);
+        let name = lines[0]?.trim() || 'Name';
         let contactInfo = '';
-        for (let i = 1; i < Math.min(10, lines.length); i++) {
-          const line = lines[i].trim();
-          if (line.includes('@') || line.includes('phone') || line.includes('tel') || 
-              /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(line)) { // Simple phone regex
-            contactInfo += line + ' | ';
+        
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i]?.trim();
+          if (line && (line.includes('@') || line.includes('phone') || line.includes('linkedin'))) {
+            contactInfo += line + ' · ';
           }
         }
         
-        if (contactInfo.endsWith(' | ')) {
+        if (contactInfo.endsWith(' · ')) {
           contactInfo = contactInfo.substring(0, contactInfo.length - 3);
         }
         
-        // Draw name in large font below the header bar
+        // Draw a colored rectangle at the top
+        currentPage.drawRectangle({
+          x: margin,
+          y: height - margin - 30,
+          width: width - 2 * margin,
+          height: 30,
+          color: accentColor,
+        });
+        
+        // Draw name in large font
         if (name) {
-          const nameWidth = titleFont.widthOfTextAtSize(name.toUpperCase(), 20);
           currentPage.drawText(name.toUpperCase(), {
-            x: (width - nameWidth) / 2,
-            y: height - margin,
-            size: 20,
+            x: margin + 10,
+            y: height - margin - 20,
+            size: 18,
             font: titleFont,
-            color: primaryColor,
+            color: rgb(1, 1, 1), // White text on colored background
           });
           
-          // Draw contact info below name
+          // Draw contact info below
           if (contactInfo) {
-            const contactWidth = regularFont.widthOfTextAtSize(contactInfo, 10);
             currentPage.drawText(contactInfo, {
-              x: (width - contactWidth) / 2,
-              y: height - margin - 25,
-              size: 10,
+              x: margin,
+              y: height - margin - 40,
+              size: 9,
               font: regularFont,
               color: textColor,
             });
-            
-            // Adjust starting positions
-            leftColumnY = height - margin - 50;
-            rightColumnY = height - margin - 50;
-          } else {
-            // Adjust starting positions
-            leftColumnY = height - margin - 30;
-            rightColumnY = height - margin - 30;
           }
+          
+          // Adjust starting positions
+          leftColumnY = height - margin - 70;
+          rightColumnY = height - margin - 70;
         }
       } catch (error: any) {
         console.warn("Error adding modern header:", error.message);
       }
     } else if (headerStyle === 'minimal') {
-      // Minimal header style - just name and contact in a clean layout
       try {
-        const lines = rawText.split('\n');
-        const name = lines[0].trim();
-        
-        // Look for contact info in the first few lines
+        // Extract name and contact info from the first few lines
+        const lines = rawText.split('\n').slice(0, 5);
+        let name = lines[0]?.trim() || 'Name';
         let contactInfo = '';
-        for (let i = 1; i < Math.min(10, lines.length); i++) {
-          const line = lines[i].trim();
-          if (line.includes('@') || line.includes('phone') || line.includes('tel') || 
-              /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(line)) {
+        
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i]?.trim();
+          if (line && (line.includes('@') || line.includes('phone') || line.includes('linkedin'))) {
             contactInfo += line + ' · ';
           }
         }
@@ -750,52 +754,59 @@ export async function modifyPDFWithOptimizedContent(
         console.warn("Error adding minimal header:", error.message);
       }
     } else if (headerStyle === 'traditional') {
-      // Traditional header style - centered name with contact below
       try {
-        const lines = rawText.split('\n');
-        const name = lines[0].trim();
+        // Extract name and contact info from the first few lines
+        const lines = rawText.split('\n').slice(0, 5);
+        let name = lines[0]?.trim() || 'Name';
+        let contactInfo = '';
         
-        // Collect contact info
-        const contactLines = [];
-        for (let i = 1; i < Math.min(10, lines.length); i++) {
-          const line = lines[i].trim();
-          if (line.includes('@') || line.includes('phone') || line.includes('tel') || 
-              /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(line)) {
-            contactLines.push(line);
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i]?.trim();
+          if (line && (line.includes('@') || line.includes('phone') || line.includes('linkedin'))) {
+            contactInfo += line + ' | ';
           }
         }
         
-        // Draw name in large font centered
+        if (contactInfo.endsWith(' | ')) {
+          contactInfo = contactInfo.substring(0, contactInfo.length - 3);
+        }
+        
+        // Center-align the name
+        const nameWidth = titleFont.widthOfTextAtSize(name, 20);
+        const nameX = (width - nameWidth) / 2;
+        
+        // Draw name in large font, centered
         if (name) {
-          const nameWidth = titleFont.widthOfTextAtSize(name, 22);
           currentPage.drawText(name, {
-            x: (width - nameWidth) / 2,
+            x: nameX,
             y: height - margin,
-            size: 22,
+            size: 20,
             font: titleFont,
             color: textColor,
           });
           
+          // Center-align contact info
+          const contactWidth = regularFont.widthOfTextAtSize(contactInfo, 10);
+          const contactX = (width - contactWidth) / 2;
+          const contactY = height - margin - 25;
+          
           // Draw contact info centered below name
-          let contactY = height - margin - 20;
-          for (const line of contactLines) {
-            const lineWidth = regularFont.widthOfTextAtSize(line, 10);
-            currentPage.drawText(line, {
-              x: (width - lineWidth) / 2,
+          if (contactInfo) {
+            currentPage.drawText(contactInfo, {
+              x: contactX,
               y: contactY,
               size: 10,
               font: regularFont,
               color: textColor,
             });
-            contactY -= 15;
           }
           
-          // Draw a horizontal line below contact info
+          // Draw a decorative line below
           currentPage.drawLine({
-            start: { x: margin, y: contactY - 10 },
-            end: { x: width - margin, y: contactY - 10 },
+            start: { x: margin, y: contactY - 15 },
+            end: { x: width - margin, y: contactY - 15 },
             thickness: 1,
-            color: textColor,
+            color: accentColor,
           });
           
           // Adjust starting positions
@@ -817,8 +828,12 @@ export async function modifyPDFWithOptimizedContent(
       rightColumnWidth = width - 2 * margin;
       
       // For one-column layout, move left column sections to right column
-      rightColumnSections = [...leftColumnSections, ...rightColumnSections];
-      leftColumnSections = [];
+      const combinedSections = [...leftColumnSections, ...rightColumnSections];
+      // Clear the original arrays
+      while (leftColumnSections.length) leftColumnSections.pop();
+      while (rightColumnSections.length) rightColumnSections.pop();
+      // Add all sections to right column
+      combinedSections.forEach(section => rightColumnSections.push(section));
     } else if (layout === "traditional") {
       // More balanced columns for traditional layout
       leftColumnWidth = (width - 2 * margin - columnGap) * 0.4;
@@ -852,90 +867,90 @@ export async function modifyPDFWithOptimizedContent(
           color: accentColor,
         });
       } else if (headerStyle === 'minimal') {
-        // No underline for minimal style
+        // For minimal style, use a dot instead of a line
+        currentPage.drawCircle({
+          x: margin - 5,
+          y: leftColumnY - 2,
+          size: 3,
+          color: accentColor,
+        });
       }
       
-      // Move down after header
-      leftColumnY -= headerSpacing; // Increased space after header from 20
+      leftColumnY -= 25; // Increased space after header from 20
       
       // Draw section content
       const contentLines = section.content.split('\n');
       for (let i = 0; i < contentLines.length; i++) {
         const line = contentLines[i].trim();
-        if (!line) continue; // Skip empty lines
+        if (!line) continue;
         
-        // Check if line is a bullet point
-        const isBullet = line.startsWith('•') || line.startsWith('-') || line.startsWith('*');
-        
-        // Check if line is a subheader (bold text)
-        const isSubheader = line.startsWith('**') && line.endsWith('**');
-        
-        if (isSubheader) {
-          // Draw subheader in bold
-          const subheaderText = line.substring(2, line.length - 2);
-          currentPage.drawText(subheaderText, {
-            x: margin,
-            y: leftColumnY,
-            size: 11,
-            font: boldFont,
-            color: textColor,
-          });
-        } else if (isBullet) {
-          // Draw bullet point
+        // Check if this is a bullet point
+        if (line.startsWith('•')) {
+          // Draw bullet point with accent color
           currentPage.drawText('•', {
             x: margin,
             y: leftColumnY,
-            size: 11,
+            size: 10,
             font: regularFont,
             color: accentColor,
           });
           
-          // Draw bullet text with indent
-          const bulletText = line.substring(1).trim();
-          const bulletLines = splitTextIntoLines(bulletText, leftColumnWidth - 10, regularFont, 11);
+          // Draw the text after the bullet point
+          const textAfterBullet = line.substring(1).trim();
           
-          for (let j = 0; j < bulletLines.length; j++) {
-            currentPage.drawText(bulletLines[j], {
-              x: margin + 10,
-              y: leftColumnY - (j * lineSpacing * 0.8),
-              size: 11,
+          // Handle text wrapping for bullet points
+          const wrappedLines = wrapText(textAfterBullet, regularFont, 9, leftColumnWidth - 10);
+          for (let j = 0; j < wrappedLines.length; j++) {
+            const wrappedLine = wrappedLines[j];
+            currentPage.drawText(wrappedLine, {
+              x: margin + 10, // Indent text after bullet point
+              y: leftColumnY - (j * 12), // Add spacing between wrapped lines
+              size: 9,
               font: regularFont,
               color: textColor,
             });
             
-            // Only add extra space after the last line of this bullet point
-            if (j === bulletLines.length - 1) {
-              leftColumnY -= lineSpacing * bulletLines.length;
+            // Only adjust Y position after all wrapped lines are drawn
+            if (j === wrappedLines.length - 1) {
+              leftColumnY -= (j * 12) + 18; // Increased space between lines from 15
             }
           }
-        } else {
-          // Draw regular text
-          const textLines = splitTextIntoLines(line, leftColumnWidth, regularFont, 11);
-          
-          for (let j = 0; j < textLines.length; j++) {
-            currentPage.drawText(textLines[j], {
+        } 
+        // Check if this is a subheader (bold text)
+        else if (line.startsWith('**') && line.endsWith('**')) {
+          const subheader = line.substring(2, line.length - 2);
+          currentPage.drawText(subheader, {
+            x: margin,
+            y: leftColumnY,
+            size: 10,
+            font: boldFont,
+            color: textColor,
+          });
+          leftColumnY -= 15;
+        } 
+        // Regular text
+        else {
+          // Handle text wrapping for regular text
+          const wrappedLines = wrapText(line, regularFont, 9, leftColumnWidth);
+          for (let j = 0; j < wrappedLines.length; j++) {
+            const wrappedLine = wrappedLines[j];
+            currentPage.drawText(wrappedLine, {
               x: margin,
-              y: leftColumnY - (j * lineSpacing * 0.8),
-              size: 11,
+              y: leftColumnY - (j * 12), // Add spacing between wrapped lines
+              size: 9,
               font: regularFont,
               color: textColor,
             });
             
-            // Only add extra space after the last line of this paragraph
-            if (j === textLines.length - 1) {
-              leftColumnY -= lineSpacing * textLines.length;
+            // Only adjust Y position after all wrapped lines are drawn
+            if (j === wrappedLines.length - 1) {
+              leftColumnY -= (j * 12) + 18; // Increased space between lines from 15
             }
           }
-        }
-        
-        // Add space between paragraphs
-        if (i < contentLines.length - 1 && contentLines[i+1].trim()) {
-          leftColumnY -= lineSpacing; // Increased space between lines from 15
         }
       }
       
-      // Add extra space between sections
-      leftColumnY -= sectionSpacing; // Add extra space between sections
+      leftColumnY -= 15; // Add extra space between sections
       
       // Check if we need to add a new page
       if (leftColumnY < margin) {
@@ -968,7 +983,7 @@ export async function modifyPDFWithOptimizedContent(
             x: dividerX,
             y,
             size: 1,
-            color: secondaryColor,
+            color: accentColor,
           });
         }
       } else if (headerStyle === 'traditional') {
@@ -977,7 +992,7 @@ export async function modifyPDFWithOptimizedContent(
           start: { x: dividerX, y: topY },
           end: { x: dividerX, y: bottomY },
           thickness: 1,
-          color: secondaryColor,
+          color: accentColor,
         });
       } else if (headerStyle === 'minimal') {
         // Minimal style: no divider
@@ -1014,90 +1029,90 @@ export async function modifyPDFWithOptimizedContent(
           color: accentColor,
         });
       } else if (headerStyle === 'minimal') {
-        // No underline for minimal style
+        // For minimal style, use a dot instead of a line
+        currentPage.drawCircle({
+          x: xPos - 5,
+          y: rightColumnY - 2,
+          size: 3,
+          color: accentColor,
+        });
       }
       
-      // Move down after header
-      rightColumnY -= headerSpacing; // Increased space after header from 20
+      rightColumnY -= 25; // Increased space after header from 20
       
       // Draw section content
       const contentLines = section.content.split('\n');
       for (let i = 0; i < contentLines.length; i++) {
         const line = contentLines[i].trim();
-        if (!line) continue; // Skip empty lines
+        if (!line) continue;
         
-        // Check if line is a bullet point
-        const isBullet = line.startsWith('•') || line.startsWith('-') || line.startsWith('*');
-        
-        // Check if line is a subheader (bold text)
-        const isSubheader = line.startsWith('**') && line.endsWith('**');
-        
-        if (isSubheader) {
-          // Draw subheader in bold
-          const subheaderText = line.substring(2, line.length - 2);
-          currentPage.drawText(subheaderText, {
-            x: xPos,
-            y: rightColumnY,
-            size: 11,
-            font: boldFont,
-            color: textColor,
-          });
-        } else if (isBullet) {
-          // Draw bullet point
+        // Check if this is a bullet point
+        if (line.startsWith('•')) {
+          // Draw bullet point with accent color
           currentPage.drawText('•', {
             x: xPos,
             y: rightColumnY,
-            size: 11,
+            size: 10,
             font: regularFont,
             color: accentColor,
           });
           
-          // Draw bullet text with indent
-          const bulletText = line.substring(1).trim();
-          const bulletLines = splitTextIntoLines(bulletText, rightColumnWidth - 10, regularFont, 11);
+          // Draw the text after the bullet point
+          const textAfterBullet = line.substring(1).trim();
           
-          for (let j = 0; j < bulletLines.length; j++) {
-            currentPage.drawText(bulletLines[j], {
-              x: xPos + 10,
-              y: rightColumnY - (j * lineSpacing * 0.8),
-              size: 11,
+          // Handle text wrapping for bullet points
+          const wrappedLines = wrapText(textAfterBullet, regularFont, 9, rightColumnWidth - 10);
+          for (let j = 0; j < wrappedLines.length; j++) {
+            const wrappedLine = wrappedLines[j];
+            currentPage.drawText(wrappedLine, {
+              x: xPos + 10, // Indent text after bullet point
+              y: rightColumnY - (j * 12), // Add spacing between wrapped lines
+              size: 9,
               font: regularFont,
               color: textColor,
             });
             
-            // Only add extra space after the last line of this bullet point
-            if (j === bulletLines.length - 1) {
-              rightColumnY -= lineSpacing * bulletLines.length;
+            // Only adjust Y position after all wrapped lines are drawn
+            if (j === wrappedLines.length - 1) {
+              rightColumnY -= (j * 12) + 18; // Increased space between lines from 15
             }
           }
-        } else {
-          // Draw regular text
-          const textLines = splitTextIntoLines(line, rightColumnWidth, regularFont, 11);
-          
-          for (let j = 0; j < textLines.length; j++) {
-            currentPage.drawText(textLines[j], {
+        } 
+        // Check if this is a subheader (bold text)
+        else if (line.startsWith('**') && line.endsWith('**')) {
+          const subheader = line.substring(2, line.length - 2);
+          currentPage.drawText(subheader, {
+            x: xPos,
+            y: rightColumnY,
+            size: 10,
+            font: boldFont,
+            color: textColor,
+          });
+          rightColumnY -= 15;
+        } 
+        // Regular text
+        else {
+          // Handle text wrapping for regular text
+          const wrappedLines = wrapText(line, regularFont, 9, rightColumnWidth);
+          for (let j = 0; j < wrappedLines.length; j++) {
+            const wrappedLine = wrappedLines[j];
+            currentPage.drawText(wrappedLine, {
               x: xPos,
-              y: rightColumnY - (j * lineSpacing * 0.8),
-              size: 11,
+              y: rightColumnY - (j * 12), // Add spacing between wrapped lines
+              size: 9,
               font: regularFont,
               color: textColor,
             });
             
-            // Only add extra space after the last line of this paragraph
-            if (j === textLines.length - 1) {
-              rightColumnY -= lineSpacing * textLines.length;
+            // Only adjust Y position after all wrapped lines are drawn
+            if (j === wrappedLines.length - 1) {
+              rightColumnY -= (j * 12) + 18; // Increased space between lines from 15
             }
           }
-        }
-        
-        // Add space between paragraphs
-        if (i < contentLines.length - 1 && contentLines[i+1].trim()) {
-          rightColumnY -= lineSpacing; // Increased space between lines from 15
         }
       }
       
-      // Add extra space between sections
-      rightColumnY -= sectionSpacing; // Add extra space between sections
+      rightColumnY -= 15; // Add extra space between sections
       
       // Check if we need to add a new page
       if (rightColumnY < margin) {
@@ -1117,43 +1132,24 @@ export async function modifyPDFWithOptimizedContent(
       }
     }
     
-    // Add page numbers to all pages
-    const pageCount = doc.getPageCount();
-    for (let i = 0; i < pageCount; i++) {
-      const page = doc.getPage(i);
-      const { width, height } = page.getSize();
-      
-      // Add page number at the bottom
-      if (pageCount > 1) {
-        page.drawText(`${i + 1} / ${pageCount}`, {
-          x: width - margin - 40,
-          y: margin / 2,
-          size: 9,
-          font: regularFont,
-          color: textColor,
-        });
-      }
-      
-      // Add a footer line based on header style
-      if (headerStyle === 'modern') {
-        // Modern footer: colored bar
-        page.drawRectangle({
-          x: 0,
-          y: 0,
-          width: width,
-          height: 10,
-          color: primaryColor,
-        });
-      } else if (headerStyle === 'minimal') {
-        // Minimal footer: thin line
-        page.drawLine({
-          start: { x: margin, y: margin / 2 },
-          end: { x: width - margin, y: margin / 2 },
-          thickness: 1,
-          color: accentColor,
-        });
-      }
+    // Draw a vertical line between columns if using two-column layout
+    if (layout !== 'one-column') {
+      currentPage.drawLine({
+        start: { x: margin + leftColumnWidth + columnGap / 2, y: height - margin },
+        end: { x: margin + leftColumnWidth + columnGap / 2, y: margin },
+        thickness: 0.5,
+        color: accentColor,
+      });
     }
+    
+    // Add a footer with page number
+    currentPage.drawText(`Page ${doc.getPageCount()}`, {
+      x: width - margin - 40,
+      y: margin / 2,
+      size: 8,
+      font: regularFont,
+      color: accentColor,
+    });
     
     // Serialize the PDFDocument to bytes
     const pdfBytes = await doc.save();
@@ -1192,3 +1188,4 @@ function getSectionCoordinates(sectionName: string, coordinates: any): number | 
   
   return sectionMap[sectionName] || null;
 }
+
