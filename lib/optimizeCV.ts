@@ -7,39 +7,49 @@ export async function optimizeCV(
     const potentialSections = extractPotentialSections(rawText);
     
     // Build a prompt for GPT-4 that instructs it to generate both optimized text and PDF editing instructions.
-    const prompt = `You are an expert CV optimizer specializing in creating professional, job-winning resumes. Your goal is to help the user GET A JOB NOW, not give general career advice.
+    const prompt = `You are an expert CV designer and content strategist specializing in creating professional, visually appealing resumes that get interviews. Your goal is to help the user GET A JOB NOW.
 
 Based on the following analysis and original CV content, generate a JSON response with two keys:
-- "optimizedText": a STRING containing the complete revised CV text with proper formatting. Do not use a nested object structure - the value must be a single string with line breaks.
-- "pdfInstructions": a concise instruction set for a PDF editing tool to transform the original CV PDF accordingly.
+- "optimizedText": a STRING containing the complete revised CV text with professional formatting and layout instructions.
+- "pdfInstructions": detailed instructions for a PDF editing tool to transform the original CV PDF into a professionally designed document.
 
-IMPORTANT: The user is actively job hunting RIGHT NOW. Do not suggest getting more experience or education - they need this CV to land interviews immediately.
+IMPORTANT: The user is actively job hunting RIGHT NOW. Focus on making their CV stand out visually and content-wise.
 
-For the optimizedText:
-1. Create a PROFESSIONAL, WELL-STRUCTURED document with clear sections and proper formatting
-2. Include a compelling PROFESSIONAL SUMMARY at the top that clearly states career objectives
-3. Add MEASURABLE ACHIEVEMENTS with numbers and metrics wherever possible (even if you need to create reasonable estimates based on the information provided)
-4. Organize information in a LOGICAL HIERARCHY with the most impressive and relevant information first
-5. Use INDUSTRY-SPECIFIC KEYWORDS relevant to their target roles
-6. Create CLEAR VISUAL SEPARATION between sections with proper spacing and formatting
-7. Ensure all bullet points are ACHIEVEMENT-ORIENTED, not just listing responsibilities
-8. Include specific QUANTIFIABLE RESULTS where possible (e.g., "Increased efficiency by 20%")
+For the optimizedText, create a COMPLETE REDESIGN that includes:
 
-IMPORTANT FORMATTING RULES:
-- Create a professional, modern layout with clear section headings
-- Use consistent formatting for section headers (e.g., ALL CAPS for main sections)
-- Format bullet points consistently with proper indentation
-- Use a clean, readable font style throughout
-- Maintain appropriate spacing between sections
-- Ensure the document has a professional, polished appearance
+1. PROFESSIONAL LAYOUT: Create a modern, clean design with proper spacing, alignment, and visual hierarchy
+   - Include clear section for contact information at the top
+   - Use appropriate margins and spacing between sections
+   - Create a balanced, easy-to-scan layout
 
-CRITICAL: The "optimizedText" value MUST be a single string with line breaks, NOT a nested JSON object. For example:
-"optimizedText": "MIGUEL OCQUE\\n\\nPROFESSIONAL SUMMARY\\nMeticulous and analytical professional with a strong foundation in Investment & Trading...\\n\\nOBJECTIVE\\nSeeking to leverage my diverse skill set..."
+2. COMPELLING CONTENT:
+   - Write a powerful PROFESSIONAL SUMMARY (3-4 lines) that highlights key strengths
+   - Create a clear CAREER OBJECTIVE statement (1-2 lines)
+   - Transform experience into ACHIEVEMENT STATEMENTS with metrics (e.g., "Increased efficiency by 20%")
+   - Highlight RELEVANT SKILLS with visual organization (e.g., skill bars or categories)
+
+3. VISUAL ELEMENTS:
+   - Suggest appropriate font pairings (one for headings, one for body text)
+   - Recommend a professional color scheme (2-3 colors maximum)
+   - Include formatting instructions for section headers, subheadings, and body text
+   - Add visual dividers between sections
+
+4. CONTENT ORGANIZATION:
+   - Arrange information in order of relevance to target positions
+   - Group related skills and experiences
+   - Use white space effectively to improve readability
+   - Create a logical flow of information
+
+The optimizedText should include formatting markers like:
+- [HEADER] for main section headers
+- [SUBHEADER] for subsections
+- [BOLD] for emphasized text
+- [BULLET] for bullet points
+- [DIVIDER] for section separators
+- [COLUMN-START] and [COLUMN-END] for multi-column sections
 
 I've identified these potential sections in the CV:
 ${potentialSections.map(section => `- ${section}`).join('\n')}
-
-Please organize your optimized text using these section headers where appropriate, adding proper formatting.
 
 CV Analysis:
 ATS Score: ${analysis.atsScore}
@@ -64,6 +74,7 @@ Return your answer strictly as JSON without additional text.`;
         model: "gpt-4", // Upgraded to GPT-4 for better quality
         messages: [{ role: "user", content: prompt }],
         stream: false,
+        temperature: 0.7, // Add some creativity for design
       }),
     });
     const result = await response.json();
@@ -78,6 +89,11 @@ Return your answer strictly as JSON without additional text.`;
         // Convert the nested object to a formatted string
         const formattedText = formatNestedObjectToString(optimizedData.optimizedText);
         optimizedData.optimizedText = formattedText;
+      }
+      
+      // Process formatting markers in the optimized text
+      if (typeof optimizedData.optimizedText === 'string') {
+        optimizedData.optimizedText = processFormattingMarkers(optimizedData.optimizedText);
       }
       
     } catch (error) {
@@ -95,6 +111,21 @@ Return your answer strictly as JSON without additional text.`;
     return { optimizedText: optimizedData.optimizedText, optimizedPDFUrl };
   }
   
+  // Process formatting markers in the text to create a more visually appealing document
+  function processFormattingMarkers(text: string): string {
+    // Replace formatting markers with appropriate styling
+    return text
+      .replace(/\[HEADER\]/g, '\n\n')
+      .replace(/\[SUBHEADER\]/g, '\n')
+      .replace(/\[BOLD\]/g, '')
+      .replace(/\[\/BOLD\]/g, '')
+      .replace(/\[BULLET\]/g, '• ')
+      .replace(/\[DIVIDER\]/g, '\n-------------------------------------------\n')
+      .replace(/\[COLUMN-START\]/g, '')
+      .replace(/\[COLUMN-END\]/g, '')
+      .replace(/\n{3,}/g, '\n\n'); // Replace multiple newlines with just two
+  }
+  
   // Helper function to convert a nested object to a formatted string
   function formatNestedObjectToString(obj: any): string {
     let result = '';
@@ -102,7 +133,7 @@ Return your answer strictly as JSON without additional text.`;
     // Process each section
     for (const [sectionName, content] of Object.entries(obj)) {
       // Add section header
-      result += `${sectionName.toUpperCase()}\n\n`;
+      result += `[HEADER]${sectionName.toUpperCase()}[HEADER]\n\n`;
       
       // Process section content
       if (typeof content === 'string') {
@@ -112,13 +143,13 @@ Return your answer strictly as JSON without additional text.`;
         // Nested object content (check that content is not null)
         for (const [subheading, subcontent] of Object.entries(content as Record<string, any>)) {
           // Add subheading
-          result += `${subheading}\n`;
+          result += `[SUBHEADER]${subheading}[SUBHEADER]\n`;
           
           // Process subcontent
           if (Array.isArray(subcontent)) {
             // Array of bullet points
             for (const point of subcontent) {
-              result += `• ${point}\n`;
+              result += `[BULLET]${point}\n`;
             }
           } else if (typeof subcontent === 'string') {
             // String content
