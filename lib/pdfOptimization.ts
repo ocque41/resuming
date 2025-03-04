@@ -414,7 +414,7 @@ export async function modifyPDFWithOptimizedContent(
     return Buffer.from(newPdfBytes).toString("base64");
   } catch (error) {
     console.error("Error in PDF modification:", error);
-    throw new Error(`PDF modification failed: ${error.message}`);
+    throw new Error(`PDF modification failed: ${(error as Error).message}`);
   }
 }
 
