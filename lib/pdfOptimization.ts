@@ -225,12 +225,15 @@ function wrapText(
 }
 
 /**
- * Add this helper function at the top of the file
+ * Update the sanitizeText function to be more aggressive
  */
 function sanitizeText(text: string): string {
+  if (!text) return '';
+  
   return text
     .replace(/\r?\n/g, ' ')         // Replace all newlines with spaces
-    .replace(/[\u0000-\u001F]/g, ' ')  // Replace control characters
+    .replace(/\u000a/g, ' ')        // Explicitly target the 0x000a character
+    .replace(/[\u0000-\u001F]/g, ' ')  // Replace all control characters
     .replace(/\s+/g, ' ')           // Replace multiple spaces with a single space
     .trim();                        // Trim leading/trailing whitespace
 }
@@ -243,90 +246,135 @@ export async function modifyPDFWithOptimizedContent(
   optimizedText: string,
   rawText?: string
 ): Promise<string> {
-  // Sanitize the optimized text first
-  optimizedText = sanitizeText(optimizedText);
-  
-  // Load the original PDF document to get its dimensions
-  const originalPdfDoc = await PDFDocument.load(originalPdfBytes);
-  const firstPage = originalPdfDoc.getPage(0);
-  const { width, height } = firstPage.getSize();
-  
-  // Create a new PDF document with the same dimensions
-  const newPdfDoc = await PDFDocument.create();
-  let page = newPdfDoc.addPage([width, height]);
-  
-  // Embed fonts
-  const helveticaFont = await newPdfDoc.embedFont(StandardFonts.Helvetica);
-  const helveticaBold = await newPdfDoc.embedFont(StandardFonts.HelveticaBold);
-  
-  // Default margins and styling
-  const margin = 50;
-  const fontSize = 10;
-  const headerFontSize = 12;
-  const lineHeight = fontSize * 1.2;
-  const maxWidth = width - margin * 2;
-  
-  // Parse the optimized text into sections
-  const optimizedSections = parseOptimizedText(optimizedText);
-  
-  // Start at the top of the page
-  let currentY = height - margin;
-  
-  // Add contact information at the top (assuming it's in the first few lines of rawText)
-  if (rawText) {
-    const contactLines = sanitizeText(rawText.split('\n').slice(0, 3).join(' '));
-    page.drawText(contactLines, {
-      x: margin,
-      y: currentY,
-      size: fontSize,
-      font: helveticaFont,
-      color: rgb(0, 0, 0),
-    });
+  try {
+    // Sanitize the optimized text first - be extra careful
+    optimizedText = sanitizeText(optimizedText);
     
-    currentY -= lineHeight * 4; // Move down after contact info
-  }
-  
-  // Process each section
-  for (const [sectionName, sectionContent] of Object.entries(optimizedSections)) {
-    // Sanitize the section name
-    const sanitizedSectionName = sanitizeText(sectionName);
+    // Load the original PDF document to get its dimensions
+    const originalPdfDoc = await PDFDocument.load(originalPdfBytes);
+    const firstPage = originalPdfDoc.getPage(0);
+    const { width, height } = firstPage.getSize();
     
-    // Draw section header
-    page.drawText(sanitizedSectionName.toUpperCase(), {
-      x: margin,
-      y: currentY,
-      size: headerFontSize,
-      font: helveticaBold,
-      color: rgb(0, 0, 0),
-    });
+    // Create a new PDF document with the same dimensions
+    const newPdfDoc = await PDFDocument.create();
+    let page = newPdfDoc.addPage([width, height]);
     
-    currentY -= lineHeight * 1.5;
+    // Embed fonts
+    const helveticaFont = await newPdfDoc.embedFont(StandardFonts.Helvetica);
+    const helveticaBold = await newPdfDoc.embedFont(StandardFonts.HelveticaBold);
     
-    // Process section content with proper paragraph breaks
-    const paragraphs = sanitizeText(sectionContent).split('  ').map(p => p.trim()).filter(Boolean);
-    for (const paragraph of paragraphs) {
-      // Handle bullet points
-      if (paragraph.includes('• ') || paragraph.includes('- ')) {
-        // Split by bullet points, being careful with the regex
-        const bulletPoints = paragraph
-          .split(/(?:^|\s)(?:•|-)\s+/)
-          .filter(Boolean)
-          .map(point => point.trim());
+    // Default margins and styling
+    const margin = 50;
+    const fontSize = 10;
+    const headerFontSize = 12;
+    const lineHeight = fontSize * 1.2;
+    const maxWidth = width - margin * 2;
+    
+    // Parse the optimized text into sections - sanitize again to be safe
+    const optimizedSections = parseOptimizedText(sanitizeText(optimizedText));
+    
+    // Start at the top of the page
+    let currentY = height - margin;
+    
+    // Add contact information at the top (assuming it's in the first few lines of rawText)
+    if (rawText) {
+      // Extra sanitization for contact info
+      const contactLines = sanitizeText(rawText.split('\n').slice(0, 3).join(' '));
+      
+      // Draw contact info
+      page.drawText(contactLines, {
+        x: margin,
+        y: currentY,
+        size: fontSize,
+        font: helveticaFont,
+        color: rgb(0, 0, 0),
+      });
+      
+      currentY -= lineHeight * 4; // Move down after contact info
+    }
+    
+    // Process each section with extra sanitization
+    for (const [sectionName, sectionContent] of Object.entries(optimizedSections)) {
+      // Sanitize the section name
+      const sanitizedSectionName = sanitizeText(sectionName);
+      
+      // Draw section header
+      page.drawText(sanitizedSectionName.toUpperCase(), {
+        x: margin,
+        y: currentY,
+        size: headerFontSize,
+        font: helveticaBold,
+        color: rgb(0, 0, 0),
+      });
+      
+      currentY -= lineHeight * 1.5;
+      
+      // Process section content with proper paragraph breaks
+      // Use double spaces as paragraph delimiters instead of newlines
+      const sanitizedContent = sanitizeText(sectionContent);
+      const paragraphs = sanitizedContent.split('  ').map(p => sanitizeText(p)).filter(Boolean);
+      
+      for (const paragraph of paragraphs) {
+        // Extra sanitization for each paragraph
+        const cleanParagraph = sanitizeText(paragraph);
         
-        for (const point of bulletPoints) {
+        // Handle bullet points
+        if (cleanParagraph.includes('• ') || cleanParagraph.includes('- ')) {
+          // Split by bullet points, being careful with the regex
+          const bulletPoints = cleanParagraph
+            .split(/(?:^|\s)(?:•|-)\s+/)
+            .filter(Boolean)
+            .map(point => sanitizeText(point));
+          
+          for (const point of bulletPoints) {
+            try {
+              // Extra sanitization for each bullet point
+              const cleanPoint = sanitizeText(point);
+              const lines = wrapText(cleanPoint, helveticaFont, fontSize, maxWidth - 15);
+              
+              // Draw bullet
+              page.drawText('•', {
+                x: margin,
+                y: currentY,
+                size: fontSize,
+                font: helveticaFont,
+                color: rgb(0, 0, 0),
+              });
+              
+              // Draw bullet point text
+              for (const line of lines) {
+                // Check if we need a new page
+                if (currentY < margin) {
+                  // Add a new page
+                  const newPage = newPdfDoc.addPage([width, height]);
+                  page = newPage;
+                  currentY = height - margin;
+                }
+                
+                // Final sanitization before drawing
+                const cleanLine = sanitizeText(line);
+                page.drawText(cleanLine, {
+                  x: margin + 15, // Indent for bullets
+                  y: currentY,
+                  size: fontSize,
+                  font: helveticaFont,
+                  color: rgb(0, 0, 0),
+                });
+                currentY -= lineHeight;
+              }
+              
+              // Add space between bullet points
+              currentY -= lineHeight * 0.3;
+            } catch (error) {
+              console.error(`Error processing bullet point: ${error}`);
+              // Continue with next bullet point
+            }
+          }
+        } else {
+          // Regular paragraph
           try {
-            const lines = wrapText(point, helveticaFont, fontSize, maxWidth - 15); // Indent for bullets
+            const lines = wrapText(cleanParagraph, helveticaFont, fontSize, maxWidth);
             
-            // Draw bullet
-            page.drawText('•', {
-              x: margin,
-              y: currentY,
-              size: fontSize,
-              font: helveticaFont,
-              color: rgb(0, 0, 0),
-            });
-            
-            // Draw bullet point text
             for (const line of lines) {
               // Check if we need a new page
               if (currentY < margin) {
@@ -336,8 +384,10 @@ export async function modifyPDFWithOptimizedContent(
                 currentY = height - margin;
               }
               
-              page.drawText(line, {
-                x: margin + 15, // Indent for bullets
+              // Final sanitization before drawing
+              const cleanLine = sanitizeText(line);
+              page.drawText(cleanLine, {
+                x: margin,
                 y: currentY,
                 size: fontSize,
                 font: helveticaFont,
@@ -345,54 +395,27 @@ export async function modifyPDFWithOptimizedContent(
               });
               currentY -= lineHeight;
             }
-            
-            // Add space between bullet points
-            currentY -= lineHeight * 0.3;
           } catch (error) {
-            console.error(`Error processing bullet point: ${error}`);
-            // Continue with next bullet point
+            console.error(`Error processing paragraph: ${error}`);
+            // Continue with next paragraph
           }
         }
-      } else {
-        // Regular paragraph
-        try {
-          const lines = wrapText(paragraph, helveticaFont, fontSize, maxWidth);
-          
-          for (const line of lines) {
-            // Check if we need a new page
-            if (currentY < margin) {
-              // Add a new page
-              const newPage = newPdfDoc.addPage([width, height]);
-              page = newPage;
-              currentY = height - margin;
-            }
-            
-            page.drawText(line, {
-              x: margin,
-              y: currentY,
-              size: fontSize,
-              font: helveticaFont,
-              color: rgb(0, 0, 0),
-            });
-            currentY -= lineHeight;
-          }
-        } catch (error) {
-          console.error(`Error processing paragraph: ${error}`);
-          // Continue with next paragraph
-        }
+        
+        // Add space between paragraphs
+        currentY -= lineHeight * 0.5;
       }
       
-      // Add space between paragraphs
-      currentY -= lineHeight * 0.5;
+      // Add space between sections
+      currentY -= lineHeight;
     }
     
-    // Add space between sections
-    currentY -= lineHeight;
+    // Serialize the new PDF
+    const newPdfBytes = await newPdfDoc.save();
+    return Buffer.from(newPdfBytes).toString("base64");
+  } catch (error) {
+    console.error("Error in PDF modification:", error);
+    throw new Error(`PDF modification failed: ${error.message}`);
   }
-  
-  // Serialize the new PDF
-  const newPdfBytes = await newPdfDoc.save();
-  return Buffer.from(newPdfBytes).toString("base64");
 }
 
 // Helper function to get section-specific coordinates
