@@ -144,9 +144,11 @@ Return your answer strictly as JSON without additional text.`;
   // Process formatting markers in the text to create a more visually appealing document
   function processFormattingMarkers(text: string): string {
     // Replace formatting markers with appropriate styling
-    return text
+    let processed = text
       .replace(/\[HEADER\]/g, '\n\n')
+      .replace(/\[\/HEADER\]/g, '')
       .replace(/\[SUBHEADER\]/g, '\n')
+      .replace(/\[\/SUBHEADER\]/g, '')
       .replace(/\[BOLD\]/g, '')
       .replace(/\[\/BOLD\]/g, '')
       .replace(/\[BULLET\]/g, '• ')
@@ -154,6 +156,17 @@ Return your answer strictly as JSON without additional text.`;
       .replace(/\[COLUMN-START\]/g, '')
       .replace(/\[COLUMN-END\]/g, '')
       .replace(/\n{3,}/g, '\n\n'); // Replace multiple newlines with just two
+    
+    // Add proper spacing around section headers
+    processed = processed.replace(/([A-Z\s]+)\n\n/g, '\n\n$1\n\n');
+    
+    // Ensure bullet points are properly indented and formatted
+    processed = processed.replace(/•\s+/g, '•  ');
+    
+    // Add proper spacing after contact information
+    processed = processed.replace(/(email|phone|portfolio|linkedin)/gi, '\n$1');
+    
+    return processed;
   }
   
   // Helper function to convert a nested object to a formatted string
