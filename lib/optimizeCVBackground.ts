@@ -72,7 +72,7 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     // Convert buffer to base64 string
     const modifiedPdfBase64 = Buffer.isBuffer(pdfBuffer) 
       ? pdfBuffer.toString('base64')
-      : Buffer.from(JSON.stringify(pdfBuffer)).toString('base64');
+      : Buffer.from(pdfBuffer).toString('base64');
     
     console.log(`Generated optimized PDF (${modifiedPdfBase64.length} base64 characters)`);
 
