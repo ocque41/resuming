@@ -1,5 +1,6 @@
 // lib/optimizeCV.ts
 import { CVTemplate } from "@/types/templates";
+import { modifyPDFWithOptimizedContent } from "./pdfOptimization";
 
 export async function optimizeCV(
     rawText: string,
@@ -194,30 +195,25 @@ ${rawText}`;
       
       // Generate PDF with the optimized content
       console.log("Generating PDF with optimized content");
-      const pdfResponse = await fetch("/api/generate-pdf", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          optimizedText: processedText,
+      try {
+        const pdfBuffer = await modifyPDFWithOptimizedContent(
+          processedText,
           rawText,
-          template: template ? template.id : null,
-        }),
-      });
-
-      if (!pdfResponse.ok) {
-        const errorData = await pdfResponse.json();
-        console.error("PDF generation error:", errorData);
-        throw new Error(`PDF generation failed: ${errorData.error || 'Unknown error'}`);
+          template
+        );
+        
+        // Convert buffer to base64 for URL
+        const base64Pdf = pdfBuffer.toString('base64');
+        const optimizedPDFUrl = `data:application/pdf;base64,${base64Pdf}`;
+        
+        return {
+          optimizedText: processedText,
+          optimizedPDFUrl: optimizedPDFUrl,
+        };
+      } catch (error: any) {
+        console.error("PDF generation error:", error);
+        throw new Error(`PDF generation failed: ${error.message || 'Unknown error'}`);
       }
-
-      const pdfData = await pdfResponse.json();
-      
-      return {
-        optimizedText: processedText,
-        optimizedPDFUrl: pdfData.pdfUrl,
-      };
     } catch (error: any) {
       console.error("Error in optimizeCV:", error);
       
@@ -227,31 +223,24 @@ ${rawText}`;
       // Try to generate a PDF with the fallback text
       try {
         console.log("Attempting to generate PDF with fallback content");
-        const fallbackPdfResponse = await fetch("/api/generate-pdf", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            optimizedText: fallbackText,
-            rawText,
-            template: template ? template.id : null,
-          }),
-        });
+        const fallbackPdfBuffer = await modifyPDFWithOptimizedContent(
+          fallbackText,
+          rawText,
+          template
+        );
         
-        if (fallbackPdfResponse.ok) {
-          const fallbackPdfData = await fallbackPdfResponse.json();
-          return {
-            optimizedText: fallbackText,
-            optimizedPDFUrl: fallbackPdfData.pdfUrl,
-          };
-        }
+        // Convert buffer to base64 for URL
+        const base64Pdf = fallbackPdfBuffer.toString('base64');
+        const optimizedPDFUrl = `data:application/pdf;base64,${base64Pdf}`;
+        
+        return {
+          optimizedText: fallbackText,
+          optimizedPDFUrl: optimizedPDFUrl,
+        };
       } catch (fallbackError) {
         console.error("Fallback PDF generation failed:", fallbackError);
+        throw new Error(`CV optimization failed: ${error.message}`);
       }
-      
-      // If all else fails, throw the original error
-      throw new Error(`CV optimization failed: ${error.message}`);
     }
   }
   
@@ -866,56 +855,5 @@ ${text}
       preserved: missingItems.length === 0,
       missingItems
     };
-  }
-  
-  // Simulated PDF editing function.
-  async function editPDF(pdfInstructions: string, template?: CVTemplate): Promise<string> {
-    // In a real scenario, you'd call your PDF parsing/editing tool here.
-    // Parse the instructions to format them for the PDF generator
-    let parsedInstructions = pdfInstructions;
-    
-    try {
-      // If the instructions are provided as a JSON string, parse them
-      const instructionsObj = JSON.parse(pdfInstructions);
-      
-      // If template is provided, apply template-specific styling
-      if (template) {
-        // Add template information to the instructions
-        instructionsObj.template = {
-          name: template.name,
-          company: template.company,
-          preferredFonts: template.metadata.preferredFonts,
-          colorScheme: template.metadata.colorScheme,
-          layout: template.metadata.layout
-        };
-      }
-      
-      // Enhanced processing logic can be added here based on the structure of instructionsObj
-      // For example, extracting color schemes, font styles, layout templates, etc.
-      
-      // Convert back to string with improved formatting
-      parsedInstructions = JSON.stringify(instructionsObj, null, 2);
-    } catch (error) {
-      // If it's not valid JSON, use as is
-      console.log("PDF instructions are not in JSON format, using as plain text");
-      
-      // If template is provided but instructions aren't JSON, append template info
-      if (template) {
-        parsedInstructions += `\n\nTemplate: ${template.name} (${template.company})\n`;
-        parsedInstructions += `Fonts: ${template.metadata.preferredFonts.join(', ')}\n`;
-        parsedInstructions += `Layout: ${template.metadata.layout}\n`;
-      }
-    }
-    
-    // Simulate processing delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    
-    // In the real implementation, you would:
-    // 1. Use a PDF generation library (e.g., PDFKit, jsPDF)
-    // 2. Apply the styling and layout based on parsedInstructions
-    // 3. Generate and save the PDF
-    // 4. Return the URL to the saved PDF
-    
-    return "https://example.com/path/to/optimized-cv.pdf";
   }
   
