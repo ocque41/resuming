@@ -1,365 +1,256 @@
 import { PDFDocument, StandardFonts, rgb, PDFFont } from "pdf-lib";
 import { getOverlayCoordinates } from "./templateMatching";
 import { CVTemplate } from "@/types/templates";
+import { Buffer } from "buffer";
+
+// Add Section interface at the top of the file
+export interface Section {
+  title: string;
+  content: string;
+}
 
 /**
  * Parses structured optimized text into sections
  */
-function parseOptimizedText(text: string): { [key: string]: string } {
-  const sections: { [key: string]: string } = {};
-  let currentSection = '';
-  let currentContent: string[] = [];
+export function parseOptimizedText(text: string): { leftColumnSections: Section[]; rightColumnSections: Section[] } {
+  console.log("Parsing optimized text into sections");
   
-  // Add tracking for column type
-  let inLeftColumn = false;
-  let inRightColumn = false;
-  let leftColumnContent: { [key: string]: string } = {};
-  let rightColumnContent: { [key: string]: string } = {};
-  
-  // If there's no text, use a placeholder
+  // Handle empty text
   if (!text || text.trim().length === 0) {
-    console.error("ERROR: parseOptimizedText received empty text");
-    return { "Content": "No content was provided for the CV. Please try again." };
+    console.error("ERROR: Empty text provided to parseOptimizedText");
+    return {
+      leftColumnSections: [{ title: "Error", content: "No content was provided for parsing." }],
+      rightColumnSections: []
+    };
   }
   
-  console.log(`Starting to parse optimized text (${text.length} characters)`);
-  
-  // Handle the case where the text is JSON
+  // Try to parse JSON if the text appears to be in JSON format
+  let textToProcess = text;
   if (text.trim().startsWith('{') && text.trim().endsWith('}')) {
     try {
-      // Try to parse it as JSON
-      const parsed = JSON.parse(text);
-      if (parsed.optimizedText) {
-        // If we got JSON with optimizedText, use that instead
-        console.log("Found JSON optimizedText, using it instead");
-        text = parsed.optimizedText;
+      const jsonData = JSON.parse(text);
+      if (jsonData.optimizedText) {
+        console.log("Found JSON format with optimizedText property, extracting content");
+        textToProcess = jsonData.optimizedText;
       }
-    } catch (e) {
-      console.log("Text appears to be JSON but couldn't be parsed", e);
+    } catch (error) {
+      console.warn("Text appears to be JSON but failed to parse:", error);
     }
   }
   
-  // Default section to start with
-  currentSection = 'Content';
+  const lines = textToProcess.split('\n');
+  let currentSection: Section | null = null;
+  const leftColumnSections: Section[] = [];
+  const rightColumnSections: Section[] = [];
   
-  const lines = text.split('\n');
-  console.log(`Processing ${lines.length} lines of text`);
+  // Track all section headers found for better organization
+  const allSectionHeaders: string[] = [];
   
-  // Count valid lines (not empty, not just column markers)
-  let validLineCount = 0;
-  lines.forEach(line => {
-    const trimmedLine = line.trim();
-    if (trimmedLine.length > 0 && 
-        !trimmedLine.includes('[LEFT-COLUMN-START]') && 
-        !trimmedLine.includes('[LEFT-COLUMN-END]') && 
-        !trimmedLine.includes('[RIGHT-COLUMN-START]') && 
-        !trimmedLine.includes('[RIGHT-COLUMN-END]')) {
-      validLineCount++;
-    }
-  });
+  // Count valid content lines to detect minimal content
+  let validContentLines = 0;
   
-  console.log(`Found ${validLineCount} non-empty content lines`);
+  // Collect all non-marker lines as fallback content
+  let fallbackContent = '';
   
-  // Extremely basic check - if we have very few lines, the content is likely invalid
-  if (validLineCount < 5) {
-    console.warn("WARNING: Very few valid content lines found, content may be invalid");
-  }
+  // Track which column we're in
+  let inLeftColumn = false;
+  let inRightColumn = false;
   
-  let fallbackContent = ""; // Collect all content as fallback
-  let allSectionHeaders: string[] = []; // Track all section headers we find
-  
+  // Process each line
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     
-    // Build fallback content from all non-marker lines
+    // Skip empty lines
+    if (line.length === 0) continue;
+    
+    // Count valid content lines
     if (line.length > 0 && 
         !line.includes('[LEFT-COLUMN-START]') && 
         !line.includes('[LEFT-COLUMN-END]') && 
         !line.includes('[RIGHT-COLUMN-START]') && 
         !line.includes('[RIGHT-COLUMN-END]')) {
-      fallbackContent += line + "\n";
+      validContentLines++;
+      
+      // Add to fallback content if not a marker
+      if (!line.includes('[HEADER]') && 
+          !line.includes('[SUBHEADER]') && 
+          !line.includes('[BULLET]')) {
+        fallbackContent += line + '\n';
+      }
     }
-    
-    if (line.length === 0) continue; // Skip empty lines for cleaner processing
     
     // Check for column markers
     if (line.includes('[LEFT-COLUMN-START]')) {
-      // Save any current content before switching columns
-      if (currentSection && currentContent.length > 0) {
-        if (inLeftColumn) {
-          leftColumnContent[currentSection] = currentContent.join('\n');
-        } else if (inRightColumn) {
-          rightColumnContent[currentSection] = currentContent.join('\n');
-        } else {
-          sections[currentSection] = currentContent.join('\n');
-        }
-        currentContent = [];
-      }
-      
       inLeftColumn = true;
       inRightColumn = false;
       continue;
-    }
-    
-    if (line.includes('[LEFT-COLUMN-END]')) {
-      // Save the left column content before ending it
-      if (currentSection && currentContent.length > 0) {
-        leftColumnContent[currentSection] = currentContent.join('\n');
-        currentContent = [];
-      }
-      
+    } else if (line.includes('[LEFT-COLUMN-END]')) {
       inLeftColumn = false;
       continue;
-    }
-    
-    if (line.includes('[RIGHT-COLUMN-START]')) {
-      // Save any current content before switching columns
-      if (currentSection && currentContent.length > 0) {
-        if (inLeftColumn) {
-          leftColumnContent[currentSection] = currentContent.join('\n');
-        } else if (inRightColumn) {
-          rightColumnContent[currentSection] = currentContent.join('\n');
-        } else {
-          sections[currentSection] = currentContent.join('\n');
-        }
-        currentContent = [];
-      }
-      
+    } else if (line.includes('[RIGHT-COLUMN-START]')) {
       inRightColumn = true;
       inLeftColumn = false;
       continue;
-    }
-    
-    if (line.includes('[RIGHT-COLUMN-END]')) {
-      // Save the right column content before ending it
-      if (currentSection && currentContent.length > 0) {
-        rightColumnContent[currentSection] = currentContent.join('\n');
-        currentContent = [];
-      }
-      
+    } else if (line.includes('[RIGHT-COLUMN-END]')) {
       inRightColumn = false;
       continue;
     }
     
-    // Check for section headers (either ## or [HEADER])
-    if (line.startsWith('## ') || line.includes('[HEADER]')) {
-      // Save previous section if it exists
-      if (currentSection && currentContent.length > 0) {
+    // Check for section headers
+    if (line.includes('[HEADER]') || line.startsWith('## ')) {
+      // Extract section title
+      const title = line.replace('[HEADER]', '').replace('## ', '').trim();
+      
+      // Save the previous section if it exists
+      if (currentSection) {
         if (inLeftColumn) {
-          leftColumnContent[currentSection] = currentContent.join('\n');
+          leftColumnSections.push(currentSection);
         } else if (inRightColumn) {
-          rightColumnContent[currentSection] = currentContent.join('\n');
+          rightColumnSections.push(currentSection);
         } else {
-          sections[currentSection] = currentContent.join('\n');
+          // If we're not in a specific column, default to right column
+          rightColumnSections.push(currentSection);
         }
       }
       
-      // Start new section
-      currentSection = line.replace('## ', '').replace('[HEADER]', '').trim();
-      allSectionHeaders.push(currentSection); // Track all section headers
-      currentContent = [];
-    } else if (line.length > 0) {
-      // Process subheaders, bullets, etc.
-      let processedLine = line
-        .replace('### ', '')
-        .replace('[SUBHEADER]', '')
-        .replace('[BULLET]', '• ')
-        .trim();
-        
-      currentContent.push(processedLine);
+      // Create a new section
+      currentSection = { title, content: '' };
+      allSectionHeaders.push(title);
+      continue;
     }
-  }
-  
-  // Save the last section
-  if (currentSection && currentContent.length > 0) {
-    if (inLeftColumn) {
-      leftColumnContent[currentSection] = currentContent.join('\n');
-    } else if (inRightColumn) {
-      rightColumnContent[currentSection] = currentContent.join('\n');
-    } else {
-      sections[currentSection] = currentContent.join('\n');
-    }
-  }
-  
-  // If we have no sections parsed but we have fallback content, create a default section
-  if (Object.keys(sections).length === 0 && 
-      Object.keys(leftColumnContent).length === 0 && 
-      Object.keys(rightColumnContent).length === 0) {
     
-    if (fallbackContent.trim().length > 0) {
-      console.log("No sections found, using fallback content");
+    // Check for subheaders
+    if (line.includes('[SUBHEADER]') || line.startsWith('### ')) {
+      const subheaderText = line.replace('[SUBHEADER]', '').replace('### ', '').trim();
       
-      // Try to identify some basic sections from the fallback content
-      const potentialSections = [
-        { name: "Profile", regex: /\b(profile|summary|about|objective)\b/i },
-        { name: "Experience", regex: /\b(experience|work|employment|career)\b/i },
-        { name: "Education", regex: /\b(education|academic|qualifications|degree)\b/i },
-        { name: "Skills", regex: /\b(skills|abilities|competencies|expertise)\b/i },
-        { name: "Languages", regex: /\b(languages|language proficiency)\b/i },
-        { name: "Certifications", regex: /\b(certifications|certificates|qualifications)\b/i },
-        { name: "Projects", regex: /\b(projects|portfolio|achievements)\b/i },
-        { name: "Contact", regex: /\b(contact|email|phone|address)\b/i }
-      ];
-      
-      let foundAnySections = false;
-      const fallbackLines = fallbackContent.split('\n');
-      
-      // First pass: look for clear section headers
-      for (let i = 0; i < fallbackLines.length; i++) {
-        const line = fallbackLines[i].trim();
-        
-        // Skip empty lines
-        if (line.length === 0) continue;
-        
-        // Check if this line looks like a section header (short line, possibly all caps)
-        if (line.length < 40 && (line === line.toUpperCase() || line.endsWith(':'))) {
-          for (const section of potentialSections) {
-            if (section.regex.test(line)) {
-              // This could be a section header
-              const sectionContent = [];
-              
-              // Collect content until the next potential section header
-              for (let j = i + 1; j < fallbackLines.length; j++) {
-                const contentLine = fallbackLines[j].trim();
-                
-                // Stop if we hit another potential section
-                let isAnotherSection = false;
-                for (const otherSection of potentialSections) {
-                  if (otherSection.regex.test(contentLine) && contentLine.length < 40 && 
-                      (contentLine === contentLine.toUpperCase() || contentLine.endsWith(':'))) {
-                    isAnotherSection = true;
-                    break;
-                  }
-                }
-                
-                if (isAnotherSection) break;
-                
-                if (contentLine.length > 0) {
-                  sectionContent.push(contentLine);
-                }
-              }
-              
-              if (sectionContent.length > 0) {
-                // Determine if this should be in left or right column
-                if (['Contact', 'Education', 'Skills', 'Languages', 'Certifications'].includes(section.name)) {
-                  leftColumnContent[section.name] = sectionContent.join('\n');
-                } else {
-                  rightColumnContent[section.name] = sectionContent.join('\n');
-                }
-                foundAnySections = true;
-              }
-              
-              break;
-            }
-          }
-        }
-      }
-      
-      // If we still couldn't identify sections, use the whole content
-      if (!foundAnySections) {
-        // Try to split the content into logical chunks
-        let contactInfo = "";
-        let mainContent = "";
-        let hasFoundMainContent = false;
-        
-        // First few lines are likely contact info
-        for (let i = 0; i < Math.min(10, fallbackLines.length); i++) {
-          const line = fallbackLines[i].trim();
-          if (line.length === 0) continue;
-          
-          // If line contains email or phone, it's likely contact info
-          if (line.includes('@') || line.match(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/)) {
-            contactInfo += line + "\n";
-          } else if (!hasFoundMainContent && line.length > 50) {
-            // First long line is likely the start of main content
-            hasFoundMainContent = true;
-            mainContent += line + "\n";
-          } else if (hasFoundMainContent) {
-            mainContent += line + "\n";
-          } else {
-            contactInfo += line + "\n";
-          }
-        }
-        
-        // Add remaining lines to main content
-        for (let i = 10; i < fallbackLines.length; i++) {
-          mainContent += fallbackLines[i] + "\n";
-        }
-        
-        // Create basic sections
-        if (contactInfo.trim().length > 0) {
-          leftColumnContent['Contact'] = contactInfo;
-        }
-        
-        if (mainContent.trim().length > 0) {
-          rightColumnContent['Content'] = mainContent;
-        } else {
-          // If we couldn't split it, just use everything as content
-          rightColumnContent['Content'] = fallbackContent;
-        }
-      }
-    } else {
-      console.log("No content found at all, creating default section with message");
-      sections['Content'] = "No content was provided for the CV. Please try again.";
-    }
-  }
-  
-  // Check if we have any content in the columns
-  const hasLeftColumnContent = Object.keys(leftColumnContent).length > 0;
-  const hasRightColumnContent = Object.keys(rightColumnContent).length > 0;
-  
-  // If we have no content in either column but have sections, distribute them
-  if (!hasLeftColumnContent && !hasRightColumnContent && Object.keys(sections).length > 0) {
-    console.log("Redistributing sections to columns");
-    
-    // Determine which sections go in which column
-    const leftColumnSectionNames = ['Contact', 'Education', 'Skills', 'Languages', 'Certifications'];
-    const rightColumnSectionNames = ['Profile', 'Summary', 'Experience', 'Work Experience', 'Professional Experience'];
-    
-    for (const [key, value] of Object.entries(sections)) {
-      // Check if this section should be in left column
-      const isLeftSection = leftColumnSectionNames.some(name => 
-        key.toLowerCase().includes(name.toLowerCase()));
-      
-      // Check if this section should be in right column
-      const isRightSection = rightColumnSectionNames.some(name => 
-        key.toLowerCase().includes(name.toLowerCase()));
-      
-      if (isLeftSection) {
-        leftColumnContent[key] = value;
-      } else if (isRightSection) {
-        rightColumnContent[key] = value;
+      // Add subheader to current section if it exists
+      if (currentSection) {
+        currentSection.content += `<strong>${subheaderText}</strong>\n`;
       } else {
-        // Default to right column for unknown sections
-        rightColumnContent[key] = value;
+        // If no current section, create one with a generic title
+        currentSection = { 
+          title: "Content", 
+          content: `<strong>${subheaderText}</strong>\n` 
+        };
       }
+      continue;
     }
     
-    // Clear the sections object since we've redistributed everything
-    Object.keys(sections).forEach(key => delete sections[key]);
+    // Check for bullet points
+    if (line.includes('[BULLET]') || line.startsWith('• ') || line.startsWith('* ')) {
+      const bulletText = line
+        .replace('[BULLET]', '')
+        .replace('• ', '')
+        .replace('* ', '')
+        .trim();
+      
+      // Add bullet point to current section if it exists
+      if (currentSection) {
+        currentSection.content += `• ${bulletText}\n`;
+      } else {
+        // If no current section, add to a generic section
+        currentSection = { 
+          title: "Content", 
+          content: `• ${bulletText}\n` 
+        };
+      }
+      continue;
+    }
+    
+    // Add regular content to current section
+    if (currentSection) {
+      currentSection.content += `${line}\n`;
+    } else {
+      // If content appears before any section header, create a default section
+      currentSection = { title: "Content", content: `${line}\n` };
+    }
   }
   
-  // Merge column content with main sections
-  // Left column sections are prefixed with "LEFT:" for proper identification
-  for (const [key, value] of Object.entries(leftColumnContent)) {
-    sections['LEFT:' + key] = value;
+  // Add the last section if it exists
+  if (currentSection) {
+    if (inLeftColumn) {
+      leftColumnSections.push(currentSection);
+    } else if (inRightColumn) {
+      rightColumnSections.push(currentSection);
+    } else {
+      // If we're not in a specific column, default to right column
+      rightColumnSections.push(currentSection);
+    }
   }
   
-  // Right column sections are added normally
-  for (const [key, value] of Object.entries(rightColumnContent)) {
-    sections[key] = value;
+  // Check if we have minimal content
+  if (validContentLines < 10) {
+    console.warn(`WARNING: Minimal content detected (${validContentLines} lines)`);
   }
   
-  // Final check - if we still have no sections, create a default one with the fallback content
-  if (Object.keys(sections).length === 0) {
-    console.warn("WARNING: No sections found after all processing, using fallback content");
-    sections['Content'] = fallbackContent || "No content was provided for the CV. Please try again.";
+  // If no sections were found, try to identify sections from fallback content
+  if (leftColumnSections.length === 0 && rightColumnSections.length === 0 && fallbackContent.length > 0) {
+    console.log("No sections found, attempting to identify sections from fallback content");
+    
+    // Common section patterns
+    const sectionPatterns = [
+      { name: 'Profile', regex: /\b(profile|summary|about|objective)\b/i, isLeft: false },
+      { name: 'Experience', regex: /\b(experience|work|employment|career)\b/i, isLeft: false },
+      { name: 'Education', regex: /\b(education|academic|qualifications|degree)\b/i, isLeft: true },
+      { name: 'Skills', regex: /\b(skills|abilities|competencies|expertise)\b/i, isLeft: true },
+      { name: 'Languages', regex: /\b(languages|language proficiency)\b/i, isLeft: true },
+      { name: 'Certifications', regex: /\b(certifications|certificates|qualifications)\b/i, isLeft: true },
+      { name: 'Contact', regex: /\b(contact|email|phone|address)\b/i, isLeft: true }
+    ];
+    
+    // Split fallback content into potential sections
+    const contentBlocks = fallbackContent.split(/\n\s*\n/);
+    
+    for (const block of contentBlocks) {
+      if (block.trim().length === 0) continue;
+      
+      // Try to identify what type of section this might be
+      let identifiedSection = false;
+      
+      for (const pattern of sectionPatterns) {
+        if (pattern.regex.test(block)) {
+          // Create a section with the identified name
+          const section = { title: pattern.name, content: block.trim() };
+          
+          if (pattern.isLeft) {
+            leftColumnSections.push(section);
+          } else {
+            rightColumnSections.push(section);
+          }
+          
+          identifiedSection = true;
+          break;
+        }
+      }
+      
+      // If we couldn't identify the section, add it to the right column as generic content
+      if (!identifiedSection) {
+        rightColumnSections.push({ title: "Content", content: block.trim() });
+      }
+    }
   }
   
-  console.log(`Finished parsing, found ${Object.keys(sections).length} total sections`);
-  console.log(`Section headers found: ${allSectionHeaders.join(', ')}`);
+  // If we still have no sections, create a placeholder
+  if (leftColumnSections.length === 0 && rightColumnSections.length === 0) {
+    console.warn("WARNING: No sections found after processing");
+    rightColumnSections.push({ 
+      title: "Content", 
+      content: textToProcess.trim() || "No structured content was found." 
+    });
+  }
   
-  return sections;
+  console.log(`Parsed ${leftColumnSections.length} left column sections and ${rightColumnSections.length} right column sections`);
+  
+  // Log section titles for debugging
+  if (leftColumnSections.length > 0) {
+    console.log("Left column sections:", leftColumnSections.map(s => s.title).join(", "));
+  }
+  
+  if (rightColumnSections.length > 0) {
+    console.log("Right column sections:", rightColumnSections.map(s => s.title).join(", "));
+  }
+  
+  return { leftColumnSections, rightColumnSections };
 }
 
 /**
@@ -579,646 +470,437 @@ function sanitizeText(text: string): string {
  * Creates a new PDF with optimized content
  */
 export async function modifyPDFWithOptimizedContent(
-  originalPdfBytes: Uint8Array,
   optimizedText: string,
-  rawText?: string,
+  rawText: string,
   template?: CVTemplate
-): Promise<string> {
-  try {
-    // Debug check to ensure we have content to work with
-    if (!optimizedText || optimizedText.trim().length === 0) {
-      console.error("ERROR: Empty optimized text received. Cannot generate PDF.");
-      
-      // If we have original text, use that instead
-      if (rawText && rawText.trim().length > 0) {
-        console.log("Using original raw text as fallback for PDF generation");
-        optimizedText = `[HEADER] Profile\n\nThe content below is from the original CV.\n\n[RIGHT-COLUMN-START]\n[HEADER] Content\n\n${rawText}\n[RIGHT-COLUMN-END]`;
-      } else {
-        throw new Error("No content was provided for PDF generation");
-      }
+): Promise<Buffer> {
+  console.log("Starting PDF generation with optimized content");
+  
+  // Debug check: verify that optimizedText is not empty
+  if (!optimizedText || optimizedText.trim().length === 0) {
+    console.error("ERROR: Empty optimizedText provided to modifyPDFWithOptimizedContent");
+    
+    // Fallback to rawText if available
+    if (rawText && rawText.trim().length > 0) {
+      console.log("Using rawText as fallback for PDF generation");
+      optimizedText = rawText;
+    } else {
+      throw new Error("No content available for PDF generation");
     }
-    
-    console.log(`Optimized text length: ${optimizedText.length}`);
-    console.log(`First 200 characters: ${optimizedText.substring(0, 200)}...`);
-    
-    // Parse the optimized text into sections for structured processing
-    const parsedSections = parseOptimizedText(optimizedText);
-    
-    // Debug to verify we extracted content from the optimized text
-    console.log(`Parsed ${Object.keys(parsedSections).length} sections from optimized text`);
-    
-    // Display the sections we found
-    Object.keys(parsedSections).forEach(section => {
-      const contentLength = parsedSections[section].length;
-      console.log(`- Section "${section}": ${contentLength} characters`);
-    });
-    
-    // Do a sanity check - if we have no meaningful content, use the raw text
-    const totalContentLength = Object.values(parsedSections).reduce((sum, content) => sum + content.length, 0);
-    if (totalContentLength < 100 && rawText && rawText.length > 100) {
-      console.warn("WARNING: Optimized content appears to be minimal. Using raw text as fallback.");
-      
-      // Replace the sections with a simple structure using the raw text
-      const fallbackContent = `The content below is from the original CV.\n\n${rawText}`;
-      parsedSections["Content"] = fallbackContent;
-    }
-    
-    // Create a new PDF document
-    const newPdfDoc = await PDFDocument.create();
-    
-    // Load fonts
-    const helveticaFont = await newPdfDoc.embedFont(StandardFonts.Helvetica);
-    const helveticaBold = await newPdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const timesRoman = await newPdfDoc.embedFont(StandardFonts.TimesRoman);
-    const timesBold = await newPdfDoc.embedFont(StandardFonts.TimesRomanBold);
-    
-    // Add a page
-    let page = newPdfDoc.addPage([612, 792]); // Letter size
-    const { width, height } = page.getSize();
-    
-    // Default brand colors from the design system
-    let primaryColor = rgb(88/255, 66/255, 53/255); // Rich Walnut: #584235
-    let secondaryColor = rgb(232/255, 220/255, 196/255); // Aged Paper: #E8DCC4
-    let accentColor = rgb(180/255, 145/255, 108/255); // Bamboo: #B4916C
-    let backgroundColor = rgb(250/255, 246/255, 237/255); // Rice Paper: #FAF6ED
-    let textColor = rgb(44/255, 36/255, 32/255); // Ink Stone: #2C2420
-    
-    // Apply template-specific styling if template is provided
-    if (template) {
-      console.log(`Applying template: ${template.name} (${template.company})`);
-      
-      // Apply template-specific colors if defined
-      if (template.metadata.colorScheme) {
-        try {
-          const colors = template.metadata.colorScheme;
-          
-          // Convert hex to RGB for pdf-lib
-          const hexToRgb = (hex: string) => {
-            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-            return result ? rgb(
-              parseInt(result[1], 16) / 255,
-              parseInt(result[2], 16) / 255,
-              parseInt(result[3], 16) / 255
-            ) : null;
-          };
-          
-          // Apply colors if provided in the template
-          if (colors.primary) primaryColor = hexToRgb(colors.primary) || primaryColor;
-          if (colors.secondary) secondaryColor = hexToRgb(colors.secondary) || secondaryColor;
-          if (colors.accent) accentColor = hexToRgb(colors.accent) || accentColor;
-          if (colors.background) backgroundColor = hexToRgb(colors.background) || backgroundColor;
-          if (colors.text) textColor = hexToRgb(colors.text) || textColor;
-        } catch (error) {
-          console.error("Error applying template colors:", error);
-          // Continue with default colors if there's an error
-        }
-      }
-    }
-    
-    // Enhanced styling and layout
-    const margin = 50;
-    const sidebarWidth = 180; // Width of the left sidebar
-    const fontSize = 10;
-    const headerFontSize = 14;
-    const subheaderFontSize = 12;
-    const nameSize = 24; // Larger size for the name
-    const lineHeight = fontSize * 1.4; // Increased for better readability
-    const maxWidth = width - margin * 2;
-    const mainColumnWidth = width - margin - sidebarWidth - margin; // Width of main content area
-    
-    // Make sure optimizedText is a string
-    if (typeof optimizedText !== 'string') {
-      console.error("optimizedText is not a string:", optimizedText);
-      optimizedText = String(optimizedText || ''); // Convert to string or use empty string
-    }
-    
-    // Make sure rawText is a string if provided
-    if (rawText !== undefined && typeof rawText !== 'string') {
-      console.error("rawText is not a string:", rawText);
-      rawText = String(rawText || ''); // Convert to string or use empty string
-    }
-    
-    // Parse the optimized text into sections
-    const optimizedSections = parseOptimizedText(sanitizeText(optimizedText));
-
-    // Fill page with subtle background color
-    page.drawRectangle({
-      x: 0,
-      y: 0,
-      width: width,
-      height: height,
-      color: backgroundColor,
-    });
-    
-    // Create a left sidebar on each page
-    page.drawRectangle({
-      x: 0,
-      y: 0,
-      width: sidebarWidth,
-      height: height,
-      color: rgb(245/255, 245/255, 245/255), // Light gray for sidebar
-    });
-    
-    // Add a circular logo/initials at top of sidebar
-    const logoRadius = 40;
-    const logoX = sidebarWidth / 2;
-    const logoY = height - 100;
-    
-    // Draw circle for logo
-    page.drawCircle({
-      x: logoX,
-      y: logoY,
-      size: logoRadius,
-      color: primaryColor,
-    });
-    
-    // Extract initials from name
-    let initials = "M.O."; // Default initials
-    if (rawText) {
-      const name = sanitizeText(rawText.split('\n')[0]);
-      if (name) {
-        const nameParts = name.split(' ');
-        if (nameParts.length >= 2) {
-          initials = `${nameParts[0][0]}.${nameParts[1][0]}.`;
-        }
-      }
-    }
-    
-    // Draw initials in circle
-    page.drawText(initials, {
-      x: logoX - (initials.length * 7 / 2), // Center approximately
-      y: logoY - 6, // Slight adjustment to center vertically
-      size: 16,
-      font: timesBold,
-      color: secondaryColor,
-    });
-    
-    // Extract name from the first line of rawText
-    let candidateName = '';
-    if (rawText) {
-      candidateName = sanitizeText(rawText.split('\n')[0]);
-      
-      // Draw name below the logo
-      page.drawText(candidateName, {
-        x: margin / 2,
-        y: logoY - 60,
-        size: 14,
-        font: timesBold,
-        color: textColor,
-        maxWidth: sidebarWidth - margin,
-      });
-    }
-    
-    // Current position in sidebar for contact info
-    let sidebarY = logoY - 90;
-    
-    // Extract contact information (email, phone, etc.)
-    if (rawText) {
-      const contactLines = rawText.split('\n').slice(1, 5);
-      
-      // Headers for sidebar sections
-      page.drawText('CONTACT', {
-        x: margin / 2,
-        y: sidebarY,
-        size: subheaderFontSize,
-        font: timesBold,
-        color: primaryColor,
-      });
-      
-      sidebarY -= lineHeight * 1.5;
-      
-      // Draw contact info in sidebar
-      for (const line of contactLines) {
-        if (line.includes('@') || line.includes('http') || line.includes('+') || line.includes('Phone')) {
-          const cleanLine = sanitizeText(line);
-          const wrappedLines = wrapText(cleanLine, helveticaFont, fontSize, sidebarWidth - margin);
-          
-          for (const wrappedLine of wrappedLines) {
-            page.drawText(wrappedLine, {
-              x: margin / 2,
-              y: sidebarY,
-              size: fontSize,
-              font: helveticaFont,
-              color: textColor,
-            });
-            sidebarY -= lineHeight;
-          }
-          sidebarY -= lineHeight * 0.5;
-        }
-      }
-    }
-    
-    // Add education section to sidebar if it exists
-    if (optimizedSections['EDUCATION'] || optimizedSections['Education']) {
-      const educationContent = optimizedSections['EDUCATION'] || optimizedSections['Education'];
-      
-      // Add some space before education section
-      sidebarY -= lineHeight;
-      
-      // Draw education header
-      page.drawText('EDUCATION', {
-        x: margin / 2,
-        y: sidebarY,
-        size: subheaderFontSize,
-        font: timesBold,
-        color: primaryColor,
-      });
-      
-      sidebarY -= lineHeight * 1.5;
-      
-      // Process education content
-      if (educationContent) {
-        const educationLines = educationContent.split('\n');
-        
-        for (const line of educationLines) {
-          if (line.trim()) {
-            const cleanLine = sanitizeText(line);
-            const wrappedLines = wrapText(cleanLine, helveticaFont, fontSize, sidebarWidth - margin);
-            
-            for (const wrappedLine of wrappedLines) {
-              page.drawText(wrappedLine, {
-                x: margin / 2,
-                y: sidebarY,
-                size: fontSize,
-                font: helveticaFont,
-                color: textColor,
-              });
-              sidebarY -= lineHeight;
-            }
-          }
-        }
-      }
-    }
-    
-    // Add languages section to sidebar if it exists
-    if (optimizedSections['LANGUAGES'] || optimizedSections['Languages']) {
-      const languagesContent = optimizedSections['LANGUAGES'] || optimizedSections['Languages'];
-      
-      // Add some space before languages section
-      sidebarY -= lineHeight;
-      
-      // Draw languages header
-      page.drawText('LANGUAGES', {
-        x: margin / 2,
-        y: sidebarY,
-        size: subheaderFontSize,
-        font: timesBold,
-        color: primaryColor,
-      });
-      
-      sidebarY -= lineHeight * 1.5;
-      
-      // Process languages content
-      if (languagesContent) {
-        const languageLines = languagesContent.split('\n');
-        
-        for (const line of languageLines) {
-          if (line.trim()) {
-            const cleanLine = sanitizeText(line);
-            const wrappedLines = wrapText(cleanLine, helveticaFont, fontSize, sidebarWidth - margin);
-            
-            for (const wrappedLine of wrappedLines) {
-              page.drawText(wrappedLine, {
-                x: margin / 2,
-                y: sidebarY,
-                size: fontSize,
-                font: helveticaFont,
-                color: textColor,
-              });
-              sidebarY -= lineHeight;
-            }
-          }
-        }
-      }
-    }
-    
-    // Start content in main column
-    let mainColumnX = sidebarWidth + margin / 2;
-    let currentY = height - margin * 1.5;
-    
-    // Collect left column and right column sections
-    const leftColumnSections: Record<string, string> = {};
-    const rightColumnSections: Record<string, string> = {};
-    
-    // Sort sections into left and right columns
-    for (const [key, value] of Object.entries(optimizedSections)) {
-      if (key.startsWith('LEFT:')) {
-        // Add to left column without the prefix
-        leftColumnSections[key.substring(5)] = value;
-      } else {
-        // Add to right column
-        rightColumnSections[key] = value;
-      }
-    }
-    
-    // Process left column content that wasn't already handled (sidebar content)
-    // We've already processed EDUCATION and LANGUAGES in the sidebar, so check for others
-    for (const [sectionName, sectionContent] of Object.entries(leftColumnSections)) {
-      // Skip sections we've already handled
-      if (['EDUCATION', 'Languages', 'LANGUAGES', 'Education'].includes(sectionName)) {
-        continue;
-      }
-      
-      // Add some space
-      sidebarY -= lineHeight;
-      
-      // Draw section header
-      page.drawText(sectionName.toUpperCase(), {
-        x: margin / 2,
-        y: sidebarY,
-        size: subheaderFontSize,
-        font: timesBold,
-        color: primaryColor,
-      });
-      
-      sidebarY -= lineHeight * 1.5;
-      
-      // Process section content
-      if (sectionContent) {
-        const contentLines = sectionContent.split('\n');
-        
-        for (const line of contentLines) {
-          if (line.trim()) {
-            // Handle bullet points
-            let cleanLine = sanitizeText(line);
-            let xOffset = margin / 2;
-            
-            if (line.includes('• ') || line.startsWith('•')) {
-              // This is a bullet point, add proper indentation
-              cleanLine = cleanLine.replace('• ', '').replace('•', '');
-              
-              // Draw bullet point
-              page.drawCircle({
-                x: margin / 2 + 3,
-                y: sidebarY + 3,
-                size: 1.5,
-                color: accentColor,
-              });
-              
-              xOffset = margin / 2 + 10; // Indented text after bullet
-            }
-            
-            const wrappedLines = wrapText(cleanLine, helveticaFont, fontSize, sidebarWidth - margin);
-            
-            for (const wrappedLine of wrappedLines) {
-              // Check if we need a new page for sidebar
-              if (sidebarY < margin) {
-                page = newPdfDoc.addPage([width, height]);
-                
-                // Create sidebar on new page
-                page.drawRectangle({
-                  x: 0,
-                  y: 0,
-                  width: sidebarWidth,
-                  height: height,
-                  color: rgb(245/255, 245/255, 245/255), // Light gray
-                });
-                
-                sidebarY = height - margin * 1.5;
-              }
-              
-              page.drawText(wrappedLine, {
-                x: xOffset,
-                y: sidebarY,
-                size: fontSize,
-                font: helveticaFont,
-                color: textColor,
-              });
-              
-              sidebarY -= lineHeight;
-            }
-          }
-        }
-      }
-    }
-    
-    // Function to process a section for the main column
-    const processMainColumnSection = (sectionName: string, sectionContent: string) => {
-      if (!sectionContent) return;
-      
-      // Check if we need a new page
-      if (currentY < margin + 50) {
-        page = newPdfDoc.addPage([width, height]);
-        
-        // Add sidebar to new page
-        page.drawRectangle({
-          x: 0,
-          y: 0,
-          width: sidebarWidth,
-          height: height,
-          color: rgb(245/255, 245/255, 245/255), // Light gray
-        });
-        
-        // Reset Y position for new page
-        currentY = height - margin * 1.5;
-      }
-      
-      // Draw section header
-      page.drawText(sectionName.toUpperCase(), {
-        x: mainColumnX,
-        y: currentY,
-        size: headerFontSize,
-        font: timesBold,
-        color: primaryColor,
-      });
-      
-      // Add underline
-      page.drawLine({
-        start: { x: mainColumnX, y: currentY - 5 },
-        end: { x: width - margin, y: currentY - 5 },
-        thickness: 1,
-        color: accentColor,
-      });
-      
-      currentY -= lineHeight * 2;
-      
-      // Process section content
-      const paragraphs = sectionContent.split('\n\n').map(p => sanitizeText(p)).filter(Boolean);
-      
-      for (const paragraph of paragraphs) {
-        // Handle bullet points
-        if (paragraph.includes('• ') || paragraph.includes('- ')) {
-          const bulletPoints = paragraph
-            .split(/(?:^|\s)(?:•|-)\s+/)
-            .filter(Boolean)
-            .map(point => sanitizeText(point));
-          
-          for (const point of bulletPoints) {
-            // Check for new page
-            if (currentY < margin + 20) {
-              page = newPdfDoc.addPage([width, height]);
-              
-              // Add sidebar to new page
-              page.drawRectangle({
-                x: 0,
-                y: 0,
-                width: sidebarWidth,
-                height: height,
-                color: rgb(245/255, 245/255, 245/255), // Light gray
-              });
-              
-              currentY = height - margin * 1.5;
-            }
-            
-            // Draw bullet point
-            page.drawCircle({
-              x: mainColumnX + 4,
-              y: currentY + 3,
-              size: 2,
-              color: accentColor,
-            });
-            
-            // Draw bullet text
-            const lines = wrapText(point, helveticaFont, fontSize, mainColumnWidth - 15);
-            
-            for (const line of lines) {
-              page.drawText(sanitizeText(line), {
-                x: mainColumnX + 15,
-                y: currentY,
-                size: fontSize,
-                font: helveticaFont,
-                color: textColor,
-              });
-              
-              currentY -= lineHeight;
-            }
-          }
-        } else {
-          // Regular paragraph
-          // Check if it looks like a subheader
-          const isSubheader = paragraph === paragraph.toUpperCase() || paragraph.endsWith(':');
-          
-          if (isSubheader) {
-            // Draw as subheader
-            page.drawText(sanitizeText(paragraph), {
-              x: mainColumnX,
-              y: currentY,
-              size: subheaderFontSize,
-              font: helveticaBold,
-              color: accentColor,
-            });
-            
-            currentY -= lineHeight * 1.5;
-          } else {
-            // Draw as normal paragraph
-            const lines = wrapText(paragraph, helveticaFont, fontSize, mainColumnWidth);
-            
-            for (const line of lines) {
-              if (currentY < margin) {
-                page = newPdfDoc.addPage([width, height]);
-                
-                // Add sidebar to new page
-                page.drawRectangle({
-                  x: 0,
-                  y: 0,
-                  width: sidebarWidth,
-                  height: height,
-                  color: rgb(245/255, 245/255, 245/255), // Light gray
-                });
-                
-                currentY = height - margin * 1.5;
-              }
-              
-              page.drawText(sanitizeText(line), {
-                x: mainColumnX,
-                y: currentY,
-                size: fontSize,
-                font: helveticaFont,
-                color: textColor,
-              });
-              
-              currentY -= lineHeight;
-            }
-            
-            // Add extra space after paragraphs
-            currentY -= lineHeight * 0.5;
-          }
-        }
-      }
-      
-      // Add space after section
-      currentY -= lineHeight * 1.5;
-    };
-    
-    // Process main content sections in proper order
-    // First, process Profile/Summary if it exists
-    if (rightColumnSections['PROFILE'] || rightColumnSections['PROFESSIONAL SUMMARY']) {
-      const profileContent = rightColumnSections['PROFILE'] || rightColumnSections['PROFESSIONAL SUMMARY'];
-      processMainColumnSection('PROFILE', profileContent);
-    }
-    
-    // Then Professional Experience
-    if (rightColumnSections['EXPERIENCE'] || rightColumnSections['PROFESSIONAL EXPERIENCE']) {
-      const experienceContent = rightColumnSections['EXPERIENCE'] || rightColumnSections['PROFESSIONAL EXPERIENCE'];
-      processMainColumnSection('PROFESSIONAL EXPERIENCE', experienceContent);
-    }
-    
-    // Process Skills section
-    if (rightColumnSections['SKILLS'] || rightColumnSections['TECHNICAL SKILLS']) {
-      const skillsContent = rightColumnSections['SKILLS'] || rightColumnSections['TECHNICAL SKILLS'];
-      processMainColumnSection('SKILLS', skillsContent);
-    }
-    
-    // Process other sections in the right column
-    for (const [sectionName, sectionContent] of Object.entries(rightColumnSections)) {
-      // Skip sections we've already processed
-      if (['PROFILE', 'PROFESSIONAL SUMMARY', 'EXPERIENCE', 'PROFESSIONAL EXPERIENCE', 
-           'SKILLS', 'TECHNICAL SKILLS'].includes(sectionName.toUpperCase())) {
-        continue;
-      }
-      
-      processMainColumnSection(sectionName, sectionContent);
-    }
-    
-    // Add a professional footer to each page
-    const pageCount = newPdfDoc.getPageCount();
-    for (let i = 0; i < pageCount; i++) {
-      const page = newPdfDoc.getPage(i);
-      const { width, height } = page.getSize();
-      
-      // Draw footer line
-      page.drawLine({
-        start: { x: sidebarWidth + margin / 2, y: 30 },
-        end: { x: width - margin, y: 30 },
-        thickness: 0.5,
-        color: accentColor,
-      });
-      
-      // Add page number and date
-      const currentDate = new Date().toLocaleDateString();
-      page.drawText(`Page ${i + 1} of ${pageCount} | Updated: ${currentDate}`, {
-        x: sidebarWidth + margin / 2,
-        y: 15,
-        size: 8,
-        font: helveticaFont,
-        color: primaryColor,
-      });
-    }
-    
-    // Embed the full text content as metadata in the PDF for easier extraction later
-    const metadata = {
-      fullText: sanitizeText(optimizedText),
-      generatedAt: new Date().toISOString(),
-      isOptimized: true
-    };
-
-    // Set PDF metadata using the methods that are available in pdf-lib
-    newPdfDoc.setTitle("Optimized CV");
-    newPdfDoc.setSubject("CV optimized with AI");
-    newPdfDoc.setKeywords(["CV", "resume", "optimized"]);
-    newPdfDoc.setProducer("CV Optimizer");
-    newPdfDoc.setCreator("CV Optimizer AI");
-
-    // Store the full text in the Subject field since custom metadata isn't available
-    newPdfDoc.setSubject(JSON.stringify(metadata));
-
-    // Serialize the PDF with metadata
-    const newPdfBytes = await newPdfDoc.save();
-    return Buffer.from(newPdfBytes).toString("base64");
-  } catch (error) {
-    console.error("Error in PDF generation:", error);
-    throw new Error(`Failed to modify PDF: ${error}`);
   }
+  
+  // Log the length of the optimizedText for debugging
+  console.log(`Optimized text length: ${optimizedText.length} characters`);
+  console.log(`First 200 characters: ${optimizedText.substring(0, 200)}...`);
+  
+  // Parse the optimizedText into sections
+  const { leftColumnSections, rightColumnSections } = parseOptimizedText(optimizedText);
+  
+  // Log the number of sections parsed
+  console.log(`Parsed ${leftColumnSections.length} left column sections and ${rightColumnSections.length} right column sections`);
+  
+  // Log character count for each section for debugging
+  leftColumnSections.forEach(section => {
+    console.log(`Left column section "${section.title}": ${section.content.length} characters`);
+  });
+  
+  rightColumnSections.forEach(section => {
+    console.log(`Right column section "${section.title}": ${section.content.length} characters`);
+  });
+  
+  // Sanity check: if total content is minimal, use rawText as fallback
+  const totalContentLength = 
+    leftColumnSections.reduce((sum, section) => sum + section.content.length, 0) +
+    rightColumnSections.reduce((sum, section) => sum + section.content.length, 0);
+  
+  if (totalContentLength < 100 && rawText && rawText.length > 0) {
+    console.warn("WARNING: Minimal content detected, using rawText as fallback");
+    const { leftColumnSections: fallbackLeft, rightColumnSections: fallbackRight } = parseOptimizedText(rawText);
+    
+    // Only use fallback if it has more content
+    const fallbackContentLength = 
+      fallbackLeft.reduce((sum, section) => sum + section.content.length, 0) +
+      fallbackRight.reduce((sum, section) => sum + section.content.length, 0);
+    
+    if (fallbackContentLength > totalContentLength) {
+      console.log(`Using fallback content with ${fallbackContentLength} characters`);
+      return createPDFWithSections(fallbackLeft, fallbackRight, rawText, template);
+    }
+  }
+  
+  // Create PDF with the parsed sections
+  return createPDFWithSections(leftColumnSections, rightColumnSections, rawText, template);
+}
+
+async function createPDFWithSections(
+  leftColumnSections: Section[],
+  rightColumnSections: Section[],
+  rawText: string,
+  template?: CVTemplate
+): Promise<Buffer> {
+  try {
+    // Create a new PDF document
+    const doc = await PDFDocument.create();
+    
+    // Embed fonts
+    const regularFont = await doc.embedFont(StandardFonts.Helvetica);
+    const boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
+    let titleFont = boldFont;
+    let bodyFont = regularFont;
+    
+    // Try to load template-specific fonts if available
+    if (template?.metadata?.preferredFonts) {
+      try {
+        const preferredFonts = template.metadata.preferredFonts;
+        
+        // Use Times Roman for more traditional templates
+        if (preferredFonts.includes('Times') || preferredFonts.includes('Serif')) {
+          titleFont = await doc.embedFont(StandardFonts.TimesRomanBold);
+          bodyFont = await doc.embedFont(StandardFonts.TimesRoman);
+          console.log("Using Times Roman fonts for template");
+        }
+        
+        // Use Courier for monospaced templates
+        if (preferredFonts.includes('Courier') || preferredFonts.includes('Monospace')) {
+          titleFont = await doc.embedFont(StandardFonts.CourierBold);
+          bodyFont = await doc.embedFont(StandardFonts.Courier);
+          console.log("Using Courier fonts for template");
+        }
+      } catch (error: any) {
+        console.warn("Could not load preferred fonts:", error.message);
+        // Continue with default fonts
+      }
+    }
+    
+    // Define default brand colors
+    let primaryColor = rgb(0.2, 0.4, 0.6); // Default blue
+    let secondaryColor = rgb(0.8, 0.8, 0.8); // Default light gray
+    let textColor = rgb(0.1, 0.1, 0.1); // Near black
+    let accentColor = rgb(0.4, 0.6, 0.8); // Light blue
+    
+    // If template is provided, try to apply template-specific colors
+    if (template && template.metadata && template.metadata.colorScheme) {
+      try {
+        const colorScheme = template.metadata.colorScheme;
+        
+        if (colorScheme.primary) {
+          const { r, g, b } = hexToRgb(colorScheme.primary);
+          primaryColor = rgb(r/255, g/255, b/255);
+        }
+        
+        if (colorScheme.secondary) {
+          const { r, g, b } = hexToRgb(colorScheme.secondary);
+          secondaryColor = rgb(r/255, g/255, b/255);
+        }
+        
+        if (colorScheme.text) {
+          const { r, g, b } = hexToRgb(colorScheme.text);
+          textColor = rgb(r/255, g/255, b/255);
+        }
+        
+        if (colorScheme.accent) {
+          const { r, g, b } = hexToRgb(colorScheme.accent);
+          accentColor = rgb(r/255, g/255, b/255);
+        }
+        
+        console.log(`Applied color scheme from template: ${template.name}`);
+      } catch (error: any) {
+        console.error("Error applying template colors:", error.message);
+        // Continue with default colors
+      }
+    }
+    
+    // Determine layout based on template
+    let layout = "two-column"; // Default layout
+    if (template?.metadata?.layout) {
+      layout = template.metadata.layout;
+      console.log(`Using template layout: ${layout}`);
+    }
+    
+    // Add a page to the document
+    let currentPage = doc.addPage([595, 842]); // A4 size
+    const { width, height } = currentPage.getSize();
+    
+    // Define margins
+    const margin = 50;
+    const columnGap = 20;
+    
+    // Calculate column widths based on layout
+    let leftColumnWidth = (width - 2 * margin - columnGap) * 0.3; // Default: 30% of available width
+    let rightColumnWidth = (width - 2 * margin - columnGap) * 0.7; // Default: 70% of available width
+    
+    // Adjust column widths based on layout
+    if (layout === "one-column") {
+      leftColumnWidth = 0;
+      rightColumnWidth = width - 2 * margin;
+      
+      // For one-column layout, move left column sections to right column
+      rightColumnSections = [...leftColumnSections, ...rightColumnSections];
+      leftColumnSections = [];
+    } else if (layout === "traditional") {
+      // More balanced columns for traditional layout
+      leftColumnWidth = (width - 2 * margin - columnGap) * 0.4;
+      rightColumnWidth = (width - 2 * margin - columnGap) * 0.6;
+    }
+    
+    // Define starting positions
+    let leftColumnY = height - margin;
+    let rightColumnY = height - margin;
+    
+    // For traditional layout, add a name header at the top
+    if (layout === "traditional" && rawText) {
+      try {
+        // Extract name from first line of raw text
+        const name = rawText.split('\n')[0].trim();
+        if (name) {
+          // Draw name centered at top
+          const nameWidth = titleFont.widthOfTextAtSize(name.toUpperCase(), 24);
+          currentPage.drawText(name.toUpperCase(), {
+            x: (width - nameWidth) / 2,
+            y: height - margin,
+            size: 24,
+            font: titleFont,
+            color: primaryColor,
+          });
+          
+          // Add underline
+          currentPage.drawLine({
+            start: { x: (width - nameWidth) / 2, y: height - margin - 30 },
+            end: { x: (width + nameWidth) / 2, y: height - margin - 30 },
+            thickness: 1,
+            color: accentColor,
+          });
+          
+          // Adjust starting positions
+          leftColumnY -= 50;
+          rightColumnY -= 50;
+        }
+      } catch (error: any) {
+        console.warn("Error adding name header:", error.message);
+      }
+    }
+    
+    // Draw left column sections
+    for (const section of leftColumnSections) {
+      // Draw section header
+      currentPage.drawText(section.title.toUpperCase(), {
+        x: margin,
+        y: leftColumnY,
+        size: 12,
+        font: titleFont,
+        color: primaryColor,
+      });
+      
+      // Add underline for section header
+      if (layout === "traditional") {
+        currentPage.drawLine({
+          start: { x: margin, y: leftColumnY - 5 },
+          end: { x: margin + leftColumnWidth * 0.8, y: leftColumnY - 5 },
+          thickness: 1,
+          color: accentColor,
+        });
+      }
+      
+      leftColumnY -= 20; // Space after header
+      
+      // Draw section content
+      const contentLines = section.content.split('\n');
+      for (const line of contentLines) {
+        if (line.trim().length === 0) continue;
+        
+        // Check if line is a bullet point
+        if (line.trim().startsWith('•')) {
+          // Draw bullet point
+          currentPage.drawText(line, {
+            x: margin + 10, // Indent bullet points
+            y: leftColumnY,
+            size: 10,
+            font: bodyFont,
+            color: textColor,
+            maxWidth: leftColumnWidth - 10,
+          });
+        } else if (line.trim().startsWith('<strong>') && line.trim().endsWith('</strong>')) {
+          // Draw subheader (bold text)
+          const subheaderText = line.replace('<strong>', '').replace('</strong>', '').trim();
+          currentPage.drawText(subheaderText, {
+            x: margin,
+            y: leftColumnY,
+            size: 11,
+            font: titleFont,
+            color: textColor,
+            maxWidth: leftColumnWidth,
+          });
+        } else {
+          // Draw regular text
+          currentPage.drawText(line, {
+            x: margin,
+            y: leftColumnY,
+            size: 10,
+            font: bodyFont,
+            color: textColor,
+            maxWidth: leftColumnWidth,
+          });
+        }
+        
+        leftColumnY -= 15; // Space between lines
+        
+        // Add a new page if we're near the bottom
+        if (leftColumnY < margin) {
+          // Add column divider if using two-column layout
+          if (layout !== "one-column") {
+            currentPage.drawLine({
+              start: { x: margin + leftColumnWidth + columnGap/2, y: height - margin },
+              end: { x: margin + leftColumnWidth + columnGap/2, y: margin },
+              thickness: 1,
+              color: secondaryColor,
+            });
+          }
+          
+          // Add new page
+          currentPage = doc.addPage([595, 842]);
+          leftColumnY = height - margin;
+          rightColumnY = height - margin;
+        }
+      }
+      
+      leftColumnY -= 30; // Space between sections
+    }
+    
+    // Draw right column sections
+    for (const section of rightColumnSections) {
+      // Calculate x position based on layout
+      const xPosition = layout === "one-column" 
+        ? margin 
+        : margin + leftColumnWidth + columnGap;
+      
+      // Draw section header
+      currentPage.drawText(section.title.toUpperCase(), {
+        x: xPosition,
+        y: rightColumnY,
+        size: 12,
+        font: titleFont,
+        color: primaryColor,
+      });
+      
+      // Add underline for section header
+      if (layout === "traditional") {
+        currentPage.drawLine({
+          start: { x: xPosition, y: rightColumnY - 5 },
+          end: { x: xPosition + rightColumnWidth * 0.8, y: rightColumnY - 5 },
+          thickness: 1,
+          color: accentColor,
+        });
+      }
+      
+      rightColumnY -= 20; // Space after header
+      
+      // Draw section content
+      const contentLines = section.content.split('\n');
+      for (const line of contentLines) {
+        if (line.trim().length === 0) continue;
+        
+        // Check if line is a bullet point
+        if (line.trim().startsWith('•')) {
+          // Draw bullet point
+          currentPage.drawText(line, {
+            x: xPosition + 10, // Indent bullet points
+            y: rightColumnY,
+            size: 10,
+            font: bodyFont,
+            color: textColor,
+            maxWidth: rightColumnWidth - 10,
+          });
+        } else if (line.trim().startsWith('<strong>') && line.trim().endsWith('</strong>')) {
+          // Draw subheader (bold text)
+          const subheaderText = line.replace('<strong>', '').replace('</strong>', '').trim();
+          currentPage.drawText(subheaderText, {
+            x: xPosition,
+            y: rightColumnY,
+            size: 11,
+            font: titleFont,
+            color: textColor,
+            maxWidth: rightColumnWidth,
+          });
+        } else {
+          // Draw regular text
+          currentPage.drawText(line, {
+            x: xPosition,
+            y: rightColumnY,
+            size: 10,
+            font: bodyFont,
+            color: textColor,
+            maxWidth: rightColumnWidth,
+          });
+        }
+        
+        rightColumnY -= 15; // Space between lines
+        
+        // Add a new page if we're near the bottom
+        if (rightColumnY < margin) {
+          // Add column divider if using two-column layout
+          if (layout !== "one-column") {
+            currentPage.drawLine({
+              start: { x: margin + leftColumnWidth + columnGap/2, y: height - margin },
+              end: { x: margin + leftColumnWidth + columnGap/2, y: margin },
+              thickness: 1,
+              color: secondaryColor,
+            });
+          }
+          
+          // Add new page
+          currentPage = doc.addPage([595, 842]);
+          leftColumnY = height - margin;
+          rightColumnY = height - margin;
+        }
+      }
+      
+      rightColumnY -= 30; // Space between sections
+    }
+    
+    // Draw a line between columns on the last page if using two-column layout
+    if (layout !== "one-column") {
+      currentPage.drawLine({
+        start: { x: margin + leftColumnWidth + columnGap/2, y: height - margin },
+        end: { x: margin + leftColumnWidth + columnGap/2, y: margin },
+        thickness: 1,
+        color: secondaryColor,
+      });
+    }
+    
+    // Add footer with page numbers
+    const pageCount = doc.getPageCount();
+    for (let i = 0; i < pageCount; i++) {
+      const page = doc.getPage(i);
+      page.drawText(`Page ${i + 1} of ${pageCount}`, {
+        x: width - margin - 60,
+        y: margin / 2,
+        size: 8,
+        font: bodyFont,
+        color: rgb(0.5, 0.5, 0.5),
+      });
+    }
+    
+    // Serialize the PDFDocument to bytes
+    const pdfBytes = await doc.save();
+    return Buffer.from(pdfBytes);
+  } catch (error: any) {
+    console.error("Error generating PDF:", error.message);
+    throw new Error(`Failed to generate PDF: ${error.message}`);
+  }
+}
+
+// Helper function to convert hex color to RGB
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  // Remove # if present
+  hex = hex.replace(/^#/, '');
+  
+  // Parse hex values
+  const bigint = parseInt(hex, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  
+  return { r, g, b };
 }
 
 // Helper function to get section-specific coordinates

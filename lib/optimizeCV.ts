@@ -7,8 +7,17 @@ export async function optimizeCV(
     template?: CVTemplate
   ): Promise<{ optimizedText: string; optimizedPDFUrl: string }> {
     try {
+      console.log("Starting CV optimization process");
+      
+      // Validate input
+      if (!rawText || rawText.trim().length === 0) {
+        console.error("ERROR: Empty raw text provided to optimizeCV");
+        throw new Error("No CV content was provided for optimization");
+      }
+      
       // Get potential sections
       const potentialSections = extractPotentialSections(rawText);
+      console.log(`Identified potential sections: ${potentialSections.join(', ')}`);
       
       // Customize prompt based on template if available
       let formattingInstructions = `
@@ -25,36 +34,52 @@ RIGHT COLUMN (main content):
 - Professional Experience (achievement-oriented bullet points, with metrics and results)
 - Additional Skills & Certifications (if applicable)`;
 
+      // If template is provided, customize the formatting instructions
+      if (template) {
+        console.log(`Using template: ${template.name} (${template.company})`);
+        
+        // Adjust formatting based on template layout
+        if (template.metadata.layout === 'one-column') {
+          formattingInstructions = `
+Your task is to completely rewrite and restructure this CV to match a clean one-column layout with the following sections in order:
+- Professional Profile (3-4 compelling sentences highlighting unique value proposition)
+- Professional Experience (achievement-oriented bullet points, with metrics and results)
+- Education (formatted with years and institutions prominently displayed)
+- Skills (separated by category)
+- Languages (with proficiency levels)
+- Additional Certifications (if applicable)`;
+        } else if (template.metadata.layout === 'traditional') {
+          formattingInstructions = `
+Your task is to completely rewrite and restructure this CV to match a traditional layout with the following sections in order:
+- Contact Information (centered at top)
+- Professional Summary (3-4 compelling sentences highlighting unique value proposition)
+- Professional Experience (achievement-oriented bullet points, with metrics and results)
+- Education (formatted with years and institutions prominently displayed)
+- Skills (separated by category)
+- References (if provided)`;
+        }
+        
+        // Add template-specific keywords to emphasize
+        if (template.metadata.keywordsEmphasis && template.metadata.keywordsEmphasis.length > 0) {
+          formattingInstructions += `\n\nEmphasize these keywords throughout the CV: ${template.metadata.keywordsEmphasis.join(', ')}`;
+        }
+      }
+
       // Industry-specific instructions
       let industryInstructions = '';
-
-      // If template is provided, adapt formatting instructions with industry-specific context
-      if (template) {
+      
+      // If template is provided, use its industry-specific guidance
+      if (template?.metadata?.industrySpecific) {
         const industryInfo = template.metadata.industrySpecific;
         
-        // Add template-specific formatting instructions
-        formattingInstructions = `
-Your task is to completely rewrite and restructure this CV following the ${template.name} style (${template.company} preferred format) with the following characteristics:
-
-${template.description}
-
-The layout should incorporate:
-- ${template.metadata.preferredFonts.join(', ')} fonts
-- Color scheme matching ${template.company}'s brand
-- ${template.metadata.layout} layout
-- Emphasis on skills: ${template.metadata.keywordsEmphasis.join(', ')}
-- Section order: ${template.metadata.sectionOrder.join(' → ')}`;
-
-        // Add detailed industry-specific instructions
         industryInstructions = `
-IMPORTANT INDUSTRY-SPECIFIC GUIDANCE:
-Industry: ${industryInfo.industry}
+INDUSTRY-SPECIFIC GUIDANCE FOR ${industryInfo.industry.toUpperCase()}:
 
-REQUIRED SKILLS TO EMPHASIZE:
+REQUIRED SKILLS TO HIGHLIGHT:
 ${industryInfo.requiredSkills.map(skill => `- ${skill}`).join('\n')}
 
-KEY VALUE PROPOSITIONS FOR THIS INDUSTRY:
-${industryInfo.valuePropositions.map(value => `- ${value}`).join('\n')}
+VALUE PROPOSITIONS TO EMPHASIZE:
+${industryInfo.valuePropositions.map(prop => `- ${prop}`).join('\n')}
 
 RECRUITER PREFERENCES:
 ${industryInfo.recruiterPreferences.map(pref => `- ${pref}`).join('\n')}
@@ -97,31 +122,13 @@ CRITICAL: The optimized CV must be SUBSTANTIALLY DIFFERENT from the original in 
 
 CRITICAL REQUIREMENT: If you cannot properly optimize the content, you MUST return the original content with proper formatting markers added. NEVER return an empty or minimal response.
 
-The original CV content is below. YOU MUST ENHANCE AND REWRITE THIS CONTENT, NOT REMOVE IT:
+Here is the CV to optimize:
 
-${rawText}
+${rawText}`;
 
-Potential CV sections I've identified (you can modify or add to these):
-${potentialSections.map(section => `- ${section}`).join('\n')}
-
-CV Analysis:
-ATS Score: ${analysis.atsScore || 'N/A'}
-Strengths: ${analysis.strengths && Array.isArray(analysis.strengths) ? analysis.strengths.join(", ") : 'None provided'}
-Weaknesses: ${analysis.weaknesses && Array.isArray(analysis.weaknesses) ? analysis.weaknesses.join(", ") : 'None provided'}
-Recommendations: ${analysis.recommendations && Array.isArray(analysis.recommendations) ? analysis.recommendations.join(", ") : 'None provided'}
-Industry Insight: ${analysis.industryInsight || 'None provided'}
-Target Roles: ${analysis.targetRoles && Array.isArray(analysis.targetRoles) ? analysis.targetRoles.join(", ") : 'None provided'}
-
-${template ? `Selected Template: ${template.name} (${template.company} style)` : ''}
-
-Please generate a complete, optimized CV with proper formatting markers, containing ALL relevant information from the original CV but enhanced and restructured. Include every section that was in the original CV, but optimize the content.
-
-The response should be formatted as a JSON with two keys:
-1. "optimizedText": The fully optimized CV text with proper formatting markers.
-2. "pdfInstructions": Any specific instructions for PDF styling (colors, fonts, layout adjustments)`;
+      console.log("Sending optimization request to OpenAI");
       
-      console.log("Sending request to OpenAI with prompt length:", prompt.length);
-      
+      // Call OpenAI API
       const response = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -137,104 +144,114 @@ The response should be formatted as a JSON with two keys:
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        console.error("OpenAI API error:", response.status, response.statusText, errorData);
-        
-        // If API call fails, create a formatted version of the raw text as fallback
-        console.log("API call failed, using formatted raw text as fallback");
-        const fallbackText = createFormattedFallbackFromRawText(rawText);
-        return {
-          optimizedText: fallbackText,
-          optimizedPDFUrl: await editPDF(fallbackText, template),
-        };
+        const errorData = await response.json();
+        console.error("OpenAI API error:", errorData);
+        throw new Error(`OpenAI API error: ${errorData.error?.message || 'Unknown error'}`);
       }
 
       const data = await response.json();
-      let responseContent = data.choices[0]?.message?.content;
-
-      if (!responseContent) {
-        console.error("No content in OpenAI response:", data);
-        // Use fallback if no response content
-        const fallbackText = createFormattedFallbackFromRawText(rawText);
-        return {
-          optimizedText: fallbackText,
-          optimizedPDFUrl: await editPDF(fallbackText, template),
-        };
-      }
       
-      console.log("Received response from OpenAI, length:", responseContent.length);
-      console.log("First 200 characters:", responseContent.substring(0, 200));
+      // Validate the response
+      if (!data.choices || data.choices.length === 0 || !data.choices[0].message) {
+        console.error("Invalid response from OpenAI:", data);
+        throw new Error("Failed to get a valid response from the AI service");
+      }
 
-      // Fix any JSON string issues
-      responseContent = fixJsonString(responseContent);
-
-      try {
-        // Parse the JSON response
-        const parsedResponse = JSON.parse(responseContent);
+      // Extract the optimized text from the response
+      let optimizedText = data.choices[0].message.content;
+      
+      // Validate the optimized text
+      if (!optimizedText || optimizedText.trim().length === 0) {
+        console.error("Empty optimized text received from OpenAI");
+        // Use a fallback approach - format the original text
+        optimizedText = createFormattedFallbackFromRawText(rawText);
+        console.log("Using formatted fallback from raw text");
+      } else {
+        console.log(`Received optimized text (${optimizedText.length} characters)`);
         
-        // Validate that we have optimized text
-        if (!parsedResponse.optimizedText || parsedResponse.optimizedText.trim().length === 0) {
-          console.error("OpenAI response missing optimizedText:", parsedResponse);
-          // Use fallback if optimizedText is missing or empty
-          const fallbackText = createFormattedFallbackFromRawText(rawText);
+        // Check if the optimized text has the required formatting markers
+        if (!optimizedText.includes('[HEADER]') || 
+            (!optimizedText.includes('[LEFT-COLUMN-START]') && !optimizedText.includes('[RIGHT-COLUMN-START]'))) {
+          console.warn("Optimized text is missing required formatting markers, processing...");
+          optimizedText = processFormattingMarkers(optimizedText);
+        }
+        
+        // Verify that the optimized text contains key information from the original
+        const contentPreservationCheck = verifyContentPreservation(rawText, optimizedText);
+        if (!contentPreservationCheck.preserved) {
+          console.warn(`Content preservation check failed: ${contentPreservationCheck.missingItems.join(', ')}`);
+          
+          // If critical content is missing, use the fallback
+          if (contentPreservationCheck.missingItems.length > 3) {
+            console.error("Too many missing items, using fallback");
+            optimizedText = createFormattedFallbackFromRawText(rawText);
+          }
+        }
+      }
+
+      // Process the optimized text to ensure it has proper formatting markers
+      const processedText = processFormattingMarkers(optimizedText);
+      
+      // Generate PDF with the optimized content
+      console.log("Generating PDF with optimized content");
+      const pdfResponse = await fetch("/api/generate-pdf", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          optimizedText: processedText,
+          rawText,
+          template: template ? template.id : null,
+        }),
+      });
+
+      if (!pdfResponse.ok) {
+        const errorData = await pdfResponse.json();
+        console.error("PDF generation error:", errorData);
+        throw new Error(`PDF generation failed: ${errorData.error || 'Unknown error'}`);
+      }
+
+      const pdfData = await pdfResponse.json();
+      
+      return {
+        optimizedText: processedText,
+        optimizedPDFUrl: pdfData.pdfUrl,
+      };
+    } catch (error: any) {
+      console.error("Error in optimizeCV:", error);
+      
+      // Create a fallback response with the original text
+      const fallbackText = createFormattedFallbackFromRawText(rawText);
+      
+      // Try to generate a PDF with the fallback text
+      try {
+        console.log("Attempting to generate PDF with fallback content");
+        const fallbackPdfResponse = await fetch("/api/generate-pdf", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            optimizedText: fallbackText,
+            rawText,
+            template: template ? template.id : null,
+          }),
+        });
+        
+        if (fallbackPdfResponse.ok) {
+          const fallbackPdfData = await fallbackPdfResponse.json();
           return {
             optimizedText: fallbackText,
-            optimizedPDFUrl: await editPDF(fallbackText, template),
+            optimizedPDFUrl: fallbackPdfData.pdfUrl,
           };
         }
-        
-        // Extract the optimized text content
-        let optimizedText = parsedResponse.optimizedText || "";
-        
-        // Validate the optimized text has sufficient content
-        if (optimizedText.trim().length < 100) {
-          console.warn("Optimized text is too short, using fallback");
-          optimizedText = createFormattedFallbackFromRawText(rawText);
-        }
-        
-        // Process formatting markers
-        optimizedText = processFormattingMarkers(optimizedText);
-        
-        // Get PDF editing instructions
-        const pdfInstructions = parsedResponse.pdfInstructions || "";
-        
-        // Generate an optimized PDF using the pdfInstructions and optimizedText
-        // Pass template information if available
-        const optimizedPDFUrl = await editPDF(pdfInstructions, template);
-        
-        return {
-          optimizedText,
-          optimizedPDFUrl,
-        };
-      } catch (parseError) {
-        console.error("Error parsing OpenAI response:", parseError);
-        console.error("Response content:", responseContent);
-        
-        // Fallback: If JSON parsing fails, treat the entire response as the optimized text
-        console.log("Using fallback: treating entire response as optimized text");
-        let optimizedText = processFormattingMarkers(responseContent);
-        
-        // Check if the response has enough content
-        if (optimizedText.trim().length < 100) {
-          console.warn("Processed response is too short, using formatted raw text");
-          optimizedText = createFormattedFallbackFromRawText(rawText);
-        }
-        
-        const optimizedPDFUrl = await editPDF(optimizedText, template);
-        
-        return {
-          optimizedText,
-          optimizedPDFUrl,
-        };
+      } catch (fallbackError) {
+        console.error("Fallback PDF generation failed:", fallbackError);
       }
-    } catch (error) {
-      console.error("CV optimization error:", error);
-      // Final fallback in case of any error
-      const fallbackText = createFormattedFallbackFromRawText(rawText);
-      return {
-        optimizedText: fallbackText,
-        optimizedPDFUrl: await editPDF(fallbackText, template),
-      };
+      
+      // If all else fails, throw the original error
+      throw new Error(`CV optimization failed: ${error.message}`);
     }
   }
   
@@ -514,83 +531,85 @@ The response should be formatted as a JSON with two keys:
   function processFormattingMarkers(text: string): string {
     console.log("Processing formatting markers");
     
-    // Check if the text has any content
+    // Handle empty text
     if (!text || text.trim().length === 0) {
-      console.error("Empty text provided to processFormattingMarkers");
-      return "[HEADER] Error\n\nNo content was provided for formatting.";
+      console.error("ERROR: Empty text provided to processFormattingMarkers");
+      return "[HEADER] Error\n\nNo content was provided for processing.";
     }
     
-    // If text doesn't have explicit column markers, add them for a standard layout
-    if (!text.includes('[LEFT-COLUMN-START]') && !text.includes('[RIGHT-COLUMN-START]')) {
-      console.log("No column markers found, adding standard layout markers");
+    let processedText = text;
+    const lines = text.split('\n');
+    
+    // Check if we have column markers
+    const hasLeftColumnStart = text.includes('[LEFT-COLUMN-START]');
+    const hasRightColumnStart = text.includes('[RIGHT-COLUMN-START]');
+    const hasLeftColumnEnd = text.includes('[LEFT-COLUMN-END]');
+    const hasRightColumnEnd = text.includes('[RIGHT-COLUMN-END]');
+    
+    // Track sections for better organization
+    const sections: Array<{ name: string; index: number; content: string }> = [];
+    
+    // First pass: identify sections by looking for headers
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
       
-      const lines = text.split('\n');
-      let processedText = '';
-      let foundProfile = false;
-      let foundEducation = false;
-      let foundSkills = false;
-      let foundExperience = false;
-      let foundLanguages = false;
-      let foundCertifications = false;
-      let inLeftColumn = false;
-      let inRightColumn = false;
+      // Skip empty lines
+      if (line.length === 0) continue;
       
-      // First pass: identify all sections
-      const sections = [];
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        
-        // Check for section headers (either with ## or [HEADER])
-        if (line.startsWith('## ') || line.startsWith('[HEADER]')) {
-          const sectionName = line.replace('## ', '').replace('[HEADER]', '').trim();
-          sections.push({
-            name: sectionName,
-            index: i,
-            content: ''
-          });
-        }
+      // Check for section headers (either ## or [HEADER])
+      if (line.startsWith('## ') || line.includes('[HEADER]')) {
+        // Extract section name
+        const sectionName = line.replace('## ', '').replace('[HEADER]', '').trim();
+        sections.push({
+          name: sectionName,
+          index: i,
+          content: ''
+        });
       }
+    }
+    
+    console.log(`Found ${sections.length} sections in the text`);
+    
+    // If no sections were found, try to identify potential sections
+    if (sections.length === 0) {
+      console.log("No section markers found, attempting to identify sections");
       
-      // If no sections were found, try to identify potential sections
-      if (sections.length === 0) {
-        console.log("No section markers found, attempting to identify sections");
-        
-        // Common section patterns
-        const sectionPatterns = [
-          { name: 'Profile', regex: /\b(profile|summary|about|objective)\b/i },
+      // Common section patterns
+      const sectionPatterns = [
+        { name: 'Profile', regex: /\b(profile|summary|about|objective)\b/i },
           { name: 'Experience', regex: /\b(experience|work|employment|career)\b/i },
           { name: 'Education', regex: /\b(education|academic|qualifications|degree)\b/i },
           { name: 'Skills', regex: /\b(skills|abilities|competencies|expertise)\b/i },
           { name: 'Languages', regex: /\b(languages|language proficiency)\b/i },
           { name: 'Certifications', regex: /\b(certifications|certificates|qualifications)\b/i }
-        ];
+      ];
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
         
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i].trim();
-          
-          // Skip empty lines
-          if (line.length === 0) continue;
-          
-          // Check if this line looks like a section header (short line, possibly all caps)
-          if (line.length < 40 && (line === line.toUpperCase() || line.endsWith(':'))) {
-            for (const pattern of sectionPatterns) {
-              if (pattern.regex.test(line)) {
-                sections.push({
-                  name: pattern.name,
-                  index: i,
-                  content: ''
-                });
-                break;
-              }
+        // Skip empty lines
+        if (line.length === 0) continue;
+        
+        // Check if this line looks like a section header (short line, possibly all caps)
+        if (line.length < 40 && (line === line.toUpperCase() || line.endsWith(':'))) {
+          for (const pattern of sectionPatterns) {
+            if (pattern.regex.test(line)) {
+              sections.push({
+                name: pattern.name,
+                index: i,
+                content: ''
+              });
+              break;
             }
           }
         }
       }
-      
-      // If we still have no sections, create default sections
-      if (sections.length === 0) {
-        console.log("No sections identified, creating default sections");
-        processedText = `[LEFT-COLUMN-START]
+    }
+    
+    // If we still have no sections, create default sections
+    if (sections.length === 0) {
+      console.log("No sections identified, creating default sections");
+      processedText = `[LEFT-COLUMN-START]
 [HEADER] Contact
 
 [HEADER] Education
@@ -607,104 +626,136 @@ The response should be formatted as a JSON with two keys:
 ${text}
 [RIGHT-COLUMN-END]`;
 
-        return processedText;
-      }
+      return processedText;
+    }
+    
+    // Determine which sections should go in which column
+    const leftColumnSections = ['Contact', 'Education', 'Skills', 'Languages', 'Certifications'];
+    const rightColumnSections = ['Profile', 'Summary', 'Experience', 'Work Experience', 'Projects', 'Achievements'];
+    
+    // Check if we need to add column markers
+    if (!hasLeftColumnStart && !hasRightColumnStart) {
+      console.log("No column markers found, adding standard layout markers");
       
-      // Determine which sections go in which column
-      const leftColumnSections = ['Contact', 'Education', 'Skills', 'Languages', 'Certifications'];
-      const rightColumnSections = ['Profile', 'Summary', 'Experience', 'Work Experience', 'Professional Experience'];
+      // Build new text with proper column markers
+      let leftColumnContent = '';
+      let rightColumnContent = '';
       
-      // Start building the formatted text with column markers
-      processedText = '[LEFT-COLUMN-START]\n';
-      inLeftColumn = true;
-      
-      // Process each section
-      for (let i = 0; i < sections.length; i++) {
-        const section = sections[i];
-        const nextSectionIndex = i < sections.length - 1 ? sections[i + 1].index : lines.length;
+      // Sort sections into columns
+      for (const section of sections) {
+        // Determine which column this section belongs in
+        const sectionName = section.name;
+        let isLeftColumn = false;
+        
+        // Check if this section should be in the left column
+        for (const leftSection of leftColumnSections) {
+          if (sectionName.toLowerCase().includes(leftSection.toLowerCase())) {
+            isLeftColumn = true;
+            break;
+          }
+        }
         
         // Extract section content
         let sectionContent = '';
-        for (let j = section.index + 1; j < nextSectionIndex; j++) {
-          sectionContent += lines[j] + '\n';
-        }
+        const startIndex = section.index;
+        let endIndex = lines.length;
         
-        section.content = sectionContent;
-        
-        // Determine if this section should be in the left or right column
-        const isLeftColumnSection = leftColumnSections.some(s => 
-          section.name.toLowerCase().includes(s.toLowerCase()));
-        
-        const isRightColumnSection = rightColumnSections.some(s => 
-          section.name.toLowerCase().includes(s.toLowerCase()));
-        
-        // Handle column transitions
-        if (isLeftColumnSection && !inLeftColumn) {
-          // Close right column and open left column
-          processedText += '[RIGHT-COLUMN-END]\n\n[LEFT-COLUMN-START]\n';
-          inLeftColumn = true;
-          inRightColumn = false;
-        } else if (isRightColumnSection && !inRightColumn) {
-          // Close left column and open right column
-          if (inLeftColumn) {
-            processedText += '[LEFT-COLUMN-END]\n\n';
-            inLeftColumn = false;
+        // Find the end of this section (next section or end of text)
+        for (let i = 0; i < sections.length; i++) {
+          if (sections[i].index > startIndex && sections[i].index < endIndex) {
+            endIndex = sections[i].index;
           }
-          processedText += '[RIGHT-COLUMN-START]\n';
-          inRightColumn = true;
         }
         
-        // Add section header and content
-        processedText += `[HEADER] ${section.name}\n\n${section.content}\n`;
+        // Get the content between start and end
+        for (let i = startIndex + 1; i < endIndex; i++) {
+          if (i < lines.length) {
+            sectionContent += lines[i] + '\n';
+          }
+        }
+        
+        // Add to appropriate column
+        if (isLeftColumn) {
+          leftColumnContent += `[HEADER] ${sectionName}\n\n${sectionContent}\n`;
+        } else {
+          rightColumnContent += `[HEADER] ${sectionName}\n\n${sectionContent}\n`;
+        }
       }
       
-      // Close any open columns
-      if (inLeftColumn) {
-        processedText += '[LEFT-COLUMN-END]\n';
-      } else if (inRightColumn) {
-        processedText += '[RIGHT-COLUMN-END]\n';
-      }
-      
-      text = processedText;
+      // Combine columns into final text
+      processedText = `[LEFT-COLUMN-START]\n${leftColumnContent}[LEFT-COLUMN-END]\n\n[RIGHT-COLUMN-START]\n${rightColumnContent}[RIGHT-COLUMN-END]`;
     } else {
-      console.log("Column markers found, processing existing markers");
+      // We have some column markers, but check if they're complete
+      if (hasLeftColumnStart && !hasLeftColumnEnd) {
+        console.warn("WARNING: Found [LEFT-COLUMN-START] but missing [LEFT-COLUMN-END], adding end marker");
+        
+        // Find the right position to add the end marker
+        if (hasRightColumnStart) {
+          // Add end marker right before right column start
+          const rightStartIndex = processedText.indexOf('[RIGHT-COLUMN-START]');
+          processedText = processedText.substring(0, rightStartIndex) + 
+                         '[LEFT-COLUMN-END]\n\n' + 
+                         processedText.substring(rightStartIndex);
+        } else {
+          // Add end marker at the end
+          processedText += '\n[LEFT-COLUMN-END]';
+        }
+      }
+      
+      if (hasRightColumnStart && !hasRightColumnEnd) {
+        console.warn("WARNING: Found [RIGHT-COLUMN-START] but missing [RIGHT-COLUMN-END], adding end marker");
+        processedText += '\n[RIGHT-COLUMN-END]';
+      }
+      
+      // If we have left column end but no start, add start at beginning
+      if (hasLeftColumnEnd && !hasLeftColumnStart) {
+        console.warn("WARNING: Found [LEFT-COLUMN-END] but missing [LEFT-COLUMN-START], adding start marker");
+        processedText = '[LEFT-COLUMN-START]\n' + processedText;
+      }
+      
+      // If we have right column end but no start, add start after left column end
+      if (hasRightColumnEnd && !hasRightColumnStart) {
+        console.warn("WARNING: Found [RIGHT-COLUMN-END] but missing [RIGHT-COLUMN-START], adding start marker");
+        
+        if (hasLeftColumnEnd) {
+          const leftEndIndex = processedText.indexOf('[LEFT-COLUMN-END]');
+          processedText = processedText.substring(0, leftEndIndex + '[LEFT-COLUMN-END]'.length) + 
+                         '\n\n[RIGHT-COLUMN-START]\n' + 
+                         processedText.substring(leftEndIndex + '[LEFT-COLUMN-END]'.length);
+        } else {
+          // Add right column start at an appropriate position
+          processedText = processedText.replace('[RIGHT-COLUMN-END]', '[RIGHT-COLUMN-START]\n[RIGHT-COLUMN-END]');
+        }
+      }
     }
     
-    // Process other formatting markers
-    text = text
-      .replace(/\[HEADER\]/g, "\n\n## ")
-      .replace(/\[SUBHEADER\]/g, "\n\n### ")
-      .replace(/\[BULLET\]/g, "\n• ")
-      .replace(/\[LEFT-COLUMN-START\]/g, "\n\n[LEFT-COLUMN-START]\n")
-      .replace(/\[LEFT-COLUMN-END\]/g, "\n[LEFT-COLUMN-END]\n\n")
-      .replace(/\[RIGHT-COLUMN-START\]/g, "\n\n[RIGHT-COLUMN-START]\n")
-      .replace(/\[RIGHT-COLUMN-END\]/g, "\n[RIGHT-COLUMN-END]\n\n");
+    // Replace any remaining markdown-style headers with our format
+    processedText = processedText.replace(/^##\s+(.+)$/gm, '[HEADER] $1');
+    processedText = processedText.replace(/^###\s+(.+)$/gm, '[SUBHEADER] $1');
     
-    // Ensure we have both column markers
-    if (text.includes('[LEFT-COLUMN-START]') && !text.includes('[LEFT-COLUMN-END]')) {
-      console.warn("LEFT-COLUMN-START found but no LEFT-COLUMN-END, adding end marker");
-      text += "\n[LEFT-COLUMN-END]\n";
+    // Replace bullet points
+    processedText = processedText.replace(/^\s*[-*]\s+(.+)$/gm, '[BULLET] $1');
+    
+    // Final check - ensure we have both column markers
+    if (!processedText.includes('[LEFT-COLUMN-START]')) {
+      console.warn("WARNING: Final text still missing [LEFT-COLUMN-START], adding at beginning");
+      processedText = '[LEFT-COLUMN-START]\n[HEADER] Contact\n\n[LEFT-COLUMN-END]\n\n' + processedText;
     }
     
-    if (text.includes('[RIGHT-COLUMN-START]') && !text.includes('[RIGHT-COLUMN-END]')) {
-      console.warn("RIGHT-COLUMN-START found but no RIGHT-COLUMN-END, adding end marker");
-      text += "\n[RIGHT-COLUMN-END]\n";
+    if (!processedText.includes('[RIGHT-COLUMN-START]')) {
+      console.warn("WARNING: Final text still missing [RIGHT-COLUMN-START], adding after left column");
+      
+      if (processedText.includes('[LEFT-COLUMN-END]')) {
+        const leftEndIndex = processedText.indexOf('[LEFT-COLUMN-END]');
+        processedText = processedText.substring(0, leftEndIndex + '[LEFT-COLUMN-END]'.length) + 
+                       '\n\n[RIGHT-COLUMN-START]\n' + 
+                       processedText.substring(leftEndIndex + '[LEFT-COLUMN-END]'.length);
+      } else {
+        processedText += '\n\n[RIGHT-COLUMN-START]\n[RIGHT-COLUMN-END]';
+      }
     }
     
-    // If we have no column markers at all after processing, add default ones
-    if (!text.includes('[LEFT-COLUMN-START]') && !text.includes('[RIGHT-COLUMN-START]')) {
-      console.warn("No column markers after processing, adding default layout");
-      text = `[LEFT-COLUMN-START]
-[HEADER] Contact
-
-[LEFT-COLUMN-END]
-
-[RIGHT-COLUMN-START]
-${text}
-[RIGHT-COLUMN-END]`;
-    }
-    
-    return text;
+    return processedText;
   }
   
   // Helper function to extract potential sections from the raw text
@@ -768,6 +819,53 @@ ${text}
     }
     
     return foundSections.length > 0 ? foundSections : ["Content"];
+  }
+  
+  // New helper function to verify content preservation
+  function verifyContentPreservation(originalText: string, optimizedText: string): { 
+    preserved: boolean; 
+    missingItems: string[] 
+  } {
+    const missingItems: string[] = [];
+    
+    // Extract key information from the original text
+    const nameMatch = originalText.split('\n')[0];
+    if (nameMatch && !optimizedText.includes(nameMatch)) {
+      missingItems.push('Name');
+    }
+    
+    // Check for email
+    const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
+    const originalEmailMatch = originalText.match(emailRegex);
+    if (originalEmailMatch && !optimizedText.includes(originalEmailMatch[0])) {
+      missingItems.push('Email');
+    }
+    
+    // Check for phone number
+    const phoneRegex = /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/;
+    const originalPhoneMatch = originalText.match(phoneRegex);
+    if (originalPhoneMatch && !optimizedText.includes(originalPhoneMatch[0])) {
+      missingItems.push('Phone');
+    }
+    
+    // Check for key sections
+    const sectionPatterns = [
+      { name: 'Profile/Summary', regex: /\b(profile|summary|about|objective)\b/i },
+      { name: 'Experience', regex: /\b(experience|work|employment|career)\b/i },
+      { name: 'Education', regex: /\b(education|academic|qualifications|degree)\b/i },
+      { name: 'Skills', regex: /\b(skills|abilities|competencies|expertise)\b/i }
+    ];
+    
+    for (const pattern of sectionPatterns) {
+      if (pattern.regex.test(originalText) && !pattern.regex.test(optimizedText)) {
+        missingItems.push(pattern.name);
+      }
+    }
+    
+    return {
+      preserved: missingItems.length === 0,
+      missingItems
+    };
   }
   
   // Simulated PDF editing function.
