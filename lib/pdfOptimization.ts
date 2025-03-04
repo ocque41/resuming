@@ -16,30 +16,126 @@ function parseOptimizedText(text: string): { [key: string]: string } {
   let leftColumnContent: { [key: string]: string } = {};
   let rightColumnContent: { [key: string]: string } = {};
   
+  // If there's no text, use a placeholder
+  if (!text || text.trim().length === 0) {
+    console.error("ERROR: parseOptimizedText received empty text");
+    return { "Content": "No content was provided for the CV. Please try again." };
+  }
+  
+  console.log(`Starting to parse optimized text (${text.length} characters)`);
+  
+  // Handle the case where the text is JSON
+  if (text.trim().startsWith('{') && text.trim().endsWith('}')) {
+    try {
+      // Try to parse it as JSON
+      const parsed = JSON.parse(text);
+      if (parsed.optimizedText) {
+        // If we got JSON with optimizedText, use that instead
+        console.log("Found JSON optimizedText, using it instead");
+        text = parsed.optimizedText;
+      }
+    } catch (e) {
+      console.log("Text appears to be JSON but couldn't be parsed", e);
+    }
+  }
+  
+  // Default section to start with
+  currentSection = 'Content';
+  
   const lines = text.split('\n');
+  console.log(`Processing ${lines.length} lines of text`);
+  
+  // Count valid lines (not empty, not just column markers)
+  let validLineCount = 0;
+  lines.forEach(line => {
+    const trimmedLine = line.trim();
+    if (trimmedLine.length > 0 && 
+        !trimmedLine.includes('[LEFT-COLUMN-START]') && 
+        !trimmedLine.includes('[LEFT-COLUMN-END]') && 
+        !trimmedLine.includes('[RIGHT-COLUMN-START]') && 
+        !trimmedLine.includes('[RIGHT-COLUMN-END]')) {
+      validLineCount++;
+    }
+  });
+  
+  console.log(`Found ${validLineCount} non-empty content lines`);
+  
+  // Extremely basic check - if we have very few lines, the content is likely invalid
+  if (validLineCount < 5) {
+    console.warn("WARNING: Very few valid content lines found, content may be invalid");
+  }
+  
+  let fallbackContent = ""; // Collect all content as fallback
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     
+    // Build fallback content from all non-marker lines
+    if (line.length > 0 && 
+        !line.includes('[LEFT-COLUMN-START]') && 
+        !line.includes('[LEFT-COLUMN-END]') && 
+        !line.includes('[RIGHT-COLUMN-START]') && 
+        !line.includes('[RIGHT-COLUMN-END]')) {
+      fallbackContent += line + "\n";
+    }
+    
+    if (line.length === 0) continue; // Skip empty lines for cleaner processing
+    
     // Check for column markers
     if (line.includes('[LEFT-COLUMN-START]')) {
+      // Save any current content before switching columns
+      if (currentSection && currentContent.length > 0) {
+        if (inLeftColumn) {
+          leftColumnContent[currentSection] = currentContent.join('\n');
+        } else if (inRightColumn) {
+          rightColumnContent[currentSection] = currentContent.join('\n');
+        } else {
+          sections[currentSection] = currentContent.join('\n');
+        }
+        currentContent = [];
+      }
+      
       inLeftColumn = true;
       inRightColumn = false;
       continue;
     }
     
     if (line.includes('[LEFT-COLUMN-END]')) {
+      // Save the left column content before ending it
+      if (currentSection && currentContent.length > 0) {
+        leftColumnContent[currentSection] = currentContent.join('\n');
+        currentContent = [];
+      }
+      
       inLeftColumn = false;
       continue;
     }
     
     if (line.includes('[RIGHT-COLUMN-START]')) {
+      // Save any current content before switching columns
+      if (currentSection && currentContent.length > 0) {
+        if (inLeftColumn) {
+          leftColumnContent[currentSection] = currentContent.join('\n');
+        } else if (inRightColumn) {
+          rightColumnContent[currentSection] = currentContent.join('\n');
+        } else {
+          sections[currentSection] = currentContent.join('\n');
+        }
+        currentContent = [];
+      }
+      
       inRightColumn = true;
       inLeftColumn = false;
       continue;
     }
     
     if (line.includes('[RIGHT-COLUMN-END]')) {
+      // Save the right column content before ending it
+      if (currentSection && currentContent.length > 0) {
+        rightColumnContent[currentSection] = currentContent.join('\n');
+        currentContent = [];
+      }
+      
       inRightColumn = false;
       continue;
     }
@@ -83,6 +179,72 @@ function parseOptimizedText(text: string): { [key: string]: string } {
     }
   }
   
+  // If we have no sections parsed but we have fallback content, create a default section
+  if (Object.keys(sections).length === 0 && 
+      Object.keys(leftColumnContent).length === 0 && 
+      Object.keys(rightColumnContent).length === 0) {
+    
+    if (fallbackContent.trim().length > 0) {
+      console.log("No sections found, using fallback content");
+      
+      // Try to identify some basic sections from the fallback content
+      const potentialSections = [
+        { name: "Profile", regex: /\b(profile|summary|about|objective)\b/i },
+        { name: "Experience", regex: /\b(experience|work|employment|career)\b/i },
+        { name: "Education", regex: /\b(education|academic|qualifications|degree)\b/i },
+        { name: "Skills", regex: /\b(skills|abilities|competencies|expertise)\b/i }
+      ];
+      
+      let foundAnySections = false;
+      const fallbackLines = fallbackContent.split('\n');
+      
+      for (const section of potentialSections) {
+        // Look for lines that might contain section headers
+        for (let i = 0; i < fallbackLines.length; i++) {
+          const line = fallbackLines[i].trim();
+          
+          if (section.regex.test(line) && line.length < 50) {
+            // This could be a section header
+            const sectionContent = [];
+            
+            // Collect content until the next potential section header
+            for (let j = i + 1; j < fallbackLines.length; j++) {
+              const contentLine = fallbackLines[j].trim();
+              
+              // Stop if we hit another potential section
+              let isAnotherSection = false;
+              for (const otherSection of potentialSections) {
+                if (otherSection.regex.test(contentLine) && contentLine.length < 50) {
+                  isAnotherSection = true;
+                  break;
+                }
+              }
+              
+              if (isAnotherSection) break;
+              
+              if (contentLine.length > 0) {
+                sectionContent.push(contentLine);
+              }
+            }
+            
+            if (sectionContent.length > 0) {
+              sections[section.name] = sectionContent.join('\n');
+              foundAnySections = true;
+            }
+          }
+        }
+      }
+      
+      // If we still couldn't identify sections, use the whole content
+      if (!foundAnySections) {
+        sections['Content'] = fallbackContent;
+      }
+    } else {
+      console.log("No content found at all, creating default section with message");
+      sections['Content'] = "No content was provided for the CV. Please try again.";
+    }
+  }
+  
   // Merge column content with main sections
   // Left column sections are prefixed with "LEFT:" for proper identification
   for (const [key, value] of Object.entries(leftColumnContent)) {
@@ -93,6 +255,8 @@ function parseOptimizedText(text: string): { [key: string]: string } {
   for (const [key, value] of Object.entries(rightColumnContent)) {
     sections[key] = value;
   }
+  
+  console.log(`Finished parsing, found ${Object.keys(sections).length} total sections`);
   
   return sections;
 }
@@ -320,6 +484,44 @@ export async function modifyPDFWithOptimizedContent(
   template?: CVTemplate
 ): Promise<string> {
   try {
+    // Debug check to ensure we have content to work with
+    if (!optimizedText || optimizedText.trim().length === 0) {
+      console.error("ERROR: Empty optimized text received. Cannot generate PDF.");
+      
+      // If we have original text, use that instead
+      if (rawText && rawText.trim().length > 0) {
+        console.log("Using original raw text as fallback for PDF generation");
+        optimizedText = `[HEADER] Profile\n\nThe content below is from the original CV.\n\n[RIGHT-COLUMN-START]\n[HEADER] Content\n\n${rawText}\n[RIGHT-COLUMN-END]`;
+      } else {
+        throw new Error("No content was provided for PDF generation");
+      }
+    }
+    
+    console.log(`Optimized text length: ${optimizedText.length}`);
+    console.log(`First 200 characters: ${optimizedText.substring(0, 200)}...`);
+    
+    // Parse the optimized text into sections for structured processing
+    const parsedSections = parseOptimizedText(optimizedText);
+    
+    // Debug to verify we extracted content from the optimized text
+    console.log(`Parsed ${Object.keys(parsedSections).length} sections from optimized text`);
+    
+    // Display the sections we found
+    Object.keys(parsedSections).forEach(section => {
+      const contentLength = parsedSections[section].length;
+      console.log(`- Section "${section}": ${contentLength} characters`);
+    });
+    
+    // Do a sanity check - if we have no meaningful content, use the raw text
+    const totalContentLength = Object.values(parsedSections).reduce((sum, content) => sum + content.length, 0);
+    if (totalContentLength < 100 && rawText && rawText.length > 100) {
+      console.warn("WARNING: Optimized content appears to be minimal. Using raw text as fallback.");
+      
+      // Replace the sections with a simple structure using the raw text
+      const fallbackContent = `The content below is from the original CV.\n\n${rawText}`;
+      parsedSections["Content"] = fallbackContent;
+    }
+    
     // Create a new PDF document
     const newPdfDoc = await PDFDocument.create();
     
