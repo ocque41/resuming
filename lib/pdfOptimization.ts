@@ -365,7 +365,7 @@ export async function modifyPDFWithOptimizedContent(
               
               // Add space between bullet points
               currentY -= lineHeight * 0.3;
-            } catch (error) {
+            } catch (error: any) {
               console.error(`Error processing bullet point: ${error}`);
               // Continue with next bullet point
             }
