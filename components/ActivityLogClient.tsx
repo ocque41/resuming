@@ -78,30 +78,27 @@ interface ActivityLogClientProps {
 export default function ActivityLogClient({ logs }: ActivityLogClientProps) {
   return (
     <section>
-      <h1 className="text-md lg:text-xl font-medium text-[#584235] mb-6">
-        Activity Log
-      </h1>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base text-gray-400">Recent Activity</CardTitle>
+      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg">
+        <CardHeader className="bg-[#B4916C]/10 pb-4">
+          <CardTitle className="text-xl font-bold text-[#B4916C]">Activity Log</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-6">
           {logs.length > 0 ? (
             <ul className="space-y-4">
               {logs.map((log) => {
                 const Icon = iconMap[log.action as ActivityType] || Settings;
                 const formattedAction = formatAction(log.action);
                 return (
-                  <li key={log.id} className="flex items-center space-x-4">
-                    <div className="bg-orange-100 rounded-full p-2">
-                      <Icon className="w-5 h-5 text-orange-600" />
+                  <li key={log.id} className="flex items-center space-x-4 p-3 rounded-md bg-gray-900/30 border border-gray-800">
+                    <div className="bg-[#B4916C]/20 rounded-full p-2">
+                      <Icon className="w-5 h-5 text-[#B4916C]" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-white">
+                      <p className="text-sm font-medium text-gray-300">
                         {formattedAction}
                         {log.ipAddress && ` from IP ${log.ipAddress}`}
                       </p>
-                      <p className="text-xs text-gray-300">
+                      <p className="text-xs text-gray-400">
                         {getRelativeTime(new Date(log.timestamp))}
                       </p>
                     </div>
@@ -111,11 +108,11 @@ export default function ActivityLogClient({ logs }: ActivityLogClientProps) {
             </ul>
           ) : (
             <div className="flex flex-col items-center justify-center text-center py-12">
-              <AlertCircle className="h-12 w-12 text-orange-500 mb-4" />
-              <h3 className="text-lg font-semibold text-white mb-2">
+              <AlertCircle className="h-12 w-12 text-[#B4916C] mb-4" />
+              <h3 className="text-lg font-semibold text-gray-300 mb-2">
                 No activity yet
               </h3>
-              <p className="text-sm text-gray-300 max-w-sm">
+              <p className="text-sm text-gray-400 max-w-sm">
                 When you perform actions like signing in or updating your account,
                 they'll appear here.
               </p>

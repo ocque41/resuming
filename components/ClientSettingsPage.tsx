@@ -20,32 +20,35 @@ export default function ClientSettingsDialogContent({
   onClose,
 }: ClientSettingsDialogContentProps) {
   return (
-    <section className="flex-1 p-4 lg:p-8 bg-black text-white min-h-screen">
+    <section className="flex-1 p-4 lg:p-8 bg-[#050505] text-white min-h-screen rounded-lg">
       <div className="space-y-8 mx-auto max-w-md lg:max-w-2xl">
         <header className="flex items-center justify-between p-4 lg:p-8">
           <div className="flex items-center justify-between w-full">
-            <ArticleTitle className="text-lg lg:text-2xl font-medium ml-4">
+            <ArticleTitle className="text-lg lg:text-2xl font-medium text-[#B4916C]">
               User Settings
             </ArticleTitle>
-            <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">
+            <button 
+              onClick={onClose} 
+              className="px-4 py-2 rounded-md bg-[#B4916C]/10 text-[#B4916C] hover:bg-[#B4916C]/20 transition-colors duration-200"
+            >
               Go Back
             </button>
           </div>
         </header>
         <GeneralPage />
-        <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C] border-[1px]">
-          <CardHeader>
-            <CardTitle className="text-base text-gray-400 text-center">Subscription</CardTitle>
+        <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg">
+          <CardHeader className="bg-[#B4916C]/10 pb-4">
+            <CardTitle className="text-xl font-bold text-[#B4916C]">Subscription</CardTitle>
           </CardHeader>
-          <CardContent className="flex justify-center">
+          <CardContent className="flex justify-center p-6">
             <BillingButton />
           </CardContent>
         </Card>
-        <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C] border-[1px]">
-          <CardHeader>
-            <CardTitle className="text-base text-gray-400 text-center">Invite Team Member</CardTitle>
+        <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg">
+          <CardHeader className="bg-[#B4916C]/10 pb-4">
+            <CardTitle className="text-xl font-bold text-[#B4916C]">Invite Team Member</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-6">
             <InviteTeamMember />
           </CardContent>
         </Card>

@@ -79,7 +79,7 @@ export default function TemplateSelector({
             style={{
               borderColor: selectedTemplateId === template.id ? `${accentColor}` : '',
               '--tw-ring-color': selectedTemplateId === template.id ? `${accentColor}40` : '',
-              backgroundColor: darkMode ? '#1f2937' : 'white'
+              backgroundColor: darkMode ? '#050505' : 'white'
             } as React.CSSProperties}
             onClick={() => onSelect(template.id)}
           >
@@ -93,7 +93,7 @@ export default function TemplateSelector({
                   className="object-cover"
                 />
               ) : (
-                <div className={`w-full h-full ${darkMode ? 'bg-gray-800' : 'bg-gray-100'} flex items-center justify-center`}>
+                <div className={`w-full h-full ${darkMode ? 'bg-gray-900' : 'bg-gray-100'} flex items-center justify-center`}>
                   <span className={`${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>No preview</span>
                 </div>
               )}
