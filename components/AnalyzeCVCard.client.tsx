@@ -49,12 +49,15 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
         <CardTitle className="text-xl font-bold text-[#B4916C]">Analyze Your CV</CardTitle>
       </CardHeader>
       <CardContent className="p-6">
-        <div className="flex justify-center items-center h-48 bg-gray-900 rounded-lg mb-6 overflow-hidden">
-          <img
-            src="/animations/leep.gif"
-            alt="Animation"
-            className="w-full h-full object-cover"
-          />
+        <div className="flex justify-center items-center mb-6">
+          <div className="relative w-64 h-64 rounded-lg overflow-hidden">
+            <img
+              src="/Animation - 1741203789959.gif"
+              alt="CV Analysis Animation"
+              className="w-full h-full object-contain"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#050505] to-transparent opacity-20"></div>
+          </div>
         </div>
         
         <div className="mb-6">

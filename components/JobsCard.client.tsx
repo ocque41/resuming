@@ -295,13 +295,13 @@ export default function JobsCard({ cvs }: JobsCardProps) {
       return (
         <div className="space-y-4">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="border rounded-lg p-4 space-y-3">
-              <Skeleton className="h-6 w-2/3" />
-              <Skeleton className="h-4 w-1/2" />
-              <Skeleton className="h-4 w-1/3" />
+            <div key={i} className="border border-[#B4916C]/20 rounded-lg p-4 space-y-3 bg-[#0A0A0A]">
+              <Skeleton className="h-6 w-2/3 bg-gray-800" />
+              <Skeleton className="h-4 w-1/2 bg-gray-800" />
+              <Skeleton className="h-4 w-1/3 bg-gray-800" />
               <div className="flex gap-2 mt-2">
-                <Skeleton className="h-6 w-16" />
-                <Skeleton className="h-6 w-16" />
+                <Skeleton className="h-6 w-16 bg-gray-800" />
+                <Skeleton className="h-6 w-16 bg-gray-800" />
               </div>
             </div>
           ))}
@@ -312,12 +312,12 @@ export default function JobsCard({ cvs }: JobsCardProps) {
     if (filteredJobs.length === 0 && !isLoading) {
       return (
         <div className="text-center py-8">
-          <p className="text-muted-foreground">No jobs found matching your criteria</p>
+          <p className="text-gray-400">No jobs found matching your criteria</p>
           {selectedCV && (
             <Button 
               variant="link" 
               onClick={() => handleCVSelect(selectedCV)}
-              className="mt-2"
+              className="mt-2 text-[#B4916C]"
             >
               Reset search
             </Button>
@@ -329,36 +329,36 @@ export default function JobsCard({ cvs }: JobsCardProps) {
     return (
       <div className="space-y-4">
         {filteredJobs.map((job) => (
-          <div key={job.id} className="border border-muted rounded-lg p-4 bg-[#050505] hover:border-[#B4916C] transition-all duration-200">
+          <div key={job.id} className="border border-[#B4916C]/20 rounded-lg p-4 bg-[#0A0A0A] hover:border-[#B4916C]/50 transition-all duration-200">
             <div className="flex justify-between items-start mb-2">
-              <h3 className="font-medium text-lg">{job.title}</h3>
+              <h3 className="font-medium text-lg text-white">{job.title}</h3>
               {renderCompatibilityScore(job.compatibilityScore)}
             </div>
             
-            <div className="flex items-center text-sm text-muted-foreground mb-2">
+            <div className="flex items-center text-sm text-gray-400 mb-2">
               <Building size={14} className="mr-1" />
               <span className="mr-4">{job.company}</span>
               <MapPin size={14} className="mr-1" />
               <span>{job.location}</span>
-              {job.remote && <Badge className="ml-2 bg-blue-900/30 hover:bg-blue-900/30 text-blue-400 border-blue-900">Remote</Badge>}
+              {job.remote && <Badge className="ml-2 bg-[#B4916C]/10 text-[#B4916C] border-[#B4916C]/20">Remote</Badge>}
             </div>
             
             {job.salary && (
-              <div className="flex items-center text-sm text-muted-foreground mb-2">
+              <div className="flex items-center text-sm text-gray-400 mb-2">
                 <BarChart3 size={14} className="mr-1" />
                 <span>{job.salary}</span>
               </div>
             )}
             
-            <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{job.description}</p>
+            <p className="text-sm text-gray-300 mb-3 line-clamp-2">{job.description}</p>
             
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs flex items-center gap-1">
+                <Badge variant="outline" className="text-xs flex items-center gap-1 text-gray-400 border-gray-700">
                   <Clock size={12} />
                   {job.postedAt}
                 </Badge>
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="outline" className="text-xs text-gray-400 border-gray-700">
                   {job.source}
                 </Badge>
               </div>
@@ -382,7 +382,7 @@ export default function JobsCard({ cvs }: JobsCardProps) {
               variant="outline"
               onClick={loadMoreJobs}
               disabled={isLoading}
-              className="w-full"
+              className="w-full text-[#B4916C] border-[#B4916C]/20 hover:bg-[#B4916C]/10"
             >
               {isLoading ? 'Loading...' : 'Load More Jobs'}
             </Button>
@@ -436,15 +436,15 @@ export default function JobsCard({ cvs }: JobsCardProps) {
   };
 
   return (
-    <Card className="w-full border border-muted bg-[#050505]">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-xl font-medium">Job Opportunities</CardTitle>
-        <CardDescription>
+    <Card className="mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg">
+      <CardHeader className="bg-[#B4916C]/10 pb-4">
+        <CardTitle className="text-xl font-bold text-[#B4916C]">Job Opportunities</CardTitle>
+        <CardDescription className="text-gray-300">
           Find job openings matching your CV and skills
         </CardDescription>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="p-6">
         {renderCVSelector()}
 
         {extractedKeywords && selectedCV && (
@@ -456,11 +456,11 @@ export default function JobsCard({ cvs }: JobsCardProps) {
                 </Badge>
               ))}
               {extractedKeywords.keywords.length > 8 && (
-                <Badge variant="outline">+{extractedKeywords.keywords.length - 8} more</Badge>
+                <Badge variant="outline" className="text-gray-400 border-gray-700">+{extractedKeywords.keywords.length - 8} more</Badge>
               )}
             </div>
             
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
               <span className="flex items-center gap-1">
                 <Briefcase size={12} />
                 {extractedKeywords.jobTypes[0] || 'Any role'}
@@ -478,22 +478,22 @@ export default function JobsCard({ cvs }: JobsCardProps) {
 
         <div className="flex flex-col sm:flex-row gap-2 mb-4">
           <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
             <Input
               type="search"
               placeholder="Search jobs..."
-              className="pl-8 bg-background"
+              className="pl-8 bg-[#0A0A0A] border border-[#B4916C]/20 rounded-md text-white py-2 px-3"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
           
           <div className="relative flex-1">
-            <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
             <Input
               type="text"
               placeholder="Location..."
-              className="pl-8 bg-background"
+              className="pl-8 bg-[#0A0A0A] border border-[#B4916C]/20 rounded-md text-white py-2 px-3"
               value={locationQuery}
               onChange={(e) => setLocationQuery(e.target.value)}
             />
@@ -502,7 +502,7 @@ export default function JobsCard({ cvs }: JobsCardProps) {
           <Button 
             variant="outline" 
             size="sm"
-            className="sm:w-auto w-full"
+            className="sm:w-auto w-full border-[#B4916C]/20 hover:bg-[#B4916C]/10 text-white"
             onClick={() => setShowFilters(!showFilters)}
           >
             <Filter size={16} className="mr-2" />
@@ -512,18 +512,23 @@ export default function JobsCard({ cvs }: JobsCardProps) {
         </div>
 
         {showFilters && (
-          <div className="mb-4 p-3 border border-muted rounded-md bg-background/50">
+          <div className="mb-4 p-3 border border-[#B4916C]/20 rounded-md bg-[#0A0A0A]">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium">Additional Filters</h3>
-              <Button variant="ghost" size="sm" onClick={() => setShowFilters(false)}>
+              <h3 className="text-sm font-medium text-white">Additional Filters</h3>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setShowFilters(false)}
+                className="text-gray-400 hover:text-white hover:bg-[#B4916C]/10"
+              >
                 Close
               </Button>
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               <div className="space-y-1">
-                <label className="text-xs font-medium">Salary Range</label>
-                <select className="w-full text-sm rounded-md border border-muted bg-transparent p-2">
+                <label className="text-xs font-medium text-gray-400">Salary Range</label>
+                <select className="w-full text-sm rounded-md border border-[#B4916C]/20 bg-[#050505] text-white p-2">
                   <option>Any salary</option>
                   <option>$50k - $80k</option>
                   <option>$80k - $100k</option>
@@ -533,8 +538,8 @@ export default function JobsCard({ cvs }: JobsCardProps) {
               </div>
               
               <div className="space-y-1">
-                <label className="text-xs font-medium">Job Type</label>
-                <select className="w-full text-sm rounded-md border border-muted bg-transparent p-2">
+                <label className="text-xs font-medium text-gray-400">Job Type</label>
+                <select className="w-full text-sm rounded-md border border-[#B4916C]/20 bg-[#050505] text-white p-2">
                   <option>All types</option>
                   <option>Full-time</option>
                   <option>Part-time</option>
@@ -544,8 +549,8 @@ export default function JobsCard({ cvs }: JobsCardProps) {
               </div>
               
               <div className="space-y-1">
-                <label className="text-xs font-medium">Date Posted</label>
-                <select className="w-full text-sm rounded-md border border-muted bg-transparent p-2">
+                <label className="text-xs font-medium text-gray-400">Date Posted</label>
+                <select className="w-full text-sm rounded-md border border-[#B4916C]/20 bg-[#050505] text-white p-2">
                   <option>Any time</option>
                   <option>Today</option>
                   <option>Past 3 days</option>
@@ -558,12 +563,12 @@ export default function JobsCard({ cvs }: JobsCardProps) {
         )}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="w-full mb-4">
-            <TabsTrigger value="list" className="flex-1">
+          <TabsList className="w-full mb-4 bg-[#121212]">
+            <TabsTrigger value="list" className="flex-1 data-[state=active]:bg-[#B4916C]/20 data-[state=active]:text-[#B4916C]">
               <ListFilter className="mr-2 h-4 w-4" />
               List View
             </TabsTrigger>
-            <TabsTrigger value="map" className="flex-1">
+            <TabsTrigger value="map" className="flex-1 data-[state=active]:bg-[#B4916C]/20 data-[state=active]:text-[#B4916C]">
               <MapPin className="mr-2 h-4 w-4" />
               Map View
             </TabsTrigger>
@@ -579,7 +584,7 @@ export default function JobsCard({ cvs }: JobsCardProps) {
         </Tabs>
       </CardContent>
 
-      <CardFooter className="flex justify-between border-t border-muted pt-4 text-xs text-muted-foreground">
+      <CardFooter className="flex justify-between border-t border-[#B4916C]/20 pt-4 text-xs text-gray-500">
         <div>Powered by multiple job search APIs</div>
         {jobs.length > 0 && (
           <div>{filteredJobs.length} jobs found</div>

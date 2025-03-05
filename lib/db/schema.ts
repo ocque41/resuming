@@ -85,7 +85,6 @@ export const cvsRelations = relations(cvs, ({ one }) => ({
   }),
 }));
 
-
 export const teamsRelations = relations(teams, ({ many }) => ({
   teamMembers: many(teamMembers),
   activityLogs: many(activityLogs),
@@ -129,6 +128,20 @@ export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
     references: [users.id],
   }),
 }));
+
+export const deletedCvMetadata = pgTable(
+  "deleted_cv_metadata",
+  {
+    id: serial("id").primaryKey(),
+    originalCvId: integer("original_cv_id").notNull(),
+    userId: text("user_id").notNull(),
+    fileName: text("file_name").notNull(),
+    metadata: text("metadata"),
+    rawText: text("raw_text"),
+    createdAt: timestamp("created_at").defaultNow(),
+    deletedAt: timestamp("deleted_at").notNull(),
+  }
+);
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
