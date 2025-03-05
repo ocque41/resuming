@@ -57,23 +57,20 @@ export default function SecurityPage() {
   };
 
   return (
-    <section className="flex-1 p-4 lg:p-8">
-      <h1 className="text-md lg:text-xl font-medium bold text-[#584235] mb-6">
-        Security Settings
-      </h1>
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle className="text-base text-gray-400">Password</CardTitle>
+    <section className="space-y-8 mx-auto max-w-md lg:max-w-2xl">
+      <Card className="mt-4 mb-8 border border-[#B4916C]/20 bg-[#050505] shadow-lg">
+        <CardHeader className="bg-[#B4916C]/10 pb-4">
+          <CardTitle className="text-xl font-bold text-[#B4916C]">Password Settings</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-6">
           <form className="space-y-4" onSubmit={handlePasswordSubmit}>
             <div>
-              <Label htmlFor="current-password">Current Password</Label>
+              <Label htmlFor="current-password" className="text-gray-300">Current Password</Label>
               <Input
                 id="current-password"
                 name="currentPassword"
                 type="password"
-                className="border-gray-700"
+                className="mt-1 bg-[#121212] border-gray-700 text-gray-200 focus:border-[#B4916C] focus:ring-[#B4916C]"
                 autoComplete="current-password"
                 required
                 minLength={8}
@@ -81,12 +78,12 @@ export default function SecurityPage() {
               />
             </div>
             <div>
-              <Label htmlFor="new-password">New Password</Label>
+              <Label htmlFor="new-password" className="text-gray-300">New Password</Label>
               <Input
                 id="new-password"
                 name="newPassword"
                 type="password"
-                className="border-gray-700"
+                className="mt-1 bg-[#121212] border-gray-700 text-gray-200 focus:border-[#B4916C] focus:ring-[#B4916C]"
                 autoComplete="new-password"
                 required
                 minLength={8}
@@ -94,11 +91,12 @@ export default function SecurityPage() {
               />
             </div>
             <div>
-              <Label htmlFor="confirm-password">Confirm New Password</Label>
+              <Label htmlFor="confirm-password" className="text-gray-300">Confirm New Password</Label>
               <Input
                 id="confirm-password"
                 name="confirmPassword"
                 type="password"
+                className="mt-1 bg-[#121212] border-gray-700 text-gray-200 focus:border-[#B4916C] focus:ring-[#B4916C]"
                 required
                 minLength={8}
                 maxLength={100}
@@ -112,7 +110,7 @@ export default function SecurityPage() {
             )}
             <Button
               type="submit"
-              className="bg-[#584235] hover:bg-[#6b4f3b] text-white"
+              className="bg-[#B4916C] hover:bg-[#B4916C]/90 text-white"
               disabled={isPasswordPending}
             >
               {isPasswordPending ? (
@@ -131,28 +129,29 @@ export default function SecurityPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Delete Account</CardTitle>
+      <Card className="mt-4 mb-8 border border-[#B4916C]/20 bg-[#050505] shadow-lg">
+        <CardHeader className="bg-[#B4916C]/10 pb-4">
+          <CardTitle className="text-xl font-bold text-[#B4916C]">Delete Account</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-6">
           <p className="text-sm text-gray-300 mb-4">
             Account deletion is non-reversable. Please proceed with caution.
           </p>
           <form onSubmit={handleDeleteSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="delete-password">Confirm Password</Label>
+              <Label htmlFor="delete-password" className="text-gray-300">Confirm Password</Label>
               <Input
                 id="delete-password"
                 name="password"
                 type="password"
+                className="mt-1 bg-[#121212] border-gray-700 text-gray-200 focus:border-[#B4916C] focus:ring-[#B4916C]"
                 required
                 minLength={8}
                 maxLength={100}
               />
             </div>
             {deleteState.error && (
-              <p className="text-red-500 text-sm">{deleteState.error}</p>
+              <p className="text-red-400 text-sm">{deleteState.error}</p>
             )}
             <Button
               type="submit"

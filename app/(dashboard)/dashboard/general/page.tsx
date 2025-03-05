@@ -30,35 +30,31 @@ export default function GeneralPage() {
   };
 
   return (
-    <section className="flex-1 p-4 lg:p-8">
-      <h1 className="text-md lg:text-xl font-medium text-[#584235] mb-6">
-        General Settings
-      </h1>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base text-gray-400">Account Information</CardTitle>
+    <section className="space-y-8 mx-auto max-w-md lg:max-w-2xl">
+      <Card className="mt-4 mb-8 border border-[#B4916C]/20 bg-[#050505] shadow-lg">
+        <CardHeader className="bg-[#B4916C]/10 pb-4">
+          <CardTitle className="text-xl font-bold text-[#B4916C]">Account Information</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-6">
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
-              <Label htmlFor="name">Name</Label>
+              <Label htmlFor="name" className="text-gray-300">Name</Label>
               <Input
                 id="name"
                 name="name"
-                className="border-gray-700"
+                className="mt-1 bg-[#121212] border-gray-700 text-gray-200 focus:border-[#B4916C] focus:ring-[#B4916C]"
                 placeholder="Enter your name"
                 defaultValue={user?.name || ''}
                 required
               />
             </div>
             <div>
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-gray-300">Email</Label>
               <Input
                 id="email"
                 name="email"
                 type="email"
-                className="border-gray-700"
+                className="mt-1 bg-[#121212] border-gray-700 text-gray-200 focus:border-[#B4916C] focus:ring-[#B4916C]"
                 placeholder="Enter your email"
                 defaultValue={user?.email || ''}
                 required
@@ -72,7 +68,7 @@ export default function GeneralPage() {
             )}
             <Button
               type="submit"
-              className="bg-[#584235] hover:bg-[#6b4f3b] text-white"
+              className="bg-[#B4916C] hover:bg-[#B4916C]/90 text-white"
               disabled={isPending}
             >
               {isPending ? (

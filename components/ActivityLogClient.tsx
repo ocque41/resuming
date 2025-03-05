@@ -89,7 +89,7 @@ export default function ActivityLogClient({ logs }: ActivityLogClientProps) {
                 const Icon = iconMap[log.action as ActivityType] || Settings;
                 const formattedAction = formatAction(log.action);
                 return (
-                  <li key={log.id} className="flex items-center space-x-4 p-3 rounded-md bg-gray-900/30 border border-gray-800">
+                  <li key={log.id} className="flex items-center space-x-4 p-3 rounded-md bg-[#050505] border border-[#B4916C]/20">
                     <div className="bg-[#B4916C]/20 rounded-full p-2">
                       <Icon className="w-5 h-5 text-[#B4916C]" />
                     </div>
