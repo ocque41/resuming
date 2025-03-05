@@ -44,12 +44,12 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
   }
 
   return (
-    <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-white/90 shadow-lg hover:shadow-xl transition-all duration-300">
+    <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg hover:shadow-xl transition-all duration-300">
       <CardHeader className="bg-[#B4916C]/10 pb-4">
         <CardTitle className="text-xl font-bold text-[#B4916C]">Analyze Your CV</CardTitle>
       </CardHeader>
       <CardContent className="p-6">
-        <div className="flex justify-center items-center h-48 bg-gray-50 rounded-lg mb-6 overflow-hidden">
+        <div className="flex justify-center items-center h-48 bg-gray-900 rounded-lg mb-6 overflow-hidden">
           <img
             src="/animations/leep.gif"
             alt="Animation"
@@ -66,27 +66,28 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
               handleAnalyze(selectedCV);
             }}
             accentColor="#B4916C"
+            darkMode={true}
           />
         </div>
         
         {loading && (
           <div className="mt-4 flex items-center justify-center">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#B4916C]"></div>
-            <p className="ml-2 text-sm text-gray-600">Analyzing CV...</p>
+            <p className="ml-2 text-sm text-gray-400">Analyzing CV...</p>
           </div>
         )}
         
         {error && (
-          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
-            <p className="text-sm text-red-500">{error}</p>
+          <div className="mt-4 p-3 bg-red-900/30 border border-red-800 rounded-md">
+            <p className="text-sm text-red-400">{error}</p>
           </div>
         )}
         
         {analysis && (
-          <Article className="mt-6 p-5 border border-[#B4916C]/20 rounded-lg shadow-sm bg-white">
+          <Article className="mt-6 p-5 border border-[#B4916C]/20 rounded-lg shadow-sm bg-gray-900/50">
             <ArticleTitle className="text-lg font-semibold mb-3 text-[#B4916C]">CV Analysis Results</ArticleTitle>
             <ArticleMeta className="text-sm mb-4 flex items-center">
-              <span className="font-medium mr-2">ATS Score:</span>
+              <span className="font-medium mr-2 text-gray-300">ATS Score:</span>
               <span className="px-3 py-1 bg-[#B4916C]/10 rounded-full text-[#B4916C] font-semibold">
                 {analysis.atsScore}
               </span>
@@ -94,7 +95,7 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
             
             <ArticleContent className="text-sm mb-4">
               <h3 className="font-semibold mb-2 text-[#B4916C]">Strengths:</h3>
-              <ul className="list-disc ml-5 space-y-1 text-gray-700">
+              <ul className="list-disc ml-5 space-y-1 text-gray-300">
                 {analysis.strengths.map((s, idx) => (
                   <li key={idx}>{s}</li>
                 ))}
@@ -103,7 +104,7 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
             
             <ArticleContent className="text-sm mb-4">
               <h3 className="font-semibold mb-2 text-[#B4916C]">Weaknesses:</h3>
-              <ul className="list-disc ml-5 space-y-1 text-gray-700">
+              <ul className="list-disc ml-5 space-y-1 text-gray-300">
                 {analysis.weaknesses.map((w, idx) => (
                   <li key={idx}>{w}</li>
                 ))}
@@ -112,7 +113,7 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
             
             <ArticleContent className="text-sm">
               <h3 className="font-semibold mb-2 text-[#B4916C]">Recommendations:</h3>
-              <ul className="list-disc ml-5 space-y-1 text-gray-700">
+              <ul className="list-disc ml-5 space-y-1 text-gray-300">
                 {analysis.recommendations.map((r, idx) => (
                   <li key={idx}>{r}</li>
                 ))}

@@ -9,6 +9,7 @@ export interface ComboboxPopoverProps {
   options: string[];
   onSelect: (option: string) => void;
   accentColor?: string;
+  darkMode?: boolean;
 }
 
 export function ComboboxPopover({
@@ -16,6 +17,7 @@ export function ComboboxPopover({
   options,
   onSelect,
   accentColor = "#6366F1", // Default to indigo if no accent color provided
+  darkMode = false,
 }: ComboboxPopoverProps) {
   const [selected, setSelected] = useState("");
   const [query, setQuery] = useState("");
@@ -55,13 +57,13 @@ export function ComboboxPopover({
       `}</style>
       
       <Combobox value={selected} onChange={handleChange}>
-        <Combobox.Label className="block text-sm font-medium text-gray-700 mb-1">
+        <Combobox.Label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
           {label}
         </Combobox.Label>
         <div className="relative mt-1">
-          <div className="relative w-full cursor-default overflow-hidden rounded-lg bg-white text-left shadow-sm border accent-border accent-shadow focus-within:ring-1">
+          <div className={`relative w-full cursor-default overflow-hidden rounded-lg text-left shadow-sm border accent-border accent-shadow focus-within:ring-1 ${darkMode ? 'bg-gray-900' : 'bg-white'}`}>
             <Combobox.Input
-              className="w-full border-none py-2.5 pl-3 pr-10 leading-5 text-gray-900 focus:ring-0"
+              className={`w-full border-none py-2.5 pl-3 pr-10 leading-5 focus:ring-0 ${darkMode ? 'bg-gray-900 text-gray-200 placeholder-gray-500' : 'bg-white text-gray-900 placeholder-gray-400'}`}
               placeholder="Select an option"
               onChange={(e) => setQuery(e.target.value)}
               displayValue={(option: string) => option}
@@ -92,11 +94,11 @@ export function ComboboxPopover({
             afterLeave={() => setQuery("")}
           >
             <Combobox.Options
-              className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg
-                         ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm"
+              className={`absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md py-1 text-base shadow-lg
+                         ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm ${darkMode ? 'bg-gray-900' : 'bg-white'}`}
             >
               {filteredOptions.length === 0 && query !== "" ? (
-                <div className="relative cursor-default select-none py-2 px-4 text-gray-700">
+                <div className={`relative cursor-default select-none py-2 px-4 ${darkMode ? 'text-gray-400' : 'text-gray-700'}`}>
                   Nothing found.
                 </div>
               ) : (
@@ -108,7 +110,7 @@ export function ComboboxPopover({
                       `relative cursor-pointer select-none py-2 pl-10 pr-4 ${
                         active
                           ? "accent-bg-active text-white"
-                          : "text-gray-900"
+                          : darkMode ? "text-gray-300" : "text-gray-900"
                       }`
                     }
                   >

@@ -2,7 +2,7 @@
 import { redirect } from "next/navigation";
 import { getUser, getTeamForUser, getCVsForUser, getActivityLogs } from "@/lib/db/queries.server";
 import { ArticleTitle } from "@/components/ui/article";
-import { Card, CardContent, CardTitle, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import AnalyzeCVCard from "@/components/AnalyzeCVCard.client";
 import OptimizeCVCard from "@/components/OptimizeCVCard.client";
 import {
@@ -39,7 +39,7 @@ export default async function DashboardPage() {
         <UserMenu teamData={teamData} activityLogs={activityLogs} />
       </header>
       
-      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-white/90 shadow-lg">
+      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg">
         <CardHeader className="bg-[#B4916C]/10 pb-4">
           <CardTitle className="text-xl font-bold text-[#B4916C]">Your CV Collection</CardTitle>
         </CardHeader>
@@ -62,8 +62,8 @@ export default async function DashboardPage() {
                   console.error("Error parsing metadata:", err);
                 }
                 return (
-                  <TableRow key={cv.id} className="border-b border-gray-100 hover:bg-[#B4916C]/5">
-                    <TableCell className="text-sm lg:text-base text-gray-800 font-medium">
+                  <TableRow key={cv.id} className="border-b border-gray-800 hover:bg-[#B4916C]/5">
+                    <TableCell className="text-sm lg:text-base text-gray-300 font-medium">
                       {cv.fileName}
                     </TableCell>
                     <TableCell className="text-sm lg:text-base">
@@ -75,11 +75,11 @@ export default async function DashboardPage() {
                     </TableCell>
                     <TableCell className="text-sm lg:text-base">
                       {metadata?.optimized ? (
-                        <span className="px-2 py-1 bg-green-100 rounded-full text-green-700 font-medium text-sm">
+                        <span className="px-2 py-1 bg-green-900/30 rounded-full text-green-400 font-medium text-sm">
                           Yes ({metadata.optimizedTimes || 1})
                         </span>
                       ) : (
-                        <span className="px-2 py-1 bg-gray-100 rounded-full text-gray-600 font-medium text-sm">
+                        <span className="px-2 py-1 bg-gray-800 rounded-full text-gray-400 font-medium text-sm">
                           No
                         </span>
                       )}

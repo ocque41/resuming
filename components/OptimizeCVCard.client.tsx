@@ -116,12 +116,12 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   }
 
   return (
-    <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-white/90 shadow-lg hover:shadow-xl transition-all duration-300">
+    <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg hover:shadow-xl transition-all duration-300">
       <CardHeader className="bg-[#B4916C]/10 pb-4">
         <CardTitle className="text-xl font-bold text-[#B4916C]">Optimize Your CV</CardTitle>
       </CardHeader>
       <CardContent className="p-6">
-        <div className="flex justify-center items-center h-48 bg-gray-50 rounded-lg mb-6 overflow-hidden">
+        <div className="flex justify-center items-center h-48 bg-gray-900 rounded-lg mb-6 overflow-hidden">
           <img
             src="/animations/leep.gif"
             alt="Animation"
@@ -131,23 +131,25 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         
         {/* Step 1: Select CV */}
         <div className="mb-6">
-          <h3 className="font-semibold mb-2 text-gray-700">Step 1: Select your CV</h3>
+          <h3 className="font-semibold mb-2 text-gray-300">Step 1: Select your CV</h3>
           <ComboboxPopover
             label="Select CV"
             options={cvs}
             onSelect={handleCVSelect}
             accentColor="#B4916C"
+            darkMode={true}
           />
         </div>
         
         {/* Step 2: Select Template (only shown after CV is selected) */}
         {showTemplates && (
           <div className="mb-6">
-            <h3 className="font-semibold mb-2 text-gray-700">Step 2: Choose a template</h3>
+            <h3 className="font-semibold mb-2 text-gray-300">Step 2: Choose a template</h3>
             <TemplateSelector 
               onSelect={handleTemplateSelect}
               selectedTemplateId={selectedTemplate || undefined}
               accentColor="#B4916C"
+              darkMode={true}
             />
           </div>
         )}
@@ -155,9 +157,9 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         {/* Step 3: Optimize Button (only enabled when both CV and template are selected) */}
         {selectedCV && selectedTemplate && (
           <div className="mb-6">
-            <h3 className="font-semibold mb-2 text-gray-700">Step 3: Start optimization</h3>
+            <h3 className="font-semibold mb-2 text-gray-300">Step 3: Start optimization</h3>
             <button
-              className="bg-[#B4916C] hover:bg-[#B4916C]/90 text-white px-4 py-2.5 rounded-md w-full disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors duration-200 font-medium"
+              className="bg-[#B4916C] hover:bg-[#B4916C]/90 text-white px-4 py-2.5 rounded-md w-full disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors duration-200 font-medium"
               onClick={handleOptimize}
               disabled={optimizationStatus === "pending" || optimizationStatus === "processing"}
             >
@@ -172,7 +174,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         {optimizationStatus === "pending" && (
           <div className="mt-4 flex items-center justify-center p-3 bg-[#B4916C]/5 border border-[#B4916C]/20 rounded-md">
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#B4916C]"></div>
-            <p className="ml-2 text-sm text-gray-600">
+            <p className="ml-2 text-sm text-gray-400">
               Optimization initiated. Waiting for processing...
             </p>
           </div>
@@ -181,7 +183,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         {optimizationStatus === "processing" && (
           <div className="mt-4 flex items-center justify-center p-3 bg-[#B4916C]/5 border border-[#B4916C]/20 rounded-md">
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#B4916C]"></div>
-            <p className="ml-2 text-sm text-gray-600">
+            <p className="ml-2 text-sm text-gray-400">
               Optimizing CV... Please wait. (Attempt {pollingAttempts + 1}/{maxRetries})
             </p>
           </div>
@@ -189,10 +191,10 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         
         {/* Result Display */}
         {optimizationStatus === "complete" && optimizedPDFBase64 && (
-          <div className="mt-6 border border-[#B4916C]/20 rounded-lg p-4 bg-white shadow-sm">
+          <div className="mt-6 border border-[#B4916C]/20 rounded-lg p-4 bg-gray-900/50 shadow-sm">
             <h3 className="font-semibold mb-3 text-[#B4916C]">Optimized CV Ready</h3>
             <iframe
-              className="w-full h-96 border border-gray-200 rounded-md mb-3"
+              className="w-full h-96 border border-gray-800 rounded-md mb-3"
               src={`data:application/pdf;base64,${optimizedPDFBase64}`}
             ></iframe>
             <a
@@ -207,8 +209,8 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         
         {/* Error Message */}
         {error && (
-          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
-            <p className="text-sm text-red-500">{error}</p>
+          <div className="mt-4 p-3 bg-red-900/30 border border-red-800 rounded-md">
+            <p className="text-sm text-red-400">{error}</p>
           </div>
         )}
       </CardContent>
