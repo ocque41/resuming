@@ -574,8 +574,8 @@ export async function modifyPDFWithOptimizedContent(
     }
     
     // Set column widths based on layout
-    let leftColumnWidth = (width - 2 * margin) * 0.38; // Increase left column width for better balance
-    let rightColumnWidth = (width - 2 * margin) * 0.62; // Adjust right column accordingly
+    let leftColumnWidth = (width - 2 * margin) * 0.36; // Slightly reduce left column width
+    let rightColumnWidth = (width - 2 * margin) * 0.64; // Increase right column width
     const columnGap = 15;
     
     // Initialize Y positions for both columns
@@ -1012,6 +1012,10 @@ const formatTextWithStyling = (
   const bulletIndent = 10;
   let currentY = y;
   
+  // Add a small safety margin to prevent text from going off the edge
+  const safetyMargin = 5;
+  const safeWidth = width - safetyMargin;
+  
   // Split text into lines
   const lines = text.split('\n');
   
@@ -1045,30 +1049,67 @@ const formatTextWithStyling = (
         // Handle bold text in bullet points
         const parts = bulletText.split(/\*\*(.*?)\*\*/g);
         let currentX = x + xOffset;
+        let isFirstPartOnLine = true;
         
         for (let i = 0; i < parts.length; i++) {
           if (parts[i] === "") continue;
           
           const currentFont = i % 2 === 1 ? boldFont : font;
-          const textWidth = currentFont.widthOfTextAtSize(parts[i], fontSize);
           
-          // Check if text will overflow
-          if (currentX + textWidth > x + width) {
-            // Move to next line
-            currentY -= lineHeight;
-            currentX = x + xOffset;
+          // Split part into words for better wrapping
+          const words = parts[i].split(' ');
+          let currentPart = '';
+          
+          for (let j = 0; j < words.length; j++) {
+            const word = words[j];
+            const testPart = currentPart ? currentPart + ' ' + word : word;
+            const testWidth = currentFont.widthOfTextAtSize(testPart, fontSize);
+            
+            // Check if adding this word would overflow
+            if (currentX + testWidth > x + safeWidth) {
+              // Draw current part before moving to next line
+              if (currentPart) {
+                page.drawText(currentPart, {
+                  x: currentX,
+                  y: currentY,
+                  size: fontSize,
+                  font: currentFont,
+                  color: color,
+                });
+                
+                const partWidth = currentFont.widthOfTextAtSize(currentPart, fontSize);
+                currentX += partWidth;
+              }
+              
+              // Move to next line
+              currentY -= lineHeight;
+              currentX = x + xOffset;
+              currentPart = word;
+              isFirstPartOnLine = true;
+            } else {
+              currentPart = testPart;
+            }
           }
           
-          // Draw text
-          page.drawText(parts[i], {
-            x: currentX,
-            y: currentY,
-            size: fontSize,
-            font: currentFont,
-            color: color,
-          });
-          
-          currentX += textWidth;
+          // Draw remaining part
+          if (currentPart) {
+            // Add a space before this part if it's not the first on the line
+            if (!isFirstPartOnLine) {
+              currentX += font.widthOfTextAtSize(' ', fontSize);
+            }
+            
+            page.drawText(currentPart, {
+              x: currentX,
+              y: currentY,
+              size: fontSize,
+              font: currentFont,
+              color: color,
+            });
+            
+            const partWidth = currentFont.widthOfTextAtSize(currentPart, fontSize);
+            currentX += partWidth;
+            isFirstPartOnLine = false;
+          }
         }
         
         currentY -= lineHeight * 1.2; // Add more space after bullet points
@@ -1078,26 +1119,103 @@ const formatTextWithStyling = (
         let line = "";
         let currentX = x + xOffset;
         
-        for (const word of words) {
-          const testLine = line ? line + " " + word : word;
+        for (let j = 0; j < words.length; j++) {
+          const word = words[j];
+          
+          // Special handling for dates (don't break them)
+          const isDate = /^\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}$/.test(word) || 
+                         /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}$/.test(word + (j+1 < words.length ? ' ' + words[j+1] : '')) ||
+                         /^(January|February|March|April|May|June|July|August|September|October|November|December)$/.test(word) ||
+                         /^\d{4}$/.test(word) || // Year
+                         /^\d{4}-\d{4}$/.test(word); // Date range like 2020-2022
+
+          // Special handling for education entries
+          const isEducationLocation = /^(Madrid|Spain|Caracas|Venezuela|CG\s+Spectrum|College|University|School|Institute|Academy)/.test(word);
+
+          // If it's a date and next word is also part of the date, combine them
+          let wordToAdd = word;
+          if ((isDate || isEducationLocation) && j+1 < words.length) {
+            // For dates like "January 2022" or locations like "Madrid, Spain"
+            if ((word === "January" || word === "February" || word === "March" || word === "April" || 
+                 word === "May" || word === "June" || word === "July" || word === "August" || 
+                 word === "September" || word === "October" || word === "November" || word === "December") && 
+                /^\d{4}$/.test(words[j+1])) {
+              wordToAdd = word + ' ' + words[j+1];
+              j++; // Skip the next word
+            } 
+            // For locations like "Madrid, Spain"
+            else if ((word === "Madrid" || word === "Caracas") && words[j+1] === "Spain" || words[j+1] === "Venezuela") {
+              wordToAdd = word + ', ' + words[j+1];
+              j++; // Skip the next word
+            }
+            // For school names like "CG Spectrum College"
+            else if (word === "CG" && words[j+1] === "Spectrum") {
+              if (j+2 < words.length && words[j+2] === "College") {
+                wordToAdd = word + ' ' + words[j+1] + ' ' + words[j+2];
+                j += 2; // Skip the next two words
+              } else {
+                wordToAdd = word + ' ' + words[j+1];
+                j++; // Skip the next word
+              }
+            }
+          }
+          
+          const testLine = line ? line + " " + wordToAdd : wordToAdd;
           const testWidth = font.widthOfTextAtSize(testLine, fontSize);
           
-          if (currentX + testWidth <= x + width) {
+          if (currentX + testWidth <= x + safeWidth) {
             line = testLine;
           } else {
             // Draw current line
-            page.drawText(line, {
-              x: currentX,
-              y: currentY,
-              size: fontSize,
-              font: font,
-              color: color,
-            });
-            
-            // Move to next line
-            currentY -= lineHeight;
-            currentX = x + xOffset;
-            line = word;
+            if (line) {
+              page.drawText(line, {
+                x: currentX,
+                y: currentY,
+                size: fontSize,
+                font: font,
+                color: color,
+              });
+              
+              // Move to next line
+              currentY -= lineHeight;
+              currentX = x + xOffset;
+              line = wordToAdd;
+            } else {
+              // Word is too long for the line, need to break it
+              if (wordToAdd.length > 15) {
+                // Find a good breaking point
+                const breakPoint = Math.floor(wordToAdd.length / 2);
+                const firstPart = wordToAdd.substring(0, breakPoint) + "-";
+                const secondPart = wordToAdd.substring(breakPoint);
+                
+                page.drawText(firstPart, {
+                  x: currentX,
+                  y: currentY,
+                  size: fontSize,
+                  font: font,
+                  color: color,
+                });
+                
+                // Move to next line
+                currentY -= lineHeight;
+                currentX = x + xOffset;
+                line = secondPart;
+              } else {
+                // Just draw the long word on its own line
+                page.drawText(wordToAdd, {
+                  x: currentX,
+                  y: currentY,
+                  size: fontSize,
+                  font: font,
+                  color: color,
+                });
+                
+                // Move to next line
+                currentY -= lineHeight;
+                currentX = x + xOffset;
+                line = "";
+              }
+            }
           }
         }
         
@@ -1118,30 +1236,64 @@ const formatTextWithStyling = (
       // Handle bold text in regular lines
       const parts = line.split(/\*\*(.*?)\*\*/g);
       let currentX = x;
+      let isFirstPartOnLine = true;
       
       for (let i = 0; i < parts.length; i++) {
         if (parts[i] === "") continue;
         
         const currentFont = i % 2 === 1 ? boldFont : font;
-        const textWidth = currentFont.widthOfTextAtSize(parts[i], fontSize);
         
-        // Check if text will overflow
-        if (currentX + textWidth > x + width) {
-          // Move to next line
-          currentY -= lineHeight;
-          currentX = x;
+        // Split part into words for better wrapping
+        const words = parts[i].split(' ');
+        let currentPart = '';
+        
+        for (let j = 0; j < words.length; j++) {
+          const word = words[j];
+          const testPart = currentPart ? currentPart + ' ' + word : word;
+          const testWidth = currentFont.widthOfTextAtSize(testPart, fontSize);
+          
+          // Check if adding this word would overflow
+          if (currentX + testWidth > x + safeWidth) {
+            // Draw current part before moving to next line
+            if (currentPart) {
+              page.drawText(currentPart, {
+                x: currentX,
+                y: currentY,
+                size: fontSize,
+                font: currentFont,
+                color: color,
+              });
+            }
+            
+            // Move to next line
+            currentY -= lineHeight;
+            currentX = x;
+            currentPart = word;
+            isFirstPartOnLine = true;
+          } else {
+            currentPart = testPart;
+          }
         }
         
-        // Draw text
-        page.drawText(parts[i], {
-          x: currentX,
-          y: currentY,
-          size: fontSize,
-          font: currentFont,
-          color: color,
-        });
-        
-        currentX += textWidth;
+        // Draw remaining part
+        if (currentPart) {
+          // Add a space before this part if it's not the first on the line
+          if (!isFirstPartOnLine) {
+            currentX += font.widthOfTextAtSize(' ', fontSize);
+          }
+          
+          page.drawText(currentPart, {
+            x: currentX,
+            y: currentY,
+            size: fontSize,
+            font: currentFont,
+            color: color,
+          });
+          
+          const partWidth = currentFont.widthOfTextAtSize(currentPart, fontSize);
+          currentX += partWidth;
+          isFirstPartOnLine = false;
+        }
       }
       
       currentY -= lineHeight * 1.1; // Slightly more space after lines with bold text
@@ -1151,26 +1303,103 @@ const formatTextWithStyling = (
       let currentLine = "";
       let currentX = x;
       
-      for (const word of words) {
-        const testLine = currentLine ? currentLine + " " + word : word;
+      for (let j = 0; j < words.length; j++) {
+        const word = words[j];
+        
+        // Special handling for dates (don't break them)
+        const isDate = /^\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}$/.test(word) || 
+                       /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}$/.test(word + (j+1 < words.length ? ' ' + words[j+1] : '')) ||
+                       /^(January|February|March|April|May|June|July|August|September|October|November|December)$/.test(word) ||
+                       /^\d{4}$/.test(word) || // Year
+                       /^\d{4}-\d{4}$/.test(word); // Date range like 2020-2022
+
+        // Special handling for education entries
+        const isEducationLocation = /^(Madrid|Spain|Caracas|Venezuela|CG\s+Spectrum|College|University|School|Institute|Academy)/.test(word);
+
+        // If it's a date and next word is also part of the date, combine them
+        let wordToAdd = word;
+        if ((isDate || isEducationLocation) && j+1 < words.length) {
+          // For dates like "January 2022" or locations like "Madrid, Spain"
+          if ((word === "January" || word === "February" || word === "March" || word === "April" || 
+               word === "May" || word === "June" || word === "July" || word === "August" || 
+               word === "September" || word === "October" || word === "November" || word === "December") && 
+              /^\d{4}$/.test(words[j+1])) {
+            wordToAdd = word + ' ' + words[j+1];
+            j++; // Skip the next word
+          } 
+          // For locations like "Madrid, Spain"
+          else if ((word === "Madrid" || word === "Caracas") && words[j+1] === "Spain" || words[j+1] === "Venezuela") {
+            wordToAdd = word + ', ' + words[j+1];
+            j++; // Skip the next word
+          }
+          // For school names like "CG Spectrum College"
+          else if (word === "CG" && words[j+1] === "Spectrum") {
+            if (j+2 < words.length && words[j+2] === "College") {
+              wordToAdd = word + ' ' + words[j+1] + ' ' + words[j+2];
+              j += 2; // Skip the next two words
+            } else {
+              wordToAdd = word + ' ' + words[j+1];
+              j++; // Skip the next word
+            }
+          }
+        }
+        
+        const testLine = currentLine ? currentLine + " " + wordToAdd : wordToAdd;
         const testWidth = font.widthOfTextAtSize(testLine, fontSize);
         
-        if (currentX + testWidth <= x + width) {
+        if (currentX + testWidth <= x + safeWidth) {
           currentLine = testLine;
         } else {
           // Draw current line
-          page.drawText(currentLine, {
-            x: currentX,
-            y: currentY,
-            size: fontSize,
-            font: font,
-            color: color,
-          });
-          
-          // Move to next line
-          currentY -= lineHeight;
-          currentX = x;
-          currentLine = word;
+          if (currentLine) {
+            page.drawText(currentLine, {
+              x: currentX,
+              y: currentY,
+              size: fontSize,
+              font: font,
+              color: color,
+            });
+            
+            // Move to next line
+            currentY -= lineHeight;
+            currentX = x;
+            currentLine = wordToAdd;
+          } else {
+            // Word is too long for the line, need to break it
+            if (wordToAdd.length > 15) {
+              // Find a good breaking point
+              const breakPoint = Math.floor(wordToAdd.length / 2);
+              const firstPart = wordToAdd.substring(0, breakPoint) + "-";
+              const secondPart = wordToAdd.substring(breakPoint);
+              
+              page.drawText(firstPart, {
+                x: currentX,
+                y: currentY,
+                size: fontSize,
+                font: font,
+                color: color,
+              });
+              
+              // Move to next line
+              currentY -= lineHeight;
+              currentX = x;
+              currentLine = secondPart;
+            } else {
+              // Just draw the long word on its own line
+              page.drawText(wordToAdd, {
+                x: currentX,
+                y: currentY,
+                size: fontSize,
+                font: font,
+                color: color,
+              });
+              
+              // Move to next line
+              currentY -= lineHeight;
+              currentX = x;
+              currentLine = "";
+            }
+          }
         }
       }
       
