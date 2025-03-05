@@ -65,25 +65,25 @@ export default function ActionsDropdown({ cv }: ActionsDropdownProps) {
   return (
     <Menu as="div" className="relative inline-block text-left">
       <div>
-        <Menu.Button className="inline-flex justify-center w-full px-4 py-2 text-sm font-medium text-white bg-black rounded-md bg-opacity-20 hover:bg-opacity-30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75">
+        <Menu.Button className="inline-flex justify-center items-center px-3 py-1.5 text-sm font-medium text-[#B4916C] bg-[#B4916C]/10 rounded-md hover:bg-[#B4916C]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B4916C] focus-visible:ring-opacity-75 transition-colors duration-200">
           Actions
           <ChevronDownIcon
-            className="w-5 h-5 ml-2 -mr-1 text-violet-200 hover:text-violet-100"
+            className="w-4 h-4 ml-1 text-[#B4916C]"
             aria-hidden="true"
           />
         </Menu.Button>
       </div>
-      <Menu.Items className="absolute right-0 w-56 mt-2 origin-top-right bg-[#121212] divide-y divide-gray-700 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-10">
+      <Menu.Items className="absolute right-0 w-56 mt-2 origin-top-right bg-white divide-y divide-gray-100 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-10">
         <div className="px-1 py-1">
           <Menu.Item>
             {({ active }) => (
               <button
                 className={`${
-                  active ? 'bg-[#1a1a1a]' : ''
-                } group flex rounded-md items-center w-full px-2 py-2 text-sm text-white`}
+                  active ? 'bg-[#B4916C]/10' : ''
+                } group flex rounded-md items-center w-full px-2 py-2 text-sm text-gray-700`}
                 onClick={handleDownload}
               >
-                <ArrowDownTrayIcon className="w-5 h-5 mr-2" aria-hidden="true" />
+                <ArrowDownTrayIcon className="w-5 h-5 mr-2 text-[#B4916C]" aria-hidden="true" />
                 Download
               </button>
             )}
@@ -92,8 +92,8 @@ export default function ActionsDropdown({ cv }: ActionsDropdownProps) {
             {({ active }) => (
               <div
                 className={`${
-                  active ? 'bg-[#1a1a1a]' : ''
-                } group flex rounded-md items-center w-full px-2 py-2 text-sm text-white`}
+                  active ? 'bg-red-50' : ''
+                } group flex rounded-md items-center w-full px-2 py-2 text-sm text-gray-700`}
               >
                 <TrashIcon className="w-5 h-5 mr-2 text-red-500" aria-hidden="true" />
                 <DeleteCVButton cvId={cv.id} />

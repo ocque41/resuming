@@ -7,9 +7,14 @@ import Image from 'next/image';
 interface TemplateSelectorProps {
   onSelect: (templateId: string) => void;
   selectedTemplateId?: string;
+  accentColor?: string;
 }
 
-export default function TemplateSelector({ onSelect, selectedTemplateId }: TemplateSelectorProps) {
+export default function TemplateSelector({ 
+  onSelect, 
+  selectedTemplateId,
+  accentColor = "#B4916C" 
+}: TemplateSelectorProps) {
   const [templates, setTemplates] = useState<CVTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,11 +44,20 @@ export default function TemplateSelector({ onSelect, selectedTemplateId }: Templ
   }, []);
   
   if (loading) {
-    return <div className="flex justify-center p-8">Loading templates...</div>;
+    return (
+      <div className="flex justify-center items-center p-8">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2" style={{ borderColor: accentColor }}></div>
+        <span className="ml-2 text-sm text-gray-600">Loading templates...</span>
+      </div>
+    );
   }
   
   if (error) {
-    return <div className="text-red-500 p-4">{error}</div>;
+    return (
+      <div className="p-4 bg-red-50 border border-red-200 rounded-md">
+        <p className="text-sm text-red-500">{error}</p>
+      </div>
+    );
   }
   
   return (
@@ -55,8 +69,14 @@ export default function TemplateSelector({ onSelect, selectedTemplateId }: Templ
         {templates.map(template => (
           <div 
             key={template.id}
-            className={`template-card p-3 border rounded-lg cursor-pointer transition-all 
-              ${selectedTemplateId === template.id ? 'border-blue-500 ring-2 ring-blue-300' : 'border-gray-200 hover:border-gray-300'}`}
+            className={`template-card p-3 border rounded-lg cursor-pointer transition-all hover:shadow-md
+              ${selectedTemplateId === template.id 
+                ? 'ring-2 shadow-sm' 
+                : 'border-gray-200 hover:border-gray-300'}`}
+            style={{
+              borderColor: selectedTemplateId === template.id ? `${accentColor}` : '',
+              '--tw-ring-color': selectedTemplateId === template.id ? `${accentColor}40` : ''
+            } as React.CSSProperties}
             onClick={() => onSelect(template.id)}
           >
             <div className="aspect-w-3 aspect-h-4 mb-2 relative overflow-hidden rounded-md">
@@ -74,7 +94,9 @@ export default function TemplateSelector({ onSelect, selectedTemplateId }: Templ
                 </div>
               )}
             </div>
-            <h3 className="font-medium">{template.name}</h3>
+            <h3 className="font-medium" style={{ color: selectedTemplateId === template.id ? accentColor : '' }}>
+              {template.name}
+            </h3>
             <p className="text-sm text-gray-500">{template.description}</p>
           </div>
         ))}

@@ -8,12 +8,14 @@ export interface ComboboxPopoverProps {
   label: string;
   options: string[];
   onSelect: (option: string) => void;
+  accentColor?: string;
 }
 
 export function ComboboxPopover({
   label,
   options,
   onSelect,
+  accentColor = "#6366F1", // Default to indigo if no accent color provided
 }: ComboboxPopoverProps) {
   const [selected, setSelected] = useState("");
   const [query, setQuery] = useState("");
@@ -33,22 +35,40 @@ export function ComboboxPopover({
   };
 
   return (
-    <div className="w-72">
+    <div className="w-full">
+      <style jsx global>{`
+        .accent-bg-active {
+          background-color: ${accentColor};
+        }
+        .accent-text {
+          color: ${accentColor};
+        }
+        .accent-border {
+          border-color: ${accentColor}20;
+        }
+        .accent-shadow {
+          box-shadow: 0 0 0 1px ${accentColor}20;
+        }
+        .accent-icon {
+          color: ${accentColor}80;
+        }
+      `}</style>
+      
       <Combobox value={selected} onChange={handleChange}>
-        <Combobox.Label className="block text-sm font-medium text-gray-700">
+        <Combobox.Label className="block text-sm font-medium text-gray-700 mb-1">
           {label}
         </Combobox.Label>
         <div className="relative mt-1">
-          <div className="relative w-full cursor-default overflow-hidden rounded-lg bg-white text-left shadow-md sm:text-sm">
+          <div className="relative w-full cursor-default overflow-hidden rounded-lg bg-white text-left shadow-sm border accent-border accent-shadow focus-within:ring-1">
             <Combobox.Input
-              className="w-full border-none py-2 pl-3 pr-10 leading-5 text-black focus:ring-0"
-              placeholder="Select a CV"
+              className="w-full border-none py-2.5 pl-3 pr-10 leading-5 text-gray-900 focus:ring-0"
+              placeholder="Select an option"
               onChange={(e) => setQuery(e.target.value)}
               displayValue={(option: string) => option}
             />
             <Combobox.Button className="absolute inset-y-0 right-0 flex items-center pr-2">
               <svg
-                className="h-5 w-5 text-gray-400"
+                className="h-5 w-5 accent-icon"
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 20 20"
                 fill="currentColor"
@@ -72,7 +92,7 @@ export function ComboboxPopover({
             afterLeave={() => setQuery("")}
           >
             <Combobox.Options
-              className="absolute mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg
+              className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg
                          ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm"
             >
               {filteredOptions.length === 0 && query !== "" ? (
@@ -87,7 +107,7 @@ export function ComboboxPopover({
                     className={({ active }) =>
                       `relative cursor-pointer select-none py-2 pl-10 pr-4 ${
                         active
-                          ? "bg-indigo-600 text-white"
+                          ? "accent-bg-active text-white"
                           : "text-gray-900"
                       }`
                     }
@@ -104,7 +124,7 @@ export function ComboboxPopover({
                         {isSelected && (
                           <span
                             className={`absolute inset-y-0 left-0 flex items-center pl-3 ${
-                              active ? "text-white" : "text-indigo-600"
+                              active ? "text-white" : "accent-text"
                             }`}
                           >
                             <svg

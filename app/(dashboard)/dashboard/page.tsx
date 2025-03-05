@@ -2,7 +2,7 @@
 import { redirect } from "next/navigation";
 import { getUser, getTeamForUser, getCVsForUser, getActivityLogs } from "@/lib/db/queries.server";
 import { ArticleTitle } from "@/components/ui/article";
-import { Card, CardContent, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardTitle, CardHeader } from "@/components/ui/card";
 import AnalyzeCVCard from "@/components/AnalyzeCVCard.client";
 import OptimizeCVCard from "@/components/OptimizeCVCard.client";
 import {
@@ -33,24 +33,24 @@ export default async function DashboardPage() {
   return (
     <>
       <header className="flex items-center justify-between p-4 lg:p-8 mx-auto max-w-md lg:max-w-2xl">
-        <ArticleTitle className="text-md lg:text-xl font-medium ml-4 text-white">
+        <ArticleTitle className="text-md lg:text-xl font-medium ml-4 text-[#B4916C]">
           Dashboard
         </ArticleTitle>
         <UserMenu teamData={teamData} activityLogs={activityLogs} />
       </header>
       
-      <CardTitle className="text-sm text-white text-center mt-2 mx-auto max-w-md lg:max-w-2xl">
-        General Suite
-      </CardTitle>
-      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl bg-[#050505] border border-[#E8DCC4]">
-        <CardContent>
-          <Table className="w-full text-white">
+      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-white/90 shadow-lg">
+        <CardHeader className="bg-[#B4916C]/10 pb-4">
+          <CardTitle className="text-xl font-bold text-[#B4916C]">Your CV Collection</CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          <Table className="w-full">
             <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>ATS Score</TableHead>
-                <TableHead>Optimized</TableHead>
-                <TableHead>Actions</TableHead>
+              <TableRow className="border-b border-[#B4916C]/20">
+                <TableHead className="text-[#B4916C] font-semibold">Name</TableHead>
+                <TableHead className="text-[#B4916C] font-semibold">ATS Score</TableHead>
+                <TableHead className="text-[#B4916C] font-semibold">Optimized</TableHead>
+                <TableHead className="text-[#B4916C] font-semibold">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -62,17 +62,29 @@ export default async function DashboardPage() {
                   console.error("Error parsing metadata:", err);
                 }
                 return (
-                  <TableRow key={cv.id}>
-                    <TableCell className="text-sm lg:text-base text-white">
+                  <TableRow key={cv.id} className="border-b border-gray-100 hover:bg-[#B4916C]/5">
+                    <TableCell className="text-sm lg:text-base text-gray-800 font-medium">
                       {cv.fileName}
                     </TableCell>
-                    <TableCell className="text-sm lg:text-base text-white">
-                      {metadata?.atsScore ? `${metadata.atsScore}` : "-"}
+                    <TableCell className="text-sm lg:text-base">
+                      {metadata?.atsScore ? (
+                        <span className="px-2 py-1 bg-[#B4916C]/10 rounded-full text-[#B4916C] font-medium text-sm">
+                          {metadata.atsScore}
+                        </span>
+                      ) : "-"}
                     </TableCell>
-                    <TableCell className="text-sm lg:text-base text-white">
-                      {metadata?.optimized ? `Yes (${metadata.optimizedTimes || 1})` : "No"}
+                    <TableCell className="text-sm lg:text-base">
+                      {metadata?.optimized ? (
+                        <span className="px-2 py-1 bg-green-100 rounded-full text-green-700 font-medium text-sm">
+                          Yes ({metadata.optimizedTimes || 1})
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 bg-gray-100 rounded-full text-gray-600 font-medium text-sm">
+                          No
+                        </span>
+                      )}
                     </TableCell>
-                    <TableCell className="text-sm lg:text-base text-white">
+                    <TableCell className="text-sm lg:text-base">
                       <ActionsDropdown cv={cv} />
                     </TableCell>
                   </TableRow>
@@ -85,14 +97,8 @@ export default async function DashboardPage() {
       
       <DashboardClientWrapper cvs={cvs} />
       
-      <CardTitle className="text-sm text-white text-center mt-2 mx-auto max-w-md lg:max-w-2xl">
-        Analyze CV
-      </CardTitle>
       <AnalyzeCVCard cvs={cvs.map((cv) => cv.fileName)} />
       
-      <CardTitle className="text-sm text-white text-center mt-2 mx-auto max-w-md lg:max-w-2xl">
-        Optimize CV
-      </CardTitle>
       <OptimizeCVCard cvs={cvs.map((cv) => cv.fileName)} />
     </>
   );

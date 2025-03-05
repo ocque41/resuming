@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ComboboxPopover } from "@/components/ui/combobox";
 import TemplateSelector from "./TemplateSelector";
 
@@ -116,9 +116,12 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   }
 
   return (
-    <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border-transparent">
-      <CardContent>
-        <div className="flex justify-center items-center h-64 bg-gray-100 rounded-lg mb-4">
+    <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-white/90 shadow-lg hover:shadow-xl transition-all duration-300">
+      <CardHeader className="bg-[#B4916C]/10 pb-4">
+        <CardTitle className="text-xl font-bold text-[#B4916C]">Optimize Your CV</CardTitle>
+      </CardHeader>
+      <CardContent className="p-6">
+        <div className="flex justify-center items-center h-48 bg-gray-50 rounded-lg mb-6 overflow-hidden">
           <img
             src="/animations/leep.gif"
             alt="Animation"
@@ -126,25 +129,25 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
           />
         </div>
         
-        <h2 className="text-xl font-bold mb-4">Optimize Your CV</h2>
-        
         {/* Step 1: Select CV */}
         <div className="mb-6">
-          <h3 className="font-semibold mb-2">Step 1: Select your CV</h3>
+          <h3 className="font-semibold mb-2 text-gray-700">Step 1: Select your CV</h3>
           <ComboboxPopover
             label="Select CV"
             options={cvs}
             onSelect={handleCVSelect}
+            accentColor="#B4916C"
           />
         </div>
         
         {/* Step 2: Select Template (only shown after CV is selected) */}
         {showTemplates && (
           <div className="mb-6">
-            <h3 className="font-semibold mb-2">Step 2: Choose a template</h3>
+            <h3 className="font-semibold mb-2 text-gray-700">Step 2: Choose a template</h3>
             <TemplateSelector 
               onSelect={handleTemplateSelect}
               selectedTemplateId={selectedTemplate || undefined}
+              accentColor="#B4916C"
             />
           </div>
         )}
@@ -152,9 +155,9 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         {/* Step 3: Optimize Button (only enabled when both CV and template are selected) */}
         {selectedCV && selectedTemplate && (
           <div className="mb-6">
-            <h3 className="font-semibold mb-2">Step 3: Start optimization</h3>
+            <h3 className="font-semibold mb-2 text-gray-700">Step 3: Start optimization</h3>
             <button
-              className="bg-blue-500 text-white px-4 py-2 rounded w-full disabled:bg-gray-300 disabled:cursor-not-allowed"
+              className="bg-[#B4916C] hover:bg-[#B4916C]/90 text-white px-4 py-2.5 rounded-md w-full disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors duration-200 font-medium"
               onClick={handleOptimize}
               disabled={optimizationStatus === "pending" || optimizationStatus === "processing"}
             >
@@ -167,28 +170,35 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         
         {/* Status Messages */}
         {optimizationStatus === "pending" && (
-          <p className="mt-4 text-sm">
-            Optimization initiated. Waiting for processing...
-          </p>
+          <div className="mt-4 flex items-center justify-center p-3 bg-[#B4916C]/5 border border-[#B4916C]/20 rounded-md">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#B4916C]"></div>
+            <p className="ml-2 text-sm text-gray-600">
+              Optimization initiated. Waiting for processing...
+            </p>
+          </div>
         )}
+        
         {optimizationStatus === "processing" && (
-          <p className="mt-4 text-sm">
-            Optimizing CV... Please wait. (Attempt {pollingAttempts + 1}/{maxRetries})
-          </p>
+          <div className="mt-4 flex items-center justify-center p-3 bg-[#B4916C]/5 border border-[#B4916C]/20 rounded-md">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#B4916C]"></div>
+            <p className="ml-2 text-sm text-gray-600">
+              Optimizing CV... Please wait. (Attempt {pollingAttempts + 1}/{maxRetries})
+            </p>
+          </div>
         )}
         
         {/* Result Display */}
         {optimizationStatus === "complete" && optimizedPDFBase64 && (
-          <div className="mt-4 text-sm">
-            <h3 className="font-bold mb-2">Optimized CV Ready</h3>
+          <div className="mt-6 border border-[#B4916C]/20 rounded-lg p-4 bg-white shadow-sm">
+            <h3 className="font-semibold mb-3 text-[#B4916C]">Optimized CV Ready</h3>
             <iframe
-              className="w-full h-96 border"
+              className="w-full h-96 border border-gray-200 rounded-md mb-3"
               src={`data:application/pdf;base64,${optimizedPDFBase64}`}
             ></iframe>
             <a
               href={`data:application/pdf;base64,${optimizedPDFBase64}`}
               download="optimized-cv.pdf"
-              className="bg-blue-500 text-white px-4 py-2 rounded inline-block mt-2"
+              className="bg-[#B4916C] hover:bg-[#B4916C]/90 text-white px-4 py-2 rounded-md inline-block mt-2 transition-colors duration-200 font-medium"
             >
               Download Optimized CV
             </a>
@@ -196,7 +206,11 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         )}
         
         {/* Error Message */}
-        {error && <p className="mt-4 text-red-500">{error}</p>}
+        {error && (
+          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
+            <p className="text-sm text-red-500">{error}</p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
