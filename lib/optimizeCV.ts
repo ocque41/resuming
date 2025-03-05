@@ -1,154 +1,136 @@
 // lib/optimizeCV.ts
 import { CVTemplate } from "@/types/templates";
 import { modifyPDFWithOptimizedContent } from "./pdfOptimization";
+import { PDFDocument } from "pdf-lib";
+import { getTemplateLayout } from "./templateMatching";
 
 export async function optimizeCV(
-  rawText: string,
-  analysis: any,
+  cvText: string,
   template?: CVTemplate
-): Promise<{ optimizedText: string; optimizedPDFUrl: string }> {
+): Promise<{ optimizedText: string; error?: string }> {
   try {
     console.log("Starting CV optimization process");
     
-    // Input validation
-    if (!rawText || rawText.trim().length === 0) {
-      console.error("Empty raw text provided to optimizeCV");
-      throw new Error("No CV text content provided for optimization");
-    }
-    
-    // Log the start of the process
-    console.log(`Optimizing CV with ${rawText.length} characters`);
-    
-    // Identify potential sections from the raw text
-    const potentialSections = extractPotentialSections(rawText);
-    console.log(`Identified ${potentialSections.length} potential sections in the CV`);
-    
-    // Customize the prompt based on the provided CV template
-    let formattingInstructions = '';
-    let industryInstructions = '';
+    // Get template layout if available
+    let layout = 'two-column';
+    let headerStyle = 'modern';
     
     if (template) {
-      console.log(`Using template: ${template.name} (${template.company})`);
+      console.log(`Using template: ${template.name}`);
       
-      // Adjust formatting instructions based on template layout
-      if (template.metadata.layout === 'one-column') {
-        formattingInstructions = `
-FORMAT THE CV IN A SINGLE COLUMN LAYOUT with the following sections:
-- Contact Information at the top
-- Professional Summary/Profile
-- Work Experience (with detailed bullet points for each role)
-- Skills (organized by category)
-- Education
-- Additional sections as appropriate (Projects, Certifications, etc.)`;
-      } else if (template.metadata.layout === 'traditional') {
-        formattingInstructions = `
-FORMAT THE CV IN A TRADITIONAL LAYOUT with clear section headers:
-- Contact Information centered at the top
-- Professional Summary/Profile
-- Work Experience (with company, title, dates, and detailed bullet points)
-- Skills (organized in a clean, scannable format)
-- Education
-- Additional sections as needed (Certifications, Languages, etc.)`;
-      } else {
-        // Default to modern two-column layout
-        formattingInstructions = `
-FORMAT THE CV WITH LEFT AND RIGHT COLUMNS using the following markers:
-[LEFT COLUMN START]
-- Profile/Summary
-- Skills
-- Education
-- Languages
-- Certifications
-- References (if provided)
-[LEFT COLUMN END]
-
-[RIGHT COLUMN START]
-- Work Experience (with detailed bullet points)
-- Projects
-- Achievements
-- Additional relevant sections
-[RIGHT COLUMN END]`;
-      }
+      // Get layout from template metadata
+      layout = template.metadata.layout || layout;
       
-      // Add template-specific keywords to emphasize
-      if (template.metadata.keywordsEmphasis && template.metadata.keywordsEmphasis.length > 0) {
-        formattingInstructions += `\n\nEmphasize these keywords throughout the CV: ${template.metadata.keywordsEmphasis.join(', ')}`;
-      }
-      
-      // Industry-specific instructions
-      if (template.metadata.industrySpecific) {
-        const industryInfo = template.metadata.industrySpecific;
-        
-        industryInstructions = `
-INDUSTRY-SPECIFIC GUIDANCE FOR ${industryInfo.industry.toUpperCase()}:
-
-REQUIRED SKILLS TO HIGHLIGHT:
-${industryInfo.requiredSkills.map(skill => `- ${skill}`).join('\n')}
-
-VALUE PROPOSITIONS TO EMPHASIZE:
-${industryInfo.valuePropositions.map(prop => `- ${prop}`).join('\n')}
-
-RECRUITER PREFERENCES:
-${industryInfo.recruiterPreferences.map(pref => `- ${pref}`).join('\n')}
-
-RESUME STYLE GUIDANCE:
-${industryInfo.resumeStyle}
-
-ACHIEVEMENT FORMAT EXAMPLES:
-${industryInfo.achievementFormat}
-
-You MUST follow this exact format for achievements and include specific, measurable results relevant to this industry.`;
+      // Get template-specific layout from templateMatching
+      const templateLayout = getTemplateLayout(template.id);
+      headerStyle = templateLayout.headerStyle || headerStyle;
+    }
+    
+    // Customize prompt based on template
+    let formattingInstructions = "";
+    
+    if (layout === 'one-column') {
+      formattingInstructions = `
+        Format the CV as a single-column document with clear section headers.
+        Use bullet points for achievements and responsibilities.
+        Keep all text black.
+        Ensure the CV fits on a single page.
+      `;
+    } else if (layout === 'two-column') {
+      formattingInstructions = `
+        Format the CV with education, skills, languages, and certifications in the left column.
+        Put work experience, projects, and summary in the right column.
+        Use bullet points for achievements and responsibilities.
+        Keep all text black.
+        Ensure the CV fits on a single page.
+      `;
+    } else if (layout === 'traditional') {
+      formattingInstructions = `
+        Format the CV in a traditional style with clear section headers.
+        Use bullet points for achievements and responsibilities.
+        Keep all text black.
+        Ensure the CV fits on a single page.
+      `;
+    }
+    
+    // Customize industry guidance based on template
+    let industryGuidance = "";
+    
+    if (template) {
+      if (template.name === 'Google Modern' || template.id === 'google-modern') {
+        industryGuidance = `
+          Focus on quantifiable achievements and impact.
+          Highlight technical skills and innovative projects.
+          Use action verbs and data-driven results.
+        `;
+      } else if (template.name === 'Apple Minimal' || template.id === 'apple-minimal') {
+        industryGuidance = `
+          Focus on design thinking and user-centric approaches.
+          Highlight creative problem-solving and attention to detail.
+          Keep descriptions concise and impactful.
+        `;
+      } else if (template.name === 'Amazon Leadership' || template.id === 'amazon-leadership') {
+        industryGuidance = `
+          Structure achievements using the STAR method (Situation, Task, Action, Result).
+          Demonstrate leadership principles like customer obsession and ownership.
+          Quantify results and business impact.
+        `;
+      } else if (template.name === 'Microsoft Professional' || template.id === 'microsoft-professional') {
+        industryGuidance = `
+          Highlight collaborative projects and team achievements.
+          Focus on technical expertise and problem-solving abilities.
+          Demonstrate continuous learning and adaptability.
+        `;
       }
     }
     
-    // Build a comprehensive prompt for the OpenAI API
-    const prompt = `You are a professional CV writer and career coach with 15+ years of experience helping job seekers create impactful, ATS-optimized CVs that stand out to recruiters. Your task is to completely rewrite and restructure the provided CV to maximize its impact and effectiveness.
+    // Create the prompt for OpenAI
+    const prompt = `
+      You are a professional CV/resume optimization expert. Your task is to transform the provided CV into a more impactful, well-organized, and ATS-friendly document.
 
-IMPORTANT INSTRUCTIONS:
-1. PRESERVE ALL RELEVANT CONTENT from the original CV - including work history, education, skills, and achievements.
-2. EXPAND AND ENHANCE the content by:
-   - Adding powerful action verbs and industry-specific keywords
-   - Quantifying achievements with specific metrics and results (e.g., "increased sales by 25%")
-   - Highlighting relevant skills and experiences that align with industry standards
-   - Removing generic or vague statements and replacing them with specific, impactful content
-3. IMPROVE STRUCTURE AND FORMATTING:
-   - Create clear, well-organized sections with descriptive headings
-   - Use bullet points for achievements and responsibilities
-   - Ensure consistent formatting throughout
-   - Optimize for both human readers and ATS systems
-4. ADD MISSING SECTIONS if appropriate (e.g., Professional Summary, Technical Skills, etc.)
-5. MAINTAIN PROFESSIONAL LANGUAGE and eliminate first-person pronouns
+      IMPORTANT GUIDELINES:
+      - Keep all text BLACK - do not use any colored text.
+      - Ensure the CV fits on a single page.
+      - Do NOT include placeholder text like "[LEFT COLUMN END]" or "[RIGHT COLUMN START]" in the final output.
+      - Do NOT include "CONTENT" as a section title.
+      - Do NOT include placeholder text like "*No previous work experience provided on the original CV*".
+      - Maintain professional language throughout.
+      - Eliminate first-person pronouns (I, me, my).
+      - Use bullet points for achievements and responsibilities.
+      - Quantify achievements where possible (%, $, numbers).
+      - Focus on impact and results, not just responsibilities.
+      - Ensure all dates are in a consistent format.
+      - Use action verbs to start bullet points.
+      - Tailor content to highlight relevant skills and experiences.
+      - Optimize for ATS by including relevant keywords.
+      - Keep formatting clean and consistent.
+      - Ensure proper spelling and grammar.
 
 ${formattingInstructions}
 
-${industryInstructions}
-
-FORMATTING MARKERS:
-- Use "**Section Title**" format for section headers (with asterisks)
-- Use bullet points (•) for listing items
-- For subsections or job titles, use bold formatting
-- Maintain clear hierarchy and organization
-
-HERE IS THE ORIGINAL CV TEXT TO OPTIMIZE:
-${rawText}
-
-IMPORTANT: Your response must be ONLY the optimized CV text with appropriate formatting markers. Do not include explanations, introductions, or any text outside the CV content itself.`;
-
-    console.log("Sending request to OpenAI API");
+      ${industryGuidance}
+      
+      Here is the CV to optimize:
+      ${cvText}
+      
+      Return ONLY the optimized CV text without any explanations or additional comments.
+    `;
     
-    // Call the OpenAI API using fetch
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
+    // Call OpenAI API
+    console.log("Calling OpenAI API for CV optimization");
+    
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: "gpt-4",
+        model: "gpt-4-turbo-preview",
         messages: [
           {
             role: "system",
-            content: "You are an expert CV writer who specializes in creating impactful, ATS-optimized CVs that highlight a candidate's strengths and achievements."
+            content: "You are a professional CV/resume optimization expert."
           },
           {
             role: "user",
@@ -167,80 +149,47 @@ IMPORTANT: Your response must be ONLY the optimized CV text with appropriate for
     }
     
     const data = await response.json();
+    let optimizedText = data.choices[0]?.message?.content?.trim();
     
-    // Check if we got a valid response
-    if (!data.choices || data.choices.length === 0 || !data.choices[0].message) {
-      console.error("Invalid response from OpenAI API:", data);
-      throw new Error("Failed to get a valid response from the AI service");
-    }
-    
-    // Extract the optimized text from the response
-    let optimizedText = data.choices[0].message.content || "";
-    
-    // Log the response for debugging
-    console.log(`Received optimized text (${optimizedText.length} characters)`);
-    console.log(`First 200 characters: ${optimizedText.substring(0, 200)}...`);
-    
-    // Validate the optimized text
-    if (!optimizedText || optimizedText.trim().length === 0) {
-      console.error("Empty optimized text received from OpenAI API");
-      throw new Error("No content was generated during optimization");
-    }
-    
-    // Check if the optimized text has the required formatting markers
-    const hasFormattingMarkers = 
-      optimizedText.includes("**") || // Section headers
-      optimizedText.includes("•") || // Bullet points
-      optimizedText.includes("[LEFT COLUMN") || // Column markers
-      optimizedText.includes("[RIGHT COLUMN");
-    
-    if (!hasFormattingMarkers) {
-      console.warn("Optimized text lacks formatting markers, applying basic formatting");
-      optimizedText = processFormattingMarkers(rawText);
-    }
-    
-    // Verify that key content has been preserved
-    const contentVerification = verifyContentPreservation(rawText, optimizedText);
-    
-    if (!contentVerification.preserved) {
-      console.warn(`Content preservation check failed. Missing items: ${contentVerification.missingItems.join(', ')}`);
-      
-      // If too many items are missing, use a fallback approach
-      if (contentVerification.missingItems.length > 3) {
-        console.log("Too many items missing, using fallback formatting");
-        optimizedText = createFormattedFallbackFromRawText(rawText);
-      }
+    if (!optimizedText) {
+      throw new Error("No optimized text received from OpenAI");
     }
     
     // Process any formatting markers in the optimized text
     optimizedText = processFormattingMarkers(optimizedText);
     
-    // Generate a PDF with the optimized content
-    console.log("Generating PDF with optimized content");
-    let pdfBuffer;
-    try {
-      pdfBuffer = await modifyPDFWithOptimizedContent(optimizedText, rawText, template);
-    } catch (error: any) {
-      console.error("Error generating PDF:", error.message);
-      
-      // Try with fallback text if PDF generation fails
-      console.log("Attempting to generate PDF with fallback text");
-      const fallbackText = createFormattedFallbackFromRawText(rawText);
-      pdfBuffer = await modifyPDFWithOptimizedContent(fallbackText, rawText, template);
-    }
-    
-    // For now, we're not storing the PDF anywhere, so just return a placeholder URL
-    // In a real implementation, you would upload the PDF to a storage service and return the URL
-    const optimizedPDFUrl = "placeholder-url.pdf";
-    
-    return {
-      optimizedText,
-      optimizedPDFUrl
-    };
+    console.log("CV optimization completed successfully");
+    return { optimizedText };
   } catch (error: any) {
     console.error("Error in optimizeCV:", error.message);
-    throw new Error(`CV optimization failed: ${error.message}`);
+    return { 
+      optimizedText: cvText, 
+      error: `Failed to optimize CV: ${error.message}` 
+    };
   }
+}
+
+// Process any formatting markers in the optimized text
+function processFormattingMarkers(text: string): string {
+  // Remove any "CONTENT" title
+  text = text.replace(/^CONTENT\s*$/m, '');
+  
+  // Remove any column markers
+  text = text.replace(/\[LEFT COLUMN END\]/g, '')
+    .replace(/\[RIGHT COLUMN START\]/g, '')
+    .replace(/\[LEFT-COLUMN-START\]/g, '')
+    .replace(/\[LEFT-COLUMN-END\]/g, '')
+    .replace(/\[RIGHT-COLUMN-START\]/g, '')
+    .replace(/\[RIGHT-COLUMN-END\]/g, '');
+  
+  // Remove placeholder text for missing sections
+  text = text.replace(/\*No previous work experience provided on the original CV\*/g, '')
+    .replace(/\*No education information provided on the original CV\*/g, '')
+    .replace(/\*No skills information provided on the original CV\*/g, '')
+    .replace(/\*No projects information provided on the original CV\*/g, '')
+    .replace(/\*No.*?provided.*?\*/g, ''); // Remove any other "No X provided" messages
+  
+  return text;
 }
 
 // Helper function to extract potential sections from raw CV text
@@ -436,7 +385,7 @@ function createFormattedFallbackFromRawText(rawText: string): string {
         if (!inBulletSection) {
           formattedText += '• ' + trimmedLine + '\n';
           inBulletSection = true;
-      } else {
+        } else {
           formattedText += '• ' + trimmedLine + '\n';
         }
       }
@@ -481,100 +430,5 @@ function createFormattedFallbackFromRawText(rawText: string): string {
   }
   
   return formattedText;
-}
-
-// Helper function to process formatting markers in the optimized text
-function processFormattingMarkers(text: string): string {
-  if (!text || text.trim().length === 0) {
-    console.error("Empty text provided to processFormattingMarkers");
-    return text;
-  }
-  
-  let processedText = text;
-  
-  // Check for column markers
-  const hasLeftColumn = text.includes('[LEFT COLUMN START]');
-  const hasRightColumn = text.includes('[RIGHT COLUMN START]');
-  
-  if (hasLeftColumn && hasRightColumn) {
-    // Extract column content
-    const leftColumnMatch = text.match(/\[LEFT COLUMN START\]([\s\S]*?)\[LEFT COLUMN END\]/);
-    const rightColumnMatch = text.match(/\[RIGHT COLUMN START\]([\s\S]*?)\[RIGHT COLUMN END\]/);
-    
-    if (leftColumnMatch && rightColumnMatch) {
-      const leftColumnContent = leftColumnMatch[1].trim();
-      const rightColumnContent = rightColumnMatch[1].trim();
-      
-      // Format the content with column markers
-      processedText = `[LEFT COLUMN START]\n${leftColumnContent}\n[LEFT COLUMN END]\n\n[RIGHT COLUMN START]\n${rightColumnContent}\n[RIGHT COLUMN END]`;
-    }
-  } else {
-    // If no column markers, try to identify sections and distribute them
-    const sections = [];
-    const lines = text.split('\n');
-    let currentSection = '';
-    let inSection = false;
-    
-    for (const line of lines) {
-      // Check if this line is a section header
-      if (line.match(/^\s*\*\*.*\*\*\s*$/) || line.match(/^[A-Z\s]+:$/)) {
-        // If we were in a section, save it
-        if (inSection) {
-          sections.push(currentSection);
-          currentSection = '';
-        }
-        
-        // Start a new section
-        currentSection = line + '\n';
-        inSection = true;
-      } else if (inSection) {
-        // Add to current section
-        currentSection += line + '\n';
-      } else {
-        // Not in a section yet, might be contact info
-        currentSection += line + '\n';
-      }
-    }
-    
-    // Add the last section if there is one
-    if (currentSection) {
-      sections.push(currentSection);
-    }
-    
-    // If we identified sections, distribute them into columns
-    if (sections.length > 1) {
-      // Determine which sections go in which column
-      const leftColumnSections = [];
-      const rightColumnSections = [];
-      
-      // Common sections for left column
-      const leftColumnKeywords = ['profile', 'summary', 'skills', 'education', 'languages', 'certifications', 'references'];
-      
-      // Common sections for right column
-      const rightColumnKeywords = ['experience', 'employment', 'projects', 'achievements'];
-      
-      for (const section of sections) {
-        const sectionLower = section.toLowerCase();
-        
-        if (leftColumnKeywords.some(keyword => sectionLower.includes(keyword))) {
-          leftColumnSections.push(section);
-        } else if (rightColumnKeywords.some(keyword => sectionLower.includes(keyword))) {
-          rightColumnSections.push(section);
-        } else {
-          // If we can't determine, put shorter sections in left column
-          if (section.length < 500) {
-            leftColumnSections.push(section);
-      } else {
-            rightColumnSections.push(section);
-          }
-        }
-      }
-      
-      // Format the content with column markers
-      processedText = `[LEFT COLUMN START]\n${leftColumnSections.join('\n')}\n[LEFT COLUMN END]\n\n[RIGHT COLUMN START]\n${rightColumnSections.join('\n')}\n[RIGHT COLUMN END]`;
-    }
-  }
-  
-  return processedText;
 }
   

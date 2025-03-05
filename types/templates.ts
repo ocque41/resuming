@@ -5,6 +5,7 @@ export interface CVTemplate {
   description: string;
   previewImageUrl: string;
   templatePath: string; // Path to the template PDF in Dropbox
+  thumbnail: string;
   metadata: {
     preferredFonts: string[];
     colorScheme: {
@@ -14,7 +15,7 @@ export interface CVTemplate {
       background: string;
       text: string;
     };
-    layout: 'one-column' | 'two-column' | 'modern' | 'traditional';
+    layout: 'two-column' | 'one-column' | 'modern' | 'traditional';
     sectionOrder: string[]; // Preferred order of sections
     keywordsEmphasis: string[]; // Keywords this company values
     industrySpecific: {
@@ -38,6 +39,7 @@ export const CV_TEMPLATES: CVTemplate[] = [
     description: 'Clean, data-driven format preferred by Google recruiters',
     previewImageUrl: '/templates/google/preview.jpg',
     templatePath: '/templates/google/template.pdf',
+    thumbnail: '/templates/google/thumbnail.jpg',
     metadata: {
       preferredFonts: ['Product Sans', 'Roboto'],
       colorScheme: {
@@ -79,6 +81,7 @@ export const CV_TEMPLATES: CVTemplate[] = [
     description: 'Impact-focused template optimized for Meta hiring',
     previewImageUrl: '/templates/meta/preview.jpg',
     templatePath: '/templates/meta/template.pdf',
+    thumbnail: '/templates/meta/thumbnail.jpg',
     metadata: {
       preferredFonts: ['Optimistic Display', 'SF Pro Display'],
       colorScheme: {
@@ -120,6 +123,7 @@ export const CV_TEMPLATES: CVTemplate[] = [
     description: 'Minimalist design focused on details and craftsmanship',
     previewImageUrl: '/templates/apple/preview.jpg',
     templatePath: '/templates/apple/template.pdf',
+    thumbnail: '/templates/apple/thumbnail.jpg',
     metadata: {
       preferredFonts: ['SF Pro Display', 'SF Pro Text'],
       colorScheme: {
@@ -161,6 +165,7 @@ export const CV_TEMPLATES: CVTemplate[] = [
     description: 'Template highlighting leadership principles and quantifiable achievements',
     previewImageUrl: '/templates/amazon/preview.jpg',
     templatePath: '/templates/amazon/template.pdf',
+    thumbnail: '/templates/amazon/thumbnail.jpg',
     metadata: {
       preferredFonts: ['Amazon Ember', 'Arial'],
       colorScheme: {
@@ -203,6 +208,7 @@ export const CV_TEMPLATES: CVTemplate[] = [
     description: 'Balanced template highlighting technical and collaborative skills',
     previewImageUrl: '/templates/microsoft/preview.jpg',
     templatePath: '/templates/microsoft/template.pdf',
+    thumbnail: '/templates/microsoft/thumbnail.jpg',
     metadata: {
       preferredFonts: ['Segoe UI', 'Calibri'],
       colorScheme: {
@@ -244,6 +250,7 @@ export const CV_TEMPLATES: CVTemplate[] = [
     description: 'Conservative template for financial sector positions',
     previewImageUrl: '/templates/jpmorgan/preview.jpg',
     templatePath: '/templates/jpmorgan/template.pdf',
+    thumbnail: '/templates/jpmorgan/thumbnail.jpg',
     metadata: {
       preferredFonts: ['Times New Roman', 'Arial'],
       colorScheme: {
@@ -285,6 +292,7 @@ export const CV_TEMPLATES: CVTemplate[] = [
     description: 'Sophisticated template for asset management roles',
     previewImageUrl: '/templates/blackrock/preview.jpg',
     templatePath: '/templates/blackrock/template.pdf',
+    thumbnail: '/templates/blackrock/thumbnail.jpg',
     metadata: {
       preferredFonts: ['Avenir', 'Georgia'],
       colorScheme: {
@@ -326,6 +334,7 @@ export const CV_TEMPLATES: CVTemplate[] = [
     description: 'Bold template highlighting creative and technical contributions',
     previewImageUrl: '/templates/netflix/preview.jpg',
     templatePath: '/templates/netflix/template.pdf',
+    thumbnail: '/templates/netflix/thumbnail.jpg',
     metadata: {
       preferredFonts: ['Netflix Sans', 'Graphik'],
       colorScheme: {
@@ -367,6 +376,7 @@ export const CV_TEMPLATES: CVTemplate[] = [
     description: 'Sleek template emphasizing innovation and technical excellence',
     previewImageUrl: '/templates/tesla/preview.jpg',
     templatePath: '/templates/tesla/template.pdf',
+    thumbnail: '/templates/tesla/thumbnail.jpg',
     metadata: {
       preferredFonts: ['Gotham', 'Open Sans'],
       colorScheme: {

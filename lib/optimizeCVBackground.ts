@@ -38,7 +38,7 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
 
     // Include template information in the optimization process
     console.log("Starting optimization with AI...");
-    const optimizationResult = await optimizeCV(cvRecord.rawText, metadata, selectedTemplate);
+    const optimizationResult = await optimizeCV(cvRecord.rawText, selectedTemplate);
     
     // Verify the optimization result
     if (!optimizationResult || !optimizationResult.optimizedText) {
