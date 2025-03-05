@@ -9,7 +9,11 @@ export const checkoutAction = withTeam(async (formData, team) => {
   if (!priceId) {
     throw new Error('Price ID is required');
   }
-  await createCheckoutSession({ team: team, priceId });
+  
+  // Get the returnUrl from the form
+  const returnUrl = formData.get('returnUrl') as string || '/dashboard';
+  
+  await createCheckoutSession({ team: team, priceId, returnUrl });
 });
 
 export const customerPortalAction = withTeam(async (_, team) => {

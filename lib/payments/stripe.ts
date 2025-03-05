@@ -14,9 +14,11 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 export async function createCheckoutSession({
   team,
   priceId,
+  returnUrl = '/dashboard',
 }: {
   team: Team | null;
   priceId: string;
+  returnUrl?: string;
 }) {
   const user = await getUser();
 
@@ -33,8 +35,8 @@ export async function createCheckoutSession({
       },
     ],
     mode: 'subscription',
-    success_url: `${process.env.BASE_URL}/api/stripe/checkout?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${process.env.BASE_URL}/pricing`,
+    success_url: `${process.env.BASE_URL}/api/stripe/checkout?session_id={CHECKOUT_SESSION_ID}&return_to=${encodeURIComponent(returnUrl)}`,
+    cancel_url: `${process.env.BASE_URL}${returnUrl}`,
     customer: team.stripeCustomerId || undefined,
     client_reference_id: user.id.toString(),
     allow_promotion_codes: true,

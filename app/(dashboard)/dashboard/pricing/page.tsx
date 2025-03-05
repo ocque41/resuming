@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
-import { getUser } from "@/lib/db/queries.server";
-import { Check } from "lucide-react";
+import { getUser, getTeamForUser, getActivityLogs } from "@/lib/db/queries.server";
+import { Check, ArrowLeft } from "lucide-react";
 import { getStripePrices, getStripeProducts } from "@/lib/payments/stripe";
 import { checkoutAction } from "@/lib/payments/actions";
 import { ArticleTitle } from "@/components/ui/article";
 import { Card } from "@/components/ui/card";
+import PricingPageUserMenu from "@/components/PricingPageUserMenu";
+import Link from "next/link";
 
 // Revalidate prices every hour
 export const revalidate = 3600;
@@ -16,6 +18,13 @@ export default async function DashboardPricingPage() {
     redirect("/sign-in");
   }
 
+  const teamData = await getTeamForUser(user.id);
+  if (!teamData) {
+    throw new Error("Team not found");
+  }
+  
+  const activityLogs = await getActivityLogs();
+  
   const [prices, products] = await Promise.all([
     getStripePrices(),
     getStripeProducts(),
@@ -32,9 +41,18 @@ export default async function DashboardPricingPage() {
   return (
     <>
       <header className="flex items-center justify-between p-4 lg:p-8 mx-auto max-w-6xl">
-        <ArticleTitle className="text-md lg:text-xl font-medium ml-4 text-[#B4916C]">
-          Upgrade Your Plan
-        </ArticleTitle>
+        <div className="flex items-center">
+          <Link 
+            href="/dashboard" 
+            className="mr-4 p-2 rounded-full hover:bg-[#B4916C]/10 transition-colors"
+          >
+            <ArrowLeft className="h-5 w-5 text-[#B4916C]" />
+          </Link>
+          <ArticleTitle className="text-md lg:text-xl font-medium text-[#B4916C]">
+            Upgrade Your Plan
+          </ArticleTitle>
+        </div>
+        <PricingPageUserMenu teamData={teamData} activityLogs={activityLogs} />
       </header>
       
       <Card className="py-8 px-4 mb-8 mx-auto max-w-6xl border border-[#B4916C]/20 bg-[#050505] shadow-lg">
@@ -174,6 +192,7 @@ function PricingCard({
         </ul>
         <form action={checkoutAction} className="w-full mt-auto">
           <input type="hidden" name="priceId" value={priceId} />
+          <input type="hidden" name="returnUrl" value="/dashboard" />
           <button
             type="submit"
             className={`w-full py-2 rounded-md ${
