@@ -46,9 +46,9 @@ export default async function DashboardPricingPage() {
             href="/dashboard" 
             className="mr-4 p-2 rounded-full hover:bg-[#B4916C]/10 transition-colors"
           >
-            <ArrowLeft className="h-5 w-5 text-[#B4916C]" />
+            <ArrowLeft className="h-5 w-5 text-[#FFFFFF]" />
           </Link>
-          <ArticleTitle className="text-md lg:text-xl font-medium text-[#B4916C]">
+          <ArticleTitle className="text-md lg:text-xl font-medium text-[#FFFFFF]">
             Upgrade Your Plan
           </ArticleTitle>
         </div>

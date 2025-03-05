@@ -35,7 +35,7 @@ export default async function DashboardPage() {
   return (
     <>
       <header className="flex items-center justify-between p-4 lg:p-8 mx-auto max-w-md lg:max-w-2xl">
-        <ArticleTitle className="text-md lg:text-xl font-medium ml-4 text-[#B4916C]">
+        <ArticleTitle className="text-md lg:text-xl font-medium ml-4 text-[#FFFFFF]">
           Dashboard
         </ArticleTitle>
         <UserMenu teamData={teamData} activityLogs={activityLogs} />
