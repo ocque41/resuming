@@ -169,7 +169,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       </CardHeader>
       <CardContent className="p-6">
         <div className="flex justify-center items-center mb-6">
-          <div className="relative w-64 h-64 rounded-lg overflow-hidden">
+          <div className="relative w-48 h-48 rounded-lg overflow-hidden">
             <img
               src="/Animation - 1741203848123.gif"
               alt="CV Optimization Animation"

@@ -50,9 +50,9 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
       </CardHeader>
       <CardContent className="p-6">
         <div className="flex justify-center items-center mb-6">
-          <div className="relative w-64 h-64 rounded-lg overflow-hidden">
+          <div className="relative w-48 h-48 rounded-lg overflow-hidden">
             <img
-              src="/Animation - 1741203789959.gif"
+              src="/Animation - 1741203789959 (1).gif"
               alt="CV Analysis Animation"
               className="w-full h-full object-contain"
             />
