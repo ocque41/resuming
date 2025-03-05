@@ -91,7 +91,7 @@ export function parseOptimizedText(text: string): { leftColumnSections: Section[
   const leftColumnTitles = [
     'PROFILE', 'SUMMARY', 'ABOUT', 'CONTACT', 'PERSONAL',
     'SKILLS', 'TECHNICAL SKILLS', 'SOFT SKILLS', 'LANGUAGES', 'CERTIFICATIONS',
-    'EDUCATION', 'TRAINING', 'INTERESTS', 'HOBBIES'
+    'EDUCATION', 'TRAINING', 'INTERESTS', 'HOBBIES', 'SOFTWARE', 'PROFICIENCY'
   ];
   
   // Distribute sections based on their titles
@@ -109,6 +109,9 @@ export function parseOptimizedText(text: string): { leftColumnSections: Section[
   
   // Ensure content fits on a single page
   ensureSinglePage(leftColumnSections, rightColumnSections);
+  
+  // Balance columns if needed
+  balanceColumns(leftColumnSections, rightColumnSections);
   
   console.log(`Estimated content length - Left: ${estimateContentLength(leftColumnSections)}, Right: ${estimateContentLength(rightColumnSections)}, Total: ${estimateContentLength(leftColumnSections) + estimateContentLength(rightColumnSections)}`);
   
@@ -555,13 +558,13 @@ export async function modifyPDFWithOptimizedContent(
     }
     
     // Set column widths based on layout
-    let leftColumnWidth = (width - 2 * margin) * 0.3;
-    let rightColumnWidth = (width - 2 * margin) * 0.7;
+    let leftColumnWidth = (width - 2 * margin) * 0.38; // Increase left column width for better balance
+    let rightColumnWidth = (width - 2 * margin) * 0.62; // Adjust right column accordingly
     const columnGap = 15;
     
     // Initialize Y positions for both columns
-    let leftColumnY = height - margin - 60; // Start below header
-    let rightColumnY = height - margin - 60; // Start below header
+    let leftColumnY = height - margin - 70; // Start further below header for more space
+    let rightColumnY = height - margin - 70; // Start further below header for more space
     const rightColumnX = margin + leftColumnWidth + columnGap;
     
     // Reference to current page for multi-page support
@@ -587,9 +590,9 @@ export async function modifyPDFWithOptimizedContent(
         // Draw a colored rectangle at the top
         currentPage.drawRectangle({
           x: margin,
-          y: height - margin - 25, // Reduced from 30 to fit on one page
+          y: height - margin - 30, // Increased height for better visibility
           width: width - 2 * margin,
-          height: 25, // Reduced from 30 to fit on one page
+          height: 30, // Increased from 25 to 30
           color: accentColor,
         });
         
@@ -598,20 +601,20 @@ export async function modifyPDFWithOptimizedContent(
           // Draw the name
           currentPage.drawText(personName, {
             x: margin + 10,
-            y: height - margin - 18, // Adjusted for smaller header
-            size: 16, // Reduced from 18 to fit on one page
+            y: height - margin - 20, // Adjusted for better vertical centering
+            size: 18, // Increased from 16 to 18
             font: titleFont,
             color: rgb(1, 1, 1), // White text on colored background
           });
           
           // Calculate position for "Resume" text
-          const nameWidth = titleFont.widthOfTextAtSize(personName, 16);
+          const nameWidth = titleFont.widthOfTextAtSize(personName, 18);
           
           // Draw "Resume" next to the name
           currentPage.drawText(" | Resume", {
             x: margin + 10 + nameWidth,
-            y: height - margin - 18, // Same y position as name
-            size: 16,
+            y: height - margin - 20, // Same y position as name
+            size: 18, // Increased from 16 to 18
             font: regularFont,
             color: rgb(1, 1, 1), // White text on colored background
           });
@@ -619,21 +622,10 @@ export async function modifyPDFWithOptimizedContent(
           // Fallback if name not found
           currentPage.drawText("Resume", {
             x: margin + 10,
-            y: height - margin - 18,
-            size: 16,
+            y: height - margin - 20,
+            size: 18, // Increased from 16 to 18
             font: titleFont,
             color: rgb(1, 1, 1), // White text on colored background
-          });
-        }
-        
-        // Draw contact info below header
-        if (contactInfo) {
-          currentPage.drawText(contactInfo, {
-            x: margin,
-            y: height - margin - 40, // Adjusted for smaller header
-            size: 9, // Reduced from 10 to fit on one page
-            font: regularFont,
-            color: textColor,
           });
         }
       } catch (error) {
@@ -655,53 +647,37 @@ export async function modifyPDFWithOptimizedContent(
           contactInfo = contactMatch[1].trim();
         }
         
-        // Draw a thin line at the top
+        // Center the name and Resume title at the top
+        const titleText = personName ? `${personName} | Resume` : "Resume";
+        const titleWidth = titleFont.widthOfTextAtSize(titleText, 20);
+        const titleX = (width - titleWidth) / 2;
+        
+        // Draw name centered
+        currentPage.drawText(titleText, {
+          x: titleX,
+          y: height - margin,
+          size: 20,
+          font: titleFont,
+          color: textColor,
+        });
+        
+        // Draw a horizontal line below the name
         currentPage.drawLine({
-          start: { x: margin, y: height - margin + 8 }, // Reduced from 10 to fit on one page
-          end: { x: width - margin, y: height - margin + 8 }, // Reduced from 10 to fit on one page
-          thickness: 1,
+          start: { x: margin, y: height - margin - 12 },
+          end: { x: width - margin, y: height - margin - 12 },
+          thickness: 1.5,
           color: accentColor,
         });
         
-        // Draw name in large font
-        if (personName) {
-          // Draw the name
-          currentPage.drawText(personName, {
-            x: margin,
-            y: height - margin,
-            size: 16, // Reduced from 18 to fit on one page
-            font: titleFont,
-            color: textColor,
-          });
-          
-          // Calculate position for "Resume" text
-          const nameWidth = titleFont.widthOfTextAtSize(personName, 16);
-          
-          // Draw "Resume" next to the name
-          currentPage.drawText(" | Resume", {
-            x: margin + nameWidth,
-            y: height - margin, // Same y position as name
-            size: 16,
-            font: regularFont,
-            color: textColor,
-          });
-        } else {
-          // Fallback if name not found
-          currentPage.drawText("Resume", {
-            x: margin,
-            y: height - margin,
-            size: 16,
-            font: titleFont,
-            color: textColor,
-          });
-        }
-        
-        // Draw contact info below name
+        // Draw contact info below the line if available
         if (contactInfo) {
+          const contactWidth = regularFont.widthOfTextAtSize(contactInfo, 10);
+          const contactX = (width - contactWidth) / 2;
+          
           currentPage.drawText(contactInfo, {
-            x: margin,
-            y: height - margin - 20, // Adjusted for smaller header
-            size: 9, // Reduced from 10 to fit on one page
+            x: contactX,
+            y: height - margin - 25,
+            size: 10,
             font: regularFont,
             color: textColor,
           });
@@ -725,52 +701,29 @@ export async function modifyPDFWithOptimizedContent(
           contactInfo = contactMatch[1].trim();
         }
         
-        // Center-align the name
-        const nameWidth = titleFont.widthOfTextAtSize(personName, 18); // Reduced from 20 to fit on one page
-        const resumeText = " | Resume";
-        const resumeWidth = regularFont.widthOfTextAtSize(resumeText, 18);
-        const totalWidth = nameWidth + resumeWidth;
-        const nameX = (width - totalWidth) / 2;
+        // Create combined title text
+        const titleText = personName ? `${personName} | Resume` : "Resume";
+        const titleWidth = titleFont.widthOfTextAtSize(titleText, 20);
+        const titleX = (width - titleWidth) / 2;
         
         // Draw name in large font, centered
-        if (personName) {
-          // Draw the name
-          currentPage.drawText(personName, {
-            x: nameX,
-            y: height - margin,
-            size: 18, // Reduced from 20 to fit on one page
-            font: titleFont,
-            color: textColor,
-          });
-          
-          // Draw "Resume" next to the name
-          currentPage.drawText(resumeText, {
-            x: nameX + nameWidth,
-            y: height - margin, // Same y position as name
-            size: 18,
-            font: regularFont,
-            color: textColor,
-          });
-        } else {
-          // Fallback if name not found
-          currentPage.drawText("Resume", {
-            x: (width - titleFont.widthOfTextAtSize("Resume", 18)) / 2,
-            y: height - margin,
-            size: 18,
-            font: titleFont,
-            color: textColor,
-          });
-        }
+        currentPage.drawText(titleText, {
+          x: titleX,
+          y: height - margin,
+          size: 20,
+          font: titleFont,
+          color: textColor,
+        });
         
         // Draw contact info centered below name
         if (contactInfo) {
-          const contactWidth = regularFont.widthOfTextAtSize(contactInfo, 9); // Reduced from 10 to fit on one page
+          const contactWidth = regularFont.widthOfTextAtSize(contactInfo, 10);
           const contactX = (width - contactWidth) / 2;
           
           currentPage.drawText(contactInfo, {
             x: contactX,
-            y: height - margin - 20, // Adjusted for smaller header
-            size: 9, // Reduced from 10 to fit on one page
+            y: height - margin - 25,
+            size: 10,
             font: regularFont,
             color: textColor,
           });
@@ -778,9 +731,9 @@ export async function modifyPDFWithOptimizedContent(
         
         // Draw a horizontal line below contact info
         currentPage.drawLine({
-          start: { x: margin, y: height - margin - 30 }, // Adjusted for smaller header
-          end: { x: width - margin, y: height - margin - 30 }, // Adjusted for smaller header
-          thickness: 1,
+          start: { x: margin, y: height - margin - 35 },
+          end: { x: width - margin, y: height - margin - 35 },
+          thickness: 1.5,
           color: accentColor,
         });
       } catch (error) {
@@ -815,8 +768,8 @@ export async function modifyPDFWithOptimizedContent(
         x: margin - 2,
         y: leftColumnY - 14,
         width: leftColumnWidth + 4,
-        height: 18, // Slightly taller for better visibility
-        color: rgb(0.95, 0.95, 0.98), // Very light background color
+        height: 20, // Taller for better visibility
+        color: rgb(0.97, 0.97, 0.99), // Very light background color
       });
       
       currentPage.drawText(section.title.toUpperCase(), {
@@ -832,13 +785,13 @@ export async function modifyPDFWithOptimizedContent(
         currentPage.drawLine({
           start: { x: margin, y: leftColumnY - 4 },
           end: { x: margin + leftColumnWidth, y: leftColumnY - 4 },
-          thickness: 1,
+          thickness: 1.5,
           color: accentColor,
         });
       } else if (headerStyle === 'modern') {
         currentPage.drawLine({
           start: { x: margin, y: leftColumnY - 4 },
-          end: { x: margin + 50, y: leftColumnY - 4 }, // Slightly longer underline
+          end: { x: margin + 60, y: leftColumnY - 4 }, // Longer underline
           thickness: 2,
           color: accentColor,
         });
@@ -852,7 +805,7 @@ export async function modifyPDFWithOptimizedContent(
         });
       }
       
-      leftColumnY -= 22; // Slightly more space after section title
+      leftColumnY -= 25; // More space after section title
       
       // Use the new formatTextWithStyling function to draw section content
       leftColumnY = formatTextWithStyling(
@@ -868,7 +821,7 @@ export async function modifyPDFWithOptimizedContent(
       );
       
       // Add space after section
-      leftColumnY -= 15; // More space between sections
+      leftColumnY -= 20; // More space between sections
     }
     
     // Draw right column sections
@@ -879,8 +832,8 @@ export async function modifyPDFWithOptimizedContent(
         x: rightColumnX - 2,
         y: rightColumnY - 14,
         width: rightColumnWidth + 4,
-        height: 18, // Slightly taller for better visibility
-        color: rgb(0.95, 0.95, 0.98), // Very light background color
+        height: 20, // Taller for better visibility
+        color: rgb(0.97, 0.97, 0.99), // Very light background color
       });
       
       currentPage.drawText(section.title.toUpperCase(), {
@@ -896,13 +849,13 @@ export async function modifyPDFWithOptimizedContent(
         currentPage.drawLine({
           start: { x: rightColumnX, y: rightColumnY - 4 },
           end: { x: rightColumnX + rightColumnWidth, y: rightColumnY - 4 },
-          thickness: 1,
+          thickness: 1.5,
           color: accentColor,
         });
       } else if (headerStyle === 'modern') {
         currentPage.drawLine({
           start: { x: rightColumnX, y: rightColumnY - 4 },
-          end: { x: rightColumnX + 50, y: rightColumnY - 4 }, // Slightly longer underline
+          end: { x: rightColumnX + 60, y: rightColumnY - 4 }, // Longer underline
           thickness: 2,
           color: accentColor,
         });
@@ -916,7 +869,7 @@ export async function modifyPDFWithOptimizedContent(
         });
       }
       
-      rightColumnY -= 22; // Slightly more space after section title
+      rightColumnY -= 25; // More space after section title
       
       // Use the new formatTextWithStyling function to draw section content
       rightColumnY = formatTextWithStyling(
@@ -932,7 +885,7 @@ export async function modifyPDFWithOptimizedContent(
       );
       
       // Add space after section
-      rightColumnY -= 15; // More space between sections
+      rightColumnY -= 20; // More space between sections
     }
     
     // Save the PDF
@@ -972,147 +925,229 @@ function getSectionCoordinates(sectionName: string, coordinates: any): number | 
   return sectionMap[sectionName] || null;
 }
 
-// Helper function to format text with bold and bullet points
-function formatTextWithStyling(
+// Function to format text with styling (bullet points and bold text)
+const formatTextWithStyling = (
   text: string,
   page: PDFPage,
   x: number,
   y: number,
-  maxWidth: number,
-  regularFont: PDFFont,
+  width: number,
+  font: PDFFont,
   boldFont: PDFFont,
-  textColor: RGB,
+  color: RGB,
   accentColor: RGB
-): number {
+) => {
   // Sanitize text to remove control characters
-  text = sanitizeText(text);
+  const sanitizedText = text.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
   
-  // Split text into lines
-  const lines = text.split('\n');
+  const lines = sanitizedText.split("\n");
   let currentY = y;
+  const fontSize = 10; // Increased font size for better readability
+  const lineHeight = fontSize * 1.4; // Improved line spacing
   
-  for (const line of lines) {
-    if (!line.trim()) continue;
+  for (let line of lines) {
+    line = line.trim();
+    if (line === "") {
+      currentY -= lineHeight * 0.7; // Smaller space for empty lines
+      continue;
+    }
     
-    // Check if this is a bullet point
-    if (line.trim().startsWith('•') || line.trim().startsWith('-')) {
+    // Check if line starts with a bullet point
+    const bulletMatch = line.match(/^[-•*]\s+(.*)/);
+    if (bulletMatch) {
       // Draw bullet point with accent color
-      page.drawText('•', {
-        x,
-        y: currentY,
-        size: 9,
-        font: regularFont,
+      page.drawCircle({
+        x: x + 3,
+        y: currentY - fontSize / 3,
+        size: 2.5, // Slightly larger bullet
         color: accentColor,
       });
       
-      // Get text after bullet
-      const textAfterBullet = line.trim().startsWith('•') 
-        ? line.substring(1).trim() 
-        : line.substring(1).trim();
+      // Process text after bullet point
+      const bulletText = bulletMatch[1].trim();
+      let remainingText = bulletText;
+      let xOffset = 12; // Indent for bullet points
       
-      // Check if the bullet point text contains bold markers
-      if (textAfterBullet.includes('**')) {
-        // Process bold text within the bullet point
-        const parts = textAfterBullet.split('**');
-        let currentX = x + 10; // Indent after bullet
-        let isInBold = false;
+      // Check for bold text within bullet point
+      if (bulletText.includes("**")) {
+        const parts = bulletText.split(/\*\*(.*?)\*\*/g);
+        let currentX = x + xOffset;
         
         for (let i = 0; i < parts.length; i++) {
-          if (parts[i].trim() === '') {
-            isInBold = !isInBold;
-            continue;
+          if (parts[i] === "") continue;
+          
+          const currentFont = i % 2 === 1 ? boldFont : font;
+          const textWidth = currentFont.widthOfTextAtSize(parts[i], fontSize);
+          
+          // Check if text will overflow
+          if (currentX + textWidth > x + width) {
+            // Move to next line
+            currentY -= lineHeight;
+            currentX = x + xOffset;
           }
           
-          // Choose font and size based on whether this part should be bold
-          const font = isInBold ? boldFont : regularFont;
-          const fontSize = isInBold ? 9 : 9; // Same size for consistency, but bold for emphasis
-          
-          // Draw this part of the text
+          // Draw text
           page.drawText(parts[i], {
             x: currentX,
             y: currentY,
             size: fontSize,
-            font: font,
-            color: textColor,
+            font: currentFont,
+            color: color,
           });
           
-          // Move the x position for the next part
-          currentX += font.widthOfTextAtSize(parts[i], fontSize);
-          isInBold = !isInBold;
+          currentX += textWidth;
         }
         
-        currentY -= 14; // Space after bullet point
+        currentY -= lineHeight;
       } else {
-        // Handle text wrapping for bullet points
-        const wrappedLines = wrapText(textAfterBullet, regularFont, 9, maxWidth - 10);
-        for (let i = 0; i < wrappedLines.length; i++) {
-          page.drawText(wrappedLines[i], {
-            x: x + 10, // Indent after bullet
-            y: currentY - (i * 12),
-            size: 9,
-            font: regularFont,
-            color: textColor,
-          });
+        // Handle regular bullet point text with wrapping
+        const words = bulletText.split(" ");
+        let line = "";
+        let currentX = x + xOffset;
+        
+        for (const word of words) {
+          const testLine = line ? line + " " + word : word;
+          const testWidth = font.widthOfTextAtSize(testLine, fontSize);
           
-          // Only adjust Y position after all wrapped lines are drawn
-          if (i === wrappedLines.length - 1) {
-            currentY -= (i * 12) + 14;
+          if (currentX + testWidth <= x + width) {
+            line = testLine;
+          } else {
+            // Draw current line
+            page.drawText(line, {
+              x: currentX,
+              y: currentY,
+              size: fontSize,
+              font: font,
+              color: color,
+            });
+            
+            // Move to next line
+            currentY -= lineHeight;
+            currentX = x + xOffset;
+            line = word;
           }
         }
+        
+        // Draw remaining text
+        if (line) {
+          page.drawText(line, {
+            x: currentX,
+            y: currentY,
+            size: fontSize,
+            font: font,
+            color: color,
+          });
+          
+          currentY -= lineHeight;
+        }
       }
-    }
-    // Check if this is a line with ** markers (skills, etc.)
-    else if (line.includes('**')) {
-      // Process the line to handle ** markers
-      const parts = line.split('**');
+    } else if (line.includes("**")) {
+      // Handle bold text in regular lines
+      const parts = line.split(/\*\*(.*?)\*\*/g);
       let currentX = x;
-      let isInBold = false;
       
       for (let i = 0; i < parts.length; i++) {
-        if (parts[i].trim() === '') {
-          isInBold = !isInBold;
-          continue;
+        if (parts[i] === "") continue;
+        
+        const currentFont = i % 2 === 1 ? boldFont : font;
+        const textWidth = currentFont.widthOfTextAtSize(parts[i], fontSize);
+        
+        // Check if text will overflow
+        if (currentX + textWidth > x + width) {
+          // Move to next line
+          currentY -= lineHeight;
+          currentX = x;
         }
         
-        // Choose font and size based on whether this part should be bold
-        const font = isInBold ? boldFont : regularFont;
-        const fontSize = isInBold ? 9 : 9; // Same size for consistency, but bold for emphasis
-        
-        // Draw this part of the text
+        // Draw text
         page.drawText(parts[i], {
           x: currentX,
           y: currentY,
           size: fontSize,
-          font: font,
-          color: textColor,
+          font: currentFont,
+          color: color,
         });
         
-        // Move the x position for the next part
-        currentX += font.widthOfTextAtSize(parts[i], fontSize);
-        isInBold = !isInBold;
+        currentX += textWidth;
       }
       
-      currentY -= 14; // Space after line
-    }
-    // Regular text
-    else {
-      const wrappedLines = wrapText(line, regularFont, 9, maxWidth);
-      for (let i = 0; i < wrappedLines.length; i++) {
-        page.drawText(wrappedLines[i], {
-          x,
-          y: currentY - (i * 12),
-          size: 9,
-          font: regularFont,
-          color: textColor,
+      currentY -= lineHeight;
+    } else {
+      // Handle regular text with wrapping
+      const words = line.split(" ");
+      let currentLine = "";
+      let currentX = x;
+      
+      for (const word of words) {
+        const testLine = currentLine ? currentLine + " " + word : word;
+        const testWidth = font.widthOfTextAtSize(testLine, fontSize);
+        
+        if (currentX + testWidth <= x + width) {
+          currentLine = testLine;
+        } else {
+          // Draw current line
+          page.drawText(currentLine, {
+            x: currentX,
+            y: currentY,
+            size: fontSize,
+            font: font,
+            color: color,
+          });
+          
+          // Move to next line
+          currentY -= lineHeight;
+          currentX = x;
+          currentLine = word;
+        }
+      }
+      
+      // Draw remaining text
+      if (currentLine) {
+        page.drawText(currentLine, {
+          x: currentX,
+          y: currentY,
+          size: fontSize,
+          font: font,
+          color: color,
         });
         
-        if (i === wrappedLines.length - 1) {
-          currentY -= (i * 12) + 14;
-        }
+        currentY -= lineHeight;
       }
     }
   }
   
   return currentY;
+};
+
+// Helper function to balance columns if one is significantly longer than the other
+function balanceColumns(leftColumnSections: Section[], rightColumnSections: Section[]): void {
+  const leftLength = estimateContentLength(leftColumnSections);
+  const rightLength = estimateContentLength(rightColumnSections);
+  
+  // If right column is significantly longer than left column
+  if (rightLength > leftLength * 1.5 && rightColumnSections.length > 1) {
+    // Move the shortest section from right to left
+    const shortestSection = rightColumnSections
+      .map((section, index) => ({ section, index, length: estimateContentLength([section]) }))
+      .sort((a, b) => a.length - b.length)[0];
+    
+    if (shortestSection) {
+      const section = rightColumnSections.splice(shortestSection.index, 1)[0];
+      leftColumnSections.push(section);
+    }
+  }
+  
+  // If left column is significantly longer than right column
+  if (leftLength > rightLength * 1.5 && leftColumnSections.length > 1) {
+    // Move the shortest section from left to right
+    const shortestSection = leftColumnSections
+      .map((section, index) => ({ section, index, length: estimateContentLength([section]) }))
+      .sort((a, b) => a.length - b.length)[0];
+    
+    if (shortestSection) {
+      const section = leftColumnSections.splice(shortestSection.index, 1)[0];
+      rightColumnSections.push(section);
+    }
+  }
 }
 
