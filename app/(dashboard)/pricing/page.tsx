@@ -28,7 +28,7 @@ export default async function PricingPage() {
       <div className="min-h-screen pt-40 pb-16 container mx-auto px-4 text-left flex-grow">
         <div className="max-w-5xl mx-auto space-y-16">
           <section className="space-y-8">
-            <h2 className="text-6xl font-bold text-white animate-fade-in">
+            <h2 className="text-6xl font-bold text-[#B4916C] animate-fade-in">
               Plans and Pricing
             </h2>
             <p className="text-xl text-white font-semibold animate-fade-in-up mt-4">
@@ -124,52 +124,54 @@ function PricingCard({
   priceId?: string;
   tooltips?: Record<string, string>;
 }) {
-  // For side cards: use background #050505, border #E8DCC4, text white.
-  // For the highlighted card: use background #E8DCC4, border #050505, text #050505.
+  // For standard cards use #050505 background with #B4916C accent
+  // For highlighted card, use a different style to make it stand out
   const cardClass = highlight
-    ? "bg-[#E8DCC4] border border-[#050505] mx-auto"
-    : "bg-[#050505] border border-[#E8DCC4]";
-  const textClass = highlight ? "text-[#050505]" : "text-white";
+    ? "border border-[#B4916C] bg-[#B4916C]/10 shadow-lg hover:shadow-xl"
+    : "border border-[#B4916C]/20 bg-[#050505] shadow-lg hover:shadow-xl";
 
   return (
-    <div className={`p-6 rounded-lg shadow-md transition-all duration-300 ease-in-out group ${cardClass}`}>
-      <h2 className={`text-2xl font-semibold mb-2 ${textClass}`}>
-        {name}
-        {highlight && <span className="ml-2 text-sm text-[#050505]">Most Popular</span>}
-      </h2>
-      <p className={`text-4xl font-medium mb-2 ${textClass}`}>
-        ${price / 100}
-        <span className={`text-xl font-normal ${textClass} opacity-70`}>
-          /{interval}
-        </span>
-      </p>
-      <ul className="space-y-4 mb-8">
-        {features.map((feature, index) => (
-          <li key={index} className="flex items-start">
-            <Check className={`h-5 w-5 mr-2 mt-0.5 flex-shrink-0 ${textClass}`} />
-            <span className={textClass}>
-              {feature}
-              {tooltips?.[feature] && (
-                <span className="relative inline-block">
-                  <span className="opacity-0 group-hover:opacity-100 absolute left-0 -top-12 w-64 bg-black/90 text-white text-sm p-2 rounded z-10 transition-opacity duration-300">
+    <div className={`rounded-lg transition-all duration-300 ${cardClass}`}>
+      <div className={`${highlight ? 'bg-[#B4916C]/20' : 'bg-[#B4916C]/10'} py-4 px-6 rounded-t-lg`}>
+        <h2 className="text-2xl font-bold text-[#B4916C] mb-2">
+          {name}
+          {highlight && <span className="ml-2 text-sm bg-[#B4916C]/20 text-[#B4916C] px-2 py-1 rounded-full">Most Popular</span>}
+        </h2>
+        <p className="text-4xl font-semibold text-white mb-1">
+          ${price / 100}
+          <span className="text-xl font-normal text-gray-300 ml-1">
+            /{interval}
+          </span>
+        </p>
+      </div>
+      
+      <div className="p-6">
+        <ul className="space-y-4 mb-8">
+          {features.map((feature, index) => (
+            <li key={index} className="flex items-start group relative">
+              <Check className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0 text-[#B4916C]" />
+              <span className="text-gray-300">
+                {feature.replace(" ⓘ", "")}
+                {tooltips?.[feature] && (
+                  <span className="opacity-0 group-hover:opacity-100 absolute left-0 -top-12 w-64 bg-[#050505] border border-[#B4916C]/20 text-gray-300 text-sm p-2 rounded z-10 transition-opacity duration-300">
                     {tooltips[feature]}
                   </span>
-                </span>
-              )}
-            </span>
-          </li>
-        ))}
-      </ul>
-      <form action={checkoutAction} className="w-full mt-auto">
-        <input type="hidden" name="priceId" value={priceId} />
-        <SubmitButton
-          className={`w-full ${
-            highlight
-              ? "bg-[#050505] hover:bg-[#E8DCC4] text-white"
-              : "bg-[#E8DCC4] hover:bg-[#FAF6ED] text-black"
-          }`}
-        />
-      </form>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <form action={checkoutAction} className="w-full mt-auto">
+          <input type="hidden" name="priceId" value={priceId} />
+          <SubmitButton
+            className={`w-full ${
+              highlight
+                ? "bg-[#B4916C] hover:bg-[#B4916C]/90 text-white"
+                : "bg-[#B4916C]/20 hover:bg-[#B4916C]/30 text-[#B4916C]"
+            } transition-colors duration-200 font-medium`}
+          />
+        </form>
+      </div>
     </div>
   );
 }
