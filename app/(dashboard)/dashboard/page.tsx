@@ -19,6 +19,7 @@ import UserMenu from "@/components/UserMenu";
 import ActionsDropdown from "@/components/ActionsDropdown";
 import Link from "next/link";
 import { ArrowRight, Diamond } from "lucide-react";
+import JobsCard from "@/components/JobsCard.client";
 
 export default async function DashboardPage() {
   const user = await getUser();
@@ -32,10 +33,18 @@ export default async function DashboardPage() {
   const cvs = await getCVsForUser(user.id);
   const activityLogs = await getActivityLogs(); // For UserMenu
 
+  // Map CVs to match the expected JobsCardCV interface
+  const mappedCVs = cvs.map(cv => ({
+    ...cv,
+    id: cv.id.toString(),
+    userId: cv.userId.toString(),
+    metadata: cv.metadata ? JSON.parse(cv.metadata) : undefined
+  }));
+
   return (
     <>
       <header className="flex items-center justify-between p-4 lg:p-8 mx-auto max-w-md lg:max-w-2xl">
-        <ArticleTitle className="text-md lg:text-xl font-medium ml-4 text-[#FFFFFF]">
+        <ArticleTitle className="text-md lg:text-xl font-medium ml-4 text-[#B4916C]">
           Dashboard
         </ArticleTitle>
         <UserMenu teamData={teamData} activityLogs={activityLogs} />
@@ -97,7 +106,7 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
       
-      {/* Premium Plan Upgrade Card */}
+      {/* Premium Plan Upgrade Card - Temporarily hidden
       <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C] bg-[#B4916C]/10 shadow-lg hover:shadow-xl transition-all duration-300">
         <CardContent className="p-6 flex items-center justify-between">
           <div className="flex items-center space-x-4">
@@ -118,12 +127,17 @@ export default async function DashboardPage() {
           </Link>
         </CardContent>
       </Card>
+      */}
       
       <DashboardClientWrapper cvs={cvs} />
       
       <AnalyzeCVCard cvs={cvs.map((cv) => cv.fileName)} />
       
       <OptimizeCVCard cvs={cvs.map((cv) => cv.fileName)} />
+      
+      <div className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
+        <JobsCard cvs={mappedCVs} />
+      </div>
     </>
   );
 }
