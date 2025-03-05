@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb, PDFFont } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, RGB } from "pdf-lib";
 import { getOverlayCoordinates } from "./templateMatching";
 import { CVTemplate } from "@/types/templates";
 import { Buffer } from "buffer";
@@ -37,11 +37,14 @@ export function parseOptimizedText(text: string): { leftColumnSections: Section[
     // Skip empty lines
     if (!line) continue;
     
-    // Check if this is a section header (all caps or surrounded by ## or uppercase)
+    // Enhanced section header detection
+    // Check if this is a section header (all caps or surrounded by ## or uppercase or has specific formatting)
     if (
       (line === line.toUpperCase() && line.length > 2 && !/[a-z]/.test(line)) ||
       (line.startsWith('##') && line.endsWith('##')) ||
-      (line.startsWith('# '))
+      (line.startsWith('# ')) ||
+      /^[A-Z][A-Za-z\s]+:$/.test(line) || // Matches "Section Name:" format
+      (i > 0 && !lines[i-1].trim() && i < lines.length - 1 && !lines[i+1].trim() && line.length < 30) // Isolated line between empty lines
     ) {
       // Save previous section if exists
       if (currentSection) {
@@ -53,6 +56,7 @@ export function parseOptimizedText(text: string): { leftColumnSections: Section[
       let title = line;
       if (title.startsWith('##')) title = title.substring(2, title.length - 2);
       if (title.startsWith('# ')) title = title.substring(2);
+      if (title.endsWith(':')) title = title.substring(0, title.length - 1);
       
       currentSection = {
         title,
@@ -75,9 +79,7 @@ export function parseOptimizedText(text: string): { leftColumnSections: Section[
   const leftColumnSections: Section[] = [];
   const rightColumnSections: Section[] = [];
   
-  // Determine which sections go to which column
-  // Education, Skills, Languages, Certifications typically go to left column
-  // Work Experience, Projects, Summary typically go to right column
+  // Enhanced section distribution with more categories
   for (const section of sections) {
     const title = section.title.toLowerCase();
     
@@ -92,7 +94,13 @@ export function parseOptimizedText(text: string): { leftColumnSections: Section[
       title.includes('language') ||
       title.includes('certification') ||
       title.includes('reference') ||
-      title.includes('contact')
+      title.includes('contact') ||
+      title.includes('personal') ||
+      title.includes('award') ||
+      title.includes('achievement') ||
+      title.includes('volunteer') ||
+      title.includes('interest') ||
+      title.includes('hobby')
     ) {
       leftColumnSections.push(section);
     } else {
@@ -118,113 +126,123 @@ function ensureSinglePage(leftColumnSections: Section[], rightColumnSections: Se
   const estimateContentLength = (sections: Section[]): number => {
     let length = 0;
     for (const section of sections) {
-      // Add space for section title
-      length += 30;
+      // Count title (headers take more space)
+      length += section.title.length * 1.5;
       
-      // Count lines in content
-      const lines = section.content.split('\n');
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        
-        // Estimate how many lines this will take when wrapped
-        const estimatedWrappedLines = Math.ceil(line.length / 50);
-        length += estimatedWrappedLines * 10;
-        
-        // Add extra space for bullet points
-        if (line.trim().startsWith('•')) {
-          length += 5;
+      // Count content lines
+      const contentLines = section.content.split('\n');
+      for (const line of contentLines) {
+        if (line.trim()) {
+          // Bullet points and indented content take more space
+          if (line.startsWith('•') || line.startsWith('-') || line.startsWith('  ')) {
+            length += line.length * 1.2;
+          } else {
+            length += line.length;
+          }
         }
       }
-      
-      // Add space between sections
-      length += 15;
     }
     return length;
   };
   
-  const leftColumnLength = estimateContentLength(leftColumnSections);
-  const rightColumnLength = estimateContentLength(rightColumnSections);
+  const leftLength = estimateContentLength(leftColumnSections);
+  const rightLength = estimateContentLength(rightColumnSections);
   
-  // A4 page height is about 842 points, with margins around 50 points
-  // and header taking about 60-80 points
-  const maxColumnHeight = 650;
+  // Define maximum length thresholds (these values are approximate)
+  const MAX_LEFT_COLUMN_LENGTH = 3000;
+  const MAX_RIGHT_COLUMN_LENGTH = 3500;
+  const MAX_TOTAL_LENGTH = 6000;
   
-  // If either column is too long, trim content
-  if (leftColumnLength > maxColumnHeight || rightColumnLength > maxColumnHeight) {
-    console.warn("Content may not fit on a single page, trimming...");
+  console.log(`Estimated content length - Left: ${leftLength}, Right: ${rightLength}, Total: ${leftLength + rightLength}`);
+  
+  // If content is too long, trim it
+  if (leftLength > MAX_LEFT_COLUMN_LENGTH || rightLength > MAX_RIGHT_COLUMN_LENGTH || (leftLength + rightLength) > MAX_TOTAL_LENGTH) {
+    console.log("Content is too long, trimming to fit on one page");
     
-    // Trim bullet points from the bottom of longer sections
+    // Define a function to trim a section
     const trimSection = (section: Section): boolean => {
-      const lines = section.content.split('\n');
-      // Find bullet points from the bottom
-      for (let i = lines.length - 1; i >= 0; i--) {
-        if (lines[i].trim().startsWith('•')) {
-          // Remove this bullet point
-          lines.splice(i, 1);
-          section.content = lines.join('\n');
-          return true;
-        }
+      // Don't trim important sections like contact info or summary
+      if (
+        section.title.toLowerCase().includes('contact') || 
+        section.title.toLowerCase().includes('summary') ||
+        section.title.toLowerCase().includes('profile')
+      ) {
+        return false;
       }
+      
+      const lines = section.content.split('\n');
+      
+      // If section has more than 5 lines, trim it
+      if (lines.length > 5) {
+        // Keep first 4 lines and add "..." as the last line
+        section.content = lines.slice(0, 4).join('\n') + '\n...';
+        return true;
+      }
+      
       return false;
     };
     
-    // First try to trim bullet points from the longest sections
-    let trimmed = false;
-    
-    // Sort sections by content length (descending)
+    // Sort sections by length to trim the longest ones first
     const sortSectionsByLength = (sections: Section[]): Section[] => {
-      return [...sections].sort((a, b) => b.content.length - a.content.length);
+      return [...sections].sort((a, b) => {
+        return b.content.length - a.content.length;
+      });
     };
     
-    // Try to trim left column if it's too long
-    if (leftColumnLength > maxColumnHeight) {
-      const sortedSections = sortSectionsByLength(leftColumnSections);
-      for (const section of sortedSections) {
-        trimmed = trimSection(section);
-        if (trimmed) break;
+    // Try to balance columns if one is much longer than the other
+    if (leftLength > rightLength * 1.5) {
+      // Move the shortest section from left to right
+      const sortedLeft = sortSectionsByLength(leftColumnSections).reverse();
+      if (sortedLeft.length > 1) {
+        const sectionToMove = sortedLeft[0];
+        leftColumnSections.splice(leftColumnSections.indexOf(sectionToMove), 1);
+        rightColumnSections.push(sectionToMove);
+        console.log(`Moved section "${sectionToMove.title}" from left to right column to balance length`);
+      }
+    } else if (rightLength > leftLength * 1.5) {
+      // Move the shortest section from right to left
+      const sortedRight = sortSectionsByLength(rightColumnSections).reverse();
+      if (sortedRight.length > 1) {
+        const sectionToMove = sortedRight[0];
+        rightColumnSections.splice(rightColumnSections.indexOf(sectionToMove), 1);
+        leftColumnSections.push(sectionToMove);
+        console.log(`Moved section "${sectionToMove.title}" from right to left column to balance length`);
       }
     }
     
-    // Try to trim right column if it's too long
-    if (rightColumnLength > maxColumnHeight) {
-      const sortedSections = sortSectionsByLength(rightColumnSections);
-      for (const section of sortedSections) {
-        trimmed = trimSection(section);
-        if (trimmed) break;
-      }
-    }
+    // Trim sections if still too long
+    let leftTrimmed = false;
+    let rightTrimmed = false;
     
-    // If we couldn't trim bullet points, try to reduce content in other ways
-    if (!trimmed) {
-      // Reduce the number of bullet points in the longest sections
-      for (const section of sortSectionsByLength(rightColumnSections)) {
-        const lines = section.content.split('\n');
-        let bulletCount = 0;
-        
-        // Count bullet points
-        for (const line of lines) {
-          if (line.trim().startsWith('•')) bulletCount++;
-        }
-        
-        // If there are more than 5 bullet points, keep only the first 5
-        if (bulletCount > 5) {
-          const newLines = [];
-          let bulletsSeen = 0;
-          
-          for (const line of lines) {
-            if (line.trim().startsWith('•')) {
-              bulletsSeen++;
-              if (bulletsSeen <= 5) {
-                newLines.push(line);
-              }
-            } else {
-              newLines.push(line);
-            }
-          }
-          
-          section.content = newLines.join('\n');
+    if (leftLength > MAX_LEFT_COLUMN_LENGTH) {
+      const sortedLeft = sortSectionsByLength(leftColumnSections);
+      for (const section of sortedLeft) {
+        if (trimSection(section)) {
+          leftTrimmed = true;
           break;
         }
+      }
+    }
+    
+    if (rightLength > MAX_RIGHT_COLUMN_LENGTH) {
+      const sortedRight = sortSectionsByLength(rightColumnSections);
+      for (const section of sortedRight) {
+        if (trimSection(section)) {
+          rightTrimmed = true;
+          break;
+        }
+      }
+    }
+    
+    // If we trimmed any sections, recalculate length
+    if (leftTrimmed || rightTrimmed) {
+      const newLeftLength = estimateContentLength(leftColumnSections);
+      const newRightLength = estimateContentLength(rightColumnSections);
+      console.log(`After trimming - Left: ${newLeftLength}, Right: ${newRightLength}, Total: ${newLeftLength + newRightLength}`);
+      
+      // If still too long, recursively trim more
+      if (newLeftLength > MAX_LEFT_COLUMN_LENGTH || newRightLength > MAX_RIGHT_COLUMN_LENGTH || (newLeftLength + newRightLength) > MAX_TOTAL_LENGTH) {
+        ensureSinglePage(leftColumnSections, rightColumnSections);
       }
     }
   }
@@ -403,14 +421,8 @@ function wrapText(text: string, font: PDFFont, fontSize: number, maxWidth: numbe
  * Update the sanitizeText function to be more aggressive
  */
 function sanitizeText(text: string): string {
-  if (!text) return '';
-  
-  return text
-    .replace(/\r?\n/g, ' ')         // Replace all newlines with spaces
-    .replace(/\u000a/g, ' ')        // Explicitly target the 0x000a character
-    .replace(/[\u0000-\u001F]/g, ' ')  // Replace all control characters
-    .replace(/\s+/g, ' ')           // Replace multiple spaces with a single space
-    .trim();                        // Trim leading/trailing whitespace
+  // Remove any control characters or non-printable characters
+  return text.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
 }
 
 // Helper function to split text into lines that fit within a given width
@@ -463,15 +475,25 @@ export async function modifyPDFWithOptimizedContent(
     // Parse the optimized text into sections
     const { leftColumnSections, rightColumnSections } = parseOptimizedText(optimizedText);
     
-    // Get template layout if available
+    // Load fonts
+    const fontBytes = await fetch('/fonts/Roboto-Regular.ttf').then(res => res.arrayBuffer());
+    const boldFontBytes = await fetch('/fonts/Roboto-Bold.ttf').then(res => res.arrayBuffer());
+    const italicFontBytes = await fetch('/fonts/Roboto-Italic.ttf').then(res => res.arrayBuffer());
+    
+    const regularFont = await doc.embedFont(fontBytes);
+    const boldFont = await doc.embedFont(boldFontBytes);
+    const italicFont = await doc.embedFont(italicFontBytes);
+    const titleFont = boldFont;
+    
+    // Set default colors
+    let textColor = rgb(0, 0, 0); // Black
+    let accentColor = rgb(0.2, 0.4, 0.8); // Default blue
+    
+    // Set default layout
     let layout = 'two-column';
     let headerStyle = 'modern';
-    let fontFamily = 'Helvetica';
-    let primaryColor = rgb(0, 0, 0); // Default black for text
-    let accentColor = rgb(0.2, 0.4, 0.8); // Default blue for accents only
-    let backgroundColor = rgb(1, 1, 1); // Default white
-    let columnGap = 20;
     
+    // Apply template-specific styling if available
     if (template) {
       console.log(`Applying template: ${template.name}`);
       
@@ -482,123 +504,46 @@ export async function modifyPDFWithOptimizedContent(
       const templateLayout = getTemplateLayout(template.id);
       headerStyle = templateLayout.headerStyle || headerStyle;
       
-      // Set colors based on template metadata
-      if (template.metadata.colorScheme) {
-        const colorScheme = template.metadata.colorScheme;
-        
-        // Only use accent color for headers and decorative elements
-        if (colorScheme.accent) {
-          // Convert hex to RGB
-          const r = parseInt(colorScheme.accent.substring(1, 3), 16) / 255;
-          const g = parseInt(colorScheme.accent.substring(3, 5), 16) / 255;
-          const b = parseInt(colorScheme.accent.substring(5, 7), 16) / 255;
-          accentColor = rgb(r, g, b);
-        }
-        
-        if (colorScheme.background) {
-          // Convert hex to RGB
-          const r = parseInt(colorScheme.background.substring(1, 3), 16) / 255;
-          const g = parseInt(colorScheme.background.substring(3, 5), 16) / 255;
-          const b = parseInt(colorScheme.background.substring(5, 7), 16) / 255;
-          backgroundColor = rgb(r, g, b);
-        }
+      // Set accent color from template
+      if (template.metadata.colorScheme && template.metadata.colorScheme.accent) {
+        const accentHex = template.metadata.colorScheme.accent;
+        const accentRgb = hexToRgb(accentHex);
+        accentColor = rgb(accentRgb.r / 255, accentRgb.g / 255, accentRgb.b / 255);
       }
       
       // Apply template-specific styling
       if (template.name === 'Apple Minimal' || template.id === 'apple-minimal') {
-        // Minimal template has more whitespace and lighter colors
-        margin = 45; // Reduced from 60 to fit on one page
-        columnGap = 20; // Reduced from 30 to fit on one page
-        accentColor = rgb(0.5, 0.5, 0.5); // Gray accent
+        margin = 40; // Smaller margins for minimal style
+        accentColor = rgb(0.5, 0.5, 0.5); // Gray accent for minimal style
+        headerStyle = 'minimal';
       } else if (template.name === 'Google Modern' || template.id === 'google-modern') {
-        // Modern template has bold colors and less margin
-        margin = 35; // Reduced from 40 to fit on one page
-        columnGap = 20; // Reduced from 25 to fit on one page
+        margin = 50;
+        accentColor = rgb(0.2, 0.4, 0.8); // Blue accent for Google
+        headerStyle = 'modern';
       } else if (template.name === 'Amazon Leadership' || template.id === 'amazon-leadership') {
-        // Traditional template has serif fonts and classic colors
-        fontFamily = 'Times-Roman';
-        accentColor = rgb(0.5, 0.1, 0.1); // Dark red accent
-        margin = 40; // Adjusted to fit on one page
+        margin = 45;
+        accentColor = rgb(0.8, 0.5, 0.1); // Orange accent for Amazon
+        headerStyle = 'traditional';
       } else if (template.name === 'Meta Impact' || template.id === 'meta-impact') {
-        // Creative template has unique colors and layout
-        accentColor = rgb(0.8, 0.3, 0.3); // Reddish accent
-        backgroundColor = rgb(0.98, 0.98, 1); // Very light blue background
-        margin = 40; // Adjusted to fit on one page
-        
-        // Add a decorative element for creative template
-        page.drawRectangle({
-          x: 0,
-          y: height - 80, // Reduced from 100 to fit on one page
-          width: width,
-          height: 80, // Reduced from 100 to fit on one page
-          color: rgb(0.95, 0.95, 1),
-        });
-        
-        // Add a decorative line
-        page.drawLine({
-          start: { x: 0, y: height - 80 }, // Adjusted to match the rectangle
-          end: { x: width, y: height - 80 }, // Adjusted to match the rectangle
-          thickness: 3,
-          color: accentColor,
-        });
+        margin = 50;
+        accentColor = rgb(0.1, 0.4, 0.7); // Blue accent for Meta
+        headerStyle = 'modern';
       } else if (template.name === 'Microsoft Professional' || template.id === 'microsoft-professional') {
-        // Professional template has clean lines and professional colors
-        accentColor = rgb(0.4, 0.6, 0.8); // Medium blue
-        margin = 40; // Adjusted to fit on one page
-        
-        // Add a thin header bar
-        page.drawRectangle({
-          x: 0,
-          y: height - 25, // Reduced from 30 to fit on one page
-          width: width,
-          height: 25, // Reduced from 30 to fit on one page
-          color: rgb(0.05, 0.2, 0.4),
-        });
+        margin = 45;
+        accentColor = rgb(0.1, 0.5, 0.7); // Blue-green accent for Microsoft
+        headerStyle = 'traditional';
       }
     }
     
-    // Set text color to black for all content
-    const textColor = rgb(0, 0, 0);
+    // Set column widths based on layout
+    let leftColumnWidth = (width - 2 * margin) * 0.3;
+    let rightColumnWidth = (width - 2 * margin) * 0.7;
+    const columnGap = 15;
     
-    // Load fonts
-    let regularFont;
-    let boldFont;
-    let titleFont;
-    
-    // Select fonts based on template
-    if (fontFamily === 'Times-Roman') {
-      regularFont = await doc.embedFont(StandardFonts.TimesRoman);
-      boldFont = await doc.embedFont(StandardFonts.TimesRomanBold);
-      titleFont = await doc.embedFont(StandardFonts.TimesRomanBold);
-    } else if (fontFamily === 'Courier') {
-      regularFont = await doc.embedFont(StandardFonts.Courier);
-      boldFont = await doc.embedFont(StandardFonts.CourierBold);
-      titleFont = await doc.embedFont(StandardFonts.CourierBold);
-    } else {
-      // Default to Helvetica
-      regularFont = await doc.embedFont(StandardFonts.Helvetica);
-      boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
-      titleFont = await doc.embedFont(StandardFonts.HelveticaBold);
-    }
-    
-    // Fill background if not white
-    const isWhiteBackground = 
-      backgroundColor.toString() === rgb(1, 1, 1).toString();
- 
-    if (!isWhiteBackground) {
-      page.drawRectangle({
-        x: 0,
-        y: 0,
-        width,
-        height,
-        color: backgroundColor,
-      });
-    }
-    
-    // Set starting positions for columns
-    let leftColumnY = height - margin;
-    let rightColumnY = height - margin;
-    const rightColumnX = margin + (width - 2 * margin) * 0.3 + columnGap;
+    // Initialize Y positions for both columns
+    let leftColumnY = height - margin - 60; // Start below header
+    let rightColumnY = height - margin - 60; // Start below header
+    const rightColumnX = margin + leftColumnWidth + columnGap;
     
     // Reference to current page for multi-page support
     let currentPage = page;
@@ -606,21 +551,18 @@ export async function modifyPDFWithOptimizedContent(
     // Add header based on template style
     if (headerStyle === 'modern') {
       try {
-        // Extract name and contact info from the first few lines
-        const lines = rawText.split('\n').slice(0, 5);
-        let name = lines[0]?.trim() || 'Name';
-        let nameWithCV = `${name} CV`;
-        let contactInfo = '';
+        // Extract name and contact info
+        const nameMatch = optimizedText.match(/NAME: (.+?)(?:\n|$)/);
+        const contactMatch = optimizedText.match(/CONTACT: (.+?)(?:\n|$)/);
         
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i]?.trim();
-          if (line && (line.includes('@') || line.includes('phone') || line.includes('linkedin'))) {
-            contactInfo += line + ' · ';
-          }
+        let nameWithCV = "CV";
+        if (nameMatch && nameMatch[1]) {
+          nameWithCV = `${nameMatch[1].trim()} CV`;
         }
         
-        if (contactInfo.endsWith(' · ')) {
-          contactInfo = contactInfo.substring(0, contactInfo.length - 3);
+        let contactInfo = "";
+        if (contactMatch && contactMatch[1]) {
+          contactInfo = contactMatch[1].trim();
         }
         
         // Draw a colored rectangle at the top
@@ -633,7 +575,7 @@ export async function modifyPDFWithOptimizedContent(
         });
         
         // Draw name in large font
-        if (name) {
+        if (nameWithCV) {
           currentPage.drawText(nameWithCV.toUpperCase(), {
             x: margin + 10,
             y: height - margin - 18, // Adjusted for smaller header
@@ -641,42 +583,35 @@ export async function modifyPDFWithOptimizedContent(
             font: titleFont,
             color: rgb(1, 1, 1), // White text on colored background
           });
-          
-          // Draw contact info below
-          if (contactInfo) {
-            currentPage.drawText(contactInfo, {
-              x: margin,
-              y: height - margin - 35, // Adjusted for smaller header
-              size: 8, // Reduced from 9 to fit on one page
-              font: regularFont,
-              color: textColor,
-            });
-          }
-          
-          // Adjust starting positions
-          leftColumnY = height - margin - 60; // Reduced from 70 to fit on one page
-          rightColumnY = height - margin - 60; // Reduced from 70 to fit on one page
         }
-      } catch (error: any) {
-        console.warn("Error adding modern header:", error.message);
+        
+        // Draw contact info below header
+        if (contactInfo) {
+          currentPage.drawText(contactInfo, {
+            x: margin,
+            y: height - margin - 40, // Adjusted for smaller header
+            size: 9, // Reduced from 10 to fit on one page
+            font: regularFont,
+            color: textColor,
+          });
+        }
+      } catch (error) {
+        console.error("Error drawing header:", error);
       }
     } else if (headerStyle === 'minimal') {
       try {
-        // Extract name and contact info from the first few lines
-        const lines = rawText.split('\n').slice(0, 5);
-        let name = lines[0]?.trim() || 'Name';
-        let nameWithCV = `${name} CV`;
-        let contactInfo = '';
+        // Extract name and contact info
+        const nameMatch = optimizedText.match(/NAME: (.+?)(?:\n|$)/);
+        const contactMatch = optimizedText.match(/CONTACT: (.+?)(?:\n|$)/);
         
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i]?.trim();
-          if (line && (line.includes('@') || line.includes('phone') || line.includes('linkedin'))) {
-            contactInfo += line + ' · ';
-          }
+        let nameWithCV = "CV";
+        if (nameMatch && nameMatch[1]) {
+          nameWithCV = `${nameMatch[1].trim()} CV`;
         }
         
-        if (contactInfo.endsWith(' · ')) {
-          contactInfo = contactInfo.substring(0, contactInfo.length - 3);
+        let contactInfo = "";
+        if (contactMatch && contactMatch[1]) {
+          contactInfo = contactMatch[1].trim();
         }
         
         // Draw a thin line at the top
@@ -688,7 +623,7 @@ export async function modifyPDFWithOptimizedContent(
         });
         
         // Draw name in large font
-        if (name) {
+        if (nameWithCV) {
           currentPage.drawText(nameWithCV, {
             x: margin,
             y: height - margin,
@@ -696,50 +631,35 @@ export async function modifyPDFWithOptimizedContent(
             font: titleFont,
             color: textColor,
           });
-          
-          // Draw contact info to the right
-          if (contactInfo) {
-            currentPage.drawText(contactInfo, {
-              x: width - margin - regularFont.widthOfTextAtSize(contactInfo, 8), // Reduced from 9 to fit on one page
-              y: height - margin,
-              size: 8, // Reduced from 9 to fit on one page
-              font: regularFont,
-              color: textColor,
-            });
-          }
-          
-          // Draw a thin line below
-          currentPage.drawLine({
-            start: { x: margin, y: height - margin - 8 }, // Reduced from 10 to fit on one page
-            end: { x: width - margin, y: height - margin - 8 }, // Reduced from 10 to fit on one page
-            thickness: 1,
-            color: accentColor,
-          });
-          
-          // Adjust starting positions
-          leftColumnY = height - margin - 25; // Reduced from 30 to fit on one page
-          rightColumnY = height - margin - 25; // Reduced from 30 to fit on one page
         }
-      } catch (error: any) {
-        console.warn("Error adding minimal header:", error.message);
+        
+        // Draw contact info below name
+        if (contactInfo) {
+          currentPage.drawText(contactInfo, {
+            x: margin,
+            y: height - margin - 20, // Adjusted for smaller header
+            size: 9, // Reduced from 10 to fit on one page
+            font: regularFont,
+            color: textColor,
+          });
+        }
+      } catch (error) {
+        console.error("Error drawing header:", error);
       }
     } else if (headerStyle === 'traditional') {
       try {
-        // Extract name and contact info from the first few lines
-        const lines = rawText.split('\n').slice(0, 5);
-        let name = lines[0]?.trim() || 'Name';
-        let nameWithCV = `${name} CV`;
-        let contactInfo = '';
+        // Extract name and contact info
+        const nameMatch = optimizedText.match(/NAME: (.+?)(?:\n|$)/);
+        const contactMatch = optimizedText.match(/CONTACT: (.+?)(?:\n|$)/);
         
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i]?.trim();
-          if (line && (line.includes('@') || line.includes('phone') || line.includes('linkedin'))) {
-            contactInfo += line + ' | ';
-          }
+        let nameWithCV = "CV";
+        if (nameMatch && nameMatch[1]) {
+          nameWithCV = `${nameMatch[1].trim()} CV`;
         }
         
-        if (contactInfo.endsWith(' | ')) {
-          contactInfo = contactInfo.substring(0, contactInfo.length - 3);
+        let contactInfo = "";
+        if (contactMatch && contactMatch[1]) {
+          contactInfo = contactMatch[1].trim();
         }
         
         // Center-align the name
@@ -747,7 +667,7 @@ export async function modifyPDFWithOptimizedContent(
         const nameX = (width - nameWidth) / 2;
         
         // Draw name in large font, centered
-        if (name) {
+        if (nameWithCV) {
           currentPage.drawText(nameWithCV, {
             x: nameX,
             y: height - margin,
@@ -755,46 +675,37 @@ export async function modifyPDFWithOptimizedContent(
             font: titleFont,
             color: textColor,
           });
-          
-          // Center-align contact info
+        }
+        
+        // Draw contact info centered below name
+        if (contactInfo) {
           const contactWidth = regularFont.widthOfTextAtSize(contactInfo, 9); // Reduced from 10 to fit on one page
           const contactX = (width - contactWidth) / 2;
-          const contactY = height - margin - 22; // Reduced from 25 to fit on one page
           
-          // Draw contact info centered below name
-          if (contactInfo) {
-            currentPage.drawText(contactInfo, {
-              x: contactX,
-              y: contactY,
-              size: 9, // Reduced from 10 to fit on one page
-              font: regularFont,
-              color: textColor,
-            });
-          }
-          
-          // Draw a decorative line below
-          currentPage.drawLine({
-            start: { x: margin, y: contactY - 12 }, // Reduced from 15 to fit on one page
-            end: { x: width - margin, y: contactY - 12 }, // Reduced from 15 to fit on one page
-            thickness: 1,
-            color: accentColor,
+          currentPage.drawText(contactInfo, {
+            x: contactX,
+            y: height - margin - 20, // Adjusted for smaller header
+            size: 9, // Reduced from 10 to fit on one page
+            font: regularFont,
+            color: textColor,
           });
-          
-          // Adjust starting positions
-          leftColumnY = contactY - 22; // Reduced from 25 to fit on one page
-          rightColumnY = contactY - 22; // Reduced from 25 to fit on one page
         }
-      } catch (error: any) {
-        console.warn("Error adding traditional header:", error.message);
+        
+        // Draw a horizontal line below contact info
+        currentPage.drawLine({
+          start: { x: margin, y: height - margin - 30 }, // Adjusted for smaller header
+          end: { x: width - margin, y: height - margin - 30 }, // Adjusted for smaller header
+          thickness: 1,
+          color: accentColor,
+        });
+      } catch (error) {
+        console.error("Error drawing header:", error);
       }
     }
     
-    // Calculate column widths based on layout
-    let leftColumnWidth = (width - 2 * margin - columnGap) * 0.3; // Default: 30% of available width
-    let rightColumnWidth = (width - 2 * margin - columnGap) * 0.7; // Default: 70% of available width
-    
-    // Adjust column widths based on layout
+    // Adjust column layout based on template
     if (layout === "one-column") {
+      // For one-column layout, use full width
       leftColumnWidth = 0;
       rightColumnWidth = width - 2 * margin;
       
@@ -858,117 +769,21 @@ export async function modifyPDFWithOptimizedContent(
       
       leftColumnY -= 20;
       
-      // Draw section content with improved formatting for ** markers
-      const contentLines = section.content.split('\n');
-      for (let i = 0; i < contentLines.length; i++) {
-        let line = contentLines[i].trim();
-        if (!line) continue;
-        
-        // Check if this is a bullet point
-        if (line.startsWith('•')) {
-          // Draw bullet point with accent color
-          currentPage.drawText('•', {
-            x: margin,
-            y: leftColumnY,
-            size: 9, // Reduced from 10 to fit on one page
-            font: regularFont,
-            color: accentColor, // Bullet points use accent color
-          });
-          
-          // Draw the text after the bullet point
-          const textAfterBullet = line.substring(1).trim();
-          
-          // Handle text wrapping for bullet points
-          const wrappedLines = wrapText(textAfterBullet, regularFont, 8, leftColumnWidth - 10); // Reduced from 9 to fit on one page
-          for (let j = 0; j < wrappedLines.length; j++) {
-            const wrappedLine = wrappedLines[j];
-            currentPage.drawText(wrappedLine, {
-              x: margin + 10, // Indent text after bullet point
-              y: leftColumnY - (j * 10), // Reduced from 12 to fit on one page
-              size: 8, // Reduced from 9 to fit on one page
-              font: regularFont,
-              color: textColor, // Regular text is black
-            });
-            
-            // Only adjust Y position after all wrapped lines are drawn
-            if (j === wrappedLines.length - 1) {
-              leftColumnY -= (j * 10) + 14; // Reduced from 18 to fit on one page
-            }
-          }
-        }
-        // Check if this is a line with ** markers (skills, etc.)
-        else if (line.includes('**')) {
-          // Process the line to handle ** markers
-          const parts = line.split('**');
-          let currentX = margin;
-          let isInBold = false;
-          
-          // Remove any leading "- " from the line
-          if (parts[0].startsWith('- ')) {
-            parts[0] = parts[0].substring(2);
-          }
-          
-          for (let j = 0; j < parts.length; j++) {
-            if (parts[j].trim() === '') {
-              isInBold = !isInBold;
-              continue;
-            }
-            
-            // If this part was between ** markers, make it bold and slightly larger
-            const font = isInBold ? boldFont : regularFont;
-            const fontSize = isInBold ? 9 : 8; // Bold text is slightly larger
-            
-            // Draw this part of the text
-            currentPage.drawText(parts[j], {
-              x: currentX,
-              y: leftColumnY,
-              size: fontSize,
-              font: font,
-              color: textColor,
-            });
-            
-            // Move the x position for the next part
-            currentX += font.widthOfTextAtSize(parts[j], fontSize);
-            isInBold = !isInBold;
-          }
-          
-          leftColumnY -= 14;
-        }
-        // Regular text
-        else {
-          // Remove any leading "- " from the line
-          if (line.startsWith('- ')) {
-            line = line.substring(2);
-          }
-          
-          // Handle text wrapping for regular text
-          const wrappedLines = wrapText(line, regularFont, 8, leftColumnWidth);
-          for (let j = 0; j < wrappedLines.length; j++) {
-            const wrappedLine = wrappedLines[j];
-            currentPage.drawText(wrappedLine, {
-              x: margin,
-              y: leftColumnY - (j * 10), // Reduced from 12 to fit on one page
-              size: 8, // Reduced from 9 to fit on one page
-              font: regularFont,
-              color: textColor, // Regular text is black
-            });
-            
-            // Only adjust Y position after all wrapped lines are drawn
-            if (j === wrappedLines.length - 1) {
-              leftColumnY -= (j * 10) + 14; // Reduced from 18 to fit on one page
-            }
-          }
-        }
-      }
+      // Use the new formatTextWithStyling function to draw section content
+      leftColumnY = formatTextWithStyling(
+        section.content,
+        currentPage,
+        margin,
+        leftColumnY,
+        leftColumnWidth,
+        regularFont,
+        boldFont,
+        textColor,
+        accentColor
+      );
       
-      leftColumnY -= 12; // Reduced from 15 to fit on one page
-      
-      // Check if we need to add a new page - but we're trying to keep it to one page
-      if (leftColumnY < margin) {
-        console.warn("Content exceeds one page - adjusting font sizes to fit");
-        // Instead of adding a new page, we'll just stop here
-        break;
-      }
+      // Add space after section
+      leftColumnY -= 10;
     }
     
     // Draw right column sections
@@ -1018,135 +833,29 @@ export async function modifyPDFWithOptimizedContent(
       
       rightColumnY -= 20;
       
-      // Draw section content with improved formatting for ** markers
-      const contentLines = section.content.split('\n');
-      for (let i = 0; i < contentLines.length; i++) {
-        let line = contentLines[i].trim();
-        if (!line) continue;
-        
-        // Check if this is a bullet point
-        if (line.startsWith('•')) {
-          // Draw bullet point with accent color
-          currentPage.drawText('•', {
-            x: rightColumnX,
-            y: rightColumnY,
-            size: 9, // Reduced from 10 to fit on one page
-            font: regularFont,
-            color: accentColor, // Bullet points use accent color
-          });
-          
-          // Draw the text after the bullet point
-          const textAfterBullet = line.substring(1).trim();
-          
-          // Handle text wrapping for bullet points
-          const wrappedLines = wrapText(textAfterBullet, regularFont, 8, rightColumnWidth - 10); // Reduced from 9 to fit on one page
-          for (let j = 0; j < wrappedLines.length; j++) {
-            const wrappedLine = wrappedLines[j];
-            currentPage.drawText(wrappedLine, {
-              x: rightColumnX + 10, // Indent text after bullet point
-              y: rightColumnY - (j * 10), // Reduced from 12 to fit on one page
-              size: 8, // Reduced from 9 to fit on one page
-              font: regularFont,
-              color: textColor, // Regular text is black
-            });
-            
-            // Only adjust Y position after all wrapped lines are drawn
-            if (j === wrappedLines.length - 1) {
-              rightColumnY -= (j * 10) + 14; // Reduced from 18 to fit on one page
-            }
-          }
-        }
-        // Check if this is a line with ** markers (skills, etc.)
-        else if (line.includes('**')) {
-          // Process the line to handle ** markers
-          const parts = line.split('**');
-          let currentX = rightColumnX;
-          let isInBold = false;
-          
-          // Remove any leading "- " from the line
-          if (parts[0].startsWith('- ')) {
-            parts[0] = parts[0].substring(2);
-          }
-          
-          for (let j = 0; j < parts.length; j++) {
-            if (parts[j].trim() === '') {
-              isInBold = !isInBold;
-              continue;
-            }
-            
-            // If this part was between ** markers, make it bold and slightly larger
-            const font = isInBold ? boldFont : regularFont;
-            const fontSize = isInBold ? 9 : 8; // Bold text is slightly larger
-            
-            // Draw this part of the text
-            currentPage.drawText(parts[j], {
-              x: currentX,
-              y: rightColumnY,
-              size: fontSize,
-              font: font,
-              color: textColor,
-            });
-            
-            // Move the x position for the next part
-            currentX += font.widthOfTextAtSize(parts[j], fontSize);
-            isInBold = !isInBold;
-          }
-          
-          rightColumnY -= 14;
-        }
-        // Regular text
-        else {
-          // Remove any leading "- " from the line
-          if (line.startsWith('- ')) {
-            line = line.substring(2);
-          }
-          
-          // Handle text wrapping for regular text
-          const wrappedLines = wrapText(line, regularFont, 8, rightColumnWidth);
-          for (let j = 0; j < wrappedLines.length; j++) {
-            const wrappedLine = wrappedLines[j];
-            currentPage.drawText(wrappedLine, {
-              x: rightColumnX,
-              y: rightColumnY - (j * 10), // Reduced from 12 to fit on one page
-              size: 8, // Reduced from 9 to fit on one page
-              font: regularFont,
-              color: textColor, // Regular text is black
-            });
-            
-            // Only adjust Y position after all wrapped lines are drawn
-            if (j === wrappedLines.length - 1) {
-              rightColumnY -= (j * 10) + 14; // Reduced from 18 to fit on one page
-            }
-          }
-        }
-      }
+      // Use the new formatTextWithStyling function to draw section content
+      rightColumnY = formatTextWithStyling(
+        section.content,
+        currentPage,
+        rightColumnX,
+        rightColumnY,
+        rightColumnWidth,
+        regularFont,
+        boldFont,
+        textColor,
+        accentColor
+      );
       
-      rightColumnY -= 12; // Reduced from 15 to fit on one page
-      
-      // Check if we need to add a new page - but we're trying to keep it to one page
-      if (rightColumnY < margin) {
-        console.warn("Content exceeds one page - adjusting font sizes to fit");
-        // Instead of adding a new page, we'll just stop here
-        break;
-      }
+      // Add space after section
+      rightColumnY -= 10;
     }
     
-    // Draw a vertical line between columns if using two-column layout
-    if (layout !== 'one-column') {
-      currentPage.drawLine({
-        start: { x: margin + leftColumnWidth + columnGap / 2, y: height - margin },
-        end: { x: margin + leftColumnWidth + columnGap / 2, y: margin },
-        thickness: 0.5,
-        color: accentColor,
-      });
-    }
-    
-    // Serialize the PDFDocument to bytes
+    // Save the PDF
     const pdfBytes = await doc.save();
     return pdfBytes;
-  } catch (error: any) {
-    console.error("Error in modifyPDFWithOptimizedContent:", error.message);
-    throw new Error(`Failed to generate PDF: ${error.message}`);
+  } catch (error) {
+    console.error("Error modifying PDF:", error);
+    throw error;
   }
 }
 
@@ -1176,5 +885,168 @@ function getSectionCoordinates(sectionName: string, coordinates: any): number | 
   };
   
   return sectionMap[sectionName] || null;
+}
+
+// Helper function to format text with bold and bullet points
+function formatTextWithStyling(
+  text: string,
+  page: PDFPage,
+  x: number,
+  y: number,
+  maxWidth: number,
+  regularFont: PDFFont,
+  boldFont: PDFFont,
+  textColor: RGB,
+  accentColor: RGB
+): number {
+  // Split text into lines
+  const lines = text.split('\n');
+  let currentY = y;
+  
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    
+    // Check if this is a bullet point
+    if (line.trim().startsWith('•') || line.trim().startsWith('-')) {
+      // Draw bullet point with accent color
+      page.drawText('•', {
+        x,
+        y: currentY,
+        size: 9,
+        font: regularFont,
+        color: accentColor,
+      });
+      
+      // Get text after bullet
+      const textAfterBullet = line.trim().startsWith('•') 
+        ? line.substring(1).trim() 
+        : line.substring(1).trim();
+      
+      // Check if the bullet point text contains bold markers
+      if (textAfterBullet.includes('**')) {
+        // Process bold text within the bullet point
+        const parts = textAfterBullet.split('**');
+        let currentX = x + 10; // Indent after bullet
+        let isInBold = false;
+        
+        for (let i = 0; i < parts.length; i++) {
+          if (parts[i].trim() === '') {
+            isInBold = !isInBold;
+            continue;
+          }
+          
+          // Wrap this part of text
+          const font = isInBold ? boldFont : regularFont;
+          const fontSize = isInBold ? 9 : 8;
+          const wrappedLines = wrapText(parts[i], font, fontSize, maxWidth - 10);
+          
+          for (let j = 0; j < wrappedLines.length; j++) {
+            page.drawText(wrappedLines[j], {
+              x: j === 0 ? currentX : x + 10,
+              y: currentY - (j * 10),
+              size: fontSize,
+              font,
+              color: textColor,
+            });
+            
+            if (j === wrappedLines.length - 1) {
+              if (i === parts.length - 1) {
+                // Last part, move to next line
+                currentY -= (j * 10) + 14;
+              } else if (j > 0) {
+                // Multi-line part, reset X position
+                currentX = x + 10;
+                currentY -= j * 10;
+              } else {
+                // Single line part, update X position
+                currentX += font.widthOfTextAtSize(wrappedLines[j], fontSize);
+              }
+            }
+          }
+          
+          isInBold = !isInBold;
+        }
+      } else {
+        // Regular bullet point without bold text
+        const wrappedLines = wrapText(textAfterBullet, regularFont, 8, maxWidth - 10);
+        for (let i = 0; i < wrappedLines.length; i++) {
+          page.drawText(wrappedLines[i], {
+            x: x + 10,
+            y: currentY - (i * 10),
+            size: 8,
+            font: regularFont,
+            color: textColor,
+          });
+          
+          if (i === wrappedLines.length - 1) {
+            currentY -= (i * 10) + 14;
+          }
+        }
+      }
+    }
+    // Check if this is a line with bold markers
+    else if (line.includes('**')) {
+      const parts = line.split('**');
+      let currentX = x;
+      let isInBold = false;
+      
+      for (let i = 0; i < parts.length; i++) {
+        if (parts[i].trim() === '') {
+          isInBold = !isInBold;
+          continue;
+        }
+        
+        // Wrap this part of text
+        const font = isInBold ? boldFont : regularFont;
+        const fontSize = isInBold ? 9 : 8;
+        const wrappedLines = wrapText(parts[i], font, fontSize, maxWidth);
+        
+        for (let j = 0; j < wrappedLines.length; j++) {
+          page.drawText(wrappedLines[j], {
+            x: j === 0 ? currentX : x,
+            y: currentY - (j * 10),
+            size: fontSize,
+            font,
+            color: textColor,
+          });
+          
+          if (j === wrappedLines.length - 1) {
+            if (i === parts.length - 1) {
+              // Last part, move to next line
+              currentY -= (j * 10) + 14;
+            } else if (j > 0) {
+              // Multi-line part, reset X position
+              currentX = x;
+              currentY -= j * 10;
+            } else {
+              // Single line part, update X position
+              currentX += font.widthOfTextAtSize(wrappedLines[j], fontSize);
+            }
+          }
+        }
+        
+        isInBold = !isInBold;
+      }
+    }
+    // Regular text
+    else {
+      const wrappedLines = wrapText(line, regularFont, 8, maxWidth);
+      for (let i = 0; i < wrappedLines.length; i++) {
+        page.drawText(wrappedLines[i], {
+          x,
+          y: currentY - (i * 10),
+          size: 8,
+          font: regularFont,
+          color: textColor,
+        });
+        
+        if (i === wrappedLines.length - 1) {
+          currentY -= (i * 10) + 14;
+        }
+      }
+    }
+  }
+  
+  return currentY;
 }
 

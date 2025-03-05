@@ -62,24 +62,53 @@ export async function optimizeCV(
           Focus on quantifiable achievements and impact.
           Highlight technical skills and innovative projects.
           Use action verbs and data-driven results.
+          Emphasize collaboration and teamwork.
+          Include specific technologies and tools you've worked with.
         `;
       } else if (template.name === 'Apple Minimal' || template.id === 'apple-minimal') {
         industryGuidance = `
           Focus on design thinking and user-centric approaches.
           Highlight creative problem-solving and attention to detail.
           Keep descriptions concise and impactful.
+          Emphasize aesthetic sensibility and innovation.
+          Use clean, minimal formatting with plenty of white space.
         `;
       } else if (template.name === 'Amazon Leadership' || template.id === 'amazon-leadership') {
         industryGuidance = `
           Structure achievements using the STAR method (Situation, Task, Action, Result).
           Demonstrate leadership principles like customer obsession and ownership.
           Quantify results and business impact.
+          Show examples of raising the bar and thinking big.
+          Include metrics and data points that demonstrate success.
         `;
       } else if (template.name === 'Microsoft Professional' || template.id === 'microsoft-professional') {
         industryGuidance = `
           Highlight collaborative projects and team achievements.
           Focus on technical expertise and problem-solving abilities.
           Demonstrate continuous learning and adaptability.
+          Emphasize cross-functional collaboration and communication skills.
+          Show how you've contributed to product development or improvement.
+        `;
+      } else if (template.name === 'Meta Impact' || template.id === 'meta-impact') {
+        industryGuidance = `
+          Emphasize social impact and community-focused initiatives.
+          Highlight experience with social media platforms and digital communication.
+          Demonstrate creativity and innovation in connecting people.
+          Show how you've built or improved online communities.
+          Include metrics related to engagement, growth, or user experience.
+        `;
+      }
+      
+      // Add industry-specific guidance if available in template metadata
+      if (template.metadata.industrySpecific) {
+        const industry = template.metadata.industrySpecific;
+        
+        industryGuidance += `
+          Industry: ${industry.industry}
+          Required Skills: ${industry.requiredSkills.join(', ')}
+          Value Propositions: ${industry.valuePropositions.join(', ')}
+          Resume Style: ${industry.resumeStyle}
+          Achievement Format: ${industry.achievementFormat}
         `;
       }
     }
@@ -105,6 +134,8 @@ export async function optimizeCV(
       - Optimize for ATS by including relevant keywords.
       - Keep formatting clean and consistent.
       - Ensure proper spelling and grammar.
+      - Use ** around text that should be emphasized or bold (e.g., **Important Skill**).
+      - Make section titles clear and prominent.
 
 ${formattingInstructions}
 
@@ -145,26 +176,48 @@ ${formattingInstructions}
     if (!response.ok) {
       const errorData = await response.json();
       console.error("OpenAI API error:", errorData);
-      throw new Error(`OpenAI API error: ${errorData.error?.message || 'Unknown error'}`);
+      
+      // Create a fallback optimized version
+      const fallbackText = createFormattedFallbackFromRawText(cvText);
+      return { 
+        optimizedText: fallbackText, 
+        error: `OpenAI API error: ${errorData.error?.message || response.statusText}` 
+      };
     }
     
     const data = await response.json();
-    let optimizedText = data.choices[0]?.message?.content?.trim();
+    let optimizedText = data.choices[0].message.content.trim();
     
-    if (!optimizedText) {
-      throw new Error("No optimized text received from OpenAI");
-    }
-    
-    // Process any formatting markers in the optimized text
+    // Process any formatting markers
     optimizedText = processFormattingMarkers(optimizedText);
     
-    console.log("CV optimization completed successfully");
+    // Verify that the optimized content preserves important information
+    const contentVerification = verifyContentPreservation(cvText, optimizedText);
+    
+    if (!contentVerification.preserved) {
+      console.warn("Content verification failed. Missing items:", contentVerification.missingItems);
+      
+      // If critical information is missing, use a fallback approach
+      if (contentVerification.missingItems.includes('Name') || 
+          contentVerification.missingItems.includes('Contact Information')) {
+        console.warn("Critical information missing, using fallback optimization");
+        const fallbackText = createFormattedFallbackFromRawText(cvText);
+        return { 
+          optimizedText: fallbackText, 
+          error: `Content verification failed: Missing ${contentVerification.missingItems.join(', ')}` 
+        };
+      }
+    }
+    
     return { optimizedText };
   } catch (error: any) {
-    console.error("Error in optimizeCV:", error.message);
+    console.error("Error in CV optimization:", error.message);
+    
+    // Create a fallback optimized version
+    const fallbackText = createFormattedFallbackFromRawText(cvText);
     return { 
-      optimizedText: cvText, 
-      error: `Failed to optimize CV: ${error.message}` 
+      optimizedText: fallbackText, 
+      error: `CV optimization error: ${error.message}` 
     };
   }
 }
