@@ -33,7 +33,32 @@ export default function TemplateSelector({
         }
         
         const data = await response.json();
-        setTemplates(data.templates);
+        
+        // Add appropriate image paths or use company-specific images that exist
+        const templatesWithPreviews = data.templates.map((template: CVTemplate) => {
+          const company = template.company.toLowerCase();
+          
+          // Try to use company-specific images that we know exist
+          let previewPath = '';
+          if (company === 'google') {
+            previewPath = '/templates/google/google1.png';
+          } else if (company === 'meta') {
+            previewPath = '/templates/meta/meta1.png';
+          } else if (company === 'amazon') {
+            previewPath = '/templates/amazon/amazon1.png';
+          } else if (company === 'apple') {
+            previewPath = '/templates/apple/apple1.png';
+          } else if (company === 'microsoft') {
+            previewPath = '/templates/microsoft/microsoft1.png';
+          }
+          
+          return {
+            ...template,
+            previewImageUrl: previewPath || template.previewImageUrl
+          };
+        });
+        
+        setTemplates(templatesWithPreviews);
       } catch (err) {
         console.error('Error fetching templates:', err);
         setError('Failed to load templates. Please try again.');
@@ -67,49 +92,79 @@ export default function TemplateSelector({
       <p className={`mb-4 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Select a template optimized for your target company</p>
       
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {templates.map(template => (
-          <div 
-            key={template.id}
-            className={`template-card p-3 border rounded-lg cursor-pointer transition-all hover:shadow-md
-              ${selectedTemplateId === template.id 
-                ? 'ring-2 shadow-sm' 
-                : darkMode 
-                  ? 'border-[#333333] hover:border-[#444444]' 
-                  : 'border-gray-200 hover:border-gray-300'}`}
-            style={{
-              borderColor: selectedTemplateId === template.id ? `${accentColor}` : '',
-              '--tw-ring-color': selectedTemplateId === template.id ? `${accentColor}40` : '',
-              backgroundColor: darkMode ? '#050505' : 'white'
-            } as React.CSSProperties}
-            onClick={() => onSelect(template.id)}
-          >
-            <div className="aspect-w-3 aspect-h-4 mb-2 relative overflow-hidden rounded-md">
-              {template.previewImageUrl ? (
-                <Image 
-                  src={template.previewImageUrl} 
-                  alt={`${template.company} Template`}
-                  fill
-                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                  className="object-cover"
-                />
-              ) : (
-                <div className={`w-full h-full ${darkMode ? 'bg-gray-900' : 'bg-gray-100'} flex items-center justify-center`}>
-                  <span className={`${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>No preview</span>
-                </div>
-              )}
-            </div>
-            <h3 
-              className="font-medium" 
-              style={{ color: selectedTemplateId === template.id 
-                ? accentColor 
-                : darkMode ? 'rgb(209 213 219)' : '' 
-              }}
+        {templates.map(template => {
+          // Get first two letters of company name for the fallback
+          const companyInitials = template.company.slice(0, 2).toUpperCase();
+          
+          return (
+            <div 
+              key={template.id}
+              className={`template-card p-3 border rounded-lg cursor-pointer transition-all hover:shadow-md
+                ${selectedTemplateId === template.id 
+                  ? 'ring-2 shadow-sm' 
+                  : darkMode 
+                    ? 'border-[#333333] hover:border-[#444444]' 
+                    : 'border-gray-200 hover:border-gray-300'}`}
+              style={{
+                borderColor: selectedTemplateId === template.id ? `${accentColor}` : '',
+                '--tw-ring-color': selectedTemplateId === template.id ? `${accentColor}40` : '',
+                backgroundColor: darkMode ? '#050505' : 'white'
+              } as React.CSSProperties}
+              onClick={() => onSelect(template.id)}
             >
-              {template.name}
-            </h3>
-            <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{template.description}</p>
-          </div>
-        ))}
+              <div className="aspect-w-3 aspect-h-4 mb-2 relative overflow-hidden rounded-md">
+                {template.previewImageUrl ? (
+                  <Image 
+                    src={template.previewImageUrl}
+                    alt={`${template.name} template preview`}
+                    width={300}
+                    height={400}
+                    className="object-cover"
+                    onError={(e) => {
+                      // If image fails to load, replace with fallback
+                      const imgElement = e.currentTarget as HTMLImageElement;
+                      imgElement.style.display = 'none';
+                      // Type assertion for nextElementSibling as HTMLElement
+                      const fallbackElement = imgElement.nextElementSibling as HTMLElement;
+                      if (fallbackElement) {
+                        fallbackElement.style.display = 'flex';
+                      }
+                    }}
+                  />
+                ) : null}
+                {/* Fallback div with company initials */}
+                <div 
+                  className={`w-full h-full ${darkMode ? 'bg-gray-900' : 'bg-gray-100'} flex items-center justify-center ${template.previewImageUrl ? 'hidden' : ''}`}
+                  style={{ 
+                    display: template.previewImageUrl ? 'none' : 'flex',
+                    backgroundColor: template.metadata?.colorScheme?.primary || (darkMode ? '#1a1a1a' : '#f3f4f6')
+                  }}
+                >
+                  <span 
+                    className="text-xl font-semibold text-white"
+                    style={{ 
+                      color: selectedTemplateId === template.id 
+                        ? '#ffffff' 
+                        : (template.metadata?.colorScheme?.text || '#ffffff')
+                    }}
+                  >
+                    {companyInitials}
+                  </span>
+                </div>
+              </div>
+              <h3 
+                className="font-medium" 
+                style={{ color: selectedTemplateId === template.id 
+                  ? accentColor 
+                  : darkMode ? 'rgb(209 213 219)' : '' 
+                }}
+              >
+                {template.name}
+              </h3>
+              <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{template.description}</p>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
