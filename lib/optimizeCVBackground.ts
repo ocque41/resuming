@@ -20,7 +20,7 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
       ...metadata,
       optimizing: true,
       startTime: startTime,
-      progress: 0 // Initialize progress at 0
+      progress: 10 // Initialize progress at 10% instead of 0
     };
     await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedMetadata));
     
@@ -46,9 +46,21 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     
     console.log(`Raw text length: ${cvRecord.rawText.length} characters`);
 
+    // Update progress to 20%
+    await updateCVAnalysis(cvRecord.id, JSON.stringify({
+      ...updatedMetadata,
+      progress: 20
+    }));
+
     // Include template information in the optimization process
     console.log("Starting optimization with AI...");
     const optimizationResult = await optimizeCV(cvRecord.rawText, selectedTemplate);
+    
+    // Update progress to 60%
+    await updateCVAnalysis(cvRecord.id, JSON.stringify({
+      ...updatedMetadata,
+      progress: 60
+    }));
     
     // Verify the optimization result
     if (!optimizationResult || !optimizationResult.optimizedText) {
@@ -59,6 +71,12 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     console.log(`Optimized text length: ${optimizationResult.optimizedText.length} characters`);
     console.log(`First 100 characters: ${optimizationResult.optimizedText.substring(0, 100)}...`);
     
+    // Update progress to 70%
+    await updateCVAnalysis(cvRecord.id, JSON.stringify({
+      ...updatedMetadata,
+      progress: 70
+    }));
+    
     const originalPdfBytes = await getOriginalPdfBytes(cvRecord);
     
     if (!originalPdfBytes || originalPdfBytes.length === 0) {
@@ -67,6 +85,12 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     
     console.log(`Retrieved original PDF (${originalPdfBytes.length} bytes)`);
     
+    // Update progress to 80%
+    await updateCVAnalysis(cvRecord.id, JSON.stringify({
+      ...updatedMetadata,
+      progress: 80
+    }));
+    
     // Pass template information to the PDF modification function
     console.log("Generating optimized PDF...");
     const pdfBuffer = await modifyPDFWithOptimizedContent(
@@ -74,6 +98,12 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
       cvRecord.rawText,
       selectedTemplate
     );
+    
+    // Update progress to 90%
+    await updateCVAnalysis(cvRecord.id, JSON.stringify({
+      ...updatedMetadata,
+      progress: 90
+    }));
     
     if (!pdfBuffer) {
       throw new Error("PDF modification failed to produce output");
@@ -95,6 +125,7 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
       optimizing: false,
       optimizedTimes: metadata.optimizedTimes ? metadata.optimizedTimes + 1 : 1,
       error: null,
+      progress: 100, // Mark as 100% complete
       lastOptimizedAt: new Date().toISOString()
     };
 
