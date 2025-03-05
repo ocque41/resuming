@@ -4,22 +4,19 @@
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
-import { customerPortalAction } from '@/lib/payments/actions';
+import { useRouter } from 'next/navigation';
 
 export default function BillingButton({ variant = "primary" }) {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleBilling = async () => {
+  const handleBilling = () => {
     setIsLoading(true);
-    try {
-      const formData = new FormData();
-      // Add necessary data to formData if required
-      await customerPortalAction(formData);
-    } catch (error) {
-      console.error('Failed to redirect to billing portal:', error);
-    } finally {
-      setIsLoading(false);
-    }
+    // Navigate to the in-app pricing page
+    router.push('/dashboard/pricing');
+    // We'll set isLoading back to false after a short delay
+    // to handle the transition animation
+    setTimeout(() => setIsLoading(false), 500);
   };
 
   const buttonStyles = variant === "primary"
@@ -38,7 +35,7 @@ export default function BillingButton({ variant = "primary" }) {
           Redirecting...
         </>
       ) : (
-        'Manage Billing'
+        'Manage Subscription'
       )}
     </Button>
   );

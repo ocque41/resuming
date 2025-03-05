@@ -10,11 +10,11 @@ export function DashboardBottomNav() {
         <span className="block text-sm">🏠</span>
         <span className="block text-xs">Dashboard</span>
       </Link>
-      <Link href="/profile" className="flex-1 text-center py-2">
-        <span className="block text-sm">👤</span>
-        <span className="block text-xs">Profile</span>
+      <Link href="/dashboard/pricing" className="flex-1 text-center py-2">
+        <span className="block text-sm">💎</span>
+        <span className="block text-xs">Upgrade</span>
       </Link>
-      <Link href="/settings" className="flex-1 text-center py-2">
+      <Link href="/dashboard/settings" className="flex-1 text-center py-2">
         <span className="block text-sm">⚙️</span>
         <span className="block text-xs">Settings</span>
       </Link>

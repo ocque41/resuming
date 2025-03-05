@@ -17,6 +17,8 @@ import DashboardClientWrapper from "@/components/dashboard-client-wrapper";
 import DeleteCVButton from "@/components/delete-cv";
 import UserMenu from "@/components/UserMenu";
 import ActionsDropdown from "@/components/ActionsDropdown";
+import Link from "next/link";
+import { ArrowRight, Diamond } from "lucide-react";
 
 export default async function DashboardPage() {
   const user = await getUser();
@@ -92,6 +94,28 @@ export default async function DashboardPage() {
               })}
             </TableBody>
           </Table>
+        </CardContent>
+      </Card>
+      
+      {/* Premium Plan Upgrade Card */}
+      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C] bg-[#B4916C]/10 shadow-lg hover:shadow-xl transition-all duration-300">
+        <CardContent className="p-6 flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="h-10 w-10 rounded-full bg-[#B4916C]/20 flex items-center justify-center">
+              <Diamond className="h-5 w-5 text-[#B4916C]" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-[#B4916C]">Upgrade to Premium</h3>
+              <p className="text-gray-300">Get unlimited CV uploads and optimizations</p>
+            </div>
+          </div>
+          <Link 
+            href="/dashboard/pricing" 
+            className="px-4 py-2 rounded-md bg-[#B4916C] hover:bg-[#B4916C]/90 text-white font-medium flex items-center space-x-1 transition-colors"
+          >
+            <span>Upgrade</span>
+            <ArrowRight className="h-4 w-4 ml-1" />
+          </Link>
         </CardContent>
       </Card>
       

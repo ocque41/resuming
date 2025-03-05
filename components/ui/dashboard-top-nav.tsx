@@ -9,9 +9,9 @@ export function DashboardTopNav() {
         <span className="block text-sm">🏠</span>
         <span className="block text-xs">Home</span>
       </Link>
-      <Link href="/pricing" className="flex-1 text-center py-2">
-        <span className="block text-sm">💼</span>
-        <span className="block text-xs">Products</span>
+      <Link href="/dashboard/pricing" className="flex-1 text-center py-2">
+        <span className="block text-sm">💎</span>
+        <span className="block text-xs">Upgrade</span>
       </Link>
       <a
         href="https://chromad.vercel.app/docs/products/resuming/overview"

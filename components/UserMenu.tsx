@@ -23,15 +23,9 @@ export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
     window.location.href = "/";
   };
 
-  const handleManageSubscription = async () => {
-    setIsBillingLoading(true);
-    try {
-      await customerPortalAction(new FormData());
-    } catch (error) {
-      console.error("Error redirecting to billing portal:", error);
-    } finally {
-      setIsBillingLoading(false);
-    }
+  const handleManageSubscription = () => {
+    // Navigate to the in-app pricing page instead of using the customer portal
+    router.push("/dashboard/pricing");
   };
 
   return (
@@ -60,9 +54,8 @@ export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
                   <button
                     onClick={handleManageSubscription}
                     className={`${active ? "bg-[#B4916C]/10" : ""} block w-full text-left px-4 py-2 text-sm text-gray-700`}
-                    disabled={isBillingLoading}
                   >
-                    {isBillingLoading ? "Loading..." : "Manage Subscription"}
+                    Manage Subscription
                   </button>
                 )}
               </Menu.Item>
