@@ -206,6 +206,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
                 selectedTemplateId={selectedTemplate}
                 accentColor="#B4916C"
                 darkMode={true}
+                isOptimizing={isOptimizing}
               />
             </div>
           )}

@@ -20,7 +20,12 @@ export async function GET(request: Request) {
   }
 
   try {
-    const updatedMetadata = { ...metadata, optimizing: true };
+    const updatedMetadata = { 
+      ...metadata, 
+      optimizing: true,
+      startTime: new Date().toISOString(),
+      progress: 0
+    };
     await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedMetadata));
 
     optimizeCVBackground(cvRecord);
@@ -57,7 +62,9 @@ export async function POST(request: Request) {
     const updatedMetadata = { 
       ...metadata, 
       optimizing: true,
-      selectedTemplate: templateId
+      selectedTemplate: templateId,
+      startTime: new Date().toISOString(),
+      progress: 0
     };
     await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedMetadata));
 

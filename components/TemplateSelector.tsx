@@ -9,13 +9,15 @@ interface TemplateSelectorProps {
   selectedTemplateId?: string;
   accentColor?: string;
   darkMode?: boolean;
+  isOptimizing?: boolean;
 }
 
 export default function TemplateSelector({ 
   onSelect, 
   selectedTemplateId,
   accentColor = "#B4916C",
-  darkMode = false
+  darkMode = false,
+  isOptimizing = false
 }: TemplateSelectorProps) {
   const [templates, setTemplates] = useState<CVTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,7 +115,7 @@ export default function TemplateSelector({
               onClick={() => onSelect(template.id)}
             >
               <div className="aspect-w-3 aspect-h-4 mb-2 relative overflow-hidden rounded-md">
-                {template.previewImageUrl ? (
+                {template.previewImageUrl && !isOptimizing ? (
                   <Image 
                     src={template.previewImageUrl}
                     alt={`${template.name} template preview`}
@@ -132,11 +134,10 @@ export default function TemplateSelector({
                     }}
                   />
                 ) : null}
-                {/* Fallback div with company initials */}
                 <div 
-                  className={`w-full h-full ${darkMode ? 'bg-gray-900' : 'bg-gray-100'} flex items-center justify-center ${template.previewImageUrl ? 'hidden' : ''}`}
+                  className={`w-full h-full ${darkMode ? 'bg-gray-900' : 'bg-gray-100'} flex items-center justify-center ${template.previewImageUrl && !isOptimizing ? 'hidden' : ''}`}
                   style={{ 
-                    display: template.previewImageUrl ? 'none' : 'flex',
+                    display: template.previewImageUrl && !isOptimizing ? 'none' : 'flex',
                     backgroundColor: template.metadata?.colorScheme?.primary || (darkMode ? '#1a1a1a' : '#f3f4f6')
                   }}
                 >

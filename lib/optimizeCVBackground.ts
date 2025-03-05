@@ -14,6 +14,16 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     
     const metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
     
+    // Add startTime to the metadata to track optimization progress
+    const startTime = new Date().toISOString();
+    const updatedMetadata = {
+      ...metadata,
+      optimizing: true,
+      startTime: startTime,
+      progress: 0 // Initialize progress at 0
+    };
+    await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedMetadata));
+    
     // Use templateId from parameters or from stored metadata if available
     const selectedTemplateId = templateId || metadata.selectedTemplate;
     
