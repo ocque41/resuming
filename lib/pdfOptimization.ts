@@ -14,7 +14,7 @@ export interface Section {
  * Parses structured optimized text into sections
  */
 export function parseOptimizedText(text: string): { leftColumnSections: Section[]; rightColumnSections: Section[] } {
-  // Remove any placeholder markers
+  // Remove any placeholder markers but preserve the actual content
   text = text.replace(/\[LEFT COLUMN END\]/g, '')
     .replace(/\[RIGHT COLUMN START\]/g, '')
     .replace(/CONTENT/g, '')
@@ -23,6 +23,14 @@ export function parseOptimizedText(text: string): { leftColumnSections: Section[
     .replace(/\*No skills information provided on the original CV\*/g, '')
     .replace(/\*No projects information provided on the original CV\*/g, '')
     .replace(/\*No.*?provided.*?\*/g, ''); // Remove any other "No X provided" messages
+  
+  // Preserve NAME and CONTACT information for future use
+  const nameMatch = text.match(/NAME: (.+?)(?:\n|$)/);
+  const contactMatch = text.match(/CONTACT: (.+?)(?:\n|$)/);
+  
+  // Remove the NAME and CONTACT lines from the text as they'll be displayed in the header
+  text = text.replace(/NAME: .+?\n/, '')
+    .replace(/CONTACT: .+?\n/, '');
   
   const sections: Section[] = [];
   const lines = text.split('\n');
@@ -44,7 +52,8 @@ export function parseOptimizedText(text: string): { leftColumnSections: Section[
       (line.startsWith('##') && line.endsWith('##')) ||
       (line.startsWith('# ')) ||
       /^[A-Z][A-Za-z\s]+:$/.test(line) || // Matches "Section Name:" format
-      (i > 0 && !lines[i-1].trim() && i < lines.length - 1 && !lines[i+1].trim() && line.length < 30) // Isolated line between empty lines
+      (i > 0 && !lines[i-1].trim() && i < lines.length - 1 && !lines[i+1].trim() && line.length < 30) || // Isolated line between empty lines
+      line.startsWith('**') && line.endsWith('**') // Bold section headers
     ) {
       // Save previous section if exists
       if (currentSection) {
@@ -52,15 +61,14 @@ export function parseOptimizedText(text: string): { leftColumnSections: Section[
         sections.push(currentSection);
       }
       
-      // Create new section
-      let title = line;
-      if (title.startsWith('##')) title = title.substring(2, title.length - 2);
-      if (title.startsWith('# ')) title = title.substring(2);
-      if (title.endsWith(':')) title = title.substring(0, title.length - 1);
+      // Clean up section title
+      let sectionTitle = line.replace(/^#+\s*|\s*#+$|:$/g, '').trim();
+      sectionTitle = sectionTitle.replace(/^\*\*|\*\*$/g, '').trim(); // Remove ** if present
       
+      // Create new section
       currentSection = {
-        title,
-        content: '',
+        title: sectionTitle,
+        content: ''
       };
       currentContent = '';
     } else if (currentSection) {
@@ -75,49 +83,63 @@ export function parseOptimizedText(text: string): { leftColumnSections: Section[
     sections.push(currentSection);
   }
   
-  // Distribute sections between columns
+  // Distribute sections between left and right columns
   const leftColumnSections: Section[] = [];
   const rightColumnSections: Section[] = [];
   
-  // Enhanced section distribution with more categories
+  // Define which sections should go in the left column
+  const leftColumnTitles = [
+    'PROFILE', 'SUMMARY', 'ABOUT', 'CONTACT', 'PERSONAL',
+    'SKILLS', 'TECHNICAL SKILLS', 'SOFT SKILLS', 'LANGUAGES', 'CERTIFICATIONS',
+    'EDUCATION', 'TRAINING', 'INTERESTS', 'HOBBIES'
+  ];
+  
+  // Distribute sections based on their titles
   for (const section of sections) {
-    const title = section.title.toLowerCase();
+    const normalizedTitle = section.title.toUpperCase();
     
-    // Skip empty sections
-    if (!section.content.trim()) {
-      continue;
-    }
-    
-    if (
-      title.includes('education') ||
-      title.includes('skill') ||
-      title.includes('language') ||
-      title.includes('certification') ||
-      title.includes('reference') ||
-      title.includes('contact') ||
-      title.includes('personal') ||
-      title.includes('award') ||
-      title.includes('achievement') ||
-      title.includes('volunteer') ||
-      title.includes('interest') ||
-      title.includes('hobby')
-    ) {
+    // Check if this section should go in the left column
+    if (leftColumnTitles.some(title => normalizedTitle.includes(title))) {
       leftColumnSections.push(section);
     } else {
+      // Default to right column for work experience, projects, etc.
       rightColumnSections.push(section);
     }
   }
   
-  // Log sections for debugging
-  if (process.env.NODE_ENV !== 'production') {
-    console.log("Left column sections:", leftColumnSections.map(s => s.title).join(", "));
-    console.log("Right column sections:", rightColumnSections.map(s => s.title).join(", "));
-  }
-  
-  // Ensure content fits on a single page by trimming if necessary
+  // Ensure content fits on a single page
   ensureSinglePage(leftColumnSections, rightColumnSections);
   
+  console.log(`Estimated content length - Left: ${estimateContentLength(leftColumnSections)}, Right: ${estimateContentLength(rightColumnSections)}, Total: ${estimateContentLength(leftColumnSections) + estimateContentLength(rightColumnSections)}`);
+  
   return { leftColumnSections, rightColumnSections };
+}
+
+// Helper function to estimate content length
+function estimateContentLength(sections: Section[]): number {
+  let length = 0;
+  
+  for (const section of sections) {
+    // Add length for section title
+    length += 20;
+    
+    // Count lines in content
+    const lines = section.content.split('\n');
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      
+      // Bullet points and bold text take more space
+      if (line.includes('•') || line.includes('-')) {
+        length += 15;
+      } else if (line.includes('**')) {
+        length += 15;
+      } else {
+        length += 10;
+      }
+    }
+  }
+  
+  return length;
 }
 
 // Function to ensure content fits on a single page
@@ -552,9 +574,9 @@ export async function modifyPDFWithOptimizedContent(
         const nameMatch = optimizedText.match(/NAME: (.+?)(?:\n|$)/);
         const contactMatch = optimizedText.match(/CONTACT: (.+?)(?:\n|$)/);
         
-        let nameWithCV = "CV";
+        let personName = "";
         if (nameMatch && nameMatch[1]) {
-          nameWithCV = `${nameMatch[1].trim()} CV`;
+          personName = nameMatch[1].trim();
         }
         
         let contactInfo = "";
@@ -571,12 +593,34 @@ export async function modifyPDFWithOptimizedContent(
           color: accentColor,
         });
         
-        // Draw name in large font
-        if (nameWithCV) {
-          currentPage.drawText(nameWithCV.toUpperCase(), {
+        // Draw name with Resume next to it
+        if (personName) {
+          // Draw the name
+          currentPage.drawText(personName, {
             x: margin + 10,
             y: height - margin - 18, // Adjusted for smaller header
             size: 16, // Reduced from 18 to fit on one page
+            font: titleFont,
+            color: rgb(1, 1, 1), // White text on colored background
+          });
+          
+          // Calculate position for "Resume" text
+          const nameWidth = titleFont.widthOfTextAtSize(personName, 16);
+          
+          // Draw "Resume" next to the name
+          currentPage.drawText(" | Resume", {
+            x: margin + 10 + nameWidth,
+            y: height - margin - 18, // Same y position as name
+            size: 16,
+            font: regularFont,
+            color: rgb(1, 1, 1), // White text on colored background
+          });
+        } else {
+          // Fallback if name not found
+          currentPage.drawText("Resume", {
+            x: margin + 10,
+            y: height - margin - 18,
+            size: 16,
             font: titleFont,
             color: rgb(1, 1, 1), // White text on colored background
           });
@@ -601,9 +645,9 @@ export async function modifyPDFWithOptimizedContent(
         const nameMatch = optimizedText.match(/NAME: (.+?)(?:\n|$)/);
         const contactMatch = optimizedText.match(/CONTACT: (.+?)(?:\n|$)/);
         
-        let nameWithCV = "CV";
+        let personName = "";
         if (nameMatch && nameMatch[1]) {
-          nameWithCV = `${nameMatch[1].trim()} CV`;
+          personName = nameMatch[1].trim();
         }
         
         let contactInfo = "";
@@ -620,11 +664,33 @@ export async function modifyPDFWithOptimizedContent(
         });
         
         // Draw name in large font
-        if (nameWithCV) {
-          currentPage.drawText(nameWithCV, {
+        if (personName) {
+          // Draw the name
+          currentPage.drawText(personName, {
             x: margin,
             y: height - margin,
             size: 16, // Reduced from 18 to fit on one page
+            font: titleFont,
+            color: textColor,
+          });
+          
+          // Calculate position for "Resume" text
+          const nameWidth = titleFont.widthOfTextAtSize(personName, 16);
+          
+          // Draw "Resume" next to the name
+          currentPage.drawText(" | Resume", {
+            x: margin + nameWidth,
+            y: height - margin, // Same y position as name
+            size: 16,
+            font: regularFont,
+            color: textColor,
+          });
+        } else {
+          // Fallback if name not found
+          currentPage.drawText("Resume", {
+            x: margin,
+            y: height - margin,
+            size: 16,
             font: titleFont,
             color: textColor,
           });
@@ -649,9 +715,9 @@ export async function modifyPDFWithOptimizedContent(
         const nameMatch = optimizedText.match(/NAME: (.+?)(?:\n|$)/);
         const contactMatch = optimizedText.match(/CONTACT: (.+?)(?:\n|$)/);
         
-        let nameWithCV = "CV";
+        let personName = "";
         if (nameMatch && nameMatch[1]) {
-          nameWithCV = `${nameMatch[1].trim()} CV`;
+          personName = nameMatch[1].trim();
         }
         
         let contactInfo = "";
@@ -660,15 +726,37 @@ export async function modifyPDFWithOptimizedContent(
         }
         
         // Center-align the name
-        const nameWidth = titleFont.widthOfTextAtSize(nameWithCV, 18); // Reduced from 20 to fit on one page
-        const nameX = (width - nameWidth) / 2;
+        const nameWidth = titleFont.widthOfTextAtSize(personName, 18); // Reduced from 20 to fit on one page
+        const resumeText = " | Resume";
+        const resumeWidth = regularFont.widthOfTextAtSize(resumeText, 18);
+        const totalWidth = nameWidth + resumeWidth;
+        const nameX = (width - totalWidth) / 2;
         
         // Draw name in large font, centered
-        if (nameWithCV) {
-          currentPage.drawText(nameWithCV, {
+        if (personName) {
+          // Draw the name
+          currentPage.drawText(personName, {
             x: nameX,
             y: height - margin,
             size: 18, // Reduced from 20 to fit on one page
+            font: titleFont,
+            color: textColor,
+          });
+          
+          // Draw "Resume" next to the name
+          currentPage.drawText(resumeText, {
+            x: nameX + nameWidth,
+            y: height - margin, // Same y position as name
+            size: 18,
+            font: regularFont,
+            color: textColor,
+          });
+        } else {
+          // Fallback if name not found
+          currentPage.drawText("Resume", {
+            x: (width - titleFont.widthOfTextAtSize("Resume", 18)) / 2,
+            y: height - margin,
+            size: 18,
             font: titleFont,
             color: textColor,
           });
@@ -727,14 +815,14 @@ export async function modifyPDFWithOptimizedContent(
         x: margin - 2,
         y: leftColumnY - 14,
         width: leftColumnWidth + 4,
-        height: 16,
-        color: rgb(0.9, 0.9, 0.95), // Light background color
+        height: 18, // Slightly taller for better visibility
+        color: rgb(0.95, 0.95, 0.98), // Very light background color
       });
       
       currentPage.drawText(section.title.toUpperCase(), {
         x: margin,
         y: leftColumnY,
-        size: 11,
+        size: 12, // Slightly larger for better readability
         font: boldFont,
         color: accentColor, // Keep accent color for headers
       });
@@ -742,15 +830,15 @@ export async function modifyPDFWithOptimizedContent(
       // Draw underline for section header based on header style
       if (headerStyle === 'traditional') {
         currentPage.drawLine({
-          start: { x: margin, y: leftColumnY - 4 }, // Reduced from 5 to fit on one page
-          end: { x: margin + leftColumnWidth, y: leftColumnY - 4 }, // Reduced from 5 to fit on one page
+          start: { x: margin, y: leftColumnY - 4 },
+          end: { x: margin + leftColumnWidth, y: leftColumnY - 4 },
           thickness: 1,
           color: accentColor,
         });
       } else if (headerStyle === 'modern') {
         currentPage.drawLine({
-          start: { x: margin, y: leftColumnY - 4 }, // Reduced from 5 to fit on one page
-          end: { x: margin + 40, y: leftColumnY - 4 }, // Reduced from 50 to fit on one page
+          start: { x: margin, y: leftColumnY - 4 },
+          end: { x: margin + 50, y: leftColumnY - 4 }, // Slightly longer underline
           thickness: 2,
           color: accentColor,
         });
@@ -764,7 +852,7 @@ export async function modifyPDFWithOptimizedContent(
         });
       }
       
-      leftColumnY -= 20;
+      leftColumnY -= 22; // Slightly more space after section title
       
       // Use the new formatTextWithStyling function to draw section content
       leftColumnY = formatTextWithStyling(
@@ -780,7 +868,7 @@ export async function modifyPDFWithOptimizedContent(
       );
       
       // Add space after section
-      leftColumnY -= 10;
+      leftColumnY -= 15; // More space between sections
     }
     
     // Draw right column sections
@@ -791,14 +879,14 @@ export async function modifyPDFWithOptimizedContent(
         x: rightColumnX - 2,
         y: rightColumnY - 14,
         width: rightColumnWidth + 4,
-        height: 16,
-        color: rgb(0.9, 0.9, 0.95), // Light background color
+        height: 18, // Slightly taller for better visibility
+        color: rgb(0.95, 0.95, 0.98), // Very light background color
       });
       
       currentPage.drawText(section.title.toUpperCase(), {
         x: rightColumnX,
         y: rightColumnY,
-        size: 11,
+        size: 12, // Slightly larger for better readability
         font: boldFont,
         color: accentColor, // Keep accent color for headers
       });
@@ -806,15 +894,15 @@ export async function modifyPDFWithOptimizedContent(
       // Draw underline for section header based on header style
       if (headerStyle === 'traditional') {
         currentPage.drawLine({
-          start: { x: rightColumnX, y: rightColumnY - 4 }, // Reduced from 5 to fit on one page
-          end: { x: rightColumnX + rightColumnWidth, y: rightColumnY - 4 }, // Reduced from 5 to fit on one page
+          start: { x: rightColumnX, y: rightColumnY - 4 },
+          end: { x: rightColumnX + rightColumnWidth, y: rightColumnY - 4 },
           thickness: 1,
           color: accentColor,
         });
       } else if (headerStyle === 'modern') {
         currentPage.drawLine({
-          start: { x: rightColumnX, y: rightColumnY - 4 }, // Reduced from 5 to fit on one page
-          end: { x: rightColumnX + 40, y: rightColumnY - 4 }, // Reduced from 50 to fit on one page
+          start: { x: rightColumnX, y: rightColumnY - 4 },
+          end: { x: rightColumnX + 50, y: rightColumnY - 4 }, // Slightly longer underline
           thickness: 2,
           color: accentColor,
         });
@@ -828,7 +916,7 @@ export async function modifyPDFWithOptimizedContent(
         });
       }
       
-      rightColumnY -= 20;
+      rightColumnY -= 22; // Slightly more space after section title
       
       // Use the new formatTextWithStyling function to draw section content
       rightColumnY = formatTextWithStyling(
@@ -844,7 +932,7 @@ export async function modifyPDFWithOptimizedContent(
       );
       
       // Add space after section
-      rightColumnY -= 10;
+      rightColumnY -= 15; // More space between sections
     }
     
     // Save the PDF
@@ -896,6 +984,9 @@ function formatTextWithStyling(
   textColor: RGB,
   accentColor: RGB
 ): number {
+  // Sanitize text to remove control characters
+  text = sanitizeText(text);
+  
   // Split text into lines
   const lines = text.split('\n');
   let currentY = y;
@@ -932,57 +1023,47 @@ function formatTextWithStyling(
             continue;
           }
           
-          // Wrap this part of text
+          // Choose font and size based on whether this part should be bold
           const font = isInBold ? boldFont : regularFont;
-          const fontSize = isInBold ? 9 : 8;
-          const wrappedLines = wrapText(parts[i], font, fontSize, maxWidth - 10);
+          const fontSize = isInBold ? 9 : 9; // Same size for consistency, but bold for emphasis
           
-          for (let j = 0; j < wrappedLines.length; j++) {
-            page.drawText(wrappedLines[j], {
-              x: j === 0 ? currentX : x + 10,
-              y: currentY - (j * 10),
-              size: fontSize,
-              font,
-              color: textColor,
-            });
-            
-            if (j === wrappedLines.length - 1) {
-              if (i === parts.length - 1) {
-                // Last part, move to next line
-                currentY -= (j * 10) + 14;
-              } else if (j > 0) {
-                // Multi-line part, reset X position
-                currentX = x + 10;
-                currentY -= j * 10;
-              } else {
-                // Single line part, update X position
-                currentX += font.widthOfTextAtSize(wrappedLines[j], fontSize);
-              }
-            }
-          }
+          // Draw this part of the text
+          page.drawText(parts[i], {
+            x: currentX,
+            y: currentY,
+            size: fontSize,
+            font: font,
+            color: textColor,
+          });
           
+          // Move the x position for the next part
+          currentX += font.widthOfTextAtSize(parts[i], fontSize);
           isInBold = !isInBold;
         }
+        
+        currentY -= 14; // Space after bullet point
       } else {
-        // Regular bullet point without bold text
-        const wrappedLines = wrapText(textAfterBullet, regularFont, 8, maxWidth - 10);
+        // Handle text wrapping for bullet points
+        const wrappedLines = wrapText(textAfterBullet, regularFont, 9, maxWidth - 10);
         for (let i = 0; i < wrappedLines.length; i++) {
           page.drawText(wrappedLines[i], {
-            x: x + 10,
-            y: currentY - (i * 10),
-            size: 8,
+            x: x + 10, // Indent after bullet
+            y: currentY - (i * 12),
+            size: 9,
             font: regularFont,
             color: textColor,
           });
           
+          // Only adjust Y position after all wrapped lines are drawn
           if (i === wrappedLines.length - 1) {
-            currentY -= (i * 10) + 14;
+            currentY -= (i * 12) + 14;
           }
         }
       }
     }
-    // Check if this is a line with bold markers
+    // Check if this is a line with ** markers (skills, etc.)
     else if (line.includes('**')) {
+      // Process the line to handle ** markers
       const parts = line.split('**');
       let currentX = x;
       let isInBold = false;
@@ -993,52 +1074,40 @@ function formatTextWithStyling(
           continue;
         }
         
-        // Wrap this part of text
+        // Choose font and size based on whether this part should be bold
         const font = isInBold ? boldFont : regularFont;
-        const fontSize = isInBold ? 9 : 8;
-        const wrappedLines = wrapText(parts[i], font, fontSize, maxWidth);
+        const fontSize = isInBold ? 9 : 9; // Same size for consistency, but bold for emphasis
         
-        for (let j = 0; j < wrappedLines.length; j++) {
-          page.drawText(wrappedLines[j], {
-            x: j === 0 ? currentX : x,
-            y: currentY - (j * 10),
-            size: fontSize,
-            font,
-            color: textColor,
-          });
-          
-          if (j === wrappedLines.length - 1) {
-            if (i === parts.length - 1) {
-              // Last part, move to next line
-              currentY -= (j * 10) + 14;
-            } else if (j > 0) {
-              // Multi-line part, reset X position
-              currentX = x;
-              currentY -= j * 10;
-            } else {
-              // Single line part, update X position
-              currentX += font.widthOfTextAtSize(wrappedLines[j], fontSize);
-            }
-          }
-        }
+        // Draw this part of the text
+        page.drawText(parts[i], {
+          x: currentX,
+          y: currentY,
+          size: fontSize,
+          font: font,
+          color: textColor,
+        });
         
+        // Move the x position for the next part
+        currentX += font.widthOfTextAtSize(parts[i], fontSize);
         isInBold = !isInBold;
       }
+      
+      currentY -= 14; // Space after line
     }
     // Regular text
     else {
-      const wrappedLines = wrapText(line, regularFont, 8, maxWidth);
+      const wrappedLines = wrapText(line, regularFont, 9, maxWidth);
       for (let i = 0; i < wrappedLines.length; i++) {
         page.drawText(wrappedLines[i], {
           x,
-          y: currentY - (i * 10),
-          size: 8,
+          y: currentY - (i * 12),
+          size: 9,
           font: regularFont,
           color: textColor,
         });
         
         if (i === wrappedLines.length - 1) {
-          currentY -= (i * 10) + 14;
+          currentY -= (i * 12) + 14;
         }
       }
     }
