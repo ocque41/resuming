@@ -476,13 +476,10 @@ export async function modifyPDFWithOptimizedContent(
     const { leftColumnSections, rightColumnSections } = parseOptimizedText(optimizedText);
     
     // Load fonts
-    const fontBytes = await fetch('/fonts/Roboto-Regular.ttf').then(res => res.arrayBuffer());
-    const boldFontBytes = await fetch('/fonts/Roboto-Bold.ttf').then(res => res.arrayBuffer());
-    const italicFontBytes = await fetch('/fonts/Roboto-Italic.ttf').then(res => res.arrayBuffer());
-    
-    const regularFont = await doc.embedFont(fontBytes);
-    const boldFont = await doc.embedFont(boldFontBytes);
-    const italicFont = await doc.embedFont(italicFontBytes);
+    // Use StandardFonts instead of trying to load external fonts
+    const regularFont = await doc.embedFont(StandardFonts.Helvetica);
+    const boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
+    const italicFont = await doc.embedFont(StandardFonts.HelveticaOblique);
     const titleFont = boldFont;
     
     // Set default colors
