@@ -125,7 +125,10 @@ export async function optimizeCV(
       - Do NOT include placeholder text like "*No previous work experience provided on the original CV*".
       - Maintain professional language throughout.
       - Eliminate first-person pronouns (I, me, my).
-      - Use bullet points for achievements and responsibilities.
+      - Use bullet points for ALL achievements, responsibilities, and skills.
+      - ALWAYS use a hyphen followed by a space "- " for bullet points, NOT asterisks or other symbols.
+      - Ensure there is proper spacing between bullet points - each bullet point should be on its own line.
+      - NEVER combine multiple bullet points on the same line.
       - Quantify achievements where possible (%, $, numbers).
       - Focus on impact and results, not just responsibilities.
       - Ensure all dates are in a consistent format.
@@ -136,6 +139,8 @@ export async function optimizeCV(
       - Ensure proper spelling and grammar.
       - Use ** around text that should be emphasized or bold (e.g., **Important Skill**).
       - Make section titles clear and prominent.
+      - For skills sections, use bullet points for each skill or group of related skills.
+      - Ensure each bullet point is concise and focused on a single achievement or skill.
 
 ${formattingInstructions}
 

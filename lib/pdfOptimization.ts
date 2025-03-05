@@ -152,7 +152,7 @@ function ensureSinglePage(leftColumnSections: Section[], rightColumnSections: Se
     let length = 0;
     for (const section of sections) {
       // Count title (headers take more space)
-      length += section.title.length * 1.5;
+      length += section.title.length * 2;
       
       // Count content lines
       const contentLines = section.content.split('\n');
@@ -161,6 +161,9 @@ function ensureSinglePage(leftColumnSections: Section[], rightColumnSections: Se
           // Bullet points and indented content take more space
           if (line.startsWith('•') || line.startsWith('-') || line.startsWith('  ')) {
             length += line.length * 1.2;
+          } else if (line.includes('**')) {
+            // Bold text takes more space
+            length += line.length * 1.3;
           } else {
             length += line.length;
           }
@@ -174,9 +177,9 @@ function ensureSinglePage(leftColumnSections: Section[], rightColumnSections: Se
   const rightLength = estimateContentLength(rightColumnSections);
   
   // Define maximum length thresholds (these values are approximate)
-  const MAX_LEFT_COLUMN_LENGTH = 3000;
-  const MAX_RIGHT_COLUMN_LENGTH = 3500;
-  const MAX_TOTAL_LENGTH = 6000;
+  const MAX_LEFT_COLUMN_LENGTH = 3200;
+  const MAX_RIGHT_COLUMN_LENGTH = 3800;
+  const MAX_TOTAL_LENGTH = 6500;
   
   console.log(`Estimated content length - Left: ${leftLength}, Right: ${rightLength}, Total: ${leftLength + rightLength}`);
   
@@ -186,90 +189,103 @@ function ensureSinglePage(leftColumnSections: Section[], rightColumnSections: Se
     
     // Define a function to trim a section
     const trimSection = (section: Section): boolean => {
-      // Don't trim important sections like contact info or summary
+      // Don't trim important sections like contact info, summary, or education
       if (
         section.title.toLowerCase().includes('contact') || 
         section.title.toLowerCase().includes('summary') ||
-        section.title.toLowerCase().includes('profile')
+        section.title.toLowerCase().includes('profile') ||
+        section.title.toLowerCase().includes('education')
       ) {
         return false;
       }
       
       const lines = section.content.split('\n');
       
-      // If section has more than 5 lines, trim it
-      if (lines.length > 5) {
-        // Keep first 4 lines and add "..." as the last line
-        section.content = lines.slice(0, 4).join('\n') + '\n...';
+      // If section has more than 6 bullet points, trim it
+      let bulletPointCount = 0;
+      for (const line of lines) {
+        if (line.trim().startsWith('-') || line.trim().startsWith('•')) {
+          bulletPointCount++;
+        }
+      }
+      
+      if (bulletPointCount > 6) {
+        // Keep only the first 6 bullet points
+        let newContent = '';
+        let currentBulletCount = 0;
+        
+        for (const line of lines) {
+          if (line.trim().startsWith('-') || line.trim().startsWith('•')) {
+            currentBulletCount++;
+            if (currentBulletCount <= 6) {
+              newContent += line + '\n';
+            }
+          } else if (!line.trim().startsWith('-') && !line.trim().startsWith('•')) {
+            // Keep non-bullet point lines
+            newContent += line + '\n';
+          }
+        }
+        
+        section.content = newContent.trim();
+        console.log(`Trimmed section "${section.title}" from ${bulletPointCount} to 6 bullet points`);
+        return true;
+      }
+      
+      // If section has more than 10 lines, trim it
+      if (lines.length > 10) {
+        section.content = lines.slice(0, 10).join('\n');
+        console.log(`Trimmed section "${section.title}" from ${lines.length} to 10 lines`);
         return true;
       }
       
       return false;
     };
     
-    // Sort sections by length to trim the longest ones first
-    const sortSectionsByLength = (sections: Section[]): Section[] => {
-      return [...sections].sort((a, b) => {
-        return b.content.length - a.content.length;
+    // First, try to trim sections in the right column (usually contains work experience)
+    let trimmed = false;
+    for (const section of rightColumnSections) {
+      if (trimSection(section)) {
+        trimmed = true;
+      }
+    }
+    
+    // If right column is still too long, try more aggressive trimming
+    if (estimateContentLength(rightColumnSections) > MAX_RIGHT_COLUMN_LENGTH && rightColumnSections.length > 1) {
+      // Sort sections by length (descending)
+      rightColumnSections.sort((a, b) => {
+        const aLength = a.content.split('\n').length;
+        const bLength = b.content.split('\n').length;
+        return bLength - aLength;
       });
-    };
-    
-    // Try to balance columns if one is much longer than the other
-    if (leftLength > rightLength * 1.5) {
-      // Move the shortest section from left to right
-      const sortedLeft = sortSectionsByLength(leftColumnSections).reverse();
-      if (sortedLeft.length > 1) {
-        const sectionToMove = sortedLeft[0];
-        leftColumnSections.splice(leftColumnSections.indexOf(sectionToMove), 1);
-        rightColumnSections.push(sectionToMove);
-        console.log(`Moved section "${sectionToMove.title}" from left to right column to balance length`);
-      }
-    } else if (rightLength > leftLength * 1.5) {
-      // Move the shortest section from right to left
-      const sortedRight = sortSectionsByLength(rightColumnSections).reverse();
-      if (sortedRight.length > 1) {
-        const sectionToMove = sortedRight[0];
-        rightColumnSections.splice(rightColumnSections.indexOf(sectionToMove), 1);
-        leftColumnSections.push(sectionToMove);
-        console.log(`Moved section "${sectionToMove.title}" from right to left column to balance length`);
-      }
-    }
-    
-    // Trim sections if still too long
-    let leftTrimmed = false;
-    let rightTrimmed = false;
-    
-    if (leftLength > MAX_LEFT_COLUMN_LENGTH) {
-      const sortedLeft = sortSectionsByLength(leftColumnSections);
-      for (const section of sortedLeft) {
-        if (trimSection(section)) {
-          leftTrimmed = true;
-          break;
-        }
-      }
-    }
-    
-    if (rightLength > MAX_RIGHT_COLUMN_LENGTH) {
-      const sortedRight = sortSectionsByLength(rightColumnSections);
-      for (const section of sortedRight) {
-        if (trimSection(section)) {
-          rightTrimmed = true;
-          break;
-        }
-      }
-    }
-    
-    // If we trimmed any sections, recalculate length
-    if (leftTrimmed || rightTrimmed) {
-      const newLeftLength = estimateContentLength(leftColumnSections);
-      const newRightLength = estimateContentLength(rightColumnSections);
-      console.log(`After trimming - Left: ${newLeftLength}, Right: ${newRightLength}, Total: ${newLeftLength + newRightLength}`);
       
-      // If still too long, recursively trim more
-      if (newLeftLength > MAX_LEFT_COLUMN_LENGTH || newRightLength > MAX_RIGHT_COLUMN_LENGTH || (newLeftLength + newRightLength) > MAX_TOTAL_LENGTH) {
-        ensureSinglePage(leftColumnSections, rightColumnSections);
+      // Trim the longest section more aggressively
+      const longestSection = rightColumnSections[0];
+      if (!longestSection.title.toLowerCase().includes('summary') && 
+          !longestSection.title.toLowerCase().includes('profile')) {
+        const lines = longestSection.content.split('\n');
+        if (lines.length > 5) {
+          longestSection.content = lines.slice(0, 5).join('\n');
+          console.log(`Aggressively trimmed section "${longestSection.title}" to 5 lines`);
+          trimmed = true;
+        }
       }
     }
+    
+    // If left column is too long, trim it as well
+    if (estimateContentLength(leftColumnSections) > MAX_LEFT_COLUMN_LENGTH) {
+      for (const section of leftColumnSections) {
+        if (trimSection(section)) {
+          trimmed = true;
+        }
+      }
+    }
+    
+    // If we've trimmed content, check if we need to balance columns
+    if (trimmed) {
+      balanceColumns(leftColumnSections, rightColumnSections);
+    }
+    
+    console.log(`After trimming - Left: ${estimateContentLength(leftColumnSections)}, Right: ${estimateContentLength(rightColumnSections)}, Total: ${estimateContentLength(leftColumnSections) + estimateContentLength(rightColumnSections)}`);
   }
 }
 
@@ -446,8 +462,8 @@ function wrapText(text: string, font: PDFFont, fontSize: number, maxWidth: numbe
  * Update the sanitizeText function to be more aggressive
  */
 function sanitizeText(text: string): string {
-  // Remove any control characters or non-printable characters
-  return text.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
+  // Remove control characters and non-printable characters
+  return text.replace(/[\x00-\x09\x0B\x0C\x0E-\x1F\x7F]/g, '');
 }
 
 // Helper function to split text into lines that fit within a given width
@@ -590,9 +606,9 @@ export async function modifyPDFWithOptimizedContent(
         // Draw a colored rectangle at the top
         currentPage.drawRectangle({
           x: margin,
-          y: height - margin - 30, // Increased height for better visibility
+          y: height - margin - 35, // Increased height for better visibility
           width: width - 2 * margin,
-          height: 30, // Increased from 25 to 30
+          height: 35, // Increased for better visibility
           color: accentColor,
         });
         
@@ -601,20 +617,20 @@ export async function modifyPDFWithOptimizedContent(
           // Draw the name
           currentPage.drawText(personName, {
             x: margin + 10,
-            y: height - margin - 20, // Adjusted for better vertical centering
-            size: 18, // Increased from 16 to 18
+            y: height - margin - 22, // Adjusted for better vertical centering
+            size: 20, // Increased for better visibility
             font: titleFont,
             color: rgb(1, 1, 1), // White text on colored background
           });
           
           // Calculate position for "Resume" text
-          const nameWidth = titleFont.widthOfTextAtSize(personName, 18);
+          const nameWidth = titleFont.widthOfTextAtSize(personName, 20);
           
           // Draw "Resume" next to the name
-          currentPage.drawText(" | Resume", {
+          currentPage.drawText(" Resume", {
             x: margin + 10 + nameWidth,
-            y: height - margin - 20, // Same y position as name
-            size: 18, // Increased from 16 to 18
+            y: height - margin - 22, // Same y position as name
+            size: 20, // Same size as name
             font: regularFont,
             color: rgb(1, 1, 1), // White text on colored background
           });
@@ -622,10 +638,21 @@ export async function modifyPDFWithOptimizedContent(
           // Fallback if name not found
           currentPage.drawText("Resume", {
             x: margin + 10,
-            y: height - margin - 20,
-            size: 18, // Increased from 16 to 18
+            y: height - margin - 22,
+            size: 20,
             font: titleFont,
             color: rgb(1, 1, 1), // White text on colored background
+          });
+        }
+        
+        // Draw contact info below the header if available
+        if (contactInfo) {
+          currentPage.drawText(contactInfo, {
+            x: margin,
+            y: height - margin - 45, // Position below the header
+            size: 10,
+            font: regularFont,
+            color: textColor,
           });
         }
       } catch (error) {
@@ -647,36 +674,52 @@ export async function modifyPDFWithOptimizedContent(
           contactInfo = contactMatch[1].trim();
         }
         
-        // Center the name and Resume title at the top
-        const titleText = personName ? `${personName} | Resume` : "Resume";
-        const titleWidth = titleFont.widthOfTextAtSize(titleText, 20);
-        const titleX = (width - titleWidth) / 2;
-        
-        // Draw name centered
-        currentPage.drawText(titleText, {
-          x: titleX,
-          y: height - margin,
-          size: 20,
-          font: titleFont,
-          color: textColor,
-        });
-        
-        // Draw a horizontal line below the name
+        // Draw a subtle line below the header
         currentPage.drawLine({
-          start: { x: margin, y: height - margin - 12 },
-          end: { x: width - margin, y: height - margin - 12 },
-          thickness: 1.5,
+          start: { x: margin, y: height - margin - 35 },
+          end: { x: width - margin, y: height - margin - 35 },
+          thickness: 1,
           color: accentColor,
         });
         
-        // Draw contact info below the line if available
+        // Center the name and Resume title at the top
+        if (personName) {
+          // Calculate center position
+          const nameText = personName + " Resume";
+          const nameWidth = titleFont.widthOfTextAtSize(nameText, 20);
+          const centerX = (width - nameWidth) / 2;
+          
+          // Draw the name and Resume centered
+          currentPage.drawText(nameText, {
+            x: centerX,
+            y: height - margin - 22,
+            size: 20,
+            font: titleFont,
+            color: accentColor,
+          });
+        } else {
+          // Fallback if name not found
+          const resumeText = "Resume";
+          const resumeWidth = titleFont.widthOfTextAtSize(resumeText, 20);
+          const centerX = (width - resumeWidth) / 2;
+          
+          currentPage.drawText(resumeText, {
+            x: centerX,
+            y: height - margin - 22,
+            size: 20,
+            font: titleFont,
+            color: accentColor,
+          });
+        }
+        
+        // Draw contact info below the header if available
         if (contactInfo) {
           const contactWidth = regularFont.widthOfTextAtSize(contactInfo, 10);
-          const contactX = (width - contactWidth) / 2;
+          const centerX = (width - contactWidth) / 2;
           
           currentPage.drawText(contactInfo, {
-            x: contactX,
-            y: height - margin - 25,
+            x: centerX,
+            y: height - margin - 45, // Position below the header
             size: 10,
             font: regularFont,
             color: textColor,
@@ -701,41 +744,65 @@ export async function modifyPDFWithOptimizedContent(
           contactInfo = contactMatch[1].trim();
         }
         
-        // Create combined title text
-        const titleText = personName ? `${personName} | Resume` : "Resume";
-        const titleWidth = titleFont.widthOfTextAtSize(titleText, 20);
-        const titleX = (width - titleWidth) / 2;
-        
-        // Draw name in large font, centered
-        currentPage.drawText(titleText, {
-          x: titleX,
-          y: height - margin,
-          size: 20,
-          font: titleFont,
-          color: textColor,
-        });
-        
-        // Draw contact info centered below name
-        if (contactInfo) {
-          const contactWidth = regularFont.widthOfTextAtSize(contactInfo, 10);
-          const contactX = (width - contactWidth) / 2;
+        // Draw name with Resume next to it
+        if (personName) {
+          // Draw the name
+          currentPage.drawText(personName, {
+            x: margin,
+            y: height - margin - 20,
+            size: 22, // Larger for traditional style
+            font: titleFont,
+            color: accentColor,
+          });
           
+          // Calculate position for "Resume" text
+          const nameWidth = titleFont.widthOfTextAtSize(personName, 22);
+          
+          // Draw "Resume" next to the name
+          currentPage.drawText(" Resume", {
+            x: margin + nameWidth,
+            y: height - margin - 20, // Same y position as name
+            size: 22, // Same size as name
+            font: regularFont,
+            color: textColor,
+          });
+          
+          // Draw a line below the name
+          currentPage.drawLine({
+            start: { x: margin, y: height - margin - 30 },
+            end: { x: width - margin, y: height - margin - 30 },
+            thickness: 2,
+            color: accentColor,
+          });
+        } else {
+          // Fallback if name not found
+          currentPage.drawText("Resume", {
+            x: margin,
+            y: height - margin - 20,
+            size: 22,
+            font: titleFont,
+            color: accentColor,
+          });
+          
+          // Draw a line below the title
+          currentPage.drawLine({
+            start: { x: margin, y: height - margin - 30 },
+            end: { x: width - margin, y: height - margin - 30 },
+            thickness: 2,
+            color: accentColor,
+          });
+        }
+        
+        // Draw contact info below the header if available
+        if (contactInfo) {
           currentPage.drawText(contactInfo, {
-            x: contactX,
-            y: height - margin - 25,
+            x: margin,
+            y: height - margin - 45, // Position below the header
             size: 10,
             font: regularFont,
             color: textColor,
           });
         }
-        
-        // Draw a horizontal line below contact info
-        currentPage.drawLine({
-          start: { x: margin, y: height - margin - 35 },
-          end: { x: width - margin, y: height - margin - 35 },
-          thickness: 1.5,
-          color: accentColor,
-        });
       } catch (error) {
         console.error("Error drawing header:", error);
       }
@@ -763,19 +830,19 @@ export async function modifyPDFWithOptimizedContent(
     // Draw left column sections
     for (const section of leftColumnSections) {
       // Draw section header with improved contrast
-      // Add a background rectangle for the section title
+      // Add a background rectangle for the section title with better contrast
       currentPage.drawRectangle({
         x: margin - 2,
         y: leftColumnY - 14,
         width: leftColumnWidth + 4,
-        height: 20, // Taller for better visibility
-        color: rgb(0.97, 0.97, 0.99), // Very light background color
+        height: 22, // Taller for better visibility
+        color: rgb(0.95, 0.95, 0.98), // Very light background color
       });
       
       currentPage.drawText(section.title.toUpperCase(), {
         x: margin,
         y: leftColumnY,
-        size: 12, // Slightly larger for better readability
+        size: 13, // Larger for better readability
         font: boldFont,
         color: accentColor, // Keep accent color for headers
       });
@@ -783,16 +850,16 @@ export async function modifyPDFWithOptimizedContent(
       // Draw underline for section header based on header style
       if (headerStyle === 'traditional') {
         currentPage.drawLine({
-          start: { x: margin, y: leftColumnY - 4 },
-          end: { x: margin + leftColumnWidth, y: leftColumnY - 4 },
-          thickness: 1.5,
+          start: { x: margin, y: leftColumnY - 5 },
+          end: { x: margin + leftColumnWidth, y: leftColumnY - 5 },
+          thickness: 1.8,
           color: accentColor,
         });
       } else if (headerStyle === 'modern') {
         currentPage.drawLine({
-          start: { x: margin, y: leftColumnY - 4 },
-          end: { x: margin + 60, y: leftColumnY - 4 }, // Longer underline
-          thickness: 2,
+          start: { x: margin, y: leftColumnY - 5 },
+          end: { x: margin + 80, y: leftColumnY - 5 }, // Longer underline
+          thickness: 2.2,
           color: accentColor,
         });
       } else if (headerStyle === 'minimal') {
@@ -800,12 +867,12 @@ export async function modifyPDFWithOptimizedContent(
         currentPage.drawCircle({
           x: margin - 5,
           y: leftColumnY - 2,
-          size: 3,
+          size: 4,
           color: accentColor,
         });
       }
       
-      leftColumnY -= 25; // More space after section title
+      leftColumnY -= 28; // More space after section title
       
       // Use the new formatTextWithStyling function to draw section content
       leftColumnY = formatTextWithStyling(
@@ -821,25 +888,25 @@ export async function modifyPDFWithOptimizedContent(
       );
       
       // Add space after section
-      leftColumnY -= 20; // More space between sections
+      leftColumnY -= 25; // More space between sections
     }
     
     // Draw right column sections
     for (const section of rightColumnSections) {
       // Draw section header with improved contrast
-      // Add a background rectangle for the section title
+      // Add a background rectangle for the section title with better contrast
       currentPage.drawRectangle({
         x: rightColumnX - 2,
         y: rightColumnY - 14,
         width: rightColumnWidth + 4,
-        height: 20, // Taller for better visibility
-        color: rgb(0.97, 0.97, 0.99), // Very light background color
+        height: 22, // Taller for better visibility
+        color: rgb(0.95, 0.95, 0.98), // Very light background color
       });
       
       currentPage.drawText(section.title.toUpperCase(), {
         x: rightColumnX,
         y: rightColumnY,
-        size: 12, // Slightly larger for better readability
+        size: 13, // Larger for better readability
         font: boldFont,
         color: accentColor, // Keep accent color for headers
       });
@@ -847,16 +914,16 @@ export async function modifyPDFWithOptimizedContent(
       // Draw underline for section header based on header style
       if (headerStyle === 'traditional') {
         currentPage.drawLine({
-          start: { x: rightColumnX, y: rightColumnY - 4 },
-          end: { x: rightColumnX + rightColumnWidth, y: rightColumnY - 4 },
-          thickness: 1.5,
+          start: { x: rightColumnX, y: rightColumnY - 5 },
+          end: { x: rightColumnX + rightColumnWidth, y: rightColumnY - 5 },
+          thickness: 1.8,
           color: accentColor,
         });
       } else if (headerStyle === 'modern') {
         currentPage.drawLine({
-          start: { x: rightColumnX, y: rightColumnY - 4 },
-          end: { x: rightColumnX + 60, y: rightColumnY - 4 }, // Longer underline
-          thickness: 2,
+          start: { x: rightColumnX, y: rightColumnY - 5 },
+          end: { x: rightColumnX + 80, y: rightColumnY - 5 }, // Longer underline
+          thickness: 2.2,
           color: accentColor,
         });
       } else if (headerStyle === 'minimal') {
@@ -864,12 +931,12 @@ export async function modifyPDFWithOptimizedContent(
         currentPage.drawCircle({
           x: rightColumnX - 5,
           y: rightColumnY - 2,
-          size: 3,
+          size: 4,
           color: accentColor,
         });
       }
       
-      rightColumnY -= 25; // More space after section title
+      rightColumnY -= 28; // More space after section title
       
       // Use the new formatTextWithStyling function to draw section content
       rightColumnY = formatTextWithStyling(
@@ -885,7 +952,7 @@ export async function modifyPDFWithOptimizedContent(
       );
       
       // Add space after section
-      rightColumnY -= 20; // More space between sections
+      rightColumnY -= 25; // More space between sections
     }
     
     // Save the PDF
@@ -938,24 +1005,32 @@ const formatTextWithStyling = (
   accentColor: RGB
 ) => {
   // Sanitize text to remove control characters
-  const sanitizedText = text.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
+  text = sanitizeText(text);
   
-  const lines = sanitizedText.split("\n");
+  const fontSize = 10; // Increased from 9 to 10 for better readability
+  const lineHeight = fontSize * 1.5; // Increased line spacing for better readability
+  const bulletIndent = 10;
   let currentY = y;
-  const fontSize = 10; // Increased font size for better readability
-  const lineHeight = fontSize * 1.4; // Improved line spacing
   
-  for (let line of lines) {
-    line = line.trim();
-    if (line === "") {
-      currentY -= lineHeight * 0.7; // Smaller space for empty lines
+  // Split text into lines
+  const lines = text.split('\n');
+  
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i].trim();
+    if (!line) {
+      // Add space for empty lines
+      currentY -= lineHeight * 0.7;
       continue;
     }
     
-    // Check if line starts with a bullet point
-    const bulletMatch = line.match(/^[-•*]\s+(.*)/);
-    if (bulletMatch) {
-      // Draw bullet point with accent color
+    // Check if line is a bullet point
+    const isBulletPoint = line.startsWith('- ') || line.startsWith('• ');
+    
+    if (isBulletPoint) {
+      // Remove the bullet marker for processing
+      let bulletText = line.startsWith('- ') ? line.substring(2) : line.substring(2);
+      
+      // Draw the bullet point with accent color
       page.drawCircle({
         x: x + 3,
         y: currentY - fontSize / 3,
@@ -963,13 +1038,11 @@ const formatTextWithStyling = (
         color: accentColor,
       });
       
-      // Process text after bullet point
-      const bulletText = bulletMatch[1].trim();
-      let remainingText = bulletText;
-      let xOffset = 12; // Indent for bullet points
+      const xOffset = bulletIndent;
       
-      // Check for bold text within bullet point
-      if (bulletText.includes("**")) {
+      // Check if bullet text contains bold markers
+      if (bulletText.includes('**')) {
+        // Handle bold text in bullet points
         const parts = bulletText.split(/\*\*(.*?)\*\*/g);
         let currentX = x + xOffset;
         
@@ -998,7 +1071,7 @@ const formatTextWithStyling = (
           currentX += textWidth;
         }
         
-        currentY -= lineHeight;
+        currentY -= lineHeight * 1.2; // Add more space after bullet points
       } else {
         // Handle regular bullet point text with wrapping
         const words = bulletText.split(" ");
@@ -1038,7 +1111,7 @@ const formatTextWithStyling = (
             color: color,
           });
           
-          currentY -= lineHeight;
+          currentY -= lineHeight * 1.2; // Add more space after bullet points
         }
       }
     } else if (line.includes("**")) {
@@ -1071,7 +1144,7 @@ const formatTextWithStyling = (
         currentX += textWidth;
       }
       
-      currentY -= lineHeight;
+      currentY -= lineHeight * 1.1; // Slightly more space after lines with bold text
     } else {
       // Handle regular text with wrapping
       const words = line.split(" ");
@@ -1111,7 +1184,7 @@ const formatTextWithStyling = (
           color: color,
         });
         
-        currentY -= lineHeight;
+        currentY -= lineHeight * 1.1; // Slightly more space after regular text
       }
     }
   }
@@ -1124,30 +1197,60 @@ function balanceColumns(leftColumnSections: Section[], rightColumnSections: Sect
   const leftLength = estimateContentLength(leftColumnSections);
   const rightLength = estimateContentLength(rightColumnSections);
   
+  console.log(`Before balancing - Left column: ${leftLength}, Right column: ${rightLength}`);
+  
   // If right column is significantly longer than left column
-  if (rightLength > leftLength * 1.5 && rightColumnSections.length > 1) {
-    // Move the shortest section from right to left
-    const shortestSection = rightColumnSections
-      .map((section, index) => ({ section, index, length: estimateContentLength([section]) }))
-      .sort((a, b) => a.length - b.length)[0];
+  if (rightLength > leftLength * 1.3 && rightColumnSections.length > 1) {
+    // Find the shortest section from right column that's not a key section
+    const movableSections = rightColumnSections
+      .map((section, index) => ({ 
+        section, 
+        index, 
+        length: estimateContentLength([section]),
+        isKeySectionTitle: /EXPERIENCE|PROJECT|ACHIEVEMENT/i.test(section.title)
+      }))
+      .filter(item => !item.isKeySectionTitle) // Don't move key sections
+      .sort((a, b) => a.length - b.length);
     
-    if (shortestSection) {
-      const section = rightColumnSections.splice(shortestSection.index, 1)[0];
+    if (movableSections.length > 0) {
+      const sectionToMove = movableSections[0];
+      console.log(`Moving section "${rightColumnSections[sectionToMove.index].title}" from right to left column`);
+      const section = rightColumnSections.splice(sectionToMove.index, 1)[0];
       leftColumnSections.push(section);
     }
   }
   
   // If left column is significantly longer than right column
-  if (leftLength > rightLength * 1.5 && leftColumnSections.length > 1) {
-    // Move the shortest section from left to right
-    const shortestSection = leftColumnSections
-      .map((section, index) => ({ section, index, length: estimateContentLength([section]) }))
-      .sort((a, b) => a.length - b.length)[0];
+  if (leftLength > rightLength * 1.3 && leftColumnSections.length > 1) {
+    // Find the shortest section from left column that's not a key section
+    const movableSections = leftColumnSections
+      .map((section, index) => ({ 
+        section, 
+        index, 
+        length: estimateContentLength([section]),
+        isKeySectionTitle: /EDUCATION|SKILL|LANGUAGE|CERTIFICATION/i.test(section.title)
+      }))
+      .filter(item => !item.isKeySectionTitle) // Don't move key sections
+      .sort((a, b) => a.length - b.length);
     
-    if (shortestSection) {
-      const section = leftColumnSections.splice(shortestSection.index, 1)[0];
+    if (movableSections.length > 0) {
+      const sectionToMove = movableSections[0];
+      console.log(`Moving section "${leftColumnSections[sectionToMove.index].title}" from left to right column`);
+      const section = leftColumnSections.splice(sectionToMove.index, 1)[0];
       rightColumnSections.push(section);
     }
   }
+  
+  // Check if we need a second pass to balance further
+  const newLeftLength = estimateContentLength(leftColumnSections);
+  const newRightLength = estimateContentLength(rightColumnSections);
+  
+  // If still significantly imbalanced, try one more adjustment
+  if ((newRightLength > newLeftLength * 1.4 || newLeftLength > newRightLength * 1.4) && 
+      (leftColumnSections.length > 1 && rightColumnSections.length > 1)) {
+    balanceColumns(leftColumnSections, rightColumnSections);
+  }
+  
+  console.log(`After balancing - Left column: ${estimateContentLength(leftColumnSections)}, Right column: ${estimateContentLength(rightColumnSections)}`);
 }
 
