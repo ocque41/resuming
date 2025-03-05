@@ -87,7 +87,7 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
         )}
         
         {analysis && (
-          <Article className="mt-6 p-5 border border-[#B4916C]/20 rounded-lg shadow-sm bg-gray-900/50">
+          <Article className="mt-6 p-5 border border-[#B4916C]/20 rounded-lg shadow-sm bg-[#050505]">
             <ArticleTitle className="text-lg font-semibold mb-3 text-[#B4916C]">CV Analysis Results</ArticleTitle>
             <ArticleMeta className="text-sm mb-4 flex items-center">
               <span className="font-medium mr-2 text-gray-300">ATS Score:</span>

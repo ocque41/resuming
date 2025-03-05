@@ -74,7 +74,7 @@ export default function TemplateSelector({
               ${selectedTemplateId === template.id 
                 ? 'ring-2 shadow-sm' 
                 : darkMode 
-                  ? 'border-gray-700 hover:border-gray-600' 
+                  ? 'border-[#333333] hover:border-[#444444]' 
                   : 'border-gray-200 hover:border-gray-300'}`}
             style={{
               borderColor: selectedTemplateId === template.id ? `${accentColor}` : '',

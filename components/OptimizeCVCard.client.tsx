@@ -48,7 +48,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         },
         body: JSON.stringify({
           fileName: selectedCV,
-          template: selectedTemplate,
+          templateId: selectedTemplate,
         }),
       });
 
