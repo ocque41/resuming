@@ -436,7 +436,20 @@ export default function JobsCard({ cvs }: JobsCardProps) {
   };
 
   return (
-    <Card className="mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg">
+    <Card className="mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg relative group">
+      {/* Coming Soon Overlay - Always visible on mobile, visible on hover for desktop */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-md z-10 flex items-center justify-center md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300">
+        <div className="text-center p-6">
+          <span className="inline-block px-4 py-2 bg-[#B4916C] text-black rounded-full text-lg font-bold mb-4">
+            Coming Soon
+          </span>
+          <p className="text-white text-lg mb-2">Job search feature is under development</p>
+          <p className="text-gray-300 text-sm max-w-md">
+            We're working hard to bring you the best job matching experience. Stay tuned for updates!
+          </p>
+        </div>
+      </div>
+
       <CardHeader className="bg-[#B4916C]/10 pb-4">
         <CardTitle className="text-xl font-bold text-[#B4916C]">Job Opportunities</CardTitle>
         <CardDescription className="text-gray-300">

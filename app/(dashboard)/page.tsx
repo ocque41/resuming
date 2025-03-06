@@ -79,7 +79,13 @@ export default function HomePage() {
           </Article>
           {/* Large Image Placeholder */}
           <div className="mt-8 flex justify-center">
-            <div className="w-full max-w-2xl h-96 bg-gray-300 rounded-lg"></div>
+            <div className="w-full max-w-2xl rounded-lg overflow-hidden shadow-xl">
+              <img 
+                src="/mockups/mockup1.png" 
+                alt="CV Optimizer Dashboard Preview" 
+                className="w-full h-auto object-cover"
+              />
+            </div>
           </div>
         </div>
       </section>
@@ -127,7 +133,7 @@ export default function HomePage() {
               </div>
               <div className="my-2 h-1 w-16 bg-[#E8DCC4] animate-pulse"></div>
               <p className="text-gray-300">
-                Receive personalized suggestions that fine-tune your CV to stand out in today’s competitive market.
+                Receive personalized suggestions that fine-tune your CV to stand out in today's competitive market.
               </p>
             </motion.div>
             {/* Card 3: Job Matching & Mapping */}
