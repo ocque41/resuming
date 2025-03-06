@@ -14,13 +14,28 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     
     const metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
     
+    // Check if optimization is already in progress and has been running for too long
+    if (metadata.optimizing && metadata.startTime) {
+      const startTime = new Date(metadata.startTime);
+      const currentTime = new Date();
+      const timeDiffMinutes = (currentTime.getTime() - startTime.getTime()) / (1000 * 60);
+      
+      // If optimization has been running for more than 5 minutes, reset it
+      if (timeDiffMinutes > 5) {
+        console.log(`Optimization for CV ${cvRecord.id} has been running for ${timeDiffMinutes.toFixed(2)} minutes. Resetting.`);
+        metadata.optimizing = false;
+        metadata.error = "Previous optimization attempt timed out";
+      }
+    }
+    
     // Add startTime to the metadata to track optimization progress
     const startTime = new Date().toISOString();
     const updatedMetadata = {
       ...metadata,
       optimizing: true,
       startTime: startTime,
-      progress: 10 // Initialize progress at 10%
+      progress: 10, // Initialize progress at 10%
+      error: null // Clear any previous errors
     };
     await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedMetadata));
     
@@ -66,6 +81,15 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     try {
       optimizationResult = await optimizeCV(cvRecord.rawText, selectedTemplate);
       console.log("AI optimization completed successfully");
+      
+      // Immediately check if we have valid optimized text
+      if (!optimizationResult || !optimizationResult.optimizedText || optimizationResult.optimizedText.trim().length === 0) {
+        console.error("Optimization returned empty or invalid text");
+        throw new Error("Optimization returned empty or invalid text");
+      }
+      
+      // Log the first part of the optimized text for debugging
+      console.log(`Optimized text preview: "${optimizationResult.optimizedText.substring(0, 100)}..."`);
     } catch (optimizeError) {
       console.error("Error during AI optimization:", optimizeError);
       throw optimizeError;
@@ -102,6 +126,7 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
       const progress70Metadata = {
         ...metadata,
         optimizing: true,
+        optimized: false, // Don't mark as optimized until the entire process is complete
         startTime: startTime,
         progress: 70,
         optimizedText: optimizedText // Save the optimized text here as well
@@ -196,6 +221,12 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     };
 
     try {
+      // Verify the metadata has the optimized text before saving
+      if (!newMetadata.optimizedText || newMetadata.optimizedText.trim().length === 0) {
+        console.error("Final metadata is missing optimized text");
+        throw new Error("Final metadata is missing optimized text");
+      }
+      
       await updateCVAnalysis(cvRecord.id, JSON.stringify(newMetadata));
       console.log(`CV optimization completed successfully for: ${cvRecord.id}`);
       console.log(`Optimized text saved (${optimizedText.length} characters)`);

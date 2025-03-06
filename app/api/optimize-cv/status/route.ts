@@ -12,6 +12,7 @@ interface CVMetadata {
   startTime?: string; // Track when optimization started
   error?: string; // Store any error messages
   optimizedPDFBase64?: string;
+  lastProgressUpdate?: string; // Track the last progress update time
   [key: string]: any; // Allow for additional properties
 }
 
@@ -84,6 +85,7 @@ export async function GET(request: NextRequest) {
         
         // Check if the optimization is still in progress despite being marked as complete
         if (metadata.optimizing) {
+          console.log(`CV ${fileName} is marked as both optimized and optimizing. Treating as in-progress.`);
           return NextResponse.json({
             status: "processing",
             progress: metadata.progress || 50
@@ -111,9 +113,21 @@ export async function GET(request: NextRequest) {
           }, { status: 500 });
         }
         
+        // Reset the optimization state to allow for a retry
+        metadata.optimized = false;
+        metadata.optimizing = false;
+        metadata.error = "Optimization completed but no optimized text was found";
+        
+        try {
+          await updateCVMetadata(String(cvRecord.id), metadata);
+          console.log(`Reset optimization state for ${fileName} to allow retry`);
+        } catch (updateError) {
+          console.error(`Error resetting optimization state for ${fileName}:`, updateError);
+        }
+        
         return NextResponse.json({
           status: "error",
-          error: "Optimization completed but no optimized text was found"
+          error: "Optimization completed but no optimized text was found. Please try again."
         }, { status: 500 });
       }
     }
@@ -130,6 +144,8 @@ export async function GET(request: NextRequest) {
         const timeDiffMinutes = (currentTime.getTime() - startTime.getTime()) / (1000 * 60);
         
         if (timeDiffMinutes > 5) {
+          console.log(`Optimization for ${fileName} has been running for ${timeDiffMinutes.toFixed(2)} minutes. Resetting.`);
+          
           // Reset the optimization state
           metadata.optimizing = false;
           metadata.error = "Optimization timed out after 5 minutes";
@@ -141,9 +157,44 @@ export async function GET(request: NextRequest) {
           
           return NextResponse.json({
             status: "error",
-            error: "Optimization timed out after 5 minutes"
+            error: "Optimization timed out after 5 minutes. Please try again."
           }, { status: 500 });
         }
+      }
+      
+      // Check if the progress has been stuck at the same value for too long
+      if (metadata.lastProgressUpdate) {
+        const lastUpdate = new Date(metadata.lastProgressUpdate);
+        const currentTime = new Date();
+        const timeDiffMinutes = (currentTime.getTime() - lastUpdate.getTime()) / (1000 * 60);
+        
+        // If progress has been stuck for more than 2 minutes, consider it stalled
+        if (timeDiffMinutes > 2) {
+          console.log(`Progress for ${fileName} has been stuck at ${progress}% for ${timeDiffMinutes.toFixed(2)} minutes. Resetting.`);
+          
+          // Reset the optimization state
+          metadata.optimizing = false;
+          metadata.error = `Optimization stalled at ${progress}% for over 2 minutes`;
+          try {
+            await updateCVMetadata(String(cvRecord.id), metadata);
+          } catch (updateError) {
+            console.error(`Error updating metadata for stalled progress on ${fileName}:`, updateError);
+          }
+          
+          return NextResponse.json({
+            status: "error",
+            error: `Optimization stalled at ${progress}%. Please try again.`
+          }, { status: 500 });
+        }
+      }
+      
+      // Update the last progress update time
+      metadata.lastProgressUpdate = new Date().toISOString();
+      try {
+        await updateCVMetadata(String(cvRecord.id), metadata);
+      } catch (updateError) {
+        console.error(`Error updating lastProgressUpdate for ${fileName}:`, updateError);
+        // Continue despite this error
       }
       
       // Log the progress for debugging

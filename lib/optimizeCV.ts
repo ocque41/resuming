@@ -155,66 +155,99 @@ ${formattingInstructions}
     // Call OpenAI API
     console.log("Calling OpenAI API for CV optimization");
     
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "gpt-4-turbo-preview",
-        messages: [
-          {
-            role: "system",
-            content: "You are a professional CV/resume optimization expert."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 4000
-      })
-    });
+    // Add a timeout for the fetch request
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
     
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error("OpenAI API error:", errorData);
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: "gpt-4-turbo-preview",
+          messages: [
+            {
+              role: "system",
+              content: "You are a professional CV/resume optimization expert."
+            },
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 4000
+        }),
+        signal: controller.signal
+      });
+      
+      // Clear the timeout
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("OpenAI API error:", errorData);
+        
+        // Create a fallback optimized version
+        const fallbackText = createFormattedFallbackFromRawText(cvText);
+        return { 
+          optimizedText: fallbackText, 
+          error: `OpenAI API error: ${errorData.error?.message || response.statusText}` 
+        };
+      }
+      
+      const data = await response.json();
+      
+      // Verify we have a valid response
+      if (!data || !data.choices || !data.choices[0] || !data.choices[0].message || !data.choices[0].message.content) {
+        console.error("Invalid response from OpenAI API:", data);
+        const fallbackText = createFormattedFallbackFromRawText(cvText);
+        return { 
+          optimizedText: fallbackText, 
+          error: "Invalid response from OpenAI API" 
+        };
+      }
+      
+      let optimizedText = data.choices[0].message.content.trim();
+      
+      // Process any formatting markers
+      optimizedText = processFormattingMarkers(optimizedText);
+      
+      // Verify that the optimized content preserves important information
+      const contentVerification = verifyContentPreservation(cvText, optimizedText);
+      
+      if (!contentVerification.preserved) {
+        console.warn("Content verification failed. Missing items:", contentVerification.missingItems);
+        
+        // If critical information is missing, use a fallback approach
+        if (contentVerification.missingItems.includes('Name') || 
+            contentVerification.missingItems.includes('Contact Information')) {
+          console.warn("Critical information missing, using fallback optimization");
+          const fallbackText = createFormattedFallbackFromRawText(cvText);
+          return { 
+            optimizedText: fallbackText, 
+            error: `Content verification failed: Missing ${contentVerification.missingItems.join(', ')}` 
+          };
+        }
+      }
+      
+      return { optimizedText };
+    } catch (error: unknown) {
+      console.error("Error calling OpenAI API:", error);
+      
+      // Clear the timeout if it's an abort error
+      clearTimeout(timeoutId);
       
       // Create a fallback optimized version
       const fallbackText = createFormattedFallbackFromRawText(cvText);
       return { 
         optimizedText: fallbackText, 
-        error: `OpenAI API error: ${errorData.error?.message || response.statusText}` 
+        error: `Error calling OpenAI API: ${error instanceof Error ? error.message : String(error)}` 
       };
     }
-    
-    const data = await response.json();
-    let optimizedText = data.choices[0].message.content.trim();
-    
-    // Process any formatting markers
-    optimizedText = processFormattingMarkers(optimizedText);
-    
-    // Verify that the optimized content preserves important information
-    const contentVerification = verifyContentPreservation(cvText, optimizedText);
-    
-    if (!contentVerification.preserved) {
-      console.warn("Content verification failed. Missing items:", contentVerification.missingItems);
-      
-      // If critical information is missing, use a fallback approach
-      if (contentVerification.missingItems.includes('Name') || 
-          contentVerification.missingItems.includes('Contact Information')) {
-        console.warn("Critical information missing, using fallback optimization");
-        const fallbackText = createFormattedFallbackFromRawText(cvText);
-        return { 
-          optimizedText: fallbackText, 
-          error: `Content verification failed: Missing ${contentVerification.missingItems.join(', ')}` 
-        };
-      }
-    }
-    
-    return { optimizedText };
   } catch (error: any) {
     console.error("Error in CV optimization:", error.message);
     
@@ -488,5 +521,5 @@ function createFormattedFallbackFromRawText(rawText: string): string {
   }
   
   return formattedText;
-  }
+}
   

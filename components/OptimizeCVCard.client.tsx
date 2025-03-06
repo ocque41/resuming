@@ -85,8 +85,8 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       // Increment polling attempts
       setPollingAttempts(prev => prev + 1);
       
-      // If we've been polling for too long (30 attempts = 1 minute), stop
-      if (pollingAttempts > 30) {
+      // If we've been polling for too long (60 attempts = 2 minutes), stop
+      if (pollingAttempts > 60) {
         throw new Error("Optimization is taking too long. Please try again later.");
       }
       
@@ -98,12 +98,20 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         console.error("Error response from status API:", errorData);
         
         // If we need to restart optimization, do it automatically
-        if (errorData.error && errorData.error.includes("needs to be restarted")) {
+        if (errorData.error && (
+          errorData.error.includes("needs to be restarted") || 
+          errorData.error.includes("timed out") || 
+          errorData.error.includes("stalled") ||
+          errorData.error.includes("Please try again")
+        )) {
           console.log("Optimization needs to be restarted, restarting...");
           setIsPolling(false);
+          setOptimizationError("Optimization process stalled. Restarting automatically...");
+          
+          // Wait 2 seconds before restarting
           setTimeout(() => {
             handleOptimize();
-          }, 1000);
+          }, 2000);
           return;
         }
         
@@ -343,12 +351,22 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
 
           {/* Error Message */}
           {optimizationError && (
-            <div className="p-3 bg-red-900/30 border border-red-700 rounded-md text-red-400 text-sm mt-4">
-              <div className="flex items-start">
-                <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
-                <span>{optimizationError}</span>
-              </div>
-            </div>
+            <Alert className="mb-4 bg-red-900/20 border-red-800">
+              <AlertCircle className="h-4 w-4 text-red-500" />
+              <AlertDescription className="text-red-300">
+                {optimizationError}
+                {!isOptimizing && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="ml-4 mt-2 bg-red-900/30 hover:bg-red-800/50 border-red-700"
+                    onClick={handleOptimize}
+                  >
+                    Retry
+                  </Button>
+                )}
+              </AlertDescription>
+            </Alert>
           )}
 
           {/* Success Message */}
