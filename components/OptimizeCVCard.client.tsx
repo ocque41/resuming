@@ -96,8 +96,8 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         setTimeout(() => pollOptimizationStatus(cv), 2000);
       } else if (data.status === "error") {
         throw new Error(data.error || "Optimization failed");
-      }
-    } catch (error) {
+        }
+      } catch (error) {
       console.error("Error polling optimization status:", error);
       setOptimizationError((error as Error).message);
       setIsOptimizing(false);
@@ -267,7 +267,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
                 className="w-full bg-[#B4916C] text-white hover:bg-[#B4916C]/90"
               >
                 <Download className="mr-2 h-4 w-4" />
-                Download Optimized CV
+              Download Optimized CV
               </Button>
               
               <Button
@@ -281,8 +281,8 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
               >
                 Optimize Another CV
               </Button>
-            </div>
-          )}
+          </div>
+        )}
         </div>
       </CardContent>
     </Card>

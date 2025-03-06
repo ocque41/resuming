@@ -54,32 +54,11 @@ export async function GET(request: NextRequest) {
 
     // If optimization is still in progress
     if (metadata.optimizing) {
-      // Prioritize the progress value from the metadata if it exists
-      let progress = metadata.progress || 0;
+      // Always use the progress value from the metadata
+      const progress = metadata.progress || 10;
       
-      // Only use time-based calculation if no progress value is provided in metadata
-      if (progress === 0 && metadata.startTime) {
-        const startTime = new Date(metadata.startTime).getTime();
-        const currentTime = new Date().getTime();
-        const elapsedSeconds = (currentTime - startTime) / 1000;
-        
-        // Cap at 95% to avoid reaching 100% before completion
-        // Estimate that optimization takes about 2 minutes max
-        // Reach 50% in 30 seconds, 75% in 60 seconds, 95% in 120 seconds
-        if (elapsedSeconds <= 30) {
-          // First 30 seconds: 0 to 50%
-          progress = Math.min(50, Math.floor((elapsedSeconds / 30) * 50));
-        } else if (elapsedSeconds <= 60) {
-          // 30-60 seconds: 50 to 75%
-          progress = Math.min(75, 50 + Math.floor(((elapsedSeconds - 30) / 30) * 25));
-        } else if (elapsedSeconds <= 120) {
-          // 60-120 seconds: 75 to 95%
-          progress = Math.min(95, 75 + Math.floor(((elapsedSeconds - 60) / 60) * 20));
-        } else {
-          // After 2 minutes, stay at 95%
-          progress = 95;
-        }
-      }
+      // Log the progress for debugging
+      console.log(`Optimization progress for ${fileName}: ${progress}%`);
       
       return NextResponse.json({
         status: "processing",

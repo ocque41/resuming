@@ -28,8 +28,15 @@ export async function GET(request: Request) {
     };
     await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedMetadata));
 
-    optimizeCVBackground(cvRecord).catch(error => {
-      console.error("Background optimization failed:", error);
+    // Start the optimization process in the background
+    // We don't await this because it's a long-running process
+    // The client will poll for status updates
+    Promise.resolve().then(async () => {
+      try {
+        await optimizeCVBackground(cvRecord);
+      } catch (error) {
+        console.error("Background optimization failed:", error);
+      }
     });
     
     return NextResponse.json({ message: "Optimization started. Please check back later." });
@@ -71,8 +78,15 @@ export async function POST(request: Request) {
     };
     await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedMetadata));
 
-    optimizeCVBackground(cvRecord, templateId).catch(error => {
-      console.error("Background optimization with template failed:", error);
+    // Start the optimization process in the background
+    // We don't await this because it's a long-running process
+    // The client will poll for status updates
+    Promise.resolve().then(async () => {
+      try {
+        await optimizeCVBackground(cvRecord, templateId);
+      } catch (error) {
+        console.error("Background optimization with template failed:", error);
+      }
     });
     
     return NextResponse.json({ message: "Optimization with selected template started. Please check back later." });
