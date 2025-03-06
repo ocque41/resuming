@@ -44,6 +44,9 @@ export async function optimizeCV(
         Use bullet points for achievements and responsibilities.
         Keep all text black.
         Ensure the CV fits on a single page.
+        CRITICAL: Preserve ALL industry-specific keywords, technical terms, metrics, and achievements from the original CV.
+        DO NOT remove any skills, certifications, or technical competencies that could be used for ATS screening.
+        Maintain or increase keyword density for job-relevant terms.
       `;
     } else if (layout === 'two-column') {
       formattingInstructions = `
@@ -53,6 +56,9 @@ export async function optimizeCV(
         Use bullet points for achievements and responsibilities.
         Keep all text black.
         Ensure the CV fits on a single page.
+        CRITICAL: Preserve ALL industry-specific keywords, technical terms, metrics, and achievements from the original CV.
+        DO NOT remove any skills, certifications, or technical competencies that could be used for ATS screening.
+        Maintain or increase keyword density for job-relevant terms.
       `;
     }
     
@@ -71,19 +77,19 @@ export async function optimizeCV(
       // This is where you'd call your AI service (OpenAI, etc.)
       // For this implementation, we'll create an optimized version locally
       const response = await fetch('/api/optimize', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
           cvText,
           templateId: template?.id || 'default',
           formattingInstructions,
         }),
         signal: AbortSignal.timeout(30000), // 30-second timeout
-      });
-      
-      if (!response.ok) {
+    });
+    
+    if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Optimization API error: ${response.status} ${errorText}`);
       }
@@ -102,7 +108,7 @@ export async function optimizeCV(
       
       // As a fallback for demo purposes, create a simple optimized version
       console.log("Using fallback optimization method");
-      return {
+      return { 
         optimizedText: createOptimizedCV(cvText, template?.name || 'default'),
         error: `API error: ${(apiError as Error).message}. Using fallback optimization.`
       };
@@ -111,7 +117,7 @@ export async function optimizeCV(
     console.error("Error in optimization process:", error);
     
     // Always return something, even in error cases
-    return {
+        return { 
       optimizedText: cvText, // Return original text as fallback
       error: `Optimization failed: ${(error as Error).message}`
     };
@@ -125,7 +131,6 @@ function createOptimizedCV(originalText: string, templateName: string): string {
   
   // Create a more structured CV
   let optimizedCV = `# PROFESSIONAL CV
-## Updated with ${templateName.toUpperCase()} template
 
 `;
 
@@ -493,5 +498,5 @@ function createFormattedFallbackFromRawText(rawText: string): string {
   }
   
   return formattedText;
-}
+  }
   

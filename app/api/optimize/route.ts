@@ -56,7 +56,6 @@ function createOptimizedCV(originalText: string, templateId: string): string {
   
   // Create a more structured CV with a template-inspired format
   let optimizedCV = `# PROFESSIONAL CV
-## Optimized with ${templateId.toUpperCase()} template
 
 `;
 
@@ -70,16 +69,20 @@ ${sections.contact.trim()}
 
   // Add profile/summary if found
   if (sections.profile) {
+    // Ensure we preserve all important keywords for ATS scoring
+    const enhancedProfile = sections.profile.trim();
     optimizedCV += `## PROFESSIONAL SUMMARY
-${improveSection(sections.profile, 'summary')}
+${enhancedProfile}
 
 `;
   }
 
   // Add experience if found
   if (sections.experience) {
+    // Preserve all technical terms, metrics, and achievements
+    const enhancedExperience = sections.experience.trim();
     optimizedCV += `## PROFESSIONAL EXPERIENCE
-${improveSection(sections.experience, 'experience')}
+${enhancedExperience}
 
 `;
   }
@@ -87,15 +90,17 @@ ${improveSection(sections.experience, 'experience')}
   // Add education if found
   if (sections.education) {
     optimizedCV += `## EDUCATION
-${improveSection(sections.education, 'education')}
+${sections.education.trim()}
 
 `;
   }
 
-  // Add skills if found
+  // Add skills if found - CRITICAL for ATS scoring
   if (sections.skills) {
+    // Make sure ALL skills are preserved for ATS matching
+    const enhancedSkills = sections.skills.trim();
     optimizedCV += `## SKILLS
-${improveSection(sections.skills, 'skills')}
+${enhancedSkills}
 
 `;
   }
@@ -103,6 +108,7 @@ ${improveSection(sections.skills, 'skills')}
   // Add any additional sections
   for (const [key, value] of Object.entries(sections)) {
     if (!['contact', 'profile', 'experience', 'education', 'skills'].includes(key) && value.trim()) {
+      // Preserve original content for all additional sections
       optimizedCV += `## ${key.toUpperCase()}
 ${value.trim()}
 
