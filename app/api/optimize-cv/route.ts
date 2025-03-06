@@ -24,11 +24,14 @@ export async function GET(request: Request) {
       ...metadata, 
       optimizing: true,
       startTime: new Date().toISOString(),
-      progress: 0
+      progress: 10
     };
     await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedMetadata));
 
-    optimizeCVBackground(cvRecord);
+    optimizeCVBackground(cvRecord).catch(error => {
+      console.error("Background optimization failed:", error);
+    });
+    
     return NextResponse.json({ message: "Optimization started. Please check back later." });
   } catch (error: any) {
     console.error("Error initiating optimization:", error);
@@ -64,11 +67,14 @@ export async function POST(request: Request) {
       optimizing: true,
       selectedTemplate: templateId,
       startTime: new Date().toISOString(),
-      progress: 0
+      progress: 10
     };
     await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedMetadata));
 
-    optimizeCVBackground(cvRecord, templateId);
+    optimizeCVBackground(cvRecord, templateId).catch(error => {
+      console.error("Background optimization with template failed:", error);
+    });
+    
     return NextResponse.json({ message: "Optimization with selected template started. Please check back later." });
   } catch (error: any) {
     console.error("Error initiating optimization with template:", error);

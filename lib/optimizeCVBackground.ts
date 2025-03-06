@@ -20,7 +20,7 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
       ...metadata,
       optimizing: true,
       startTime: startTime,
-      progress: 10 // Initialize progress at 10% instead of 0
+      progress: 10 // Initialize progress at 10%
     };
     await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedMetadata));
     
@@ -69,7 +69,7 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     }
     
     console.log(`Optimized text length: ${optimizationResult.optimizedText.length} characters`);
-    console.log(`First 100 characters: ${optimizationResult.optimizedText.substring(0, 100)}...`);
+    console.log(`First 100 characters: \`\`\` ${optimizationResult.optimizedText.substring(0, 100)}...`);
     
     // Update progress to 70%
     await updateCVAnalysis(cvRecord.id, JSON.stringify({
@@ -131,6 +131,8 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
 
     await updateCVAnalysis(cvRecord.id, JSON.stringify(newMetadata));
     console.log(`CV optimization completed successfully for: ${cvRecord.id}`);
+    
+    return newMetadata;
   } catch (error: any) {
     console.error("Background optimization error:", error);
     console.error("CV Record ID:", cvRecord.id);
@@ -141,5 +143,7 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     metadata.error = error.message;
     metadata.errorTimestamp = new Date().toISOString();
     await updateCVAnalysis(cvRecord.id, JSON.stringify(metadata));
+    
+    throw error; // Re-throw the error to be handled by the caller
   }
 }

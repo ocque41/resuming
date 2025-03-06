@@ -54,11 +54,11 @@ export async function GET(request: NextRequest) {
 
     // If optimization is still in progress
     if (metadata.optimizing) {
-      // Calculate progress based on time elapsed since optimization started
-      // This ensures progress always moves forward and never fluctuates
+      // Prioritize the progress value from the metadata if it exists
       let progress = metadata.progress || 0;
       
-      if (metadata.startTime) {
+      // Only use time-based calculation if no progress value is provided in metadata
+      if (progress === 0 && metadata.startTime) {
         const startTime = new Date(metadata.startTime).getTime();
         const currentTime = new Date().getTime();
         const elapsedSeconds = (currentTime - startTime) / 1000;
@@ -79,10 +79,6 @@ export async function GET(request: NextRequest) {
           // After 2 minutes, stay at 95%
           progress = 95;
         }
-      } else {
-        // If no start time available, use fixed progress increments
-        // Start at 10% and cap at 95%
-        progress = Math.min(95, Math.max(10, progress + 5));
       }
       
       return NextResponse.json({

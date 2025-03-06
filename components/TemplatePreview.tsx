@@ -20,6 +20,17 @@ const generatePlaceholderColor = (templateName: string): string => {
   return `hsl(${hue}, 70%, 85%)`;
 };
 
+// Function to determine text color based on background brightness
+const getTextColor = (templateName: string): string => {
+  // For BlackRock specifically, use white text
+  if (templateName.includes('BlackRock')) {
+    return 'text-white';
+  }
+  
+  // For other templates, use dark text
+  return 'text-gray-700';
+};
+
 export const TemplatePreview: React.FC<TemplatePreviewProps> = ({ 
   template, 
   selected = false,
@@ -27,6 +38,7 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
 }) => {
   // Always use placeholder, never show image preview
   const placeholderColor = generatePlaceholderColor(template.name);
+  const textColorClass = getTextColor(template.name);
   
   return (
     <div 
@@ -39,11 +51,11 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
     >
       {/* Placeholder instead of image */}
       <div 
-        className="w-full h-32 bg-opacity-80 flex items-center justify-center"
+        className="w-full h-32 flex items-center justify-center"
         style={{ backgroundColor: placeholderColor }}
       >
-        <span className="text-xl font-medium text-gray-700 opacity-60">
-          {template.name.slice(0, 1)}
+        <span className={`text-2xl font-bold ${textColorClass} opacity-80`}>
+          {template.name.charAt(0)}
         </span>
       </div>
       <div className="p-3">
