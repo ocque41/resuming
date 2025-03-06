@@ -79,9 +79,9 @@ export default function HomePage() {
           </Article>
           {/* Large Image Placeholder - Making it much bigger */}
           <div className="mt-12 flex justify-center">
-            <div className="w-full max-w-4xl rounded-lg overflow-hidden shadow-2xl">
+            <div className="w-full max-w-5xl rounded-lg overflow-hidden shadow-2xl">
               <img 
-                src="/mockups/mockup1.png" 
+                src="/mockups/mockup8.png" 
                 alt="CV Optimizer Dashboard Preview" 
                 className="w-full h-auto object-cover transform hover:scale-105 transition-transform duration-500"
               />

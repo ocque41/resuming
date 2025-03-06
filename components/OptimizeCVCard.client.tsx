@@ -95,7 +95,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       setOptimizationStatus("Checking optimization status...");
       console.log(`Polling status for: ${cv}`);
       
-      const response = await fetch(`/api/optimize-cv/status?cvId=${selectedCV}`, {
+      const response = await fetch(`/api/optimize-cv/status?cvId=${encodeURIComponent(cv)}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",

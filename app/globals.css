@@ -42,7 +42,7 @@
   }
 }
 
-/* Optional: Remove this block if Next.js’s font loader is handling the font */
+/* Optional: Remove this block if Next.js's font loader is handling the font */
 /*
 @font-face {
   font-family: 'Safiro';
@@ -151,4 +151,9 @@
 
 .animate-scroll-fade {
   animation: scroll-fade 0.6s ease-out forwards;
+}
+
+/* Hide the NEXT_REDIRECT flash message */
+[data-message="NEXT_REDIRECT"] {
+  display: none !important;
 }

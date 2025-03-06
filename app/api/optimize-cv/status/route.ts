@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { cvs } from '@/lib/db/schema';
 import { getSession } from '@/lib/auth/session';
-import { eq } from 'drizzle-orm';
+import { eq, like } from 'drizzle-orm';
 import { updateCVAnalysis } from '@/lib/db/queries.server';
+import { getCVByFileName } from '@/lib/db/queries.server';
 
 // Define the metadata interface
 interface CVMetadata {
@@ -42,24 +43,27 @@ export async function GET(request: NextRequest) {
 
     // Get cv ID from query params
     const { searchParams } = new URL(request.url);
-    const cvId = searchParams.get('cvId');
+    const cvIdParam = searchParams.get('cvId');
     
-    if (!cvId) {
-      return NextResponse.json({ error: 'CV ID is required' }, { status: 400 });
+    if (!cvIdParam) {
+      return NextResponse.json({ error: 'CV ID or filename is required' }, { status: 400 });
     }
 
-    console.log(`Checking optimization status for: ${cvId}`);
+    console.log(`Checking optimization status for: ${cvIdParam}`);
 
-    // Get the CV from the database
-    // Convert cvId to the correct type for the database
-    const cvIdNum = parseInt(cvId, 10);
-    if (isNaN(cvIdNum)) {
-      return NextResponse.json({ error: 'Invalid CV ID format' }, { status: 400 });
-    }
+    // Determine if cvIdParam is a numeric ID or a filename
+    let cvRecord;
+    const cvIdNum = parseInt(cvIdParam, 10);
     
-    const cvRecord = await db.query.cvs.findFirst({
-      where: eq(cvs.id, cvIdNum),
-    });
+    if (!isNaN(cvIdNum)) {
+      // If it's a valid number, lookup by ID
+      cvRecord = await db.query.cvs.findFirst({
+        where: eq(cvs.id, cvIdNum),
+      });
+    } else {
+      // If it's not a number, assume it's a filename and look it up
+      cvRecord = await getCVByFileName(cvIdParam);
+    }
 
     if (!cvRecord) {
       return NextResponse.json({ error: 'CV not found' }, { status: 404 });
@@ -78,7 +82,7 @@ export async function GET(request: NextRequest) {
       try {
         metadata = JSON.parse(cvRecord.metadata);
       } catch (error) {
-        console.error(`Error parsing metadata for CV ${cvId}:`, error);
+        console.error(`Error parsing metadata for CV ${cvIdParam}:`, error);
         return NextResponse.json({ 
           error: 'Invalid metadata format',
           details: (error as Error).message
@@ -105,14 +109,14 @@ export async function GET(request: NextRequest) {
         // We'll keep optimizing true but add an error so the frontend can show appropriate message
         // This lets the user decide to try again or continue with partial results
         if (!metadata.optimizationCompleted && metadata.optimizedText) {
-          console.log(`CV ${cvId} has partial results available despite stalled optimization`);
+          console.log(`CV ${cvIdParam} has partial results available despite stalled optimization`);
           metadata.partialResultsAvailable = true;
         }
         
         // Only update the database if we're adding new information
         if (!metadata.stalledDetected) {
           metadata.stalledDetected = true;
-          await updateCVMetadata(cvId, metadata);
+          await updateCVMetadata(cvIdParam, metadata);
         }
       }
       
@@ -129,7 +133,7 @@ export async function GET(request: NextRequest) {
             metadata.progressStalled = true;
             metadata.progressStalledAt = metadata.progress;
             metadata.progressStalledTime = lastUpdateTime.toISOString();
-            await updateCVMetadata(cvId, metadata);
+            await updateCVMetadata(cvIdParam, metadata);
           }
         }
       }
@@ -143,14 +147,14 @@ export async function GET(request: NextRequest) {
       if (metadata.optimizedText) {
         metadata.optimizing = false;
         console.log(`Resolved conflict in favor of completed state since optimized text exists`);
-        await updateCVMetadata(cvId, metadata);
+        await updateCVMetadata(cvIdParam, metadata);
       } 
       // Otherwise likely the process crashed in the middle
       else {
         metadata.optimized = false;
         metadata.error = "Previous optimization process did not complete successfully";
         console.log(`Resolved conflict by marking as incomplete since no optimized text exists`);
-        await updateCVMetadata(cvId, metadata);
+        await updateCVMetadata(cvIdParam, metadata);
       }
     }
 
@@ -176,7 +180,7 @@ export async function GET(request: NextRequest) {
       displayError = metadata.error;
       
       // Update the database with this critical error
-      await updateCVMetadata(cvId, metadata);
+      await updateCVMetadata(cvIdParam, metadata);
     }
 
     // Create the response object with all necessary information
@@ -213,13 +217,21 @@ export async function GET(request: NextRequest) {
  */
 async function updateCVMetadata(cvId: string, metadata: CVMetadata) {
   try {
-    // Convert string ID to number
+    // Check if cvId is a number or a filename
     const cvIdNum = parseInt(cvId, 10);
-    if (isNaN(cvIdNum)) {
-      throw new Error(`Invalid CV ID: ${cvId}`);
+    
+    if (!isNaN(cvIdNum)) {
+      // If it's a number, use updateCVAnalysis directly
+      await updateCVAnalysis(cvIdNum, JSON.stringify(metadata));    
+    } else {
+      // If it's a filename, get the CV first
+      const cvRecord = await getCVByFileName(cvId);
+      if (!cvRecord) {
+        throw new Error(`CV not found with filename: ${cvId}`);
+      }
+      await updateCVAnalysis(cvRecord.id, JSON.stringify(metadata));
     }
     
-    await updateCVAnalysis(cvIdNum, JSON.stringify(metadata));    
     console.log(`Updated metadata for CV ${cvId}`);
     return true;
   } catch (error) {
