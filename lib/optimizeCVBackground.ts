@@ -6,7 +6,7 @@ import { CV_TEMPLATES } from "@/types/templates";
 
 export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
   try {
-    if (!cvRecord.filepath) {
+    if (!cvRecord.filepath && !cvRecord.filePath) {
       throw new Error("PDF path not found in CV record");
     }
     
@@ -46,27 +46,44 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     
     console.log(`Raw text length: ${cvRecord.rawText.length} characters`);
 
-    // Update progress to 20%
-    const progress20Metadata = {
-      ...metadata,
-      optimizing: true,
-      startTime: startTime,
-      progress: 20
-    };
-    await updateCVAnalysis(cvRecord.id, JSON.stringify(progress20Metadata));
+    try {
+      // Update progress to 20%
+      const progress20Metadata = {
+        ...metadata,
+        optimizing: true,
+        startTime: startTime,
+        progress: 20
+      };
+      await updateCVAnalysis(cvRecord.id, JSON.stringify(progress20Metadata));
+    } catch (updateError) {
+      console.error("Failed to update progress to 20%:", updateError);
+      // Continue despite the error
+    }
 
     // Include template information in the optimization process
     console.log("Starting optimization with AI...");
-    const optimizationResult = await optimizeCV(cvRecord.rawText, selectedTemplate);
+    let optimizationResult;
+    try {
+      optimizationResult = await optimizeCV(cvRecord.rawText, selectedTemplate);
+      console.log("AI optimization completed successfully");
+    } catch (optimizeError) {
+      console.error("Error during AI optimization:", optimizeError);
+      throw optimizeError;
+    }
     
-    // Update progress to 60%
-    const progress60Metadata = {
-      ...metadata,
-      optimizing: true,
-      startTime: startTime,
-      progress: 60
-    };
-    await updateCVAnalysis(cvRecord.id, JSON.stringify(progress60Metadata));
+    try {
+      // Update progress to 60%
+      const progress60Metadata = {
+        ...metadata,
+        optimizing: true,
+        startTime: startTime,
+        progress: 60
+      };
+      await updateCVAnalysis(cvRecord.id, JSON.stringify(progress60Metadata));
+    } catch (updateError) {
+      console.error("Failed to update progress to 60%:", updateError);
+      // Continue despite the error
+    }
     
     // Verify the optimization result
     if (!optimizationResult || !optimizationResult.optimizedText) {
@@ -77,16 +94,27 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     console.log(`Optimized text length: ${optimizationResult.optimizedText.length} characters`);
     console.log(`First 100 characters: \`\`\` ${optimizationResult.optimizedText.substring(0, 100)}...`);
     
-    // Update progress to 70%
-    const progress70Metadata = {
-      ...metadata,
-      optimizing: true,
-      startTime: startTime,
-      progress: 70
-    };
-    await updateCVAnalysis(cvRecord.id, JSON.stringify(progress70Metadata));
+    try {
+      // Update progress to 70%
+      const progress70Metadata = {
+        ...metadata,
+        optimizing: true,
+        startTime: startTime,
+        progress: 70
+      };
+      await updateCVAnalysis(cvRecord.id, JSON.stringify(progress70Metadata));
+    } catch (updateError) {
+      console.error("Failed to update progress to 70%:", updateError);
+      // Continue despite the error
+    }
     
-    const originalPdfBytes = await getOriginalPdfBytes(cvRecord);
+    let originalPdfBytes;
+    try {
+      originalPdfBytes = await getOriginalPdfBytes(cvRecord);
+    } catch (pdfError: any) {
+      console.error("Error retrieving original PDF bytes:", pdfError);
+      throw new Error(`Failed to retrieve original PDF: ${pdfError.message}`);
+    }
     
     if (!originalPdfBytes || originalPdfBytes.length === 0) {
       throw new Error("Failed to retrieve original PDF content");
@@ -94,31 +122,48 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     
     console.log(`Retrieved original PDF (${originalPdfBytes.length} bytes)`);
     
-    // Update progress to 80%
-    const progress80Metadata = {
-      ...metadata,
-      optimizing: true,
-      startTime: startTime,
-      progress: 80
-    };
-    await updateCVAnalysis(cvRecord.id, JSON.stringify(progress80Metadata));
+    try {
+      // Update progress to 80%
+      const progress80Metadata = {
+        ...metadata,
+        optimizing: true,
+        startTime: startTime,
+        progress: 80
+      };
+      await updateCVAnalysis(cvRecord.id, JSON.stringify(progress80Metadata));
+    } catch (updateError) {
+      console.error("Failed to update progress to 80%:", updateError);
+      // Continue despite the error
+    }
     
     // Pass template information to the PDF modification function
     console.log("Generating optimized PDF...");
-    const pdfBuffer = await modifyPDFWithOptimizedContent(
-      optimizationResult.optimizedText,
-      cvRecord.rawText,
-      selectedTemplate
-    );
+    let pdfBuffer;
+    try {
+      pdfBuffer = await modifyPDFWithOptimizedContent(
+        optimizationResult.optimizedText,
+        cvRecord.rawText,
+        selectedTemplate
+      );
+      console.log("PDF modification completed successfully");
+    } catch (pdfError: any) {
+      console.error("Error during PDF modification:", pdfError);
+      throw new Error(`PDF modification failed: ${pdfError.message}`);
+    }
     
-    // Update progress to 90%
-    const progress90Metadata = {
-      ...metadata,
-      optimizing: true,
-      startTime: startTime,
-      progress: 90
-    };
-    await updateCVAnalysis(cvRecord.id, JSON.stringify(progress90Metadata));
+    try {
+      // Update progress to 90%
+      const progress90Metadata = {
+        ...metadata,
+        optimizing: true,
+        startTime: startTime,
+        progress: 90
+      };
+      await updateCVAnalysis(cvRecord.id, JSON.stringify(progress90Metadata));
+    } catch (updateError) {
+      console.error("Failed to update progress to 90%:", updateError);
+      // Continue despite the error
+    }
     
     if (!pdfBuffer) {
       throw new Error("PDF modification failed to produce output");
@@ -133,7 +178,7 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
 
     const newMetadata = {
       ...metadata,
-      optimizedCV: optimizationResult.optimizedText,
+      optimizedText: optimizationResult.optimizedText,
       optimizedPDFBase64: modifiedPdfBase64,
       selectedTemplate: selectedTemplateId, // Save the template ID in metadata
       optimized: true,
@@ -144,8 +189,13 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
       lastOptimizedAt: new Date().toISOString()
     };
 
-    await updateCVAnalysis(cvRecord.id, JSON.stringify(newMetadata));
-    console.log(`CV optimization completed successfully for: ${cvRecord.id}`);
+    try {
+      await updateCVAnalysis(cvRecord.id, JSON.stringify(newMetadata));
+      console.log(`CV optimization completed successfully for: ${cvRecord.id}`);
+    } catch (finalUpdateError: any) {
+      console.error("Failed to update final metadata:", finalUpdateError);
+      throw new Error(`Failed to save optimization results: ${finalUpdateError.message}`);
+    }
     
     return newMetadata;
   } catch (error: any) {
@@ -153,11 +203,15 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     console.error("CV Record ID:", cvRecord.id);
     console.error("Error stack:", error.stack);
     
-    const metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
-    metadata.optimizing = false;
-    metadata.error = error.message;
-    metadata.errorTimestamp = new Date().toISOString();
-    await updateCVAnalysis(cvRecord.id, JSON.stringify(metadata));
+    try {
+      const metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
+      metadata.optimizing = false;
+      metadata.error = error.message;
+      metadata.errorTimestamp = new Date().toISOString();
+      await updateCVAnalysis(cvRecord.id, JSON.stringify(metadata));
+    } catch (metadataError) {
+      console.error("Failed to update error metadata:", metadataError);
+    }
     
     throw error; // Re-throw the error to be handled by the caller
   }

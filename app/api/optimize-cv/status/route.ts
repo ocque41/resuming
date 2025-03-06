@@ -44,18 +44,48 @@ export async function GET(request: NextRequest) {
     }
 
     // If optimization is complete
-    if (metadata.optimized && metadata.optimizedText) {
-      return NextResponse.json({
-        status: "completed",
-        optimizedText: metadata.optimizedText,
-        template: metadata.selectedTemplate || "professional"
-      });
+    if (metadata.optimized) {
+      // Check for optimizedText in both locations (for backward compatibility)
+      const optimizedText = metadata.optimizedText || metadata.optimizedCV;
+      
+      if (optimizedText) {
+        return NextResponse.json({
+          status: "completed",
+          optimizedText: optimizedText,
+          template: metadata.selectedTemplate || "professional"
+        });
+      } else {
+        console.error("Optimization marked as complete but no optimized text found");
+        return NextResponse.json({
+          status: "error",
+          error: "Optimization completed but no optimized text was found"
+        }, { status: 500 });
+      }
     }
 
     // If optimization is still in progress
     if (metadata.optimizing) {
       // Always use the progress value from the metadata
       const progress = metadata.progress || 10;
+      
+      // Check if optimization has been running for too long (more than 5 minutes)
+      if (metadata.startTime) {
+        const startTime = new Date(metadata.startTime);
+        const currentTime = new Date();
+        const timeDiffMinutes = (currentTime.getTime() - startTime.getTime()) / (1000 * 60);
+        
+        if (timeDiffMinutes > 5) {
+          // Reset the optimization state
+          metadata.optimizing = false;
+          metadata.error = "Optimization timed out after 5 minutes";
+          await updateCVMetadata(String(cvRecord.id), metadata);
+          
+          return NextResponse.json({
+            status: "error",
+            error: "Optimization timed out after 5 minutes"
+          }, { status: 500 });
+        }
+      }
       
       // Log the progress for debugging
       console.log(`Optimization progress for ${fileName}: ${progress}%`);
@@ -71,11 +101,28 @@ export async function GET(request: NextRequest) {
       status: "processing",
       progress: 10
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error checking optimization status:", error);
     return NextResponse.json({ 
       status: "error",
-      error: "Failed to check optimization status" 
+      error: `Failed to check optimization status: ${error.message}` 
     }, { status: 500 });
+  }
+}
+
+// Helper function to update CV metadata
+async function updateCVMetadata(cvId: string, metadata: CVMetadata) {
+  try {
+    // Import the database query function directly
+    const { updateCVAnalysis } = await import("@/lib/db/queries.server");
+    
+    // Update the CV metadata using the server function
+    // Convert the cvId string back to a number since updateCVAnalysis expects a number
+    await updateCVAnalysis(Number(cvId), JSON.stringify(metadata));
+    
+    return true;
+  } catch (error: any) {
+    console.error("Error updating CV metadata:", error);
+    return false;
   }
 } 

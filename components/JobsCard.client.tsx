@@ -482,7 +482,7 @@ export default function JobsCard({ cvs }: JobsCardProps) {
             <Input
               type="search"
               placeholder="Search jobs..."
-              className="pl-8 bg-[#0A0A0A] border border-[#B4916C]/20 rounded-md text-white py-2 px-3"
+              className="pl-9 bg-[#0A0A0A] border border-[#B4916C]/20 rounded-md text-white py-2 px-3"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -493,7 +493,7 @@ export default function JobsCard({ cvs }: JobsCardProps) {
             <Input
               type="text"
               placeholder="Location..."
-              className="pl-8 bg-[#0A0A0A] border border-[#B4916C]/20 rounded-md text-white py-2 px-3"
+              className="pl-9 bg-[#0A0A0A] border border-[#B4916C]/20 rounded-md text-white py-2 px-3"
               value={locationQuery}
               onChange={(e) => setLocationQuery(e.target.value)}
             />
