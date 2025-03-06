@@ -90,15 +90,20 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         throw new Error("Optimization is taking too long. Please try again later.");
       }
       
+      console.log(`Polling optimization status for ${cv}, attempt ${pollingAttempts}`);
       const response = await fetch(`/api/optimize-cv/status?fileName=${encodeURIComponent(cv)}`);
       
       if (!response.ok) {
-        throw new Error("Failed to check optimization status");
+        const errorData = await response.json();
+        console.error("Error response from status API:", errorData);
+        throw new Error(errorData.error || `Server error: ${response.status} ${response.statusText}`);
       }
       
       const data = await response.json();
+      console.log(`Status response for ${cv}:`, data);
       
       if (data.status === "completed") {
+        console.log("Optimization completed successfully");
         setOptimizedText(data.optimizedText);
         setIsOptimized(true);
         setIsOptimizing(false);
@@ -110,6 +115,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       } else if (data.status === "processing") {
         // Update progress
         setOptimizationProgress(data.progress || 10);
+        console.log(`Optimization in progress: ${data.progress || 10}%`);
         
         // Poll again after 2 seconds
         setTimeout(() => {
@@ -118,11 +124,15 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
           }
         }, 2000);
       } else if (data.status === "error") {
-        throw new Error(data.error || "Optimization failed");
+        console.error("Error status received:", data.error);
+        throw new Error(data.error || "Optimization failed with an unknown error");
+      } else {
+        console.warn("Unknown status received:", data);
+        throw new Error("Received unknown status from server");
       }
     } catch (error) {
       console.error("Error polling optimization status:", error);
-      setOptimizationError((error as Error).message);
+      setOptimizationError((error as Error).message || "Failed to check optimization status");
       setIsOptimizing(false);
       setIsPolling(false);
     }
@@ -223,6 +233,17 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         <CardTitle className="text-xl font-bold text-[#B4916C]">Optimize Your CV</CardTitle>
       </CardHeader>
       <CardContent className="p-6">
+        <div className="flex justify-center items-center mb-6">
+          <div className="relative w-48 h-48 rounded-lg overflow-hidden">
+            <img
+              src="/Animation - 1741203848123.gif"
+              alt="CV Optimization Animation"
+              className="w-full h-full object-contain"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#050505] to-transparent opacity-20"></div>
+          </div>
+        </div>
+        
         <div className="space-y-4">
           {/* CV Selection */}
           <div>

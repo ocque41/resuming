@@ -6,9 +6,11 @@ interface CVMetadata {
   optimizing?: boolean;
   optimized?: boolean;
   optimizedText?: string;
+  optimizedCV?: string;
   selectedTemplate?: string;
   progress?: number;
   startTime?: string; // Track when optimization started
+  error?: string; // Store any error messages
   [key: string]: any; // Allow for additional properties
 }
 
@@ -21,22 +23,41 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    console.log(`Checking optimization status for: ${fileName}`);
     const cvRecord = await getCVByFileName(fileName);
     
     if (!cvRecord) {
-      return NextResponse.json({ error: "CV not found" }, { status: 404 });
+      console.error(`CV not found: ${fileName}`);
+      return NextResponse.json({ 
+        status: "error",
+        error: `CV not found: ${fileName}` 
+      }, { status: 404 });
     }
 
     let metadata: CVMetadata = {};
     try {
       metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
+      console.log(`Parsed metadata for ${fileName}:`, JSON.stringify(metadata, null, 2));
     } catch (error) {
-      console.error("Error parsing metadata:", error);
-      return NextResponse.json({ error: "Invalid metadata format" }, { status: 500 });
+      console.error(`Error parsing metadata for ${fileName}:`, error);
+      return NextResponse.json({ 
+        status: "error",
+        error: "Invalid metadata format" 
+      }, { status: 500 });
+    }
+
+    // Check if there's an error stored in the metadata
+    if (metadata.error) {
+      console.error(`Error found in metadata for ${fileName}:`, metadata.error);
+      return NextResponse.json({ 
+        status: "error",
+        error: metadata.error 
+      }, { status: 500 });
     }
 
     // Check if optimization was initiated
     if (!metadata.optimizing && !metadata.optimized) {
+      console.log(`Optimization not initiated for ${fileName}`);
       return NextResponse.json({ 
         status: "error",
         error: "CV optimization has not been initiated"
@@ -49,13 +70,14 @@ export async function GET(request: NextRequest) {
       const optimizedText = metadata.optimizedText || metadata.optimizedCV;
       
       if (optimizedText) {
+        console.log(`Optimization completed for ${fileName}`);
         return NextResponse.json({
           status: "completed",
           optimizedText: optimizedText,
           template: metadata.selectedTemplate || "professional"
         });
       } else {
-        console.error("Optimization marked as complete but no optimized text found");
+        console.error(`Optimization marked as complete but no optimized text found for ${fileName}`);
         return NextResponse.json({
           status: "error",
           error: "Optimization completed but no optimized text was found"
@@ -78,7 +100,11 @@ export async function GET(request: NextRequest) {
           // Reset the optimization state
           metadata.optimizing = false;
           metadata.error = "Optimization timed out after 5 minutes";
-          await updateCVMetadata(String(cvRecord.id), metadata);
+          try {
+            await updateCVMetadata(String(cvRecord.id), metadata);
+          } catch (updateError) {
+            console.error(`Error updating metadata for timeout on ${fileName}:`, updateError);
+          }
           
           return NextResponse.json({
             status: "error",
@@ -97,12 +123,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Default fallback
+    console.log(`Using default fallback for ${fileName}`);
     return NextResponse.json({
       status: "processing",
       progress: 10
     });
   } catch (error: any) {
-    console.error("Error checking optimization status:", error);
+    console.error(`Error checking optimization status for ${fileName}:`, error);
     return NextResponse.json({ 
       status: "error",
       error: `Failed to check optimization status: ${error.message}` 
@@ -113,6 +140,7 @@ export async function GET(request: NextRequest) {
 // Helper function to update CV metadata
 async function updateCVMetadata(cvId: string, metadata: CVMetadata) {
   try {
+    console.log(`Updating metadata for CV ID: ${cvId}`);
     // Import the database query function directly
     const { updateCVAnalysis } = await import("@/lib/db/queries.server");
     
@@ -122,7 +150,7 @@ async function updateCVMetadata(cvId: string, metadata: CVMetadata) {
     
     return true;
   } catch (error: any) {
-    console.error("Error updating CV metadata:", error);
+    console.error(`Error updating CV metadata for ID ${cvId}:`, error);
     return false;
   }
 } 

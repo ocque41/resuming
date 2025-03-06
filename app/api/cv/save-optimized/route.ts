@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCVByFileName } from "@/lib/db/queries.server";
-import { extractTextFromPDF } from "@/lib/textExtraction";
-import { db } from "@/lib/db/drizzle";
-import { cvs } from "@/lib/db/schema";
 import { getServerSession } from "next-auth";
 import { uploadBufferToStorage } from "@/lib/storage";
+import { db } from "@/lib/db/drizzle";
+import { cvs } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 // Define a session type
 interface UserSession {
@@ -48,52 +48,72 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
     
-    // 1. Upload to storage (Dropbox or other configured storage)
-    console.log("Uploading optimized CV to storage...");
-    const userId = session.user.id;
-    const storagePath = `/uploads/${userId}/${fileName}`;
+    // 1. Upload to Dropbox storage
+    console.log("Uploading optimized CV to Dropbox...");
+    const dropboxPath = `/pdfs/${fileName}`; // Use the pdfs folder for consistency
     
     try {
-      await uploadBufferToStorage(buffer, storagePath);
-      console.log("Successfully uploaded to storage:", storagePath);
-    } catch (storageError) {
-      console.error("Error uploading to storage:", storageError);
-      return NextResponse.json({ 
-        error: `Failed to upload to storage: ${(storageError as Error).message}` 
-      }, { status: 500 });
-    }
-    
-    // 2. Save to Neon Database
-    console.log("Saving optimized CV to database...");
-    
-    // Create a new CV record
-    try {
-      const [newCV] = await db.insert(cvs).values({
-        userId: originalCV.userId, // Use the same user ID as the original CV
-        fileName,
+      // Upload the file to Dropbox
+      const storagePath = await uploadBufferToStorage(buffer, dropboxPath);
+      console.log("Successfully uploaded to Dropbox:", storagePath);
+      
+      // 2. Save to Neon Database using Drizzle ORM
+      console.log("Saving optimized CV to Neon database...");
+      
+      // Create a new CV record with enhanced metadata
+      const newCVMetadata = {
+        ...originalMetadata,
+        isOptimizedVersion: true,
+        originalFileName,
+        originalCVId: originalCV.id,
+        optimizedAt: new Date().toISOString(),
+        optimized: true,
+        optimizedFrom: originalCV.id,
+        optimizedBy: session.user.email || session.user.id,
+        template: originalMetadata.selectedTemplate || "professional"
+      };
+      
+      // Insert the new CV record
+      const newCVs = await db.insert(cvs).values({
+        userId: originalCV.userId,
+        fileName: fileName,
         filepath: storagePath,
         rawText: optimizedText || "",
-        metadata: JSON.stringify({
-          ...originalMetadata,
-          isOptimizedVersion: true,
-          originalFileName,
-          optimizedAt: new Date().toISOString(),
-          optimized: true,
-          optimizedFrom: originalCV.id
-        })
+        metadata: JSON.stringify(newCVMetadata)
       }).returning();
       
-      console.log("Successfully saved to database:", newCV.id);
+      const newCV = newCVs[0];
+      console.log("Successfully saved to Neon database:", newCV.id);
+      
+      // 3. Update the original CV record to link to the optimized version
+      try {
+        const updatedMetadata = {
+          ...originalMetadata,
+          hasOptimizedVersion: true,
+          optimizedVersionId: newCV.id,
+          lastOptimizedAt: new Date().toISOString()
+        };
+        
+        // Update the CV analysis with the new metadata
+        await db.update(cvs)
+          .set({ metadata: JSON.stringify(updatedMetadata) })
+          .where(eq(cvs.id, originalCV.id));
+          
+        console.log("Updated original CV record with optimized version link");
+      } catch (updateError) {
+        console.error("Error updating original CV record:", updateError);
+        // Continue despite this error
+      }
       
       return NextResponse.json({ 
         success: true, 
-        message: "Optimized CV saved successfully to storage and database",
+        message: "Optimized CV saved successfully to Dropbox and Neon database",
         cv: newCV
       });
-    } catch (dbError) {
-      console.error("Error saving to database:", dbError);
+    } catch (storageError) {
+      console.error("Error in storage or database operations:", storageError);
       return NextResponse.json({ 
-        error: `Failed to save to database: ${(dbError as Error).message}` 
+        error: `Failed to save optimized CV: ${(storageError as Error).message}` 
       }, { status: 500 });
     }
   } catch (error: any) {
