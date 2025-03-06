@@ -90,7 +90,7 @@ export default async function DashboardPage() {
                           Yes ({metadata.optimizedTimes || 1})
                         </span>
                       ) : (
-                        <span className="px-2 py-1 bg-gray-800 rounded-full text-gray-400 font-medium text-sm">
+                        <span className="px-2 py-1 bg-[#B4916C]/10 rounded-full text-[#B4916C] font-medium text-sm">
                           No
                         </span>
                       )}
