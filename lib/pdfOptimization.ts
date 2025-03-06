@@ -697,7 +697,7 @@ export async function modifyPDFWithOptimizedContent(
             font: titleFont,
             color: accentColor,
           });
-        } else {
+  } else {
           // Fallback if name not found
           const resumeText = "Resume";
           const resumeWidth = titleFont.widthOfTextAtSize(resumeText, 20);
@@ -777,7 +777,7 @@ export async function modifyPDFWithOptimizedContent(
         } else {
           // Fallback if name not found
           currentPage.drawText("Resume", {
-            x: margin,
+      x: margin,
             y: height - margin - 20,
             size: 22,
             font: titleFont,
@@ -840,7 +840,7 @@ export async function modifyPDFWithOptimizedContent(
       });
       
       currentPage.drawText(section.title.toUpperCase(), {
-        x: margin,
+      x: margin,
         y: leftColumnY,
         size: 13, // Larger for better readability
         font: boldFont,
@@ -1388,14 +1388,14 @@ const formatTextWithStyling = (
               // Just draw the long word on its own line
               page.drawText(wordToAdd, {
                 x: currentX,
-                y: currentY,
-                size: fontSize,
+      y: currentY,
+      size: fontSize,
                 font: font,
                 color: color,
-              });
+    });
               
               // Move to next line
-              currentY -= lineHeight;
+    currentY -= lineHeight;
               currentX = x;
               currentLine = "";
             }

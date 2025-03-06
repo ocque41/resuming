@@ -488,5 +488,5 @@ function createFormattedFallbackFromRawText(rawText: string): string {
   }
   
   return formattedText;
-}
+  }
   

@@ -49,7 +49,7 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
       }`}
       onClick={onClick}
     >
-      {/* Always use placeholder instead of image preview */}
+      {/* Placeholder instead of image */}
       <div 
         className="w-full h-32 flex items-center justify-center"
         style={{ backgroundColor: placeholderColor }}
