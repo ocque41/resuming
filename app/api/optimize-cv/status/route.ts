@@ -1,5 +1,18 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getCVByFileName } from "@/lib/db/queries.server";
+import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/db/drizzle';
+import { cvs } from '@/lib/db/schema';
+import { getServerSession } from 'next-auth';
+import { eq } from 'drizzle-orm';
+import { updateCVAnalysis } from '@/lib/db/queries.server';
+
+// Define a session type
+interface UserSession {
+  user?: {
+    id: string;
+    name?: string;
+    email?: string;
+  };
+}
 
 // Define the metadata interface
 interface CVMetadata {
@@ -13,274 +26,218 @@ interface CVMetadata {
   error?: string; // Store any error messages
   optimizedPDFBase64?: string;
   lastProgressUpdate?: string; // Track the last progress update time
+  optimizationCompleted?: boolean; // Explicit flag for completion
+  stalledDetected?: boolean; // Explicit flag for stalled detection
+  progressStalled?: boolean; // Explicit flag for stalled progress
+  partialResultsAvailable?: boolean; // Explicit flag for partial results
   [key: string]: any; // Allow for additional properties
 }
 
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const fileName = searchParams.get("fileName");
-  
-  if (!fileName) {
-    return NextResponse.json({ error: "Missing fileName parameter" }, { status: 400 });
-  }
+// Constants for optimization monitoring
+const OPTIMIZATION_TIMEOUT_MINUTES = 5;
+const PROGRESS_STALL_MINUTES = 2;
 
+export async function GET(request: NextRequest) {
   try {
-    console.log(`Checking optimization status for: ${fileName}`);
-    const cvRecord = await getCVByFileName(fileName);
+    // Auth check
+    const session = await getServerSession() as UserSession | null;
+     
+    if (!session || !session.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Convert string ID to number for database operations
+    const userId = parseInt(session.user.id, 10);
     
+    if (isNaN(userId)) {
+      console.error(`Invalid user ID: ${session.user.id}`);
+      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
+    }
+
+    // Get cv ID from query params
+    const { searchParams } = new URL(request.url);
+    const cvId = searchParams.get('cvId');
+    
+    if (!cvId) {
+      return NextResponse.json({ error: 'CV ID is required' }, { status: 400 });
+    }
+
+    console.log(`Checking optimization status for: ${cvId}`);
+
+    // Get the CV from the database
+    // Convert cvId to the correct type for the database
+    const cvIdNum = parseInt(cvId, 10);
+    if (isNaN(cvIdNum)) {
+      return NextResponse.json({ error: 'Invalid CV ID format' }, { status: 400 });
+    }
+    
+    const cvRecord = await db.query.cvs.findFirst({
+      where: eq(cvs.id, cvIdNum),
+    });
+
     if (!cvRecord) {
-      console.error(`CV not found: ${fileName}`);
-      return NextResponse.json({ 
-        status: "error",
-        error: `CV not found: ${fileName}` 
-      }, { status: 404 });
+      return NextResponse.json({ error: 'CV not found' }, { status: 404 });
+    }
+
+    // Check if the CV belongs to the authenticated user
+    if (cvRecord.userId !== userId) {
+      console.error(`User ${userId} attempted to access CV ${cvRecord.id} belonging to user ${cvRecord.userId}`);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     let metadata: CVMetadata = {};
-    try {
-      metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
-      console.log(`Parsed metadata for ${fileName}:`, JSON.stringify(metadata, null, 2));
-    } catch (error) {
-      console.error(`Error parsing metadata for ${fileName}:`, error);
-      return NextResponse.json({ 
-        status: "error",
-        error: "Invalid metadata format" 
-      }, { status: 500 });
-    }
-
-    // Check if there's an error stored in the metadata
-    if (metadata.error) {
-      console.error(`Error found in metadata for ${fileName}:`, metadata.error);
-      return NextResponse.json({ 
-        status: "error",
-        error: metadata.error 
-      }, { status: 500 });
-    }
-
-    // Check if optimization was initiated
-    if (!metadata.optimizing && !metadata.optimized) {
-      console.log(`Optimization not initiated for ${fileName}`);
-      return NextResponse.json({ 
-        status: "error",
-        error: "CV optimization has not been initiated"
-      }, { status: 400 });
-    }
-
-    // If optimization is complete
-    if (metadata.optimized) {
-      // Check for optimizedText in both locations (for backward compatibility)
-      const optimizedText = metadata.optimizedText || metadata.optimizedCV;
-      
-      if (optimizedText) {
-        // Check if it's still marked as optimizing - if so, we need to fix this
-        if (metadata.optimizing) {
-          console.log(`CV ${fileName} is marked as both optimized and optimizing. Fixing metadata.`);
-          
-          // Fix the metadata by setting optimizing to false
-          metadata.optimizing = false;
-          metadata.progress = 100;
-          
-          try {
-            await updateCVMetadata(String(cvRecord.id), metadata);
-            console.log(`Fixed metadata for ${fileName}`);
-          } catch (updateError) {
-            console.error(`Error fixing metadata for ${fileName}:`, updateError);
-            // Continue despite this error
-          }
-        }
-        
-        console.log(`Optimization completed for ${fileName}`);
-        return NextResponse.json({
-          status: "completed",
-          optimizedText: optimizedText,
-          template: metadata.selectedTemplate || "professional"
-        });
-      } else {
-        // Log the entire metadata for debugging
-        console.error(`Optimization marked as complete but no optimized text found for ${fileName}`);
-        console.error(`Full metadata for debugging:`, JSON.stringify(metadata, null, 2));
-        
-        // Check if the optimization is still in progress despite being marked as complete
-        if (metadata.optimizing) {
-          console.log(`CV ${fileName} is marked as both optimized and optimizing. Treating as in-progress.`);
-          
-          // If progress is stuck at 10% for too long, we need to reset
-          const currentProgress = metadata.progress || 0;
-          if (currentProgress <= 10 && metadata.startTime) {
-            const startTime = new Date(metadata.startTime);
-            const currentTime = new Date();
-            const timeDiffMinutes = (currentTime.getTime() - startTime.getTime()) / (1000 * 60);
-            
-            if (timeDiffMinutes > 1) { // If stuck for more than 1 minute
-              console.log(`CV ${fileName} is stuck at ${currentProgress}% for ${timeDiffMinutes.toFixed(2)} minutes. Resetting.`);
-              
-              // Reset the optimization state
-              metadata.optimized = false;
-              metadata.optimizing = false;
-              metadata.error = `Optimization stalled at ${currentProgress}%`;
-              
-              try {
-                await updateCVMetadata(String(cvRecord.id), metadata);
-              } catch (updateError) {
-                console.error(`Error resetting metadata for ${fileName}:`, updateError);
-              }
-              
-              return NextResponse.json({
-                status: "error",
-                error: `Optimization stalled. Please try again.`
-              }, { status: 500 });
-            }
-          }
-          
-          return NextResponse.json({
-            status: "processing",
-            progress: metadata.progress || 50
-          });
-        }
-        
-        // If there's optimizedPDFBase64 but no optimizedText, try to extract it
-        if (metadata.optimizedPDFBase64) {
-          console.log(`Found optimizedPDFBase64 but no optimizedText for ${fileName}`);
-          
-          // Update the metadata to indicate we need to re-optimize
-          metadata.optimizing = true;
-          metadata.optimized = false;
-          metadata.error = "Optimized text missing, needs re-optimization";
-          
-          try {
-            await updateCVMetadata(String(cvRecord.id), metadata);
-          } catch (updateError) {
-            console.error(`Error updating metadata for ${fileName}:`, updateError);
-          }
-          
-          return NextResponse.json({
-            status: "error",
-            error: "Optimization needs to be restarted. Please try again."
-          }, { status: 500 });
-        }
-        
-        // Reset the optimization state to allow for a retry
-        metadata.optimized = false;
-        metadata.optimizing = false;
-        metadata.error = "Optimization completed but no optimized text was found";
-        
-        try {
-          await updateCVMetadata(String(cvRecord.id), metadata);
-          console.log(`Reset optimization state for ${fileName} to allow retry`);
-        } catch (updateError) {
-          console.error(`Error resetting optimization state for ${fileName}:`, updateError);
-        }
-        
-        return NextResponse.json({
-          status: "error",
-          error: "Optimization completed but no optimized text was found. Please try again."
+    
+    // Parse the metadata from the CV record
+    if (cvRecord.metadata) {
+      try {
+        metadata = JSON.parse(cvRecord.metadata);
+      } catch (error) {
+        console.error(`Error parsing metadata for CV ${cvId}:`, error);
+        return NextResponse.json({ 
+          error: 'Invalid metadata format',
+          details: (error as Error).message
         }, { status: 500 });
       }
     }
 
-    // If optimization is still in progress
-    if (metadata.optimizing) {
-      // Always use the progress value from the metadata
-      const progress = metadata.progress || 10;
-      
-      // Check if optimization has been running for too long (more than 5 minutes)
-      if (metadata.startTime) {
-        const startTime = new Date(metadata.startTime);
-        const currentTime = new Date();
-        const timeDiffMinutes = (currentTime.getTime() - startTime.getTime()) / (1000 * 60);
+    // Log metadata for debugging
+    console.log(`Parsed metadata for ${cvRecord.fileName}:`, JSON.stringify(metadata, null, 2));
+
+    // Detect stalled optimizations by checking startTime and progress updates
+    if (metadata.optimizing && metadata.startTime) {
+      const startTime = new Date(metadata.startTime);
+      const currentTime = new Date();
+      const timeDiffMinutes = (currentTime.getTime() - startTime.getTime()) / (1000 * 60);
+
+      // Check if the entire optimization has been running too long (over 5 minutes)
+      if (timeDiffMinutes > OPTIMIZATION_TIMEOUT_MINUTES) {
+        console.warn(`Optimization for ${cvRecord.fileName} has been running for ${timeDiffMinutes.toFixed(2)} minutes and appears stalled.`);
         
-        if (timeDiffMinutes > 5) {
-          console.log(`Optimization for ${fileName} has been running for ${timeDiffMinutes.toFixed(2)} minutes. Resetting.`);
-          
-          // Reset the optimization state
-          metadata.optimizing = false;
-          metadata.error = "Optimization timed out after 5 minutes";
-          try {
-            await updateCVMetadata(String(cvRecord.id), metadata);
-          } catch (updateError) {
-            console.error(`Error updating metadata for timeout on ${fileName}:`, updateError);
-          }
-          
-          return NextResponse.json({
-            status: "error",
-            error: "Optimization timed out after 5 minutes. Please try again."
-          }, { status: 500 });
+        // Update metadata to reflect the stalled state
+        metadata.error = `Optimization process stalled after ${timeDiffMinutes.toFixed(1)} minutes`;
+        
+        // We'll keep optimizing true but add an error so the frontend can show appropriate message
+        // This lets the user decide to try again or continue with partial results
+        if (!metadata.optimizationCompleted && metadata.optimizedText) {
+          console.log(`CV ${cvId} has partial results available despite stalled optimization`);
+          metadata.partialResultsAvailable = true;
+        }
+        
+        // Only update the database if we're adding new information
+        if (!metadata.stalledDetected) {
+          metadata.stalledDetected = true;
+          await updateCVMetadata(cvId, metadata);
         }
       }
       
-      // Check if the progress has been stuck at the same value for too long
+      // Check if progress hasn't updated in a while but optimization is still running
       if (metadata.lastProgressUpdate) {
-        const lastUpdate = new Date(metadata.lastProgressUpdate);
-        const currentTime = new Date();
-        const timeDiffMinutes = (currentTime.getTime() - lastUpdate.getTime()) / (1000 * 60);
+        const lastUpdateTime = new Date(metadata.lastProgressUpdate);
+        const updateTimeDiffMinutes = (currentTime.getTime() - lastUpdateTime.getTime()) / (1000 * 60);
         
-        // If progress has been stuck for more than 2 minutes, consider it stalled
-        if (timeDiffMinutes > 2) {
-          console.log(`Progress for ${fileName} has been stuck at ${progress}% for ${timeDiffMinutes.toFixed(2)} minutes. Resetting.`);
+        if (updateTimeDiffMinutes > PROGRESS_STALL_MINUTES && metadata.progress && metadata.progress < 100) {
+          console.warn(`Progress for ${cvRecord.fileName} has been stuck at ${metadata.progress}% for ${updateTimeDiffMinutes.toFixed(2)} minutes.`);
           
-          // Reset the optimization state
-          metadata.optimizing = false;
-          metadata.error = `Optimization stalled at ${progress}% for over 2 minutes`;
-          try {
-            await updateCVMetadata(String(cvRecord.id), metadata);
-          } catch (updateError) {
-            console.error(`Error updating metadata for stalled progress on ${fileName}:`, updateError);
+          // Add progress stalled info but don't change overall status yet
+          if (!metadata.progressStalled) {
+            metadata.progressStalled = true;
+            metadata.progressStalledAt = metadata.progress;
+            metadata.progressStalledTime = lastUpdateTime.toISOString();
+            await updateCVMetadata(cvId, metadata);
           }
-          
-          return NextResponse.json({
-            status: "error",
-            error: `Optimization stalled at ${progress}%. Please try again.`
-          }, { status: 500 });
         }
       }
-      
-      // Update the last progress update time
-      metadata.lastProgressUpdate = new Date().toISOString();
-      try {
-        await updateCVMetadata(String(cvRecord.id), metadata);
-      } catch (updateError) {
-        console.error(`Error updating lastProgressUpdate for ${fileName}:`, updateError);
-        // Continue despite this error
-      }
-      
-      // Log the progress for debugging
-      console.log(`Optimization progress for ${fileName}: ${progress}%`);
-      
-      return NextResponse.json({
-        status: "processing",
-        progress: progress
-      });
     }
 
-    // Default fallback
-    console.log(`Using default fallback for ${fileName}`);
-    return NextResponse.json({
-      status: "processing",
-      progress: 10
-    });
-  } catch (error: any) {
-    console.error(`Error checking optimization status for ${fileName}:`, error);
+    // Check for state inconsistencies that need fixing
+    if (metadata.optimized && metadata.optimizing) {
+      console.warn(`CV ${cvRecord.fileName} is marked both as optimized and optimizing - resolving conflict`);
+      
+      // If we have an optimizedText, then optimization succeeded
+      if (metadata.optimizedText) {
+        metadata.optimizing = false;
+        console.log(`Resolved conflict in favor of completed state since optimized text exists`);
+        await updateCVMetadata(cvId, metadata);
+      } 
+      // Otherwise likely the process crashed in the middle
+      else {
+        metadata.optimized = false;
+        metadata.error = "Previous optimization process did not complete successfully";
+        console.log(`Resolved conflict by marking as incomplete since no optimized text exists`);
+        await updateCVMetadata(cvId, metadata);
+      }
+    }
+
+    // Handle the error display logic for the frontend
+    let displayError = null;
+    if (metadata.error) {
+      console.log(`Error found in metadata for ${cvRecord.fileName}: ${metadata.error}`);
+      
+      // Determine if this error should be displayed to the user
+      if (metadata.optimizing && !metadata.optimized) {
+        displayError = metadata.error;
+      } 
+      // If optimization is not in progress and we have an error, also display it
+      else if (!metadata.optimizing && metadata.error) {
+        displayError = metadata.error;
+      }
+    }
+
+    // Check if optimized but no text found (critical error)
+    if (metadata.optimized && (!metadata.optimizedText || metadata.optimizedText.trim().length === 0)) {
+      console.error(`Optimization marked as complete but no optimized text found for ${cvRecord.fileName}`);
+      metadata.error = "Optimization completed but no optimized text was found";
+      displayError = metadata.error;
+      
+      // Update the database with this critical error
+      await updateCVMetadata(cvId, metadata);
+    }
+
+    // Create the response object with all necessary information
+    const response = {
+      id: cvRecord.id,
+      fileName: cvRecord.fileName,
+      optimizing: metadata.optimizing || false,
+      optimized: metadata.optimized || false,
+      progress: metadata.progress || 0,
+      error: displayError,
+      hasOptimizedText: !!metadata.optimizedText,
+      hasOptimizedPDF: !!metadata.optimizedPDFBase64,
+      template: metadata.selectedTemplate,
+      // Include additional metadata that the frontend might need
+      lastOptimizedAt: metadata.lastOptimizedAt,
+      optimizationCompleted: metadata.optimizationCompleted || false,
+      stalledDetected: metadata.stalledDetected || false,
+      progressStalled: metadata.progressStalled || false,
+      partialResultsAvailable: metadata.partialResultsAvailable || false
+    };
+
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error("Error checking optimization status:", error);
     return NextResponse.json({ 
-      status: "error",
-      error: `Failed to check optimization status: ${error.message}` 
+      error: 'Failed to check optimization status',
+      details: (error as Error).message
     }, { status: 500 });
   }
 }
 
-// Helper function to update CV metadata
+/**
+ * Helper function to update CV metadata in the database
+ */
 async function updateCVMetadata(cvId: string, metadata: CVMetadata) {
   try {
-    console.log(`Updating metadata for CV ID: ${cvId}`);
-    // Import the database query function directly
-    const { updateCVAnalysis } = await import("@/lib/db/queries.server");
+    // Convert string ID to number
+    const cvIdNum = parseInt(cvId, 10);
+    if (isNaN(cvIdNum)) {
+      throw new Error(`Invalid CV ID: ${cvId}`);
+    }
     
-    // Update the CV metadata using the server function
-    // Convert the cvId string back to a number since updateCVAnalysis expects a number
-    await updateCVAnalysis(Number(cvId), JSON.stringify(metadata));
-    
+    await updateCVAnalysis(cvIdNum, JSON.stringify(metadata));    
+    console.log(`Updated metadata for CV ${cvId}`);
     return true;
-  } catch (error: any) {
-    console.error(`Error updating CV metadata for ID ${cvId}:`, error);
+  } catch (error) {
+    console.error(`Failed to update metadata for CV ${cvId}:`, error);
     return false;
   }
 } 

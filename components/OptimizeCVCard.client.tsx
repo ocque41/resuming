@@ -1,7 +1,7 @@
 // OptimizeCVCard.client.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Download, ArrowRight, Check, AlertCircle } from "lucide-react";
@@ -23,6 +23,14 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   const [optimizedText, setOptimizedText] = useState<string | null>(null);
   const [optimizationError, setOptimizationError] = useState<string | null>(null);
   const [pollingAttempts, setPollingAttempts] = useState(0);
+  const pollRef = useRef(true);
+  const [loading, setLoading] = useState(false);
+  const [loadingContent, setLoadingContent] = useState(false);
+  const [optimizationStatus, setOptimizationStatus] = useState("Checking optimization status...");
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
+  const [hasOptimizedContent, setHasOptimizedContent] = useState(false);
+  const [hasOptimizedPDF, setHasOptimizedPDF] = useState(false);
+  const [optimizedPDFBase64, setOptimizedPDFBase64] = useState<string | null>(null);
 
   // Reset state when component unmounts
   useEffect(() => {
@@ -81,157 +89,225 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   }
 
   async function pollOptimizationStatus(cv: string) {
+    if (!pollRef.current) return;
+    
     try {
-      // Increment polling attempts
-      setPollingAttempts(prev => prev + 1);
+      setOptimizationStatus("Checking optimization status...");
+      console.log(`Polling status for: ${cv}`);
       
-      // If we've been polling for too long (60 attempts = 2 minutes), stop
-      if (pollingAttempts > 60) {
-        throw new Error("Optimization is taking too long. Please try again later.");
-      }
-      
-      console.log(`Polling optimization status for ${cv}, attempt ${pollingAttempts}`);
-      const response = await fetch(`/api/optimize-cv/status?fileName=${encodeURIComponent(cv)}`);
+      const response = await fetch(`/api/optimize-cv/status?cvId=${selectedCV}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error("Error response from status API:", errorData);
+        const errorText = await response.text();
+        console.error(`Error checking optimization status: ${errorText}`);
         
-        // If we need to restart optimization, do it automatically
-        if (errorData.error && (
-          errorData.error.includes("needs to be restarted") || 
-          errorData.error.includes("timed out") || 
-          errorData.error.includes("stalled") ||
-          errorData.error.includes("Please try again")
-        )) {
-          console.log("Optimization needs to be restarted, restarting...");
-          setIsPolling(false);
-          setOptimizationError("Optimization process stalled. Restarting automatically...");
-          
-          // Wait 2 seconds before restarting
-          setTimeout(() => {
-            handleOptimize();
-          }, 2000);
-          return;
-        }
+        // Add more detailed error status
+        setOptimizationError(`Server error: ${response.status} - ${errorText}`);
+        setErrorDetails(`The optimization process encountered a server error. You can try again or contact support if the issue persists.`);
         
-        throw new Error(errorData.error || `Server error: ${response.status} ${response.statusText}`);
+        // Stop polling if we get a server error
+        pollRef.current = false;
+        setIsPolling(false);
+        
+        // Close loading UI after a short delay
+        setTimeout(() => {
+          setLoading(false);
+          setIsOptimizing(false);
+        }, 2000);
+        
+        return;
       }
       
       const data = await response.json();
-      console.log(`Status response for ${cv}:`, data);
+      console.log("Optimization status:", data);
       
-      if (data.status === "completed") {
-        console.log("Optimization completed successfully");
+      // Check if there's an error in the response
+      if (data.error) {
+        console.error(`Optimization error: ${data.error}`);
+        setOptimizationError(data.error);
         
-        // Verify we have optimized text
-        if (!data.optimizedText) {
-          console.error("No optimized text in completed response");
-          throw new Error("Optimization completed but no optimized text was found");
+        if (data.partialResultsAvailable) {
+          // If we have partial results, let the user continue
+          setErrorDetails(`The optimization process stalled but partial results are available. You can still download the partially optimized CV or try again.`);
+          
+          // Load the optimized text if available
+          await loadOptimizedContent(selectedCV);
+          
+          // Stop polling since we have partial results
+          pollRef.current = false;
+          setIsPolling(false);
+          
+          // Close loading UI
+          setLoading(false);
+          setIsOptimizing(false);
+        } else {
+          // If no results are available, suggest retry
+          setErrorDetails(`Try again or select a different template. If the issue persists, contact support.`);
+          
+          // Stop polling since we have an error
+          pollRef.current = false;
+          setIsPolling(false);
+          
+          // Close loading UI after a short delay
+          setTimeout(() => {
+            setLoading(false);
+            setIsOptimizing(false);
+          }, 2000);
         }
         
-        setOptimizedText(data.optimizedText);
-        setIsOptimized(true);
-        setIsOptimizing(false);
-        setIsPolling(false);
-        setOptimizationProgress(100);
-        
-        // Automatically save the optimized CV back to the user's collection
-        await saveOptimizedCV(cv, data.optimizedText);
-      } else if (data.status === "processing") {
-        // Update progress
+        return;
+      }
+
+      // Update progress based on the status
+      if (data.optimizing) {
         setOptimizationProgress(data.progress || 10);
-        console.log(`Optimization in progress: ${data.progress || 10}%`);
+        setOptimizationStatus(`Optimizing your CV... ${data.progress || 10}%`);
         
-        // Poll again after 2 seconds
+        // Check for stalled progress
+        if (data.progressStalled) {
+          console.warn(`Progress is stalled at ${data.progress}%`);
+          setOptimizationStatus(`Optimizing your CV... ${data.progress || 10}% (processing...)`);
+        }
+
+        // Continue polling
         setTimeout(() => {
-          if (isPolling) { // Only continue polling if we haven't stopped
-            pollOptimizationStatus(cv);
-          }
+          if (pollRef.current) pollOptimizationStatus(cv);
         }, 2000);
-      } else if (data.status === "error") {
-        console.error("Error status received:", data.error);
-        throw new Error(data.error || "Optimization failed with an unknown error");
+      } else if (data.optimized) {
+        setOptimizationProgress(100);
+        setOptimizationStatus("CV optimized successfully!");
+        setIsOptimizing(false);
+        
+        // If we have optimized text, load it
+        if (data.hasOptimizedText) {
+          await loadOptimizedContent(selectedCV);
+          setIsOptimized(true);
+          pollRef.current = false;
+          setIsPolling(false);
+          setLoading(false);
+        } else {
+          // This should not happen but handle it just in case
+          setOptimizationError("Optimization completed but no optimized content was found");
+          setErrorDetails("There was an issue retrieving your optimized CV. Please try again.");
+          pollRef.current = false;
+          setIsPolling(false);
+          setLoading(false);
+        }
       } else {
-        console.warn("Unknown status received:", data);
-        throw new Error("Received unknown status from server");
+        // Handle unexpected state
+        console.warn("Optimization in an unexpected state:", data);
+        setOptimizationStatus("Checking optimization status...");
+        
+        // Continue polling a few more times in case the status is delayed
+        setTimeout(() => {
+          if (pollRef.current) pollOptimizationStatus(cv);
+        }, 3000);
       }
     } catch (error) {
       console.error("Error polling optimization status:", error);
-      setOptimizationError((error as Error).message || "Failed to check optimization status");
-      setIsOptimizing(false);
+      setOptimizationError(`Error checking optimization status: ${(error as Error).message}`);
+      setErrorDetails(`There was a network error while checking the optimization status. Check your connection and try again.`);
+      
+      // Stop polling on error
+      pollRef.current = false;
       setIsPolling(false);
+      setLoading(false);
+      setIsOptimizing(false);
+    }
+  }
+
+  async function loadOptimizedContent(cv: string) {
+    try {
+      // Show loading state
+      setLoading(true);
+      
+      const response = await fetch(`/api/cv/optimized-content?cvId=${cv}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.optimizedText) {
+        setOptimizedText(data.optimizedText);
+        console.log("Loaded optimized text (length):", data.optimizedText.length);
+        if (data.optimizedText.length > 0) {
+          setIsOptimized(true);
+        }
+      } else {
+        console.warn("No optimized text found");
+        setOptimizationError("No optimized content found");
+        setErrorDetails("The optimization process did not produce any content. Try again or select a different template.");
+      }
+      
+      // Check for base64 PDF content
+      if (data.optimizedPDFBase64) {
+        console.log("PDF base64 data is available");
+        setIsOptimized(true);
+      } else {
+        console.warn("No optimized PDF found");
+        setIsOptimized(false);
+      }
+    } catch (error) {
+      console.error("Error loading optimized content:", error);
+      setOptimizationError(`Error loading optimized content: ${(error as Error).message}`);
+      setErrorDetails("There was an error retrieving your optimized CV content. Try downloading again.");
+    } finally {
+      setLoading(false);
     }
   }
 
   async function saveOptimizedCV(originalFileName: string, optimizedText: string) {
     try {
-      // First, get the optimized PDF from the server
-      const pdfResponse = await fetch(`/api/optimize-cv/download?fileName=${encodeURIComponent(originalFileName)}`);
-      
-      let pdfBlob;
-      let fallbackMode = false;
-      
-      if (pdfResponse.status === 206) {
-        // We have optimized text but no PDF, use a fallback approach
-        console.log("No optimized PDF available, using fallback mode with text only");
-        fallbackMode = true;
-        
-        // Create a simple text PDF as a fallback
-        const textData = await pdfResponse.json();
-        if (!textData.optimizedText) {
-          throw new Error('Failed to retrieve optimized text');
-        }
-        
-        // Create a simple text blob as fallback
-        const textContent = textData.optimizedText;
-        pdfBlob = new Blob([textContent], { type: 'text/plain' });
-      } else if (!pdfResponse.ok) {
-        throw new Error('Failed to retrieve optimized PDF');
-      } else {
-        // Get the PDF as a blob
-        pdfBlob = await pdfResponse.blob();
+      if (!optimizedText || optimizedText.trim().length === 0) {
+        console.error("No optimized text to save");
+        throw new Error("No optimized text to save");
       }
       
-      // Create a new filename for the optimized version
-      const fileNameParts = originalFileName.split('.');
-      const extension = fileNameParts.pop();
-      const baseName = fileNameParts.join('.');
-      const optimizedFileName = `${baseName}-optimized${fallbackMode ? '-text' : ''}.${fallbackMode ? 'txt' : 'pdf'}`;
+      console.log(`Saving optimized CV for ${originalFileName} (optimized text length: ${optimizedText.length})`);
       
-      // Create a File object from the blob
-      const file = new File([pdfBlob], optimizedFileName, { 
-        type: fallbackMode ? 'text/plain' : 'application/pdf' 
+      // Check if the text looks valid (contains some reasonable content)
+      if (optimizedText.length < 100) {
+        console.warn("Optimized text is suspiciously short:", optimizedText);
+        throw new Error("Optimized text appears to be incomplete");
+      }
+
+      const response = await fetch("/api/cv/save-optimized", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          originalCV: selectedCV,
+          optimizedText: optimizedText,
+        }),
       });
-      
-      // Create FormData to send the file
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('fileName', optimizedFileName);
-      formData.append('originalFileName', originalFileName);
-      formData.append('optimizedText', optimizedText);
-      
-      // Send the optimized CV to the server to save in both Neon DB and Dropbox
-      const response = await fetch('/api/cv/save-optimized', {
-        method: 'POST',
-        body: formData,
-      });
-      
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to save optimized CV');
+        const errorText = await response.text();
+        throw new Error(`Failed to save optimized CV: ${errorText}`);
       }
-      
+
       const data = await response.json();
-      console.log('Optimized CV saved successfully:', data);
+      console.log("Optimized CV saved successfully:", data);
       
-      // Refresh the page after a short delay to show the updated CV collection
-      setTimeout(() => {
-        window.location.reload();
-      }, 3000);
+      return data;
     } catch (error) {
-      console.error('Error saving optimized CV:', error);
-      // Don't show this error to the user, as the optimization itself was successful
+      console.error("Error saving optimized CV:", error);
+      setOptimizationError(`Error saving: ${(error as Error).message}`);
+      setErrorDetails("There was an error saving your optimized CV. You can still download the current version.");
+      throw error;
     }
   }
 
@@ -336,7 +412,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
           {isOptimizing && (
             <div className="space-y-2 mt-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-400">Optimizing your CV...</span>
+                <span className="text-sm text-gray-400">{optimizationStatus}</span>
                 <span className="text-sm font-medium text-[#B4916C]">{optimizationProgress}%</span>
               </div>
               <div className="w-full bg-[#1A1A1A] rounded-full h-2.5">
@@ -346,7 +422,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
                 ></div>
               </div>
               <p className="text-xs text-gray-500 mt-1">
-                This may take a minute or two. Please don't close this page.
+                {errorDetails}
               </p>
             </div>
           )}

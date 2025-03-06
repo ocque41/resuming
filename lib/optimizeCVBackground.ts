@@ -12,7 +12,12 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     
     console.log(`Starting CV optimization for: ${cvRecord.id}, template: ${templateId || 'default'}`);
     
+    // Parse existing metadata
     const metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
+    
+    // Clear any previous errors or stalled state
+    delete metadata.error;
+    delete metadata.errorTimestamp;
     
     // Check if optimization is already in progress and has been running for too long
     if (metadata.optimizing && metadata.startTime) {
@@ -22,22 +27,32 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
       
       // If optimization has been running for more than 5 minutes, reset it
       if (timeDiffMinutes > 5) {
-        console.log(`Optimization for CV ${cvRecord.id} has been running for ${timeDiffMinutes.toFixed(2)} minutes. Resetting.`);
-        metadata.optimizing = false;
-        metadata.error = "Previous optimization attempt timed out";
+        console.log(`Previous optimization for CV ${cvRecord.id} had been running for ${timeDiffMinutes.toFixed(2)} minutes. Resetting.`);
+        console.log(`Previous progress: ${metadata.progress}%, Status: optimizing=${metadata.optimizing}, optimized=${metadata.optimized}`);
       }
     }
+    
+    // Reset optimization state to start fresh
+    metadata.optimizing = true;
+    metadata.optimized = false; // Ensure we're not marked as optimized until complete
     
     // Add startTime to the metadata to track optimization progress
     const startTime = new Date().toISOString();
     const updatedMetadata = {
       ...metadata,
-      optimizing: true,
       startTime: startTime,
       progress: 10, // Initialize progress at 10%
-      error: null // Clear any previous errors
+      lastProgressUpdate: new Date().toISOString() // Track when progress last changed
     };
-    await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedMetadata));
+    
+    // Save initial state to database
+    try {
+      await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedMetadata));
+      console.log(`Initialized optimization state for CV ${cvRecord.id} at 10%`);
+    } catch (updateError) {
+      console.error("Failed to initialize optimization state:", updateError);
+      throw new Error(`Failed to initialize optimization: ${(updateError as Error).message}`);
+    }
     
     // Use templateId from parameters or from stored metadata if available
     const selectedTemplateId = templateId || metadata.selectedTemplate;
@@ -61,211 +76,315 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     
     console.log(`Raw text length: ${cvRecord.rawText.length} characters`);
 
+    // Update progress to 20%
     try {
-      // Update progress to 20%
       const progress20Metadata = {
-        ...metadata,
-        optimizing: true,
-        startTime: startTime,
-        progress: 20
+        ...updatedMetadata,
+        progress: 20,
+        lastProgressUpdate: new Date().toISOString()
       };
       await updateCVAnalysis(cvRecord.id, JSON.stringify(progress20Metadata));
+      console.log(`Updated progress to 20% for CV ${cvRecord.id}`);
     } catch (updateError) {
       console.error("Failed to update progress to 20%:", updateError);
       // Continue despite the error
     }
 
     // Include template information in the optimization process
-    console.log("Starting optimization with AI...");
+    console.log("Starting AI optimization...");
     let optimizationResult;
     try {
-      optimizationResult = await optimizeCV(cvRecord.rawText, selectedTemplate);
+      // Set a timeout for the AI optimization
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("AI optimization timed out after 60 seconds")), 60000);
+      });
+      
+      // Race the optimization against the timeout
+      optimizationResult = await Promise.race([
+        optimizeCV(cvRecord.rawText, selectedTemplate),
+        timeoutPromise
+      ]) as { optimizedText: string; error?: string };
+      
       console.log("AI optimization completed successfully");
       
-      // Immediately check if we have valid optimized text
-      if (!optimizationResult || !optimizationResult.optimizedText || optimizationResult.optimizedText.trim().length === 0) {
-        console.error("Optimization returned empty or invalid text");
-        throw new Error("Optimization returned empty or invalid text");
+      // Immediately verify we got a valid result
+      if (!optimizationResult) {
+        throw new Error("Optimization result is undefined");
       }
       
-      // Log the first part of the optimized text for debugging
-      console.log(`Optimized text preview: "${optimizationResult.optimizedText.substring(0, 100)}..."`);
+      if (!optimizationResult.optimizedText || optimizationResult.optimizedText.trim().length === 0) {
+        console.error("Optimization returned empty text");
+        throw new Error("Optimization returned empty text");
+      }
       
-      // Immediately save the optimized text to avoid losing it
+      console.log(`Optimized text received (length: ${optimizationResult.optimizedText.length} characters)`);
+      console.log(`First 100 chars: "${optimizationResult.optimizedText.substring(0, 100).replace(/\n/g, "\\n")}..."`);
+      
+      // Immediately save the optimized text to avoid loss
       try {
-        const immediateUpdateMetadata = {
-          ...metadata,
-          optimizing: true,
-          startTime: startTime,
-          progress: 30,
-          optimizedText: optimizationResult.optimizedText,
-          contentVerificationFailed: optimizationResult.error ? true : false,
-          contentVerificationError: optimizationResult.error
+        const progress40Metadata = {
+          ...updatedMetadata,
+          progress: 40,
+          optimizedText: optimizationResult.optimizedText, // Save text immediately
+          lastProgressUpdate: new Date().toISOString()
         };
-        await updateCVAnalysis(cvRecord.id, JSON.stringify(immediateUpdateMetadata));
-        console.log("Immediately saved optimized text after AI completion");
+        await updateCVAnalysis(cvRecord.id, JSON.stringify(progress40Metadata));
+        console.log(`Saved optimized text at 40% progress for CV ${cvRecord.id}`);
       } catch (immediateUpdateError) {
         console.error("Failed to save optimized text immediately:", immediateUpdateError);
-        // Continue despite the error, we'll try again later
+        // Continue despite this error
       }
     } catch (optimizeError) {
       console.error("Error during AI optimization:", optimizeError);
+      
+      // Update metadata to reflect the error
+      try {
+        const errorMetadata = {
+          ...updatedMetadata,
+          optimizing: false,
+          error: `AI optimization failed: ${(optimizeError as Error).message}`,
+          errorTimestamp: new Date().toISOString()
+        };
+        await updateCVAnalysis(cvRecord.id, JSON.stringify(errorMetadata));
+      } catch (metadataError) {
+        console.error("Failed to update error metadata:", metadataError);
+      }
+      
       throw optimizeError;
     }
     
+    // Update progress to 60%
     try {
-      // Update progress to 60%
       const progress60Metadata = {
-        ...metadata,
-        optimizing: true,
-        startTime: startTime,
+        ...updatedMetadata,
         progress: 60,
-        optimizedText: optimizationResult.optimizedText  // Make sure the text is saved here too
+        optimizedText: optimizationResult.optimizedText, // Ensure text is saved here too
+        lastProgressUpdate: new Date().toISOString()
       };
       await updateCVAnalysis(cvRecord.id, JSON.stringify(progress60Metadata));
+      console.log(`Updated progress to 60% for CV ${cvRecord.id}`);
     } catch (updateError) {
       console.error("Failed to update progress to 60%:", updateError);
       // Continue despite the error
     }
     
-    // Verify the optimization result
+    // Double-check the optimization result again
     if (!optimizationResult || !optimizationResult.optimizedText) {
       console.error("Optimization failed to produce valid output");
       throw new Error("No optimized text was returned from the optimization process");
     }
     
-    console.log(`Optimized text length: ${optimizationResult.optimizedText.length} characters`);
-    console.log(`First 100 characters: \`\`\` ${optimizationResult.optimizedText.substring(0, 100)}...`);
-    
-    // Store the optimized text in a variable to ensure it's available
+    // Store the optimized text in a variable for further use
     const optimizedText = optimizationResult.optimizedText;
     
+    // Update progress to 70%
     try {
-      // Update progress to 70% and save the optimized text immediately
       const progress70Metadata = {
-        ...metadata,
-        optimizing: true,
-        optimized: false, // Don't mark as optimized until the entire process is complete
-        startTime: startTime,
+        ...updatedMetadata,
         progress: 70,
-        optimizedText: optimizedText // Save the optimized text here as well
+        optimizedText: optimizedText, // Keep saving the text at each step
+        lastProgressUpdate: new Date().toISOString()
       };
       await updateCVAnalysis(cvRecord.id, JSON.stringify(progress70Metadata));
-      console.log("Updated progress to 70% and saved optimized text");
+      console.log(`Updated progress to 70% for CV ${cvRecord.id}`);
     } catch (updateError) {
       console.error("Failed to update progress to 70%:", updateError);
       // Continue despite the error
     }
     
+    // Retrieve the original PDF bytes
     let originalPdfBytes;
     try {
+      console.log(`Retrieving original PDF for CV ${cvRecord.id}...`);
       originalPdfBytes = await getOriginalPdfBytes(cvRecord);
-    } catch (pdfError: any) {
+      
+      if (!originalPdfBytes || originalPdfBytes.length === 0) {
+        throw new Error("Retrieved empty PDF content");
+      }
+      
+      console.log(`Retrieved original PDF (${originalPdfBytes.length} bytes)`);
+    } catch (pdfError) {
       console.error("Error retrieving original PDF bytes:", pdfError);
-      throw new Error(`Failed to retrieve original PDF: ${pdfError.message}`);
+      
+      // Save optimization result without PDF but with text
+      try {
+        const errorButWithTextMetadata = {
+          ...updatedMetadata,
+          optimizing: false,
+          optimized: true, // Mark as optimized since we have the text
+          optimizedText: optimizedText,
+          progress: 100,
+          error: `PDF retrieval failed: ${(pdfError as Error).message}, but optimized text is available`,
+          lastOptimizedAt: new Date().toISOString()
+        };
+        await updateCVAnalysis(cvRecord.id, JSON.stringify(errorButWithTextMetadata));
+        console.log(`Saved optimized text despite PDF error for CV ${cvRecord.id}`);
+      } catch (metadataError) {
+        console.error("Failed to update error metadata with text:", metadataError);
+      }
+      
+      throw new Error(`Failed to retrieve original PDF: ${(pdfError as Error).message}`);
     }
     
-    if (!originalPdfBytes || originalPdfBytes.length === 0) {
-      throw new Error("Failed to retrieve original PDF content");
-    }
-    
-    console.log(`Retrieved original PDF (${originalPdfBytes.length} bytes)`);
-    
+    // Update progress to 80%
     try {
-      // Update progress to 80%
       const progress80Metadata = {
-        ...metadata,
-        optimizing: true,
-        startTime: startTime,
-        progress: 80
+        ...updatedMetadata,
+        progress: 80,
+        optimizedText: optimizedText, // Keep saving the text
+        lastProgressUpdate: new Date().toISOString()
       };
       await updateCVAnalysis(cvRecord.id, JSON.stringify(progress80Metadata));
+      console.log(`Updated progress to 80% for CV ${cvRecord.id}`);
     } catch (updateError) {
       console.error("Failed to update progress to 80%:", updateError);
       // Continue despite the error
     }
     
-    // Pass template information to the PDF modification function
-    console.log("Generating optimized PDF...");
+    // Generate optimized PDF
     let pdfBuffer;
     try {
-      pdfBuffer = await modifyPDFWithOptimizedContent(
-        optimizationResult.optimizedText,
-        cvRecord.rawText,
-        selectedTemplate
-      );
-      console.log("PDF modification completed successfully");
-    } catch (pdfError: any) {
+      console.log("Generating optimized PDF...");
+      // Set a timeout for PDF generation
+      const pdfTimeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("PDF generation timed out after 30 seconds")), 30000);
+      });
+      
+      // Race the PDF generation against the timeout
+      pdfBuffer = await Promise.race([
+        modifyPDFWithOptimizedContent(optimizedText, cvRecord.rawText, selectedTemplate),
+        pdfTimeoutPromise
+      ]) as Uint8Array;
+      
+      console.log("PDF generation completed successfully");
+      
+      if (!pdfBuffer || pdfBuffer.length === 0) {
+        throw new Error("PDF generation produced empty output");
+      }
+    } catch (pdfError) {
       console.error("Error during PDF modification:", pdfError);
-      throw new Error(`PDF modification failed: ${pdfError.message}`);
+      
+      // Save optimization result without PDF but with text
+      try {
+        const pdfErrorButWithTextMetadata = {
+          ...updatedMetadata,
+          optimizing: false,
+          optimized: true, // Mark as optimized since we have the text
+          optimizedText: optimizedText,
+          progress: 100,
+          error: `PDF generation failed: ${(pdfError as Error).message}, but optimized text is available`,
+          lastOptimizedAt: new Date().toISOString()
+        };
+        await updateCVAnalysis(cvRecord.id, JSON.stringify(pdfErrorButWithTextMetadata));
+        console.log(`Saved optimized text despite PDF generation error for CV ${cvRecord.id}`);
+      } catch (metadataError) {
+        console.error("Failed to update PDF error metadata with text:", metadataError);
+      }
+      
+      throw new Error(`PDF modification failed: ${(pdfError as Error).message}`);
     }
     
+    // Update progress to 90%
     try {
-      // Update progress to 90%
       const progress90Metadata = {
-        ...metadata,
-        optimizing: true,
-        startTime: startTime,
-        progress: 90
+        ...updatedMetadata,
+        progress: 90,
+        optimizedText: optimizedText, // Keep saving the text
+        lastProgressUpdate: new Date().toISOString()
       };
       await updateCVAnalysis(cvRecord.id, JSON.stringify(progress90Metadata));
+      console.log(`Updated progress to 90% for CV ${cvRecord.id}`);
     } catch (updateError) {
       console.error("Failed to update progress to 90%:", updateError);
       // Continue despite the error
     }
     
-    if (!pdfBuffer) {
-      throw new Error("PDF modification failed to produce output");
-    }
-    
-    // Convert buffer to base64 string
-    const modifiedPdfBase64 = Buffer.isBuffer(pdfBuffer) 
-      ? pdfBuffer.toString('base64')
-      : Buffer.from(pdfBuffer).toString('base64');
-    
-    console.log(`Generated optimized PDF (${modifiedPdfBase64.length} base64 characters)`);
-
-    // Ensure we're using the optimized text we saved earlier
-    const newMetadata = {
-      ...metadata,
-      optimizedText: optimizedText, // Use the variable we stored earlier
-      optimizedPDFBase64: modifiedPdfBase64,
-      selectedTemplate: selectedTemplateId, // Save the template ID in metadata
-      optimized: true,
-      optimizing: false,
-      optimizedTimes: metadata.optimizedTimes ? metadata.optimizedTimes + 1 : 1,
-      error: null,
-      progress: 100, // Mark as 100% complete
-      lastOptimizedAt: new Date().toISOString()
-    };
-
+    // Convert PDF buffer to base64
+    let modifiedPdfBase64;
     try {
-      // Verify the metadata has the optimized text before saving
-      if (!newMetadata.optimizedText || newMetadata.optimizedText.trim().length === 0) {
-        console.error("Final metadata is missing optimized text");
-        throw new Error("Final metadata is missing optimized text");
+      modifiedPdfBase64 = Buffer.isBuffer(pdfBuffer) 
+        ? pdfBuffer.toString('base64')
+        : Buffer.from(pdfBuffer).toString('base64');
+      
+      console.log(`Generated optimized PDF base64 (${modifiedPdfBase64.length} chars)`);
+      
+      if (!modifiedPdfBase64 || modifiedPdfBase64.length === 0) {
+        throw new Error("Failed to convert PDF to base64");
+      }
+    } catch (base64Error) {
+      console.error("Error converting PDF to base64:", base64Error);
+      
+      // Save optimization result without PDF base64 but with text
+      try {
+        const base64ErrorButWithTextMetadata = {
+          ...updatedMetadata,
+          optimizing: false,
+          optimized: true,
+          optimizedText: optimizedText,
+          progress: 100,
+          error: `Base64 conversion failed: ${(base64Error as Error).message}, but optimized text is available`,
+          lastOptimizedAt: new Date().toISOString()
+        };
+        await updateCVAnalysis(cvRecord.id, JSON.stringify(base64ErrorButWithTextMetadata));
+        console.log(`Saved optimized text despite base64 conversion error for CV ${cvRecord.id}`);
+      } catch (metadataError) {
+        console.error("Failed to update base64 error metadata with text:", metadataError);
       }
       
-      await updateCVAnalysis(cvRecord.id, JSON.stringify(newMetadata));
-      console.log(`CV optimization completed successfully for: ${cvRecord.id}`);
-      console.log(`Optimized text saved (${optimizedText.length} characters)`);
-    } catch (finalUpdateError: any) {
-      console.error("Failed to update final metadata:", finalUpdateError);
-      throw new Error(`Failed to save optimization results: ${finalUpdateError.message}`);
+      throw new Error(`Failed to convert PDF to base64: ${(base64Error as Error).message}`);
     }
     
-    return newMetadata;
-  } catch (error: any) {
+    // Prepare final metadata with all optimization results
+    const finalMetadata = {
+      ...metadata, // Start with original metadata (strengths, weaknesses, etc.)
+      optimizedText: optimizedText,
+      optimizedPDFBase64: modifiedPdfBase64,
+      selectedTemplate: selectedTemplateId,
+      optimized: true,
+      optimizing: false,
+      optimizedTimes: (metadata.optimizedTimes || 0) + 1,
+      error: null, // Clear any errors
+      progress: 100,
+      lastProgressUpdate: new Date().toISOString(),
+      lastOptimizedAt: new Date().toISOString(),
+      optimizationCompleted: true // Add this flag to explicitly indicate completion
+    };
+    
+    // Verify the final metadata has the optimized text before saving
+    if (!finalMetadata.optimizedText || finalMetadata.optimizedText.trim().length === 0) {
+      console.error("Final metadata is missing optimized text");
+      throw new Error("Final metadata is missing optimized text");
+    }
+    
+    // Save the final optimization results
+    try {
+      await updateCVAnalysis(cvRecord.id, JSON.stringify(finalMetadata));
+      console.log(`CV optimization completed successfully for: ${cvRecord.id}`);
+      console.log(`Saved optimized text (${optimizedText.length} chars) and PDF (${modifiedPdfBase64.length} base64 chars)`);
+    } catch (finalUpdateError) {
+      console.error("Failed to update final metadata:", finalUpdateError);
+      throw new Error(`Failed to save optimization results: ${(finalUpdateError as Error).message}`);
+    }
+    
+    return finalMetadata;
+  } catch (error) {
     console.error("Background optimization error:", error);
-    console.error("CV Record ID:", cvRecord.id);
-    console.error("Error stack:", error.stack);
+    console.error("CV Record ID:", cvRecord?.id);
+    console.error("Error stack:", (error as Error).stack);
     
     try {
       const metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
-      metadata.optimizing = false;
-      metadata.error = error.message;
-      metadata.errorTimestamp = new Date().toISOString();
-      await updateCVAnalysis(cvRecord.id, JSON.stringify(metadata));
+      
+      // Update metadata to reflect the error
+      const errorMetadata = {
+        ...metadata,
+        optimizing: false, // No longer optimizing
+        error: `Optimization failed: ${(error as Error).message}`,
+        errorTimestamp: new Date().toISOString()
+      };
+      
+      await updateCVAnalysis(cvRecord.id, JSON.stringify(errorMetadata));
+      console.log(`Updated error state for CV ${cvRecord.id}`);
     } catch (metadataError) {
       console.error("Failed to update error metadata:", metadataError);
     }
