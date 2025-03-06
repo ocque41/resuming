@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import crossFetch from "cross-fetch";
-import { getDropboxClient } from "./dropboxAdmin";
+import { getDropboxClient, updateDropboxAccessToken } from "./dropboxAdmin";
 import pdfParse from "pdf-parse";
 
 const pdfCache = new Map<string, Uint8Array>();
@@ -91,4 +91,31 @@ export async function extractTextFromPdf(pdfBytes: Uint8Array): Promise<string> 
   const buffer = Buffer.from(pdfBytes);
   const data = await pdfParse(buffer);
   return data.text;
+}
+
+/**
+ * Uploads a buffer to Dropbox and returns the path.
+ * @param buffer - The file buffer to upload
+ * @param dropboxPath - The path where the file should be stored in Dropbox
+ * @returns A Promise that resolves with the Dropbox path
+ */
+export async function uploadBufferToStorage(buffer: Buffer, dropboxPath: string): Promise<string> {
+  const dbx = getDropboxClient();
+
+  try {
+    await dbx.filesUpload({
+      path: dropboxPath,
+      contents: buffer,
+      mode: { ".tag": "overwrite" }
+    });
+    
+    return dropboxPath;
+  } catch (error: any) {
+    if (error.status === 401) {
+      console.error("Access token expired, refreshing token...");
+      await updateDropboxAccessToken();
+      return await uploadBufferToStorage(buffer, dropboxPath);
+    }
+    throw error;
+  }
 }

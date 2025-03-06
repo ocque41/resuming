@@ -130,33 +130,50 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
 
   async function saveOptimizedCV(originalFileName: string, optimizedText: string) {
     try {
+      // First, get the optimized PDF from the server
+      const pdfResponse = await fetch(`/api/optimize-cv/download?fileName=${encodeURIComponent(originalFileName)}`);
+      
+      if (!pdfResponse.ok) {
+        throw new Error('Failed to retrieve optimized PDF');
+      }
+      
+      // Get the PDF as a blob
+      const pdfBlob = await pdfResponse.blob();
+      
       // Create a new filename for the optimized version
       const fileNameParts = originalFileName.split('.');
       const extension = fileNameParts.pop();
       const baseName = fileNameParts.join('.');
-      const optimizedFileName = `${baseName}-optimized.${extension}`;
+      const optimizedFileName = `${baseName}-optimized.pdf`;
       
-      // Convert optimized text to a file object
-      const textBlob = new Blob([optimizedText], { type: 'text/plain' });
-      const file = new File([textBlob], optimizedFileName, { type: 'application/pdf' });
+      // Create a File object from the PDF blob
+      const file = new File([pdfBlob], optimizedFileName, { type: 'application/pdf' });
       
       // Create FormData to send the file
       const formData = new FormData();
       formData.append('file', file);
       formData.append('fileName', optimizedFileName);
       formData.append('originalFileName', originalFileName);
+      formData.append('optimizedText', optimizedText);
       
-      // Send the optimized CV to the server
+      // Send the optimized CV to the server to save in both Neon DB and Dropbox
       const response = await fetch('/api/cv/save-optimized', {
         method: 'POST',
         body: formData,
       });
       
       if (!response.ok) {
-        throw new Error('Failed to save optimized CV');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save optimized CV');
       }
       
-      console.log('Optimized CV saved successfully');
+      const data = await response.json();
+      console.log('Optimized CV saved successfully:', data);
+      
+      // Refresh the page after a short delay to show the updated CV collection
+      setTimeout(() => {
+        window.location.reload();
+      }, 3000);
     } catch (error) {
       console.error('Error saving optimized CV:', error);
       // Don't show this error to the user, as the optimization itself was successful
@@ -201,25 +218,25 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   }
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="text-xl font-semibold">Optimize Your CV</CardTitle>
+    <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg">
+      <CardHeader className="bg-[#B4916C]/10 pb-4">
+        <CardTitle className="text-xl font-bold text-[#B4916C]">Optimize Your CV</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-6">
         <div className="space-y-4">
           {/* CV Selection */}
           <div>
-            <label className="block text-sm font-medium mb-1">Select CV</label>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Select CV</label>
             <Select
               value={selectedCV}
               onValueChange={handleCVSelect}
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="w-full bg-[#121212] border border-[#B4916C]/30 text-white">
                 <SelectValue placeholder="Select a CV to optimize" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-[#121212] border border-[#B4916C]/30 text-white">
                 {cvs.map((cv) => (
-                  <SelectItem key={cv} value={cv}>
+                  <SelectItem key={cv} value={cv} className="hover:bg-[#B4916C]/10">
                     {cv}
                   </SelectItem>
                 ))}
@@ -229,33 +246,38 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
 
           {/* Template Selection */}
           <div>
-            <label className="block text-sm font-medium mb-1">Select Template</label>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Select Template</label>
             <Select
               value={selectedTemplate}
               onValueChange={handleTemplateSelect}
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="w-full bg-[#121212] border border-[#B4916C]/30 text-white">
                 <SelectValue placeholder="Select a template" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="professional">Professional</SelectItem>
-                <SelectItem value="modern">Modern</SelectItem>
-                <SelectItem value="creative">Creative</SelectItem>
-                <SelectItem value="executive">Executive</SelectItem>
-                <SelectItem value="technical">Technical</SelectItem>
+              <SelectContent className="bg-[#121212] border border-[#B4916C]/30 text-white">
+                <SelectItem value="professional" className="hover:bg-[#B4916C]/10">Professional</SelectItem>
+                <SelectItem value="modern" className="hover:bg-[#B4916C]/10">Modern</SelectItem>
+                <SelectItem value="creative" className="hover:bg-[#B4916C]/10">Creative</SelectItem>
+                <SelectItem value="executive" className="hover:bg-[#B4916C]/10">Executive</SelectItem>
+                <SelectItem value="technical" className="hover:bg-[#B4916C]/10">Technical</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           {/* Optimization Progress */}
           {isOptimizing && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Optimizing your CV...</span>
-                <span className="text-sm font-medium">{optimizationProgress}%</span>
+            <div className="space-y-2 mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-gray-400">Optimizing your CV...</span>
+                <span className="text-sm font-medium text-[#B4916C]">{optimizationProgress}%</span>
               </div>
-              <Progress value={optimizationProgress} className="h-2" />
-              <p className="text-xs text-muted-foreground mt-1">
+              <div className="w-full bg-[#1A1A1A] rounded-full h-2.5">
+                <div 
+                  className="bg-[#B4916C] h-2.5 rounded-full" 
+                  style={{ width: `${optimizationProgress}%` }}
+                ></div>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
                 This may take a minute or two. Please don't close this page.
               </p>
             </div>
@@ -263,22 +285,24 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
 
           {/* Error Message */}
           {optimizationError && (
-            <Alert variant="destructive" className="mt-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                {optimizationError}
-              </AlertDescription>
-            </Alert>
+            <div className="p-3 bg-red-900/30 border border-red-700 rounded-md text-red-400 text-sm mt-4">
+              <div className="flex items-start">
+                <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
+                <span>{optimizationError}</span>
+              </div>
+            </div>
           )}
 
           {/* Success Message */}
           {isOptimized && !optimizationError && (
-            <Alert className="bg-green-50 border-green-200 text-green-800 mt-4">
-              <Check className="h-4 w-4" />
-              <AlertDescription>
-                Your CV has been successfully optimized!
-              </AlertDescription>
-            </Alert>
+            <div className="p-3 bg-green-900/30 border border-green-700 rounded-md text-green-400 text-sm flex items-start mt-4">
+              <Check className="h-5 w-5 mr-2 flex-shrink-0" />
+              <div>
+                <p className="font-medium">CV Optimized Successfully!</p>
+                <p className="mt-1">Your optimized CV has been automatically added to your collection.</p>
+                <p className="mt-1 text-xs">The page will refresh in a moment to show your updated collection.</p>
+              </div>
+            </div>
           )}
 
           {/* Action Buttons */}
@@ -286,7 +310,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
             <Button
               onClick={handleOptimize}
               disabled={!selectedCV || isOptimizing}
-              className="flex-1"
+              className="flex-1 bg-[#B4916C] text-white hover:bg-[#B4916C]/90"
             >
               {isOptimizing ? (
                 <>
@@ -305,7 +329,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
               <Button
                 onClick={handleDownload}
                 variant="outline"
-                className="flex-1"
+                className="flex-1 border-[#B4916C]/30 text-white hover:bg-[#B4916C]/10"
               >
                 <Download className="mr-2 h-4 w-4" />
                 Download Optimized CV
