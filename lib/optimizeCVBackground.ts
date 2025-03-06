@@ -94,15 +94,20 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     console.log(`Optimized text length: ${optimizationResult.optimizedText.length} characters`);
     console.log(`First 100 characters: \`\`\` ${optimizationResult.optimizedText.substring(0, 100)}...`);
     
+    // Store the optimized text in a variable to ensure it's available
+    const optimizedText = optimizationResult.optimizedText;
+    
     try {
-      // Update progress to 70%
+      // Update progress to 70% and save the optimized text immediately
       const progress70Metadata = {
         ...metadata,
         optimizing: true,
         startTime: startTime,
-        progress: 70
+        progress: 70,
+        optimizedText: optimizedText // Save the optimized text here as well
       };
       await updateCVAnalysis(cvRecord.id, JSON.stringify(progress70Metadata));
+      console.log("Updated progress to 70% and saved optimized text");
     } catch (updateError) {
       console.error("Failed to update progress to 70%:", updateError);
       // Continue despite the error
@@ -176,9 +181,10 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     
     console.log(`Generated optimized PDF (${modifiedPdfBase64.length} base64 characters)`);
 
+    // Ensure we're using the optimized text we saved earlier
     const newMetadata = {
       ...metadata,
-      optimizedText: optimizationResult.optimizedText,
+      optimizedText: optimizedText, // Use the variable we stored earlier
       optimizedPDFBase64: modifiedPdfBase64,
       selectedTemplate: selectedTemplateId, // Save the template ID in metadata
       optimized: true,
@@ -192,6 +198,7 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     try {
       await updateCVAnalysis(cvRecord.id, JSON.stringify(newMetadata));
       console.log(`CV optimization completed successfully for: ${cvRecord.id}`);
+      console.log(`Optimized text saved (${optimizedText.length} characters)`);
     } catch (finalUpdateError: any) {
       console.error("Failed to update final metadata:", finalUpdateError);
       throw new Error(`Failed to save optimization results: ${finalUpdateError.message}`);

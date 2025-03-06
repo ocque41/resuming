@@ -47,6 +47,19 @@ export async function GET(request: NextRequest) {
     const optimizedPDFBase64 = metadata.optimizedPDFBase64;
     
     if (!optimizedPDFBase64) {
+      console.error(`Optimized PDF not found in metadata for ${fileName}`);
+      
+      // Check if we have optimized text but no PDF
+      if (metadata.optimizedText) {
+        console.log(`Found optimized text but no PDF for ${fileName}`);
+        
+        // Return the optimized text as a fallback
+        return NextResponse.json({ 
+          error: "Optimized PDF not found, but optimized text is available",
+          optimizedText: metadata.optimizedText
+        }, { status: 206 }); // 206 Partial Content
+      }
+      
       return NextResponse.json({ 
         error: "Optimized PDF not found in metadata" 
       }, { status: 404 });

@@ -11,6 +11,7 @@ interface CVMetadata {
   progress?: number;
   startTime?: string; // Track when optimization started
   error?: string; // Store any error messages
+  optimizedPDFBase64?: string;
   [key: string]: any; // Allow for additional properties
 }
 
@@ -77,7 +78,39 @@ export async function GET(request: NextRequest) {
           template: metadata.selectedTemplate || "professional"
         });
       } else {
+        // Log the entire metadata for debugging
         console.error(`Optimization marked as complete but no optimized text found for ${fileName}`);
+        console.error(`Full metadata for debugging:`, JSON.stringify(metadata, null, 2));
+        
+        // Check if the optimization is still in progress despite being marked as complete
+        if (metadata.optimizing) {
+          return NextResponse.json({
+            status: "processing",
+            progress: metadata.progress || 50
+          });
+        }
+        
+        // If there's optimizedPDFBase64 but no optimizedText, try to extract it
+        if (metadata.optimizedPDFBase64) {
+          console.log(`Found optimizedPDFBase64 but no optimizedText for ${fileName}`);
+          
+          // Update the metadata to indicate we need to re-optimize
+          metadata.optimizing = true;
+          metadata.optimized = false;
+          metadata.error = "Optimized text missing, needs re-optimization";
+          
+          try {
+            await updateCVMetadata(String(cvRecord.id), metadata);
+          } catch (updateError) {
+            console.error(`Error updating metadata for ${fileName}:`, updateError);
+          }
+          
+          return NextResponse.json({
+            status: "error",
+            error: "Optimization needs to be restarted. Please try again."
+          }, { status: 500 });
+        }
+        
         return NextResponse.json({
           status: "error",
           error: "Optimization completed but no optimized text was found"

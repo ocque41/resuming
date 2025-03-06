@@ -96,6 +96,17 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       if (!response.ok) {
         const errorData = await response.json();
         console.error("Error response from status API:", errorData);
+        
+        // If we need to restart optimization, do it automatically
+        if (errorData.error && errorData.error.includes("needs to be restarted")) {
+          console.log("Optimization needs to be restarted, restarting...");
+          setIsPolling(false);
+          setTimeout(() => {
+            handleOptimize();
+          }, 1000);
+          return;
+        }
+        
         throw new Error(errorData.error || `Server error: ${response.status} ${response.statusText}`);
       }
       
@@ -104,6 +115,13 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       
       if (data.status === "completed") {
         console.log("Optimization completed successfully");
+        
+        // Verify we have optimized text
+        if (!data.optimizedText) {
+          console.error("No optimized text in completed response");
+          throw new Error("Optimization completed but no optimized text was found");
+        }
+        
         setOptimizedText(data.optimizedText);
         setIsOptimized(true);
         setIsOptimizing(false);
@@ -143,21 +161,40 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       // First, get the optimized PDF from the server
       const pdfResponse = await fetch(`/api/optimize-cv/download?fileName=${encodeURIComponent(originalFileName)}`);
       
-      if (!pdfResponse.ok) {
-        throw new Error('Failed to retrieve optimized PDF');
-      }
+      let pdfBlob;
+      let fallbackMode = false;
       
-      // Get the PDF as a blob
-      const pdfBlob = await pdfResponse.blob();
+      if (pdfResponse.status === 206) {
+        // We have optimized text but no PDF, use a fallback approach
+        console.log("No optimized PDF available, using fallback mode with text only");
+        fallbackMode = true;
+        
+        // Create a simple text PDF as a fallback
+        const textData = await pdfResponse.json();
+        if (!textData.optimizedText) {
+          throw new Error('Failed to retrieve optimized text');
+        }
+        
+        // Create a simple text blob as fallback
+        const textContent = textData.optimizedText;
+        pdfBlob = new Blob([textContent], { type: 'text/plain' });
+      } else if (!pdfResponse.ok) {
+        throw new Error('Failed to retrieve optimized PDF');
+      } else {
+        // Get the PDF as a blob
+        pdfBlob = await pdfResponse.blob();
+      }
       
       // Create a new filename for the optimized version
       const fileNameParts = originalFileName.split('.');
       const extension = fileNameParts.pop();
       const baseName = fileNameParts.join('.');
-      const optimizedFileName = `${baseName}-optimized.pdf`;
+      const optimizedFileName = `${baseName}-optimized${fallbackMode ? '-text' : ''}.${fallbackMode ? 'txt' : 'pdf'}`;
       
-      // Create a File object from the PDF blob
-      const file = new File([pdfBlob], optimizedFileName, { type: 'application/pdf' });
+      // Create a File object from the blob
+      const file = new File([pdfBlob], optimizedFileName, { 
+        type: fallbackMode ? 'text/plain' : 'application/pdf' 
+      });
       
       // Create FormData to send the file
       const formData = new FormData();

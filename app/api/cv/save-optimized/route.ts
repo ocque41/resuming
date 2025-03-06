@@ -44,6 +44,15 @@ export async function POST(request: NextRequest) {
     // Extract metadata from original CV
     const originalMetadata = originalCV.metadata ? JSON.parse(originalCV.metadata) : {};
     
+    // Verify we have optimized text
+    if (!optimizedText || optimizedText.trim().length === 0) {
+      console.error("Missing or empty optimized text for:", originalFileName);
+      return NextResponse.json({ error: "Missing or empty optimized text" }, { status: 400 });
+    }
+    
+    console.log(`Optimized text length: ${optimizedText.length} characters`);
+    console.log(`First 100 characters of optimized text: ${optimizedText.substring(0, 100)}...`);
+    
     // Convert file to buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
@@ -70,7 +79,8 @@ export async function POST(request: NextRequest) {
         optimized: true,
         optimizedFrom: originalCV.id,
         optimizedBy: session.user.email || session.user.id,
-        template: originalMetadata.selectedTemplate || "professional"
+        template: originalMetadata.selectedTemplate || "professional",
+        optimizedText: optimizedText // Store the optimized text in metadata as well
       };
       
       // Insert the new CV record
