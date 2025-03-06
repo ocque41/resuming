@@ -116,6 +116,7 @@ export function getTemplateLayout(templateId: string): {
   
   // Template-specific layouts
   const templateLayouts: Record<string, typeof defaultLayout> = {
+    // Company templates (new format)
     'google-modern': {
       sidebarWidth: 180,
       mainColumnWidth: 380,
@@ -157,8 +158,63 @@ export function getTemplateLayout(templateId: string): {
       mainColumnWidth: 410,
       sectionSpacing: 25,
       headerStyle: 'modern'
+    },
+
+    // Legacy templates (old format) - for backward compatibility
+    'professional': {
+      sidebarWidth: 180,
+      mainColumnWidth: 380,
+      sectionSpacing: 20,
+      headerStyle: 'traditional'
+    },
+    'modern': {
+      sidebarWidth: 160,
+      mainColumnWidth: 400,
+      sectionSpacing: 25,
+      headerStyle: 'modern'
+    },
+    'creative': {
+      sidebarWidth: 150,
+      mainColumnWidth: 410,
+      sectionSpacing: 30,
+      headerStyle: 'minimal'
+    },
+    'executive': {
+      sidebarWidth: 190,
+      mainColumnWidth: 370,
+      sectionSpacing: 15,
+      headerStyle: 'traditional'
+    },
+    'technical': {
+      sidebarWidth: 170,
+      mainColumnWidth: 390,
+      sectionSpacing: 20,
+      headerStyle: 'modern'
     }
   };
   
+  // If the template doesn't exist, try to use a closest match based on the name
+  if (!templateLayouts[templateId]) {
+    console.warn(`Template ID "${templateId}" not found. Looking for closest match...`);
+    
+    // Check if it contains certain keywords
+    if (templateId.includes('google') || templateId.includes('modern')) {
+      return templateLayouts['google-modern'];
+    } else if (templateId.includes('amazon') || templateId.includes('leadership')) {
+      return templateLayouts['amazon-leadership'];
+    } else if (templateId.includes('apple') || templateId.includes('minimal')) {
+      return templateLayouts['apple-minimal'];
+    } else if (templateId.includes('meta') || templateId.includes('facebook') || templateId.includes('impact')) {
+      return templateLayouts['meta-impact'];
+    } else if (templateId.includes('microsoft') || templateId.includes('professional')) {
+      return templateLayouts['microsoft-professional'];
+    } else if (templateId.includes('jp') || templateId.includes('morgan') || templateId.includes('finance')) {
+      return templateLayouts['jpmorgan-finance'];
+    } else if (templateId.includes('netflix') || templateId.includes('creative')) {
+      return templateLayouts['netflix-creative'];
+    }
+  }
+  
+  console.log(`Using template layout for: ${templateId in templateLayouts ? templateId : 'default'}`);
   return templateLayouts[templateId] || defaultLayout;
 }

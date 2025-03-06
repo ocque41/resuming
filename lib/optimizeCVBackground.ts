@@ -90,6 +90,24 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
       
       // Log the first part of the optimized text for debugging
       console.log(`Optimized text preview: "${optimizationResult.optimizedText.substring(0, 100)}..."`);
+      
+      // Immediately save the optimized text to avoid losing it
+      try {
+        const immediateUpdateMetadata = {
+          ...metadata,
+          optimizing: true,
+          startTime: startTime,
+          progress: 30,
+          optimizedText: optimizationResult.optimizedText,
+          contentVerificationFailed: optimizationResult.error ? true : false,
+          contentVerificationError: optimizationResult.error
+        };
+        await updateCVAnalysis(cvRecord.id, JSON.stringify(immediateUpdateMetadata));
+        console.log("Immediately saved optimized text after AI completion");
+      } catch (immediateUpdateError) {
+        console.error("Failed to save optimized text immediately:", immediateUpdateError);
+        // Continue despite the error, we'll try again later
+      }
     } catch (optimizeError) {
       console.error("Error during AI optimization:", optimizeError);
       throw optimizeError;
@@ -101,7 +119,8 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
         ...metadata,
         optimizing: true,
         startTime: startTime,
-        progress: 60
+        progress: 60,
+        optimizedText: optimizationResult.optimizedText  // Make sure the text is saved here too
       };
       await updateCVAnalysis(cvRecord.id, JSON.stringify(progress60Metadata));
     } catch (updateError) {

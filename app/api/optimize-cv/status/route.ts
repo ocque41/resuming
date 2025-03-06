@@ -72,6 +72,23 @@ export async function GET(request: NextRequest) {
       const optimizedText = metadata.optimizedText || metadata.optimizedCV;
       
       if (optimizedText) {
+        // Check if it's still marked as optimizing - if so, we need to fix this
+        if (metadata.optimizing) {
+          console.log(`CV ${fileName} is marked as both optimized and optimizing. Fixing metadata.`);
+          
+          // Fix the metadata by setting optimizing to false
+          metadata.optimizing = false;
+          metadata.progress = 100;
+          
+          try {
+            await updateCVMetadata(String(cvRecord.id), metadata);
+            console.log(`Fixed metadata for ${fileName}`);
+          } catch (updateError) {
+            console.error(`Error fixing metadata for ${fileName}:`, updateError);
+            // Continue despite this error
+          }
+        }
+        
         console.log(`Optimization completed for ${fileName}`);
         return NextResponse.json({
           status: "completed",
@@ -86,6 +103,35 @@ export async function GET(request: NextRequest) {
         // Check if the optimization is still in progress despite being marked as complete
         if (metadata.optimizing) {
           console.log(`CV ${fileName} is marked as both optimized and optimizing. Treating as in-progress.`);
+          
+          // If progress is stuck at 10% for too long, we need to reset
+          const currentProgress = metadata.progress || 0;
+          if (currentProgress <= 10 && metadata.startTime) {
+            const startTime = new Date(metadata.startTime);
+            const currentTime = new Date();
+            const timeDiffMinutes = (currentTime.getTime() - startTime.getTime()) / (1000 * 60);
+            
+            if (timeDiffMinutes > 1) { // If stuck for more than 1 minute
+              console.log(`CV ${fileName} is stuck at ${currentProgress}% for ${timeDiffMinutes.toFixed(2)} minutes. Resetting.`);
+              
+              // Reset the optimization state
+              metadata.optimized = false;
+              metadata.optimizing = false;
+              metadata.error = `Optimization stalled at ${currentProgress}%`;
+              
+              try {
+                await updateCVMetadata(String(cvRecord.id), metadata);
+              } catch (updateError) {
+                console.error(`Error resetting metadata for ${fileName}:`, updateError);
+              }
+              
+              return NextResponse.json({
+                status: "error",
+                error: `Optimization stalled. Please try again.`
+              }, { status: 500 });
+            }
+          }
+          
           return NextResponse.json({
             status: "processing",
             progress: metadata.progress || 50

@@ -15,7 +15,7 @@ interface OptimizeCVCardProps {
 
 export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   const [selectedCV, setSelectedCV] = useState<string>("");
-  const [selectedTemplate, setSelectedTemplate] = useState<string>("professional");
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("google-modern");
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isOptimized, setIsOptimized] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
@@ -312,20 +312,22 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
 
           {/* Template Selection */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Select Template</label>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Select Company Template</label>
             <Select
               value={selectedTemplate}
               onValueChange={handleTemplateSelect}
             >
               <SelectTrigger className="w-full bg-[#121212] border border-[#B4916C]/30 text-white">
-                <SelectValue placeholder="Select a template" />
+                <SelectValue placeholder="Select a company template" />
               </SelectTrigger>
               <SelectContent className="bg-[#121212] border border-[#B4916C]/30 text-white">
-                <SelectItem value="professional" className="hover:bg-[#B4916C]/10">Professional</SelectItem>
-                <SelectItem value="modern" className="hover:bg-[#B4916C]/10">Modern</SelectItem>
-                <SelectItem value="creative" className="hover:bg-[#B4916C]/10">Creative</SelectItem>
-                <SelectItem value="executive" className="hover:bg-[#B4916C]/10">Executive</SelectItem>
-                <SelectItem value="technical" className="hover:bg-[#B4916C]/10">Technical</SelectItem>
+                <SelectItem value="google-modern" className="hover:bg-[#B4916C]/10">Google</SelectItem>
+                <SelectItem value="amazon-leadership" className="hover:bg-[#B4916C]/10">Amazon</SelectItem>
+                <SelectItem value="meta-impact" className="hover:bg-[#B4916C]/10">Meta</SelectItem>
+                <SelectItem value="apple-minimal" className="hover:bg-[#B4916C]/10">Apple</SelectItem>
+                <SelectItem value="microsoft-professional" className="hover:bg-[#B4916C]/10">Microsoft</SelectItem>
+                <SelectItem value="jpmorgan-finance" className="hover:bg-[#B4916C]/10">JP Morgan</SelectItem>
+                <SelectItem value="professional" className="hover:bg-[#B4916C]/10">Professional (General)</SelectItem>
               </SelectContent>
             </Select>
           </div>
