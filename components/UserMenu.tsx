@@ -47,13 +47,13 @@ export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
           leaveFrom="transform opacity-100 scale-100"
           leaveTo="transform opacity-0 scale-95"
         >
-          <Menu.Items className="absolute right-4 mt-2 w-56 origin-top-right bg-white border border-[#B4916C]/20 rounded-md shadow-lg focus:outline-none z-50">
+          <Menu.Items className="absolute right-4 mt-2 w-56 origin-top-right bg-[#050505] border border-[#B4916C]/20 rounded-md shadow-lg focus:outline-none z-50">
             <div className="py-1">
               <Menu.Item>
                 {({ active }) => (
                   <button
                     onClick={handleManageSubscription}
-                    className={`${active ? "bg-[#B4916C]/10" : ""} block w-full text-left px-4 py-2 text-sm text-gray-700`}
+                    className={`${active ? "bg-[#B4916C]/20" : ""} block w-full text-left px-4 py-2 text-sm text-white`}
                   >
                     Manage Subscription
                   </button>
@@ -63,7 +63,7 @@ export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
                 {({ active }) => (
                   <button
                     onClick={() => setIsSettingsOpen(true)}
-                    className={`${active ? "bg-[#B4916C]/10" : ""} block w-full text-left px-4 py-2 text-sm text-gray-700`}
+                    className={`${active ? "bg-[#B4916C]/20" : ""} block w-full text-left px-4 py-2 text-sm text-white`}
                   >
                     Settings
                   </button>
@@ -73,7 +73,7 @@ export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
                 {({ active }) => (
                   <button
                     onClick={handleLogout}
-                    className={`${active ? "bg-[#B4916C]/10" : ""} block w-full text-left px-4 py-2 text-sm text-gray-700`}
+                    className={`${active ? "bg-[#B4916C]/20" : ""} block w-full text-left px-4 py-2 text-sm text-white`}
                   >
                     Log Out
                   </button>

@@ -24,7 +24,7 @@ export default function ClientSettingsDialogContent({
       <div className="space-y-8 mx-auto max-w-md lg:max-w-2xl">
         <header className="flex items-center justify-between p-4 lg:p-8">
           <div className="flex items-center justify-between w-full">
-            <ArticleTitle className="text-lg lg:text-2xl font-medium text-[#B4916C]">
+            <ArticleTitle className="text-lg lg:text-2xl font-medium text-white">
               User Settings
             </ArticleTitle>
             <button 
@@ -38,7 +38,7 @@ export default function ClientSettingsDialogContent({
         <GeneralPage />
         <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg">
           <CardHeader className="bg-[#B4916C]/10 pb-4">
-            <CardTitle className="text-xl font-bold text-[#B4916C]">Subscription</CardTitle>
+            <CardTitle className="text-xl font-bold text-white">Subscription</CardTitle>
           </CardHeader>
           <CardContent className="flex justify-center p-6">
             <BillingButton />
@@ -46,7 +46,7 @@ export default function ClientSettingsDialogContent({
         </Card>
         <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg">
           <CardHeader className="bg-[#B4916C]/10 pb-4">
-            <CardTitle className="text-xl font-bold text-[#B4916C]">Invite Team Member</CardTitle>
+            <CardTitle className="text-xl font-bold text-white">Invite Team Member</CardTitle>
           </CardHeader>
           <CardContent className="p-6">
             <InviteTeamMember />

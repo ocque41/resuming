@@ -1,18 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { cvs } from '@/lib/db/schema';
-import { getServerSession } from 'next-auth';
+import { getSession } from '@/lib/auth/session';
 import { eq } from 'drizzle-orm';
 import { updateCVAnalysis } from '@/lib/db/queries.server';
-
-// Define a session type
-interface UserSession {
-  user?: {
-    id: string;
-    name?: string;
-    email?: string;
-  };
-}
 
 // Define the metadata interface
 interface CVMetadata {
@@ -39,20 +30,15 @@ const PROGRESS_STALL_MINUTES = 2;
 
 export async function GET(request: NextRequest) {
   try {
-    // Auth check
-    const session = await getServerSession() as UserSession | null;
-     
+    // Auth check using app's custom auth system
+    const session = await getSession();
+    
     if (!session || !session.user) {
+      console.log("Unauthorized: No valid session found in status check");
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Convert string ID to number for database operations
-    const userId = parseInt(session.user.id, 10);
-    
-    if (isNaN(userId)) {
-      console.error(`Invalid user ID: ${session.user.id}`);
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
-    }
+    const userId = session.user.id;
 
     // Get cv ID from query params
     const { searchParams } = new URL(request.url);

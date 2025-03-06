@@ -44,7 +44,7 @@ export default async function DashboardPage() {
   return (
     <>
       <header className="flex items-center justify-between p-4 lg:p-8 mx-auto max-w-md lg:max-w-2xl">
-        <ArticleTitle className="text-md lg:text-xl font-medium ml-4 text-[#B4916C]">
+        <ArticleTitle className="text-md lg:text-xl font-medium ml-4 text-white">
           Dashboard
         </ArticleTitle>
         <UserMenu teamData={teamData} activityLogs={activityLogs} />
@@ -52,7 +52,7 @@ export default async function DashboardPage() {
       
       <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg">
         <CardHeader className="bg-[#B4916C]/10 pb-4">
-          <CardTitle className="text-xl font-bold text-[#B4916C]">Your CV Collection</CardTitle>
+          <CardTitle className="text-xl font-bold text-white">Your CV Collection</CardTitle>
         </CardHeader>
         <CardContent className="p-6">
           <Table className="w-full">

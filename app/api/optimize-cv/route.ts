@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCVByFileName, updateCVAnalysis } from "@/lib/db/queries.server";
 import { optimizeCVBackground } from "@/lib/optimizeCVBackground";
-import { getServerSession } from "next-auth";
+import { getSession } from "@/lib/auth/session";
 
 // Define a session type
 interface UserSession {
@@ -13,12 +13,15 @@ interface UserSession {
 }
 
 export async function GET(request: Request) {
-  // Authentication check
-  const session = await getServerSession() as UserSession | null;
+  // Authentication check using the app's custom auth system
+  const session = await getSession();
     
   if (!session || !session.user) {
+    console.log("Unauthorized: No valid session found");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const userId = session.user.id;
 
   const { searchParams } = new URL(request.url);
   const fileName = searchParams.get("fileName");
@@ -29,13 +32,6 @@ export async function GET(request: Request) {
   const cvRecord = await getCVByFileName(fileName!);
   if (!cvRecord) {
     return NextResponse.json({ error: "CV not found" }, { status: 404 });
-  }
-
-  // Ensure the CV belongs to the authenticated user
-  const userId = parseInt(session.user.id, 10);
-  if (isNaN(userId)) {
-    console.error(`Invalid user ID: ${session.user.id}`);
-    return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
   }
 
   // Verify ownership
@@ -78,12 +74,15 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    // Authentication check
-    const session = await getServerSession() as UserSession | null;
+    // Authentication check using the app's custom auth system
+    const session = await getSession();
       
     if (!session || !session.user) {
+      console.log("Unauthorized: No valid session found");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const userId = session.user.id;
 
     const body = await request.json();
     const { fileName, templateId } = body;
@@ -99,13 +98,6 @@ export async function POST(request: Request) {
     const cvRecord = await getCVByFileName(fileName);
     if (!cvRecord) {
       return NextResponse.json({ error: "CV not found" }, { status: 404 });
-    }
-
-    // Ensure the CV belongs to the authenticated user
-    const userId = parseInt(session.user.id, 10);
-    if (isNaN(userId)) {
-      console.error(`Invalid user ID: ${session.user.id}`);
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
     }
 
     // Verify ownership
