@@ -133,10 +133,16 @@ function PricingCard({
   return (
     <div className={`rounded-lg transition-all duration-300 ${cardClass}`}>
       <div className={`${highlight ? 'bg-[#B4916C]/20' : 'bg-[#B4916C]/10'} py-4 px-6 rounded-t-lg`}>
-        <h2 className="text-2xl font-bold text-[#B4916C] mb-2">
+        <h2 className="text-2xl font-bold text-[#B4916C] mb-1">
           {name}
-          {highlight && <span className="ml-2 text-sm bg-[#B4916C]/20 text-[#B4916C] px-2 py-1 rounded-full">Most Popular</span>}
         </h2>
+        {highlight && 
+          <div className="mb-3">
+            <span className="inline-block text-sm bg-[#B4916C]/20 text-[#B4916C] px-2 py-1 rounded-full">
+              Most Popular
+            </span>
+          </div>
+        }
         <p className="text-4xl font-semibold text-white mb-1">
           ${price / 100}
           <span className="text-xl font-normal text-gray-300 ml-1">

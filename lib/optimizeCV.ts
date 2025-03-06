@@ -11,6 +11,15 @@ export async function optimizeCV(
   try {
     console.log("Starting CV optimization process");
     
+    // Input validation - address possible issues early
+    if (!cvText || cvText.trim().length === 0) {
+      console.error("Empty CV text provided to optimization");
+      return { 
+        optimizedText: "", 
+        error: "Empty CV text provided" 
+      };
+    }
+    
     // Get template layout if available
     let layout = 'two-column';
     let headerStyle = 'modern';
@@ -19,7 +28,7 @@ export async function optimizeCV(
       console.log(`Using template: ${template.name}`);
       
       // Get layout from template metadata
-      layout = template.metadata.layout || layout;
+      layout = template.metadata?.layout || layout;
       
       // Get template-specific layout from templateMatching
       const templateLayout = getTemplateLayout(template.id);
@@ -38,226 +47,189 @@ export async function optimizeCV(
       `;
     } else if (layout === 'two-column') {
       formattingInstructions = `
-        Format the CV with education, skills, languages, and certifications in the left column.
-        Put work experience, projects, and summary in the right column.
-        Use bullet points for achievements and responsibilities.
-        Keep all text black.
-        Ensure the CV fits on a single page.
-      `;
-    } else if (layout === 'traditional') {
-      formattingInstructions = `
-        Format the CV in a traditional style with clear section headers.
+        Format the CV with a main column and a sidebar.
+        Put contact information, skills, languages, and education in the sidebar.
+        Put professional experience, projects, and other details in the main column.
         Use bullet points for achievements and responsibilities.
         Keep all text black.
         Ensure the CV fits on a single page.
       `;
     }
     
-    // Customize industry guidance based on template
-    let industryGuidance = "";
-    
-    if (template) {
-      if (template.name === 'Google Modern' || template.id === 'google-modern') {
-        industryGuidance = `
-          Focus on quantifiable achievements and impact.
-          Highlight technical skills and innovative projects.
-          Use action verbs and data-driven results.
-          Emphasize collaboration and teamwork.
-          Include specific technologies and tools you've worked with.
-        `;
-      } else if (template.name === 'Apple Minimal' || template.id === 'apple-minimal') {
-        industryGuidance = `
-          Focus on design thinking and user-centric approaches.
-          Highlight creative problem-solving and attention to detail.
-          Keep descriptions concise and impactful.
-          Emphasize aesthetic sensibility and innovation.
-          Use clean, minimal formatting with plenty of white space.
-        `;
-      } else if (template.name === 'Amazon Leadership' || template.id === 'amazon-leadership') {
-        industryGuidance = `
-          Structure achievements using the STAR method (Situation, Task, Action, Result).
-          Demonstrate leadership principles like customer obsession and ownership.
-          Quantify results and business impact.
-          Show examples of raising the bar and thinking big.
-          Include metrics and data points that demonstrate success.
-        `;
-      } else if (template.name === 'Microsoft Professional' || template.id === 'microsoft-professional') {
-        industryGuidance = `
-          Highlight collaborative projects and team achievements.
-          Focus on technical expertise and problem-solving abilities.
-          Demonstrate continuous learning and adaptability.
-          Emphasize cross-functional collaboration and communication skills.
-          Show how you've contributed to product development or improvement.
-        `;
-      } else if (template.name === 'Meta Impact' || template.id === 'meta-impact') {
-        industryGuidance = `
-          Emphasize social impact and community-focused initiatives.
-          Highlight experience with social media platforms and digital communication.
-          Demonstrate creativity and innovation in connecting people.
-          Show how you've built or improved online communities.
-          Include metrics related to engagement, growth, or user experience.
-        `;
-      }
-      
-      // Add industry-specific guidance if available in template metadata
-      if (template.metadata.industrySpecific) {
-        const industry = template.metadata.industrySpecific;
-        
-        industryGuidance += `
-          Industry: ${industry.industry}
-          Required Skills: ${industry.requiredSkills.join(', ')}
-          Value Propositions: ${industry.valuePropositions.join(', ')}
-          Resume Style: ${industry.resumeStyle}
-          Achievement Format: ${industry.achievementFormat}
-        `;
-      }
-    }
-    
-    // Create the prompt for OpenAI
-    const prompt = `
-      You are a professional CV/resume optimization expert. Your task is to transform the provided CV into a more impactful, well-organized, and ATS-friendly document.
-
-      IMPORTANT GUIDELINES:
-      - Keep all text BLACK - do not use any colored text.
-      - Ensure the CV fits on a single page.
-      - Do NOT include placeholder text like "[LEFT COLUMN END]" or "[RIGHT COLUMN START]" in the final output.
-      - Do NOT include "CONTENT" as a section title.
-      - Do NOT include placeholder text like "*No previous work experience provided on the original CV*".
-      - Maintain professional language throughout.
-      - Eliminate first-person pronouns (I, me, my).
-      - Use bullet points for ALL achievements, responsibilities, and skills.
-      - ALWAYS use a hyphen followed by a space "- " for bullet points, NOT asterisks or other symbols.
-      - Ensure there is proper spacing between bullet points - each bullet point should be on its own line.
-      - NEVER combine multiple bullet points on the same line.
-      - Quantify achievements where possible (%, $, numbers).
-      - Focus on impact and results, not just responsibilities.
-      - Ensure all dates are in a consistent format.
-      - Use action verbs to start bullet points.
-      - Tailor content to highlight relevant skills and experiences.
-      - Optimize for ATS by including relevant keywords.
-      - Keep formatting clean and consistent.
-      - Ensure proper spelling and grammar.
-      - Use ** around text that should be emphasized or bold (e.g., **Important Skill**).
-      - Make section titles clear and prominent.
-      - For skills sections, use bullet points for each skill or group of related skills.
-      - Ensure each bullet point is concise and focused on a single achievement or skill.
-
-${formattingInstructions}
-
-      ${industryGuidance}
-      
-      Here is the CV to optimize:
-      ${cvText}
-      
-      Return ONLY the optimized CV text without any explanations or additional comments.
-    `;
-    
-    // Call OpenAI API
     console.log("Calling OpenAI API for CV optimization");
     
-    // Add a timeout for the fetch request
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+    // For testing purposes, create a dummy result if the API isn't available
+    // Remove this in production
+    if (process.env.NODE_ENV === 'development' && process.env.MOCK_API === 'true') {
+      console.log("Using mock data for development");
+      return {
+        optimizedText: createOptimizedCV(cvText, template?.name || 'default'),
+      };
+    }
     
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      // This is where you'd call your AI service (OpenAI, etc.)
+      // For this implementation, we'll create an optimized version locally
+      const response = await fetch('/api/optimize', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
         },
         body: JSON.stringify({
-          model: "gpt-4-turbo-preview",
-          messages: [
-            {
-              role: "system",
-              content: "You are a professional CV/resume optimization expert."
-            },
-            {
-              role: "user",
-              content: prompt
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 4000
+          cvText,
+          templateId: template?.id || 'default',
+          formattingInstructions,
         }),
-        signal: controller.signal
+        signal: AbortSignal.timeout(30000), // 30-second timeout
       });
       
-      // Clear the timeout
-      clearTimeout(timeoutId);
-      
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error("OpenAI API error:", errorData);
-        
-        // Create a fallback optimized version
-        const fallbackText = createFormattedFallbackFromRawText(cvText);
-        return { 
-          optimizedText: fallbackText, 
-          error: `OpenAI API error: ${errorData.error?.message || response.statusText}` 
-        };
+        const errorText = await response.text();
+        throw new Error(`Optimization API error: ${response.status} ${errorText}`);
       }
       
-      const data = await response.json();
+      const result = await response.json();
       
-      // Verify we have a valid response
-      if (!data || !data.choices || !data.choices[0] || !data.choices[0].message || !data.choices[0].message.content) {
-        console.error("Invalid response from OpenAI API:", data);
-        const fallbackText = createFormattedFallbackFromRawText(cvText);
-        return { 
-          optimizedText: fallbackText, 
-          error: "Invalid response from OpenAI API" 
-        };
+      if (!result.optimizedCV) {
+        throw new Error("No optimized CV in API response");
       }
       
-      let optimizedText = data.choices[0].message.content.trim();
+      return {
+        optimizedText: result.optimizedCV,
+      };
+    } catch (apiError) {
+      console.error("API error during optimization:", apiError);
       
-      // Process any formatting markers
-      optimizedText = processFormattingMarkers(optimizedText);
-      
-      // Verify that the optimized content preserves important information
-      const contentVerification = verifyContentPreservation(cvText, optimizedText);
-      
-      if (!contentVerification.preserved) {
-        console.warn("Content verification failed. Missing items:", contentVerification.missingItems);
-        
-        // If critical information is missing, use a fallback approach
-        if (contentVerification.missingItems.includes('Name') || 
-            contentVerification.missingItems.includes('Contact Information')) {
-          console.warn("Critical information missing, using fallback optimization");
-          const fallbackText = createFormattedFallbackFromRawText(cvText);
-          return { 
-            optimizedText: fallbackText, 
-            error: `Content verification failed: Missing ${contentVerification.missingItems.join(', ')}` 
-          };
-        }
-      }
-      
-      return { optimizedText };
-    } catch (error: unknown) {
-      console.error("Error calling OpenAI API:", error);
-      
-      // Clear the timeout if it's an abort error
-      clearTimeout(timeoutId);
-      
-      // Create a fallback optimized version
-      const fallbackText = createFormattedFallbackFromRawText(cvText);
-      return { 
-        optimizedText: fallbackText, 
-        error: `Error calling OpenAI API: ${error instanceof Error ? error.message : String(error)}` 
+      // As a fallback for demo purposes, create a simple optimized version
+      console.log("Using fallback optimization method");
+      return {
+        optimizedText: createOptimizedCV(cvText, template?.name || 'default'),
+        error: `API error: ${(apiError as Error).message}. Using fallback optimization.`
       };
     }
-  } catch (error: any) {
-    console.error("Error in CV optimization:", error.message);
+  } catch (error) {
+    console.error("Error in optimization process:", error);
     
-    // Create a fallback optimized version
-    const fallbackText = createFormattedFallbackFromRawText(cvText);
-    return { 
-      optimizedText: fallbackText, 
-      error: `CV optimization error: ${error.message}` 
+    // Always return something, even in error cases
+    return {
+      optimizedText: cvText, // Return original text as fallback
+      error: `Optimization failed: ${(error as Error).message}`
     };
   }
+}
+
+// Fallback function to create an optimized CV when API fails
+// This ensures the process doesn't get stuck
+function createOptimizedCV(originalText: string, templateName: string): string {
+  const sections = extractSections(originalText);
+  
+  // Create a more structured CV
+  let optimizedCV = `# PROFESSIONAL CV
+## Updated with ${templateName.toUpperCase()} template
+
+`;
+
+  // Add contact section if found
+  if (sections.contact) {
+    optimizedCV += `## CONTACT INFORMATION
+${sections.contact.trim()}
+
+`;
+  }
+
+  // Add profile/summary if found
+  if (sections.profile) {
+    optimizedCV += `## PROFESSIONAL SUMMARY
+${improveSection(sections.profile, 'summary')}
+
+`;
+  }
+
+  // Add experience if found
+  if (sections.experience) {
+    optimizedCV += `## PROFESSIONAL EXPERIENCE
+${improveSection(sections.experience, 'experience')}
+
+`;
+  }
+
+  // Add education if found
+  if (sections.education) {
+    optimizedCV += `## EDUCATION
+${improveSection(sections.education, 'education')}
+
+`;
+  }
+
+  // Add skills if found
+  if (sections.skills) {
+    optimizedCV += `## SKILLS
+${improveSection(sections.skills, 'skills')}
+
+`;
+  }
+
+  // Add any additional sections
+  for (const [key, value] of Object.entries(sections)) {
+    if (!['contact', 'profile', 'experience', 'education', 'skills'].includes(key) && value.trim()) {
+      optimizedCV += `## ${key.toUpperCase()}
+${value.trim()}
+
+`;
+    }
+  }
+
+  return optimizedCV;
+}
+
+// Helper functions for the fallback optimization
+function extractSections(text: string): Record<string, string> {
+  const sections: Record<string, string> = {
+    contact: '',
+    profile: '',
+    experience: '',
+    education: '',
+    skills: ''
+  };
+  
+  // Simple parsing logic - in real app would be more sophisticated
+  const lines = text.split('\n');
+  let currentSection = 'profile';
+  
+  for (const line of lines) {
+    const lowerLine = line.toLowerCase();
+    
+    if (lowerLine.includes('email') || lowerLine.includes('phone') || lowerLine.includes('address')) {
+      sections.contact += line + '\n';
+    } else if (lowerLine.includes('experience') || lowerLine.includes('work')) {
+      currentSection = 'experience';
+    } else if (lowerLine.includes('education') || lowerLine.includes('university')) {
+      currentSection = 'education';
+    } else if (lowerLine.includes('skills') || lowerLine.includes('abilities')) {
+      currentSection = 'skills';
+    } else if (lowerLine.includes('profile') || lowerLine.includes('summary') || lowerLine.includes('objective')) {
+      currentSection = 'profile';
+    } else {
+      sections[currentSection] += line + '\n';
+    }
+  }
+  
+  return sections;
+}
+
+function improveSection(text: string, sectionType: string): string {
+  // Simple enhancements
+  const lines = text.split('\n').filter(line => line.trim().length > 0);
+  
+  // Add bullets to lines that don't have them
+  const bulletedLines = lines.map(line => {
+    if (line.trim().startsWith('-') || line.trim().startsWith('•')) {
+      return line;
+    }
+    return '• ' + line;
+  });
+  
+  return bulletedLines.join('\n');
 }
 
 // Process any formatting markers in the optimized text

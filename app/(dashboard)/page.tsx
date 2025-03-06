@@ -41,11 +41,11 @@ export default function HomePage() {
       {/* Navbar */}
       <Navbar />
 
-      {/* Hero Section */}
-      <section className="relative h-screen flex items-center bg-black pt-8">
+      {/* Hero Section - Added more top padding to increase space */}
+      <section className="relative min-h-screen flex items-center bg-black pt-32 pb-16">
         {/* Background overlay */}
         <div className="absolute inset-0 bg-[url('/hero-bg.jpg')] bg-cover bg-center opacity-30"></div>
-        <div className="relative z-10 max-w-4xl mx-auto px-4 md:px-8 text-left space-y-2">
+        <div className="relative z-10 max-w-4xl mx-auto px-4 md:px-8 text-left space-y-6">
           {/* Badge above title */}
           <div>
             <Link href="https://chromad.vercel.app/docs/products/resuming">
@@ -90,9 +90,9 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* How It Works Section */}
-      <section className="py-16 px-4">
-        <div className="max-w-4xl mx-auto text-left space-y-8">
+      {/* How It Works Section - Added more padding */}
+      <section className="py-32 px-4">
+        <div className="max-w-4xl mx-auto text-left space-y-12">
           <Article>
             <ArticleTitle className="text-3xl md:text-4xl font-bold text-white">
               How It Works
@@ -164,9 +164,9 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Use Cases Section */}
-      <section className="py-16 px-4">
-        <div className="max-w-4xl mx-auto text-left space-y-8">
+      {/* Use Cases Section - Added more padding */}
+      <section className="py-32 px-4 bg-[#050505]">
+        <div className="max-w-4xl mx-auto text-left space-y-12">
           <Article>
             <ArticleTitle className="text-3xl md:text-4xl font-bold text-white">
               Use Cases
