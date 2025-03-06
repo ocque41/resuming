@@ -48,27 +48,53 @@ ${cleanedText}`;
   });
 
   const result = await response.json();
+  
+  if (!result.choices || !result.choices[0] || !result.choices[0].message) {
+    throw new Error('Invalid response from OpenAI API');
+  }
+  
   const message = result.choices[0].message.content;
 
   try {
-    const analysis = JSON.parse(message);
+    // First, try to parse the message as JSON
+    let analysis;
+    try {
+      analysis = JSON.parse(message);
+    } catch (parseError) {
+      // If direct parsing fails, try to extract JSON from the message
+      const jsonMatch = message.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        analysis = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('Could not extract valid JSON from the response');
+      }
+    }
     
-    // Format the ATS score to include the % symbol consistently
-    if (typeof analysis.atsScore === 'number' || !isNaN(parseInt(analysis.atsScore))) {
-      // Convert to number first to remove any unexpected characters, then add a single % symbol
-      const score = parseInt(String(analysis.atsScore));
-      analysis.atsScore = `${score}%`;
-    } else if (typeof analysis.atsScore === 'string') {
-      // Remove any existing % symbols, then add just one
-      const scoreStr = analysis.atsScore.replace(/%/g, '').trim();
-      const score = parseInt(scoreStr);
+    // Format the ATS score
+    if (analysis.atsScore !== undefined) {
+      // Handle different types of atsScore
+      let score;
+      if (typeof analysis.atsScore === 'number') {
+        score = analysis.atsScore;
+      } else if (typeof analysis.atsScore === 'string') {
+        // Remove any non-numeric characters and parse
+        const numericString = analysis.atsScore.replace(/[^0-9]/g, '');
+        score = parseInt(numericString, 10);
+      }
+      
+      // Ensure score is a valid number
       if (!isNaN(score)) {
-        analysis.atsScore = `${score}%`;
+        analysis.atsScore = score;
+      } else {
+        // Default to a middle score if parsing fails
+        analysis.atsScore = 50;
       }
     }
     
     return analysis;
   } catch (error) {
+    console.error('Error parsing AI response:', error);
+    console.error('Raw response:', message);
     throw new Error('Failed to parse AI response: ' + message);
   }
 }

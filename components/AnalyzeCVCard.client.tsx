@@ -11,6 +11,8 @@ interface AnalysisResult {
   strengths: string[];
   weaknesses: string[];
   recommendations: string[];
+  industryInsight?: string;
+  targetRoles?: string[];
 }
 
 interface AnalyzeCVCardProps {
@@ -42,6 +44,25 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
       setLoading(false);
     }
   }
+
+  // Format ATS score with percentage symbol
+  const formatAtsScore = (score: number | string): string => {
+    if (typeof score === 'number') {
+      return `${score}%`;
+    }
+    if (typeof score === 'string') {
+      // If it already has a % symbol, return as is
+      if (score.includes('%')) {
+        return score;
+      }
+      // Try to parse as number and add %
+      const numericValue = parseInt(score.replace(/[^0-9]/g, ''));
+      if (!isNaN(numericValue)) {
+        return `${numericValue}%`;
+      }
+    }
+    return '0%'; // Fallback
+  };
 
   return (
     <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg hover:shadow-xl transition-all duration-300">
@@ -92,7 +113,7 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
             <ArticleMeta className="text-sm mb-4 flex items-center">
               <span className="font-medium mr-2 text-gray-300">ATS Score:</span>
               <span className="px-3 py-1 bg-[#B4916C]/10 rounded-full text-[#B4916C] font-semibold">
-                {analysis.atsScore}
+                {formatAtsScore(analysis.atsScore)}
               </span>
             </ArticleMeta>
             
@@ -114,7 +135,7 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
               </ul>
             </ArticleContent>
             
-            <ArticleContent className="text-sm">
+            <ArticleContent className="text-sm mb-4">
               <h3 className="font-semibold mb-2 text-[#B4916C]">Recommendations:</h3>
               <ul className="list-disc ml-5 space-y-1 text-gray-300">
                 {analysis.recommendations.map((r, idx) => (
@@ -122,6 +143,24 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
                 ))}
               </ul>
             </ArticleContent>
+            
+            {analysis.industryInsight && (
+              <ArticleContent className="text-sm mb-4">
+                <h3 className="font-semibold mb-2 text-[#B4916C]">Industry Insight:</h3>
+                <p className="text-gray-300">{analysis.industryInsight}</p>
+              </ArticleContent>
+            )}
+            
+            {analysis.targetRoles && analysis.targetRoles.length > 0 && (
+              <ArticleContent className="text-sm">
+                <h3 className="font-semibold mb-2 text-[#B4916C]">Target Roles:</h3>
+                <ul className="list-disc ml-5 space-y-1 text-gray-300">
+                  {analysis.targetRoles.map((role, idx) => (
+                    <li key={idx}>{role}</li>
+                  ))}
+                </ul>
+              </ArticleContent>
+            )}
           </Article>
         )}
         {children}
