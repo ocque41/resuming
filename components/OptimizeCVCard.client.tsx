@@ -60,6 +60,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
     setOptimizationError(null);
     setOptimizedText(null);
     setPollingAttempts(0);
+    pollRef.current = true;
 
     try {
       const response = await fetch("/api/optimize-cv", {
@@ -70,6 +71,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         body: JSON.stringify({
           fileName: selectedCV,
           templateId: selectedTemplate,
+          forceReoptimize: true,
         }),
       });
 

@@ -500,13 +500,11 @@ function createConservativeOptimizedCV(originalText: string, templateId: string)
   const sections = extractSections(originalText);
   
   // Create a new CV with better formatting but minimal content changes
-  let conservativeCV = `# PROFESSIONAL CV
-
-`;
+  let conservativeCV = ``;
 
   // Add sections with minimal changes to preserve keywords
   if (sections.contact) {
-    conservativeCV += `## CONTACT INFORMATION
+    conservativeCV += `## CONTACT
 ${sections.contact.trim()}
 
 `;
@@ -534,8 +532,16 @@ ${sections.education.trim()}
   }
 
   if (sections.skills) {
+    // Clean up skills section by removing ### markers
+    const cleanedSkills = sections.skills.trim()
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .map(line => line.replace(/^###\s*/, '')) // Remove ### markers
+      .join('\n');
+      
     conservativeCV += `## SKILLS
-${sections.skills.trim()}
+${cleanedSkills}
 
 `;
   }

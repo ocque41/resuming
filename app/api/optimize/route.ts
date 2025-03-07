@@ -121,13 +121,11 @@ function createEnhancedOptimizedCV(originalText: string, templateId: string, ana
   const originalKeywords = extractCriticalKeywords(originalText);
   
   // Create a more structured CV with template-inspired format
-  let optimizedCV = `# PROFESSIONAL CV
-
-`;
+  let optimizedCV = ``;
 
   // Add contact section if found
   if (sections.contact) {
-    optimizedCV += `## CONTACT INFORMATION
+    optimizedCV += `## CONTACT
 ${sections.contact.trim()}
 
 `;
@@ -232,6 +230,8 @@ ${sections.education.trim()}
       enhancedSkills = enhancedSkills.split('\n')
         .map(line => line.trim())
         .filter(line => line.length > 0)
+        // Remove any ### markers
+        .map(line => line.replace(/^###\s*/, ''))
         .map(line => `• ${line}`)
         .join('\n');
     }
@@ -243,7 +243,7 @@ ${sections.education.trim()}
       .slice(0, 6);
     
     if (keywordsToAdd.length > 0) {
-      enhancedSkills += '\n\n### Additional Industry Expertise:\n';
+      enhancedSkills += '\n\n// Additional Industry Expertise\n';
       for (const keyword of keywordsToAdd) {
         enhancedSkills += `• ${keyword}\n`;
       }

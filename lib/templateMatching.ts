@@ -130,9 +130,9 @@ export function getTemplateLayout(templateId: string): {
       headerStyle: 'modern'
     },
     'apple-minimal': {
-      sidebarWidth: 150,
-      mainColumnWidth: 410,
-      sectionSpacing: 30,
+      sidebarWidth: 180,
+      mainColumnWidth: 380,
+      sectionSpacing: 20,
       headerStyle: 'minimal'
     },
     'amazon-leadership': {

@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     const userId = session.user.id;
 
     const body = await request.json();
-    const { fileName, templateId } = body;
+    const { fileName, templateId, forceReoptimize } = body;
 
     if (!fileName) {
       return NextResponse.json({ error: "Missing fileName parameter" }, { status: 400 });
@@ -55,6 +55,22 @@ export async function POST(request: Request) {
     const metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : null;
     if (!metadata || !metadata.atsScore) {
       return NextResponse.json({ error: "CV has not been analyzed yet." }, { status: 400 });
+    }
+
+    // If forceReoptimize is true, reset optimization state
+    if (forceReoptimize && metadata) {
+      console.log(`Force re-optimization requested for CV ${cvRecord.id}`);
+      // Reset optimization state
+      const resetMetadata = {
+        ...metadata,
+        optimizing: false,
+        optimized: false,
+        progress: 0,
+        error: null,
+        stalledDetected: false,
+        progressStalled: false
+      };
+      await updateCVAnalysis(cvRecord.id, JSON.stringify(resetMetadata));
     }
 
     // Use the new background optimization that uses analysis data

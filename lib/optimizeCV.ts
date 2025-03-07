@@ -445,6 +445,14 @@ export function extractCriticalKeywords(text: string): string[] {
     keywords.push(match[0].toLowerCase());
   }
   
+  // Extract phone numbers but don't add them as keywords
+  // Just identify them for special handling in the optimization process
+  const phonePattern = /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b|\b\d{6,12}\b/g;
+  const phoneNumbers: string[] = [];
+  while ((match = phonePattern.exec(text)) !== null) {
+    phoneNumbers.push(match[0]);
+  }
+  
   // Remove duplicates
   const uniqueKeywords = [...new Set(keywords)];
   
@@ -470,19 +478,20 @@ function createFormattedFallbackFromRawText(rawText: string): string {
     // Look for contact information
     const contactLines = lines.slice(1, 5).filter(line => 
       line.includes('@') || // Email
-      line.match(/\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/) || // Phone
+      line.match(/\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b|\b\d{6,12}\b/) || // Phone numbers
       line.includes('linkedin.com') // LinkedIn
     );
     
     if (contactLines.length > 0) {
+      formattedText += "## CONTACT\n";
       formattedText += contactLines.join('\n') + '\n\n';
     }
     
     // Add a summary section
-    formattedText += "**Professional Summary**\n\n";
+    formattedText += "## PROFESSIONAL SUMMARY\n\n";
     
     // Add an experience section
-    formattedText += "**Work Experience**\n\n";
+    formattedText += "## PROFESSIONAL EXPERIENCE\n\n";
     
     // Add remaining content with some basic formatting
     const remainingLines = lines.slice(5);
