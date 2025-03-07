@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analyzeCV } from "@/lib/analyzeCV";
-import { getSession } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { getCVByFileName, getCVById } from "@/lib/db/queries.server";
+import { getSession } from "@/lib/auth/session";
+import { db } from "@/lib/db/drizzle";
+import { getCVByFileName } from "@/lib/db/queries.server";
 import { cvs } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -73,8 +73,7 @@ export async function POST(request: NextRequest) {
           // Update DB with the new metadata
           await db.update(cvs)
             .set({ 
-              metadata: JSON.stringify(updatedMetadata),
-              updatedAt: new Date()
+              metadata: JSON.stringify(updatedMetadata)
             })
             .where(eq(cvs.id, cvRecord.id));
           
