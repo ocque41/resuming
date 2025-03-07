@@ -63,7 +63,8 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
     pollRef.current = true;
 
     try {
-      const response = await fetch("/api/optimize-cv", {
+      // Use the new DOCX-based optimization endpoint
+      const response = await fetch("/api/cv/optimize-docx", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

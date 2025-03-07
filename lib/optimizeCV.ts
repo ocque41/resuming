@@ -870,7 +870,7 @@ function createFormattedFallbackFromRawText(rawText: string): string {
   }
   
   return formattedText;
-}
+  }
 
 // New function to optimize CV based on analysis data
 export async function optimizeCVWithAnalysis(
