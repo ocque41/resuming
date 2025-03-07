@@ -1,7 +1,6 @@
 import NextAuth from "next-auth";
-import { getSession } from "@/lib/auth/session";
 import CredentialsProvider from "next-auth/providers/credentials";
-import type { Session } from "next-auth";
+import { getSession } from "@/lib/auth/session";
 
 // Extend the built-in session type
 declare module "next-auth" {
@@ -21,9 +20,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // Use Credentials provider as a placeholder since we're using a custom system
     CredentialsProvider({
       name: "Custom Auth",
-      credentials: {
-        // This won't actually be used as we're using our custom session
-      },
+      credentials: {},
       async authorize() {
         // The actual authorization is handled by our custom session system
         return { id: "1" }; // Just a placeholder
@@ -42,7 +39,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             ...session.user,
             id: customSession.user.id.toString()
           };
-          return session;
         }
         
         return session;
