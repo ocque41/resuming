@@ -7,12 +7,25 @@ import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
 import 'react-circular-progressbar/dist/styles.css';
 import { ArrowRight, ArrowUp, ArrowDown, BarChart, CheckCircle, AlertTriangle, FileText } from 'lucide-react';
 
+// Brand colors
+const BRAND_PRIMARY = '#B4916C'; // Amber/gold brand color
+const BRAND_PRIMARY_LIGHT = 'rgba(180, 145, 108, 0.1)'; // Lighter version for backgrounds
+const BRAND_SUCCESS = '#4caf50'; // Green for success
+const BRAND_WARNING = '#ff9800'; // Orange for warnings
+const BRAND_DANGER = '#f44336'; // Red for errors
+const BRAND_NEUTRAL = '#64748b'; // Neutral color for general use
+
 interface OptimizationSummaryProps {
   fileName: string;
   showDetails?: boolean;
+  onUpdateDashboard?: (atsScore: number) => void; // New prop for updating dashboard
 }
 
-export default function OptimizationSummary({ fileName, showDetails = true }: OptimizationSummaryProps) {
+export default function OptimizationSummary({ 
+  fileName, 
+  showDetails = true,
+  onUpdateDashboard
+}: OptimizationSummaryProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [summaryData, setSummaryData] = useState<any>(null);
@@ -39,6 +52,11 @@ export default function OptimizationSummary({ fileName, showDetails = true }: Op
         
         const data = await response.json();
         setSummaryData(data);
+        
+        // If we have optimized score and the parent wants updates, call the callback
+        if (data.optimizedAtsScore && onUpdateDashboard) {
+          onUpdateDashboard(data.optimizedAtsScore);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An unknown error occurred');
       } finally {
@@ -47,18 +65,18 @@ export default function OptimizationSummary({ fileName, showDetails = true }: Op
     }
     
     fetchSummary();
-  }, [fileName]);
+  }, [fileName, onUpdateDashboard]);
 
-  // Helper to determine score color
+  // Helper to determine score color using brand colors
   const getScoreColor = (score: number) => {
-    if (score >= 80) return '#4caf50'; // Green for excellent
-    if (score >= 70) return '#8bc34a'; // Light green for good
-    if (score >= 60) return '#ffc107'; // Amber for moderate
-    if (score >= 50) return '#ff9800'; // Orange for needs improvement
-    return '#f44336'; // Red for poor
+    if (score >= 80) return BRAND_SUCCESS;
+    if (score >= 70) return BRAND_PRIMARY;
+    if (score >= 60) return BRAND_WARNING;
+    if (score >= 50) return '#ff9800'; // Orange
+    return BRAND_DANGER;
   };
 
-  // Helper to get difference indicator
+  // Helper to get difference indicator with brand colors
   const getDifferenceIndicator = (difference: number) => {
     if (difference > 0) return <ArrowUp className="text-green-500" />;
     if (difference < 0) return <ArrowDown className="text-red-500" />;
@@ -67,13 +85,13 @@ export default function OptimizationSummary({ fileName, showDetails = true }: Op
 
   if (loading) {
     return (
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>Optimization Summary</CardTitle>
+      <Card className="w-full border border-border/40 shadow-sm bg-card/50">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl font-semibold text-primary">Optimization Summary</CardTitle>
           <CardDescription>Loading optimization data...</CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center py-6">
-          <div className="animate-pulse h-48 w-48 rounded-full bg-gray-200"></div>
+          <div className="animate-pulse h-48 w-48 rounded-full bg-muted/50"></div>
         </CardContent>
       </Card>
     );
@@ -81,9 +99,9 @@ export default function OptimizationSummary({ fileName, showDetails = true }: Op
 
   if (error) {
     return (
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>Optimization Summary</CardTitle>
+      <Card className="w-full border border-border/40 shadow-sm bg-card/50">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl font-semibold text-primary">Optimization Summary</CardTitle>
           <CardDescription>Could not load summary</CardDescription>
         </CardHeader>
         <CardContent>
@@ -102,9 +120,9 @@ export default function OptimizationSummary({ fileName, showDetails = true }: Op
 
   if (!summaryData) {
     return (
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>Optimization Summary</CardTitle>
+      <Card className="w-full border border-border/40 shadow-sm bg-card/50">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl font-semibold text-primary">Optimization Summary</CardTitle>
           <CardDescription>No data available</CardDescription>
         </CardHeader>
         <CardContent>
@@ -121,9 +139,11 @@ export default function OptimizationSummary({ fileName, showDetails = true }: Op
   }
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle>CV Optimization Results</CardTitle>
+    <Card className="w-full border border-border/40 shadow-sm bg-card/50">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-xl font-semibold" style={{ color: BRAND_PRIMARY }}>
+          CV Optimization Results
+        </CardTitle>
         <CardDescription>
           ATS Score comparison between original and optimized CV
         </CardDescription>
@@ -140,24 +160,41 @@ export default function OptimizationSummary({ fileName, showDetails = true }: Op
                 styles={buildStyles({
                   pathColor: getScoreColor(summaryData.originalAtsScore || 0),
                   textColor: getScoreColor(summaryData.originalAtsScore || 0),
-                  trailColor: '#e2e8f0',
+                  trailColor: 'rgba(100, 116, 139, 0.2)', // Slate-colored trail
                 })}
               />
             </div>
           </div>
 
-          {/* Arrow */}
-          <div className="flex items-center">
-            {getDifferenceIndicator(summaryData.difference || 0)}
-            <span className="text-lg font-bold mx-2">
+          {/* Arrow with brand styling */}
+          <div className="flex items-center my-4 lg:my-0 bg-muted/30 px-4 py-2 rounded-full">
+            {summaryData.difference > 0 ? (
+              <ArrowUp className="text-green-500 h-5 w-5 mr-2" />
+            ) : summaryData.difference < 0 ? (
+              <ArrowDown className="text-red-500 h-5 w-5 mr-2" />
+            ) : (
+              <ArrowRight className="text-gray-500 h-5 w-5 mr-2" />
+            )}
+            <span 
+              className="text-lg font-bold" 
+              style={{ 
+                color: summaryData.difference > 0 
+                  ? BRAND_SUCCESS 
+                  : summaryData.difference < 0 
+                    ? BRAND_DANGER 
+                    : BRAND_NEUTRAL
+              }}
+            >
               {summaryData.difference > 0 ? '+' : ''}
               {summaryData.difference || 0}%
             </span>
           </div>
 
-          {/* Optimized ATS Score */}
+          {/* Optimized ATS Score with brand styling */}
           <div className="flex flex-col items-center">
-            <h3 className="text-sm font-medium mb-2">Optimized CV</h3>
+            <h3 className="text-sm font-medium mb-2" style={{ color: BRAND_PRIMARY }}>
+              Optimized CV
+            </h3>
             <div className="w-32 h-32">
               <CircularProgressbar
                 value={summaryData.optimizedAtsScore || 0}
@@ -165,22 +202,37 @@ export default function OptimizationSummary({ fileName, showDetails = true }: Op
                 styles={buildStyles({
                   pathColor: getScoreColor(summaryData.optimizedAtsScore || 0),
                   textColor: getScoreColor(summaryData.optimizedAtsScore || 0),
-                  trailColor: '#e2e8f0',
+                  trailColor: 'rgba(100, 116, 139, 0.2)',
+                  // Add brand-specific styling
+                  pathTransition: 'stroke-dashoffset 0.5s ease 0s',
                 })}
               />
             </div>
           </div>
         </div>
 
-        {/* Comparison Summary */}
+        {/* Comparison Summary with brand styling */}
         <div className="mt-4">
-          <Alert className={`mb-4 ${summaryData.difference >= 0 ? 'bg-green-50' : 'bg-amber-50'}`}>
+          <Alert 
+            className={`mb-4 ${
+              summaryData.difference >= 0 
+                ? `bg-${BRAND_PRIMARY_LIGHT} border-${BRAND_PRIMARY}/20`
+                : 'bg-amber-50 border-amber-200'
+            }`}
+          >
             {summaryData.difference >= 0 ? (
-              <CheckCircle className="h-4 w-4 text-green-600" />
+              <CheckCircle className="h-4 w-4" style={{ color: BRAND_PRIMARY }} />
             ) : (
               <AlertTriangle className="h-4 w-4 text-amber-600" />
             )}
-            <AlertTitle className={summaryData.difference >= 0 ? 'text-green-800' : 'text-amber-800'}>
+            <AlertTitle 
+              className={
+                summaryData.difference >= 0 
+                  ? `text-${BRAND_PRIMARY}`
+                  : 'text-amber-800'
+              }
+              style={{ color: summaryData.difference >= 0 ? BRAND_PRIMARY : undefined }}
+            >
               {summaryData.comparison}
             </AlertTitle>
             <AlertDescription>
@@ -189,24 +241,34 @@ export default function OptimizationSummary({ fileName, showDetails = true }: Op
           </Alert>
         </div>
 
-        {/* Recommendations */}
+        {/* Recommendations with brand styling */}
         {showDetails && summaryData.recommendedActions && summaryData.recommendedActions.length > 0 && (
-          <div className="mt-6">
-            <h3 className="text-lg font-semibold mb-2 flex items-center">
-              <BarChart className="w-5 h-5 mr-2" />
+          <div className="mt-6 p-4 rounded-lg bg-muted/30">
+            <h3 className="text-lg font-semibold mb-3 flex items-center" style={{ color: BRAND_PRIMARY }}>
+              <BarChart className="w-5 h-5 mr-2" style={{ color: BRAND_PRIMARY }} />
               Recommended Actions
             </h3>
-            <ul className="space-y-2 list-disc list-inside">
+            <ul className="space-y-2 list-none">
               {summaryData.recommendedActions.map((action: string, index: number) => (
-                <li key={index} className="text-sm">{action}</li>
+                <li key={index} className="text-sm flex items-start">
+                  <div className="flex-shrink-0 mt-1 mr-2 text-primary">
+                    <div className="w-1.5 h-1.5 rounded-full bg-current"></div>
+                  </div>
+                  <div>{action}</div>
+                </li>
               ))}
             </ul>
           </div>
         )}
       </CardContent>
-      <CardFooter className="flex justify-end">
-        <Button variant="outline" onClick={() => window.location.reload()}>
-          Refresh Data
+      <CardFooter className="flex justify-end border-t border-border/40 pt-4">
+        <Button 
+          variant="outline" 
+          onClick={() => window.location.reload()}
+          className="text-xs hover:bg-primary/10 hover:text-primary"
+          style={{ borderColor: BRAND_PRIMARY_LIGHT, color: BRAND_PRIMARY }}
+        >
+          Refresh Results
         </Button>
       </CardFooter>
     </Card>

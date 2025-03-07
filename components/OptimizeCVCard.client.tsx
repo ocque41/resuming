@@ -32,6 +32,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   const [hasOptimizedContent, setHasOptimizedContent] = useState(false);
   const [hasOptimizedPDF, setHasOptimizedPDF] = useState(false);
   const [optimizedPDFBase64, setOptimizedPDFBase64] = useState<string | null>(null);
+  const [updatedAtsScore, setUpdatedAtsScore] = useState<number | null>(null);
 
   // Reset state when component unmounts
   useEffect(() => {
@@ -349,6 +350,14 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
     }
   }
 
+  const handleAtsScoreUpdate = (newScore: number) => {
+    console.log(`Updating dashboard ATS score to: ${newScore}`);
+    setUpdatedAtsScore(newScore);
+    
+    // Additional logic could be added here to update the dashboard table
+    // For example, dispatching an event or calling a parent callback
+  };
+
   return (
     <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg">
       <CardHeader className="bg-[#B4916C]/10 pb-4">
@@ -513,7 +522,10 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
 
         {optimizedText && selectedCV && (
           <div className="mt-6">
-            <OptimizationSummary fileName={selectedCV} />
+            <OptimizationSummary 
+              fileName={selectedCV} 
+              onUpdateDashboard={handleAtsScoreUpdate}
+            />
           </div>
         )}
       </CardContent>
