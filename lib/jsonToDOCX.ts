@@ -3,7 +3,8 @@ import {
   AlignmentType, Table, TableRow, TableCell, BorderStyle,
   ImageRun, Footer, Header, WidthType, TableOfContents,
   Tab, HorizontalPositionAlign, VerticalPositionAlign,
-  HorizontalPositionRelativeFrom, VerticalPositionRelativeFrom
+  HorizontalPositionRelativeFrom, VerticalPositionRelativeFrom,
+  VerticalAlign
 } from 'docx';
 
 /**
@@ -11,11 +12,19 @@ import {
  * 
  * @param data Structured CV data from extractStructuredDataFromPDF
  * @param templateId Template identifier
+ * @param photoData Optional photo data (base64 string or URL)
  * @returns DOCX Document object
  */
-export function generateDOCXFromJSON(data: Record<string, any>, templateId: string): Document {
+export async function generateDOCXFromJSON(
+  data: Record<string, any>, 
+  templateId: string,
+  photoData?: string
+): Promise<Document> {
   // Process the structured data
   const { sections, nameAndContact } = data;
+  
+  // Generate content with photo if provided
+  const documentContent = await createDocumentContent(sections, nameAndContact, photoData);
   
   // Create document with modern professional template styling
   const doc = new Document({
@@ -146,7 +155,7 @@ export function generateDOCXFromJSON(data: Record<string, any>, templateId: stri
             },
           },
         },
-        children: createDocumentContent(sections, nameAndContact),
+        children: documentContent,
       },
     ],
   });
@@ -155,57 +164,176 @@ export function generateDOCXFromJSON(data: Record<string, any>, templateId: stri
 }
 
 /**
+ * Fetch an image from a URL and convert it to base64
+ */
+async function fetchImageAsBase64(url: string): Promise<string> {
+  const response = await fetch(url);
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer).toString('base64');
+}
+
+/**
  * Create document content from CV sections
  */
-function createDocumentContent(sections: Record<string, string>, nameAndContact: any): any[] {
+async function createDocumentContent(
+  sections: Record<string, string>, 
+  nameAndContact: any, 
+  photoData?: string
+): Promise<any[]> {
   const documentElements = [];
   
-  // Add name header with two-tone style
-  documentElements.push(
-    new Paragraph({
-      children: [
-        new TextRun({
-          text: nameAndContact.firstName.toUpperCase(),
-          bold: true,
-          size: 36,
-        }),
-        new TextRun({
-          text: " " + nameAndContact.lastName.toUpperCase(),
-          bold: true,
-          size: 36,
-          color: "808080", // Gray color for last name
+  // Create header layout with optional photo
+  if (photoData) {
+    // Create a table for the header with photo
+    const headerTable = new Table({
+      width: {
+        size: 100,
+        type: WidthType.PERCENTAGE,
+      },
+      borders: {
+        top: { style: BorderStyle.NONE },
+        bottom: { style: BorderStyle.NONE },
+        left: { style: BorderStyle.NONE },
+        right: { style: BorderStyle.NONE },
+        insideHorizontal: { style: BorderStyle.NONE },
+        insideVertical: { style: BorderStyle.NONE },
+      },
+      rows: [
+        new TableRow({
+          children: [
+            // Photo cell
+            new TableCell({
+              width: {
+                size: 20,
+                type: WidthType.PERCENTAGE,
+              },
+              children: [
+                new Paragraph({
+                  children: [
+                    new ImageRun({
+                      data: photoData.startsWith('http') 
+                        ? Buffer.from(await fetchImageAsBase64(photoData), 'base64')
+                        : Buffer.from(photoData.replace(/^data:image\/(png|jpeg|jpg);base64,/, ''), 'base64'),
+                      transformation: {
+                        width: 100,
+                        height: 100,
+                      },
+                      type: 'png',
+                    }),
+                  ],
+                }),
+              ],
+              verticalAlign: VerticalAlign.CENTER,
+            }),
+            // Name and contact info cell
+            new TableCell({
+              width: {
+                size: 80,
+                type: WidthType.PERCENTAGE,
+              },
+              children: [
+                // Name with two-tone style
+                new Paragraph({
+                  spacing: {
+                    after: 200,
+                  },
+                  children: [
+                    new TextRun({
+                      text: nameAndContact.firstName + " ",
+                      bold: true,
+                      size: 36,
+                      color: "000000",
+                    }),
+                    new TextRun({
+                      text: nameAndContact.lastName,
+                      bold: true,
+                      size: 36,
+                      color: "666666",
+                    }),
+                  ],
+                }),
+                // Job title
+                new Paragraph({
+                  spacing: {
+                    after: 200,
+                  },
+                  children: [
+                    new TextRun({
+                      text: nameAndContact.jobTitle,
+                      italics: true,
+                      size: 24,
+                      color: "666666",
+                    }),
+                  ],
+                }),
+                // Contact info line
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: `${nameAndContact.email} • ${nameAndContact.phone} • ${nameAndContact.location}`,
+                      size: 20,
+                      color: "666666",
+                    }),
+                  ],
+                }),
+              ],
+              verticalAlign: VerticalAlign.CENTER,
+            }),
+          ],
         }),
       ],
-      alignment: AlignmentType.CENTER,
-    })
-  );
-  
-  // Add job title
-  documentElements.push(
-    new Paragraph({
-      text: nameAndContact.jobTitle,
-      alignment: AlignmentType.CENTER,
-      spacing: {
-        after: 100,
-      },
-    })
-  );
-  
-  // Add contact info (phone, email, location)
-  const contactInfoLines = [];
-  if (nameAndContact.phone) contactInfoLines.push(nameAndContact.phone);
-  if (nameAndContact.email) contactInfoLines.push(nameAndContact.email);
-  if (nameAndContact.location) contactInfoLines.push(nameAndContact.location);
-  
-  documentElements.push(
-    new Paragraph({
-      text: contactInfoLines.join("\n"),
-      alignment: AlignmentType.CENTER,
-      spacing: {
-        after: 400,
-      },
-    })
-  );
+    });
+    
+    documentElements.push(headerTable);
+  } else {
+    // Standard header without photo
+    // Add name header with two-tone style
+    documentElements.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: nameAndContact.firstName.toUpperCase(),
+            bold: true,
+            size: 36,
+          }),
+          new TextRun({
+            text: " " + nameAndContact.lastName.toUpperCase(),
+            bold: true,
+            size: 36,
+            color: "808080", // Gray color for last name
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+      })
+    );
+    
+    // Add job title
+    documentElements.push(
+      new Paragraph({
+        text: nameAndContact.jobTitle,
+        alignment: AlignmentType.CENTER,
+        spacing: {
+          after: 100,
+        },
+      })
+    );
+    
+    // Add contact info (phone, email, location)
+    const contactInfoLines = [];
+    if (nameAndContact.phone) contactInfoLines.push(nameAndContact.phone);
+    if (nameAndContact.email) contactInfoLines.push(nameAndContact.email);
+    if (nameAndContact.location) contactInfoLines.push(nameAndContact.location);
+    
+    documentElements.push(
+      new Paragraph({
+        text: contactInfoLines.join("\n"),
+        alignment: AlignmentType.CENTER,
+        spacing: {
+          after: 400,
+        },
+      })
+    );
+  }
   
   // Add ABOUT ME section
   if (sections.profile || sections.summary || sections.about_me) {

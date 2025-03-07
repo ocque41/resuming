@@ -2,13 +2,21 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Download, ArrowRight, Check, AlertCircle } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { 
+  Select, 
+  SelectTrigger, 
+  SelectValue, 
+  SelectContent, 
+  SelectItem 
+} from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import OptimizationSummary from "./OptimizationSummary.client";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 
 interface OptimizeCVCardProps {
   cvs: string[];
@@ -33,6 +41,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   const [hasOptimizedPDF, setHasOptimizedPDF] = useState(false);
   const [optimizedPDFBase64, setOptimizedPDFBase64] = useState<string | null>(null);
   const [updatedAtsScore, setUpdatedAtsScore] = useState<number | null>(null);
+  const [includePhoto, setIncludePhoto] = useState(false);
 
   // Reset state when component unmounts
   useEffect(() => {
@@ -53,29 +62,30 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   }
 
   async function handleOptimize() {
-    if (!selectedCV) return;
-
-    setIsOptimizing(true);
-    setOptimizationProgress(0);
-    setOptimizationError(null);
-    setOptimizedText(null);
-    setPollingAttempts(0);
-    pollRef.current = true;
-
+    if (!selectedCV) {
+      alert("Please select a CV to optimize");
+      return;
+    }
+    
     try {
-      // Use the new DOCX-based optimization endpoint
+      setIsOptimizing(true);
+      setOptimizationProgress(10);
+      setOptimizationError(null);
+      
+      // Start the optimization process
       const response = await fetch("/api/cv/optimize-docx", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          fileName: selectedCV,
+          fileName: selectedCV.split('|')[0],
           templateId: selectedTemplate,
           forceReoptimize: true,
+          includePhoto: includePhoto
         }),
       });
-
+      
       if (!response.ok) {
         const error = await response.text();
         throw new Error(error || "Failed to optimize CV");
@@ -317,14 +327,27 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   }
 
   async function handleDownload() {
-    if (!optimizedText || !selectedCV) return;
+    if (!selectedCV) return;
     
     try {
-      // Get the optimized PDF from the server
-      const response = await fetch(`/api/optimize-cv/download?fileName=${encodeURIComponent(selectedCV)}`);
+      // First, get the CV details to get the id
+      const cvDetails = cvs.find(cv => cv === selectedCV);
+      if (!cvDetails) {
+        throw new Error('Selected CV details not found');
+      }
+      
+      // Extract the cv ID - assuming the format is 'filename.pdf|id'
+      const cvId = selectedCV.split('|')[1];
+      if (!cvId) {
+        throw new Error('CV ID not found in selected CV format');
+      }
+      
+      // Get the optimized PDF from the server using the new endpoint
+      const response = await fetch(`/api/cv/download-optimized?cvId=${encodeURIComponent(cvId)}`);
       
       if (!response.ok) {
-        throw new Error('Failed to download optimized CV');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to download optimized CV');
       }
       
       const blob = await response.blob();
@@ -362,11 +385,14 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   };
 
   return (
-    <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg">
+    <Card className="bg-[#050505] shadow-lg border border-[#B4916C]/20 overflow-hidden">
       <CardHeader className="bg-[#B4916C]/10 pb-4">
-        <CardTitle className="text-xl font-bold text-[#B4916C]">Optimize Your CV</CardTitle>
+        <CardTitle className="text-xl font-bold text-white">Optimize Your CV</CardTitle>
+        <CardDescription className="text-gray-400">
+          Enhanced with AI - Make your CV stand out
+        </CardDescription>
       </CardHeader>
-      <CardContent className="p-6">
+      <CardContent className="p-6 space-y-4">
         <div className="flex justify-center items-center mb-6">
           <div className="relative w-48 h-48 rounded-lg overflow-hidden">
             <img
@@ -380,18 +406,18 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         
         <div className="space-y-4">
           {/* CV Selection */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Select CV</label>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-200">Select CV</label>
             <Select
               value={selectedCV}
               onValueChange={handleCVSelect}
             >
-              <SelectTrigger className="w-full bg-[#121212] border border-[#B4916C]/30 text-white">
-                <SelectValue placeholder="Select a CV to optimize" />
+              <SelectTrigger>
+                <SelectValue placeholder="Select a CV" />
               </SelectTrigger>
-              <SelectContent className="bg-[#121212] border border-[#B4916C]/30 text-white">
+              <SelectContent>
                 {cvs.map((cv) => (
-                  <SelectItem key={cv} value={cv} className="hover:bg-[#B4916C]/10">
+                  <SelectItem key={cv} value={cv}>
                     {cv}
                   </SelectItem>
                 ))}
@@ -400,25 +426,38 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
           </div>
 
           {/* Template Selection */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Select Company Template</label>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-200">Select Template</label>
             <Select
               value={selectedTemplate}
               onValueChange={handleTemplateSelect}
             >
-              <SelectTrigger className="w-full bg-[#121212] border border-[#B4916C]/30 text-white">
-                <SelectValue placeholder="Select a company template" />
+              <SelectTrigger>
+                <SelectValue placeholder="Select a template" />
               </SelectTrigger>
-              <SelectContent className="bg-[#121212] border border-[#B4916C]/30 text-white">
-                <SelectItem value="google-modern" className="hover:bg-[#B4916C]/10">Google</SelectItem>
-                <SelectItem value="amazon-leadership" className="hover:bg-[#B4916C]/10">Amazon</SelectItem>
-                <SelectItem value="meta-impact" className="hover:bg-[#B4916C]/10">Meta</SelectItem>
-                <SelectItem value="apple-minimal" className="hover:bg-[#B4916C]/10">Apple</SelectItem>
-                <SelectItem value="microsoft-professional" className="hover:bg-[#B4916C]/10">Microsoft</SelectItem>
-                <SelectItem value="jpmorgan-finance" className="hover:bg-[#B4916C]/10">JP Morgan</SelectItem>
-                <SelectItem value="professional" className="hover:bg-[#B4916C]/10">Professional (General)</SelectItem>
+              <SelectContent>
+                {["google-modern", "amazon-leadership", "meta-impact", "apple-minimal", "microsoft-professional", "jpmorgan-finance", "professional"].map((template) => (
+                  <SelectItem key={template} value={template}>
+                    {template}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Photo Option */}
+          <div className="flex items-center space-x-2 pt-2">
+            <Checkbox
+              id="include-photo"
+              checked={includePhoto}
+              onCheckedChange={(checked) => setIncludePhoto(checked as boolean)}
+            />
+            <Label
+              htmlFor="include-photo"
+              className="text-sm font-medium text-gray-200 cursor-pointer"
+            >
+              Include professional photo (if available)
+            </Label>
           </div>
 
           {/* Optimization Progress */}

@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     
     // Parse request body
     const body = await request.json();
-    const { fileName, templateId } = body;
+    const { fileName, templateId, includePhoto } = body;
     
     if (!fileName) {
       return NextResponse.json({ error: "Missing fileName parameter" }, { status: 400 });
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       }
       
       // We'll process this in the background
-      processOptimizationBackground(cvRecord, templateId);
+      processOptimizationBackground(cvRecord, templateId, includePhoto);
       
       // Return immediate response indicating the process has started
       return NextResponse.json({
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
 /**
  * Process the optimization in the background to avoid timeouts
  */
-async function processOptimizationBackground(cvRecord: any, templateId: string): Promise<void> {
+async function processOptimizationBackground(cvRecord: any, templateId: string, includePhoto: boolean): Promise<void> {
   // Run this asynchronously
   (async () => {
     try {
@@ -126,8 +126,14 @@ async function processOptimizationBackground(cvRecord: any, templateId: string):
       // Update progress to 30%
       await updateProgress(cvRecord.id, 30);
       
+      // Check if we should include a photo
+      let photoData;
+      if (includePhoto && metadata.photoData) {
+        photoData = metadata.photoData;
+      }
+      
       // Step 4: Generate DOCX from structured data
-      const docx = generateDOCXFromJSON(structuredData, templateId);
+      const docx = await generateDOCXFromJSON(structuredData, templateId, photoData);
       const docxBuffer = await exportDOCXToBuffer(docx);
       
       // Update progress to 40%
