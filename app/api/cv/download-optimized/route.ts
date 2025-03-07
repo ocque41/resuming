@@ -12,6 +12,7 @@ interface CVMetadata {
   optimizedVersionId?: string;
   optimizedPDFBase64?: string;
   optimizedPdfUrl?: string;
+  optimizedText?: string;
   selectedTemplate?: string;
   progress?: number;
   startTime?: string;
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const cvId = searchParams.get("cvId");
+    const format = searchParams.get("format") || "pdf"; // Default to PDF
     
     if (!cvId) {
       return NextResponse.json({ error: "Missing cvId parameter" }, { status: 400 });
@@ -64,6 +66,28 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // Handle text format request
+    if (format === "text" && metadata.optimizedText) {
+      // Create a text file from the optimized content
+      const textContent = metadata.optimizedText;
+      
+      // Create a new filename for the optimized version
+      const fileName = cvRecord.fileName;
+      const fileNameParts = fileName.split('.');
+      fileNameParts.pop(); // Remove extension
+      const baseName = fileNameParts.join('.');
+      const optimizedFileName = `${baseName}-optimized.txt`;
+
+      // Return the text file
+      return new NextResponse(textContent, {
+        headers: {
+          'Content-Type': 'text/plain',
+          'Content-Disposition': `attachment; filename="${optimizedFileName}"`,
+          'Cache-Control': 'no-cache',
+        },
+      });
+    }
+
     // Get the optimized PDF from metadata
     const optimizedPDFBase64 = metadata.optimizedPDFBase64;
     
@@ -74,11 +98,22 @@ export async function GET(request: NextRequest) {
       if (metadata.optimizedText) {
         console.log(`Found optimized text but no PDF for CV ID ${cvId}`);
         
-        // Return the optimized text as a fallback
-        return NextResponse.json({ 
-          error: "Optimized PDF not found, but optimized text is available",
-          optimizedText: metadata.optimizedText
-        }, { status: 206 }); // 206 Partial Content
+        // Return the optimized text as a fallback with a 200 status
+        // Create a new filename for the optimized version
+        const fileName = cvRecord.fileName;
+        const fileNameParts = fileName.split('.');
+        fileNameParts.pop(); // Remove extension
+        const baseName = fileNameParts.join('.');
+        const optimizedFileName = `${baseName}-optimized.txt`;
+
+        // Return the text file
+        return new NextResponse(metadata.optimizedText, {
+          headers: {
+            'Content-Type': 'text/plain',
+            'Content-Disposition': `attachment; filename="${optimizedFileName}"`,
+            'Cache-Control': 'no-cache',
+          },
+        });
       }
       
       return NextResponse.json({ 
@@ -86,24 +121,31 @@ export async function GET(request: NextRequest) {
       }, { status: 404 });
     }
 
-    // Convert base64 to buffer
-    const pdfBuffer = Buffer.from(optimizedPDFBase64, 'base64');
-    
-    // Create a new filename for the optimized version
-    const fileName = cvRecord.fileName;
-    const fileNameParts = fileName.split('.');
-    const extension = fileNameParts.pop();
-    const baseName = fileNameParts.join('.');
-    const optimizedFileName = `${baseName}-optimized.pdf`;
+    try {
+      // Convert base64 to buffer
+      const pdfBuffer = Buffer.from(optimizedPDFBase64, 'base64');
+      
+      // Create a new filename for the optimized version
+      const fileName = cvRecord.fileName;
+      const fileNameParts = fileName.split('.');
+      const extension = fileNameParts.pop();
+      const baseName = fileNameParts.join('.');
+      const optimizedFileName = `${baseName}-optimized.pdf`;
 
-    // Return the PDF file
-    return new NextResponse(pdfBuffer, {
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${optimizedFileName}"`,
-        'Cache-Control': 'no-cache',
-      },
-    });
+      // Return the PDF file
+      return new NextResponse(pdfBuffer, {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="${optimizedFileName}"`,
+          'Cache-Control': 'no-cache',
+        },
+      });
+    } catch (bufferError) {
+      console.error("Error processing PDF buffer:", bufferError);
+      return NextResponse.json({ 
+        error: "Failed to process PDF data" 
+      }, { status: 500 });
+    }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error("Error downloading optimized CV:", error);

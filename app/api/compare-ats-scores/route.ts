@@ -50,70 +50,87 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
     
-    // Check if we already have ATS scores for both
-    const originalAtsScore = metadata.atsScore || null;
-    const optimizedAtsScore = metadata.optimizedAtsScore || null;
+    // Get ATS scores
+    let originalAtsScore = metadata.atsScore || null;
+    let optimizedAtsScore = metadata.optimizedAtsScore || null;
     
-    // If we don't have the optimized score yet, analyze it
-    if (optimizedAtsScore === null && metadata.optimizedText) {
-      console.log("Analyzing optimized CV to get ATS score");
+    // If we don't have scores, calculate them
+    if (!originalAtsScore || !optimizedAtsScore) {
       try {
-        const optimizedAnalysis = await analyzeCV(metadata.optimizedText);
+        // Get the raw text
+        const rawText = cvRecord.rawText || "";
         
-        if (optimizedAnalysis && typeof optimizedAnalysis.atsScore === 'number') {
-          // Save the optimized ATS score to metadata
-          const updatedMetadata = {
-            ...metadata,
-            optimizedAtsScore: optimizedAnalysis.atsScore,
-            optimizedIndustry: optimizedAnalysis.industry || null,
-            optimizedKeywords: optimizedAnalysis.missingKeywords || [],
-            lastAnalyzed: new Date().toISOString()
-          };
+        // Get the optimized text
+        const optimizedText = metadata.optimizedText || "";
+        
+        // If we have both texts, analyze them
+        if (rawText && optimizedText) {
+          // Calculate original ATS score if not available
+          if (!originalAtsScore) {
+            const originalAnalysis = await analyzeCV(rawText);
+            originalAtsScore = originalAnalysis.atsScore || 0;
+            
+            // Update the CV record with the original ATS score
+            const updatedMetadata = { ...metadata, atsScore: originalAtsScore };
+            await db.update(cvs)
+              .set({ metadata: JSON.stringify(updatedMetadata) })
+              .where(eq(cvs.id, cvRecord.id))
+              .execute();
+          }
           
-          // Update DB with the new metadata
-          await db.update(cvs)
-            .set({ 
-              metadata: JSON.stringify(updatedMetadata)
-            })
-            .where(eq(cvs.id, cvRecord.id));
-          
-          // Use the new score for response
-          metadata.optimizedAtsScore = optimizedAnalysis.atsScore;
+          // Calculate optimized ATS score if not available
+          if (!optimizedAtsScore) {
+            const optimizedAnalysis = await analyzeCV(optimizedText);
+            optimizedAtsScore = optimizedAnalysis.atsScore || 0;
+            
+            // Update the CV record with the optimized ATS score
+            const updatedMetadata = { 
+              ...metadata, 
+              optimizedAtsScore: optimizedAtsScore,
+              atsImprovement: optimizedAtsScore - (originalAtsScore || 0)
+            };
+            await db.update(cvs)
+              .set({ metadata: JSON.stringify(updatedMetadata) })
+              .where(eq(cvs.id, cvRecord.id))
+              .execute();
+          }
         }
-      } catch (analysisError) {
-        console.error("Error analyzing optimized CV:", analysisError);
-        // Continue with what we have
+      } catch (error) {
+        console.error("Error calculating ATS scores:", error);
       }
     }
     
-    // Calculate score difference and comparison
-    const difference = metadata.optimizedAtsScore !== null && originalAtsScore !== null 
-      ? metadata.optimizedAtsScore - originalAtsScore 
+    // Calculate the difference
+    const difference = optimizedAtsScore !== null && originalAtsScore !== null
+      ? optimizedAtsScore - originalAtsScore
       : null;
     
-    // Generate a human-readable comparison
-    let comparison = null;
+    // Generate comparison text
+    let comparison = "";
     if (difference !== null) {
-      if (difference > 5) {
-        comparison = "Significant improvement in ATS score";
+      if (difference > 15) {
+        comparison = "Significant improvement in ATS compatibility";
+      } else if (difference > 5) {
+        comparison = "Moderate improvement in ATS compatibility";
       } else if (difference > 0) {
-        comparison = "Slight improvement in ATS score";
+        comparison = "Slight improvement in ATS compatibility";
       } else if (difference === 0) {
-        comparison = "No change in ATS score";
-      } else if (difference > -5) {
-        comparison = "Slight decrease in ATS score";
+        comparison = "No change in ATS compatibility";
       } else {
-        comparison = "Significant decrease in ATS score";
+        comparison = "Decreased ATS compatibility";
       }
     }
     
-    // Return the scores and comparison
+    // Generate recommended actions based on scores
+    const recommendedActions = generateRecommendedActions(originalAtsScore, optimizedAtsScore, metadata);
+    
+    // Return a simplified response with only the necessary data
     return NextResponse.json({
       originalAtsScore,
-      optimizedAtsScore: metadata.optimizedAtsScore,
+      optimizedAtsScore,
       difference,
       comparison,
-      recommendedActions: generateRecommendedActions(originalAtsScore, metadata.optimizedAtsScore, metadata)
+      recommendedActions: recommendedActions.slice(0, 5) // Limit to 5 recommendations
     });
     
   } catch (error) {

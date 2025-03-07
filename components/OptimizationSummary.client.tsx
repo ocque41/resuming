@@ -50,15 +50,30 @@ export default function OptimizationSummary({
           throw new Error(errorData.error || 'Failed to fetch optimization summary');
         }
         
-        const data = await response.json();
+        // First get the response as text to avoid JSON parsing issues
+        const responseText = await response.text();
         
-        // Safely handle potentially large data
+        // Safely parse the JSON
         try {
-          setSummaryData(data);
+          // Use a safer approach to parse JSON
+          const data = JSON.parse(responseText);
+          
+          // Only extract the fields we need to avoid large object issues
+          const safeData = {
+            originalAtsScore: data.originalAtsScore,
+            optimizedAtsScore: data.optimizedAtsScore,
+            difference: data.difference,
+            comparison: data.comparison,
+            recommendedActions: Array.isArray(data.recommendedActions) 
+              ? data.recommendedActions.slice(0, 5) // Limit to 5 recommendations
+              : []
+          };
+          
+          setSummaryData(safeData);
           
           // If we have optimized score and the parent wants updates, call the callback
-          if (data.optimizedAtsScore && onUpdateDashboard) {
-            onUpdateDashboard(data.optimizedAtsScore);
+          if (safeData.optimizedAtsScore && onUpdateDashboard) {
+            onUpdateDashboard(safeData.optimizedAtsScore);
           }
         } catch (processingError) {
           console.error("Error processing summary data:", processingError);

@@ -225,14 +225,36 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       const data = await response.json();
       
       if (data.optimizedText) {
+        // Check if the optimized text is a JSON string
+        let displayText = data.optimizedText;
+        let isJsonFormat = false;
+        
+        try {
+          // Try to parse as JSON if it starts with a curly brace
+          if (typeof displayText === 'string' && (displayText.trim().startsWith('{') || displayText.trim().startsWith('{'))) {
+            const parsedJson = JSON.parse(displayText);
+            isJsonFormat = true;
+            
+            // Format the JSON into a readable format
+            displayText = Object.entries(parsedJson)
+              .filter(([key, value]) => value && String(value).trim())
+              .map(([key, value]) => `## ${key.toUpperCase()}\n${value}`)
+              .join('\n\n');
+          }
+        } catch (jsonError) {
+          console.warn("Text is not in JSON format:", jsonError);
+          // Keep the original text if it's not valid JSON
+        }
+        
         // Limit the size of the optimized text to prevent stack overflow
-        const maxPreviewLength = 5000; // Limit preview to 5000 characters
-        const truncatedText = data.optimizedText.length > maxPreviewLength 
-          ? data.optimizedText.substring(0, maxPreviewLength) + '... (content truncated for preview)'
-          : data.optimizedText;
+        const maxPreviewLength = 2000; // Limit preview to 2000 characters
+        const truncatedText = displayText.length > maxPreviewLength 
+          ? displayText.substring(0, maxPreviewLength) + '... (content truncated for preview)'
+          : displayText;
         
         setOptimizedText(truncatedText);
-        console.log("Loaded optimized text (length):", data.optimizedText.length, "Preview length:", truncatedText.length);
+        console.log("Loaded optimized text (length):", data.optimizedText.length, "Preview length:", truncatedText.length, "JSON format:", isJsonFormat);
+        
         if (data.optimizedText.length > 0) {
           setIsOptimized(true);
         }
@@ -334,13 +356,17 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         return;
       }
       
+      // Determine the format to download (PDF or text)
+      const format = statusData.optimizedPDFBase64 ? "pdf" : "text";
+      console.log(`Downloading in ${format} format`);
+      
       // Use the download endpoint to get the full content
-      const downloadUrl = `/api/cv/download-optimized?cvId=${cvId}`;
+      const downloadUrl = `/api/cv/download-optimized?cvId=${cvId}&format=${format}`;
       
       // Create a temporary link and trigger download
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.setAttribute('download', `optimized_${statusData.fileName || 'cv'}.pdf`);
+      link.setAttribute('download', `optimized_${statusData.fileName || 'cv'}.${format}`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -562,16 +588,12 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
           <div className="mt-6 border border-[#B4916C]/20 bg-[#121212] rounded-md p-4">
             <h3 className="text-[#B4916C] font-medium mb-2">Optimized Content Preview</h3>
             <div className="max-h-48 overflow-y-auto text-sm text-gray-300 bg-[#0A0A0A] p-3 rounded whitespace-pre-line">
-              {/* Render optimized text in chunks to prevent stack overflow */}
-              {optimizedText.length > 10000 ? (
-                <>
-                  <p>{optimizedText.substring(0, 2000)}</p>
-                  <p className="text-amber-500 my-2">... (content truncated for preview) ...</p>
-                  <p>{optimizedText.substring(optimizedText.length - 2000)}</p>
-                </>
-              ) : (
-                optimizedText
-              )}
+              {/* Render optimized text safely */}
+              {optimizedText.split('\n').map((line, index) => (
+                <div key={index} className={line.startsWith('##') ? 'text-[#B4916C] font-medium mt-2' : ''}>
+                  {line.startsWith('##') ? line.substring(2).trim() : line}
+                </div>
+              ))}
             </div>
             
             {/* Show ATS Score Comparison if available */}
