@@ -224,58 +224,27 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       
       const data = await response.json();
       
-      if (data.optimizedText) {
-        // Check if the optimized text is a JSON string
-        let displayText = data.optimizedText;
-        let isJsonFormat = false;
-        
-        try {
-          // Try to parse as JSON if it starts with a curly brace
-          if (typeof displayText === 'string' && (displayText.trim().startsWith('{') || displayText.trim().startsWith('{'))) {
-            const parsedJson = JSON.parse(displayText);
-            isJsonFormat = true;
-            
-            // Format the JSON into a readable format
-            displayText = Object.entries(parsedJson)
-              .filter(([key, value]) => value && String(value).trim())
-              .map(([key, value]) => `## ${key.toUpperCase()}\n${value}`)
-              .join('\n\n');
-          }
-        } catch (jsonError) {
-          console.warn("Text is not in JSON format:", jsonError);
-          // Keep the original text if it's not valid JSON
-        }
-        
-        // Limit the size of the optimized text to prevent stack overflow
-        const maxPreviewLength = 2000; // Limit preview to 2000 characters
-        const truncatedText = displayText.length > maxPreviewLength 
-          ? displayText.substring(0, maxPreviewLength) + '... (content truncated for preview)'
-          : displayText;
-        
-        setOptimizedText(truncatedText);
-        console.log("Loaded optimized text (length):", data.optimizedText.length, "Preview length:", truncatedText.length, "JSON format:", isJsonFormat);
-        
-        if (data.optimizedText.length > 0) {
-          setIsOptimized(true);
-        }
-      } else {
-        console.warn("No optimized text found");
-        setOptimizationError("No optimized content found");
-        setErrorDetails("The optimization process did not produce any content. Try again or select a different template.");
-      }
-      
-      // Check for base64 PDF content
-      if (data.optimizedPDFBase64) {
-        console.log("PDF base64 data is available");
+      // Only check if optimization is complete, don't load the actual content
+      if (data.optimized) {
         setIsOptimized(true);
+        
+        // Update ATS score if available
+        if (data.optimizedAtsScore) {
+          handleAtsScoreUpdate(data.optimizedAtsScore);
+        }
       } else {
-        console.warn("No optimized PDF found");
+        console.warn("CV is not optimized yet");
         setIsOptimized(false);
       }
+      
+      // Check for base64 PDF content availability (don't load it)
+      if (data.optimizedPDFBase64) {
+        console.log("PDF base64 data is available");
+      }
     } catch (error) {
-      console.error("Error loading optimized content:", error);
-      setOptimizationError(`Error loading optimized content: ${(error as Error).message}`);
-      setErrorDetails("There was an error retrieving your optimized CV content. Try downloading again.");
+      console.error("Error checking optimization status:", error);
+      setOptimizationError(`Error checking status: ${(error as Error).message}`);
+      setErrorDetails("There was an error checking your optimized CV status. Try again later.");
     } finally {
       setLoading(false);
     }
@@ -356,22 +325,15 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         return;
       }
       
-      // Determine the format to download (PDF or text)
-      const format = statusData.optimizedPDFBase64 ? "pdf" : "text";
-      console.log(`Downloading in ${format} format`);
-      
-      // Use the download endpoint to get the full content
+      // Open the download URL in a new tab instead of using the download attribute
+      // This is more reliable and avoids issues with large files
+      const format = "text"; // Default to text format which is more reliable
       const downloadUrl = `/api/cv/download-optimized?cvId=${cvId}&format=${format}`;
       
-      // Create a temporary link and trigger download
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.setAttribute('download', `optimized_${statusData.fileName || 'cv'}.${format}`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // Open in a new tab
+      window.open(downloadUrl, '_blank');
       
-      console.log("Download initiated");
+      console.log("Download initiated in new tab");
     } catch (error) {
       console.error("Error downloading optimized CV:", error);
       setOptimizationError(`Error downloading: ${(error as Error).message}`);
@@ -556,25 +518,8 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
           </div>
         </div>
 
-        {optimizedText && (
-          <div className="mt-4 space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-semibold">
-                Optimized CV
-              </h3>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={handleDownload}
-                disabled={loading}
-              >
-                {loading ? "Downloading..." : "Download PDF"}
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {optimizedText && selectedCV && (
+        {/* Show optimization summary only once */}
+        {selectedCV && (
           <div className="mt-6">
             <OptimizationSummary 
               fileName={selectedCV} 
@@ -583,29 +528,16 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
           </div>
         )}
 
-        {/* Optimized CV Preview - show when available */}
-        {optimizedText && (
-          <div className="mt-6 border border-[#B4916C]/20 bg-[#121212] rounded-md p-4">
-            <h3 className="text-[#B4916C] font-medium mb-2">Optimized Content Preview</h3>
-            <div className="max-h-48 overflow-y-auto text-sm text-gray-300 bg-[#0A0A0A] p-3 rounded whitespace-pre-line">
-              {/* Render optimized text safely */}
-              {optimizedText.split('\n').map((line, index) => (
-                <div key={index} className={line.startsWith('##') ? 'text-[#B4916C] font-medium mt-2' : ''}>
-                  {line.startsWith('##') ? line.substring(2).trim() : line}
-                </div>
-              ))}
-            </div>
-            
-            {/* Show ATS Score Comparison if available */}
-            {updatedAtsScore !== null && (
-              <div className="mt-4">
-                <OptimizationSummary 
-                  fileName={selectedCV?.split('|')[0] || ''}
-                  showDetails={false}
-                  onUpdateDashboard={handleAtsScoreUpdate}
-                />
-              </div>
-            )}
+        {/* Add download button when CV is optimized */}
+        {isOptimized && selectedCV && (
+          <div className="mt-6 flex justify-center">
+            <Button 
+              onClick={handleDownload}
+              disabled={loading}
+              className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
+            >
+              {loading ? "Processing..." : "Download Optimized CV"}
+            </Button>
           </div>
         )}
       </CardContent>

@@ -37,43 +37,40 @@ export default function OptimizationSummary({
       try {
         setLoading(true);
         
-        const response = await fetch('/api/compare-ats-scores', {
-          method: 'POST',
+        // Use a simplified endpoint that returns only essential data
+        const response = await fetch(`/api/cv/optimization-status?fileName=${encodeURIComponent(fileName)}`, {
+          method: 'GET',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ fileName }),
         });
         
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to fetch optimization summary');
+          throw new Error(`Server error: ${response.status}`);
         }
         
-        // First get the response as text to avoid JSON parsing issues
+        // Get the response as text first to avoid JSON parsing issues
         const responseText = await response.text();
         
-        // Safely parse the JSON
         try {
-          // Use a safer approach to parse JSON
+          // Parse the JSON manually
           const data = JSON.parse(responseText);
           
-          // Only extract the fields we need to avoid large object issues
-          const safeData = {
-            originalAtsScore: data.originalAtsScore,
-            optimizedAtsScore: data.optimizedAtsScore,
-            difference: data.difference,
-            comparison: data.comparison,
-            recommendedActions: Array.isArray(data.recommendedActions) 
-              ? data.recommendedActions.slice(0, 5) // Limit to 5 recommendations
-              : []
+          // Create a minimal data object with only what we need
+          const minimalData = {
+            originalAtsScore: data.atsScore || 0,
+            optimizedAtsScore: data.optimizedAtsScore || 0,
+            difference: (data.optimizedAtsScore || 0) - (data.atsScore || 0),
+            optimized: data.optimized || false,
+            progress: data.progress || 0
           };
           
-          setSummaryData(safeData);
+          // Set the summary data
+          setSummaryData(minimalData);
           
           // If we have optimized score and the parent wants updates, call the callback
-          if (safeData.optimizedAtsScore && onUpdateDashboard) {
-            onUpdateDashboard(safeData.optimizedAtsScore);
+          if (minimalData.optimizedAtsScore && onUpdateDashboard) {
+            onUpdateDashboard(minimalData.optimizedAtsScore);
           }
         } catch (processingError) {
           console.error("Error processing summary data:", processingError);
@@ -171,7 +168,7 @@ export default function OptimizationSummary({
           CV Optimization Results
         </CardTitle>
         <CardDescription>
-          ATS Score comparison between original and optimized CV
+          ATS Score comparison
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -229,63 +226,12 @@ export default function OptimizationSummary({
                   pathColor: getScoreColor(summaryData.optimizedAtsScore || 0),
                   textColor: getScoreColor(summaryData.optimizedAtsScore || 0),
                   trailColor: 'rgba(100, 116, 139, 0.2)',
-                  // Add brand-specific styling
                   pathTransition: 'stroke-dashoffset 0.5s ease 0s',
                 })}
               />
             </div>
           </div>
         </div>
-
-        {/* Comparison Summary with brand styling */}
-        <div className="mt-4">
-          <Alert 
-            className={`mb-4 ${
-              summaryData.difference >= 0 
-                ? `bg-${BRAND_PRIMARY_LIGHT} border-${BRAND_PRIMARY}/20`
-                : 'bg-amber-50 border-amber-200'
-            }`}
-          >
-            {summaryData.difference >= 0 ? (
-              <CheckCircle className="h-4 w-4" style={{ color: BRAND_PRIMARY }} />
-            ) : (
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
-            )}
-            <AlertTitle 
-              className={
-                summaryData.difference >= 0 
-                  ? `text-${BRAND_PRIMARY}`
-                  : 'text-amber-800'
-              }
-              style={{ color: summaryData.difference >= 0 ? BRAND_PRIMARY : undefined }}
-            >
-              {summaryData.comparison}
-            </AlertTitle>
-            <AlertDescription className="text-gray-800 font-medium">
-              Your CV's ATS compatibility has {summaryData.difference >= 0 ? 'improved' : 'decreased'} by {Math.abs(summaryData.difference || 0)}%.
-            </AlertDescription>
-          </Alert>
-        </div>
-
-        {/* Recommendations with brand styling */}
-        {showDetails && summaryData.recommendedActions && summaryData.recommendedActions.length > 0 && (
-          <div className="mt-6 p-4 rounded-lg bg-muted/30">
-            <h3 className="text-lg font-semibold mb-3 flex items-center" style={{ color: BRAND_PRIMARY }}>
-              <BarChart className="w-5 h-5 mr-2" style={{ color: BRAND_PRIMARY }} />
-              Recommended Actions
-            </h3>
-            <ul className="space-y-2 list-none">
-              {summaryData.recommendedActions.map((action: string, index: number) => (
-                <li key={index} className="text-sm flex items-start">
-                  <div className="flex-shrink-0 mt-1 mr-2 text-primary">
-                    <div className="w-1.5 h-1.5 rounded-full bg-current"></div>
-                  </div>
-                  <div>{action}</div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </CardContent>
       <CardFooter className="flex justify-end border-t border-border/40 pt-4">
         <Button 
