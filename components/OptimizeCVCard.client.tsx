@@ -91,8 +91,8 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       setPollingAttempts(0);
       pollRef.current = true;
       
-      // Start the optimization process
-      const response = await fetch("/api/cv/optimize-docx", {
+      // Start the optimization process using the local route
+      const response = await fetch("/api/cv/optimize-local", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
