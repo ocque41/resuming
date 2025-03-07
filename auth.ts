@@ -32,18 +32,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     async session({ session }) {
-      // Get the custom session from our auth system
-      const customSession = await getSession();
-      
-      if (customSession && customSession.user) {
-        // Add the user ID to the session
-        session.user = {
-          ...session.user,
-          id: customSession.user.id.toString()
-        };
+      try {
+        // Get the custom session from our auth system
+        const customSession = await getSession();
+        
+        if (customSession && customSession.user) {
+          // Add the user ID to the session
+          session.user = {
+            ...session.user,
+            id: customSession.user.id.toString()
+          };
+          return session;
+        }
+        
+        return session;
+      } catch (error) {
+        console.error("Error in session callback:", error);
+        return session;
       }
-      
-      return session;
     }
   },
   pages: {

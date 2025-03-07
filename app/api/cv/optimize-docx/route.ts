@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { convertDOCXToPDF } from '@/lib/docxToPDF';
 import { generateDOCXFromJSON, exportDOCXToBuffer } from '@/lib/jsonToDOCX';
-import { optimizeCV, optimizeCVWithAnalysis } from '@/lib/optimizeCV';
+import { 
+  optimizeCV, 
+  optimizeCVWithAnalysis, 
+  extractSections as extractCVSections,
+  analyzeCVContent
+} from '@/lib/optimizeCV';
 import { uploadBufferToStorage, getOriginalPdfBytes, extractTextFromPdf } from '@/lib/storage';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
@@ -122,7 +127,7 @@ async function processOptimizationBackground(cvRecord: any, templateId: string, 
       
       // Step 3: Extract structured data from the PDF
       const structuredData = {
-        sections: extractSections(cvText),
+        sections: extractCVSections(cvText),
         nameAndContact: extractNameAndContact(cvText),
         analysis: analyzeCV(cvText),
         originalText: cvText
@@ -268,15 +273,8 @@ async function updateProgress(cvId: number, progress: number): Promise<void> {
 }
 
 // Helper functions
-function extractSections(text: string): Record<string, string> {
-  // Import from optimizeCV.ts to avoid circular dependencies
-  const { extractSections } = require("@/lib/optimizeCV");
-  return extractSections(text);
-}
-
 function analyzeCV(text: string): any {
-  // Import from optimizeCV.ts to avoid circular dependencies
-  const { analyzeCVContent } = require("@/lib/optimizeCV");
+  // Use the imported analyzeCVContent function
   return analyzeCVContent(text);
 }
 
@@ -288,30 +286,50 @@ function extractNameAndContact(text: string): any {
     firstName: 'NAME',
     lastName: 'LAST NAME',
     jobTitle: 'JOB OCCUPIED',
-    phone: '',
-    email: '',
-    location: ''
+    phone: '+1 234 567 890',
+    email: 'email@example.com',
+    location: 'City, Country'
   };
   
-  // First line is often the name
+  // Try to extract real name from first lines
   if (lines.length > 0) {
-    const nameParts = lines[0].split(' ');
+    const nameLine = lines[0].trim();
+    const nameParts = nameLine.split(' ');
+    
     if (nameParts.length >= 2) {
       result.firstName = nameParts[0];
       result.lastName = nameParts.slice(1).join(' ');
     }
-  }
-  
-  // Look for email, phone, and location
-  for (const line of lines.slice(0, 10)) { // Check first 10 lines
-    if (line.includes('@')) {
-      result.email = line.trim();
-    } else if (line.match(/\+?[\d\s-]{7,}/)) {
-      result.phone = line.trim();
-    } else if (line.match(/[A-Za-z]+,\s*[A-Za-z]+/) || line.includes('USA') || line.includes('UK')) {
-      result.location = line.trim();
-    } else if (line.match(/director|manager|engineer|developer|designer|consultant|specialist|analyst|coordinator/i) && result.jobTitle === 'JOB OCCUPIED') {
-      result.jobTitle = line.trim();
+    
+    // Try to extract job title from second line
+    if (lines.length > 1) {
+      result.jobTitle = lines[1].trim();
+    }
+    
+    // Look for email and phone in the first few lines
+    for (let i = 0; i < Math.min(10, lines.length); i++) {
+      const line = lines[i].toLowerCase();
+      
+      // Email pattern
+      if (line.includes('@') && line.includes('.')) {
+        const emailMatch = line.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+        if (emailMatch) {
+          result.email = emailMatch[0];
+        }
+      }
+      
+      // Phone pattern
+      if (line.match(/\+?\d[\d\s-]{7,}/)) {
+        const phoneMatch = line.match(/\+?\d[\d\s-]{7,}/);
+        if (phoneMatch) {
+          result.phone = phoneMatch[0];
+        }
+      }
+      
+      // Location pattern - look for city, country format
+      if (line.includes(',') && !line.includes('@')) {
+        result.location = lines[i].trim();
+      }
     }
   }
   

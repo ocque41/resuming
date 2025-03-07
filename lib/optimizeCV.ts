@@ -2594,5 +2594,5 @@ function formatLanguagesWithBars(languages: string): string {
   }
   
   return result.trim();
-}
+  }
   
