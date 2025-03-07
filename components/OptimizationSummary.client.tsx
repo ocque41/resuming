@@ -235,7 +235,7 @@ export default function OptimizationSummary({
             >
               {summaryData.comparison}
             </AlertTitle>
-            <AlertDescription>
+            <AlertDescription className="text-gray-800 font-medium">
               Your CV's ATS compatibility has {summaryData.difference >= 0 ? 'improved' : 'decreased'} by {Math.abs(summaryData.difference || 0)}%.
             </AlertDescription>
           </Alert>

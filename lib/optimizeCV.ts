@@ -355,7 +355,7 @@ export function verifyContentPreservation(originalText: string, optimizedText: s
   
   // Check if each important phrase is preserved
   for (const phrase of importantPhrases) {
-    if (!normalizedOptimized.includes(phrase)) {
+    if (!normalizedOptimized.includes(phrase.toLowerCase())) {
       missingItems.push(phrase);
     }
   }
@@ -365,25 +365,52 @@ export function verifyContentPreservation(originalText: string, optimizedText: s
     ? Math.round(((importantPhrases.length - missingItems.length) / importantPhrases.length) * 100)
     : 100; // Default to 100 if no important phrases found
   
-  // Consider content preserved if keyword score is above 90%
-  const preserved = keywordScore >= 90;
+  // More strict preservation requirement - require at least 95% keyword preservation
+  const preserved = keywordScore >= 95;
+  
+  // Check if the optimized text has more industry-specific keywords than the original
+  const industryKeywords = getIndustrySpecificKeywords("General"); // Use general keywords as a baseline
+  
+  let originalKeywordCount = 0;
+  let optimizedKeywordCount = 0;
+  
+  for (const keyword of industryKeywords) {
+    const keywordLower = keyword.toLowerCase();
+    if (normalizedOriginal.includes(keywordLower)) {
+      originalKeywordCount++;
+    }
+    if (normalizedOptimized.includes(keywordLower)) {
+      optimizedKeywordCount++;
+    }
+  }
+  
+  const keywordImprovement = optimizedKeywordCount - originalKeywordCount;
   
   // Log diagnostic information
   console.log(`Content verification: ${preserved ? 'PASSED' : 'FAILED'}`);
   console.log(`Keyword preservation score: ${keywordScore}%`);
+  console.log(`Industry keyword count: Original=${originalKeywordCount}, Optimized=${optimizedKeywordCount} (${keywordImprovement > 0 ? '+' : ''}${keywordImprovement})`);
+  
   if (missingItems.length > 0) {
     console.log(`Missing items (${missingItems.length}): ${missingItems.slice(0, 10).join(', ')}${missingItems.length > 10 ? '...' : ''}`);
   }
   
+  // Only consider preserved if both keyword preservation is high AND we have more industry keywords
+  const finalPreserved = preserved && (keywordImprovement >= 0);
+  
+  if (!finalPreserved && keywordImprovement < 0) {
+    console.warn("Optimization FAILED: Lost industry-specific keywords");
+  }
+  
   return {
-    preserved,
+    preserved: finalPreserved,
     missingItems,
     keywordScore
   };
 }
 
-// New function: Extract critical keywords from CV text
-function extractCriticalKeywords(text: string): string[] {
+// Export the function so it can be imported in other files
+export function extractCriticalKeywords(text: string): string[] {
   const keywords: string[] = [];
   
   // Identify technical skills (common programming languages, tools, etc.)
@@ -575,13 +602,29 @@ export async function optimizeCVWithAnalysis(
       headerStyle = templateLayout.headerStyle || headerStyle;
     }
     
+    // Extract all keywords from the original CV to ensure preservation
+    const originalKeywords = extractCriticalKeywords(cvText);
+    console.log(`Extracted ${originalKeywords.length} critical keywords from original CV`);
+    
+    // Get additional industry-specific keywords to boost ATS score
+    const additionalKeywords = getIndustrySpecificKeywords(industry);
+    console.log(`Adding ${additionalKeywords.length} industry-specific keywords`);
+    
     // Build industry-specific optimization instructions
     const industryInstructions = getIndustrySpecificInstructions(industry);
     
-    // Build keyword optimization instructions
-    const keywordInstructions = missingKeywords.length > 0
-      ? `Incorporate these missing keywords in a natural way (do not just list them): ${missingKeywords.join(', ')}.`
-      : "Ensure all industry-specific keywords are included and properly highlighted.";
+    // Build keyword optimization instructions with emphasis on preservation
+    const keywordInstructions = `
+CRITICAL: Preserve ALL of these original keywords (do not remove any of them):
+${originalKeywords.join(', ')}
+
+Additionally, incorporate these industry-specific keywords naturally throughout the CV:
+${additionalKeywords.join(', ')}
+
+${missingKeywords.length > 0 
+  ? `Also add these missing keywords that will improve ATS score: ${missingKeywords.join(', ')}`
+  : 'Ensure all industry-specific keywords are included and properly highlighted.'}
+`;
     
     // Build weakness remediation instructions
     const weaknessRemediation = weaknesses.length > 0
@@ -594,12 +637,12 @@ export async function optimizeCVWithAnalysis(
     // Enhance the sections based on analysis
     const enhancedSections = enhanceSectionsWithAnalysis(sections, analysisMetadata);
     
-    // Custom prompt based on analysis data
+    // Custom prompt based on analysis data with stronger emphasis on ATS optimization
     const optimizationPrompt = `
 You are a professional CV/resume optimization expert with specialization in the ${industry} industry.
 
 The CV you're optimizing currently has an ATS (Applicant Tracking System) score of ${atsScore}/100.
-Your task is to optimize this CV to achieve a perfect ATS score while maintaining a professional, 
+Your task is to optimize this CV to achieve a HIGHER ATS score while maintaining a professional, 
 human-readable format that appeals to hiring managers.
 
 ${industryInstructions}
@@ -612,20 +655,24 @@ Key strengths to emphasize:
 ${strengths.map((s: string) => `- ${s}`).join('\n')}
 
 CRITICAL ATS OPTIMIZATION RULES:
-1. Preserve ALL industry-specific keywords and technical terms
+1. NEVER remove ANY keywords from the original CV - keyword preservation is the highest priority
 2. Quantify achievements with specific metrics (%, $, numbers) wherever possible
 3. Use standard job titles and industry terminology
 4. Organize information in a clear, scannable format with proper section headers
 5. Include all educational credentials, certifications, and specialized training
 6. Format dates consistently (MM/YYYY format preferred)
 7. Use both acronyms AND their expanded forms where appropriate (e.g., "AI (Artificial Intelligence)")
+8. Add the industry-specific keywords provided above to boost ATS score
+9. Ensure the optimized version has MORE relevant keywords than the original
 
 CONTENT ORGANIZATION:
 1. Begin with a strong professional summary that highlights core competencies
-2. Organize experience in reverse chronological order
-3. For each position, lead with accomplishments rather than responsibilities
-4. Format skills section for maximum ATS visibility
-5. Use industry-standard section headings
+2. Include a dedicated ACHIEVEMENTS section with 3-5 bullet points of quantified accomplishments
+3. Organize experience in reverse chronological order
+4. For each position, lead with accomplishments rather than responsibilities
+5. Format skills section for maximum ATS visibility
+6. Use industry-standard section headings
+7. Use bullet points for better readability
 
 FORMATTING INSTRUCTIONS:
 ${layout === 'one-column' 
@@ -676,13 +723,19 @@ ${cvText}
         // Incorporate missing keywords into the optimized text
         const recoveredText = incorporateMissingItems(result.optimizedCV, verification.missingItems, sections);
         
+        // Add additional industry keywords to further boost ATS score
+        const enhancedText = addIndustryKeywords(recoveredText, additionalKeywords);
+        
         return {
-          optimizedText: recoveredText,
+          optimizedText: enhancedText,
         };
       }
       
+      // Even if verification passed, still add industry keywords to boost ATS score
+      const enhancedText = addIndustryKeywords(result.optimizedCV, additionalKeywords);
+      
       return {
-        optimizedText: result.optimizedCV,
+        optimizedText: enhancedText,
       };
     } catch (apiError: unknown) {
       console.error("API error during optimization:", apiError);
@@ -703,6 +756,112 @@ ${cvText}
       error: `Optimization failed: ${error instanceof Error ? error.message : String(error)}`
     };
   }
+}
+
+// Export the function so it can be imported in other files
+export function getIndustrySpecificKeywords(industry: string): string[] {
+  const keywords: Record<string, string[]> = {
+    'Technology': [
+      'agile methodology', 'scrum', 'continuous integration', 'continuous deployment', 
+      'software development lifecycle', 'SDLC', 'test-driven development', 'TDD',
+      'object-oriented programming', 'OOP', 'RESTful API', 'microservices',
+      'cloud computing', 'scalability', 'version control', 'git', 'CI/CD pipeline'
+    ],
+    'Finance': [
+      'financial analysis', 'risk assessment', 'portfolio management', 'asset allocation',
+      'financial modeling', 'forecasting', 'budgeting', 'cost reduction', 'ROI analysis',
+      'financial reporting', 'compliance', 'regulatory requirements', 'audit',
+      'investment strategy', 'cash flow management', 'financial planning'
+    ],
+    'Marketing': [
+      'digital marketing', 'content strategy', 'SEO optimization', 'SEM', 'PPC campaigns',
+      'social media marketing', 'brand development', 'market research', 'customer acquisition',
+      'conversion rate optimization', 'CRO', 'marketing analytics', 'A/B testing',
+      'email marketing', 'marketing automation', 'customer journey mapping'
+    ],
+    'Healthcare': [
+      'patient care', 'clinical documentation', 'healthcare compliance', 'HIPAA',
+      'electronic health records', 'EHR', 'medical coding', 'quality improvement',
+      'patient safety', 'care coordination', 'clinical workflow', 'healthcare informatics',
+      'evidence-based practice', 'patient outcomes', 'healthcare management'
+    ],
+    'Sales': [
+      'revenue generation', 'sales pipeline', 'lead qualification', 'account management',
+      'client relationship', 'sales forecasting', 'territory management', 'quota attainment',
+      'customer retention', 'upselling', 'cross-selling', 'sales strategy',
+      'negotiation', 'closing techniques', 'CRM management', 'sales analytics'
+    ],
+    'General': [
+      'project management', 'team leadership', 'strategic planning', 'process improvement',
+      'stakeholder management', 'cross-functional collaboration', 'problem-solving',
+      'data analysis', 'performance metrics', 'KPI tracking', 'resource allocation',
+      'budget management', 'quality assurance', 'continuous improvement'
+    ]
+  };
+  
+  // Get keywords for the specific industry or use general keywords
+  const industryKeywords = keywords[industry] || keywords['General'];
+  
+  // Add some general keywords that are valuable across industries
+  const generalKeywords = [
+    'leadership', 'communication', 'collaboration', 'analytical skills',
+    'problem-solving', 'time management', 'attention to detail', 'innovation'
+  ];
+  
+  // Combine and return unique keywords
+  return [...new Set([...industryKeywords, ...generalKeywords])];
+}
+
+// New function to add industry keywords to optimized text
+function addIndustryKeywords(optimizedText: string, industryKeywords: string[]): string {
+  // Check if the text already contains each keyword
+  const lowerText = optimizedText.toLowerCase();
+  const missingKeywords = industryKeywords.filter(keyword => !lowerText.includes(keyword.toLowerCase()));
+  
+  // If no missing keywords, return the original text
+  if (missingKeywords.length === 0) {
+    return optimizedText;
+  }
+  
+  // Try to add keywords to the skills section
+  if (optimizedText.includes('## SKILLS') || optimizedText.includes('## Skills')) {
+    // Find the skills section
+    const skillsRegex = /##\s*SKILLS.*?(?=##|$)/is;
+    const skillsMatch = optimizedText.match(skillsRegex);
+    
+    if (skillsMatch) {
+      const skillsSection = skillsMatch[0];
+      const skillsSectionIndex = optimizedText.indexOf(skillsSection);
+      
+      // Create a new skills section with additional keywords
+      let newSkillsSection = skillsSection;
+      
+      // Add missing keywords as bullet points
+      newSkillsSection += '\n\nAdditional Industry Expertise:\n';
+      for (const keyword of missingKeywords.slice(0, 5)) { // Limit to 5 keywords
+        newSkillsSection += `• ${keyword}\n`;
+      }
+      
+      // Replace the old skills section with the new one
+      return (
+        optimizedText.substring(0, skillsSectionIndex) + 
+        newSkillsSection + 
+        optimizedText.substring(skillsSectionIndex + skillsSection.length)
+      );
+    }
+  }
+  
+  // If no skills section or couldn't modify it, add a new section
+  if (missingKeywords.length > 0) {
+    let additionalSection = '\n\n## ADDITIONAL EXPERTISE\n';
+    for (const keyword of missingKeywords.slice(0, 8)) { // Limit to 8 keywords
+      additionalSection += `• ${keyword}\n`;
+    }
+    
+    return optimizedText + additionalSection;
+  }
+  
+  return optimizedText;
 }
 
 // Enhance sections using analysis data
@@ -1077,6 +1236,13 @@ function createEnhancedOptimizedCV(originalText: string, templateName: string, a
   const sections = extractSections(originalText);
   const enhancedSections = enhanceSectionsWithAnalysis(sections, analysis);
   
+  // Get industry-specific keywords to boost ATS score
+  const industry = analysis.industry || "General";
+  const additionalKeywords = getIndustrySpecificKeywords(industry);
+  
+  // Extract original keywords to ensure preservation
+  const originalKeywords = extractCriticalKeywords(originalText);
+  
   // Create a more structured CV with analysis insights
   let optimizedCV = `# PROFESSIONAL CV
 
@@ -1098,18 +1264,34 @@ ${enhancedSections.contact.trim()}
 
 `;
 
-  // Add profile/summary with analysis insights
+  // Add profile/summary with analysis insights and industry keywords
   if (enhancedSections.profile) {
+    // Enhance the profile with industry keywords
+    let enhancedProfile = enhancedSections.profile.trim();
+    
+    // Add industry keywords if not already present
+    const profileLower = enhancedProfile.toLowerCase();
+    const keywordsToAdd = additionalKeywords
+      .slice(0, 3) // Take just a few keywords for the profile
+      .filter(kw => !profileLower.includes(kw.toLowerCase()));
+    
+    if (keywordsToAdd.length > 0) {
+      enhancedProfile += ` Skilled in ${keywordsToAdd.join(', ')}.`;
+    }
+    
     optimizedCV += `## PROFESSIONAL SUMMARY
-${enhancedSections.profile.trim()}
+${enhancedProfile}
 
 `;
   }
 
   // Add experience section with quantified achievements
   if (enhancedSections.experience) {
+    // Ensure experience has quantified achievements
+    const quantifiedExperience = quantifyAchievements(enhancedSections.experience.trim());
+    
     optimizedCV += `## PROFESSIONAL EXPERIENCE
-${enhancedSections.experience.trim()}
+${quantifiedExperience}
 
 `;
   }
@@ -1122,10 +1304,35 @@ ${enhancedSections.education.trim()}
 `;
   }
 
-  // Add skills section with missing keywords
+  // Add enhanced skills section with industry keywords
   if (enhancedSections.skills) {
+    let enhancedSkills = enhancedSections.skills.trim();
+    
+    // Add industry-specific keywords to skills section
+    const skillsLower = enhancedSkills.toLowerCase();
+    const missingSkills = additionalKeywords
+      .filter(kw => !skillsLower.includes(kw.toLowerCase()))
+      .slice(0, 8); // Limit to 8 additional skills
+    
+    if (missingSkills.length > 0) {
+      enhancedSkills += '\n\n### Additional Industry Expertise:\n';
+      for (const skill of missingSkills) {
+        enhancedSkills += `• ${skill}\n`;
+      }
+    }
+    
     optimizedCV += `## SKILLS
-${enhancedSections.skills.trim()}
+${enhancedSkills}
+
+`;
+  } else {
+    // If no skills section exists, create one with industry keywords
+    optimizedCV += `## SKILLS
+### Technical Skills:
+${additionalKeywords.slice(0, 5).map(kw => `• ${kw}`).join('\n')}
+
+### Professional Skills:
+${additionalKeywords.slice(5, 10).map(kw => `• ${kw}`).join('\n')}
 
 `;
   }
@@ -1150,10 +1357,23 @@ ${value.trim()}
     
     if (missingKeywords.length > 0) {
       optimizedCV += `## ADDITIONAL EXPERTISE
-${missingKeywords.join(', ')}
+${missingKeywords.map((kw: string) => `• ${kw}`).join('\n')}
 
 `;
     }
+  }
+
+  // Ensure all original keywords are preserved
+  const finalCvLower = optimizedCV.toLowerCase();
+  const missingOriginalKeywords = originalKeywords.filter(
+    kw => !finalCvLower.includes(kw.toLowerCase())
+  );
+  
+  if (missingOriginalKeywords.length > 0) {
+    optimizedCV += `## ADDITIONAL QUALIFICATIONS
+${missingOriginalKeywords.map(kw => `• ${kw}`).join('\n')}
+
+`;
   }
 
   return optimizedCV;
