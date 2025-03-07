@@ -3,7 +3,7 @@ import { modifyPDFWithOptimizedContent } from "./pdfOptimization";
 import { updateCVAnalysis } from "@/lib/db/queries.server";
 import { getOriginalPdfBytes } from "./storage"; // Using updated storage helper
 import { CV_TEMPLATES } from "@/types/templates";
-import { verifyContentPreservation, extractSections } from "./optimizeCV"; // Import needed functions
+import { verifyContentPreservation, extractSections, ensureProperSectionStructure } from "./optimizeCV"; // Import needed functions
 
 export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
   try {
@@ -187,7 +187,7 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     }
     
     // Store the optimized text in a variable for further use
-    const optimizedText = optimizationResult.optimizedText;
+    let optimizedText = optimizationResult.optimizedText;
     
     // Update progress to 70%
     try {
@@ -251,6 +251,69 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     } catch (updateError) {
       console.error("Failed to update progress to 80%:", updateError);
       // Continue despite the error
+    }
+    
+    // Verify structure and fix any issues before PDF generation
+    try {
+      console.log("Verifying document structure and layout...");
+      
+      // Check for section duplication
+      const sectionPattern = /##\s+(.*?)(?=\n##|$)/gs;
+      const matches = [...optimizedText.matchAll(sectionPattern)];
+      
+      // Count occurrences of each section
+      const sectionCounts: Record<string, number> = {};
+      for (const match of matches) {
+        const sectionName = match[1].trim().toLowerCase();
+        sectionCounts[sectionName] = (sectionCounts[sectionName] || 0) + 1;
+      }
+      
+      // Log any duplicated sections
+      const duplicatedSections = Object.entries(sectionCounts)
+        .filter(([_, count]) => count > 1)
+        .map(([name]) => name);
+      
+      if (duplicatedSections.length > 0) {
+        console.warn(`Found duplicated sections: ${duplicatedSections.join(', ')}`);
+        
+        // Fix duplicated sections
+        const fixedText = ensureProperSectionStructure(optimizedText, 
+          extractSections(cvRecord.rawText));
+        
+        // Use the fixed text instead
+        if (fixedText && fixedText !== optimizedText) {
+          console.log("Applied structure fix to remove duplicated sections");
+          optimizedText = fixedText;
+          
+          // Update metadata with fixed text
+          updatedMetadata.optimizedText = optimizedText;
+          await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedMetadata));
+        }
+      }
+      
+      // Check for excessively long sections that might cause layout issues
+      const totalLength = optimizedText.length;
+      if (totalLength > 8000) { // Approximate character limit for a standard CV
+        console.warn(`Optimized CV is possibly too long (${totalLength} chars)`);
+        
+        // Apply length control to ensure it fits on a standard page
+        const truncatedText = truncateTextToFitPage(optimizedText);
+        
+        if (truncatedText !== optimizedText) {
+          console.log("Applied length control to ensure CV fits on page");
+          optimizedText = truncatedText;
+          
+          // Update metadata with truncated text
+          updatedMetadata.optimizedText = optimizedText;
+          await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedMetadata));
+        }
+      }
+      
+      // Continue with PDF generation
+      // ... existing PDF generation code ...
+    } catch (verificationError) {
+      console.error("Error during document structure verification:", verificationError);
+      // Continue despite verification error
     }
     
     // Generate optimized PDF
@@ -557,4 +620,61 @@ ${value.trim()}
   }
 
   return conservativeCV;
+}
+
+// Helper function to truncate text to fit on a standard page
+function truncateTextToFitPage(text: string): string {
+  // Split into sections
+  const sectionPattern = /(##\s+.*?)(?=\n##|$)/gs;
+  const sections = text.split(sectionPattern).filter(s => s.trim().length > 0);
+  
+  // Apply character limits per section
+  const sectionLimits: Record<string, number> = {
+    'contact': 200,
+    'profile': 500,
+    'professional summary': 500,
+    'achievements': 400,
+    'experience': 1500,
+    'professional experience': 1500,
+    'education': 500,
+    'skills': 600,
+    'default': 400
+  };
+  
+  let result = '';
+  let currentSection = 'default';
+  
+  for (const section of sections) {
+    if (section.startsWith('##')) {
+      // This is a section header
+      result += section + '\n';
+      currentSection = section.toLowerCase().replace(/^##\s+/, '').trim();
+    } else {
+      // This is section content
+      const limit = sectionLimits[currentSection] || sectionLimits.default;
+      
+      if (section.length > limit) {
+        // Truncate while preserving structure
+        const lines = section.split('\n');
+        let truncatedSection = '';
+        let currentLength = 0;
+        
+        for (const line of lines) {
+          if (currentLength + line.length <= limit) {
+            truncatedSection += line + '\n';
+            currentLength += line.length + 1;
+          } else {
+            // Stop adding lines
+            break;
+          }
+        }
+        
+        result += truncatedSection;
+      } else {
+        result += section;
+      }
+    }
+  }
+  
+  return result;
 }

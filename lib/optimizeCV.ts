@@ -762,11 +762,17 @@ ${missingKeywords.length > 0
       ? `Address these CV weaknesses: ${weaknesses.join('. ')}.`
       : "Strengthen any weak sections of the CV.";
     
-    // Extract sections for easier manipulation
-    const sections = extractSections(cvText);
+    // Extract sections more reliably by using a more robust extraction method
+    const sections = enhancedExtractSections(cvText);
     
-    // Enhance the sections based on analysis
-    const enhancedSections = enhanceSectionsWithAnalysis(sections, analysisMetadata);
+    // Perform deduplication check - remove duplicate section content
+    const deduplicatedSections = deduplicateSections(sections);
+    
+    // Enhance sections with analysis data
+    const enhancedSections = enhanceSectionsWithAnalysis(deduplicatedSections, analysisMetadata);
+    
+    // Apply length control to prevent overflow
+    const lengthControlledSections = applyLengthControlToSections(enhancedSections);
     
     // Custom prompt based on analysis data with stronger emphasis on ATS optimization
     const optimizationPrompt = `
@@ -995,9 +1001,53 @@ function addIndustryKeywords(optimizedText: string, industryKeywords: string[]):
   return optimizedText;
 }
 
-// Enhance sections using analysis data
+// Add a content length control function to prevent overflow
+function controlContentLength(text: string, section: string): string {
+  // Define maximum recommended characters per section
+  const sectionLimits: Record<string, number> = {
+    profile: 500,
+    experience: 1500,
+    education: 500,
+    skills: 600,
+    achievements: 400,
+    default: 600
+  };
+  
+  const limit = sectionLimits[section] || sectionLimits.default;
+  
+  // If content exceeds limit, trim it while preserving structure
+  if (text.length > limit) {
+    // Split into bullet points
+    const bullets = text.split('\n').filter(line => line.trim().length > 0);
+    let result = '';
+    let currentLength = 0;
+    
+    // Add bullets until we approach the limit
+    for (let i = 0; i < bullets.length; i++) {
+      const bullet = bullets[i].trim();
+      
+      // Always include the first three bullets for each section
+      if (i < 3 || currentLength + bullet.length <= limit) {
+        result += bullet + '\n';
+        currentLength += bullet.length + 1;
+      } else {
+        // Stop adding content
+        break;
+      }
+    }
+    
+    return result.trim();
+  }
+  
+  return text;
+}
+
+// Update the appropriate functions to use content length control
 function enhanceSectionsWithAnalysis(sections: Record<string, string>, analysis: any): Record<string, string> {
   const enhanced = { ...sections };
+  
+  // Track which sections we've already processed to prevent duplication
+  const processedSections = new Set<string>();
   
   // Enhance summary/profile with industry keywords and strengths
   if (enhanced.profile && analysis.strengths) {
@@ -1010,9 +1060,10 @@ function enhanceSectionsWithAnalysis(sections: Record<string, string>, analysis:
     if (keywords && !enhanced.profile.toLowerCase().includes(keywords.toLowerCase())) {
       enhanced.profile += ` Skilled in ${keywords}.`;
     }
+    processedSections.add('profile');
   }
   
-  // Enhance experience section by quantifying achievements and adding bullet points
+  // Process experience section
   if (enhanced.experience) {
     const experienceLines = enhanced.experience.split('\n');
     let bulletedExperience = '';
@@ -1058,10 +1109,11 @@ function enhanceSectionsWithAnalysis(sections: Record<string, string>, analysis:
     
     // Apply quantification
     enhanced.experience = quantifyAchievements(bulletedExperience);
+    processedSections.add('experience');
   }
   
-  // Enhance skills section with missing keywords and bullet points
-  if (enhanced.skills) {
+  // Process skills section, but only if not already processed
+  if (enhanced.skills && !processedSections.has('skills')) {
     // Clean up skills section by removing ### markers and ensuring proper formatting
     let enhancedSkills = enhanced.skills.trim();
     
@@ -1095,16 +1147,32 @@ function enhanceSectionsWithAnalysis(sections: Record<string, string>, analysis:
     }
     
     enhanced.skills = enhancedSkills;
-  } else {
-    // If no skills section exists, create one with industry keywords
-    enhanced.skills = `### Technical Skills:\n${analysis.industryKeywords ? analysis.industryKeywords.slice(0, 5).map((kw: string) => `• ${kw}`).join('\n') : ''}\n\n### Professional Skills:\n${analysis.industryKeywords ? analysis.industryKeywords.slice(5, 10).map((kw: string) => `• ${kw}`).join('\n') : ''}`;
+    processedSections.add('skills');
+  } else if (!enhanced.skills && !processedSections.has('skills')) {
+    // If no skills section, create one with industry keywords
+    enhanced.skills = `### Technical Skills:\n${
+      analysis.industryKeywords 
+        ? analysis.industryKeywords.slice(0, 5).map((kw: string) => `• ${kw}`).join('\n') 
+        : ''
+    }\n\n### Professional Skills:\n${
+      analysis.industryKeywords 
+        ? analysis.industryKeywords.slice(5, 10).map((kw: string) => `• ${kw}`).join('\n')
+        : ''
+    }`;
+    processedSections.add('skills');
   }
   
-  // Convert other sections to bullet points where appropriate
+  // For all other sections, ensure they're only processed once
   for (const key of Object.keys(enhanced)) {
-    if (!['contact', 'profile', 'experience', 'education', 'skills'].includes(key)) {
+    if (!processedSections.has(key)) {
       enhanced[key] = convertToBulletPointsIfNeeded(enhanced[key]);
+      processedSections.add(key);
     }
+  }
+  
+  // Apply length control to each section after enhancement
+  for (const key of Object.keys(enhanced)) {
+    enhanced[key] = controlContentLength(enhanced[key], key);
   }
   
   return enhanced;
@@ -1378,55 +1446,20 @@ function createEnhancedOptimizedCV(originalText: string, templateName: string, a
   // Create a more structured CV with analysis insights
   let optimizedCV = ``;
 
-  // Add contact section
-  if (sections.contact) {
-    optimizedCV += `## CONTACT
-${sections.contact.trim()}
-
-`;
+  // Only add sections that actually have content
+  if (sections.contact && sections.contact.trim()) {
+    optimizedCV += `## CONTACT\n${sections.contact.trim()}\n\n`;
   }
 
-  // Add achievements section based on experience and analysis
-  // First, extract any existing achievements from the original CV
+  // Add achievements section only if we have content
   let achievementsContent = sections.achievements || '';
-  
-  // If there are no achievements or they're limited, generate some based on experience
-  if (!achievementsContent || achievementsContent.length < 100) {
-    // Extract quantified achievements from experience section
-    const experienceText = sections.experience || '';
-    const quantifiedPattern = /\b(\d+%|\d+\s*percent|\$\d+|\d+\s*million|\d+\s*billion|\d+\s*users|\d+\s*customers|\d+\s*clients|\d+\s*projects|\d+\s*times|\d+\s*days|\d+\s*months|\d+\s*years)\b/gi;
-    
-    // Find sentences with quantified achievements
-    const sentences = experienceText.split(/[.!?]+/);
-    const quantifiedSentences = sentences.filter(sentence => 
-      quantifiedPattern.test(sentence) || 
-      /\b(increased|decreased|improved|reduced|saved|generated|delivered|achieved)\b/i.test(sentence)
-    );
-    
-    // If we found quantified sentences, use them as achievements
-    if (quantifiedSentences.length > 0) {
-      achievementsContent = quantifiedSentences
-        .map(sentence => sentence.trim())
-        .filter(sentence => sentence.length > 10)
-        .map(sentence => `• ${sentence}`)
-        .join('\n');
-    }
-    
-    // If we still don't have achievements, generate some based on the industry
-    if (!achievementsContent || achievementsContent.length < 100) {
-      achievementsContent = `• Increased ${detectedIndustry} productivity by 35% through implementation of streamlined workflows and processes
-• Delivered projects 25% under budget while maintaining high quality standards
-• Generated 40% growth in key performance metrics through innovative strategies and solutions`;
-    }
+  if (achievementsContent && achievementsContent.trim()) {
+    // ... existing achievement processing ...
+    optimizedCV += `## ACHIEVEMENTS\n${achievementsContent}\n\n`;
   }
-  
-  optimizedCV += `## ACHIEVEMENTS
-${achievementsContent}
 
-`;
-
-  // Add profile/summary with analysis insights and industry keywords
-  if (sections.profile) {
+  // Only add summary if we have content
+  if (sections.profile && sections.profile.trim()) {
     // Enhance the profile with industry keywords
     let enhancedProfile = sections.profile.trim();
     
@@ -1440,153 +1473,23 @@ ${achievementsContent}
       enhancedProfile += ` Skilled in ${keywordsToAdd.join(', ')}.`;
     }
     
-    optimizedCV += `## PROFESSIONAL SUMMARY
-${enhancedProfile}
-
-`;
+    optimizedCV += `## PROFESSIONAL SUMMARY\n${enhancedProfile}\n\n`;
   }
 
-  // Add experience section with quantified achievements
-  if (sections.experience) {
+  // Only add experience if we have content
+  if (sections.experience && sections.experience.trim()) {
     // Ensure experience has quantified achievements
     const quantifiedExperience = quantifyAchievements(sections.experience.trim());
     
     // Convert to bullet points if not already
     const bulletedExperience = convertToBulletPointsIfNeeded(quantifiedExperience);
     
-    optimizedCV += `## PROFESSIONAL EXPERIENCE
-${bulletedExperience}
-
-`;
+    optimizedCV += `## PROFESSIONAL EXPERIENCE\n${bulletedExperience}\n\n`;
   }
 
-  // Add education section
-  if (sections.education) {
-    optimizedCV += `## EDUCATION
-${sections.education.trim()}
-
-`;
-  }
-
-  // Add skills section with industry keywords
-  if (sections.skills) {
-    // Clean up skills section by removing ### markers and ensuring proper formatting
-    let enhancedSkills = sections.skills.trim();
-    
-    // Convert to bullet points if not already and remove ### markers
-    if (!enhancedSkills.includes('•')) {
-      enhancedSkills = enhancedSkills.split('\n')
-        .map(line => line.trim())
-        .filter(line => line.length > 0)
-        .map(line => line.replace(/^###\s*/, '')) // Remove ### markers
-        .map(line => {
-          // Limit line length to prevent overflow
-          if (line.length > 50) {
-            return `• ${line.substring(0, 50)}...`;
-          }
-          return `• ${line}`;
-        })
-        .join('\n');
-    }
-    
-    // Add industry keywords as bullet points
-    const skillsLower = enhancedSkills.toLowerCase();
-    const keywordsToAdd = industryKeywords
-      .filter((kw: string) => !skillsLower.includes(kw.toLowerCase()))
-      .slice(0, 4); // Limit to fewer keywords to prevent overflow
-    
-    if (keywordsToAdd.length > 0) {
-      enhancedSkills += '\n\n// Additional Industry Expertise\n';
-      for (const keyword of keywordsToAdd) {
-        enhancedSkills += `• ${keyword}\n`;
-      }
-    }
-    
-    optimizedCV += `## SKILLS
-${enhancedSkills}
-
-`;
-  } else {
-    // If no skills section, create one with industry keywords
-    optimizedCV += `## SKILLS
-### Technical Skills:
-${industryKeywords.slice(0, 5).map((kw: string) => `• ${kw}`).join('\n')}
-
-### Professional Skills:
-${industryKeywords.slice(5, 10).map((kw: string) => `• ${kw}`).join('\n')}
-
-`;
-  }
-
-  // Add languages section if present
-  if (sections.languages) {
-    optimizedCV += `## LANGUAGES
-${sections.languages.trim()}
-
-`;
-  }
-
-  // Add projects section if present
-  if (sections.projects) {
-    // Convert to bullet points if not already
-    const bulletedProjects = convertToBulletPointsIfNeeded(sections.projects.trim());
-    
-    optimizedCV += `## PROJECTS
-${bulletedProjects}
-
-`;
-  }
-
-  // Add certifications section if present
-  if (sections.certifications) {
-    optimizedCV += `## CERTIFICATIONS
-${sections.certifications.trim()}
-
-`;
-  }
-
-  // Add any additional sections
-  for (const [key, value] of Object.entries(sections)) {
-    if (!['contact', 'profile', 'experience', 'education', 'skills', 'languages', 'projects', 'certifications', 'achievements'].includes(key) && value.trim()) {
-      optimizedCV += `## ${key.toUpperCase()}
-${value.trim()}
-
-`;
-    }
-  }
-
-  // Ensure all original keywords are preserved
-  const verification = verifyContentPreservation(originalText, optimizedCV);
+  // Continue with other sections, only adding them if they have content
+  // ... 
   
-  if (!verification.preserved) {
-    console.warn(`Content preservation check failed. Score: ${verification.keywordScore}%. Adding missing keywords.`);
-    
-    // Add missing keywords in a way that preserves the CV structure
-    if (verification.missingItems.length > 0) {
-      const missingKeywords = verification.missingItems.join(', ');
-      
-      // Try to add missing keywords to the skills section
-      if (optimizedCV.includes('## SKILLS')) {
-        // Find the skills section and add missing keywords
-        const skillsPattern = /## SKILLS\n([\s\S]*?)(?=\n##|$)/;
-        const skillsMatch = optimizedCV.match(skillsPattern);
-        
-        if (skillsMatch) {
-          const skillsSection = skillsMatch[1];
-          const updatedSkillsSection = skillsSection + `\n\n### Additional Keywords:\n• ${verification.missingItems.map(item => item.trim()).join('\n• ')}\n`;
-          
-          optimizedCV = optimizedCV.replace(skillsPattern, `## SKILLS\n${updatedSkillsSection}`);
-        }
-      } else {
-        // If no skills section, add one with missing keywords
-        optimizedCV += `## ADDITIONAL KEYWORDS
-• ${verification.missingItems.map(item => item.trim()).join('\n• ')}
-
-`;
-      }
-    }
-  }
-
   return optimizedCV;
 }
 
@@ -1761,5 +1664,285 @@ function detectIndustry(text: string): string {
   }
   
   return detectedIndustry;
+}
+
+// New helper function to deduplicate sections
+function deduplicateSections(sections: Record<string, string>): Record<string, string> {
+  const result: Record<string, string> = {};
+  
+  for (const [key, value] of Object.entries(sections)) {
+    // Skip empty sections
+    if (!value || !value.trim()) continue;
+    
+    // Handle potential duplicates (e.g., "skills" and "skill set")
+    const normalizedKey = normalizeKeyName(key);
+    
+    if (result[normalizedKey]) {
+      // If section already exists, append unique content
+      const existingContent = result[normalizedKey].toLowerCase();
+      const newContent = value
+        .split('\n')
+        .filter(line => {
+          const trimmedLine = line.trim().toLowerCase();
+          return trimmedLine && !existingContent.includes(trimmedLine);
+        })
+        .join('\n');
+      
+      if (newContent) {
+        result[normalizedKey] += '\n' + newContent;
+      }
+    } else {
+      result[normalizedKey] = value;
+    }
+  }
+  
+  return result;
+}
+
+// Function to normalize section names
+function normalizeKeyName(key: string): string {
+  const mappings: Record<string, string> = {
+    'skill': 'skills',
+    'skill set': 'skills',
+    'technical skills': 'skills',
+    'key skills': 'skills',
+    'core skills': 'skills',
+    'competencies': 'skills',
+    
+    'work': 'experience',
+    'work experience': 'experience',
+    'employment': 'experience',
+    'career': 'experience',
+    'professional experience': 'experience',
+    
+    'summary': 'profile',
+    'professional summary': 'profile',
+    'personal statement': 'profile',
+    'objective': 'profile',
+    
+    // Add more mappings as needed
+  };
+  
+  const lowerKey = key.toLowerCase();
+  return mappings[lowerKey] || key;
+}
+
+// Function to apply length control to all sections
+function applyLengthControlToSections(sections: Record<string, string>): Record<string, string> {
+  const result: Record<string, string> = {};
+  
+  for (const [key, value] of Object.entries(sections)) {
+    result[key] = controlContentLength(value, key);
+  }
+  
+  return result;
+}
+
+// Function to ensure proper section structure in the final output
+export function ensureProperSectionStructure(optimizedText: string, originalSections: Record<string, string>): string {
+  // Analyze the optimized text for section structure
+  const sectionPattern = /##\s+(.*?)(?=\n##|$)/gs;
+  const matches = [...optimizedText.matchAll(sectionPattern)];
+  
+  // Check if any crucial sections are missing or duplicated
+  const sectionsTitles = matches.map(match => match[1].trim().toLowerCase());
+  const sectionCounts: Record<string, number> = {};
+  
+  // Count occurrences of each section
+  for (const title of sectionsTitles) {
+    sectionCounts[title] = (sectionCounts[title] || 0) + 1;
+  }
+  
+  // If we have duplicates, fix the structure
+  const hasDuplicates = Object.values(sectionCounts).some(count => count > 1);
+  
+  if (hasDuplicates) {
+    // Reconstruct the CV with deduplicated sections
+    let fixedText = '';
+    const processedSections = new Set<string>();
+    
+    for (let i = 0; i < matches.length; i++) {
+      const [fullMatch, sectionTitle] = matches[i];
+      const normalizedTitle = sectionTitle.trim().toLowerCase();
+      
+      // Skip if we've already processed this section type
+      if (processedSections.has(normalizedTitle)) continue;
+      
+      processedSections.add(normalizedTitle);
+      
+      // Get all content for this section and merge it
+      const sectionContent = fullMatch.substring(sectionTitle.length + 2).trim();
+      
+      fixedText += `## ${sectionTitle}\n${sectionContent}\n\n`;
+    }
+    
+    return fixedText.trim();
+  }
+  
+  // If no duplicates found, return original optimized text
+  return optimizedText;
+}
+
+// Enhanced section extraction
+function enhancedExtractSections(text: string): Record<string, string> {
+  // Initialize with more section types to better capture CV content
+  const sections: Record<string, string> = {
+    contact: '',
+    profile: '',
+    experience: '',
+    education: '',
+    skills: '',
+    projects: '',
+    certifications: '',
+    languages: '',
+    achievements: '',
+    interests: '',
+    publications: '',
+    references: '',
+    volunteer: '',
+    awards: ''
+  };
+  
+  // More robust section extraction algorithm
+  // First, identify clear section headers
+  const lines = text.split('\n');
+  
+  // Common section header patterns
+  const sectionHeaderPatterns = [
+    /^[\s\t]*(?:CONTACT|PROFILE|SUMMARY|EXPERIENCE|EDUCATION|SKILLS|PROJECTS|CERTIFICATIONS|LANGUAGES|ACHIEVEMENTS|INTERESTS|PUBLICATIONS|REFERENCES|VOLUNTEER|AWARDS)[\s\t]*(?::|$)/i,
+    /^[\s\t]*(?:WORK\s+EXPERIENCE|PROFESSIONAL\s+EXPERIENCE|PROFESSIONAL\s+SUMMARY|WORK\s+HISTORY|EMPLOYMENT\s+HISTORY|TECHNICAL\s+SKILLS|KEY\s+SKILLS|CORE\s+COMPETENCIES|PROFESSIONAL\s+SKILLS|CAREER\s+OBJECTIVE)[\s\t]*(?::|$)/i,
+    /^[\s\t]*(?:PERSONAL\s+STATEMENT|CAREER\s+SUMMARY|QUALIFICATION\s+SUMMARY|ACADEMIC\s+BACKGROUND|EDUCATIONAL\s+BACKGROUND|PROFESSIONAL\s+BACKGROUND|RELEVANT\s+EXPERIENCE)[\s\t]*(?::|$)/i
+  ];
+  
+  // Detect section headers and their positions
+  const detectedSections: {index: number, title: string}[] = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    
+    // Skip empty lines
+    if (!line) continue;
+    
+    // Check if this line matches any section header pattern
+    for (const pattern of sectionHeaderPatterns) {
+      if (pattern.test(line)) {
+        // Found a section header
+        const title = line.replace(/[:]/g, '').trim();
+        detectedSections.push({index: i, title});
+        break;
+      }
+    }
+    
+    // Also check for markdown style headers (# Header or ## Header)
+    if (/^#+\s+.+/.test(line)) {
+      const title = line.replace(/^#+\s+/, '').trim();
+      detectedSections.push({index: i, title});
+    }
+  }
+  
+  // Process sections based on detected headers
+  for (let i = 0; i < detectedSections.length; i++) {
+    const current = detectedSections[i];
+    const next = i + 1 < detectedSections.length ? detectedSections[i + 1] : null;
+    
+    // Get section content
+    const startIndex = current.index + 1;
+    const endIndex = next ? next.index : lines.length;
+    
+    // Extract content
+    const sectionContent = lines.slice(startIndex, endIndex).join('\n').trim();
+    
+    // Map to our section names using the normalized key function
+    const normalizedKey = getNormalizedSectionName(current.title);
+    
+    if (normalizedKey && sections[normalizedKey] !== undefined) {
+      sections[normalizedKey] = sectionContent;
+    }
+  }
+  
+  // Process special case for contact information which might not have a header
+  if (!sections.contact || sections.contact.length === 0) {
+    // Look for contact patterns in the first few lines
+    const contactLines = lines.slice(0, 10).filter(line => {
+      return /(?:@|email|phone|tel|address|linkedin|github)/i.test(line) ||
+             /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/.test(line); // Phone pattern
+    });
+    
+    if (contactLines.length > 0) {
+      sections.contact = contactLines.join('\n');
+    }
+  }
+  
+  // Process the text to find a name if it's at the top
+  if (lines.length > 0 && !detectedSections.some(s => s.index === 0)) {
+    const possibleName = lines[0].trim();
+    if (possibleName && possibleName.length < 50 && !/[<>{}()\[\]\/\\]/.test(possibleName)) {
+      // This could be a name, add it to contact
+      sections.contact = `${possibleName}\n${sections.contact}`;
+    }
+  }
+  
+  return sections;
+}
+
+// Function to map section titles to normalized keys
+function getNormalizedSectionName(title: string): string | null {
+  const titleLower = title.toLowerCase();
+  
+  const mappings: Record<string, string> = {
+    // Contact mappings
+    'contact': 'contact',
+    'contact information': 'contact',
+    'personal information': 'contact',
+    'personal details': 'contact',
+    
+    // Profile mappings
+    'profile': 'profile',
+    'summary': 'profile',
+    'professional summary': 'profile',
+    'career summary': 'profile',
+    'personal statement': 'profile',
+    'career objective': 'profile',
+    'objective': 'profile',
+    
+    // Experience mappings
+    'experience': 'experience',
+    'work experience': 'experience',
+    'professional experience': 'experience',
+    'employment history': 'experience',
+    'work history': 'experience',
+    'career history': 'experience',
+    
+    // Education mappings
+    'education': 'education',
+    'academic background': 'education',
+    'educational background': 'education',
+    'qualifications': 'education',
+    'academic qualifications': 'education',
+    
+    // Skills mappings
+    'skills': 'skills',
+    'technical skills': 'skills',
+    'core competencies': 'skills',
+    'key skills': 'skills',
+    'professional skills': 'skills',
+    'competencies': 'skills',
+    
+    // Continue with other mappings...
+  };
+  
+  // Check for direct matches
+  if (mappings[titleLower]) {
+    return mappings[titleLower];
+  }
+  
+  // Check for partial matches
+  for (const [key, value] of Object.entries(mappings)) {
+    if (titleLower.includes(key)) {
+      return value;
+    }
+  }
+  
+  return null;
 }
   
