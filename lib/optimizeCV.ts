@@ -47,6 +47,15 @@ export async function optimizeCV(
         CRITICAL: Preserve ALL industry-specific keywords, technical terms, metrics, and achievements from the original CV.
         DO NOT remove any skills, certifications, or technical competencies that could be used for ATS screening.
         Maintain or increase keyword density for job-relevant terms.
+        
+        ATS OPTIMIZATION RULES:
+        1. Keep all technical skills intact - these are critical for ATS keyword matching
+        2. Preserve numerical achievements and metrics (%, $, numbers) - these stand out to both ATS and recruiters
+        3. Include industry-standard section headers (Education, Experience, Skills, etc.)
+        4. Maintain all job titles, company names, and dates exactly as in the original
+        5. Ensure all educational credentials, degrees, and certifications appear in full
+        6. Preserve acronyms AND their expanded forms where present (e.g., "AI (Artificial Intelligence)")
+        7. Keep language competencies and proficiency levels intact
       `;
     } else if (layout === 'two-column') {
       formattingInstructions = `
@@ -59,6 +68,15 @@ export async function optimizeCV(
         CRITICAL: Preserve ALL industry-specific keywords, technical terms, metrics, and achievements from the original CV.
         DO NOT remove any skills, certifications, or technical competencies that could be used for ATS screening.
         Maintain or increase keyword density for job-relevant terms.
+        
+        ATS OPTIMIZATION RULES:
+        1. Keep all technical skills intact - these are critical for ATS keyword matching
+        2. Preserve numerical achievements and metrics (%, $, numbers) - these stand out to both ATS and recruiters
+        3. Include industry-standard section headers (Education, Experience, Skills, etc.)
+        4. Maintain all job titles, company names, and dates exactly as in the original
+        5. Ensure all educational credentials, degrees, and certifications appear in full
+        6. Preserve acronyms AND their expanded forms where present (e.g., "AI (Artificial Intelligence)")
+        7. Keep language competencies and proficiency levels intact
       `;
     }
     
@@ -188,7 +206,7 @@ ${value.trim()}
 }
 
 // Helper functions for the fallback optimization
-function extractSections(text: string): Record<string, string> {
+export function extractSections(text: string): Record<string, string> {
   const sections: Record<string, string> = {
     contact: '',
     profile: '',
@@ -319,82 +337,91 @@ function extractPotentialSections(rawText: string): string[] {
   return potentialSections;
 }
 
-// Helper function to verify that key content has been preserved
-function verifyContentPreservation(originalText: string, optimizedText: string): { 
+// Export these functions so they can be used in other files
+export function verifyContentPreservation(originalText: string, optimizedText: string): { 
   preserved: boolean; 
-  missingItems: string[] 
+  missingItems: string[];
+  keywordScore: number;
 } {
+  // Convert to lowercase and remove extra whitespace for comparison
+  const normalizedOriginal = originalText.toLowerCase().replace(/\s+/g, ' ').trim();
+  const normalizedOptimized = optimizedText.toLowerCase().replace(/\s+/g, ' ').trim();
+  
+  // Check if core content is preserved
   const missingItems: string[] = [];
   
-  // Extract key information from the original text
-  const originalLines = originalText.split('\n');
+  // Extract critical items to check (skills, job titles, education, etc.)
+  const importantPhrases = extractCriticalKeywords(normalizedOriginal);
   
-  // Check for name (usually at the top)
-  const potentialName = originalLines[0]?.trim();
-  if (potentialName && potentialName.length > 0 && !optimizedText.includes(potentialName)) {
-    missingItems.push('Name');
-  }
-  
-  // Check for contact information (email, phone)
-  const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-  const phoneRegex = /(\+\d{1,3}[ -]?)?\(?\d{3}\)?[ -]?\d{3}[ -]?\d{4}/g;
-  
-  const originalEmails = originalText.match(emailRegex) || [];
-  const originalPhones = originalText.match(phoneRegex) || [];
-  
-  const optimizedEmails = optimizedText.match(emailRegex) || [];
-  const optimizedPhones = optimizedText.match(phoneRegex) || [];
-  
-  if (originalEmails.length > 0 && optimizedEmails.length === 0) {
-    missingItems.push('Email');
-  }
-  
-  if (originalPhones.length > 0 && optimizedPhones.length === 0) {
-    missingItems.push('Phone');
-  }
-  
-  // Check for key sections
-  const keySections = ['education', 'experience', 'skills'];
-  
-  for (const section of keySections) {
-    const sectionRegex = new RegExp(`\\b${section}\\b`, 'i');
-    if (sectionRegex.test(originalText) && !sectionRegex.test(optimizedText)) {
-      missingItems.push(`${section.charAt(0).toUpperCase() + section.slice(1)} section`);
+  // Check if each important phrase is preserved
+  for (const phrase of importantPhrases) {
+    if (!normalizedOptimized.includes(phrase)) {
+      missingItems.push(phrase);
     }
   }
   
-  // Check for company names and job titles (more complex, simplified approach)
-  const potentialCompanies = extractPotentialSections(originalText)
-    .filter(section => /experience|employment/i.test(section))
-    .flatMap(section => {
-      const lines = section.split('\n');
-      return lines.filter(line => 
-        line.length > 0 && 
-        !line.match(/^\s*•/) && // Not a bullet point
-        !line.match(/^\d{4}/) && // Not a year
-        line !== line.toUpperCase() // Not all uppercase (likely not a section header)
-      );
-    });
+  // Calculate a keyword preservation score (0-100)
+  const keywordScore = importantPhrases.length > 0 
+    ? Math.round(((importantPhrases.length - missingItems.length) / importantPhrases.length) * 100)
+    : 100; // Default to 100 if no important phrases found
   
-  // Check if at least some company names are preserved
-  if (potentialCompanies.length > 0) {
-    let companiesFound = false;
-    for (const company of potentialCompanies) {
-      if (optimizedText.includes(company)) {
-        companiesFound = true;
-        break;
-      }
-    }
-    
-    if (!companiesFound) {
-      missingItems.push('Company names');
-    }
+  // Consider content preserved if keyword score is above 90%
+  const preserved = keywordScore >= 90;
+  
+  // Log diagnostic information
+  console.log(`Content verification: ${preserved ? 'PASSED' : 'FAILED'}`);
+  console.log(`Keyword preservation score: ${keywordScore}%`);
+  if (missingItems.length > 0) {
+    console.log(`Missing items (${missingItems.length}): ${missingItems.slice(0, 10).join(', ')}${missingItems.length > 10 ? '...' : ''}`);
   }
   
   return {
-    preserved: missingItems.length === 0,
-    missingItems
+    preserved,
+    missingItems,
+    keywordScore
   };
+}
+
+// New function: Extract critical keywords from CV text
+function extractCriticalKeywords(text: string): string[] {
+  const keywords: string[] = [];
+  
+  // Identify technical skills (common programming languages, tools, etc.)
+  const technicalSkillsPattern = /\b(javascript|typescript|python|java|c\+\+|react|angular|vue|node\.js|express|django|flask|aws|azure|gcp|docker|kubernetes|sql|mongodb|mysql|postgresql|nosql|rest|graphql|html|css|sass|less|git|ci\/cd|jenkins|jira|agile|scrum|machine learning|deep learning|artificial intelligence|ai|ml|blockchain|devops|data science)\b/gi;
+  
+  let match;
+  while ((match = technicalSkillsPattern.exec(text)) !== null) {
+    keywords.push(match[0].toLowerCase());
+  }
+  
+  // Identify education and certifications
+  const educationPattern = /\b(ph\.?d\.?|master'?s|mba|bachelor'?s|b\.?s\.?|m\.?s\.?|b\.?a\.?|m\.?a\.?|degree|certification|certified|license|licensed)\b/gi;
+  while ((match = educationPattern.exec(text)) !== null) {
+    keywords.push(match[0].toLowerCase());
+  }
+  
+  // Extract company names (look for common company suffixes)
+  const companyPattern = /\b[A-Z][a-zA-Z0-9]*(?:\s+[A-Z][a-zA-Z0-9]*)*\s+(Inc\.?|Corp\.?|LLC|Ltd\.?|Limited|Group|Solutions|Technologies|Systems)\b/g;
+  while ((match = companyPattern.exec(text)) !== null) {
+    keywords.push(match[0].toLowerCase());
+  }
+  
+  // Extract job titles (common positions)
+  const jobTitlePattern = /\b(senior|junior|lead|principal|staff|chief|head|director|manager|engineer|developer|architect|analyst|specialist|consultant|coordinator|administrator|advisor|officer|associate)\b\s+\b(\w+){1,3}\b/gi;
+  while ((match = jobTitlePattern.exec(text)) !== null) {
+    keywords.push(match[0].toLowerCase());
+  }
+  
+  // Extract metrics and achievements
+  const metricsPattern = /\b(\d+)[\s-]*(percent|%|million|k|thousand|billion)\b|increased|decreased|improved|reduced|saved|generated|delivered|managed|led|built|created|designed|implemented/gi;
+  while ((match = metricsPattern.exec(text)) !== null) {
+    keywords.push(match[0].toLowerCase());
+  }
+  
+  // Remove duplicates
+  const uniqueKeywords = [...new Set(keywords)];
+  
+  return uniqueKeywords;
 }
 
 // Helper function to create a formatted fallback from raw text
@@ -498,5 +525,5 @@ function createFormattedFallbackFromRawText(rawText: string): string {
   }
   
   return formattedText;
-  }
+}
   

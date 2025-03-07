@@ -3,6 +3,7 @@ import { modifyPDFWithOptimizedContent } from "./pdfOptimization";
 import { updateCVAnalysis } from "@/lib/db/queries.server";
 import { getOriginalPdfBytes } from "./storage"; // Using updated storage helper
 import { CV_TEMPLATES } from "@/types/templates";
+import { verifyContentPreservation, extractSections } from "./optimizeCV"; // Import needed functions
 
 export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
   try {
@@ -356,6 +357,93 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
       throw new Error("Final metadata is missing optimized text");
     }
     
+    // After optimizing the CV, verify keyword preservation
+    try {
+      const verification = verifyContentPreservation(cvRecord.rawText, optimizedText);
+      console.log(`Keyword preservation score: ${verification.keywordScore}%`);
+      
+      // If keyword preservation is poor, attempt to recover
+      if (!verification.preserved) {
+        console.warn(`Keyword preservation failed. Score: ${verification.keywordScore}%. Missing ${verification.missingItems.length} items.`);
+        
+        // If severe content loss (below 70%), fall back to a more conservative optimization
+        if (verification.keywordScore < 70) {
+          console.warn("Severe content loss detected. Falling back to conservative optimization...");
+          
+          try {
+            // Update progress to indicate recovery attempt
+            const recoveryMetadata = {
+              ...updatedMetadata,
+              progress: 75,
+              warning: "Initial optimization lost important keywords. Attempting recovery.",
+              lastProgressUpdate: new Date().toISOString()
+            };
+            await updateCVAnalysis(cvRecord.id, JSON.stringify(recoveryMetadata));
+            
+            // Create a conservative fallback that preserves more of the original
+            const conservativeOptimizedText = createConservativeOptimizedCV(cvRecord.rawText, templateId || 'default');
+            
+            // Verify the conservative version
+            const conservativeVerification = verifyContentPreservation(cvRecord.rawText, conservativeOptimizedText);
+            
+            // If conservative approach works better, use it instead
+            if (conservativeVerification.keywordScore > verification.keywordScore) {
+              console.log(`Conservative optimization improved keyword score to ${conservativeVerification.keywordScore}%`);
+              // Create a new optimized text variable instead of reassigning
+              const betterOptimizedText = conservativeOptimizedText;
+              
+              // Update metadata to indicate recovery was successful
+              const recoveredMetadata = {
+                ...updatedMetadata,
+                progress: 80,
+                optimizedText: betterOptimizedText,
+                warning: "Recovered from keyword loss using conservative optimization.",
+                keywordPreservationScore: conservativeVerification.keywordScore,
+                lastProgressUpdate: new Date().toISOString()
+              };
+              await updateCVAnalysis(cvRecord.id, JSON.stringify(recoveredMetadata));
+              
+              // Return early with the better version
+              return {
+                optimizedText: betterOptimizedText,
+                pdf: await modifyPDFWithOptimizedContent(
+                  betterOptimizedText,
+                  cvRecord.rawText,
+                  selectedTemplate
+                ),
+                status: 'success',
+                message: 'Optimization completed with keyword preservation recovery'
+              };
+            } else {
+              console.warn("Conservative approach did not improve keyword preservation. Using original optimization.");
+            }
+          } catch (recoveryError) {
+            console.error("Error during recovery optimization:", recoveryError);
+            // Continue with original optimization despite the keyword loss
+          }
+        }
+        
+        // Add missing keywords to metadata for transparency
+        const updatedProgress80Metadata = {
+          ...updatedMetadata,
+          progress: 80,
+          optimizedText: optimizedText,
+          keywordPreservationScore: verification.keywordScore,
+          missingKeywordCount: verification.missingItems.length,
+          lastProgressUpdate: new Date().toISOString()
+        };
+        
+        if (verification.missingItems.length > 0) {
+          updatedProgress80Metadata.missingKeywordSample = verification.missingItems.slice(0, 10);
+        }
+        
+        await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedProgress80Metadata));
+      }
+    } catch (verificationError) {
+      console.error("Error during content verification:", verificationError);
+      // Continue despite verification error
+    }
+    
     // Save the final optimization results
     try {
       await updateCVAnalysis(cvRecord.id, JSON.stringify(finalMetadata));
@@ -391,4 +479,65 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     
     throw error; // Re-throw the error to be handled by the caller
   }
+}
+
+// This function creates a more conservative optimization that preserves more original content
+function createConservativeOptimizedCV(originalText: string, templateId: string): string {
+  console.log("Creating conservative optimization to preserve keywords");
+  
+  // Extract sections from the original text
+  const sections = extractSections(originalText);
+  
+  // Create a new CV with better formatting but minimal content changes
+  let conservativeCV = `# PROFESSIONAL CV
+
+`;
+
+  // Add sections with minimal changes to preserve keywords
+  if (sections.contact) {
+    conservativeCV += `## CONTACT INFORMATION
+${sections.contact.trim()}
+
+`;
+  }
+
+  if (sections.profile) {
+    conservativeCV += `## PROFESSIONAL SUMMARY
+${sections.profile.trim()}
+
+`;
+  }
+
+  if (sections.experience) {
+    conservativeCV += `## PROFESSIONAL EXPERIENCE
+${sections.experience.trim()}
+
+`;
+  }
+
+  if (sections.education) {
+    conservativeCV += `## EDUCATION
+${sections.education.trim()}
+
+`;
+  }
+
+  if (sections.skills) {
+    conservativeCV += `## SKILLS
+${sections.skills.trim()}
+
+`;
+  }
+
+  // Add any additional sections with minimal changes
+  for (const [key, value] of Object.entries(sections)) {
+    if (!['contact', 'profile', 'experience', 'education', 'skills'].includes(key) && value.trim()) {
+      conservativeCV += `## ${key.toUpperCase()}
+${value.trim()}
+
+`;
+    }
+  }
+
+  return conservativeCV;
 }
