@@ -1,4 +1,4 @@
-import { optimizeCV } from "./optimizeCV";
+import { optimizeCV, optimizeCVWithAnalysis } from "./optimizeCV";
 import { modifyPDFWithOptimizedContent } from "./pdfOptimization";
 import { updateCVAnalysis } from "@/lib/db/queries.server";
 import { getOriginalPdfBytes } from "./storage"; // Using updated storage helper
@@ -91,8 +91,8 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
       // Continue despite the error
     }
 
-    // Include template information in the optimization process
-    console.log("Starting AI optimization...");
+    // Now use the analysis-driven optimization if analysis metadata is available
+    console.log("Starting analysis-driven AI optimization...");
     let optimizationResult;
     try {
       // Set a timeout for the AI optimization
@@ -101,10 +101,21 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
       });
       
       // Race the optimization against the timeout
-      optimizationResult = await Promise.race([
-        optimizeCV(cvRecord.rawText, selectedTemplate),
-        timeoutPromise
-      ]) as { optimizedText: string; error?: string };
+      // Use the analysis-driven optimization if we have analysis data
+      if (metadata.atsScore && (metadata.strengths || metadata.weaknesses || metadata.recommendations)) {
+        console.log("Using analysis-driven optimization with existing metadata");
+        optimizationResult = await Promise.race([
+          optimizeCVWithAnalysis(cvRecord.rawText, metadata, selectedTemplate),
+          timeoutPromise
+        ]) as { optimizedText: string; error?: string };
+      } else {
+        // Fall back to standard optimization if analysis data is not available
+        console.log("Using standard optimization (analysis data not available)");
+        optimizationResult = await Promise.race([
+          optimizeCV(cvRecord.rawText, selectedTemplate),
+          timeoutPromise
+        ]) as { optimizedText: string; error?: string };
+      }
       
       console.log("AI optimization completed successfully");
       

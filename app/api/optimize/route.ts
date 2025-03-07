@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTemplateLayout } from "@/lib/templateMatching";
 import { modifyPDFWithOptimizedContent } from "@/lib/pdfOptimization";
 import { getTemplateById } from "@/lib/templates";
+import { analyzeCV } from "@/lib/analyzeCV";
 
 export async function POST(req: NextRequest) {
   try {
     // Parse the request body
     const body = await req.json();
-    const { cvText, templateId, formattingInstructions } = body;
+    const { cvText, templateId, formattingInstructions, analysisMetadata, optimizationPrompt } = body;
     
     // Validate input
     if (!cvText || typeof cvText !== 'string' || cvText.trim().length === 0) {
@@ -30,14 +31,60 @@ export async function POST(req: NextRequest) {
       }
     }
     
-    // Create a simple optimized version for the demo
-    const optimizedCV = createOptimizedCV(cvText, templateId || 'default');
-    
-    // Success response - for demo purposes
-    return NextResponse.json({
-      optimizedCV,
-      message: "CV optimization completed successfully"
-    });
+    // If we have a custom optimization prompt, use it
+    if (optimizationPrompt) {
+      console.log("Using custom optimization prompt with analysis insights");
+      
+      try {
+        // Call the OpenAI API with the customized prompt
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: 'gpt-4-turbo', // Use the best available model for CV optimization
+            messages: [{ role: 'user', content: optimizationPrompt }],
+            stream: false,
+          }),
+        });
+
+        const result = await response.json();
+        
+        if (!result.choices || !result.choices[0] || !result.choices[0].message) {
+          throw new Error('Invalid response from OpenAI API');
+        }
+        
+        const optimizedCV = result.choices[0].message.content;
+        
+        // Success response with the optimized CV
+        return NextResponse.json({
+          optimizedCV,
+          message: "CV optimization completed successfully"
+        });
+      } catch (aiError) {
+        console.error("Error calling OpenAI API:", aiError);
+        // Fall back to simple optimization on AI service error
+        const fallbackCV = createOptimizedCV(cvText, templateId || 'default');
+        
+        return NextResponse.json({
+          optimizedCV: fallbackCV,
+          message: "CV optimization completed with fallback method due to AI service error"
+        });
+      }
+    } 
+    // Use the standard optimization if no custom prompt
+    else {
+      // Create a simple optimized version
+      const optimizedCV = createOptimizedCV(cvText, templateId || 'default');
+      
+      // Success response
+      return NextResponse.json({
+        optimizedCV,
+        message: "CV optimization completed successfully"
+      });
+    }
   } catch (error: any) {
     console.error("Error in CV optimization API route:", error.message);
     return NextResponse.json(

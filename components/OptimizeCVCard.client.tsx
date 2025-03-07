@@ -8,6 +8,7 @@ import { Loader2, Download, ArrowRight, Check, AlertCircle } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
+import OptimizationSummary from "./OptimizationSummary.client";
 
 interface OptimizeCVCardProps {
   cvs: string[];
@@ -491,6 +492,30 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
             )}
           </div>
         </div>
+
+        {optimizedText && (
+          <div className="mt-4 space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xl font-semibold">
+                Optimized CV
+              </h3>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleDownload}
+                disabled={loading}
+              >
+                {loading ? "Downloading..." : "Download PDF"}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {optimizedText && selectedCV && (
+          <div className="mt-6">
+            <OptimizationSummary fileName={selectedCV} />
+          </div>
+        )}
       </CardContent>
     </Card>
   );

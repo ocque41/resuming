@@ -526,4 +526,412 @@ function createFormattedFallbackFromRawText(rawText: string): string {
   
   return formattedText;
 }
+
+// New function to optimize CV based on analysis data
+export async function optimizeCVWithAnalysis(
+  cvText: string,
+  analysisMetadata: any,
+  template?: CVTemplate
+): Promise<{ optimizedText: string; error?: string }> {
+  try {
+    console.log("Starting analysis-driven CV optimization process");
+    
+    // Input validation
+    if (!cvText || cvText.trim().length === 0) {
+      console.error("Empty CV text provided to optimization");
+      return { 
+        optimizedText: "", 
+        error: "Empty CV text provided" 
+      };
+    }
+    
+    if (!analysisMetadata) {
+      console.error("Missing analysis metadata for optimization");
+      return {
+        optimizedText: "",
+        error: "Analysis metadata required for intelligent optimization"
+      };
+    }
+    
+    // Extract key information from analysis
+    const industry = analysisMetadata.industry || "General";
+    const atsScore = analysisMetadata.atsScore || 0;
+    const strengths = analysisMetadata.strengths || [];
+    const weaknesses = analysisMetadata.weaknesses || [];
+    const missingKeywords = analysisMetadata.missingKeywords || [];
+    const recommendations = analysisMetadata.recommendations || [];
+    
+    console.log(`Optimizing for ${industry} industry with base ATS score: ${atsScore}`);
+    console.log(`Missing keywords to incorporate: ${missingKeywords.join(', ')}`);
+    
+    // Get template layout
+    let layout = 'two-column';
+    let headerStyle = 'modern';
+    
+    if (template) {
+      console.log(`Using template: ${template.name}`);
+      layout = template.metadata?.layout || layout;
+      const templateLayout = getTemplateLayout(template.id);
+      headerStyle = templateLayout.headerStyle || headerStyle;
+    }
+    
+    // Build industry-specific optimization instructions
+    const industryInstructions = getIndustrySpecificInstructions(industry);
+    
+    // Build keyword optimization instructions
+    const keywordInstructions = missingKeywords.length > 0
+      ? `Incorporate these missing keywords in a natural way (do not just list them): ${missingKeywords.join(', ')}.`
+      : "Ensure all industry-specific keywords are included and properly highlighted.";
+    
+    // Build weakness remediation instructions
+    const weaknessRemediation = weaknesses.length > 0
+      ? `Address these CV weaknesses: ${weaknesses.join('. ')}.`
+      : "Strengthen any weak sections of the CV.";
+    
+    // Extract sections for easier manipulation
+    const sections = extractSections(cvText);
+    
+    // Enhance the sections based on analysis
+    const enhancedSections = enhanceSectionsWithAnalysis(sections, analysisMetadata);
+    
+    // Custom prompt based on analysis data
+    const optimizationPrompt = `
+You are a professional CV/resume optimization expert with specialization in the ${industry} industry.
+
+The CV you're optimizing currently has an ATS (Applicant Tracking System) score of ${atsScore}/100.
+Your task is to optimize this CV to achieve a perfect ATS score while maintaining a professional, 
+human-readable format that appeals to hiring managers.
+
+${industryInstructions}
+
+${keywordInstructions}
+
+${weaknessRemediation}
+
+Key strengths to emphasize:
+${strengths.map((s: string) => `- ${s}`).join('\n')}
+
+CRITICAL ATS OPTIMIZATION RULES:
+1. Preserve ALL industry-specific keywords and technical terms
+2. Quantify achievements with specific metrics (%, $, numbers) wherever possible
+3. Use standard job titles and industry terminology
+4. Organize information in a clear, scannable format with proper section headers
+5. Include all educational credentials, certifications, and specialized training
+6. Format dates consistently (MM/YYYY format preferred)
+7. Use both acronyms AND their expanded forms where appropriate (e.g., "AI (Artificial Intelligence)")
+
+CONTENT ORGANIZATION:
+1. Begin with a strong professional summary that highlights core competencies
+2. Organize experience in reverse chronological order
+3. For each position, lead with accomplishments rather than responsibilities
+4. Format skills section for maximum ATS visibility
+5. Use industry-standard section headings
+
+FORMATTING INSTRUCTIONS:
+${layout === 'one-column' 
+  ? 'Format as a single-column document with clear section headers.'
+  : 'Format with a main column and a sidebar. Put contact info, skills, education in the sidebar. Put experience and projects in the main column.'}
+Use bullet points for achievements.
+Ensure all text is black and professional.
+Optimize for a single page layout if possible.
+
+Original CV Text:
+${cvText}
+`;
+
+    // Call the AI service for enhanced optimization
+    try {
+      const response = await fetch('/api/optimize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cvText,
+          analysisMetadata: JSON.stringify(analysisMetadata),
+          templateId: template?.id || 'default',
+          optimizationPrompt,
+        }),
+        signal: AbortSignal.timeout(30000), // 30-second timeout
+      });
+    
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Optimization API error: ${response.status} ${errorText}`);
+      }
+      
+      const result = await response.json();
+      
+      if (!result.optimizedCV) {
+        throw new Error("No optimized CV in API response");
+      }
+      
+      // Verify that optimized content preserves critical elements
+      const verification = verifyContentPreservation(cvText, result.optimizedCV);
+      
+      // If verification fails, try to recover
+      if (!verification.preserved) {
+        console.warn(`Content verification failed. Score: ${verification.keywordScore}%. Attempting recovery...`);
+        
+        // Incorporate missing keywords into the optimized text
+        const recoveredText = incorporateMissingItems(result.optimizedCV, verification.missingItems, sections);
+        
+        return {
+          optimizedText: recoveredText,
+        };
+      }
+      
+      return {
+        optimizedText: result.optimizedCV,
+      };
+    } catch (apiError: unknown) {
+      console.error("API error during optimization:", apiError);
+      
+      // Fallback to local optimization if API fails
+      console.log("Using local fallback optimization");
+      const fallbackOptimized = createEnhancedOptimizedCV(cvText, template?.name || 'default', analysisMetadata);
+      
+      return {
+        optimizedText: fallbackOptimized,
+        error: `API error (using fallback): ${apiError instanceof Error ? apiError.message : String(apiError)}`
+      };
+    }
+  } catch (error: unknown) {
+    console.error("Error in optimization process:", error);
+    return {
+      optimizedText: "",
+      error: `Optimization failed: ${error instanceof Error ? error.message : String(error)}`
+    };
+  }
+}
+
+// Enhance sections using analysis data
+function enhanceSectionsWithAnalysis(sections: Record<string, string>, analysis: any): Record<string, string> {
+  const enhanced = { ...sections };
+  
+  // Enhance summary/profile with industry keywords and strengths
+  if (enhanced.profile && analysis.strengths) {
+    const strengths = analysis.strengths.join(', ');
+    const keywords = analysis.missingKeywords ? analysis.missingKeywords.join(', ') : '';
+    
+    enhanced.profile = `Experienced ${analysis.industry || ''} professional with expertise in ${strengths}. ${enhanced.profile}`;
+    
+    // Add missing keywords naturally if possible
+    if (keywords && !enhanced.profile.toLowerCase().includes(keywords.toLowerCase())) {
+      enhanced.profile += ` Proficient in ${keywords}.`;
+    }
+  }
+  
+  // Enhance experience section by quantifying achievements
+  if (enhanced.experience) {
+    enhanced.experience = quantifyAchievements(enhanced.experience);
+  }
+  
+  // Enhance skills section with missing keywords
+  if (enhanced.skills && analysis.missingKeywords) {
+    const existingSkills = enhanced.skills.toLowerCase();
+    const missingSkills = analysis.missingKeywords.filter(
+      (keyword: string) => !existingSkills.includes(keyword.toLowerCase())
+    );
+    
+    if (missingSkills.length > 0) {
+      enhanced.skills += `\n\nAdditional expertise: ${missingSkills.join(', ')}`;
+    }
+  }
+  
+  return enhanced;
+}
+
+// Function to get industry-specific instructions
+function getIndustrySpecificInstructions(industry: string): string {
+  const instructions: Record<string, string> = {
+    'Technology': `
+- Highlight technical skills, programming languages, and frameworks prominently
+- Include GitHub/project links if available
+- Quantify impact of technical implementations (e.g., performance improvements, scale)
+- Use specific version numbers for technologies where applicable
+- Group skills by category (languages, frameworks, tools, etc.)
+    `,
+    'Finance': `
+- Emphasize financial metrics, portfolio performance, and cost savings
+- Include specific financial tools and software proficiency
+- Highlight regulatory compliance knowledge and certifications
+- Quantify financial achievements with precise figures
+- Emphasize analytical skills and attention to detail
+    `,
+    'Marketing': `
+- Focus on campaign metrics, ROI, and growth statistics
+- Highlight experience with specific platforms and analytics tools
+- Include content creation and social media management expertise
+- Quantify audience growth, engagement, and conversion rates
+- Emphasize creative and analytical capabilities equally
+    `,
+    'Healthcare': `
+- Highlight patient care metrics and quality improvement initiatives
+- Include all certifications, licenses, and compliance knowledge
+- Emphasize specialized medical terminology relevant to your specialty
+- Quantify patient outcomes and efficiency improvements
+- Include experience with specific medical systems and technologies
+    `,
+    'Sales': `
+- Lead with sales achievement metrics and quota attainment
+- Quantify client acquisition, retention rates, and revenue growth
+- Highlight experience with specific CRM tools and sales methodologies
+- Include industry-specific sales expertise and market knowledge
+- Emphasize relationship-building and negotiation skills
+    `,
+    'General': `
+- Quantify achievements across all roles with specific metrics
+- Highlight transferable skills applicable across industries
+- Include both technical and soft skills with concrete examples
+- Use industry-standard terminology and avoid jargon
+- Emphasize problem-solving capabilities with specific examples
+    `
+  };
+  
+  return instructions[industry] || instructions['General'];
+}
+
+// Function to quantify achievements in experience section
+function quantifyAchievements(experienceText: string): string {
+  // Split experience into lines
+  const lines = experienceText.split('\n');
+  
+  // Process each line
+  const processedLines = lines.map(line => {
+    // Skip headers and job titles
+    if (line.trim().length < 10 || line.includes(':') || /^\s*•/.test(line)) {
+      return line;
+    }
+    
+    // Check if the line already contains metrics
+    const hasMetrics = /\d+%|\$\d+|\d+ (percent|million|thousand|users|customers|clients|projects)/.test(line);
+    
+    if (!hasMetrics && line.length > 20) {
+      // Add placeholder for human review - will be refined by AI optimization
+      return line + ' [QUANTIFY]';
+    }
+    
+    return line;
+  });
+  
+  return processedLines.join('\n');
+}
+
+// Function to incorporate missing items into optimized text
+function incorporateMissingItems(optimizedText: string, missingItems: string[], originalSections: Record<string, string>): string {
+  if (missingItems.length === 0) {
+    return optimizedText;
+  }
+  
+  console.log(`Incorporating ${missingItems.length} missing items into optimized text`);
+  
+  // Create a skills addition if items are short (likely keywords)
+  const shortItems = missingItems.filter(item => item.length < 30);
+  const longItems = missingItems.filter(item => item.length >= 30);
+  
+  let enhancedText = optimizedText;
+  
+  // Add short items to skills section
+  if (shortItems.length > 0) {
+    const skillsHeader = '## SKILLS';
+    if (enhancedText.includes(skillsHeader)) {
+      const skillsSection = enhancedText.split(skillsHeader)[1].split('##')[0];
+      const updatedSkillsSection = skillsSection + `\n\nAdditional expertise: ${shortItems.join(', ')}`;
+      enhancedText = enhancedText.replace(skillsSection, updatedSkillsSection);
+    } else {
+      // Add skills section if not present
+      enhancedText += `\n\n## ADDITIONAL SKILLS\n${shortItems.join(', ')}\n`;
+    }
+  }
+  
+  // Add longer items to appropriate sections or as notes
+  if (longItems.length > 0) {
+    enhancedText += '\n\n## ADDITIONAL INFORMATION\n';
+    for (const item of longItems) {
+      enhancedText += `• ${item}\n`;
+    }
+  }
+  
+  return enhancedText;
+}
+
+// Enhanced fallback function with analysis integration
+function createEnhancedOptimizedCV(originalText: string, templateName: string, analysis: any): string {
+  const sections = extractSections(originalText);
+  const enhancedSections = enhanceSectionsWithAnalysis(sections, analysis);
+  
+  // Create a more structured CV with analysis insights
+  let optimizedCV = `# PROFESSIONAL CV
+
+`;
+
+  // Add contact section
+  if (enhancedSections.contact) {
+    optimizedCV += `## CONTACT INFORMATION
+${enhancedSections.contact.trim()}
+
+`;
+  }
+
+  // Add profile/summary with analysis insights
+  if (enhancedSections.profile) {
+    optimizedCV += `## PROFESSIONAL SUMMARY
+${enhancedSections.profile.trim()}
+
+`;
+  }
+
+  // Add experience section with quantified achievements
+  if (enhancedSections.experience) {
+    optimizedCV += `## PROFESSIONAL EXPERIENCE
+${enhancedSections.experience.trim()}
+
+`;
+  }
+
+  // Add education section
+  if (enhancedSections.education) {
+    optimizedCV += `## EDUCATION
+${enhancedSections.education.trim()}
+
+`;
+  }
+
+  // Add skills section with missing keywords
+  if (enhancedSections.skills) {
+    optimizedCV += `## SKILLS
+${enhancedSections.skills.trim()}
+
+`;
+  }
+
+  // Add any additional sections
+  for (const [key, value] of Object.entries(enhancedSections)) {
+    if (!['contact', 'profile', 'experience', 'education', 'skills'].includes(key) && value.trim()) {
+      optimizedCV += `## ${key.toUpperCase()}
+${value.trim()}
+
+`;
+    }
+  }
+
+  // If analysis found missing keywords that weren't integrated above
+  if (analysis.missingKeywords && analysis.missingKeywords.length > 0) {
+    // Check if keywords are already in the CV
+    const cvLower = optimizedCV.toLowerCase();
+    const missingKeywords = analysis.missingKeywords.filter(
+      (kw: string) => !cvLower.includes(kw.toLowerCase())
+    );
+    
+    if (missingKeywords.length > 0) {
+      optimizedCV += `## ADDITIONAL EXPERTISE
+${missingKeywords.join(', ')}
+
+`;
+    }
+  }
+
+  return optimizedCV;
+}
   
