@@ -343,9 +343,9 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   }
 
   return (
-    <Card className="border border-[#B4916C]/20 bg-[#050505] shadow-lg overflow-hidden">
+    <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg hover:shadow-xl transition-all duration-300">
       <CardHeader className="bg-[#B4916C]/10 pb-4">
-        <CardTitle className="text-xl font-bold text-white">Optimize Your CV</CardTitle>
+        <CardTitle className="text-xl font-bold text-[#B4916C]">Optimize Your CV</CardTitle>
         <CardDescription className="text-gray-400">
           Enhanced with AI - Make your CV stand out
         </CardDescription>

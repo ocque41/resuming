@@ -24,11 +24,18 @@ export async function POST(request: NextRequest) {
   try {
     // Authenticate user
     const session = await getServerSession() as UserSession | null;
-    if (!session?.user) {
+     
+    if (!session || !session.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = session.user.id;
+    // Convert string ID to number for database operations
+    const userId = parseInt(session.user.id, 10);
+    
+    if (isNaN(userId)) {
+      console.error(`Invalid user ID: ${session.user.id}`);
+      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
+    }
     
     // Parse request body
     const body = await request.json();
@@ -48,7 +55,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Check if the CV belongs to the authenticated user
-    if (cvRecord.userId !== parseInt(userId)) {
+    if (cvRecord.userId !== userId) {
       return NextResponse.json({ error: "Unauthorized access to CV" }, { status: 403 });
     }
     
