@@ -219,8 +219,27 @@ export function extractSections(text: string): Record<string, string> {
   const lines = text.split('\n');
   let currentSection = 'profile';
   
+  // First pass: detect phone numbers that might be section titles
+  const phoneNumberPattern = /^\s*(\d{3}\s*\d{3}\s*\d{3}|\d{6,12})\s*$/;
+  const phoneNumbers: string[] = [];
+  
+  for (const line of lines) {
+    if (phoneNumberPattern.test(line.trim())) {
+      phoneNumbers.push(line.trim());
+      // Add this to contact section
+      sections.contact += `Phone: ${line.trim()}\n`;
+    }
+  }
+  
+  // Second pass: process the rest of the content
   for (const line of lines) {
     const lowerLine = line.toLowerCase();
+    const trimmedLine = line.trim();
+    
+    // Skip lines that are just phone numbers (already processed)
+    if (phoneNumberPattern.test(trimmedLine)) {
+      continue;
+    }
     
     if (lowerLine.includes('email') || lowerLine.includes('phone') || lowerLine.includes('address')) {
       sections.contact += line + '\n';
@@ -886,7 +905,7 @@ function enhanceSectionsWithAnalysis(sections: Record<string, string>, analysis:
     
     // Add missing keywords naturally if possible
     if (keywords && !enhanced.profile.toLowerCase().includes(keywords.toLowerCase())) {
-      enhanced.profile += ` Proficient in ${keywords}.`;
+      enhanced.profile += ` Skilled in ${keywords}.`;
     }
   }
   
@@ -940,48 +959,42 @@ function enhanceSectionsWithAnalysis(sections: Record<string, string>, analysis:
   
   // Enhance skills section with missing keywords and bullet points
   if (enhanced.skills) {
-    // Convert skills to bullet points if not already
-    const skillLines = enhanced.skills.split('\n');
-    let bulletedSkills = '';
+    // Clean up skills section by removing ### markers and ensuring proper formatting
+    let enhancedSkills = enhanced.skills.trim();
     
-    for (let i = 0; i < skillLines.length; i++) {
-      const line = skillLines[i].trim();
-      
-      if (!line) {
-        bulletedSkills += '\n';
-        continue;
-      }
-      
-      // Skip if already a bullet point
-      if (line.startsWith('•') || line.startsWith('-') || line.startsWith('*')) {
-        bulletedSkills += line + '\n';
-      } else {
-        // Check if it's a category header (short line, possibly ending with colon)
-        if (line.length < 30 && (line.endsWith(':') || line.toUpperCase() === line)) {
-          bulletedSkills += line + '\n';
-        } else {
-          // Convert to bullet point
-          bulletedSkills += '• ' + line + '\n';
-        }
+    // Convert to bullet points if not already and remove ### markers
+    if (!enhancedSkills.includes('•')) {
+      enhancedSkills = enhancedSkills.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0)
+        .map(line => line.replace(/^###\s*/, '')) // Remove ### markers
+        .map(line => {
+          // Limit line length to prevent overflow
+          if (line.length > 50) {
+            return `• ${line.substring(0, 50)}...`;
+          }
+          return `• ${line}`;
+        })
+        .join('\n');
+    }
+    
+    // Add industry keywords as bullet points
+    const skillsLower = enhancedSkills.toLowerCase();
+    const keywordsToAdd = analysis.industryKeywords || getIndustrySpecificKeywords(analysis.industry || "General")
+      .filter((kw: string) => !skillsLower.includes(kw.toLowerCase()))
+      .slice(0, 4); // Limit to fewer keywords to prevent overflow
+    
+    if (keywordsToAdd.length > 0) {
+      enhancedSkills += '\n\n// Additional Industry Expertise\n';
+      for (const keyword of keywordsToAdd) {
+        enhancedSkills += `• ${keyword}\n`;
       }
     }
     
-    // Add missing keywords as bullet points
-    if (analysis.missingKeywords) {
-      const existingSkills = bulletedSkills.toLowerCase();
-      const missingSkills = analysis.missingKeywords.filter(
-        (keyword: string) => !existingSkills.includes(keyword.toLowerCase())
-      );
-      
-      if (missingSkills.length > 0) {
-        bulletedSkills += '\nAdditional Skills:\n';
-        for (const skill of missingSkills) {
-          bulletedSkills += `• ${skill}\n`;
-        }
-      }
-    }
-    
-    enhanced.skills = bulletedSkills;
+    enhanced.skills = enhancedSkills;
+  } else {
+    // If no skills section exists, create one with industry keywords
+    enhanced.skills = `### Technical Skills:\n${analysis.industryKeywords ? analysis.industryKeywords.slice(0, 5).map((kw: string) => `• ${kw}`).join('\n') : ''}\n\n### Professional Skills:\n${analysis.industryKeywords ? analysis.industryKeywords.slice(5, 10).map((kw: string) => `• ${kw}`).join('\n') : ''}`;
   }
   
   // Convert other sections to bullet points where appropriate
@@ -1253,13 +1266,11 @@ function createEnhancedOptimizedCV(originalText: string, templateName: string, a
   const originalKeywords = extractCriticalKeywords(originalText);
   
   // Create a more structured CV with analysis insights
-  let optimizedCV = `# PROFESSIONAL CV
-
-`;
+  let optimizedCV = ``;
 
   // Add contact section
   if (enhancedSections.contact) {
-    optimizedCV += `## CONTACT INFORMATION
+    optimizedCV += `## CONTACT
 ${enhancedSections.contact.trim()}
 
 `;
@@ -1282,7 +1293,7 @@ ${enhancedSections.contact.trim()}
     const profileLower = enhancedProfile.toLowerCase();
     const keywordsToAdd = additionalKeywords
       .slice(0, 3) // Take just a few keywords for the profile
-      .filter(kw => !profileLower.includes(kw.toLowerCase()));
+      .filter((kw: string) => !profileLower.includes(kw.toLowerCase()));
     
     if (keywordsToAdd.length > 0) {
       enhancedProfile += ` Skilled in ${keywordsToAdd.join(', ')}.`;
@@ -1317,16 +1328,32 @@ ${enhancedSections.education.trim()}
   if (enhancedSections.skills) {
     let enhancedSkills = enhancedSections.skills.trim();
     
-    // Add industry-specific keywords to skills section
-    const skillsLower = enhancedSkills.toLowerCase();
-    const missingSkills = additionalKeywords
-      .filter(kw => !skillsLower.includes(kw.toLowerCase()))
-      .slice(0, 8); // Limit to 8 additional skills
+    // Convert to bullet points if not already and remove ### markers
+    if (!enhancedSkills.includes('•')) {
+      enhancedSkills = enhancedSkills.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0)
+        .map(line => line.replace(/^###\s*/, '')) // Remove ### markers
+        .map(line => {
+          // Limit line length to prevent overflow
+          if (line.length > 50) {
+            return `• ${line.substring(0, 50)}...`;
+          }
+          return `• ${line}`;
+        })
+        .join('\n');
+    }
     
-    if (missingSkills.length > 0) {
-      enhancedSkills += '\n\n### Additional Industry Expertise:\n';
-      for (const skill of missingSkills) {
-        enhancedSkills += `• ${skill}\n`;
+    // Add industry keywords as bullet points
+    const skillsLower = enhancedSkills.toLowerCase();
+    const keywordsToAdd = additionalKeywords
+      .filter((kw: string) => !skillsLower.includes(kw.toLowerCase()))
+      .slice(0, 4); // Limit to fewer keywords to prevent overflow
+    
+    if (keywordsToAdd.length > 0) {
+      enhancedSkills += '\n\n// Additional Industry Expertise\n';
+      for (const keyword of keywordsToAdd) {
+        enhancedSkills += `• ${keyword}\n`;
       }
     }
     
@@ -1338,10 +1365,10 @@ ${enhancedSkills}
     // If no skills section exists, create one with industry keywords
     optimizedCV += `## SKILLS
 ### Technical Skills:
-${additionalKeywords.slice(0, 5).map(kw => `• ${kw}`).join('\n')}
+${additionalKeywords.slice(0, 5).map((kw: string) => `• ${kw}`).join('\n')}
 
 ### Professional Skills:
-${additionalKeywords.slice(5, 10).map(kw => `• ${kw}`).join('\n')}
+${additionalKeywords.slice(5, 10).map((kw: string) => `• ${kw}`).join('\n')}
 
 `;
   }

@@ -232,7 +232,13 @@ ${sections.education.trim()}
         .filter(line => line.length > 0)
         // Remove any ### markers
         .map(line => line.replace(/^###\s*/, ''))
-        .map(line => `• ${line}`)
+        .map(line => {
+          // Limit line length to prevent overflow
+          if (line.length > 50) {
+            return `• ${line.substring(0, 50)}...`;
+          }
+          return `• ${line}`;
+        })
         .join('\n');
     }
     
@@ -240,7 +246,7 @@ ${sections.education.trim()}
     const skillsLower = enhancedSkills.toLowerCase();
     const keywordsToAdd = industryKeywords
       .filter((kw: string) => !skillsLower.includes(kw.toLowerCase()))
-      .slice(0, 6);
+      .slice(0, 4); // Limit to fewer keywords to prevent overflow
     
     if (keywordsToAdd.length > 0) {
       enhancedSkills += '\n\n// Additional Industry Expertise\n';
@@ -256,7 +262,7 @@ ${enhancedSkills}
   } else {
     // If no skills section, create one with industry keywords
     optimizedCV += `## SKILLS
-• ${industryKeywords.slice(0, 8).join('\n• ')}
+• ${industryKeywords.slice(0, 6).join('\n• ')}
 
 `;
   }
