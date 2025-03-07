@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { auth } from '@/auth';
 import { convertDOCXToPDF } from '@/lib/docxToPDF';
 import { generateDOCXFromJSON, exportDOCXToBuffer } from '@/lib/jsonToDOCX';
 import { optimizeCV, optimizeCVWithAnalysis } from '@/lib/optimizeCV';
@@ -22,10 +22,10 @@ interface UserSession {
  */
 export async function POST(request: NextRequest) {
   try {
-    // Authenticate user
-    const session = await getServerSession() as UserSession | null;
+    // Authenticate user using the new auth system
+    const session = await auth();
      
-    if (!session || !session.user) {
+    if (!session || !session.user || !session.user.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

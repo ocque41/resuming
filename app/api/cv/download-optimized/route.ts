@@ -1,17 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { auth } from "@/auth";
 import { db } from "@/lib/db/drizzle";
 import { cvs } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-
-// Define a session type
-interface UserSession {
-  user?: {
-    id: string;
-    name?: string;
-    email?: string;
-  };
-}
 
 // Define the metadata interface
 interface CVMetadata {
@@ -30,8 +21,8 @@ interface CVMetadata {
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession() as UserSession | null;
-    if (!session?.user) {
+    const session = await auth();
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -52,7 +43,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if the CV belongs to the authenticated user
-    if (cvRecord.userId !== parseInt(session.user.id)) {
+    const userId = parseInt(session.user.id, 10);
+    if (cvRecord.userId !== userId) {
       return NextResponse.json({ error: "Unauthorized access to CV" }, { status: 403 });
     }
 
