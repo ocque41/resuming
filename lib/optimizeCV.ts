@@ -147,62 +147,249 @@ export async function optimizeCV(
 function createOptimizedCV(originalText: string, templateName: string): string {
   const sections = extractSections(originalText);
   
-  // Create a more structured CV
-  let optimizedCV = `# PROFESSIONAL CV
+  // Extract top achievements
+  const topAchievements = extractTopAchievements(originalText);
+  
+  // Create a standardized CV with consistent styling
+  let optimizedCV = `# ${sections.name || 'PROFESSIONAL CV'}
 
 `;
 
   // Add contact section if found
   if (sections.contact) {
-    optimizedCV += `## CONTACT INFORMATION
-${sections.contact.trim()}
+    optimizedCV += `${sections.contact.trim().split('\n')[0] || ''}
+${sections.job_title || sections.position || 'Professional'}
+${sections.contact.trim().split('\n').slice(1).join('\n') || ''}
 
 `;
   }
 
-  // Add profile/summary if found
-  if (sections.profile) {
-    optimizedCV += `## PROFESSIONAL SUMMARY
-${improveSection(sections.profile, 'summary')}
+  // Add profile/summary section
+  optimizedCV += `## ABOUT ME
+${sections.profile ? improveSection(sections.profile, 'summary') : 'Experienced professional with a strong track record of achievements and expertise in the field.'}
 
 `;
-  }
 
-  // Add experience if found
-  if (sections.experience) {
-    optimizedCV += `## PROFESSIONAL EXPERIENCE
-${improveSection(sections.experience, 'experience')}
-
-`;
-  }
-
-  // Add education if found
-  if (sections.education) {
-    optimizedCV += `## EDUCATION
-${improveSection(sections.education, 'education')}
+  // Add NEW achievements section with exactly 3 bullet points
+  optimizedCV += `## ACHIEVEMENTS
+• ${topAchievements[0]}
+• ${topAchievements[1]}
+• ${topAchievements[2]}
 
 `;
-  }
 
-  // Add skills if found
-  if (sections.skills) {
-    optimizedCV += `## SKILLS
-${improveSection(sections.skills, 'skills')}
+  // Add skills/competences section
+  optimizedCV += `## COMPETENCES
+${sections.skills ? formatCompetences(sections.skills) : '• Core skill\n• Technical skill\n• Professional skill'}
 
 `;
-  }
 
-  // Add any additional sections
-  for (const [key, value] of Object.entries(sections)) {
-    if (!['contact', 'profile', 'experience', 'education', 'skills'].includes(key) && value.trim()) {
-      optimizedCV += `## ${key.toUpperCase()}
-${value.trim()}
+  // Add experience section
+  optimizedCV += `## WORK EXPERIENCE
+${sections.experience ? formatExperience(sections.experience) : 'Professional experience details.'}
 
 `;
-    }
+
+  // Add education section
+  optimizedCV += `## EDUCATION
+${sections.education ? formatEducation(sections.education) : 'Educational qualifications and credentials.'}
+
+`;
+
+  // Add languages section if available
+  if (sections.languages) {
+    optimizedCV += `## LANGUAGES
+${formatLanguages(sections.languages)}
+
+`;
   }
 
   return optimizedCV;
+}
+
+// Helper function to format competences in a clean three-column layout
+function formatCompetences(skills: string): string {
+  // Extract skills as bullet points
+  const skillList = skills
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .map(line => line.replace(/^[•\-\*]+\s*/, '')) // Remove existing bullet markers
+    .filter(line => !line.startsWith('#')); // Remove headers
+    
+  // Organize into a three-column layout (approximately)
+  const column1 = skillList.slice(0, Math.ceil(skillList.length / 3));
+  const column2 = skillList.slice(Math.ceil(skillList.length / 3), Math.ceil(2 * skillList.length / 3));
+  const column3 = skillList.slice(Math.ceil(2 * skillList.length / 3));
+  
+  let formattedSkills = '';
+  
+  // Add first column
+  for (const skill of column1) {
+    formattedSkills += `• ${skill}\n`;
+  }
+  
+  // Add second column (with spacing)
+  for (const skill of column2) {
+    formattedSkills += `• ${skill}\n`;
+  }
+  
+  // Add third column
+  for (const skill of column3) {
+    formattedSkills += `• ${skill}\n`;
+  }
+  
+  return formattedSkills.trim();
+}
+
+// Helper function to format experience with consistent date-first style
+function formatExperience(experience: string): string {
+  // Split into job blocks
+  const jobBlocks = experience.split(/\n\s*\n/);
+  let formattedExperience = '';
+  
+  for (const block of jobBlocks) {
+    if (!block.trim()) continue;
+    
+    const lines = block.split('\n');
+    let dateRange = '';
+    let company = '';
+    let title = '';
+    let location = '';
+    let bullets = [];
+    
+    // Try to identify date, title, company
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      // Skip empty lines
+      if (!line) continue;
+      
+      // Look for date patterns
+      if (line.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i) || 
+          line.match(/\b\d{4}\s*[-–—]\s*(\d{4}|Present|Current|Now)\b/i) ||
+          line.match(/\b\d{1,2}\/\d{4}\s*[-–—]\s*(\d{1,2}\/\d{4}|Present|Current|Now)\b/i)) {
+        dateRange = line;
+        continue;
+      }
+      
+      // Look for company/title patterns (non-bullet lines near the top)
+      if (!line.match(/^[•\-\*]/) && bullets.length === 0 && i < 4) {
+        if (!title) {
+          title = line;
+        } else if (!company) {
+          company = line;
+        } else if (!location) {
+          location = line;
+        }
+        continue;
+      }
+      
+      // Collect bullet points
+      if (line.match(/^[•\-\*]/) || bullets.length > 0) {
+        // Add bullet if needed
+        const bulletLine = line.replace(/^[•\-\*]\s*/, '');
+        bullets.push(bulletLine.charAt(0).toUpperCase() + bulletLine.slice(1));
+      }
+    }
+    
+    // If no explicit dates found, look for year patterns in the first few lines
+    if (!dateRange) {
+      for (let i = 0; i < Math.min(3, lines.length); i++) {
+        const yearMatch = lines[i].match(/\b(20\d{2}|19\d{2})\b/g);
+        if (yearMatch && yearMatch.length >= 1) {
+          if (yearMatch.length >= 2) {
+            dateRange = `${yearMatch[0]} - ${yearMatch[1]}`;
+          } else {
+            dateRange = `${yearMatch[0]} - Present`;
+          }
+          break;
+        }
+      }
+    }
+    
+    // Format using our standard layout
+    formattedExperience += `${dateRange || 'Date Range'}\n`;
+    formattedExperience += `${title || 'Job Title'}\n`;
+    formattedExperience += `${company || 'COMPANY NAME'} - ${location || 'LOCATION'}\n`;
+    
+    // Add bullets
+    if (bullets.length > 0) {
+      formattedExperience += `• ${bullets[0]}\n`;
+      
+      // Add more bullets (up to 3 per job)
+      for (let i = 1; i < Math.min(bullets.length, 3); i++) {
+        formattedExperience += `• ${bullets[i]}\n`;
+      }
+    } else {
+      formattedExperience += `• Responsibilities and achievements at this position\n`;
+    }
+    
+    formattedExperience += '\n';
+  }
+  
+  return formattedExperience.trim();
+}
+
+// Helper function to format education with consistent styling
+function formatEducation(education: string): string {
+  // Split into education blocks
+  const eduBlocks = education.split(/\n\s*\n/);
+  let formattedEducation = '';
+  
+  // If we have multiple education entries, format them properly
+  if (eduBlocks.length > 1) {
+    // Format as three-column layout for multiple institutions
+    const institutions = eduBlocks.filter(block => block.trim().length > 0);
+    
+    for (let i = 0; i < Math.min(institutions.length, 3); i++) {
+      const lines = institutions[i].split('\n');
+      const school = lines.find(line => line.match(/university|college|school/i)) || lines[0] || 'UNIVERSITY OR SCHOOL';
+      const degree = lines.find(line => line.match(/degree|diploma|bachelor|master|phd|certificate/i)) || lines[1] || 'Diploma Xxxxxxxxx';
+      const year = lines.find(line => line.match(/\b(20\d{2}|19\d{2})\b/)) || '20XX';
+      
+      formattedEducation += `${school.toUpperCase()}\n${degree}\n${year}\n\n`;
+    }
+    
+    return formattedEducation.trim();
+  }
+  
+  // If just one entry, format it properly
+  const lines = education.split('\n');
+  const school = lines.find(line => line.match(/university|college|school/i)) || lines[0] || 'UNIVERSITY OR SCHOOL';
+  const degree = lines.find(line => line.match(/degree|diploma|bachelor|master|phd|certificate/i)) || lines[1] || 'Diploma Xxxxxxxxx';
+  const year = lines.find(line => line.match(/\b(20\d{2}|19\d{2})\b/)) || '20XX';
+  
+  return `${school.toUpperCase()}\n${degree}\n${year}`;
+}
+
+// Helper function to format languages with proficiency indicators
+function formatLanguages(languages: string): string {
+  const languageLines = languages.split('\n').filter(line => line.trim().length > 0);
+  let formattedLanguages = '';
+  
+  const languageNames = ['English', 'German', 'Spanish', 'French', 'Chinese'];
+  const detectedLanguages = [];
+  
+  // Extract actual languages from the text
+  for (const line of languageLines) {
+    for (const lang of languageNames) {
+      if (line.toLowerCase().includes(lang.toLowerCase())) {
+        detectedLanguages.push(lang);
+        break;
+      }
+    }
+  }
+  
+  // If no languages found, use default set
+  const languagesToUse = detectedLanguages.length > 0 ? detectedLanguages : ['English', 'German', 'Spanish'];
+  
+  // Format each language with a proficiency indicator
+  for (const lang of languagesToUse.slice(0, 3)) {
+    formattedLanguages += `${lang}     █████████░░     \n`;
+  }
+  
+  return formattedLanguages.trim();
 }
 
 // Helper functions for the fallback optimization
@@ -1945,4 +2132,106 @@ function getNormalizedSectionName(title: string): string | null {
   
   return null;
 }
+
+// Add this function to extractSections to identify top achievements
+function extractTopAchievements(text: string): string[] {
+  // Look for achievement patterns in the text
+  const achievementPatterns = [
+    /\b(increased|improved|reduced|saved|launched|achieved|won|awarded|led|grew|generated|developed|delivered|implemented|created)\b.{10,120}(by\s+\d+%|\$\d+|\d+\s+million|\d+\s+customers|\d+\s+users)/gi,
+    /\b(recognition|award|honor|prize|certification).{5,100}/gi,
+    /\b(managed|directed|supervised|oversaw|coordinated).{10,120}(team of \d+|across \d+|budget of \$\d+)/gi
+  ];
+  
+  let achievements: string[] = [];
+  
+  // Extract achievements that match our patterns
+  for (const pattern of achievementPatterns) {
+    const matches = text.match(pattern) || [];
+    achievements = [...achievements, ...matches];
+  }
+  
+  // If we don't have enough achievement matches, look for sentences with metrics
+  if (achievements.length < 5) {
+    const metricsPattern = /\b[^.!?]*?(increased|improved|reduced|saved|delivered|generated|achieved)[^.!?]*?(by \d+%|\$\d+|\d+ million|\d+%|\d+ users)[^.!?]*?[.!?]/gi;
+    const metricsMatches = text.match(metricsPattern) || [];
+    achievements = [...achievements, ...metricsMatches];
+  }
+  
+  // Clean up the extracted achievements
+  const cleanedAchievements = achievements
+    .map(a => a.trim())
+    .filter(a => a.length > 20 && a.length < 150) // Reasonable length
+    .map(a => a.replace(/^[^a-zA-Z]+/, '')) // Remove leading non-alphabet chars
+    .map(a => {
+      // Ensure it starts with an action verb in past tense
+      const firstWord = a.split(' ')[0].toLowerCase();
+      if (!firstWord.endsWith('ed') && !firstWord.match(/^(led|grew|built|won|ran)$/)) {
+        const firstCap = a.charAt(0).toUpperCase() + a.slice(1);
+        return `Achieved ${firstCap}`;
+      }
+      return a.charAt(0).toUpperCase() + a.slice(1);
+    });
+  
+  // Rank achievements by impact (presence of metrics, results)
+  const rankedAchievements = cleanedAchievements.sort((a, b) => {
+    const aScore = scoreAchievement(a);
+    const bScore = scoreAchievement(b);
+    return bScore - aScore;
+  });
+  
+  // Return top 3 achievements, or generate placeholders if needed
+  if (rankedAchievements.length >= 3) {
+    return rankedAchievements.slice(0, 3);
+  }
+  
+  // Add placeholder achievements if we couldn't find enough real ones
+  const placeholders = [
+    "Increased departmental efficiency by 25% through implementation of new workflow processes",
+    "Led cross-functional team of 8 professionals to deliver project 15% under budget",
+    "Recognized as top performer with excellence award for outstanding customer satisfaction ratings"
+  ];
+  
+  return [...rankedAchievements, ...placeholders].slice(0, 3);
+}
+
+// Helper to score achievements by impact
+function scoreAchievement(achievement: string): number {
+  let score = 0;
+  
+  // Higher score for quantified results
+  if (achievement.match(/\d+%|\$\d+|\d+ million|\d+ users/)) {
+    score += 5;
+  }
+  
+  // Higher score for impactful verbs
+  if (achievement.match(/\b(led|launched|won|achieved|delivered)\b/i)) {
+    score += 3;
+  }
+  
+  // Higher score for leadership indicators
+  if (achievement.match(/\b(team|organization|company|department)\b/i)) {
+    score += 2;
+  }
+  
+  // Higher score for recognition
+  if (achievement.match(/\b(award|recognition|honor|selected)\b/i)) {
+    score += 4;
+  }
+  
+  // Higher score for business impact
+  if (achievement.match(/\b(revenue|profit|cost|sales|growth)\b/i)) {
+    score += 3;
+  }
+  
+  return score;
+}
+  
+// Export helper functions so they can be used in optimizeCVBackground.ts
+export {
+  extractTopAchievements,
+  formatCompetences,
+  formatExperience,
+  formatEducation,
+  formatLanguages
+};
   

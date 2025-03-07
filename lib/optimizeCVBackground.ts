@@ -1,9 +1,19 @@
-import { optimizeCV, optimizeCVWithAnalysis } from "./optimizeCV";
+import { 
+  optimizeCV, 
+  optimizeCVWithAnalysis,
+  verifyContentPreservation, 
+  extractSections, 
+  ensureProperSectionStructure,
+  extractTopAchievements,
+  formatCompetences,
+  formatExperience,
+  formatEducation,
+  formatLanguages
+} from "./optimizeCV"; // Import all needed functions
 import { modifyPDFWithOptimizedContent } from "./pdfOptimization";
 import { updateCVAnalysis } from "@/lib/db/queries.server";
 import { getOriginalPdfBytes } from "./storage"; // Using updated storage helper
 import { CV_TEMPLATES } from "@/types/templates";
-import { verifyContentPreservation, extractSections, ensureProperSectionStructure } from "./optimizeCV"; // Import needed functions
 
 export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
   try {
@@ -309,10 +319,22 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
         }
       }
       
+      // Now ensure consistent styling with required sections
+      console.log("Applying standardized CV styling...");
+      const styledText = ensureConsistentStyling(optimizedText);
+      
+      if (styledText !== optimizedText) {
+        console.log("Applied standardized styling to CV");
+        optimizedText = styledText;
+        
+        // Update metadata with styled text
+        updatedMetadata.optimizedText = optimizedText;
+        await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedMetadata));
+      }
+      
       // Continue with PDF generation
-      // ... existing PDF generation code ...
     } catch (verificationError) {
-      console.error("Error during document structure verification:", verificationError);
+      console.error("Error during document styling:", verificationError);
       // Continue despite verification error
     }
     
@@ -677,4 +699,175 @@ function truncateTextToFitPage(text: string): string {
   }
   
   return result;
+}
+
+// Add a new function to verify styling consistency
+function ensureConsistentStyling(optimizedText: string): string {
+  // Check if the text already has our required structure
+  const requiredSections = ['ABOUT ME', 'ACHIEVEMENTS', 'COMPETENCES', 'WORK EXPERIENCE', 'EDUCATION'];
+  const sectionPattern = /##\s+(.*?)(?=\n##|$)/gs;
+  const matches = [...optimizedText.matchAll(sectionPattern)];
+  const foundSections = matches.map(match => match[1].trim().toUpperCase());
+  
+  // Check if all required sections exist
+  const missingRequiredSections = requiredSections.filter(
+    section => !foundSections.some(found => found === section)
+  );
+  
+  // If some required sections are missing, recreate the entire CV
+  if (missingRequiredSections.length > 0) {
+    console.log(`Missing required sections: ${missingRequiredSections.join(', ')}. Recreating CV with standard format.`);
+    
+    // Parse the existing CV to extract content
+    const sections = extractSections(optimizedText);
+    
+    // Add any missing sections
+    for (const missingSection of missingRequiredSections) {
+      const normalizedName = missingSection.toLowerCase().replace(/\s+/g, '_');
+      if (!sections[normalizedName]) {
+        sections[normalizedName] = '';
+      }
+    }
+    
+    // Ensure ACHIEVEMENTS section has exactly 3 bullets
+    if (missingRequiredSections.includes('ACHIEVEMENTS')) {
+      const topAchievements = extractTopAchievements(optimizedText);
+      sections.achievements = `• ${topAchievements[0]}\n• ${topAchievements[1]}\n• ${topAchievements[2]}`;
+    } else {
+      // Verify achievements has exactly 3 bullet points
+      const achievementLines = sections.achievements.split('\n').filter(line => line.trim().startsWith('•'));
+      if (achievementLines.length !== 3) {
+        const existingAchievements = achievementLines.map(line => line.replace(/^•\s*/, '').trim());
+        const topAchievements = extractTopAchievements(optimizedText);
+        
+        // Use existing achievements if available, fill in with extracted ones as needed
+        const combinedAchievements = [
+          ...existingAchievements, 
+          ...topAchievements
+        ].slice(0, 3);
+        
+        sections.achievements = combinedAchievements.map(a => `• ${a}`).join('\n');
+      }
+    }
+    
+    return createStandardStyledCV(sections);
+  }
+  
+  // If we have all required sections but need to verify ACHIEVEMENTS has 3 bullet points
+  if (optimizedText.includes('## ACHIEVEMENTS')) {
+    const achievementsMatch = optimizedText.match(/##\s+ACHIEVEMENTS\s*\n([\s\S]*?)(?=\n##|$)/i);
+    if (achievementsMatch) {
+      const achievementContent = achievementsMatch[1];
+      const bulletPoints = achievementContent.split('\n').filter(line => line.trim().startsWith('•'));
+      
+      // If we don't have exactly 3 bullet points, fix it
+      if (bulletPoints.length !== 3) {
+        console.log(`ACHIEVEMENTS section has ${bulletPoints.length} bullet points instead of 3. Fixing.`);
+        
+        // Extract existing bullets
+        const existingAchievements = bulletPoints.map(line => line.replace(/^•\s*/, '').trim());
+        
+        // Extract top achievements to fill in if needed
+        const topAchievements = extractTopAchievements(optimizedText);
+        
+        // Combine existing and extracted achievements
+        const combinedAchievements = [
+          ...existingAchievements, 
+          ...topAchievements
+        ].slice(0, 3);
+        
+        // Create new achievements section
+        const newAchievementsSection = `## ACHIEVEMENTS\n• ${combinedAchievements[0]}\n• ${combinedAchievements[1]}\n• ${combinedAchievements[2]}\n`;
+        
+        // Replace the old achievements section
+        return optimizedText.replace(/##\s+ACHIEVEMENTS\s*\n(?:[\s\S]*?)(?=\n##|$)/i, newAchievementsSection);
+      }
+    }
+  }
+  
+  return optimizedText;
+}
+
+// Create a completely standardized CV with the required styling
+function createStandardStyledCV(sections: Record<string, string>): string {
+  // Format name or use a placeholder
+  const name = sections.name || sections.contact?.split('\n')[0] || 'PROFESSIONAL NAME';
+  
+  // Initialize CV with header
+  let standardCV = `# ${name.toUpperCase()}
+
+`;
+
+  // Add contact information
+  if (sections.contact) {
+    const contactLines = sections.contact.split('\n').filter(line => line.trim());
+    const jobTitle = sections.job_title || 'JOB POSITION';
+    
+    standardCV += `${jobTitle}\n`;
+    
+    // Add phone, email, location from contact section
+    for (const line of contactLines.slice(1)) {
+      if (line.includes('@') || line.match(/\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/) || 
+          line.match(/\b(street|road|avenue|city|state|zip|postal)\b/i)) {
+        standardCV += `${line}\n`;
+      }
+    }
+    standardCV += '\n';
+  }
+
+  // Add ABOUT ME section
+  standardCV += `## ABOUT ME
+${sections.profile || sections.summary || 'Professional with experience in the field.'}
+
+`;
+
+  // Add ACHIEVEMENTS section with exactly 3 bullet points
+  const achievements = sections.achievements?.split('\n')
+    .filter(line => line.trim().startsWith('•'))
+    .map(line => line.replace(/^•\s*/, '').trim()) || [];
+  
+  // Fill in with extracted achievements if needed
+  const topAchievements = extractTopAchievements(
+    sections.experience || sections.profile || ''
+  );
+  
+  const finalAchievements = [
+    ...achievements,
+    ...topAchievements
+  ].slice(0, 3);
+  
+  standardCV += `## ACHIEVEMENTS
+• ${finalAchievements[0]}
+• ${finalAchievements[1]}
+• ${finalAchievements[2]}
+
+`;
+
+  // Add COMPETENCES section
+  standardCV += `## COMPETENCES
+${formatCompetences(sections.skills || sections.competences || '')}
+
+`;
+
+  // Add WORK EXPERIENCE section
+  standardCV += `## WORK EXPERIENCE
+${formatExperience(sections.experience || sections.work_experience || '')}
+
+`;
+
+  // Add EDUCATION section
+  standardCV += `## EDUCATION
+${formatEducation(sections.education || '')}
+
+`;
+
+  // Add LANGUAGES section if available
+  if (sections.languages) {
+    standardCV += `## LANGUAGES
+${formatLanguages(sections.languages)}
+
+`;
+  }
+
+  return standardCV;
 }
