@@ -51,11 +51,18 @@ export default function OptimizationSummary({
         }
         
         const data = await response.json();
-        setSummaryData(data);
         
-        // If we have optimized score and the parent wants updates, call the callback
-        if (data.optimizedAtsScore && onUpdateDashboard) {
-          onUpdateDashboard(data.optimizedAtsScore);
+        // Safely handle potentially large data
+        try {
+          setSummaryData(data);
+          
+          // If we have optimized score and the parent wants updates, call the callback
+          if (data.optimizedAtsScore && onUpdateDashboard) {
+            onUpdateDashboard(data.optimizedAtsScore);
+          }
+        } catch (processingError) {
+          console.error("Error processing summary data:", processingError);
+          setError("Error processing summary data: Maximum call stack size exceeded");
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An unknown error occurred');
@@ -108,7 +115,11 @@ export default function OptimizationSummary({
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>
+              {error === "Maximum call stack size exceeded" ? 
+                "The optimization summary is too large to display. Try downloading the optimized CV instead." : 
+                error}
+            </AlertDescription>
           </Alert>
         </CardContent>
         <CardFooter>

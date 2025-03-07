@@ -225,8 +225,14 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       const data = await response.json();
       
       if (data.optimizedText) {
-        setOptimizedText(data.optimizedText);
-        console.log("Loaded optimized text (length):", data.optimizedText.length);
+        // Limit the size of the optimized text to prevent stack overflow
+        const maxPreviewLength = 5000; // Limit preview to 5000 characters
+        const truncatedText = data.optimizedText.length > maxPreviewLength 
+          ? data.optimizedText.substring(0, maxPreviewLength) + '... (content truncated for preview)'
+          : data.optimizedText;
+        
+        setOptimizedText(truncatedText);
+        console.log("Loaded optimized text (length):", data.optimizedText.length, "Preview length:", truncatedText.length);
         if (data.optimizedText.length > 0) {
           setIsOptimized(true);
         }
@@ -297,90 +303,55 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   }
 
   async function handleDownload() {
-    if (!selectedCV) return;
-    
+    if (!selectedCV) {
+      setOptimizationError("Please select a CV first");
+      return;
+    }
+
     try {
-      // Extract the cv ID - assuming the format is 'filename.pdf|id'
-      const cvId = selectedCV.split('|')[1];
-      if (!cvId) {
-        throw new Error('CV ID not found in selected CV format');
-      }
+      setLoading(true);
       
-      // First check if the optimization is complete
-      const statusResponse = await fetch(`/api/cv/optimization-status?cvId=${cvId}`);
-      const statusData = await statusResponse.json();
+      // Extract the CV ID if it's in the format 'filename|id'
+      const cvId = selectedCV.includes('|') ? selectedCV.split('|')[1] : selectedCV;
+      
+      // First check if the CV is optimized
+      const statusResponse = await fetch(`/api/cv/optimization-status?cvId=${cvId}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
       
       if (!statusResponse.ok) {
-        throw new Error(statusData.error || 'Failed to check optimization status');
+        throw new Error(`Server error: ${statusResponse.status}`);
       }
+      
+      const statusData = await statusResponse.json();
       
       if (!statusData.optimized) {
-        throw new Error('CV has not been optimized yet');
-      }
-      
-      // If we have optimized text but no PDF, create a text file for download
-      if (statusData.optimizedText && !statusData.optimizedPDFBase64) {
-        // Create a text file from the optimized content
-        const blob = new Blob([statusData.optimizedText], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        
-        // Create a download link
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${selectedCV.split('|')[0].replace('.pdf', '')}-optimized.txt`;
-        document.body.appendChild(a);
-        a.click();
-        
-        // Clean up
-        setTimeout(() => {
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }, 100);
-        
+        setOptimizationError("CV has not been optimized yet");
+        setErrorDetails("Please optimize the CV before downloading.");
         return;
       }
       
-      // If we have a PDF, download it
-      if (statusData.optimizedPDFBase64) {
-        // Convert base64 to blob
-        const byteCharacters = atob(statusData.optimizedPDFBase64);
-        const byteArrays = [];
-        
-        for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-          const slice = byteCharacters.slice(offset, offset + 512);
-          
-          const byteNumbers = new Array(slice.length);
-          for (let i = 0; i < slice.length; i++) {
-            byteNumbers[i] = slice.charCodeAt(i);
-          }
-          
-          const byteArray = new Uint8Array(byteNumbers);
-          byteArrays.push(byteArray);
-        }
-        
-        const blob = new Blob(byteArrays, { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        
-        // Create a download link
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${selectedCV.split('|')[0].replace('.pdf', '')}-optimized.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        
-        // Clean up
-        setTimeout(() => {
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }, 100);
-        
-        return;
-      }
+      // Use the download endpoint to get the full content
+      const downloadUrl = `/api/cv/download-optimized?cvId=${cvId}`;
       
-      throw new Error('No optimized content available for download');
+      // Create a temporary link and trigger download
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.setAttribute('download', `optimized_${statusData.fileName || 'cv'}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      console.log("Download initiated");
     } catch (error) {
       console.error("Error downloading optimized CV:", error);
-      setOptimizationError(error instanceof Error ? error.message : "Failed to download optimized CV");
+      setOptimizationError(`Error downloading: ${(error as Error).message}`);
+      setErrorDetails("There was an error downloading your optimized CV. Please try again.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -590,8 +561,17 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         {optimizedText && (
           <div className="mt-6 border border-[#B4916C]/20 bg-[#121212] rounded-md p-4">
             <h3 className="text-[#B4916C] font-medium mb-2">Optimized Content Preview</h3>
-            <div className="max-h-48 overflow-y-auto text-sm text-gray-300 bg-[#0A0A0A] p-3 rounded whitespace-pre-wrap">
-              {optimizedText}
+            <div className="max-h-48 overflow-y-auto text-sm text-gray-300 bg-[#0A0A0A] p-3 rounded whitespace-pre-line">
+              {/* Render optimized text in chunks to prevent stack overflow */}
+              {optimizedText.length > 10000 ? (
+                <>
+                  <p>{optimizedText.substring(0, 2000)}</p>
+                  <p className="text-amber-500 my-2">... (content truncated for preview) ...</p>
+                  <p>{optimizedText.substring(optimizedText.length - 2000)}</p>
+                </>
+              ) : (
+                optimizedText
+              )}
             </div>
             
             {/* Show ATS Score Comparison if available */}

@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const cvId = searchParams.get('cvId');
     const fileName = searchParams.get('fileName');
+    const fullContent = searchParams.get('fullContent') === 'true';
     
     if (!cvId && !fileName) {
       return NextResponse.json({ error: "CV ID or filename is required" }, { status: 400 });
@@ -32,6 +33,15 @@ export async function GET(request: NextRequest) {
     // Parse metadata
     const metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
     
+    // Limit the size of optimized text for preview
+    let optimizedText = metadata.optimizedText || null;
+    if (optimizedText && !fullContent) {
+      const maxLength = 5000; // Limit to 5000 characters for preview
+      if (optimizedText.length > maxLength) {
+        optimizedText = optimizedText.substring(0, maxLength) + '... (content truncated for preview)';
+      }
+    }
+    
     // Return optimization status
     return NextResponse.json({
       id: cvRecord.id,
@@ -42,8 +52,9 @@ export async function GET(request: NextRequest) {
       error: metadata.error || null,
       startTime: metadata.startTime || null,
       completedAt: metadata.completedAt || null,
-      optimizedText: metadata.optimizedText || null,
-      hasOptimizedText: !!metadata.optimizedText
+      optimizedText: optimizedText,
+      hasOptimizedText: !!metadata.optimizedText,
+      textLength: metadata.optimizedText ? metadata.optimizedText.length : 0
     });
     
   } catch (error) {
