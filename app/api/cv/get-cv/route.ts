@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get the file path
-    const filePath = cvRecord.filePath || cvRecord.filepath; // Support both casing versions
+    const filePath = cvRecord.filepath; // Use the correct property name
     
     if (!filePath) {
       console.error(`No file path found for CV ${cvId}`);
