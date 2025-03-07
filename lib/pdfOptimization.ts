@@ -502,6 +502,46 @@ export async function modifyPDFWithOptimizedContent(
   try {
     console.log("Starting PDF generation with optimized content");
     
+    // Check if modern template is requested
+    const useModernStyling = template?.id && (
+      template.id.includes('modern') || 
+      template.id.includes('professional') || 
+      template.id.includes('apple') || 
+      template.id.includes('google') ||
+      template.id.includes('meta')
+    );
+    
+    // If modern styling is requested, pre-process the text
+    if (useModernStyling) {
+      console.log("Using modern CV styling for template:", template?.id);
+      
+      // Extract sections from the optimized text
+      const sections: Record<string, string> = {};
+      
+      // Parse the optimized text into sections
+      const sectionRegex = /## ([A-Z\s]+)\n([\s\S]*?)(?=\n## |$)/g;
+      let match;
+      
+      while ((match = sectionRegex.exec(optimizedText)) !== null) {
+        const title = match[1].trim().toLowerCase().replace(/\s+/g, '_');
+        const content = match[2].trim();
+        sections[title] = content;
+      }
+      
+      // Extract name and contact info for the header
+      const contactLines = sections.contact ? sections.contact.split('\n') : [];
+      if (contactLines.length > 0) {
+        const name = contactLines[0];
+        sections.name = name;
+      }
+      
+      // Import the formatModernCV function dynamically
+      const { formatModernCV } = require('./optimizeCV');
+      
+      // Format using the modern CV style
+      optimizedText = formatModernCV(sections);
+    }
+    
     // Create a new PDF document
     const doc = await PDFDocument.create();
     
@@ -697,7 +737,7 @@ export async function modifyPDFWithOptimizedContent(
             font: titleFont,
             color: accentColor,
           });
-  } else {
+        } else {
           // Fallback if name not found
           const resumeText = "Resume";
           const resumeWidth = titleFont.widthOfTextAtSize(resumeText, 20);
@@ -777,7 +817,7 @@ export async function modifyPDFWithOptimizedContent(
         } else {
           // Fallback if name not found
           currentPage.drawText("Resume", {
-      x: margin,
+            x: margin,
             y: height - margin - 20,
             size: 22,
             font: titleFont,
@@ -840,7 +880,7 @@ export async function modifyPDFWithOptimizedContent(
       });
       
       currentPage.drawText(section.title.toUpperCase(), {
-      x: margin,
+        x: margin,
         y: leftColumnY,
         size: 13, // Larger for better readability
         font: boldFont,
@@ -1388,14 +1428,14 @@ const formatTextWithStyling = (
               // Just draw the long word on its own line
               page.drawText(wordToAdd, {
                 x: currentX,
-      y: currentY,
-      size: fontSize,
+                y: currentY,
+                size: fontSize,
                 font: font,
                 color: color,
-    });
+              });
               
               // Move to next line
-    currentY -= lineHeight;
+              currentY -= lineHeight;
               currentX = x;
               currentLine = "";
             }

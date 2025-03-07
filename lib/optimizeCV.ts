@@ -2235,3 +2235,364 @@ export {
   formatLanguages
 };
   
+/**
+ * Formats a CV in the modern professional style as shown in the image
+ * With two-tone name header, clear sections, and consistent formatting
+ * @param sections The CV content organized by section
+ * @returns A formatted CV string ready for PDF generation
+ */
+export function formatModernCV(sections: Record<string, string>): string {
+  // Extract name parts or use placeholders
+  let firstName = 'NAME';
+  let lastName = 'LAST NAME';
+  
+  if (sections.contact) {
+    const contactLines = sections.contact.split('\n');
+    if (contactLines.length > 0 && contactLines[0].trim()) {
+      const nameParts = contactLines[0].trim().split(' ');
+      if (nameParts.length >= 2) {
+        // Use first part as first name, rest as last name
+        firstName = nameParts[0].toUpperCase();
+        lastName = nameParts.slice(1).join(' ').toUpperCase();
+      }
+    }
+  }
+  
+  // Extract job title or use placeholder
+  const jobTitle = sections.job_title || 'JOB OCCUPIED';
+  
+  // Extract contact details
+  let phone = '';
+  let email = '';
+  let location = '';
+  
+  if (sections.contact) {
+    const contactLines = sections.contact.split('\n');
+    for (const line of contactLines) {
+      if (line.match(/\+?\d[\d\s-]{7,}/)) {
+        phone = line.trim();
+      } else if (line.includes('@')) {
+        email = line.trim();
+      } else if (line.match(/[A-Za-z]+,\s*[A-Za-z]+/) || line.includes('USA') || line.includes('UK')) {
+        location = line.trim();
+      }
+    }
+  }
+  
+  // Start building the CV with the header
+  let formattedCV = `${firstName} ${lastName}
+${jobTitle}
+${phone}
+${email}
+${location}
+
+`;
+
+  // Add ABOUT ME section
+  formattedCV += `ABOUT ME
+${sections.profile || sections.summary || sections.about || sections.about_me || 'Professional with experience in the field.'}
+
+`;
+
+  // Add COMPETENCES section with three-column layout
+  formattedCV += `COMPETENCES
+${formatCompetencesInColumns(sections.skills || sections.competences || '')}
+
+`;
+
+  // Add WORK EXPERIENCE section with date-job-company format
+  formattedCV += `WORK EXPERIENCE
+${formatWorkExperienceModern(sections.experience || sections.work_experience || '')}
+
+`;
+
+  // Add EDUCATION section with three-column layout
+  formattedCV += `EDUCATION
+${formatEducationInColumns(sections.education || '')}
+
+`;
+
+  // Add LANGUAGES section with proficiency bars
+  formattedCV += `LANGUAGES
+${formatLanguagesWithBars(sections.languages || '')}
+`;
+
+  return formattedCV;
+}
+
+/**
+ * Formats skills/competences in a three-column layout
+ */
+function formatCompetencesInColumns(skills: string): string {
+  // Extract all skills as individual items
+  const skillItems = skills
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .map(line => line.replace(/^[•\-\*]+\s*/, '')) // Remove existing bullet markers
+    .filter(line => !line.startsWith('#') && !line.startsWith('/')); // Remove headers
+  
+  // If we don't have enough skills, add some defaults
+  if (skillItems.length < 6) {
+    skillItems.push(...[
+      'Word', 'Excel', 'PowerPoint', 
+      'Photoshop', 'Outlook', 'Communication'
+    ].filter(s => !skillItems.includes(s)));
+  }
+  
+  // Organize into a three-column layout
+  const column1 = skillItems.slice(0, Math.ceil(skillItems.length / 3));
+  const column2 = skillItems.slice(Math.ceil(skillItems.length / 3), Math.ceil(2 * skillItems.length / 3));
+  const column3 = skillItems.slice(Math.ceil(2 * skillItems.length / 3));
+  
+  // Format each column with bullets
+  const col1Format = column1.map(skill => `• ${skill}`).join('\n');
+  const col2Format = column2.map(skill => `• ${skill}`).join('\n');
+  const col3Format = column3.map(skill => `• ${skill}`).join('\n');
+  
+  // Return the formatted columns
+  return `${col1Format}\n\n${col2Format}\n\n${col3Format}`;
+}
+
+/**
+ * Formats work experience with the modern date-job-company-city layout
+ */
+function formatWorkExperienceModern(experience: string): string {
+  // Split into job blocks
+  const jobBlocks = experience.split(/\n\s*\n/).filter(block => block.trim());
+  let formattedExperience = '';
+  
+  // If no experience, create a placeholder entry
+  if (jobBlocks.length === 0) {
+    return `Sept. 20XX    Job occupied
+Juli. 20XX     NAME OF THE COMPANY - CITY
+• Missions or tasks realized: Duis augue magna, bibendum at nunc id, gravida ultrices tellus. Pellentesque.
+• Vehicula ante id, dictum ligula ante gravida ultrices. Lorem ipsum dolor sit amet.
+• Pellentesqu, ehicula ante id, dictum ligula ante. Lorem ipsum dolor sit amet.`;
+  }
+  
+  // Process each job block
+  for (const block of jobBlocks) {
+    const lines = block.split('\n');
+    
+    // Extract dates, job title, company, location
+    const datePattern = /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|May|June|July|August|September|October|November|December|Sept|Juli)\S*\.?\s+20\d{2}\b/i;
+    const dateMatches = block.match(datePattern);
+    
+    let startDate = dateMatches?.[0] || 'Sept. 20XX';
+    let endDate = 'Present';
+    
+    // Find second date match
+    if (dateMatches && dateMatches.length > 1) {
+      endDate = dateMatches[1];
+    } else {
+      // Look for year ranges
+      const yearRangeMatch = block.match(/\b(20\d{2})\s*[-–—]\s*(20\d{2}|Present|Current|Now)\b/i);
+      if (yearRangeMatch) {
+        startDate = yearRangeMatch[1];
+        endDate = yearRangeMatch[2];
+      }
+    }
+    
+    // Extract job title - typically a short line near the beginning
+    let jobTitle = 'Job occupied';
+    for (const line of lines.slice(0, 3)) {
+      if (line.length > 0 && line.length < 50 && !line.match(datePattern) && !line.includes('-')) {
+        jobTitle = line.trim();
+        break;
+      }
+    }
+    
+    // Extract company and city
+    let companyAndCity = 'NAME OF THE COMPANY - CITY';
+    for (const line of lines) {
+      if (line.includes('-') && !line.match(datePattern)) {
+        companyAndCity = line.trim();
+        break;
+      }
+    }
+    
+    // Format entry header
+    formattedExperience += `${startDate}    ${jobTitle}\n`;
+    formattedExperience += `${endDate}     ${companyAndCity}\n`;
+    
+    // Extract bullet points
+    const bulletPoints = lines
+      .filter(line => line.trim().startsWith('•') || line.trim().startsWith('-'))
+      .map(line => line.replace(/^[•\-]\s*/, '').trim())
+      .filter(line => line.length > 0);
+    
+    // If we found bullet points, format them
+    if (bulletPoints.length > 0) {
+      formattedExperience += `• Missions or tasks realized: ${bulletPoints[0]}\n`;
+      
+      // Add remaining bullet points (up to 2 more)
+      for (let i = 1; i < Math.min(bulletPoints.length, 3); i++) {
+        formattedExperience += `• ${bulletPoints[i]}\n`;
+      }
+    } else {
+      // Create default bullet points if none found
+      formattedExperience += `• Missions or tasks realized: Duis augue magna, bibendum at nunc id, gravida ultrices tellus. Pellentesque.\n`;
+      formattedExperience += `• Vehicula ante id, dictum ligula ante gravida ultrices. Lorem ipsum dolor sit amet.\n`;
+      formattedExperience += `• Pellentesqu, ehicula ante id, dictum ligula ante. Lorem ipsum dolor sit amet.\n`;
+    }
+    
+    formattedExperience += '\n';
+  }
+  
+  return formattedExperience.trim();
+}
+
+/**
+ * Formats education in a three-column layout
+ */
+function formatEducationInColumns(education: string): string {
+  // Split education into blocks
+  const eduBlocks = education.split(/\n\s*\n/).filter(block => block.trim());
+  
+  // Create placeholder entries if needed
+  const entries = [];
+  if (eduBlocks.length === 0) {
+    entries.push({
+      institution: 'UNIVERSITY OR SCHOOL',
+      diploma: 'Diploma Xxxxxxxxx',
+      year: '20XX'
+    });
+    entries.push({
+      institution: 'UNIVERSITY OR SCHOOL',
+      diploma: 'Diploma Xxxxxxxxx',
+      year: '20XX'
+    });
+    entries.push({
+      institution: 'UNIVERSITY OR SCHOOL',
+      diploma: 'Diploma Xxxxxxxxx',
+      year: '20XX'
+    });
+  } else {
+    // Process each education block
+    for (const block of eduBlocks) {
+      const lines = block.split('\n');
+      
+      // Find institution (usually contains university, college, school)
+      let institution = '';
+      for (const line of lines) {
+        if (line.match(/university|college|school|institut/i)) {
+          institution = line.trim().toUpperCase();
+          break;
+        }
+      }
+      if (!institution && lines.length > 0) {
+        institution = lines[0].trim().toUpperCase();
+      }
+      
+      // Find diploma/degree
+      let diploma = '';
+      for (const line of lines) {
+        if (line.match(/diploma|degree|bachelor|master|phd|certificate/i)) {
+          diploma = line.trim();
+          break;
+        }
+      }
+      if (!diploma && lines.length > 1) {
+        diploma = lines[1].trim();
+      }
+      
+      // Find year
+      let year = '';
+      for (const line of lines) {
+        const yearMatch = line.match(/\b(20\d{2}|19\d{2})\b/);
+        if (yearMatch) {
+          year = yearMatch[0];
+          break;
+        }
+      }
+      
+      entries.push({
+        institution: institution || 'UNIVERSITY OR SCHOOL',
+        diploma: diploma || 'Diploma Xxxxxxxxx',
+        year: year || '20XX'
+      });
+    }
+    
+    // Ensure we have at least 3 entries
+    while (entries.length < 3) {
+      entries.push({
+        institution: 'UNIVERSITY OR SCHOOL',
+        diploma: 'Diploma Xxxxxxxxx',
+        year: '20XX'
+      });
+    }
+  }
+  
+  // Format entries in columns
+  let result = '';
+  for (let i = 0; i < 3; i++) {
+    if (i < entries.length) {
+      result += `${entries[i].institution}\n${entries[i].diploma}\n${entries[i].year}\n\n`;
+    }
+  }
+  
+  return result.trim();
+}
+
+/**
+ * Formats languages with proficiency bars
+ */
+function formatLanguagesWithBars(languages: string): string {
+  // Extract language entries
+  const languageEntries = languages.split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+  
+  // Common languages to detect
+  const commonLanguages = [
+    'English', 'German', 'Spanish', 'French', 'Italian', 
+    'Chinese', 'Japanese', 'Russian', 'Portuguese', 'Arabic'
+  ];
+  
+  // Detected languages with proficiency levels
+  const detectedLanguages = [];
+  
+  // Process language entries
+  for (const entry of languageEntries) {
+    for (const lang of commonLanguages) {
+      if (entry.toLowerCase().includes(lang.toLowerCase())) {
+        // Try to determine proficiency
+        let proficiency = 0.7; // Default to intermediate
+        
+        if (entry.match(/native|fluent|mother tongue|perfect/i)) {
+          proficiency = 1.0;
+        } else if (entry.match(/advanced|proficient|c2|c1/i)) {
+          proficiency = 0.8;
+        } else if (entry.match(/intermediate|b2|b1/i)) {
+          proficiency = 0.6;
+        } else if (entry.match(/basic|beginner|elementary|a2|a1/i)) {
+          proficiency = 0.3;
+        }
+        
+        detectedLanguages.push({ name: lang, level: proficiency });
+        break;
+      }
+    }
+  }
+  
+  // If no languages detected, add default ones
+  if (detectedLanguages.length === 0) {
+    detectedLanguages.push({ name: 'English', level: 0.9 });
+    detectedLanguages.push({ name: 'German', level: 0.5 });
+    detectedLanguages.push({ name: 'Spanish', level: 0.3 });
+  }
+  
+  // Format languages with bars
+  let result = '';
+  for (const lang of detectedLanguages.slice(0, 3)) {
+    const filledBlocks = Math.round(lang.level * 10);
+    const emptyBlocks = 10 - filledBlocks;
+    
+    const bar = '█'.repeat(filledBlocks) + '░'.repeat(emptyBlocks);
+    result += `${lang.name}     ${bar}     \n`;
+  }
+  
+  return result.trim();
+}
+  

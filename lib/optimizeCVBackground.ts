@@ -8,7 +8,8 @@ import {
   formatCompetences,
   formatExperience,
   formatEducation,
-  formatLanguages
+  formatLanguages,
+  formatModernCV
 } from "./optimizeCV"; // Import all needed functions
 import { modifyPDFWithOptimizedContent } from "./pdfOptimization";
 import { updateCVAnalysis } from "@/lib/db/queries.server";
@@ -577,6 +578,15 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
   }
 }
 
+// Apply modern CV styling to the optimized text
+function applyModernStyling(optimizedText: string): string {
+  // Extract sections from the optimized text
+  const sections = extractSections(optimizedText);
+  
+  // Format the CV using the modern styling
+  return formatModernCV(sections);
+}
+
 // This function creates a more conservative optimization that preserves more original content
 function createConservativeOptimizedCV(originalText: string, templateId: string): string {
   console.log("Creating conservative optimization to preserve keywords");
@@ -641,6 +651,11 @@ ${value.trim()}
     }
   }
 
+  // If the template ID indicates modern styling, apply it
+  if (templateId.toLowerCase().includes('modern') || templateId.toLowerCase().includes('professional')) {
+    return applyModernStyling(conservativeCV);
+  }
+  
   return conservativeCV;
 }
 
