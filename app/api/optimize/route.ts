@@ -3,7 +3,12 @@ import { getTemplateLayout } from "@/lib/templateMatching";
 import { modifyPDFWithOptimizedContent } from "@/lib/pdfOptimization";
 import { getTemplateById } from "@/lib/templates";
 import { analyzeCV } from "@/lib/analyzeCV";
-import { extractCriticalKeywords, getIndustrySpecificKeywords } from "@/lib/optimizeCV";
+import { 
+  extractCriticalKeywords, 
+  getIndustrySpecificKeywords, 
+  analyzeCVContent, 
+  verifyContentPreservation 
+} from "@/lib/optimizeCV";
 
 export async function POST(req: NextRequest) {
   try {
@@ -32,6 +37,10 @@ export async function POST(req: NextRequest) {
       }
     }
     
+    // Analyze the CV to identify strengths and weaknesses
+    const analysisResults = analyzeCVContent(cvText);
+    console.log(`CV Analysis completed: ${analysisResults.strengths.length} strengths, ${analysisResults.weaknesses.length} weaknesses identified`);
+    
     // If we have a custom optimization prompt, use it
     if (optimizationPrompt) {
       console.log("Using custom optimization prompt with analysis insights");
@@ -59,32 +68,49 @@ export async function POST(req: NextRequest) {
         
         const optimizedCV = result.choices[0].message.content;
         
+        // Verify content preservation
+        const verification = verifyContentPreservation(cvText, optimizedCV);
+        
+        if (!verification.preserved) {
+          console.warn(`AI optimization failed content preservation check. Score: ${verification.keywordScore}%. Using enhanced fallback.`);
+          // Fall back to enhanced optimization
+          const fallbackCV = createEnhancedOptimizedCV(cvText, templateId || 'default', analysisResults);
+          
+          return NextResponse.json({
+            optimizedCV: fallbackCV,
+            message: "CV optimization completed with enhanced fallback due to content preservation failure",
+            analysis: analysisResults
+          });
+        }
+        
         // Success response with the optimized CV
         return NextResponse.json({
           optimizedCV,
-          message: "CV optimization completed successfully"
+          message: "CV optimization completed successfully",
+          analysis: analysisResults
         });
       } catch (aiError) {
         console.error("Error calling OpenAI API:", aiError);
         // Fall back to enhanced optimization on AI service error
-        const fallbackCV = createEnhancedOptimizedCV(cvText, templateId || 'default', 
-          analysisMetadata ? JSON.parse(analysisMetadata) : null);
+        const fallbackCV = createEnhancedOptimizedCV(cvText, templateId || 'default', analysisResults);
         
         return NextResponse.json({
           optimizedCV: fallbackCV,
-          message: "CV optimization completed with fallback method due to AI service error"
+          message: "CV optimization completed with fallback method due to AI service error",
+          analysis: analysisResults
         });
       }
     } 
     // Use the standard optimization if no custom prompt
     else {
       // Create an enhanced optimized version with ATS focus
-      const optimizedCV = createEnhancedOptimizedCV(cvText, templateId || 'default');
+      const optimizedCV = createEnhancedOptimizedCV(cvText, templateId || 'default', analysisResults);
       
       // Success response
       return NextResponse.json({
         optimizedCV,
-        message: "CV optimization completed successfully"
+        message: "CV optimization completed successfully",
+        analysis: analysisResults
       });
     }
   } catch (error: any) {
@@ -106,12 +132,14 @@ function createEnhancedOptimizedCV(originalText: string, templateId: string, ana
   // If we have analysis data, use it to enhance the CV
   let industry = "General";
   let strengths = [];
-  let missingKeywords = [];
+  let weaknesses = [];
+  let improvementSuggestions = {};
   
   if (analysisData) {
-    industry = analysisData.industry || "General";
+    industry = analysisData.detectedIndustry || "General";
     strengths = analysisData.strengths || [];
-    missingKeywords = analysisData.missingKeywords || [];
+    weaknesses = analysisData.weaknesses || [];
+    improvementSuggestions = analysisData.improvementSuggestions || {};
   }
   
   // Get industry-specific keywords to boost ATS score
@@ -131,11 +159,42 @@ ${sections.contact.trim()}
 `;
   }
 
+  // First, extract any existing achievements from the original CV
+  let achievementsContent = sections.achievements || '';
+  
+  // If there are no achievements or they're limited, generate some based on experience
+  if (!achievementsContent || achievementsContent.length < 100) {
+    // Extract quantified achievements from experience section
+    const experienceText = sections.experience || '';
+    const quantifiedPattern = /\b(\d+%|\d+\s*percent|\$\d+|\d+\s*million|\d+\s*billion|\d+\s*users|\d+\s*customers|\d+\s*clients|\d+\s*projects|\d+\s*times|\d+\s*days|\d+\s*months|\d+\s*years)\b/gi;
+    
+    // Find sentences with quantified achievements
+    const sentences = experienceText.split(/[.!?]+/);
+    const quantifiedSentences = sentences.filter(sentence => 
+      quantifiedPattern.test(sentence) || 
+      /\b(increased|decreased|improved|reduced|saved|generated|delivered|achieved)\b/i.test(sentence)
+    );
+    
+    // If we found quantified sentences, use them as achievements
+    if (quantifiedSentences.length > 0) {
+      achievementsContent = quantifiedSentences
+        .map(sentence => sentence.trim())
+        .filter(sentence => sentence.length > 10)
+        .map(sentence => `• ${sentence}`)
+        .join('\n');
+    }
+    
+    // If we still don't have achievements, generate some based on the industry
+    if (!achievementsContent || achievementsContent.length < 100) {
+      achievementsContent = `• Increased ${industry} productivity by 35% through implementation of streamlined workflows and processes
+• Delivered projects 25% under budget while maintaining high quality standards
+• Generated 40% growth in key performance metrics through innovative strategies and solutions`;
+    }
+  }
+  
   // Add achievements section with quantified accomplishments
   optimizedCV += `## ACHIEVEMENTS
-• Increased productivity by 35% through implementation of streamlined workflows and processes
-• Delivered projects 25% under budget while maintaining high quality standards
-• Generated 40% growth in key performance metrics through innovative strategies and solutions
+${achievementsContent}
 
 `;
 
@@ -267,9 +326,33 @@ ${enhancedSkills}
 `;
   }
 
+  // Add languages section if present
+  if (sections.languages) {
+    optimizedCV += `## LANGUAGES
+${sections.languages.trim()}
+
+`;
+  }
+
+  // Add projects section if present
+  if (sections.projects) {
+    optimizedCV += `## PROJECTS
+${sections.projects.trim()}
+
+`;
+  }
+
+  // Add certifications section if present
+  if (sections.certifications) {
+    optimizedCV += `## CERTIFICATIONS
+${sections.certifications.trim()}
+
+`;
+  }
+
   // Add any additional sections
   for (const [key, value] of Object.entries(sections)) {
-    if (!['contact', 'profile', 'experience', 'education', 'skills'].includes(key) && value.trim()) {
+    if (!['contact', 'profile', 'experience', 'education', 'skills', 'languages', 'projects', 'certifications', 'achievements'].includes(key) && value.trim()) {
       optimizedCV += `## ${key.toUpperCase()}
 ${value.trim()}
 
@@ -277,17 +360,34 @@ ${value.trim()}
     }
   }
 
-  // Ensure all original keywords are preserved
-  const finalCvLower = optimizedCV.toLowerCase();
-  const missingOriginalKeywords = originalKeywords.filter(
-    (kw: string) => !finalCvLower.includes(kw.toLowerCase())
-  );
+  // Verify content preservation
+  const verification = verifyContentPreservation(originalText, optimizedCV);
   
-  if (missingOriginalKeywords.length > 0) {
-    optimizedCV += `## ADDITIONAL QUALIFICATIONS
-• ${missingOriginalKeywords.join('\n• ')}
+  if (!verification.preserved) {
+    console.warn(`Content preservation check failed. Score: ${verification.keywordScore}%. Adding missing keywords.`);
+    
+    // Add missing keywords in a way that preserves the CV structure
+    if (verification.missingItems.length > 0) {
+      // Try to add missing keywords to the skills section
+      if (optimizedCV.includes('## SKILLS')) {
+        // Find the skills section and add missing keywords
+        const skillsPattern = /## SKILLS\n([\s\S]*?)(?=\n##|$)/;
+        const skillsMatch = optimizedCV.match(skillsPattern);
+        
+        if (skillsMatch) {
+          const skillsSection = skillsMatch[1];
+          const updatedSkillsSection = skillsSection + `\n\n### Additional Keywords:\n• ${verification.missingItems.map(item => item.trim()).join('\n• ')}\n`;
+          
+          optimizedCV = optimizedCV.replace(skillsPattern, `## SKILLS\n${updatedSkillsSection}`);
+        }
+      } else {
+        // If no skills section, add one with missing keywords
+        optimizedCV += `## ADDITIONAL KEYWORDS
+• ${verification.missingItems.map(item => item.trim()).join('\n• ')}
 
 `;
+      }
+    }
   }
 
   return optimizedCV;
@@ -295,37 +395,8 @@ ${value.trim()}
 
 // Helper functions
 function extractSections(text: string): Record<string, string> {
-  const sections: Record<string, string> = {
-    contact: '',
-    profile: '',
-    experience: '',
-    education: '',
-    skills: ''
-  };
-  
-  // Simple parsing logic - in real app would be more sophisticated
-  const lines = text.split('\n');
-  let currentSection = 'profile';
-  
-  for (const line of lines) {
-    const lowerLine = line.toLowerCase();
-    
-    if (lowerLine.includes('email') || lowerLine.includes('phone') || lowerLine.includes('address')) {
-      sections.contact += line + '\n';
-    } else if (lowerLine.includes('experience') || lowerLine.includes('work')) {
-      currentSection = 'experience';
-    } else if (lowerLine.includes('education') || lowerLine.includes('university')) {
-      currentSection = 'education';
-    } else if (lowerLine.includes('skills') || lowerLine.includes('abilities')) {
-      currentSection = 'skills';
-    } else if (lowerLine.includes('profile') || lowerLine.includes('summary') || lowerLine.includes('objective')) {
-      currentSection = 'profile';
-    } else {
-      sections[currentSection] += line + '\n';
-    }
-  }
-  
-  return sections;
+  // Use the enhanced extractSections function from optimizeCV.ts
+  return require("@/lib/optimizeCV").extractSections(text);
 }
 
 function improveSection(text: string, sectionType: string): string {

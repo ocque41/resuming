@@ -207,53 +207,125 @@ ${value.trim()}
 
 // Helper functions for the fallback optimization
 export function extractSections(text: string): Record<string, string> {
+  // Initialize with more section types to better capture CV content
   const sections: Record<string, string> = {
     contact: '',
     profile: '',
     experience: '',
     education: '',
-    skills: ''
+    skills: '',
+    projects: '',
+    certifications: '',
+    languages: '',
+    achievements: '',
+    interests: '',
+    publications: '',
+    references: '',
+    volunteer: '',
+    awards: ''
   };
   
   // Simple parsing logic - in real app would be more sophisticated
   const lines = text.split('\n');
   let currentSection = 'profile';
   
-  // First pass: detect phone numbers that might be section titles
+  // First pass: detect section headers and phone numbers
   const phoneNumberPattern = /^\s*(\d{3}\s*\d{3}\s*\d{3}|\d{6,12})\s*$/;
   const phoneNumbers: string[] = [];
   
-  for (const line of lines) {
-    if (phoneNumberPattern.test(line.trim())) {
-      phoneNumbers.push(line.trim());
-      // Add this to contact section
-      sections.contact += `Phone: ${line.trim()}\n`;
-    }
-  }
+  // Detect potential section headers
+  const sectionHeaderPattern = /^[\s\t]*(?:[A-Z][A-Z\s]+|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)[\s\t]*(?::|$)/;
+  const potentialSections: {line: number, title: string}[] = [];
   
-  // Second pass: process the rest of the content
-  for (const line of lines) {
-    const lowerLine = line.toLowerCase();
-    const trimmedLine = line.trim();
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
     
-    // Skip lines that are just phone numbers (already processed)
-    if (phoneNumberPattern.test(trimmedLine)) {
+    // Detect phone numbers
+    if (phoneNumberPattern.test(line)) {
+      phoneNumbers.push(line);
+      // Add this to contact section
+      sections.contact += `Phone: ${line}\n`;
       continue;
     }
     
-    if (lowerLine.includes('email') || lowerLine.includes('phone') || lowerLine.includes('address')) {
+    // Detect potential section headers
+    if (sectionHeaderPattern.test(line)) {
+      const title = line.replace(':', '').trim().toLowerCase();
+      potentialSections.push({line: i, title});
+    }
+  }
+  
+  // Map detected section headers to our section keys
+  const sectionMappings: Record<string, string[]> = {
+    profile: ['profile', 'summary', 'about', 'objective', 'professional summary', 'career objective', 'personal statement'],
+    experience: ['experience', 'work experience', 'employment', 'work history', 'professional experience', 'career history'],
+    education: ['education', 'academic background', 'qualifications', 'academic', 'educational background', 'training'],
+    skills: ['skills', 'technical skills', 'core competencies', 'key skills', 'competencies', 'expertise', 'professional skills'],
+    projects: ['projects', 'key projects', 'project experience', 'portfolio'],
+    certifications: ['certifications', 'certificates', 'professional certifications', 'credentials'],
+    languages: ['languages', 'language proficiency', 'language skills'],
+    achievements: ['achievements', 'accomplishments', 'key achievements'],
+    interests: ['interests', 'hobbies', 'activities', 'personal interests'],
+    publications: ['publications', 'papers', 'research', 'articles'],
+    references: ['references', 'recommendations'],
+    volunteer: ['volunteer', 'volunteering', 'community service', 'community involvement'],
+    awards: ['awards', 'honors', 'recognitions']
+  };
+  
+  // Second pass: assign content to sections based on detected headers
+  let currentSectionStart = 0;
+  
+  for (let i = 0; i < potentialSections.length; i++) {
+    const section = potentialSections[i];
+    const nextSection = potentialSections[i + 1];
+    const sectionEnd = nextSection ? nextSection.line : lines.length;
+    
+    // Find which of our section types this matches
+    let matchedSection = 'profile'; // Default
+    
+    for (const [sectionKey, aliases] of Object.entries(sectionMappings)) {
+      if (aliases.some(alias => section.title.includes(alias))) {
+        matchedSection = sectionKey;
+        break;
+      }
+    }
+    
+    // Extract content for this section
+    const sectionContent = lines.slice(section.line + 1, sectionEnd).join('\n');
+    sections[matchedSection] += sectionContent + '\n';
+  }
+  
+  // Third pass: process the rest of the content
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    const lowerLine = line.toLowerCase();
+    
+    // Skip lines that are just phone numbers (already processed)
+    if (phoneNumberPattern.test(line)) {
+      continue;
+    }
+    
+    // Skip lines that are section headers (already processed)
+    if (potentialSections.some(section => section.line === i)) {
+      continue;
+    }
+    
+    // Detect section by content if not already assigned
+    if (lowerLine.includes('@') || lowerLine.includes('email') || lowerLine.includes('phone') || lowerLine.includes('address')) {
       sections.contact += line + '\n';
-    } else if (lowerLine.includes('experience') || lowerLine.includes('work')) {
-      currentSection = 'experience';
-    } else if (lowerLine.includes('education') || lowerLine.includes('university')) {
-      currentSection = 'education';
-    } else if (lowerLine.includes('skills') || lowerLine.includes('abilities')) {
-      currentSection = 'skills';
-    } else if (lowerLine.includes('profile') || lowerLine.includes('summary') || lowerLine.includes('objective')) {
-      currentSection = 'profile';
+    } else if (lowerLine.includes('university') || lowerLine.includes('college') || lowerLine.includes('degree') || lowerLine.includes('gpa')) {
+      sections.education += line + '\n';
+    } else if (lowerLine.includes('skill') || lowerLine.includes('proficient') || lowerLine.includes('expertise')) {
+      sections.skills += line + '\n';
     } else {
+      // If we can't determine the section, add to current section
       sections[currentSection] += line + '\n';
     }
+  }
+  
+  // Ensure all sections are properly trimmed
+  for (const key of Object.keys(sections)) {
+    sections[key] = sections[key].trim();
   }
   
   return sections;
@@ -361,70 +433,101 @@ export function verifyContentPreservation(originalText: string, optimizedText: s
   preserved: boolean; 
   missingItems: string[];
   keywordScore: number;
+  industryKeywordScore: number;
 } {
-  // Convert to lowercase and remove extra whitespace for comparison
-  const normalizedOriginal = originalText.toLowerCase().replace(/\s+/g, ' ').trim();
-  const normalizedOptimized = optimizedText.toLowerCase().replace(/\s+/g, ' ').trim();
+  // Extract critical keywords from both texts
+  const originalKeywords = extractCriticalKeywords(originalText);
+  const optimizedKeywords = extractCriticalKeywords(optimizedText);
   
-  // Check if core content is preserved
+  console.log(`Original keywords (${originalKeywords.length}): ${originalKeywords.slice(0, 10).join(', ')}...`);
+  console.log(`Optimized keywords (${optimizedKeywords.length}): ${optimizedKeywords.slice(0, 10).join(', ')}...`);
+  
+  // Find missing keywords
   const missingItems: string[] = [];
   
-  // Extract critical items to check (skills, job titles, education, etc.)
-  const importantPhrases = extractCriticalKeywords(normalizedOriginal);
-  
-  // Check if each important phrase is preserved
-  for (const phrase of importantPhrases) {
-    if (!normalizedOptimized.includes(phrase.toLowerCase())) {
-      missingItems.push(phrase);
+  for (const keyword of originalKeywords) {
+    // Check if the keyword or a similar form exists in the optimized text
+    const keywordLower = keyword.toLowerCase();
+    const keywordWithoutPunctuation = keywordLower.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "");
+    
+    // Check for exact match, substring match, or root word match
+    const keywordExists = 
+      optimizedText.toLowerCase().includes(keywordLower) || 
+      optimizedText.toLowerCase().includes(keywordWithoutPunctuation) ||
+      optimizedKeywords.some(k => 
+        k.toLowerCase().includes(keywordLower) || 
+        keywordLower.includes(k.toLowerCase())
+      );
+    
+    if (!keywordExists) {
+      missingItems.push(keyword);
     }
   }
   
-  // Calculate a keyword preservation score (0-100)
-  const keywordScore = importantPhrases.length > 0 
-    ? Math.round(((importantPhrases.length - missingItems.length) / importantPhrases.length) * 100)
-    : 100; // Default to 100 if no important phrases found
+  // Calculate keyword preservation score (percentage of keywords preserved)
+  const keywordScore = originalKeywords.length > 0 
+    ? Math.round(((originalKeywords.length - missingItems.length) / originalKeywords.length) * 100) 
+    : 100;
   
-  // More strict preservation requirement - require at least 95% keyword preservation
-  const preserved = keywordScore >= 95;
+  console.log(`Keyword preservation score: ${keywordScore}%`);
+  console.log(`Missing keywords (${missingItems.length}): ${missingItems.slice(0, 10).join(', ')}...`);
   
-  // Check if the optimized text has more industry-specific keywords than the original
-  const industryKeywords = getIndustrySpecificKeywords("General"); // Use general keywords as a baseline
+  // Check for industry-specific keywords improvement
+  // This helps ensure we're not just preserving but also enhancing
+  const industries = ['software', 'finance', 'healthcare', 'marketing', 'engineering', 'sales', 'education', 'design'];
+  let detectedIndustry = 'general';
   
-  let originalKeywordCount = 0;
-  let optimizedKeywordCount = 0;
+  // Try to detect the industry from the text
+  for (const industry of industries) {
+    if (originalText.toLowerCase().includes(industry)) {
+      detectedIndustry = industry;
+      break;
+    }
+  }
+  
+  // Get industry-specific keywords
+  const industryKeywords = getIndustrySpecificKeywords(detectedIndustry);
+  
+  // Count industry keywords in both texts
+  let originalIndustryKeywordCount = 0;
+  let optimizedIndustryKeywordCount = 0;
   
   for (const keyword of industryKeywords) {
-    const keywordLower = keyword.toLowerCase();
-    if (normalizedOriginal.includes(keywordLower)) {
-      originalKeywordCount++;
+    if (originalText.toLowerCase().includes(keyword.toLowerCase())) {
+      originalIndustryKeywordCount++;
     }
-    if (normalizedOptimized.includes(keywordLower)) {
-      optimizedKeywordCount++;
+    if (optimizedText.toLowerCase().includes(keyword.toLowerCase())) {
+      optimizedIndustryKeywordCount++;
     }
   }
   
-  const keywordImprovement = optimizedKeywordCount - originalKeywordCount;
+  // Calculate industry keyword improvement score
+  const industryKeywordScore = originalIndustryKeywordCount > 0
+    ? Math.round((optimizedIndustryKeywordCount / originalIndustryKeywordCount) * 100)
+    : optimizedIndustryKeywordCount > 0 ? 150 : 100; // If original had none, but optimized has some, that's a 150% improvement
   
-  // Log diagnostic information
-  console.log(`Content verification: ${preserved ? 'PASSED' : 'FAILED'}`);
-  console.log(`Keyword preservation score: ${keywordScore}%`);
-  console.log(`Industry keyword count: Original=${originalKeywordCount}, Optimized=${optimizedKeywordCount} (${keywordImprovement > 0 ? '+' : ''}${keywordImprovement})`);
+  console.log(`Industry keyword score: ${industryKeywordScore}%`);
+  console.log(`Original industry keywords: ${originalIndustryKeywordCount}, Optimized: ${optimizedIndustryKeywordCount}`);
   
-  if (missingItems.length > 0) {
-    console.log(`Missing items (${missingItems.length}): ${missingItems.slice(0, 10).join(', ')}${missingItems.length > 10 ? '...' : ''}`);
+  // Determine if content is preserved based on keyword score and industry keyword improvement
+  const preserved = keywordScore >= 95 && industryKeywordScore >= 100;
+  
+  // If not preserved but industry keywords improved significantly, we might still consider it a success
+  const keywordImprovement = industryKeywordScore - 100;
+  
+  if (!preserved && keywordImprovement > 50) {
+    console.log(`Despite missing some keywords, industry keyword count improved by ${keywordImprovement}%`);
   }
   
-  // Only consider preserved if both keyword preservation is high AND we have more industry keywords
-  const finalPreserved = preserved && (keywordImprovement >= 0);
-  
-  if (!finalPreserved && keywordImprovement < 0) {
+  if (!preserved && keywordImprovement < 0) {
     console.warn("Optimization FAILED: Lost industry-specific keywords");
   }
   
   return {
-    preserved: finalPreserved,
+    preserved,
     missingItems,
-    keywordScore
+    keywordScore,
+    industryKeywordScore
   };
 }
 
@@ -1254,13 +1357,20 @@ function incorporateMissingItems(optimizedText: string, missingItems: string[], 
 }
 
 // Enhanced fallback function with analysis integration
-function createEnhancedOptimizedCV(originalText: string, templateName: string, analysis: any): string {
+function createEnhancedOptimizedCV(originalText: string, templateName: string, analysis: any = null): string {
+  console.log(`Creating enhanced optimized CV with template: ${templateName}`);
+  
+  // Extract sections from the original text
   const sections = extractSections(originalText);
-  const enhancedSections = enhanceSectionsWithAnalysis(sections, analysis);
+  
+  // If no analysis was provided, perform one now
+  if (!analysis) {
+    analysis = analyzeCVContent(originalText);
+  }
   
   // Get industry-specific keywords to boost ATS score
-  const industry = analysis.industry || "General";
-  const additionalKeywords = getIndustrySpecificKeywords(industry);
+  const detectedIndustry = detectIndustry(originalText);
+  const industryKeywords = getIndustrySpecificKeywords(detectedIndustry);
   
   // Extract original keywords to ensure preservation
   const originalKeywords = extractCriticalKeywords(originalText);
@@ -1269,29 +1379,60 @@ function createEnhancedOptimizedCV(originalText: string, templateName: string, a
   let optimizedCV = ``;
 
   // Add contact section
-  if (enhancedSections.contact) {
+  if (sections.contact) {
     optimizedCV += `## CONTACT
-${enhancedSections.contact.trim()}
+${sections.contact.trim()}
 
 `;
   }
 
   // Add achievements section based on experience and analysis
+  // First, extract any existing achievements from the original CV
+  let achievementsContent = sections.achievements || '';
+  
+  // If there are no achievements or they're limited, generate some based on experience
+  if (!achievementsContent || achievementsContent.length < 100) {
+    // Extract quantified achievements from experience section
+    const experienceText = sections.experience || '';
+    const quantifiedPattern = /\b(\d+%|\d+\s*percent|\$\d+|\d+\s*million|\d+\s*billion|\d+\s*users|\d+\s*customers|\d+\s*clients|\d+\s*projects|\d+\s*times|\d+\s*days|\d+\s*months|\d+\s*years)\b/gi;
+    
+    // Find sentences with quantified achievements
+    const sentences = experienceText.split(/[.!?]+/);
+    const quantifiedSentences = sentences.filter(sentence => 
+      quantifiedPattern.test(sentence) || 
+      /\b(increased|decreased|improved|reduced|saved|generated|delivered|achieved)\b/i.test(sentence)
+    );
+    
+    // If we found quantified sentences, use them as achievements
+    if (quantifiedSentences.length > 0) {
+      achievementsContent = quantifiedSentences
+        .map(sentence => sentence.trim())
+        .filter(sentence => sentence.length > 10)
+        .map(sentence => `• ${sentence}`)
+        .join('\n');
+    }
+    
+    // If we still don't have achievements, generate some based on the industry
+    if (!achievementsContent || achievementsContent.length < 100) {
+      achievementsContent = `• Increased ${detectedIndustry} productivity by 35% through implementation of streamlined workflows and processes
+• Delivered projects 25% under budget while maintaining high quality standards
+• Generated 40% growth in key performance metrics through innovative strategies and solutions`;
+    }
+  }
+  
   optimizedCV += `## ACHIEVEMENTS
-• Developed creative solutions in marketing projects that increased client engagement by 40% and retention rates by 25%.
-• Successfully combined financial knowledge with creative design skills to generate 15+ innovative business proposals.
-• Mastered 10+ advanced software tools with 95% proficiency, enabling the delivery of high-quality visual assets 30% faster than industry average.
+${achievementsContent}
 
 `;
 
   // Add profile/summary with analysis insights and industry keywords
-  if (enhancedSections.profile) {
+  if (sections.profile) {
     // Enhance the profile with industry keywords
-    let enhancedProfile = enhancedSections.profile.trim();
+    let enhancedProfile = sections.profile.trim();
     
     // Add industry keywords if not already present
     const profileLower = enhancedProfile.toLowerCase();
-    const keywordsToAdd = additionalKeywords
+    const keywordsToAdd = industryKeywords
       .slice(0, 3) // Take just a few keywords for the profile
       .filter((kw: string) => !profileLower.includes(kw.toLowerCase()));
     
@@ -1306,27 +1447,31 @@ ${enhancedProfile}
   }
 
   // Add experience section with quantified achievements
-  if (enhancedSections.experience) {
+  if (sections.experience) {
     // Ensure experience has quantified achievements
-    const quantifiedExperience = quantifyAchievements(enhancedSections.experience.trim());
+    const quantifiedExperience = quantifyAchievements(sections.experience.trim());
+    
+    // Convert to bullet points if not already
+    const bulletedExperience = convertToBulletPointsIfNeeded(quantifiedExperience);
     
     optimizedCV += `## PROFESSIONAL EXPERIENCE
-${quantifiedExperience}
+${bulletedExperience}
 
 `;
   }
 
   // Add education section
-  if (enhancedSections.education) {
+  if (sections.education) {
     optimizedCV += `## EDUCATION
-${enhancedSections.education.trim()}
+${sections.education.trim()}
 
 `;
   }
 
-  // Add enhanced skills section with industry keywords
-  if (enhancedSections.skills) {
-    let enhancedSkills = enhancedSections.skills.trim();
+  // Add skills section with industry keywords
+  if (sections.skills) {
+    // Clean up skills section by removing ### markers and ensuring proper formatting
+    let enhancedSkills = sections.skills.trim();
     
     // Convert to bullet points if not already and remove ### markers
     if (!enhancedSkills.includes('•')) {
@@ -1346,7 +1491,7 @@ ${enhancedSections.education.trim()}
     
     // Add industry keywords as bullet points
     const skillsLower = enhancedSkills.toLowerCase();
-    const keywordsToAdd = additionalKeywords
+    const keywordsToAdd = industryKeywords
       .filter((kw: string) => !skillsLower.includes(kw.toLowerCase()))
       .slice(0, 4); // Limit to fewer keywords to prevent overflow
     
@@ -1362,20 +1507,47 @@ ${enhancedSkills}
 
 `;
   } else {
-    // If no skills section exists, create one with industry keywords
+    // If no skills section, create one with industry keywords
     optimizedCV += `## SKILLS
 ### Technical Skills:
-${additionalKeywords.slice(0, 5).map((kw: string) => `• ${kw}`).join('\n')}
+${industryKeywords.slice(0, 5).map((kw: string) => `• ${kw}`).join('\n')}
 
 ### Professional Skills:
-${additionalKeywords.slice(5, 10).map((kw: string) => `• ${kw}`).join('\n')}
+${industryKeywords.slice(5, 10).map((kw: string) => `• ${kw}`).join('\n')}
+
+`;
+  }
+
+  // Add languages section if present
+  if (sections.languages) {
+    optimizedCV += `## LANGUAGES
+${sections.languages.trim()}
+
+`;
+  }
+
+  // Add projects section if present
+  if (sections.projects) {
+    // Convert to bullet points if not already
+    const bulletedProjects = convertToBulletPointsIfNeeded(sections.projects.trim());
+    
+    optimizedCV += `## PROJECTS
+${bulletedProjects}
+
+`;
+  }
+
+  // Add certifications section if present
+  if (sections.certifications) {
+    optimizedCV += `## CERTIFICATIONS
+${sections.certifications.trim()}
 
 `;
   }
 
   // Add any additional sections
-  for (const [key, value] of Object.entries(enhancedSections)) {
-    if (!['contact', 'profile', 'experience', 'education', 'skills'].includes(key) && value.trim()) {
+  for (const [key, value] of Object.entries(sections)) {
+    if (!['contact', 'profile', 'experience', 'education', 'skills', 'languages', 'projects', 'certifications', 'achievements'].includes(key) && value.trim()) {
       optimizedCV += `## ${key.toUpperCase()}
 ${value.trim()}
 
@@ -1383,35 +1555,211 @@ ${value.trim()}
     }
   }
 
-  // If analysis found missing keywords that weren't integrated above
-  if (analysis.missingKeywords && analysis.missingKeywords.length > 0) {
-    // Check if keywords are already in the CV
-    const cvLower = optimizedCV.toLowerCase();
-    const missingKeywords = analysis.missingKeywords.filter(
-      (kw: string) => !cvLower.includes(kw.toLowerCase())
-    );
+  // Ensure all original keywords are preserved
+  const verification = verifyContentPreservation(originalText, optimizedCV);
+  
+  if (!verification.preserved) {
+    console.warn(`Content preservation check failed. Score: ${verification.keywordScore}%. Adding missing keywords.`);
     
-    if (missingKeywords.length > 0) {
-      optimizedCV += `## ADDITIONAL EXPERTISE
-${missingKeywords.map((kw: string) => `• ${kw}`).join('\n')}
+    // Add missing keywords in a way that preserves the CV structure
+    if (verification.missingItems.length > 0) {
+      const missingKeywords = verification.missingItems.join(', ');
+      
+      // Try to add missing keywords to the skills section
+      if (optimizedCV.includes('## SKILLS')) {
+        // Find the skills section and add missing keywords
+        const skillsPattern = /## SKILLS\n([\s\S]*?)(?=\n##|$)/;
+        const skillsMatch = optimizedCV.match(skillsPattern);
+        
+        if (skillsMatch) {
+          const skillsSection = skillsMatch[1];
+          const updatedSkillsSection = skillsSection + `\n\n### Additional Keywords:\n• ${verification.missingItems.map(item => item.trim()).join('\n• ')}\n`;
+          
+          optimizedCV = optimizedCV.replace(skillsPattern, `## SKILLS\n${updatedSkillsSection}`);
+        }
+      } else {
+        // If no skills section, add one with missing keywords
+        optimizedCV += `## ADDITIONAL KEYWORDS
+• ${verification.missingItems.map(item => item.trim()).join('\n• ')}
 
 `;
+      }
     }
   }
 
-  // Ensure all original keywords are preserved
-  const finalCvLower = optimizedCV.toLowerCase();
-  const missingOriginalKeywords = originalKeywords.filter(
-    kw => !finalCvLower.includes(kw.toLowerCase())
-  );
-  
-  if (missingOriginalKeywords.length > 0) {
-    optimizedCV += `## ADDITIONAL QUALIFICATIONS
-${missingOriginalKeywords.map(kw => `• ${kw}`).join('\n')}
-
-`;
-  }
-
   return optimizedCV;
+}
+
+/**
+ * Analyzes a CV to identify strengths and areas for improvement
+ * @param cvText The original CV text
+ * @returns Analysis results with improvement suggestions
+ */
+export function analyzeCVContent(cvText: string): {
+  strengths: string[];
+  weaknesses: string[];
+  improvementSuggestions: Record<string, string[]>;
+  metrics: {
+    quantifiedAchievements: number;
+    actionVerbs: number;
+    technicalTerms: number;
+    industryKeywords: number;
+  }
+} {
+  // Initialize results
+  const strengths: string[] = [];
+  const weaknesses: string[] = [];
+  const improvementSuggestions: Record<string, string[]> = {
+    content: [],
+    formatting: [],
+    keywords: [],
+    achievements: []
+  };
+  
+  // Extract sections for analysis
+  const sections = extractSections(cvText);
+  
+  // Metrics tracking
+  let quantifiedAchievements = 0;
+  let actionVerbs = 0;
+  let technicalTerms = 0;
+  let industryKeywords = 0;
+  
+  // Check for quantified achievements
+  const quantifiedPattern = /\b(\d+%|\d+\s*percent|\$\d+|\d+\s*million|\d+\s*billion|\d+\s*users|\d+\s*customers|\d+\s*clients|\d+\s*projects|\d+\s*times|\d+\s*days|\d+\s*months|\d+\s*years)\b/gi;
+  const quantifiedMatches = cvText.match(quantifiedPattern) || [];
+  quantifiedAchievements = quantifiedMatches.length;
+  
+  // Check for action verbs
+  const actionVerbPattern = /\b(achieved|improved|increased|decreased|developed|created|implemented|managed|led|designed|launched|reduced|generated|delivered|streamlined|enhanced|transformed|optimized|negotiated|secured)\b/gi;
+  const actionVerbMatches = cvText.match(actionVerbPattern) || [];
+  actionVerbs = actionVerbMatches.length;
+  
+  // Check for technical terms
+  const technicalTermPattern = /\b(javascript|python|java|c\+\+|react|angular|vue|node\.js|express|django|flask|aws|azure|gcp|docker|kubernetes|sql|mongodb|mysql|postgresql|nosql|rest|graphql|html|css|sass|less|git|ci\/cd|jenkins|jira|agile|scrum|machine learning|deep learning|artificial intelligence|ai|ml|blockchain|devops|data science)\b/gi;
+  const technicalMatches = cvText.match(technicalTermPattern) || [];
+  technicalTerms = technicalMatches.length;
+  
+  // Check for industry keywords
+  const detectedIndustry = detectIndustry(cvText);
+  const industrySpecificKeywords = getIndustrySpecificKeywords(detectedIndustry);
+  
+  for (const keyword of industrySpecificKeywords) {
+    if (cvText.toLowerCase().includes(keyword.toLowerCase())) {
+      industryKeywords++;
+    }
+  }
+  
+  // Analyze strengths
+  if (quantifiedAchievements >= 3) {
+    strengths.push("Good use of quantified achievements");
+  }
+  
+  if (actionVerbs >= 10) {
+    strengths.push("Strong action verbs throughout the CV");
+  }
+  
+  if (technicalTerms >= 5) {
+    strengths.push("Good inclusion of technical terms");
+  }
+  
+  if (industryKeywords >= 5) {
+    strengths.push("Good use of industry-specific keywords");
+  }
+  
+  if (sections.profile && sections.profile.length > 100) {
+    strengths.push("Comprehensive professional summary");
+  }
+  
+  // Analyze weaknesses and suggest improvements
+  if (quantifiedAchievements < 3) {
+    weaknesses.push("Limited quantified achievements");
+    improvementSuggestions.achievements.push("Add more measurable results with percentages or numbers");
+  }
+  
+  if (actionVerbs < 10) {
+    weaknesses.push("Limited use of action verbs");
+    improvementSuggestions.content.push("Use more powerful action verbs to describe your experience");
+  }
+  
+  if (technicalTerms < 5 && (detectedIndustry === 'software' || detectedIndustry === 'engineering')) {
+    weaknesses.push("Limited technical terminology");
+    improvementSuggestions.keywords.push("Include more technical terms relevant to your field");
+  }
+  
+  if (industryKeywords < 5) {
+    weaknesses.push("Limited industry-specific keywords");
+    improvementSuggestions.keywords.push("Add more keywords specific to your industry");
+  }
+  
+  if (!sections.profile || sections.profile.length < 50) {
+    weaknesses.push("Missing or brief professional summary");
+    improvementSuggestions.content.push("Add a comprehensive professional summary highlighting your key strengths");
+  }
+  
+  if (!sections.skills || sections.skills.length < 50) {
+    weaknesses.push("Limited skills section");
+    improvementSuggestions.content.push("Expand your skills section with relevant technical and soft skills");
+  }
+  
+  // Check for bullet points in experience section
+  if (sections.experience && !sections.experience.includes('•') && !sections.experience.includes('-')) {
+    weaknesses.push("Experience not formatted with bullet points");
+    improvementSuggestions.formatting.push("Format your experience with bullet points for better readability");
+  }
+  
+  return {
+    strengths,
+    weaknesses,
+    improvementSuggestions,
+    metrics: {
+      quantifiedAchievements,
+      actionVerbs,
+      technicalTerms,
+      industryKeywords
+    }
+  };
+}
+
+/**
+ * Detects the most likely industry based on CV content
+ * @param text The CV text
+ * @returns The detected industry
+ */
+function detectIndustry(text: string): string {
+  const lowerText = text.toLowerCase();
+  
+  // Define industry-specific keyword patterns
+  const industries: Record<string, RegExp> = {
+    software: /\b(software|developer|programming|code|web|app|application|frontend|backend|fullstack|javascript|python|java|c\+\+|react|angular|vue|node\.js)\b/gi,
+    finance: /\b(finance|financial|accounting|accountant|banking|investment|portfolio|assets|liabilities|audit|tax|revenue|profit|loss|budget|forecast)\b/gi,
+    healthcare: /\b(healthcare|medical|clinical|patient|doctor|nurse|physician|hospital|clinic|care|treatment|therapy|diagnosis|health|wellness)\b/gi,
+    marketing: /\b(marketing|brand|campaign|social media|digital|content|seo|sem|analytics|audience|customer|consumer|market research|advertising|promotion)\b/gi,
+    engineering: /\b(engineering|engineer|mechanical|electrical|civil|structural|design|cad|technical|specification|project|construction|manufacturing)\b/gi,
+    sales: /\b(sales|revenue|client|customer|account|business development|pipeline|quota|target|prospect|lead|conversion|close|negotiate|deal)\b/gi,
+    education: /\b(education|teaching|teacher|professor|student|school|university|college|curriculum|course|class|lecture|learning|academic|faculty)\b/gi,
+    design: /\b(design|designer|creative|ui|ux|user interface|user experience|graphic|visual|layout|typography|illustration|brand|aesthetic)\b/gi
+  };
+  
+  // Count matches for each industry
+  const matches: Record<string, number> = {};
+  
+  for (const [industry, pattern] of Object.entries(industries)) {
+    const industryMatches = (text.match(pattern) || []).length;
+    matches[industry] = industryMatches;
+  }
+  
+  // Find the industry with the most matches
+  let maxMatches = 0;
+  let detectedIndustry = 'general';
+  
+  for (const [industry, count] of Object.entries(matches)) {
+    if (count > maxMatches) {
+      maxMatches = count;
+      detectedIndustry = industry;
+    }
+  }
+  
+  return detectedIndustry;
 }
   
