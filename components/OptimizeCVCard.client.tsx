@@ -133,7 +133,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       const cvId = cv.split('|')[1];
       
       const queryParam = cvId ? `cvId=${cvId}` : `fileName=${fileName}`;
-      const response = await fetch(`/api/optimize-cv/status?${queryParam}`);
+      const response = await fetch(`/api/cv/optimization-status?${queryParam}`);
       const data = await response.json();
       
       if (!response.ok) {
@@ -207,7 +207,11 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       // Show loading state
       setLoading(true);
       
-      const response = await fetch(`/api/cv/optimized-content?cvId=${cv}`, {
+      // Extract the CV ID if it's in the format 'filename|id'
+      const cvId = cv.includes('|') ? cv.split('|')[1] : cv;
+      
+      // Use our new status endpoint to get the optimized content
+      const response = await fetch(`/api/cv/optimization-status?cvId=${cvId}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -296,49 +300,87 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
     if (!selectedCV) return;
     
     try {
-      // First, get the CV details to get the id
-      const cvDetails = cvs.find(cv => cv === selectedCV);
-      if (!cvDetails) {
-        throw new Error('Selected CV details not found');
-      }
-      
       // Extract the cv ID - assuming the format is 'filename.pdf|id'
       const cvId = selectedCV.split('|')[1];
       if (!cvId) {
         throw new Error('CV ID not found in selected CV format');
       }
       
-      // Get the optimized PDF from the server using the new endpoint
-      const response = await fetch(`/api/cv/download-optimized?cvId=${encodeURIComponent(cvId)}`);
+      // First check if the optimization is complete
+      const statusResponse = await fetch(`/api/cv/optimization-status?cvId=${cvId}`);
+      const statusData = await statusResponse.json();
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to download optimized CV');
+      if (!statusResponse.ok) {
+        throw new Error(statusData.error || 'Failed to check optimization status');
       }
       
-      const blob = await response.blob();
+      if (!statusData.optimized) {
+        throw new Error('CV has not been optimized yet');
+      }
       
-      // Create a download link
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      // If we have optimized text but no PDF, create a text file for download
+      if (statusData.optimizedText && !statusData.optimizedPDFBase64) {
+        // Create a text file from the optimized content
+        const blob = new Blob([statusData.optimizedText], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        
+        // Create a download link
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${selectedCV.split('|')[0].replace('.pdf', '')}-optimized.txt`;
+        document.body.appendChild(a);
+        a.click();
+        
+        // Clean up
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 100);
+        
+        return;
+      }
       
-      // Create a filename for the download
-      const fileNameParts = selectedCV.split('.');
-      const extension = fileNameParts.pop();
-      const baseName = fileNameParts.join('.');
-      const downloadFileName = `${baseName}-optimized.pdf`;
+      // If we have a PDF, download it
+      if (statusData.optimizedPDFBase64) {
+        // Convert base64 to blob
+        const byteCharacters = atob(statusData.optimizedPDFBase64);
+        const byteArrays = [];
+        
+        for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+          const slice = byteCharacters.slice(offset, offset + 512);
+          
+          const byteNumbers = new Array(slice.length);
+          for (let i = 0; i < slice.length; i++) {
+            byteNumbers[i] = slice.charCodeAt(i);
+          }
+          
+          const byteArray = new Uint8Array(byteNumbers);
+          byteArrays.push(byteArray);
+        }
+        
+        const blob = new Blob(byteArrays, { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        
+        // Create a download link
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${selectedCV.split('|')[0].replace('.pdf', '')}-optimized.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        
+        // Clean up
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 100);
+        
+        return;
+      }
       
-      a.href = url;
-      a.download = downloadFileName;
-      document.body.appendChild(a);
-      a.click();
-      
-      // Clean up
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      throw new Error('No optimized content available for download');
     } catch (error) {
-      console.error('Error downloading optimized CV:', error);
-      setOptimizationError((error as Error).message);
+      console.error("Error downloading optimized CV:", error);
+      setOptimizationError(error instanceof Error ? error.message : "Failed to download optimized CV");
     }
   }
 
