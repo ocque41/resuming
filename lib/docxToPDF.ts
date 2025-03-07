@@ -1,121 +1,61 @@
-import docxPdf from 'docx-pdf';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import * as util from 'util';
-
-// Promisify docxPdf function
-const docxToPdfPromise = (input: string, output: string): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    docxPdf(input, output, (err: Error | null) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve();
-      }
-    });
-  });
-};
+import { promises as fs } from 'fs';
+import path from 'path';
+import os from 'os';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
- * Convert a DOCX buffer to PDF
+ * Convert DOCX buffer to PDF using a direct buffer-based approach
  * 
- * This uses temporary files because the docx-pdf library requires file paths
+ * NOTE: This is a fallback implementation that doesn't actually convert to PDF
+ * due to PhantomJS dependency issues. Instead, it returns the original DOCX buffer
+ * and sets a metadata flag for on-demand conversion later.
  */
-export async function convertDOCXToPDF(docxBuffer: Buffer): Promise<Buffer> {
+export async function convertDOCXToPDF(docxBuffer: Buffer): Promise<{ 
+  pdfBuffer?: Buffer; 
+  docxBuffer: Buffer;
+  conversionSuccessful: boolean;
+}> {
   try {
-    console.log("Starting DOCX to PDF conversion");
+    console.log('Starting DOCX to PDF conversion (fallback mode)');
     
-    // Create temporary file paths
-    const tempDir = os.tmpdir();
-    const tempDocxPath = path.join(tempDir, `cv_${Date.now()}.docx`);
-    const tempPdfPath = path.join(tempDir, `cv_${Date.now()}.pdf`);
-    
-    // Write DOCX buffer to temporary file
-    await fs.promises.writeFile(tempDocxPath, docxBuffer);
-    console.log(`Temporary DOCX file created at ${tempDocxPath}`);
-    
-    try {
-      // Convert DOCX to PDF using docx-pdf library
-      await docxToPdfPromise(tempDocxPath, tempPdfPath);
-      console.log(`PDF conversion completed, saved at ${tempPdfPath}`);
-      
-      // Read the generated PDF file
-      const pdfBuffer = await fs.promises.readFile(tempPdfPath);
-      console.log(`Read PDF buffer of size ${pdfBuffer.length} bytes`);
-      
-      // Clean up temporary files
-      try {
-        await fs.promises.unlink(tempDocxPath);
-        await fs.promises.unlink(tempPdfPath);
-        console.log("Temporary files cleaned up");
-      } catch (cleanupError) {
-        console.warn("Error cleaning up temporary files:", cleanupError);
-      }
-      
-      return pdfBuffer;
-    } catch (conversionError: unknown) {
-      console.error("Error during DOCX to PDF conversion:", conversionError);
-      
-      // Clean up the temp DOCX file in case of error
-      try {
-        await fs.promises.unlink(tempDocxPath);
-      } catch (unlinkError) {
-        console.warn("Error cleaning up temporary DOCX file:", unlinkError);
-      }
-      
-      const errorMessage = conversionError instanceof Error 
-        ? conversionError.message 
-        : String(conversionError);
-      
-      throw new Error(`DOCX to PDF conversion failed: ${errorMessage}`);
-    }
-  } catch (error: unknown) {
-    console.error("Error in DOCX to PDF conversion:", error);
-    
-    const errorMessage = error instanceof Error 
-      ? error.message 
-      : String(error);
-    
+    // In this fallback implementation, we just return the DOCX buffer
+    // along with metadata indicating that conversion should happen later
+    return {
+      docxBuffer,
+      conversionSuccessful: false
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Error during DOCX to PDF conversion (fallback):', error);
     throw new Error(`Failed to convert DOCX to PDF: ${errorMessage}`);
   }
 }
 
 /**
- * Alternative implementation using Buffer directly
- * This is a fallback in case the file-based approach doesn't work
+ * Save DOCX buffer to temporary file
+ * This can be used if we need to save the DOCX for manual conversion later
  */
-export async function convertDOCXBufferToPDF(docxBuffer: Buffer): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    // docx-pdf doesn't have a buffer-to-buffer API, so this is a workaround
+export async function saveDOCXToTempFile(docxBuffer: Buffer): Promise<string> {
+  try {
     const tempDir = os.tmpdir();
-    const tempDocxPath = path.join(tempDir, `cv_${Date.now()}.docx`);
-    const tempPdfPath = path.join(tempDir, `cv_${Date.now()}.pdf`);
+    const fileName = `cv_${Date.now()}.docx`;
+    const filePath = path.join(tempDir, fileName);
     
-    fs.writeFile(tempDocxPath, docxBuffer, (writeErr) => {
-      if (writeErr) {
-        return reject(new Error(`Error writing temp DOCX file: ${writeErr.message}`));
-      }
-      
-      docxPdf(tempDocxPath, tempPdfPath, (convertErr: Error | null) => {
-        if (convertErr) {
-          // Clean up DOCX file
-          fs.unlink(tempDocxPath, () => {});
-          return reject(new Error(`Error converting DOCX to PDF: ${convertErr.message}`));
-        }
-        
-        fs.readFile(tempPdfPath, (readErr, pdfBuffer) => {
-          // Clean up both files regardless of success
-          fs.unlink(tempDocxPath, () => {});
-          fs.unlink(tempPdfPath, () => {});
-          
-          if (readErr) {
-            return reject(new Error(`Error reading PDF file: ${readErr.message}`));
-          }
-          
-          resolve(pdfBuffer);
-        });
-      });
-    });
-  });
+    await fs.writeFile(filePath, docxBuffer);
+    console.log(`Temporary DOCX file created at ${filePath}`);
+    
+    return filePath;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Failed to save DOCX to temporary file: ${errorMessage}`);
+  }
+}
+
+/**
+ * Generate a unique filename for a DOCX or PDF file
+ */
+export function generateUniqueFilename(originalFilename: string, extension: 'docx' | 'pdf'): string {
+  const uuid = uuidv4().substring(0, 8);
+  const baseName = path.basename(originalFilename, path.extname(originalFilename));
+  return `${baseName}-optimized-${uuid}.${extension}`;
 } 

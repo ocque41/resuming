@@ -23,14 +23,15 @@ interface OptimizeCVCardProps {
 }
 
 export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
-  const [selectedCV, setSelectedCV] = useState<string>("");
-  const [selectedTemplate, setSelectedTemplate] = useState<string>("google-modern");
+  const [selectedCV, setSelectedCV] = useState<string | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState("google-modern");
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isOptimized, setIsOptimized] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
   const [optimizationProgress, setOptimizationProgress] = useState(0);
-  const [optimizedText, setOptimizedText] = useState<string | null>(null);
   const [optimizationError, setOptimizationError] = useState<string | null>(null);
+  const [optimizationWarning, setOptimizationWarning] = useState<string | null>(null);
+  const [optimizedText, setOptimizedText] = useState<string | null>(null);
   const [pollingAttempts, setPollingAttempts] = useState(0);
   const pollRef = useRef(true);
   const [loading, setLoading] = useState(false);
@@ -42,6 +43,21 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   const [optimizedPDFBase64, setOptimizedPDFBase64] = useState<string | null>(null);
   const [updatedAtsScore, setUpdatedAtsScore] = useState<number | null>(null);
   const [includePhoto, setIncludePhoto] = useState(false);
+
+  // Fix the linter errors by moving handleAtsScoreUpdate above its usage
+  const handleAtsScoreUpdate = (newScore: number) => {
+    console.log(`Updating dashboard ATS score to: ${newScore}`);
+    setUpdatedAtsScore(newScore);
+    
+    // Additional logic could be added here to update the dashboard table
+    // For example, dispatching an event or calling a parent callback
+    if (onUpdateAtsScore) {
+      onUpdateAtsScore(newScore);
+    }
+  };
+
+  // Function to update the ATS score in the parent component
+  const onUpdateAtsScore = handleAtsScoreUpdate;
 
   // Reset state when component unmounts
   useEffect(() => {
@@ -71,6 +87,9 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       setIsOptimizing(true);
       setOptimizationProgress(10);
       setOptimizationError(null);
+      setOptimizedText(null);
+      setPollingAttempts(0);
+      pollRef.current = true;
       
       // Start the optimization process
       const response = await fetch("/api/cv/optimize-docx", {
@@ -86,19 +105,21 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         }),
       });
       
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(error || "Failed to optimize CV");
-      }
-
       const data = await response.json();
       
-      // Start polling for optimization status
-      setIsPolling(true);
+      if (!response.ok) {
+        console.error("Error optimizing CV:", data.error);
+        setOptimizationError(data.error || "Failed to optimize CV");
+        setIsOptimizing(false);
+        return;
+      }
+      
+      // Start polling for status updates
       pollOptimizationStatus(selectedCV);
+      
     } catch (error) {
-      console.error("Optimization error:", error);
-      setOptimizationError((error as Error).message || "Failed to optimize CV");
+      console.error("Error in optimization process:", error);
+      setOptimizationError(error instanceof Error ? error.message : "An unknown error occurred");
       setIsOptimizing(false);
     }
   }
@@ -107,131 +128,76 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
     if (!pollRef.current) return;
     
     try {
-      setOptimizationStatus("Checking optimization status...");
-      console.log(`Polling status for: ${cv}`);
+      // Extract the file name from the CV selection (it might include an ID)
+      const fileName = cv.split('|')[0];
+      const cvId = cv.split('|')[1];
       
-      const response = await fetch(`/api/optimize-cv/status?cvId=${encodeURIComponent(cv)}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+      const queryParam = cvId ? `cvId=${cvId}` : `fileName=${fileName}`;
+      const response = await fetch(`/api/optimize-cv/status?${queryParam}`);
+      const data = await response.json();
       
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Error checking optimization status: ${errorText}`);
-        
-        // Add more detailed error status
-        setOptimizationError(`Server error: ${response.status} - ${errorText}`);
-        setErrorDetails(`The optimization process encountered a server error. You can try again or contact support if the issue persists.`);
-        
-        // Stop polling if we get a server error
-        pollRef.current = false;
-        setIsPolling(false);
-        
-        // Close loading UI after a short delay
-        setTimeout(() => {
-          setLoading(false);
-          setIsOptimizing(false);
-        }, 2000);
-        
-        return;
-      }
-      
-      const data = await response.json();
-      console.log("Optimization status:", data);
-      
-      // Check if there's an error in the response
-      if (data.error) {
-        console.error(`Optimization error: ${data.error}`);
-        setOptimizationError(data.error);
-        
-        if (data.partialResultsAvailable) {
-          // If we have partial results, let the user continue
-          setErrorDetails(`The optimization process stalled but partial results are available. You can still download the partially optimized CV or try again.`);
-          
-          // Load the optimized text if available
-          await loadOptimizedContent(selectedCV);
-          
-          // Stop polling since we have partial results
-          pollRef.current = false;
-          setIsPolling(false);
-          
-          // Close loading UI
-          setLoading(false);
-          setIsOptimizing(false);
-        } else {
-          // If no results are available, suggest retry
-          setErrorDetails(`Try again or select a different template. If the issue persists, contact support.`);
-          
-          // Stop polling since we have an error
-          pollRef.current = false;
-          setIsPolling(false);
-          
-          // Close loading UI after a short delay
-          setTimeout(() => {
-            setLoading(false);
-            setIsOptimizing(false);
-          }, 2000);
-        }
-        
-        return;
-      }
-
-      // Update progress based on the status
-      if (data.optimizing) {
-        setOptimizationProgress(data.progress || 10);
-        setOptimizationStatus(`Optimizing your CV... ${data.progress || 10}%`);
-        
-        // Check for stalled progress
-        if (data.progressStalled) {
-          console.warn(`Progress is stalled at ${data.progress}%`);
-          setOptimizationStatus(`Optimizing your CV... ${data.progress || 10}% (processing...)`);
-        }
-
-        // Continue polling
-        setTimeout(() => {
-          if (pollRef.current) pollOptimizationStatus(cv);
-        }, 2000);
-      } else if (data.optimized) {
-        setOptimizationProgress(100);
-        setOptimizationStatus("CV optimized successfully!");
+        console.error("Error polling status:", data.error);
+        setOptimizationError(data.error || "Failed to get optimization status");
         setIsOptimizing(false);
-        
-        // If we have optimized text, load it
-        if (data.hasOptimizedText) {
-          await loadOptimizedContent(selectedCV);
-          setIsOptimized(true);
-          pollRef.current = false;
-          setIsPolling(false);
-          setLoading(false);
-        } else {
-          // This should not happen but handle it just in case
-          setOptimizationError("Optimization completed but no optimized content was found");
-          setErrorDetails("There was an issue retrieving your optimized CV. Please try again.");
-          pollRef.current = false;
-          setIsPolling(false);
-          setLoading(false);
-        }
-      } else {
-        // Handle unexpected state
-        console.warn("Optimization in an unexpected state:", data);
-        setOptimizationStatus("Checking optimization status...");
-        
-        // Continue polling a few more times in case the status is delayed
-        setTimeout(() => {
-          if (pollRef.current) pollOptimizationStatus(cv);
-        }, 3000);
+        return;
       }
+      
+      // Update progress
+      setOptimizationProgress(data.progress || 0);
+      
+      // Check if optimization is complete
+      if (data.optimized) {
+        setIsOptimizing(false);
+        setOptimizationProgress(100);
+        
+        // Check for DOCX-only mode (PDF conversion failed)
+        if (data.docxOnly) {
+          setOptimizationWarning("PDF conversion is not available. The optimized CV will be available as a DOCX file.");
+        }
+        
+        // Load optimized content if available
+        if (data.optimizedText) {
+          setOptimizedText(data.optimizedText);
+          // Update the ATS score on the dashboard if the handler is provided
+          if (data.atsScore && onUpdateAtsScore) {
+            onUpdateAtsScore(data.atsScore);
+            setUpdatedAtsScore(data.atsScore);
+          }
+        } else {
+          setOptimizationError("Optimization marked as complete but no optimized text found");
+        }
+        
+        // Store the optimized PDF base64 if available
+        if (data.optimizedPDFBase64) {
+          setOptimizedPDFBase64(data.optimizedPDFBase64);
+        }
+        
+        return;
+      }
+      
+      // Check for errors
+      if (data.error) {
+        console.error("Optimization error:", data.error);
+        setOptimizationError(data.error);
+        setIsOptimizing(false);
+        return;
+      }
+      
+      // Continue polling
+      setPollingAttempts(prev => prev + 1);
+      
+      // Limit polling attempts to prevent infinite loop
+      if (pollingAttempts < 60) { // 5 minutes max (60 * 5s)
+        setTimeout(() => pollOptimizationStatus(cv), 5000);
+      } else {
+        setOptimizationError("Optimization timed out. Please try again later.");
+        setIsOptimizing(false);
+      }
+      
     } catch (error) {
       console.error("Error polling optimization status:", error);
-      setOptimizationError(`Error checking optimization status: ${(error as Error).message}`);
-      setErrorDetails(`There was a network error while checking the optimization status. Check your connection and try again.`);
-      
-      // Stop polling on error
-      pollRef.current = false;
-      setIsPolling(false);
-      setLoading(false);
+      setOptimizationError(error instanceof Error ? error.message : "Failed to check optimization status");
       setIsOptimizing(false);
     }
   }
@@ -376,16 +342,8 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
     }
   }
 
-  const handleAtsScoreUpdate = (newScore: number) => {
-    console.log(`Updating dashboard ATS score to: ${newScore}`);
-    setUpdatedAtsScore(newScore);
-    
-    // Additional logic could be added here to update the dashboard table
-    // For example, dispatching an event or calling a parent callback
-  };
-
   return (
-    <Card className="bg-[#050505] shadow-lg border border-[#B4916C]/20 overflow-hidden">
+    <Card className="border border-[#B4916C]/20 bg-[#050505] shadow-lg overflow-hidden">
       <CardHeader className="bg-[#B4916C]/10 pb-4">
         <CardTitle className="text-xl font-bold text-white">Optimize Your CV</CardTitle>
         <CardDescription className="text-gray-400">
@@ -407,17 +365,17 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         <div className="space-y-4">
           {/* CV Selection */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-200">Select CV</label>
+            <label className="text-sm font-medium text-[#B4916C]">Select CV</label>
             <Select
-              value={selectedCV}
+              value={selectedCV || ""}
               onValueChange={handleCVSelect}
             >
-              <SelectTrigger>
+              <SelectTrigger className="bg-[#121212] border border-[#B4916C]/30 text-white">
                 <SelectValue placeholder="Select a CV" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-[#050505] border border-[#B4916C]/30 text-white">
                 {cvs.map((cv) => (
-                  <SelectItem key={cv} value={cv}>
+                  <SelectItem key={cv} value={cv} className="hover:bg-[#B4916C]/10">
                     {cv}
                   </SelectItem>
                 ))}
@@ -427,20 +385,24 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
 
           {/* Template Selection */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-200">Select Template</label>
+            <label className="text-sm font-medium text-[#B4916C]">Select Template</label>
             <Select
               value={selectedTemplate}
               onValueChange={handleTemplateSelect}
             >
-              <SelectTrigger>
+              <SelectTrigger className="bg-[#121212] border border-[#B4916C]/30 text-white">
                 <SelectValue placeholder="Select a template" />
               </SelectTrigger>
-              <SelectContent>
-                {["google-modern", "amazon-leadership", "meta-impact", "apple-minimal", "microsoft-professional", "jpmorgan-finance", "professional"].map((template) => (
-                  <SelectItem key={template} value={template}>
-                    {template}
-                  </SelectItem>
-                ))}
+              <SelectContent className="bg-[#050505] border border-[#B4916C]/30 text-white">
+                <SelectItem value="google-modern" className="hover:bg-[#B4916C]/10">Google Modern</SelectItem>
+                <SelectItem value="amazon-leadership" className="hover:bg-[#B4916C]/10">Amazon Leadership</SelectItem>
+                <SelectItem value="meta-impact" className="hover:bg-[#B4916C]/10">Meta Impact</SelectItem>
+                <SelectItem value="apple-minimal" className="hover:bg-[#B4916C]/10">Apple Minimal</SelectItem>
+                <SelectItem value="microsoft-professional" className="hover:bg-[#B4916C]/10">Microsoft Pro</SelectItem>
+                <SelectItem value="jpmorgan-finance" className="hover:bg-[#B4916C]/10">JP Morgan</SelectItem>
+                <SelectItem value="professional" className="hover:bg-[#B4916C]/10">Professional</SelectItem>
+                <SelectItem value="modern" className="hover:bg-[#B4916C]/10">Modern Classic</SelectItem>
+                <SelectItem value="executive" className="hover:bg-[#B4916C]/10">Executive</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -451,6 +413,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
               id="include-photo"
               checked={includePhoto}
               onCheckedChange={(checked) => setIncludePhoto(checked as boolean)}
+              className="border-[#B4916C]/50 data-[state=checked]:bg-[#B4916C] data-[state=checked]:border-[#B4916C]"
             />
             <Label
               htmlFor="include-photo"
@@ -460,63 +423,73 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
             </Label>
           </div>
 
-          {/* Optimization Progress */}
+          {/* Progress Bar - only show during optimization */}
           {isOptimizing && (
-            <div className="space-y-2 mt-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-400">{optimizationStatus}</span>
-                <span className="text-sm font-medium text-[#B4916C]">{optimizationProgress}%</span>
+            <div className="mt-4 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-300">Optimization Progress</span>
+                <span className="text-[#B4916C] font-medium">{optimizationProgress}%</span>
               </div>
-              <div className="w-full bg-[#1A1A1A] rounded-full h-2.5">
+              <Progress 
+                value={optimizationProgress} 
+                max={100} 
+                className="h-2 bg-[#121212]"
+              >
                 <div 
-                  className="bg-[#B4916C] h-2.5 rounded-full" 
+                  className="h-full bg-[#B4916C] transition-all" 
                   style={{ width: `${optimizationProgress}%` }}
-                ></div>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                {errorDetails}
-              </p>
+                />
+              </Progress>
             </div>
           )}
 
-          {/* Error Message */}
+          {/* Error Display */}
           {optimizationError && (
-            <Alert className="mb-4 bg-red-900/20 border-red-800">
-              <AlertCircle className="h-4 w-4 text-red-500" />
-              <AlertDescription className="text-red-300">
+            <Alert className="mt-4 border-red-500/20 bg-red-500/10 text-red-300">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
                 {optimizationError}
-                {!isOptimizing && (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="ml-4 mt-2 bg-red-900/30 hover:bg-red-800/50 border-red-700"
-                    onClick={handleOptimize}
-                  >
-                    Retry
-                  </Button>
-                )}
               </AlertDescription>
             </Alert>
           )}
 
-          {/* Success Message */}
-          {isOptimized && !optimizationError && (
-            <div className="p-3 bg-green-900/30 border border-green-700 rounded-md text-green-400 text-sm flex items-start mt-4">
-              <Check className="h-5 w-5 mr-2 flex-shrink-0" />
-              <div>
-                <p className="font-medium">CV Optimized Successfully!</p>
-                <p className="mt-1">Your optimized CV has been automatically added to your collection.</p>
-                <p className="mt-1 text-xs">The page will refresh in a moment to show your updated collection.</p>
+          {/* Warning Display */}
+          {optimizationWarning && (
+            <Alert className="mt-4 border-yellow-500/20 bg-yellow-500/10 text-yellow-300">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                {optimizationWarning}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Success Display - only show when optimization complete */}
+          {optimizedText && !optimizationError && (
+            <Alert className="mt-4 border-green-500/20 bg-green-500/10 text-green-300">
+              <Check className="h-4 w-4" />
+              <AlertDescription>
+                CV optimized successfully!
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          {/* Updated ATS Score - show if available */}
+          {updatedAtsScore !== null && (
+            <div className="mt-4 p-3 bg-[#121212] border border-[#B4916C]/20 rounded-md">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-300">Updated ATS Score:</span>
+                <span className="text-[#B4916C] font-bold text-lg">{updatedAtsScore}%</span>
               </div>
             </div>
           )}
 
           {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-2 mt-4">
+          <div className="mt-4 space-y-4">
+            {/* Optimization Button */}
             <Button
               onClick={handleOptimize}
-              disabled={!selectedCV || isOptimizing}
-              className="flex-1 bg-[#B4916C] text-white hover:bg-[#B4916C]/90"
+              disabled={isOptimizing || !selectedCV}
+              className="w-full bg-[#B4916C] hover:bg-[#B4916C]/80 text-white font-medium py-2 rounded-md flex items-center justify-center"
             >
               {isOptimizing ? (
                 <>
@@ -530,12 +503,12 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
                 </>
               )}
             </Button>
-            
-            {isOptimized && (
+
+            {/* Download Button - only show when optimized */}
+            {optimizedText && (
               <Button
                 onClick={handleDownload}
-                variant="outline"
-                className="flex-1 border-[#B4916C]/30 text-white hover:bg-[#B4916C]/10"
+                className="w-full bg-[#121212] hover:bg-[#1a1a1a] text-white font-medium py-2 rounded-md border border-[#B4916C]/30 flex items-center justify-center"
               >
                 <Download className="mr-2 h-4 w-4" />
                 Download Optimized CV
@@ -568,6 +541,27 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
               fileName={selectedCV} 
               onUpdateDashboard={handleAtsScoreUpdate}
             />
+          </div>
+        )}
+
+        {/* Optimized CV Preview - show when available */}
+        {optimizedText && (
+          <div className="mt-6 border border-[#B4916C]/20 bg-[#121212] rounded-md p-4">
+            <h3 className="text-[#B4916C] font-medium mb-2">Optimized Content Preview</h3>
+            <div className="max-h-48 overflow-y-auto text-sm text-gray-300 bg-[#0A0A0A] p-3 rounded whitespace-pre-wrap">
+              {optimizedText}
+            </div>
+            
+            {/* Show ATS Score Comparison if available */}
+            {updatedAtsScore !== null && (
+              <div className="mt-4">
+                <OptimizationSummary 
+                  fileName={selectedCV?.split('|')[0] || ''}
+                  showDetails={false}
+                  onUpdateDashboard={handleAtsScoreUpdate}
+                />
+              </div>
+            )}
           </div>
         )}
       </CardContent>

@@ -55,6 +55,7 @@
     "@types/node": "^20.11.16",
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
+    "@types/uuid": "^10.0.0",
     "ai": "^4.1.34",
     "antd": "^5.23.3",
     "axios": "^1.7.9",
@@ -103,6 +104,7 @@
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.7.2",
+    "uuid": "^11.1.0",
     "vaul": "^1.1.2",
     "vercel-ai": "^0.0.0",
     "zod": "^3.24.1"

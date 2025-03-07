@@ -1,11 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth/session';
-import { extractStructuredDataFromPDF } from '@/lib/pdfToJSON';
-import { generateDOCXFromJSON, exportDOCXToBuffer } from '@/lib/jsonToDOCX';
+import { getServerSession } from 'next-auth';
 import { convertDOCXToPDF } from '@/lib/docxToPDF';
-import { getCVByFileName, updateCVAnalysis } from '@/lib/db/queries.server';
+import { generateDOCXFromJSON, exportDOCXToBuffer } from '@/lib/jsonToDOCX';
 import { optimizeCV, optimizeCVWithAnalysis } from '@/lib/optimizeCV';
-import { uploadBufferToStorage } from '@/lib/storage';
+import { uploadBufferToStorage, getOriginalPdfBytes, extractTextFromPdf } from '@/lib/storage';
+import { eq } from 'drizzle-orm';
+import { db } from '@/lib/db/drizzle';
+import { cvs } from '@/lib/db/schema';
+
+// Define a session type
+interface UserSession {
+  user?: {
+    id: string;
+    name?: string;
+    email?: string;
+  };
+}
 
 /**
  * API endpoint to optimize a CV using the new DOCX-based workflow
@@ -13,12 +23,11 @@ import { uploadBufferToStorage } from '@/lib/storage';
 export async function POST(request: NextRequest) {
   try {
     // Authenticate user
-    const session = await getSession();
-    if (!session || !session.user) {
-      console.log("Unauthorized: No valid session found");
+    const session = await getServerSession() as UserSession | null;
+    if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    
+
     const userId = session.user.id;
     
     // Parse request body
@@ -29,68 +38,50 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing fileName parameter" }, { status: 400 });
     }
     
-    if (!templateId) {
-      return NextResponse.json({ error: "Missing templateId parameter" }, { status: 400 });
-    }
+    // Get the CV record from the database
+    const cvRecord = await db.query.cvs.findFirst({
+      where: eq(cvs.fileName, fileName)
+    });
     
-    // Get CV record
-    const cvRecord = await getCVByFileName(fileName);
     if (!cvRecord) {
       return NextResponse.json({ error: "CV not found" }, { status: 404 });
     }
     
-    // Verify ownership
-    if (cvRecord.userId !== userId) {
-      console.error(`User ${userId} attempted to access CV ${cvRecord.id} belonging to user ${cvRecord.userId}`);
-      return NextResponse.json({ error: "Unauthorized access to CV" }, { status: 401 });
+    // Check if the CV belongs to the authenticated user
+    if (cvRecord.userId !== parseInt(userId)) {
+      return NextResponse.json({ error: "Unauthorized access to CV" }, { status: 403 });
     }
     
-    // Update metadata to show optimization in progress
+    // Initialize metadata
     const metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
-    const updatedMetadata = {
-      ...metadata,
-      optimizing: true,
-      optimized: false,
-      progress: 10,
-      startTime: new Date().toISOString(),
-      lastProgressUpdate: new Date().toISOString()
-    };
-    await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedMetadata));
     
-    // Begin optimization process
-    try {
-      // Step 1: Get the PDF buffer
-      if (!cvRecord.filepath) {
-        throw new Error("PDF path not found in CV record");
-      }
-      
-      // We'll process this in the background
-      processOptimizationBackground(cvRecord, templateId, includePhoto);
-      
-      // Return immediate response indicating the process has started
-      return NextResponse.json({
-        message: "CV optimization started",
-        cvId: cvRecord.id,
-        fileName: cvRecord.fileName,
-        status: "optimizing"
-      });
-    } catch (error: any) {
-      console.error("Error starting optimization:", error);
-      
-      // Update metadata with error
-      const errorMetadata = {
-        ...updatedMetadata,
-        optimizing: false,
-        error: `Optimization failed: ${error.message}`,
-        errorTimestamp: new Date().toISOString()
-      };
-      await updateCVAnalysis(cvRecord.id, JSON.stringify(errorMetadata));
-      
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-  } catch (error: any) {
-    console.error("Error in CV optimization API route:", error.message);
-    return NextResponse.json({ error: `CV optimization failed: ${error.message}` }, { status: 500 });
+    // Update metadata to indicate optimization is in progress
+    metadata.optimizing = true;
+    metadata.progress = 10;
+    metadata.startTime = new Date().toISOString();
+    metadata.lastProgressUpdate = new Date().toISOString();
+    
+    // Save the updated metadata
+    await db.update(cvs)
+      .set({
+        metadata: JSON.stringify(metadata)
+      })
+      .where(eq(cvs.id, cvRecord.id));
+    
+    // We'll process this in the background
+    processOptimizationBackground(cvRecord, templateId, includePhoto);
+    
+    // Return immediate response indicating the process has started
+    return NextResponse.json({
+      message: "Optimization process started",
+      status: "optimizing",
+      progress: 10
+    });
+    
+  } catch (error) {
+    console.error("Error starting optimization:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: `Failed to start optimization: ${errorMessage}` }, { status: 500 });
   }
 }
 
@@ -100,22 +91,29 @@ export async function POST(request: NextRequest) {
 async function processOptimizationBackground(cvRecord: any, templateId: string, includePhoto: boolean): Promise<void> {
   // Run this asynchronously
   (async () => {
+    let metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
     try {
-      console.log(`Starting CV optimization for: ${cvRecord.id}, template: ${templateId || 'default'}`);
+      // Step 1: Get the PDF buffer
+      if (!cvRecord.filepath) {
+        throw new Error("PDF path not found in CV record");
+      }
       
-      // Step 1: Parse metadata
-      const metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
+      // Clear any previous errors
+      delete metadata.error;
+      delete metadata.errorTimestamp;
       
-      // Step 2: Extract text from the PDF (we already have it in rawText)
-      const cvText = cvRecord.rawText;
+      // Step 2: Extract text from PDF
+      const pdfBytes = await getOriginalPdfBytes(cvRecord);
+      const cvText = await extractTextFromPdf(pdfBytes);
+      
       if (!cvText || cvText.trim().length === 0) {
-        throw new Error("CV text content is missing or empty");
+        throw new Error("Failed to extract text from PDF or PDF is empty");
       }
       
       // Update progress to 20%
       await updateProgress(cvRecord.id, 20);
       
-      // Step 3: Extract structured data from the CV text
+      // Step 3: Extract structured data from the PDF
       const structuredData = {
         sections: extractSections(cvText),
         nameAndContact: extractNameAndContact(cvText),
@@ -139,56 +137,95 @@ async function processOptimizationBackground(cvRecord: any, templateId: string, 
       // Update progress to 40%
       await updateProgress(cvRecord.id, 40);
       
-      // Step 5: Convert DOCX to PDF for preview
-      const pdfBuffer = await convertDOCXToPDF(docxBuffer);
+      // Step 5: Try to convert DOCX to PDF, but use fallback if it fails
+      const conversionResult = await convertDOCXToPDF(docxBuffer);
       
-      // Update progress to 60%
-      await updateProgress(cvRecord.id, 60);
+      // Store the DOCX for later use regardless of PDF conversion success
+      const docxPath = `/cv-optimized/${cvRecord.id}/optimized.docx`;
+      await uploadBufferToStorage(docxBuffer, docxPath);
       
-      // Step 6: Upload optimized PDF to storage
-      const optimizedFilePath = `${cvRecord.userId}/optimized/${Date.now()}_${cvRecord.fileName}`;
-      const fileURL = await uploadBufferToStorage(pdfBuffer, optimizedFilePath);
+      // Update progress based on conversion result
+      if (conversionResult.conversionSuccessful) {
+        // If conversion worked, update to 60%
+        await updateProgress(cvRecord.id, 60);
+        
+        // Step 6: Save optimized PDF to storage
+        if (conversionResult.pdfBuffer) {
+          const pdfPath = `/cv-optimized/${cvRecord.id}/optimized.pdf`;
+          await uploadBufferToStorage(conversionResult.pdfBuffer, pdfPath);
+        } else {
+          throw new Error("PDF conversion produced null buffer");
+        }
+      } else {
+        // Conversion failed or used fallback, so we'll save metadata about the DOCX
+        await updateProgress(cvRecord.id, 50);
+        metadata.docxOnly = true;
+        metadata.docxPath = docxPath;
+      }
       
       // Update progress to 80%
       await updateProgress(cvRecord.id, 80);
       
-      // Step 7: Update metadata with optimization results
-      const pdfBase64 = pdfBuffer.toString('base64');
-      const finalMetadata = {
-        ...metadata,
-        optimized: true,
-        optimizing: false,
-        optimizedPDFBase64: pdfBase64,
-        selectedTemplate: templateId,
-        optimizedFilePath: fileURL,
-        optimizedText: cvText, // Keep the original text since we're just reformatting
-        progress: 100,
-        lastProgressUpdate: new Date().toISOString(),
-        lastOptimizedAt: new Date().toISOString(),
-        optimizationCompleted: true
-      };
+      // Step 7: Update CV record with results
+      metadata.optimized = true;
+      metadata.optimizing = false;
+      metadata.error = null;
+      metadata.progress = 100;
+      metadata.selectedTemplate = templateId;
+      metadata.completedAt = new Date().toISOString();
+      metadata.docxPath = docxPath;
       
-      await updateCVAnalysis(cvRecord.id, JSON.stringify(finalMetadata));
-      console.log(`CV optimization completed successfully for: ${cvRecord.id}`);
-    } catch (error: any) {
+      // Create base64 version of PDF if available for download
+      if (conversionResult.conversionSuccessful && conversionResult.pdfBuffer) {
+        metadata.optimizedPDFBase64 = conversionResult.pdfBuffer.toString('base64');
+      }
+      
+      // Store original file details for reference
+      metadata.originalFileName = cvRecord.fileName;
+      
+      // Save the optimized text in the metadata - this is important for recovery
+      if (structuredData.sections) {
+        metadata.optimizedText = JSON.stringify(structuredData.sections);
+      }
+      
+      // If we have the structured data, store it for potential reuse
+      metadata.structuredData = structuredData;
+      
+      // Save all updates to the database
+      await db.update(cvs)
+        .set({
+          metadata: JSON.stringify(metadata)
+        })
+        .where(eq(cvs.id, cvRecord.id));
+      
+      console.log(`Optimization completed for CV ${cvRecord.id}`);
+      
+    } catch (error) {
       console.error("Error during background optimization:", error);
       
-      // Update metadata with error
+      // Update metadata with error information
+      metadata.error = error instanceof Error ? error.message : String(error);
+      metadata.errorTimestamp = new Date().toISOString();
+      metadata.optimizing = false;
+      
+      // If we have partial progress, mark it
+      if (metadata.progress && metadata.progress > 0) {
+        metadata.partialOptimization = true;
+      }
+      
+      // Save the error information to the database
       try {
-        const metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
-        const errorMetadata = {
-          ...metadata,
-          optimizing: false,
-          error: `Optimization failed: ${error.message}`,
-          errorTimestamp: new Date().toISOString()
-        };
-        await updateCVAnalysis(cvRecord.id, JSON.stringify(errorMetadata));
-      } catch (metadataError) {
-        console.error("Failed to update error metadata:", metadataError);
+        await db.update(cvs)
+          .set({
+            metadata: JSON.stringify(metadata)
+          })
+          .where(eq(cvs.id, cvRecord.id));
+      } catch (dbError) {
+        console.error("Failed to update CV record with error information:", dbError);
       }
     }
   })().catch(error => {
-    console.error("Unhandled error in background process:", error);
+    console.error("Unhandled error in background optimization process:", error);
   });
 }
 
@@ -197,7 +234,9 @@ async function processOptimizationBackground(cvRecord: any, templateId: string, 
  */
 async function updateProgress(cvId: number, progress: number): Promise<void> {
   try {
-    const cvRecord = await getCVByFileName(cvId.toString());
+    const cvRecord = await db.query.cvs.findFirst({
+      where: eq(cvs.id, cvId)
+    });
     if (!cvRecord) {
       console.error(`CV not found for ID: ${cvId}`);
       return;
@@ -210,7 +249,11 @@ async function updateProgress(cvId: number, progress: number): Promise<void> {
       lastProgressUpdate: new Date().toISOString()
     };
     
-    await updateCVAnalysis(cvId, JSON.stringify(updatedMetadata));
+    await db.update(cvs)
+      .set({
+        metadata: JSON.stringify(updatedMetadata)
+      })
+      .where(eq(cvs.id, cvId));
     console.log(`Updated progress to ${progress}% for CV ${cvId}`);
   } catch (error) {
     console.error(`Failed to update progress for CV ${cvId}:`, error);
