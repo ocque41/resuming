@@ -37,12 +37,13 @@ export default function OptimizationSummary({
       try {
         setLoading(true);
         
-        // Use a simplified endpoint that returns only essential data
-        const response = await fetch(`/api/cv/optimization-status?fileName=${encodeURIComponent(fileName)}`, {
-          method: 'GET',
+        // Use the compare-ats-scores endpoint which is designed for ATS score comparison
+        const response = await fetch('/api/compare-ats-scores', {
+          method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
+          body: JSON.stringify({ fileName }),
         });
         
         if (!response.ok) {
@@ -58,12 +59,14 @@ export default function OptimizationSummary({
           
           // Create a minimal data object with only what we need
           const minimalData = {
-            originalAtsScore: data.atsScore || 0,
+            originalAtsScore: data.originalAtsScore || 0,
             optimizedAtsScore: data.optimizedAtsScore || 0,
-            difference: (data.optimizedAtsScore || 0) - (data.atsScore || 0),
-            optimized: data.optimized || false,
-            progress: data.progress || 0
+            difference: data.difference || 0,
+            optimized: true,
+            progress: 100
           };
+          
+          console.log("ATS Score Data:", minimalData);
           
           // Set the summary data
           setSummaryData(minimalData);
@@ -74,7 +77,7 @@ export default function OptimizationSummary({
           }
         } catch (processingError) {
           console.error("Error processing summary data:", processingError);
-          setError("Error processing summary data: Maximum call stack size exceeded");
+          setError("Error processing summary data: " + (processingError instanceof Error ? processingError.message : String(processingError)));
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An unknown error occurred');

@@ -223,23 +223,47 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       }
       
       const data = await response.json();
+      console.log("Optimization status data:", data);
       
-      // Only check if optimization is complete, don't load the actual content
+      // Check if optimization is complete
       if (data.optimized) {
         setIsOptimized(true);
+        console.log("CV is optimized");
         
-        // Update ATS score if available
-        if (data.optimizedAtsScore) {
-          handleAtsScoreUpdate(data.optimizedAtsScore);
+        // Trigger ATS score update
+        if (selectedCV) {
+          // Extract the filename from the selectedCV string
+          const fileName = selectedCV.includes('|') 
+            ? selectedCV.split('|')[0] 
+            : selectedCV;
+          
+          console.log("Updating ATS score for:", fileName);
+          
+          // Fetch ATS scores
+          try {
+            const atsResponse = await fetch('/api/compare-ats-scores', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ fileName }),
+            });
+            
+            if (atsResponse.ok) {
+              const atsData = await atsResponse.json();
+              console.log("ATS score data:", atsData);
+              
+              if (atsData.optimizedAtsScore) {
+                handleAtsScoreUpdate(atsData.optimizedAtsScore);
+              }
+            }
+          } catch (atsError) {
+            console.error("Error fetching ATS scores:", atsError);
+          }
         }
       } else {
         console.warn("CV is not optimized yet");
         setIsOptimized(false);
-      }
-      
-      // Check for base64 PDF content availability (don't load it)
-      if (data.optimizedPDFBase64) {
-        console.log("PDF base64 data is available");
       }
     } catch (error) {
       console.error("Error checking optimization status:", error);
@@ -325,15 +349,45 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         return;
       }
       
-      // Open the download URL in a new tab instead of using the download attribute
-      // This is more reliable and avoids issues with large files
-      const format = "text"; // Default to text format which is more reliable
-      const downloadUrl = `/api/cv/download-optimized?cvId=${cvId}&format=${format}`;
-      
-      // Open in a new tab
-      window.open(downloadUrl, '_blank');
-      
-      console.log("Download initiated in new tab");
+      // Create a direct download using fetch and blob
+      try {
+        const downloadResponse = await fetch(`/api/cv/download-optimized?cvId=${cvId}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+        
+        if (!downloadResponse.ok) {
+          throw new Error(`Download error: ${downloadResponse.status}`);
+        }
+        
+        // Get the content as text
+        const content = await downloadResponse.text();
+        
+        // Create a blob and download it
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        
+        // Create a download link
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `optimized_${statusData.fileName || 'cv'}.txt`;
+        document.body.appendChild(link);
+        link.click();
+        
+        // Clean up
+        setTimeout(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }, 100);
+        
+        console.log("Download completed successfully");
+      } catch (downloadError) {
+        console.error("Error during download:", downloadError);
+        setOptimizationError(`Download error: ${(downloadError as Error).message}`);
+        setErrorDetails("There was an error downloading your optimized CV. Please try again.");
+      }
     } catch (error) {
       console.error("Error downloading optimized CV:", error);
       setOptimizationError(`Error downloading: ${(error as Error).message}`);
@@ -534,7 +588,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
             <Button 
               onClick={handleDownload}
               disabled={loading}
-              className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
+              className="bg-[#B4916C] hover:bg-[#A3815C] text-white w-full max-w-xs py-6 text-lg"
             >
               {loading ? "Processing..." : "Download Optimized CV"}
             </Button>
