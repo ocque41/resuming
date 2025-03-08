@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
 
     // Return the optimization status
     return NextResponse.json({
+      id: cvRecord.id,
       fileName: cvRecord.fileName,
       optimizing: metadata.optimizing || false,
       optimized: metadata.optimized || false,

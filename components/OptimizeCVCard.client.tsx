@@ -98,15 +98,22 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         
         // Try to get the optimized PDF
         try {
-          const pdfResponse = await fetch(`/api/cv/${fileName}/optimized-pdf`);
+          // Get the CV ID from the status data or use the filename
+          const cvId = statusData.id || statusData.cvId;
           
-          if (pdfResponse.ok) {
-            const pdfData = await pdfResponse.json();
+          if (cvId) {
+            const pdfResponse = await fetch(`/api/get-optimized-pdf?cvId=${cvId}`);
             
-            if (pdfData.pdfBase64) {
-              setOptimizedPdfData(pdfData.pdfBase64);
-              console.log("Retrieved optimized PDF data");
+            if (pdfResponse.ok) {
+              const pdfData = await pdfResponse.json();
+              
+              if (pdfData.pdfBase64) {
+                setOptimizedPdfData(pdfData.pdfBase64);
+                console.log("Retrieved optimized PDF data");
+              }
             }
+          } else {
+            console.warn("Could not retrieve CV ID from status data");
           }
         } catch (pdfError) {
           console.error("Error retrieving optimized PDF:", pdfError);
