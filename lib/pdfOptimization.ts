@@ -1542,6 +1542,8 @@ async function createProfessionalClassicCV(
   boldFont: PDFFont,
   italicFont: PDFFont
 ): Promise<Uint8Array> {
+  console.log("Creating Professional Classic CV layout");
+  
   // Create a new page
   const page = doc.addPage([595, 842]); // A4 size
   const { width, height } = page.getSize();
@@ -1553,13 +1555,55 @@ async function createProfessionalClassicCV(
   
   // Parse the optimized text into sections
   const sections: Record<string, string> = {};
-  const sectionRegex = /## ([A-Z\s]+)\n([\s\S]*?)(?=\n## |$)/g;
+  
+  // Try different section regex patterns to ensure we capture all sections
+  let sectionRegex = /## ([A-Z\s]+)\n([\s\S]*?)(?=\n## |$)/g;
   let match;
   
   while ((match = sectionRegex.exec(optimizedText)) !== null) {
     const title = match[1].trim();
     const content = match[2].trim();
     sections[title] = content;
+    console.log(`Found section: ${title} (${content.length} chars)`);
+  }
+  
+  // If we didn't find any sections with the first regex, try an alternative
+  if (Object.keys(sections).length === 0) {
+    console.log("No sections found with primary regex, trying alternative");
+    sectionRegex = /\n([A-Z][A-Z\s]+)[\n\r]+([^]*?)(?=\n[A-Z][A-Z\s]+[\n\r]+|$)/g;
+    
+    while ((match = sectionRegex.exec(optimizedText)) !== null) {
+      const title = match[1].trim();
+      const content = match[2].trim();
+      sections[title] = content;
+      console.log(`Found section with alt regex: ${title} (${content.length} chars)`);
+    }
+  }
+  
+  // If we still don't have sections, create default ones
+  if (Object.keys(sections).length === 0) {
+    console.log("No sections found, creating default sections");
+    sections["ABOUT ME"] = "Professional summary not available.";
+    sections["COMPETENCES"] = "Skills not available.";
+    sections["WORK EXPERIENCE"] = "Work experience not available.";
+    sections["EDUCATION"] = "Education not available.";
+    sections["LANGUAGES"] = "Languages not available.";
+    
+    // Try to extract some content from the raw text
+    const lines = optimizedText.split('\n');
+    let currentSection = "";
+    
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (trimmedLine.toUpperCase() === trimmedLine && trimmedLine.length > 3) {
+        // This might be a section header
+        currentSection = trimmedLine;
+        sections[currentSection] = "";
+      } else if (currentSection && trimmedLine) {
+        // Add content to the current section
+        sections[currentSection] += trimmedLine + "\n";
+      }
+    }
   }
   
   // Extract name and contact info
@@ -1570,9 +1614,15 @@ async function createProfessionalClassicCV(
   let email = "name@mail.com";
   let location = "Oregon, USA";
   
-  if (sections["CONTACT"]) {
-    const contactLines = sections["CONTACT"].split('\n');
+  // Try to extract contact info from CONTACT section or PERSONAL INFORMATION
+  const contactSection = sections["CONTACT"] || sections["PERSONAL INFORMATION"] || sections["PERSONAL DETAILS"];
+  
+  if (contactSection) {
+    console.log("Found contact section:", contactSection);
+    const contactLines = contactSection.split('\n');
+    
     if (contactLines.length > 0) {
+      // First line is usually the name
       const fullName = contactLines[0].trim();
       const nameParts = fullName.split(' ');
       if (nameParts.length > 1) {
@@ -1581,24 +1631,41 @@ async function createProfessionalClassicCV(
       } else {
         name = fullName;
       }
+      
+      // Extract other contact info
+      for (const line of contactLines) {
+        if (line.includes('@')) {
+          email = line.trim();
+        } else if (line.includes('+') || /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(line)) {
+          phone = line.trim();
+        } else if (line !== contactLines[0] && !jobTitle.includes(line)) {
+          // Check if this might be a job title
+          if (line.includes('Developer') || line.includes('Engineer') || line.includes('Manager') || 
+              line.includes('Designer') || line.includes('Analyst') || line.includes('Consultant')) {
+            jobTitle = line.trim();
+          } else {
+            // Assume it's a location
+            location = line.trim();
+          }
+        }
+      }
     }
-    
-    // Extract other contact info
-    for (const line of contactLines) {
-      if (line.includes('@')) {
-        email = line.trim();
-      } else if (line.includes('+') || /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(line)) {
-        phone = line.trim();
-      } else if (line !== contactLines[0]) {
-        // Assume any non-name, non-email, non-phone line is location or job title
-        if (!jobTitle || jobTitle === "JOB OCCUPIED") {
-          jobTitle = line.trim();
-        } else {
-          location = line.trim();
+  } else {
+    // Try to extract name from the beginning of the text
+    const firstLines = optimizedText.split('\n').slice(0, 5);
+    for (const line of firstLines) {
+      if (line.trim() && !line.includes(':') && line.split(' ').length <= 4) {
+        const nameParts = line.trim().split(' ');
+        if (nameParts.length > 1) {
+          name = nameParts[0];
+          lastName = nameParts.slice(1).join(' ');
+          break;
         }
       }
     }
   }
+  
+  console.log(`Extracted contact info - Name: ${name}, Last Name: ${lastName}, Job: ${jobTitle}`);
   
   // Draw header
   // Name
@@ -1612,7 +1679,7 @@ async function createProfessionalClassicCV(
   
   // Last Name
   page.drawText(lastName, {
-    x: margin + 100, // Adjust based on name length
+    x: margin + name.length * 14, // Adjust based on name length
     y: height - margin - 20,
     size: 24,
     font: boldFont,
@@ -1688,7 +1755,22 @@ async function createProfessionalClassicCV(
   ];
   
   for (const sectionName of sectionOrder) {
-    if (sections[sectionName]) {
+    // Check for variations of section names
+    const sectionKey = Object.keys(sections).find(key => 
+      key.toUpperCase() === sectionName || 
+      key.toUpperCase().includes(sectionName) ||
+      (sectionName === "ABOUT ME" && (key.toUpperCase().includes("PROFILE") || key.toUpperCase().includes("SUMMARY"))) ||
+      (sectionName === "COMPETENCES" && (key.toUpperCase().includes("SKILLS") || key.toUpperCase().includes("EXPERTISE"))) ||
+      (sectionName === "WORK EXPERIENCE" && (key.toUpperCase().includes("EMPLOYMENT") || key.toUpperCase().includes("PROFESSIONAL"))) ||
+      (sectionName === "EDUCATION" && key.toUpperCase().includes("ACADEMIC")) ||
+      (sectionName === "LANGUAGES" && key.toUpperCase().includes("LANGUAGE"))
+    );
+    
+    const sectionContent = sectionKey ? sections[sectionKey] : null;
+    
+    if (sectionContent) {
+      console.log(`Processing section: ${sectionName} (${sectionContent.length} chars)`);
+      
       // Draw section title
       page.drawText(sectionName, {
         x: margin,
@@ -1703,13 +1785,17 @@ async function createProfessionalClassicCV(
       // Process section content based on section type
       if (sectionName === "COMPETENCES") {
         // Draw competences as bullet points in columns
-        const competences = sections[sectionName].split('\n');
+        const competences = sectionContent.split('\n')
+          .map(line => line.trim())
+          .filter(line => line.length > 0)
+          .map(line => line.replace(/^[-•*]\s*/, ''));
+        
         const columnWidth = (width - 2 * margin) / 3;
         let columnY = currentY;
         
         for (let i = 0; i < competences.length; i++) {
           const columnIndex = i % 3;
-          const competence = competences[i].trim();
+          const competence = competences[i];
           
           if (competence) {
             // Draw bullet point
@@ -1722,7 +1808,7 @@ async function createProfessionalClassicCV(
             });
             
             // Draw competence text
-            page.drawText(competence.replace(/^[-•*]\s*/, ''), {
+            page.drawText(competence, {
               x: margin + columnIndex * columnWidth + 15,
               y: columnY,
               size: 10,
@@ -1742,7 +1828,37 @@ async function createProfessionalClassicCV(
         
       } else if (sectionName === "WORK EXPERIENCE") {
         // Process work experience entries
-        const experiences = sections[sectionName].split('\n\n');
+        let experiences = [];
+        
+        // Try to split by double newlines first
+        if (sectionContent.includes('\n\n')) {
+          experiences = sectionContent.split('\n\n');
+        } else {
+          // Try to identify job entries by dates or company names
+          const lines = sectionContent.split('\n');
+          let currentExp = "";
+          
+          for (const line of lines) {
+            // Check if this line might be the start of a new experience
+            if (
+              /\b(19|20)\d{2}\b/.test(line) || // Contains a year
+              /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{4}\b/i.test(line) || // Contains a month and year
+              /\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}\b/i.test(line) || // Contains a full month and year
+              line.toUpperCase() === line // All uppercase might be a company name
+            ) {
+              if (currentExp) {
+                experiences.push(currentExp);
+              }
+              currentExp = line;
+            } else {
+              currentExp += "\n" + line;
+            }
+          }
+          
+          if (currentExp) {
+            experiences.push(currentExp);
+          }
+        }
         
         for (const experience of experiences) {
           const lines = experience.split('\n');
@@ -1754,9 +1870,8 @@ async function createProfessionalClassicCV(
             dateAndPosition = lines[0].trim();
             
             // Draw date on the left
-            if (dateAndPosition.includes('-')) {
-              const dateParts = dateAndPosition.split('-');
-              page.drawText(dateParts[0].trim(), {
+            if (dateAndPosition.includes('-') || /\b(19|20)\d{2}\b/.test(dateAndPosition)) {
+              page.drawText(dateAndPosition, {
                 x: margin,
                 y: currentY,
                 size: 10,
@@ -1765,19 +1880,30 @@ async function createProfessionalClassicCV(
               });
               
               // Draw position
-              page.drawText("Job occupied", {
-                x: margin + 100,
-                y: currentY,
-                size: 10,
-                font: regularFont,
-                color: textColor
-              });
+              if (lines.length > 1 && !lines[1].startsWith('•') && !lines[1].startsWith('-')) {
+                page.drawText(lines[1].trim(), {
+                  x: margin + 100,
+                  y: currentY,
+                  size: 10,
+                  font: regularFont,
+                  color: textColor
+                });
+                company = lines[1].trim();
+              } else {
+                page.drawText("Job occupied", {
+                  x: margin + 100,
+                  y: currentY,
+                  size: 10,
+                  font: regularFont,
+                  color: textColor
+                });
+              }
               
               currentY -= 20;
             }
             
-            // Draw company name
-            if (lines.length > 1) {
+            // Draw company name if not already drawn
+            if (lines.length > 1 && !company) {
               company = lines[1].trim();
               page.drawText(company.toUpperCase(), {
                 x: margin + 100,
@@ -1788,42 +1914,40 @@ async function createProfessionalClassicCV(
               });
               
               currentY -= 20;
-              
-              // Process bullet points
-              for (let i = 2; i < lines.length; i++) {
-                const line = lines[i].trim();
-                if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
-                  details.push(line);
-                  
-                  // Draw bullet point
-                  page.drawText("•", {
-                    x: margin + 100,
-                    y: currentY,
+            }
+            
+            // Process bullet points or responsibilities
+            for (let i = 2; i < lines.length; i++) {
+              const line = lines[i].trim();
+              if (line) {
+                // Draw bullet point
+                page.drawText("•", {
+                  x: margin + 100,
+                  y: currentY,
+                  size: 10,
+                  font: regularFont,
+                  color: textColor
+                });
+                
+                // Draw detail text
+                const textLines = splitTextIntoLines(
+                  line.replace(/^[-•*]\s*/, ''),
+                  width - margin - 125,
+                  regularFont,
+                  10
+                );
+                
+                for (let j = 0; j < textLines.length; j++) {
+                  page.drawText(textLines[j], {
+                    x: margin + 115,
+                    y: currentY - j * 15,
                     size: 10,
                     font: regularFont,
                     color: textColor
                   });
-                  
-                  // Draw detail text
-                  const textLines = splitTextIntoLines(
-                    line.replace(/^[-•*]\s*/, ''),
-                    width - margin - 125,
-                    regularFont,
-                    10
-                  );
-                  
-                  for (let j = 0; j < textLines.length; j++) {
-                    page.drawText(textLines[j], {
-                      x: margin + 115,
-                      y: currentY - j * 15,
-                      size: 10,
-                      font: regularFont,
-                      color: textColor
-                    });
-                  }
-                  
-                  currentY -= 15 * textLines.length;
                 }
+                
+                currentY -= 15 * textLines.length;
               }
             }
           }
@@ -1833,29 +1957,87 @@ async function createProfessionalClassicCV(
         
       } else if (sectionName === "EDUCATION") {
         // Process education entries
-        const educationEntries = sections[sectionName].split('\n\n');
+        let educationEntries = [];
+        
+        // Try to split by double newlines first
+        if (sectionContent.includes('\n\n')) {
+          educationEntries = sectionContent.split('\n\n');
+        } else {
+          // Try to identify education entries by years or school names
+          const lines = sectionContent.split('\n');
+          let currentEdu = "";
+          
+          for (const line of lines) {
+            // Check if this line might be the start of a new education entry
+            if (
+              /\b(19|20)\d{2}\b/.test(line) || // Contains a year
+              /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{4}\b/i.test(line) || // Contains a month and year
+              /\b(University|College|School|Institute)\b/i.test(line) // Contains education keywords
+            ) {
+              if (currentEdu) {
+                educationEntries.push(currentEdu);
+              }
+              currentEdu = line;
+            } else {
+              currentEdu += "\n" + line;
+            }
+          }
+          
+          if (currentEdu) {
+            educationEntries.push(currentEdu);
+          }
+        }
+        
+        // If we couldn't identify multiple entries, create at least one
+        if (educationEntries.length === 0) {
+          educationEntries = [sectionContent];
+        }
         
         // Create a grid layout for education
         const columnWidth = (width - 2 * margin) / 3;
         let columnIndex = 0;
         let rowY = currentY;
         
-        for (const entry of educationEntries) {
+        // Limit to 3 entries for the layout
+        const maxEntries = Math.min(educationEntries.length, 3);
+        
+        for (let i = 0; i < maxEntries; i++) {
+          const entry = educationEntries[i];
           const lines = entry.split('\n');
           let school = "UNIVERSITY OR SCHOOL";
           let diploma = "Diploma Xxxxxxxxxx";
           let year = "20XX";
           
+          // Extract school, diploma, and year from the entry
           if (lines.length > 0) {
-            school = lines[0].trim();
-          }
-          
-          if (lines.length > 1) {
-            diploma = lines[1].trim();
-          }
-          
-          if (lines.length > 2) {
-            year = lines[2].trim();
+            // Try to identify which line is which
+            for (const line of lines) {
+              if (/\b(19|20)\d{2}\b/.test(line)) {
+                // Line contains a year
+                const yearMatch = line.match(/\b(19|20)\d{2}\b/);
+                if (yearMatch && yearMatch[0]) {
+                  year = yearMatch[0];
+                }
+                if (!diploma.includes("Diploma")) {
+                  school = line;
+                }
+              } else if (/\b(University|College|School|Institute)\b/i.test(line)) {
+                // Line contains education institution keywords
+                school = line.trim();
+              } else if (/\b(Bachelor|Master|PhD|Diploma|Degree|Certificate)\b/i.test(line)) {
+                // Line contains degree keywords
+                diploma = line.trim();
+              }
+            }
+            
+            // If we couldn't identify specific parts, use the lines in order
+            if (school === "UNIVERSITY OR SCHOOL" && lines[0]) {
+              school = lines[0].trim();
+            }
+            
+            if (diploma === "Diploma Xxxxxxxxxx" && lines.length > 1) {
+              diploma = lines[1].trim();
+            }
           }
           
           // Draw school name
@@ -1898,78 +2080,88 @@ async function createProfessionalClassicCV(
         
       } else if (sectionName === "LANGUAGES") {
         // Process languages with progress bars
-        const languages = sections[sectionName].split('\n');
-        const columnWidth = (width - 2 * margin) / 3;
+        const languageLines = sectionContent.split('\n')
+          .map(line => line.trim())
+          .filter(line => line.length > 0);
         
-        for (let i = 0; i < languages.length; i++) {
-          const columnIndex = i % 3;
-          const language = languages[i].trim();
+        const columnWidth = (width - 2 * margin) / 3;
+        let columnIndex = 0;
+        let rowY = currentY;
+        
+        for (const line of languageLines) {
+          let languageName = line;
+          let proficiency = 0.7; // Default 70%
           
-          if (language) {
-            let languageName = language;
-            let proficiency = 0.7; // Default 70%
+          // Extract proficiency if available
+          if (line.includes(':')) {
+            const parts = line.split(':');
+            languageName = parts[0].trim();
             
-            // Extract proficiency if available
-            if (language.includes(':')) {
-              const parts = language.split(':');
-              languageName = parts[0].trim();
-              
-              // Parse proficiency
-              const proficiencyText = parts[1].trim().toLowerCase();
-              if (proficiencyText.includes('fluent') || proficiencyText.includes('native')) {
-                proficiency = 0.9;
-              } else if (proficiencyText.includes('advanced')) {
-                proficiency = 0.7;
-              } else if (proficiencyText.includes('intermediate')) {
-                proficiency = 0.5;
-              } else if (proficiencyText.includes('basic')) {
-                proficiency = 0.3;
+            // Parse proficiency
+            const proficiencyText = parts[1].trim().toLowerCase();
+            if (proficiencyText.includes('fluent') || proficiencyText.includes('native')) {
+              proficiency = 0.9;
+            } else if (proficiencyText.includes('advanced')) {
+              proficiency = 0.7;
+            } else if (proficiencyText.includes('intermediate')) {
+              proficiency = 0.5;
+            } else if (proficiencyText.includes('basic')) {
+              proficiency = 0.3;
+            } else if (proficiencyText.includes('%')) {
+              // Try to parse percentage
+              const percentMatch = proficiencyText.match(/(\d+)%/);
+              if (percentMatch) {
+                proficiency = parseInt(percentMatch[1]) / 100;
               }
             }
-            
-            // Draw language name
-            page.drawText(languageName, {
-              x: margin + columnIndex * columnWidth,
-              y: currentY,
-              size: 10,
-              font: regularFont,
-              color: textColor
-            });
-            
-            // Draw progress bar background
-            page.drawRectangle({
-              x: margin + columnIndex * columnWidth,
-              y: currentY - 15,
-              width: 100,
-              height: 5,
-              color: rgb(0.9, 0.9, 0.9)
-            });
-            
-            // Draw progress bar fill
-            page.drawRectangle({
-              x: margin + columnIndex * columnWidth,
-              y: currentY - 15,
-              width: 100 * proficiency,
-              height: 5,
-              color: rgb(0, 0, 0)
-            });
-            
-            // Move to next row if we've filled all columns
-            if (columnIndex === 2) {
-              currentY -= 30;
-            }
+          }
+          
+          // Draw language name
+          page.drawText(languageName, {
+            x: margin + columnIndex * columnWidth,
+            y: rowY,
+            size: 10,
+            font: regularFont,
+            color: textColor
+          });
+          
+          // Draw progress bar background
+          page.drawRectangle({
+            x: margin + columnIndex * columnWidth,
+            y: rowY - 15,
+            width: 100,
+            height: 5,
+            color: rgb(0.9, 0.9, 0.9)
+          });
+          
+          // Draw progress bar fill
+          page.drawRectangle({
+            x: margin + columnIndex * columnWidth,
+            y: rowY - 15,
+            width: 100 * proficiency,
+            height: 5,
+            color: rgb(0, 0, 0)
+          });
+          
+          // Move to next column or row
+          columnIndex++;
+          if (columnIndex >= 3) {
+            columnIndex = 0;
+            rowY -= 30;
           }
         }
         
         // Update current Y to the lowest point
-        if (languages.length % 3 !== 0) {
-          currentY -= 30;
+        if (languageLines.length % 3 !== 0) {
+          currentY = rowY - 30;
+        } else {
+          currentY = rowY;
         }
         
       } else {
         // Default text rendering for other sections (like ABOUT ME)
         const textLines = splitTextIntoLines(
-          sections[sectionName],
+          sectionContent,
           width - 2 * margin,
           regularFont,
           10

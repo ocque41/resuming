@@ -28,16 +28,22 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   const [optimizedPdfData, setOptimizedPdfData] = useState<string | null>(null);
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
 
-  // Templates for selection
+  // Templates for selection with their corresponding IDs
   const templates = [
-    "Professional Classic",
-    "Modern Professional",
-    "Creative Design",
-    "Executive",
-    "Technical",
-    "Academic",
-    "Entry Level"
+    { name: "Professional Classic", id: "professional-classic" },
+    { name: "Modern Professional", id: "modern-professional" },
+    { name: "Creative Design", id: "creative-design" },
+    { name: "Executive", id: "executive" },
+    { name: "Technical", id: "technical" },
+    { name: "Academic", id: "academic" },
+    { name: "Entry Level", id: "entry-level" }
   ];
+  
+  // Extract template names for display
+  const templateNames = templates.map(t => t.name);
+  
+  // State to track if we should force re-optimization
+  const [forceReoptimize, setForceReoptimize] = useState<boolean>(false);
 
   // Extract display names for the CV dropdown (without the ID part)
   const cvDisplayNames = cvs.map(cv => {
@@ -48,6 +54,12 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   // Handle CV selection
   const handleCVSelect = useCallback((cv: string) => {
     console.log("Selected CV display name:", cv);
+    
+    // Reset optimization state when changing CV
+    setIsOptimized(false);
+    setProgress(0);
+    setError(null);
+    setOptimizedPdfData(null);
     
     // Find the original CV string with ID
     const originalCVString = cvs.find(item => item.startsWith(cv + '|'));
@@ -66,16 +78,28 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       setSelectedCV(cv);
       setSelectedCVId(null);
     }
-    
-    setIsOptimized(false);
-    setProgress(0);
-    setError(null);
   }, [cvs]);
 
   // Handle template selection
-  const handleTemplateSelect = useCallback((template: string) => {
-    console.log("Selected template:", template);
-    setSelectedTemplate(template);
+  const handleTemplateSelect = useCallback((templateName: string) => {
+    console.log("Selected template:", templateName);
+    
+    // Reset optimization state when changing template
+    setIsOptimized(false);
+    setProgress(0);
+    setError(null);
+    setOptimizedPdfData(null);
+    
+    // Find the template ID that corresponds to the selected name
+    const template = templates.find(t => t.name === templateName);
+    if (template) {
+      setSelectedTemplate(template.id);
+      console.log(`Mapped template name "${templateName}" to ID "${template.id}"`);
+    } else {
+      // Fallback to the name if no mapping is found
+      setSelectedTemplate(templateName.toLowerCase().replace(/\s+/g, '-'));
+      console.log(`No template mapping found, using formatted name: ${templateName.toLowerCase().replace(/\s+/g, '-')}`);
+    }
   }, []);
 
   // Function to poll for optimization status
@@ -214,7 +238,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         setPollingInterval(null);
       }
       
-      console.log(`Starting optimization for CV: ${selectedCV}, ID: ${selectedCVId}, template: ${selectedTemplate}`);
+      console.log(`Starting optimization for CV: ${selectedCV}, ID: ${selectedCVId}, template: ${selectedTemplate}, forceReoptimize: ${forceReoptimize}`);
       
       // Step 1: Call the API to start optimization
       setOptimizationStep("Starting optimization process");
@@ -222,8 +246,8 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       
       // Use the ID if available, otherwise use the filename
       const payload = selectedCVId 
-        ? { cvId: selectedCVId, templateId: selectedTemplate.toLowerCase().replace(/\s+/g, '-'), forceReoptimize: false }
-        : { fileName: selectedCV, templateId: selectedTemplate.toLowerCase().replace(/\s+/g, '-'), forceReoptimize: false };
+        ? { cvId: selectedCVId, templateId: selectedTemplate, forceReoptimize }
+        : { fileName: selectedCV, templateId: selectedTemplate, forceReoptimize };
       
       const optimizeResponse = await fetch('/api/optimize-cv', {
         method: 'POST',
@@ -253,7 +277,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       setError(`Optimization failed: ${error instanceof Error ? error.message : String(error)}`);
       setIsOptimizing(false);
     }
-  }, [selectedCV, selectedCVId, selectedTemplate, pollingInterval, pollOptimizationStatus]);
+  }, [selectedCV, selectedCVId, selectedTemplate, pollingInterval, pollOptimizationStatus, forceReoptimize]);
 
   // Simple download function
   const handleDownload = useCallback(() => {
@@ -362,11 +386,27 @@ Date: ${new Date().toLocaleDateString()}`;
           <div className="mb-6">
             <ComboboxPopover
               label="Select Template"
-              options={templates}
+              options={templateNames}
               onSelect={handleTemplateSelect}
               accentColor="#B4916C"
               darkMode={true}
             />
+          </div>
+        )}
+        
+        {/* Force Re-optimization Checkbox */}
+        {selectedCV && selectedTemplate && !isOptimizing && (
+          <div className="flex items-center mb-4">
+            <input
+              type="checkbox"
+              id="force-reoptimize"
+              checked={forceReoptimize}
+              onChange={(e) => setForceReoptimize(e.target.checked)}
+              className="mr-2 h-4 w-4 rounded border-gray-300 text-[#B4916C] focus:ring-[#B4916C]"
+            />
+            <label htmlFor="force-reoptimize" className="text-sm text-gray-300">
+              Force re-optimization (use if template changes aren't applied)
+            </label>
           </div>
         )}
         
