@@ -44,19 +44,32 @@ export async function GET(request: NextRequest) {
 
     const userId = session.user.id;
     const fileName = request.nextUrl.searchParams.get('fileName');
+    const cvId = request.nextUrl.searchParams.get('cvId');
 
-    console.log(`Checking optimization status for user ${userId}, fileName: ${fileName}`);
+    console.log(`Checking optimization status for user ${userId}, fileName: ${fileName}, cvId: ${cvId}`);
 
-    if (!fileName) {
-      return NextResponse.json({ error: "Missing fileName parameter" }, { status: 400 });
+    if (!fileName && !cvId) {
+      return NextResponse.json({ error: "Missing fileName or cvId parameter" }, { status: 400 });
     }
 
-    // Get the CV record
-    console.log(`Looking up CV with fileName: ${fileName}`);
-    const cvRecord = await getCVByFileName(fileName);
+    // Get CV record either by ID or fileName
+    let cvRecord = null;
+    
+    if (cvId) {
+      console.log(`Looking up CV with ID: ${cvId}`);
+      cvRecord = await db.query.cvs.findFirst({
+        where: eq(cvs.id, parseInt(cvId)),
+      });
+    } else {
+      console.log(`Looking up CV with fileName: ${fileName!}`);
+      cvRecord = await getCVByFileName(fileName!);
+    }
     
     if (!cvRecord) {
-      console.error(`CV not found with fileName: ${fileName}`);
+      const errorMessage = cvId 
+        ? `CV not found with ID: ${cvId}` 
+        : `CV not found with fileName: ${fileName}`;
+      console.error(errorMessage);
       return NextResponse.json({ error: "CV not found" }, { status: 404 });
     }
 

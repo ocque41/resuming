@@ -139,9 +139,48 @@ export async function getCVsForUser(userId: number) {
 
 /**
  * Retrieves a CV record by its fileName.
- * Uses a more flexible search to handle case differences and partial matches.
+ * Uses a more flexible search to handle case differences, partial matches, and filenames with pipe characters.
  */
 export async function getCVByFileName(fileName: string) {
+  console.log(`getCVByFileName called with: "${fileName}"`);
+  
+  // Check if the filename contains a pipe character with an ID
+  if (fileName.includes('|')) {
+    // Extract the actual filename part (before the pipe)
+    const actualFileName = fileName.split('|')[0];
+    console.log(`Filename contains pipe character. Using actual filename: "${actualFileName}"`);
+    
+    // Try to find by the actual filename
+    const fileNameMatch = await db
+      .select()
+      .from(cvs)
+      .where(eq(cvs.fileName, actualFileName))
+      .limit(1);
+    
+    if (fileNameMatch.length) {
+      console.log(`Found CV by actual filename: ${actualFileName}`);
+      return fileNameMatch[0];
+    }
+    
+    // If not found, try to find by ID (after the pipe)
+    const idPart = fileName.split('|')[1];
+    if (idPart && !isNaN(parseInt(idPart))) {
+      const cvId = parseInt(idPart);
+      console.log(`Trying to find CV by ID: ${cvId}`);
+      
+      const idMatch = await db
+        .select()
+        .from(cvs)
+        .where(eq(cvs.id, cvId))
+        .limit(1);
+      
+      if (idMatch.length) {
+        console.log(`Found CV by ID: ${cvId}`);
+        return idMatch[0];
+      }
+    }
+  }
+  
   // First try exact match
   const exactMatch = await db
     .select()
@@ -150,6 +189,7 @@ export async function getCVByFileName(fileName: string) {
     .limit(1);
   
   if (exactMatch.length) {
+    console.log(`Found CV by exact filename match: ${fileName}`);
     return exactMatch[0];
   }
   
@@ -161,6 +201,7 @@ export async function getCVByFileName(fileName: string) {
     .limit(1);
   
   if (caseInsensitiveMatch.length) {
+    console.log(`Found CV by case-insensitive match: ${fileName}`);
     return caseInsensitiveMatch[0];
   }
   
@@ -171,7 +212,13 @@ export async function getCVByFileName(fileName: string) {
     .where(like(cvs.fileName, `%${fileName}%`))
     .limit(1);
   
-  return partialMatch.length ? partialMatch[0] : null;
+  if (partialMatch.length) {
+    console.log(`Found CV by partial match: ${fileName}`);
+    return partialMatch[0];
+  }
+  
+  console.log(`No CV found for filename: ${fileName}`);
+  return null;
 }
 
 /**

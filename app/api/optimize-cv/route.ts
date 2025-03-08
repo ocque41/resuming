@@ -4,6 +4,9 @@ import { optimizeCV, optimizeCVWithAnalysis } from "@/lib/optimizeCV";
 import { optimizeCVBackground } from "@/lib/optimizeCVBackground";
 import { getSession } from "@/lib/auth/session";
 import { CV_TEMPLATES } from "@/types/templates";
+import { db } from "@/lib/db/drizzle";
+import { cvs } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 // Define a session type
 interface UserSession {
@@ -32,23 +35,36 @@ export async function POST(request: Request) {
     console.log(`Processing optimization request for user: ${userId}`);
 
     const body = await request.json();
-    const { fileName, templateId, forceReoptimize } = body;
+    const { fileName, cvId, templateId, forceReoptimize } = body;
 
-    console.log(`Optimization request details: fileName=${fileName}, templateId=${templateId}, forceReoptimize=${forceReoptimize}`);
+    console.log(`Optimization request details: fileName=${fileName}, cvId=${cvId}, templateId=${templateId}, forceReoptimize=${forceReoptimize}`);
 
-    if (!fileName) {
-      return NextResponse.json({ error: "Missing fileName parameter" }, { status: 400 });
+    if (!fileName && !cvId) {
+      return NextResponse.json({ error: "Missing fileName or cvId parameter" }, { status: 400 });
     }
 
     if (!templateId) {
       return NextResponse.json({ error: "Missing templateId parameter" }, { status: 400 });
     }
 
-    console.log(`Looking up CV with fileName: ${fileName}`);
-    const cvRecord = await getCVByFileName(fileName!);
+    // Get CV record either by ID or fileName
+    let cvRecord = null;
+    
+    if (cvId) {
+      console.log(`Looking up CV with ID: ${cvId}`);
+      cvRecord = await db.query.cvs.findFirst({
+        where: eq(cvs.id, parseInt(cvId)),
+      });
+    } else {
+      console.log(`Looking up CV with fileName: ${fileName}`);
+      cvRecord = await getCVByFileName(fileName!);
+    }
     
     if (!cvRecord) {
-      console.error(`CV not found with fileName: ${fileName}`);
+      const errorMessage = cvId 
+        ? `CV not found with ID: ${cvId}` 
+        : `CV not found with fileName: ${fileName}`;
+      console.error(errorMessage);
       return NextResponse.json({ error: "CV not found" }, { status: 404 });
     }
 

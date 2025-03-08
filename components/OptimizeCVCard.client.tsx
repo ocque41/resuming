@@ -11,13 +11,14 @@ import { ComboboxPopover } from "@/components/ui/combobox";
 
 // Minimal interface
 interface OptimizeCVCardProps {
-  cvs: string[];
+  cvs: string[]; // Format: "filename|id"
 }
 
 // Simplified component
 export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   // Basic state
   const [selectedCV, setSelectedCV] = useState<string>("");
+  const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isOptimized, setIsOptimized] = useState(false);
@@ -37,14 +38,38 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
     "Entry Level"
   ];
 
+  // Extract display names for the CV dropdown (without the ID part)
+  const cvDisplayNames = cvs.map(cv => {
+    const parts = cv.split('|');
+    return parts[0]; // Just the filename part
+  });
+
   // Handle CV selection
   const handleCVSelect = useCallback((cv: string) => {
-    console.log("Selected CV:", cv);
-    setSelectedCV(cv);
+    console.log("Selected CV display name:", cv);
+    
+    // Find the original CV string with ID
+    const originalCVString = cvs.find(item => item.startsWith(cv + '|'));
+    
+    if (originalCVString) {
+      const parts = originalCVString.split('|');
+      const fileName = parts[0];
+      const id = parts[1];
+      
+      console.log(`Selected CV: ${fileName}, ID: ${id}`);
+      setSelectedCV(fileName);
+      setSelectedCVId(id);
+    } else {
+      // Fallback if we can't find the ID
+      console.log("Could not find ID for selected CV, using display name only");
+      setSelectedCV(cv);
+      setSelectedCVId(null);
+    }
+    
     setIsOptimized(false);
     setProgress(0);
     setError(null);
-  }, []);
+  }, [cvs]);
 
   // Handle template selection
   const handleTemplateSelect = useCallback((template: string) => {
@@ -53,9 +78,14 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
   }, []);
 
   // Function to poll for optimization status
-  const pollOptimizationStatus = useCallback(async (fileName: string) => {
+  const pollOptimizationStatus = useCallback(async (fileName: string, cvId?: string) => {
     try {
-      const response = await fetch(`/api/optimize-cv/status?fileName=${encodeURIComponent(fileName)}`);
+      // Use the ID if available, otherwise use the filename
+      const queryParam = cvId 
+        ? `cvId=${encodeURIComponent(cvId)}` 
+        : `fileName=${encodeURIComponent(fileName)}`;
+      
+      const response = await fetch(`/api/optimize-cv/status?${queryParam}`);
       
       if (!response.ok) {
         const errorData = await response.json();
@@ -175,22 +205,23 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         setPollingInterval(null);
       }
       
-      console.log(`Starting optimization for CV: ${selectedCV}, template: ${selectedTemplate}`);
+      console.log(`Starting optimization for CV: ${selectedCV}, ID: ${selectedCVId}, template: ${selectedTemplate}`);
       
       // Step 1: Call the API to start optimization
       setOptimizationStep("Starting optimization process");
       setProgress(10);
+      
+      // Use the ID if available, otherwise use the filename
+      const payload = selectedCVId 
+        ? { cvId: selectedCVId, templateId: selectedTemplate.toLowerCase().replace(/\s+/g, '-'), forceReoptimize: false }
+        : { fileName: selectedCV, templateId: selectedTemplate.toLowerCase().replace(/\s+/g, '-'), forceReoptimize: false };
       
       const optimizeResponse = await fetch('/api/optimize-cv', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          fileName: selectedCV,
-          templateId: selectedTemplate.toLowerCase().replace(/\s+/g, '-'),
-          forceReoptimize: false
-        }),
+        body: JSON.stringify(payload),
       });
       
       if (!optimizeResponse.ok) {
@@ -203,7 +234,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       
       // Step 2: Start polling for optimization status
       const interval = setInterval(() => {
-        pollOptimizationStatus(selectedCV);
+        pollOptimizationStatus(selectedCV, selectedCVId || undefined);
       }, 2000); // Poll every 2 seconds
       
       setPollingInterval(interval);
@@ -213,7 +244,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       setError(`Optimization failed: ${error instanceof Error ? error.message : String(error)}`);
       setIsOptimizing(false);
     }
-  }, [selectedCV, selectedTemplate, pollingInterval, pollOptimizationStatus]);
+  }, [selectedCV, selectedCVId, selectedTemplate, pollingInterval, pollOptimizationStatus]);
 
   // Simple download function
   const handleDownload = useCallback(() => {
@@ -300,7 +331,7 @@ Date: ${new Date().toLocaleDateString()}`;
         <div className="mb-6">
           <ComboboxPopover
             label="Select CV to Optimize"
-            options={cvs}
+            options={cvDisplayNames}
             onSelect={handleCVSelect}
             accentColor="#B4916C"
             darkMode={true}
