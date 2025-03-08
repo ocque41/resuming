@@ -3,6 +3,11 @@ import { getOverlayCoordinates } from "./templateMatching";
 import { CVTemplate } from "@/types/templates";
 import { Buffer } from "buffer";
 import { getTemplateLayout } from './templateMatching';
+import { 
+  standardizeCV, 
+  analyzeCVContent, 
+  extractSections 
+} from "@/lib/optimizeCV.fixed";
 
 // Add Section interface at the top of the file
 export interface Section {

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 
 // Test importing from optimizeCV
-import { extractSections } from '@/lib/optimizeCV';
+import { extractSections } from '@/lib/optimizeCV.fixed';
 
 // Test importing from storage
 import { getOriginalPdfBytes, extractTextFromPdf } from '@/lib/storage';

@@ -261,4 +261,31 @@ declare module 'drizzle-orm' {
 // Cross-fetch
 declare module 'cross-fetch' {
   export default function fetch(url: string | URL | Request, init?: RequestInit): Promise<Response>;
+}
+
+// Add type declarations for Clerk Auth
+declare module '@clerk/nextjs' {
+  export function auth(): { userId: string | null };
+  export function currentUser(): Promise<any>;
+}
+
+// Add type declarations for database
+declare module '@/lib/db' {
+  export const db: {
+    query: {
+      cv: {
+        findFirst: (options: { where: any }) => Promise<any>;
+      }
+    },
+    update: (table: any) => {
+      set: (data: any) => {
+        where: (condition: any) => Promise<any>;
+      };
+    };
+  };
+}
+
+// Add type declarations for schema
+declare module '@/db/schema' {
+  export const cv: any;
 } 

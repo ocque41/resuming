@@ -4,7 +4,7 @@ import { cvs } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 // Import directly from the module file
-import { extractSections } from '@/lib/optimizeCV';
+import { extractSections } from '@/lib/optimizeCV.fixed';
 
 export async function POST(request: NextRequest) {
   try {

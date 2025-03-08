@@ -5,7 +5,7 @@ import { cvs } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 // Import the entire module to avoid bundling issues
-import * as optimizeCVModule from '@/lib/optimizeCV';
+import * as optimizeCVModule from '@/lib/optimizeCV.fixed';
 import { getOriginalPdfBytes, extractTextFromPdf } from '@/lib/storage';
 
 // Define a session type

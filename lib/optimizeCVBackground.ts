@@ -5,17 +5,19 @@ import {
   extractSections, 
   ensureProperSectionStructure,
   extractTopAchievements,
+  standardizeCV,
   formatCompetences,
   formatExperience,
   formatEducation,
   formatLanguages,
-  formatModernCV,
-  standardizeCV
-} from "./optimizeCV"; // Import all needed functions
+  formatModernCV
+} from "@/lib/optimizeCV.fixed"; // Import all needed functions
 import { modifyPDFWithOptimizedContent } from "./pdfOptimization";
+import { generateCVDocx, parseStandardCVFromSections } from "./docxGenerator";
 import { updateCVAnalysis } from "@/lib/db/queries.server";
 import { getOriginalPdfBytes } from "./storage"; // Using updated storage helper
 import { CV_TEMPLATES } from "@/types/templates";
+import { convertDOCXToPDF } from "./docxToPDF";
 
 export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
   try {
@@ -132,6 +134,8 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     // Optimize the CV
     let optimizedText = "";
     let improvedAtsScore = 0;
+    let standardizedSections: Record<string, string> = {};
+    
     try {
       console.log(`Optimizing CV ${cvRecord.id} with template ${selectedTemplateId}`);
       
@@ -159,7 +163,10 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
       
       // Standardize the CV structure to ensure it has all required sections
       console.log(`Standardizing CV structure for ${cvRecord.id}`);
-      const standardizedSections = standardizeCV(rawText, metadata.analysis);
+      const standardizedText = standardizeCV(rawText);
+      
+      // Convert standardized text to a record of sections
+      const standardizedSections = convertTextToSections(standardizedText);
       
       // Convert standardized sections to formatted text
       optimizedText = "";
@@ -201,48 +208,40 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
       // Continue despite the error
     }
     
-    // Generate PDF from optimized text
-    let pdfBuffer: Uint8Array;
+    // Generate DOCX from standardized sections
+    let docxBuffer: Buffer;
     try {
-      console.log(`Generating PDF for CV ${cvRecord.id} with template ${selectedTemplateId}`);
+      console.log(`Generating DOCX for CV ${cvRecord.id}`);
       
-      // Set a timeout for PDF generation (5 minutes)
-      const pdfTimeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error("PDF generation timed out after 5 minutes")), 5 * 60 * 1000);
-      });
+      // Create a standardized CV object
+      const standardCV = parseStandardCVFromSections(standardizedSections);
       
-      // Race the PDF generation against the timeout
-      pdfBuffer = await Promise.race([
-        modifyPDFWithOptimizedContent(optimizedText, rawText, selectedTemplate),
-        pdfTimeoutPromise
-      ]) as Uint8Array;
+      // Generate the DOCX file
+      docxBuffer = await generateCVDocx(standardCV);
       
-      console.log("PDF generation completed successfully");
+      console.log(`Generated DOCX (${docxBuffer.length} bytes)`);
+    } catch (docxError) {
+      console.error("Error generating DOCX:", docxError);
       
-      if (!pdfBuffer || pdfBuffer.length === 0) {
-        throw new Error("PDF generation produced empty output");
-      }
-    } catch (pdfError) {
-      console.error("Error during PDF modification:", pdfError);
-      
-      // Save optimization result without PDF but with text
+      // Save optimization result with error but with text
       try {
-        const pdfErrorButWithTextMetadata = {
+        const docxErrorButWithTextMetadata = {
           ...updatedMetadata,
           optimizing: false,
           optimized: true, // Mark as optimized since we have the text
           optimizedText: optimizedText,
           progress: 100,
-          error: `PDF generation failed: ${(pdfError as Error).message}, but optimized text is available`,
+          improvedAtsScore: improvedAtsScore,
+          error: `DOCX generation failed: ${(docxError as Error).message}, but optimized text is available`,
           lastOptimizedAt: new Date().toISOString()
         };
-        await updateCVAnalysis(cvRecord.id, JSON.stringify(pdfErrorButWithTextMetadata));
-        console.log(`Saved optimized text despite PDF generation error for CV ${cvRecord.id}`);
+        await updateCVAnalysis(cvRecord.id, JSON.stringify(docxErrorButWithTextMetadata));
+        console.log(`Saved optimized text despite DOCX generation error for CV ${cvRecord.id}`);
       } catch (metadataError) {
-        console.error("Failed to update PDF error metadata with text:", metadataError);
+        console.error("Failed to update DOCX error metadata with text:", metadataError);
       }
       
-      throw new Error(`PDF modification failed: ${(pdfError as Error).message}`);
+      throw new Error(`DOCX generation failed: ${(docxError as Error).message}`);
     }
     
     // Update progress to 80%
@@ -250,7 +249,7 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
       const progress80Metadata = {
         ...updatedMetadata,
         progress: 80,
-        optimizedText: optimizedText, // Keep saving the text
+        optimizedText: optimizedText,
         lastProgressUpdate: new Date().toISOString()
       };
       await updateCVAnalysis(cvRecord.id, JSON.stringify(progress80Metadata));
@@ -260,103 +259,73 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
       // Continue despite the error
     }
     
-    // Verify content preservation
+    // Convert DOCX to PDF
+    let pdfBuffer: Buffer;
     try {
-      console.log(`Verifying content preservation for CV ${cvRecord.id}`);
-      const verification = verifyContentPreservation(rawText, optimizedText);
+      console.log(`Converting DOCX to PDF for CV ${cvRecord.id}`);
       
-      // Log verification results
-      console.log(`Content preservation verification results:
-        Preserved: ${verification.preserved}
-        Missing items: ${verification.missingItems.length}
-        Keyword score: ${verification.keywordScore}
-        Industry keyword score: ${verification.industryKeywordScore}
-      `);
+      // Convert DOCX to PDF
+      const conversionResult = await convertDOCXToPDF(docxBuffer);
       
-      // If content preservation is poor, try to recover
-      if (!verification.preserved && verification.missingItems.length > 0) {
-        console.warn(`Content preservation issues detected for CV ${cvRecord.id}. Missing ${verification.missingItems.length} keywords.`);
+      if (!conversionResult.conversionSuccessful || !conversionResult.pdfBuffer) {
+        throw new Error("DOCX to PDF conversion failed");
+      }
+      
+      pdfBuffer = conversionResult.pdfBuffer;
+      console.log(`Converted to PDF (${pdfBuffer.length} bytes)`);
+    } catch (pdfError) {
+      console.error("Error converting DOCX to PDF:", pdfError);
+      
+      // Save DOCX as base64 in metadata even if PDF conversion failed
+      try {
+        const docxBase64 = docxBuffer.toString('base64');
         
-        try {
-          console.log("Attempting to recover missing keywords...");
-          
-          // Extract sections from original text
-          const originalSections = extractSections(rawText);
-          
-          // Try a more conservative approach
-          const betterOptimizedText = ensureProperSectionStructure(optimizedText, originalSections);
-          
-          // Verify the improved version
-          const improvedVerification = verifyContentPreservation(rawText, betterOptimizedText);
-          
-          console.log(`Improved content preservation:
-            Before: ${verification.keywordScore.toFixed(2)}
-            After: ${improvedVerification.keywordScore.toFixed(2)}
-            Missing items before: ${verification.missingItems.length}
-            Missing items after: ${improvedVerification.missingItems.length}
-          `);
-          
-          // If the improved version is better, use it
-          if (improvedVerification.keywordScore > verification.keywordScore) {
-            console.log("Using improved version with better keyword preservation");
-            optimizedText = betterOptimizedText;
-            
-            // Update metadata with recovery information
-            const recoveredMetadata = {
-              ...updatedMetadata,
-              optimizedText: betterOptimizedText,
-              contentRecoveryApplied: true,
-              originalKeywordScore: verification.keywordScore,
-              improvedKeywordScore: improvedVerification.keywordScore,
-              lastProgressUpdate: new Date().toISOString()
-            };
-            await updateCVAnalysis(cvRecord.id, JSON.stringify(recoveredMetadata));
-            
-            // Return early with the better version
-            return {
-              optimizedText: betterOptimizedText,
-              pdf: await modifyPDFWithOptimizedContent(
-                betterOptimizedText,
-                rawText,
-                selectedTemplate
-              ),
-              status: 'success',
-              message: 'Optimization completed with keyword preservation recovery'
-            };
-          } else {
-            console.warn("Conservative approach did not improve keyword preservation. Using original optimization.");
-          }
-        } catch (recoveryError) {
-          console.error("Error during recovery optimization:", recoveryError);
-          // Continue with original optimization despite the keyword loss
-        }
+        const pdfErrorButWithDocxMetadata = {
+          ...updatedMetadata,
+          optimizing: false,
+          optimized: true,
+          optimizedText: optimizedText,
+          optimizedDocxBase64: docxBase64,
+          progress: 100,
+          improvedAtsScore: improvedAtsScore,
+          error: `PDF conversion failed: ${(pdfError as Error).message}, but DOCX is available`,
+          lastOptimizedAt: new Date().toISOString()
+        };
+        await updateCVAnalysis(cvRecord.id, JSON.stringify(pdfErrorButWithDocxMetadata));
+        console.log(`Saved optimized text and DOCX despite PDF conversion error for CV ${cvRecord.id}`);
+        
+        return {
+          success: true,
+          message: "Optimization completed but PDF conversion failed. DOCX is available.",
+          cvId: cvRecord.id
+        };
+      } catch (metadataError) {
+        console.error("Failed to update PDF error metadata with DOCX:", metadataError);
       }
       
-      // Add missing keywords to metadata for transparency
-      const updatedProgress80Metadata = {
-        ...updatedMetadata,
-        progress: 80,
-        optimizedText: optimizedText,
-        keywordPreservationScore: verification.keywordScore,
-        missingKeywordCount: verification.missingItems.length,
-        lastProgressUpdate: new Date().toISOString()
-      };
+      throw new Error(`PDF conversion failed: ${(pdfError as Error).message}`);
+    }
+    
+    // Verify that we preserved important content from the original
+    try {
+      const contentCheck = verifyContentPreservation(rawText, optimizedText);
+      console.log(`Content preservation check: preserved=${contentCheck.preserved}, keyword score=${contentCheck.keywordScore}, industry keywords=${contentCheck.industryKeywordScore}`);
       
-      if (verification.missingItems.length > 0) {
-        updatedProgress80Metadata.missingKeywordSample = verification.missingItems.slice(0, 10);
+      if (!contentCheck.preserved) {
+        console.warn(`Content preservation check failed for CV ${cvRecord.id}. Missing items:`, contentCheck.missingItems);
+        console.warn("The optimized version might be missing important content from the original.");
       }
-      
-      await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedProgress80Metadata));
-    } catch (verificationError) {
-      console.error("Error during content verification:", verificationError);
-      // Continue despite verification error
+    } catch (contentCheckError) {
+      console.error("Error during content preservation check:", contentCheckError);
+      // Continue despite the error
     }
     
     // Update progress to 100% and mark as complete
     try {
       // Convert PDF to base64
-      const pdfBase64 = Buffer.from(pdfBuffer).toString('base64');
-      console.log(`Converted PDF to base64 (${pdfBase64.length} chars)`);
+      const pdfBase64 = pdfBuffer.toString('base64');
+      const docxBase64 = docxBuffer.toString('base64');
+      console.log(`Converted PDF to base64 (${pdfBase64.length} chars) and DOCX to base64 (${docxBase64.length} chars)`);
       
       // Final metadata update
       const finalMetadata = {
@@ -366,6 +335,7 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
         progress: 100,
         optimizedText: optimizedText,
         optimizedPDFBase64: pdfBase64,
+        optimizedDocxBase64: docxBase64,
         lastOptimizedAt: new Date().toISOString(),
         improvedAtsScore: improvedAtsScore // Include the improved ATS score
       };
@@ -409,23 +379,11 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     }
   } catch (error) {
     console.error("Error in CV optimization background process:", error);
-    
-    // Try to update the CV record with the error
-    try {
-      const errorMetadata = {
-        optimizing: false,
-        optimized: false,
-        progress: 0,
-        error: `Optimization failed: ${(error as Error).message}`,
-        errorTimestamp: new Date().toISOString()
-      };
-      
-      await updateCVAnalysis(cvRecord.id, JSON.stringify(errorMetadata));
-    } catch (updateError) {
-      console.error("Failed to update error state:", updateError);
-    }
-    
-    throw error;
+    return {
+      success: false,
+      message: `CV optimization failed: ${(error as Error).message}`,
+      error: error
+    };
   }
 }
 
@@ -736,4 +694,22 @@ ${formatLanguages(sections.languages)}
   }
 
   return standardCV;
+}
+
+// Add the convertTextToSections helper function
+function convertTextToSections(text: string): Record<string, string> {
+  if (!text) return {};
+  
+  // Extract sections based on headers (e.g., "PROFILE", "SKILLS", etc.)
+  const sectionRegex = /\n?([A-Z][A-Z\s]+)\n([\s\S]*?)(?=\n[A-Z][A-Z\s]+\n|$)/g;
+  const sections: Record<string, string> = {};
+  
+  let match;
+  while ((match = sectionRegex.exec(text)) !== null) {
+    const sectionName = match[1].trim();
+    const sectionContent = match[2].trim();
+    sections[sectionName] = sectionContent;
+  }
+  
+  return sections;
 }

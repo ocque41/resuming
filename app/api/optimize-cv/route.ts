@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCVByFileName, updateCVAnalysis } from "@/lib/db/queries.server";
-import { optimizeCV, optimizeCVWithAnalysis } from "@/lib/optimizeCV";
+import { optimizeCV, optimizeCVWithAnalysis } from "@/lib/optimizeCV.fixed";
 import { optimizeCVBackground } from "@/lib/optimizeCVBackground";
 import { getSession } from "@/lib/auth/session";
 import { CV_TEMPLATES } from "@/types/templates";

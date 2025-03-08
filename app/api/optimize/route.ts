@@ -7,8 +7,10 @@ import {
   extractCriticalKeywords, 
   getIndustrySpecificKeywords, 
   analyzeCVContent, 
-  verifyContentPreservation 
-} from "@/lib/optimizeCV";
+  verifyContentPreservation,
+  extractSections
+} from "@/lib/optimizeCV.fixed";
+import { standardizeCV } from "@/lib/cv-formatter";
 
 export async function POST(req: NextRequest) {
   try {
@@ -394,9 +396,87 @@ ${value.trim()}
 }
 
 // Helper functions
-function extractSections(text: string): Record<string, string> {
-  // Use the enhanced extractSections function from optimizeCV.ts
-  return require("@/lib/optimizeCV").extractSections(text);
+function extractSectionsLocally(text: string): Record<string, string> {
+  const sections: Record<string, string> = {};
+  
+  // Common section headers to look for
+  const sectionHeaders = [
+    'profile', 'summary', 'about me',
+    'objective', 'career goal', 
+    'experience', 'work experience', 'professional experience', 'employment history',
+    'education', 'academic background',
+    'skills', 'technical skills', 'competencies',
+    'achievements', 'accomplishments',
+    'languages', 'certifications',
+    'projects', 'publications', 'references'
+  ];
+  
+  // Convert text to lowercase for case-insensitive matching
+  const lowerText = text.toLowerCase();
+  
+  // Find each section
+  for (let i = 0; i < sectionHeaders.length; i++) {
+    const currentHeader = sectionHeaders[i];
+    const nextHeader = i < sectionHeaders.length - 1 ? sectionHeaders[i + 1] : '';
+    
+    // Look for the current header
+    const headerIndex = lowerText.indexOf(currentHeader);
+    if (headerIndex >= 0) {
+      // Found a header, now find the end of this section
+      const startPos = headerIndex + currentHeader.length;
+      let endPos = text.length;
+      
+      // If there's a next header, find it
+      if (nextHeader) {
+        const nextHeaderIndex = lowerText.indexOf(nextHeader, startPos);
+        if (nextHeaderIndex >= 0) {
+          endPos = nextHeaderIndex;
+        }
+      }
+      
+      // Extract the section content
+      const content = text.substring(startPos, endPos).trim();
+      const normalizedHeader = normalizeHeader(currentHeader);
+      
+      // Only add if there's actual content
+      if (content.length > 0 && !sections[normalizedHeader]) {
+        sections[normalizedHeader] = content;
+      }
+    }
+  }
+  
+  return sections;
+}
+
+/**
+ * Normalizes section headers to a standard format
+ */
+function normalizeHeader(header: string): string {
+  if (/profile|summary|about me/i.test(header)) {
+    return 'profile';
+  } else if (/objective|career goal/i.test(header)) {
+    return 'objective';
+  } else if (/experience|work|professional|employment/i.test(header)) {
+    return 'experience';
+  } else if (/education|academic/i.test(header)) {
+    return 'education';
+  } else if (/skills|competencies/i.test(header)) {
+    return 'skills';
+  } else if (/achievements|accomplishments/i.test(header)) {
+    return 'achievements';
+  } else if (/languages/i.test(header)) {
+    return 'languages';
+  } else if (/certifications/i.test(header)) {
+    return 'certifications';
+  } else if (/projects/i.test(header)) {
+    return 'projects';
+  } else if (/publications/i.test(header)) {
+    return 'publications';
+  } else if (/references/i.test(header)) {
+    return 'references';
+  } else {
+    return header.toLowerCase().replace(/\s+/g, '_');
+  }
 }
 
 function improveSection(text: string, sectionType: string): string {

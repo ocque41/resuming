@@ -1,6 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import { TextItem } from 'pdfjs-dist/types/src/display/api';
-import { extractSections, analyzeCVContent } from './optimizeCV';
+import { extractSections, analyzeCVContent } from './optimizeCV.fixed';
 
 /**
  * Extract text from a PDF buffer
