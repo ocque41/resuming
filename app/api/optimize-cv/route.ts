@@ -29,9 +29,12 @@ export async function POST(request: Request) {
     }
 
     const userId = session.user.id;
+    console.log(`Processing optimization request for user: ${userId}`);
 
     const body = await request.json();
     const { fileName, templateId, forceReoptimize } = body;
+
+    console.log(`Optimization request details: fileName=${fileName}, templateId=${templateId}, forceReoptimize=${forceReoptimize}`);
 
     if (!fileName) {
       return NextResponse.json({ error: "Missing fileName parameter" }, { status: 400 });
@@ -41,10 +44,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing templateId parameter" }, { status: 400 });
     }
 
+    console.log(`Looking up CV with fileName: ${fileName}`);
     const cvRecord = await getCVByFileName(fileName!);
+    
     if (!cvRecord) {
+      console.error(`CV not found with fileName: ${fileName}`);
       return NextResponse.json({ error: "CV not found" }, { status: 404 });
     }
+
+    console.log(`Found CV record: id=${cvRecord.id}, userId=${cvRecord.userId}, fileName=${cvRecord.fileName}`);
 
     // Verify ownership
     if (cvRecord.userId !== userId) {
@@ -52,8 +60,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized access to CV" }, { status: 401 });
     }
 
-    const metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : null;
+    // Parse metadata with error handling
+    let metadata = null;
+    try {
+      metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : null;
+    } catch (error) {
+      console.error(`Error parsing metadata for CV ${cvRecord.id}:`, error);
+      metadata = null;
+    }
+
     if (!metadata || !metadata.atsScore) {
+      console.log(`CV ${cvRecord.id} has not been analyzed yet or has invalid metadata`);
       return NextResponse.json({ error: "CV has not been analyzed yet." }, { status: 400 });
     }
 
@@ -75,6 +92,7 @@ export async function POST(request: Request) {
 
     // Use the new background optimization that uses analysis data
     try {
+      console.log(`Starting background optimization for CV ${cvRecord.id} with template ${templateId}`);
       // Start optimization in background
       optimizeCVBackground(cvRecord, templateId);
       

@@ -1,5 +1,5 @@
 // lib/db/queries.server.ts
-import { desc, and, eq, isNull } from 'drizzle-orm';
+import { desc, and, eq, isNull, like, ilike } from 'drizzle-orm';
 import { db } from './drizzle';
 import { activityLogs, teamMembers, teams, users, cvs } from './schema';
 import { cookies } from 'next/headers';
@@ -139,14 +139,39 @@ export async function getCVsForUser(userId: number) {
 
 /**
  * Retrieves a CV record by its fileName.
+ * Uses a more flexible search to handle case differences and partial matches.
  */
 export async function getCVByFileName(fileName: string) {
-  const result = await db
+  // First try exact match
+  const exactMatch = await db
     .select()
     .from(cvs)
     .where(eq(cvs.fileName, fileName))
     .limit(1);
-  return result.length ? result[0] : null;
+  
+  if (exactMatch.length) {
+    return exactMatch[0];
+  }
+  
+  // If no exact match, try case-insensitive match
+  const caseInsensitiveMatch = await db
+    .select()
+    .from(cvs)
+    .where(ilike(cvs.fileName, fileName))
+    .limit(1);
+  
+  if (caseInsensitiveMatch.length) {
+    return caseInsensitiveMatch[0];
+  }
+  
+  // If still no match, try partial match (filename might be stored with path)
+  const partialMatch = await db
+    .select()
+    .from(cvs)
+    .where(like(cvs.fileName, `%${fileName}%`))
+    .limit(1);
+  
+  return partialMatch.length ? partialMatch[0] : null;
 }
 
 /**

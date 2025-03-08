@@ -45,15 +45,22 @@ export async function GET(request: NextRequest) {
     const userId = session.user.id;
     const fileName = request.nextUrl.searchParams.get('fileName');
 
+    console.log(`Checking optimization status for user ${userId}, fileName: ${fileName}`);
+
     if (!fileName) {
       return NextResponse.json({ error: "Missing fileName parameter" }, { status: 400 });
     }
 
     // Get the CV record
+    console.log(`Looking up CV with fileName: ${fileName}`);
     const cvRecord = await getCVByFileName(fileName);
+    
     if (!cvRecord) {
+      console.error(`CV not found with fileName: ${fileName}`);
       return NextResponse.json({ error: "CV not found" }, { status: 404 });
     }
+
+    console.log(`Found CV record: id=${cvRecord.id}, userId=${cvRecord.userId}, fileName=${cvRecord.fileName}`);
 
     // Verify ownership
     if (cvRecord.userId !== userId) {
@@ -61,12 +68,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized access to CV" }, { status: 401 });
     }
 
-    // Parse metadata
-    const metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : null;
+    // Parse metadata with error handling
+    let metadata = null;
+    try {
+      metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : null;
+    } catch (error) {
+      console.error(`Error parsing metadata for CV ${cvRecord.id}:`, error);
+      metadata = null;
+    }
     
     if (!metadata) {
       return NextResponse.json({ error: "No metadata available for this CV" }, { status: 400 });
     }
+
+    console.log(`Returning optimization status for CV ${cvRecord.id}: progress=${metadata.progress || 0}, optimized=${metadata.optimized || false}`);
 
     // Return the optimization status
     return NextResponse.json({
