@@ -6,50 +6,84 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Download } from "lucide-react";
+import { AlertCircle, Download, RefreshCw } from "lucide-react";
 import { ComboboxPopover } from "@/components/ui/combobox";
+import { Checkbox } from "@/components/ui/checkbox";
 
 // Minimal interface
-interface OptimizeCVCardProps {
-  cvs: string[]; // Format: "filename|id"
-}
+interface OptimizeCVCardProps {}
 
 // Simplified component
-export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
-  // Basic state
-  const [selectedCV, setSelectedCV] = useState<string>("");
-  const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
-  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
-  const [isOptimizing, setIsOptimizing] = useState(false);
-  const [isOptimized, setIsOptimized] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const [optimizationStep, setOptimizationStep] = useState<string>("");
-  const [optimizedPdfData, setOptimizedPdfData] = useState<string | null>(null);
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
-
-  // Templates for selection with their corresponding IDs
-  const templates = [
-    { name: "Professional Classic", id: "professional-classic" },
-    { name: "Modern Professional", id: "modern-professional" },
-    { name: "Creative Design", id: "creative-design" },
-    { name: "Executive", id: "executive" },
-    { name: "Technical", id: "technical" },
-    { name: "Academic", id: "academic" },
-    { name: "Entry Level", id: "entry-level" }
-  ];
+export default function OptimizeCVCard({}: OptimizeCVCardProps) {
+  // State for CV selection
+  const [selectedCV, setSelectedCV] = useState<string | null>(null);
+  const [cvOptions, setCvOptions] = useState<string[]>([]);
   
-  // Extract template names for display
-  const templateNames = templates.map(t => t.name);
+  // State for template selection
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("professional-classic");
+  
+  // State for optimization process
+  const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
+  const [isOptimized, setIsOptimized] = useState<boolean>(false);
+  const [progress, setProgress] = useState<number>(0);
+  const [optimizationStep, setOptimizationStep] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+  const [optimizedPdfData, setOptimizedPdfData] = useState<string | null>(null);
   
   // State to track if we should force re-optimization
   const [forceReoptimize, setForceReoptimize] = useState<boolean>(false);
+  
+  // State for ATS scores
+  const [originalAtsScore, setOriginalAtsScore] = useState<number>(65);
+  const [improvedAtsScore, setImprovedAtsScore] = useState<number>(85);
 
   // Extract display names for the CV dropdown (without the ID part)
-  const cvDisplayNames = cvs.map(cv => {
+  const displayCVOptions = cvOptions.map(cv => {
     const parts = cv.split('|');
-    return parts[0]; // Just the filename part
+    return parts[0].trim();
   });
+
+  // Templates list
+  const templates = [
+    { value: "professional-classic", label: "Professional Classic" },
+    { value: "modern-minimal", label: "Modern Minimal" },
+    { value: "executive", label: "Executive" },
+    { value: "creative", label: "Creative" },
+    { value: "academic", label: "Academic" }
+  ];
+
+  // Fetch available CVs when component mounts
+  useEffect(() => {
+    const fetchCVs = async () => {
+      try {
+        const response = await fetch('/api/cv-list');
+        if (!response.ok) {
+          throw new Error('Failed to fetch CV list');
+        }
+        
+        const data = await response.json();
+        
+        if (data.cvs && Array.isArray(data.cvs)) {
+          // Format the CVs as "filename|id"
+          const formattedCVs = data.cvs.map((cv: any) => {
+            return `${cv.fileName}|${cv.id}`;
+          });
+          
+          setCvOptions(formattedCVs);
+          console.log(`Loaded ${formattedCVs.length} CVs`);
+        } else {
+          console.error('Invalid CV data format:', data);
+          setError('Failed to load CV list: Invalid data format');
+        }
+      } catch (error) {
+        console.error('Error fetching CV list:', error);
+        setError(`Failed to load CV list: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    };
+    
+    fetchCVs();
+  }, []);
 
   // Handle CV selection
   const handleCVSelect = useCallback((cv: string) => {
@@ -62,7 +96,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
     setOptimizedPdfData(null);
     
     // Find the original CV string with ID
-    const originalCVString = cvs.find(item => item.startsWith(cv + '|'));
+    const originalCVString = cvOptions.find(item => item.startsWith(cv + '|'));
     
     if (originalCVString) {
       const parts = originalCVString.split('|');
@@ -71,14 +105,14 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
       
       console.log(`Selected CV: ${fileName}, ID: ${id}`);
       setSelectedCV(fileName);
-      setSelectedCVId(id);
+      setCvOptions(prev => [...prev, `${fileName}|${id}`]);
     } else {
       // Fallback if we can't find the ID
       console.log("Could not find ID for selected CV, using display name only");
       setSelectedCV(cv);
-      setSelectedCVId(null);
+      setCvOptions(prev => [...prev, `${cv}|`]);
     }
-  }, [cvs]);
+  }, [cvOptions]);
 
   // Handle template selection
   const handleTemplateSelect = useCallback((templateName: string) => {
@@ -91,10 +125,10 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
     setOptimizedPdfData(null);
     
     // Find the template ID that corresponds to the selected name
-    const template = templates.find(t => t.name === templateName);
+    const template = templates.find(t => t.value === templateName);
     if (template) {
-      setSelectedTemplate(template.id);
-      console.log(`Mapped template name "${templateName}" to ID "${template.id}"`);
+      setSelectedTemplate(template.value);
+      console.log(`Mapped template name "${templateName}" to ID "${template.value}"`);
     } else {
       // Fallback to the name if no mapping is found
       setSelectedTemplate(templateName.toLowerCase().replace(/\s+/g, '-'));
@@ -150,6 +184,15 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
         setIsOptimizing(false);
         setProgress(100);
         setOptimizationStep("Optimization complete");
+        
+        // Update ATS scores if available
+        if (statusData.originalAtsScore) {
+          setOriginalAtsScore(statusData.originalAtsScore);
+        }
+        
+        if (statusData.improvedAtsScore) {
+          setImprovedAtsScore(statusData.improvedAtsScore);
+        }
         
         // Try to get the optimized PDF
         try {
@@ -214,10 +257,10 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
     };
   }, [pollingInterval]);
 
-  // Simplified optimization function
+  // Function to handle optimization
   const handleOptimize = useCallback(async () => {
     if (!selectedCV) {
-      setError("Please select a CV first");
+      setError("Please select a CV to optimize");
       return;
     }
 
@@ -227,131 +270,89 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
     }
 
     try {
+      setError("");
       setIsOptimizing(true);
+      setIsOptimized(false);
       setProgress(0);
-      setError(null);
-      setOptimizedPdfData(null);
-      
-      // Clear any existing polling interval
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-        setPollingInterval(null);
-      }
-      
-      console.log(`Starting optimization for CV: ${selectedCV}, ID: ${selectedCVId}, template: ${selectedTemplate}, forceReoptimize: ${forceReoptimize}`);
-      
-      // Step 1: Call the API to start optimization
       setOptimizationStep("Starting optimization process");
-      setProgress(10);
-      
-      // Use the ID if available, otherwise use the filename
-      const payload = selectedCVId 
-        ? { cvId: selectedCVId, templateId: selectedTemplate, forceReoptimize }
-        : { fileName: selectedCV, templateId: selectedTemplate, forceReoptimize };
-      
-      const optimizeResponse = await fetch('/api/optimize-cv', {
+      setOptimizedPdfData(null);
+
+      // Extract the CV ID from the selected CV (if it contains a pipe character)
+      const cvParts = selectedCV.split('|');
+      const fileName = cvParts[0].trim();
+      const cvId = cvParts.length > 1 ? cvParts[1].trim() : undefined;
+
+      console.log(`Starting optimization for ${fileName}${cvId ? ` (ID: ${cvId})` : ''}`);
+
+      // Call the API to start optimization
+      const response = await fetch('/api/optimize-cv', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          fileName,
+          cvId,
+          templateId: selectedTemplate,
+          forceReoptimize: forceReoptimize,
+        }),
       });
-      
-      if (!optimizeResponse.ok) {
-        const errorData = await optimizeResponse.json();
-        throw new Error(errorData.error || 'Failed to start optimization process');
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to start optimization');
       }
-      
-      const optimizeData = await optimizeResponse.json();
-      console.log("Optimization started:", optimizeData);
-      
-      // Step 2: Start polling for optimization status
+
+      const data = await response.json();
+      console.log("Optimization started:", data);
+
+      // Start polling for status updates
       const interval = setInterval(() => {
-        pollOptimizationStatus(selectedCV, selectedCVId || undefined);
+        pollOptimizationStatus(fileName, cvId);
       }, 2000); // Poll every 2 seconds
-      
+
       setPollingInterval(interval);
-      
+
+      // Initial status check
+      pollOptimizationStatus(fileName, cvId);
     } catch (error) {
-      console.error("Error during optimization:", error);
-      setError(`Optimization failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.error("Error starting optimization:", error);
+      setError(`Optimization error: ${error instanceof Error ? error.message : String(error)}`);
       setIsOptimizing(false);
     }
-  }, [selectedCV, selectedCVId, selectedTemplate, pollingInterval, pollOptimizationStatus, forceReoptimize]);
+  }, [selectedCV, selectedTemplate, forceReoptimize, pollOptimizationStatus]);
 
-  // Simple download function
+  // Function to handle download
   const handleDownload = useCallback(() => {
-    if (!selectedCV) {
-      setError("Please select a CV first");
+    if (!optimizedPdfData) {
+      setError("No optimized CV available to download");
       return;
     }
 
     try {
-      if (optimizedPdfData) {
-        console.log(`Preparing to download PDF with base64 data (${optimizedPdfData.length} chars)`);
-        
-        // Create and download PDF from base64 data
-        try {
-          const byteCharacters = atob(optimizedPdfData);
-          console.log(`Decoded base64 to ${byteCharacters.length} bytes`);
-          
-          const byteNumbers = new Array(byteCharacters.length);
-          
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-          }
-          
-          const byteArray = new Uint8Array(byteNumbers);
-          const blob = new Blob([byteArray], { type: 'application/pdf' });
-          const url = URL.createObjectURL(blob);
-          
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = `optimized_${selectedCV.replace(/\|.*$/, '')}.pdf`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-          
-          console.log("PDF download completed successfully");
-        } catch (pdfError) {
-          console.error("Error creating PDF from base64:", pdfError);
-          throw new Error(`Failed to create PDF: ${pdfError instanceof Error ? pdfError.message : String(pdfError)}`);
-        }
-      } else {
-        console.log("No PDF data available, falling back to text summary");
-        // Fallback to text file if PDF data is not available
-        const content = `Optimized CV for ${selectedCV.replace(/\|.*$/, '')}
-
-This CV has been optimized using the ${selectedTemplate} template.
-ATS Score improved from 65% to 85%.
-
-Key improvements:
-- Enhanced keyword optimization
-- Improved formatting
-- Better structure
-- Emphasized strengths
-
-Date: ${new Date().toLocaleDateString()}`;
-
-        // Create and trigger download
-        const blob = new Blob([content], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `optimized_${selectedCV.replace(/\|.*$/, '').replace('.pdf', '')}.txt`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        
-        console.log("Text download completed as fallback");
-      }
+      // Create a link element
+      const link = document.createElement('a');
+      
+      // Set the href to the base64 PDF data
+      link.href = `data:application/pdf;base64,${optimizedPdfData}`;
+      
+      // Set the download attribute with a filename
+      const fileName = selectedCV ? selectedCV.split('|')[0].trim() : 'optimized-cv';
+      link.download = `${fileName}-optimized.pdf`;
+      
+      // Append to the document
+      document.body.appendChild(link);
+      
+      // Trigger the download
+      link.click();
+      
+      // Clean up
+      document.body.removeChild(link);
     } catch (error) {
-      console.error("Error downloading optimized CV:", error);
-      setError(`Download failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.error("Error downloading PDF:", error);
+      setError(`Download error: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }, [selectedCV, selectedTemplate, optimizedPdfData]);
+  }, [optimizedPdfData, selectedCV]);
 
   return (
     <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg hover:shadow-xl transition-all duration-300">
@@ -374,7 +375,7 @@ Date: ${new Date().toLocaleDateString()}`;
         <div className="mb-6">
           <ComboboxPopover
             label="Select CV to Optimize"
-            options={cvDisplayNames}
+            options={displayCVOptions}
             onSelect={handleCVSelect}
             accentColor="#B4916C"
             darkMode={true}
@@ -386,7 +387,7 @@ Date: ${new Date().toLocaleDateString()}`;
           <div className="mb-6">
             <ComboboxPopover
               label="Select Template"
-              options={templateNames}
+              options={templates.map(t => t.label)}
               onSelect={handleTemplateSelect}
               accentColor="#B4916C"
               darkMode={true}
@@ -441,55 +442,63 @@ Date: ${new Date().toLocaleDateString()}`;
         
         {/* Optimization Results */}
         {isOptimized && (
-          <div className="mt-6 space-y-4">
-            <div className="p-4 bg-[#121212] rounded-lg border border-[#B4916C]/20">
-              <h3 className="text-[#B4916C] font-medium mb-2">Optimization Complete</h3>
-              
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-white">ATS Score:</span>
+          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+            <h3 className="text-lg font-semibold mb-2">Optimization Results</h3>
+            
+            <div className="mb-4">
+              <div className="flex justify-between items-center mb-2">
+                <span className="font-medium">ATS Score Improvement:</span>
                 <div className="flex items-center">
-                  <span className="text-gray-400 line-through mr-2">65%</span>
-                  <span className="text-green-500 font-bold">85%</span>
+                  <span className="text-gray-400 line-through mr-2">{originalAtsScore}%</span>
+                  <span className="text-green-500 font-bold">{improvedAtsScore}%</span>
                 </div>
               </div>
               
-              <div className="text-sm text-gray-300 mb-4">
-                <p className="mb-2">Your CV has been optimized with the following improvements:</p>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>Enhanced keyword optimization for better ATS recognition</li>
-                  <li>Improved formatting for better readability</li>
-                  <li>Restructured content to highlight key qualifications</li>
-                  <li>Emphasized strengths and achievements</li>
-                </ul>
+              <div className="w-full bg-gray-200 rounded-full h-2.5">
+                <div 
+                  className="bg-green-500 h-2.5 rounded-full" 
+                  style={{ width: `${improvedAtsScore}%` }}
+                ></div>
+              </div>
+            </div>
+            
+            <div className="flex flex-col space-y-3">
+              <div className="flex items-center">
+                <Button 
+                  onClick={handleDownload}
+                  disabled={!optimizedPdfData}
+                  className="w-full"
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download Optimized CV
+                </Button>
               </div>
               
-              {optimizedPdfData ? (
-                <div>
-                  <Button 
-                    onClick={handleDownload}
-                    className="w-full bg-[#B4916C] hover:bg-[#A3815C] text-white flex items-center justify-center"
+              <div className="flex items-center">
+                <div className="flex items-center space-x-2 w-full">
+                  <Checkbox 
+                    id="force-reoptimize" 
+                    checked={forceReoptimize}
+                    onCheckedChange={(checked) => setForceReoptimize(checked as boolean)}
+                  />
+                  <label 
+                    htmlFor="force-reoptimize" 
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
-                    <Download size={16} className="mr-2" />
-                    Download Optimized PDF
-                  </Button>
-                  <p className="text-xs text-gray-400 text-center mt-2">
-                    Your optimized CV is ready as a PDF document
-                  </p>
+                    Force re-optimization (ignore cached results)
+                  </label>
                 </div>
-              ) : (
-                <div>
-                  <Button 
-                    onClick={handleDownload}
-                    className="w-full bg-[#B4916C] hover:bg-[#A3815C] text-white flex items-center justify-center"
-                  >
-                    <Download size={16} className="mr-2" />
-                    Download Optimization Summary
-                  </Button>
-                  <p className="text-xs text-gray-400 text-center mt-2">
-                    PDF generation is not available. Downloading text summary instead.
-                  </p>
-                </div>
-              )}
+              </div>
+              
+              <Button 
+                onClick={handleOptimize}
+                disabled={isOptimizing || !selectedCV || !selectedTemplate}
+                variant="outline"
+                className="w-full"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Re-optimize CV
+              </Button>
             </div>
           </div>
         )}

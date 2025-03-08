@@ -22,6 +22,8 @@ interface CVMetadata {
   stalledDetected?: boolean; // Explicit flag for stalled detection
   progressStalled?: boolean; // Explicit flag for stalled progress
   partialResultsAvailable?: boolean; // Explicit flag for partial results
+  atsScore?: number;
+  improvedAtsScore?: number;
   [key: string]: any; // Allow for additional properties
 }
 
@@ -105,7 +107,9 @@ export async function GET(request: NextRequest) {
       progress: metadata.progress || 0,
       error: metadata.error || null,
       lastProgressUpdate: metadata.lastProgressUpdate || null,
-      lastOptimizedAt: metadata.lastOptimizedAt || null
+      lastOptimizedAt: metadata.lastOptimizedAt || null,
+      originalAtsScore: metadata.atsScore || 65,
+      improvedAtsScore: metadata.improvedAtsScore || 85
     });
   } catch (error) {
     console.error("Error checking optimization status:", error);

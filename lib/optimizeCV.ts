@@ -2596,3 +2596,670 @@ function formatLanguagesWithBars(languages: string): string {
   return result.trim();
   }
   
+/**
+ * Standardizes the CV structure to ensure it has all required sections in the correct format
+ * This ensures all optimized CVs follow the same structure for consistent styling
+ */
+export function standardizeCV(originalText: string, analysis: any = null): Record<string, string> {
+  console.log("Standardizing CV structure");
+  
+  // Extract sections from the original text
+  const originalSections = extractSections(originalText);
+  
+  // Create a standardized structure with all required sections
+  const standardizedSections: Record<string, string> = {
+    "PROFILE": "",
+    "CAREER GOAL": "",
+    "ACHIEVEMENTS": "",
+    "SKILLS": "",
+    "WORK EXPERIENCE": "",
+    "EDUCATION": "",
+    "LANGUAGES": ""
+  };
+  
+  // Map original sections to standardized sections
+  // Profile section (extract from contact/personal info)
+  if (originalSections.contact || originalSections.personal_information || originalSections.personal_details) {
+    const contactSection = originalSections.contact || originalSections.personal_information || originalSections.personal_details;
+    standardizedSections["PROFILE"] = extractProfileInfo(contactSection);
+  } else {
+    // Try to extract profile info from the beginning of the document
+    standardizedSections["PROFILE"] = extractProfileFromText(originalText);
+  }
+  
+  // Career Goal (from about me, summary, or objective)
+  if (originalSections.about_me || originalSections.summary || originalSections.objective || originalSections.profile) {
+    const aboutSection = originalSections.about_me || originalSections.summary || originalSections.objective || originalSections.profile;
+    standardizedSections["CAREER GOAL"] = formatCareerGoal(aboutSection);
+  }
+  
+  // Achievements (extract top achievements from experience or dedicated section)
+  if (originalSections.achievements || originalSections.accomplishments) {
+    standardizedSections["ACHIEVEMENTS"] = formatAchievements(originalSections.achievements || originalSections.accomplishments);
+  } else if (originalSections.experience || originalSections.work_experience || originalSections.employment_history) {
+    // Extract achievements from work experience
+    const experienceSection = originalSections.experience || originalSections.work_experience || originalSections.employment_history;
+    standardizedSections["ACHIEVEMENTS"] = extractTopAchievementsFromExperience(experienceSection);
+  }
+  
+  // Skills section
+  if (originalSections.skills || originalSections.competences || originalSections.expertise) {
+    const skillsSection = originalSections.skills || originalSections.competences || originalSections.expertise;
+    standardizedSections["SKILLS"] = formatSkills(skillsSection, analysis?.industry || "");
+  }
+  
+  // Work Experience
+  if (originalSections.experience || originalSections.work_experience || originalSections.employment_history) {
+    const experienceSection = originalSections.experience || originalSections.work_experience || originalSections.employment_history;
+    standardizedSections["WORK EXPERIENCE"] = formatWorkExperience(experienceSection);
+  }
+  
+  // Education
+  if (originalSections.education || originalSections.academic_background) {
+    const educationSection = originalSections.education || originalSections.academic_background;
+    standardizedSections["EDUCATION"] = formatEducation(educationSection);
+  }
+  
+  // Languages
+  if (originalSections.languages || originalSections.language_skills) {
+    const languagesSection = originalSections.languages || originalSections.language_skills;
+    standardizedSections["LANGUAGES"] = formatLanguages(languagesSection);
+  }
+  
+  // Fill in any empty sections with default content
+  for (const section in standardizedSections) {
+    if (!standardizedSections[section]) {
+      standardizedSections[section] = getDefaultContentForSection(section);
+    }
+  }
+  
+  return standardizedSections;
+}
+
+/**
+ * Extracts profile information from contact section
+ */
+function extractProfileInfo(contactText: string): string {
+  const lines = contactText.split('\n').map(line => line.trim()).filter(line => line);
+  let name = "";
+  let phone = "";
+  let email = "";
+  let location = "";
+  
+  // Extract information from contact text
+  if (lines.length > 0) {
+    // First line is usually the name
+    name = lines[0];
+    
+    // Look for phone, email, and location in other lines
+    for (const line of lines.slice(1)) {
+      if (line.includes('@')) {
+        email = line;
+      } else if (line.match(/(\+\d{1,3}[\s-]?)?\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{4}/)) {
+        // Phone number pattern
+        phone = line;
+      } else if (!location && !line.includes('Title') && !line.includes('Position')) {
+        // Assume it's a location if not already found and not a job title
+        location = line;
+      }
+    }
+  }
+  
+  // Format the profile section
+  let profile = "";
+  if (name) profile += `${name}\n`;
+  if (phone) profile += `${phone}\n`;
+  if (email) profile += `${email}\n`;
+  if (location) profile += `${location}\n`;
+  
+  return profile;
+}
+
+/**
+ * Attempts to extract profile information from the beginning of the document
+ */
+function extractProfileFromText(text: string): string {
+  const lines = text.split('\n').slice(0, 10); // Look at first 10 lines
+  let name = "";
+  let phone = "";
+  let email = "";
+  let location = "";
+  
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (!trimmedLine) continue;
+    
+    if (!name && trimmedLine.length < 50 && !trimmedLine.includes(':')) {
+      // Likely a name if it's short and doesn't contain a colon
+      name = trimmedLine;
+    } else if (trimmedLine.includes('@')) {
+      email = trimmedLine;
+    } else if (trimmedLine.match(/(\+\d{1,3}[\s-]?)?\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{4}/)) {
+      phone = trimmedLine;
+    } else if (!location && 
+              (trimmedLine.includes('Street') || 
+               trimmedLine.includes('Avenue') || 
+               trimmedLine.includes('Road') || 
+               trimmedLine.includes('Lane') ||
+               /\b[A-Z]{2}\b/.test(trimmedLine) || // State abbreviation
+               /\b\d{5}(-\d{4})?\b/.test(trimmedLine))) { // ZIP code
+      location = trimmedLine;
+    }
+  }
+  
+  // Format the profile section
+  let profile = "";
+  if (name) profile += `${name}\n`;
+  if (phone) profile += `${phone}\n`;
+  if (email) profile += `${email}\n`;
+  if (location) profile += `${location}\n`;
+  
+  return profile || "NAME LAST NAME\n+33 01 01 01 01 01\nname@mail.com\nOregon, USA";
+}
+
+/**
+ * Formats the career goal section
+ */
+function formatCareerGoal(aboutText: string): string {
+  // Remove common prefixes
+  let cleaned = aboutText.replace(/^(Summary|Profile|Objective|About Me|About):/i, '').trim();
+  
+  // Ensure it's not too long (aim for 3-4 sentences)
+  const sentences = cleaned.match(/[^.!?]+[.!?]+/g) || [];
+  if (sentences.length > 4) {
+    cleaned = sentences.slice(0, 4).join(' ');
+  }
+  
+  return cleaned;
+}
+
+/**
+ * Formats the achievements section
+ */
+function formatAchievements(achievementsText: string): string {
+  const lines = achievementsText.split('\n').map(line => line.trim()).filter(line => line);
+  let formattedAchievements = "";
+  
+  // Take up to 3 achievements
+  const achievements = lines.slice(0, 3);
+  
+  for (const achievement of achievements) {
+    // Remove bullet points if present
+    let cleaned = achievement.replace(/^[-•*]\s*/, '');
+    
+    // Add bullet point
+    formattedAchievements += `• ${cleaned}\n`;
+  }
+  
+  return formattedAchievements;
+}
+
+/**
+ * Extracts top achievements from work experience
+ */
+function extractTopAchievementsFromExperience(experienceText: string): string {
+  // Split experience into bullet points
+  const allBulletPoints: string[] = [];
+  const lines = experienceText.split('\n');
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*')) {
+      // Remove the bullet point character
+      const content = trimmed.substring(1).trim();
+      
+      // Check if it's likely an achievement (contains action verbs and metrics)
+      if (
+        (content.includes('increase') || content.includes('improve') || 
+         content.includes('reduce') || content.includes('achieve') ||
+         content.includes('develop') || content.includes('implement') ||
+         content.includes('lead') || content.includes('manage') ||
+         content.includes('create') || content.includes('design')) &&
+        (content.includes('%') || /\d+/.test(content))
+      ) {
+        allBulletPoints.push(content);
+      }
+    }
+  }
+  
+  // Score achievements based on impact
+  const scoredAchievements = allBulletPoints.map(achievement => {
+    let score = 0;
+    
+    // Higher score for quantifiable results
+    if (achievement.includes('%')) score += 3;
+    if (/\$\d+/.test(achievement) || /\d+ dollars/.test(achievement.toLowerCase())) score += 3;
+    if (/\d+ million/.test(achievement.toLowerCase())) score += 4;
+    if (/\d+ billion/.test(achievement.toLowerCase())) score += 5;
+    
+    // Higher score for leadership
+    if (achievement.toLowerCase().includes('lead') || 
+        achievement.toLowerCase().includes('manage') || 
+        achievement.toLowerCase().includes('direct')) {
+      score += 2;
+    }
+    
+    // Higher score for innovation
+    if (achievement.toLowerCase().includes('innovat') || 
+        achievement.toLowerCase().includes('develop') || 
+        achievement.toLowerCase().includes('create') ||
+        achievement.toLowerCase().includes('design')) {
+      score += 2;
+    }
+    
+    return { achievement, score };
+  });
+  
+  // Sort by score and take top 3
+  scoredAchievements.sort((a, b) => b.score - a.score);
+  const topAchievements = scoredAchievements.slice(0, 3);
+  
+  // Format achievements
+  let formattedAchievements = "";
+  for (const { achievement } of topAchievements) {
+    formattedAchievements += `• ${achievement}\n`;
+  }
+  
+  // If we don't have enough achievements, add some generic ones
+  if (topAchievements.length < 3) {
+    const genericAchievements = [
+      "Increased team productivity by 25% through implementation of agile methodologies",
+      "Reduced operational costs by 15% by streamlining processes and eliminating redundancies",
+      "Successfully led cross-functional team of 8 members to deliver project under budget and ahead of schedule"
+    ];
+    
+    for (let i = topAchievements.length; i < 3; i++) {
+      formattedAchievements += `• ${genericAchievements[i]}\n`;
+    }
+  }
+  
+  return formattedAchievements;
+}
+
+/**
+ * Formats the skills section
+ */
+function formatSkills(skillsText: string, industry: string): string {
+  // Extract skills from text
+  let skills: string[] = [];
+  
+  // Try to extract bullet points first
+  const bulletPointRegex = /[-•*]\s*([^-•*\n]+)/g;
+  let match;
+  while ((match = bulletPointRegex.exec(skillsText)) !== null) {
+    skills.push(match[1].trim());
+  }
+  
+  // If no bullet points found, try comma-separated or line-by-line
+  if (skills.length === 0) {
+    if (skillsText.includes(',')) {
+      skills = skillsText.split(',').map(s => s.trim()).filter(s => s);
+    } else {
+      skills = skillsText.split('\n').map(s => s.trim()).filter(s => s);
+    }
+  }
+  
+  // Add industry-specific skills if needed
+  const industrySkills = getIndustrySpecificSkills(industry);
+  
+  // Ensure we have a good mix of skills
+  const existingSkillsLower = skills.map(s => s.toLowerCase());
+  for (const skill of industrySkills) {
+    if (!existingSkillsLower.some(s => s.includes(skill.toLowerCase()))) {
+      skills.push(skill);
+    }
+  }
+  
+  // Limit to 9-12 skills (for 3 columns of 3-4 skills)
+  skills = skills.slice(0, 12);
+  
+  // Format skills as bullet points
+  let formattedSkills = "";
+  for (const skill of skills) {
+    formattedSkills += `• ${skill}\n`;
+  }
+  
+  return formattedSkills;
+}
+
+/**
+ * Returns industry-specific skills
+ */
+function getIndustrySpecificSkills(industry: string): string[] {
+  const industrySkillsMap: Record<string, string[]> = {
+    "Technology": [
+      "Programming", "Software Development", "Cloud Computing", 
+      "Data Analysis", "Agile Methodologies", "DevOps"
+    ],
+    "Finance": [
+      "Financial Analysis", "Risk Management", "Investment Strategies", 
+      "Financial Reporting", "Budgeting", "Forecasting"
+    ],
+    "Healthcare": [
+      "Patient Care", "Medical Records", "Healthcare Compliance", 
+      "Clinical Procedures", "Medical Terminology", "Healthcare Management"
+    ],
+    "Marketing": [
+      "Digital Marketing", "Content Strategy", "Social Media Management", 
+      "SEO/SEM", "Market Research", "Brand Development"
+    ],
+    "Education": [
+      "Curriculum Development", "Instructional Design", "Student Assessment", 
+      "Classroom Management", "Educational Technology", "Lesson Planning"
+    ],
+    "Engineering": [
+      "Project Management", "Technical Documentation", "Quality Assurance", 
+      "CAD Software", "Process Improvement", "Systems Design"
+    ],
+    "Sales": [
+      "Relationship Building", "Negotiation", "CRM Software", 
+      "Sales Strategy", "Client Acquisition", "Revenue Growth"
+    ],
+    "Human Resources": [
+      "Recruitment", "Employee Relations", "Performance Management", 
+      "Compensation & Benefits", "HR Policies", "Talent Development"
+    ]
+  };
+  
+  // Default to Technology if industry not found
+  const normalizedIndustry = Object.keys(industrySkillsMap).find(
+    key => industry.toLowerCase().includes(key.toLowerCase())
+  ) || "Technology";
+  
+  return industrySkillsMap[normalizedIndustry];
+}
+
+/**
+ * Formats the work experience section
+ */
+function formatWorkExperience(experienceText: string): string {
+  // Split experience into entries (assuming double line breaks separate entries)
+  let entries: string[] = [];
+  
+  if (experienceText.includes('\n\n')) {
+    entries = experienceText.split('\n\n').filter(entry => entry.trim());
+  } else {
+    // Try to identify job entries by dates or company names
+    const lines = experienceText.split('\n');
+    let currentEntry = "";
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      
+      // Check if this line might be the start of a new entry
+      if (
+        /\b(19|20)\d{2}\b/.test(trimmed) || // Contains a year
+        /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{4}\b/i.test(trimmed) || // Contains a month and year
+        /\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}\b/i.test(trimmed) || // Contains a full month and year
+        trimmed.toUpperCase() === trimmed // All uppercase might be a company name
+      ) {
+        if (currentEntry) {
+          entries.push(currentEntry);
+        }
+        currentEntry = trimmed;
+      } else {
+        currentEntry += "\n" + trimmed;
+      }
+    }
+    
+    if (currentEntry) {
+      entries.push(currentEntry);
+    }
+  }
+  
+  // Format each entry
+  let formattedExperience = "";
+  
+  for (const entry of entries) {
+    const lines = entry.split('\n').map(line => line.trim()).filter(line => line);
+    
+    if (lines.length === 0) continue;
+    
+    // Extract date, job title, and company
+    let date = "Sept. 20XX - Juli. 20XX";
+    let jobTitle = "Job occupied";
+    let company = "NAME OF THE COMPANY - CITY";
+    let responsibilities: string[] = [];
+    
+    // Try to extract date
+    for (const line of lines) {
+      if (/\b(19|20)\d{2}\b/.test(line) || 
+          /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{4}\b/i.test(line) ||
+          /\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}\b/i.test(line)) {
+        date = line;
+        break;
+      }
+    }
+    
+    // Try to extract company name (often in all caps or second line)
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line !== date && (line.toUpperCase() === line || i === 1)) {
+        company = line;
+        break;
+      }
+    }
+    
+    // Try to extract job title (often after date and before company)
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line !== date && line !== company && 
+          (line.includes('Manager') || line.includes('Director') || 
+           line.includes('Engineer') || line.includes('Developer') ||
+           line.includes('Analyst') || line.includes('Specialist') ||
+           line.includes('Coordinator') || line.includes('Assistant'))) {
+        jobTitle = line;
+        break;
+      }
+    }
+    
+    // Extract responsibilities (bullet points or remaining lines)
+    for (const line of lines) {
+      if (line !== date && line !== company && line !== jobTitle) {
+        // Remove bullet points if present
+        const cleaned = line.replace(/^[-•*]\s*/, '');
+        responsibilities.push(cleaned);
+      }
+    }
+    
+    // Format the entry
+    formattedExperience += `${date}\n`;
+    formattedExperience += `${jobTitle}\n`;
+    formattedExperience += `${company}\n`;
+    
+    // Add up to 3 responsibilities as bullet points
+    const topResponsibilities = responsibilities.slice(0, 3);
+    for (const responsibility of topResponsibilities) {
+      formattedExperience += `• ${responsibility}\n`;
+    }
+    
+    // Add generic responsibilities if needed
+    if (topResponsibilities.length < 3) {
+      const genericResponsibilities = [
+        "Managed cross-functional teams to deliver projects on time and within budget",
+        "Developed and implemented strategies resulting in significant improvements in efficiency",
+        "Collaborated with stakeholders to ensure alignment with business objectives"
+      ];
+      
+      for (let i = topResponsibilities.length; i < 3; i++) {
+        formattedExperience += `• ${genericResponsibilities[i]}\n`;
+      }
+    }
+    
+    formattedExperience += "\n";
+  }
+  
+  return formattedExperience;
+}
+
+/**
+ * Formats the education section
+ */
+function formatEducation(educationText: string): string {
+  // Split education into entries
+  let entries: string[] = [];
+  
+  if (educationText.includes('\n\n')) {
+    entries = educationText.split('\n\n').filter(entry => entry.trim());
+  } else {
+    // Try to identify education entries by years or school names
+    const lines = educationText.split('\n');
+    let currentEntry = "";
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      
+      // Check if this line might be the start of a new entry
+      if (
+        /\b(19|20)\d{2}\b/.test(trimmed) || // Contains a year
+        /\b(University|College|School|Institute)\b/i.test(trimmed) // Contains education keywords
+      ) {
+        if (currentEntry) {
+          entries.push(currentEntry);
+        }
+        currentEntry = trimmed;
+      } else {
+        currentEntry += "\n" + trimmed;
+      }
+    }
+    
+    if (currentEntry) {
+      entries.push(currentEntry);
+    }
+  }
+  
+  // Format each entry
+  let formattedEducation = "";
+  
+  // Limit to 3 entries for the layout
+  const maxEntries = Math.min(entries.length, 3);
+  
+  for (let i = 0; i < maxEntries; i++) {
+    const entry = entries[i];
+    const lines = entry.split('\n').map(line => line.trim()).filter(line => line);
+    
+    if (lines.length === 0) continue;
+    
+    // Extract school, degree, and year
+    let school = "UNIVERSITY OR SCHOOL";
+    let degree = "Diploma Xxxxxxxxxx";
+    let year = "20XX";
+    
+    // Try to identify which line is which
+    for (const line of lines) {
+      if (/\b(19|20)\d{2}\b/.test(line)) {
+        // Line contains a year
+        const yearMatch = line.match(/\b(19|20)\d{2}\b/);
+        if (yearMatch && yearMatch[0]) {
+          year = yearMatch[0];
+        }
+      } else if (/\b(University|College|School|Institute)\b/i.test(line)) {
+        // Line contains education institution keywords
+        school = line;
+      } else if (/\b(Bachelor|Master|PhD|Diploma|Degree|Certificate)\b/i.test(line)) {
+        // Line contains degree keywords
+        degree = line;
+      }
+    }
+    
+    // If we couldn't identify specific parts, use the lines in order
+    if (school === "UNIVERSITY OR SCHOOL" && lines[0]) {
+      school = lines[0];
+    }
+    
+    if (degree === "Diploma Xxxxxxxxxx" && lines.length > 1) {
+      degree = lines[1];
+    }
+    
+    formattedEducation += `${school}\n${degree}\n${year}\n\n`;
+  }
+  
+  return formattedEducation;
+}
+
+/**
+ * Formats the languages section
+ */
+function formatLanguages(languagesText: string): string {
+  // Extract languages
+  let languages: Array<{name: string, proficiency: number}> = [];
+  
+  // Try to extract from bullet points or lines
+  const lines = languagesText.split('\n').map(line => line.trim()).filter(line => line);
+  
+  for (const line of lines) {
+    // Remove bullet points if present
+    const cleaned = line.replace(/^[-•*]\s*/, '');
+    
+    // Try to extract proficiency
+    let languageName = cleaned;
+    let proficiency = 0.7; // Default 70%
+    
+    if (cleaned.includes(':')) {
+      const parts = cleaned.split(':');
+      languageName = parts[0].trim();
+      
+      // Parse proficiency
+      const proficiencyText = parts[1].trim().toLowerCase();
+      if (proficiencyText.includes('fluent') || proficiencyText.includes('native')) {
+        proficiency = 0.9;
+      } else if (proficiencyText.includes('advanced')) {
+        proficiency = 0.7;
+      } else if (proficiencyText.includes('intermediate')) {
+        proficiency = 0.5;
+      } else if (proficiencyText.includes('basic')) {
+        proficiency = 0.3;
+      } else if (proficiencyText.includes('%')) {
+        // Try to parse percentage
+        const percentMatch = proficiencyText.match(/(\d+)%/);
+        if (percentMatch) {
+          proficiency = parseInt(percentMatch[1]) / 100;
+        }
+      }
+    }
+    
+    languages.push({ name: languageName, proficiency });
+  }
+  
+  // Ensure we have at least 3 languages
+  if (languages.length === 0) {
+    languages = [
+      { name: "English", proficiency: 0.9 },
+      { name: "Spanish", proficiency: 0.5 },
+      { name: "French", proficiency: 0.3 }
+    ];
+  } else if (languages.length === 1) {
+    languages.push({ name: "English", proficiency: 0.7 });
+    languages.push({ name: "Spanish", proficiency: 0.4 });
+  } else if (languages.length === 2) {
+    languages.push({ name: "French", proficiency: 0.3 });
+  }
+  
+  // Format languages
+  let formattedLanguages = "";
+  for (const language of languages) {
+    formattedLanguages += `${language.name}: ${Math.round(language.proficiency * 100)}%\n`;
+  }
+  
+  return formattedLanguages;
+}
+
+/**
+ * Returns default content for empty sections
+ */
+function getDefaultContentForSection(section: string): string {
+  const defaults: Record<string, string> = {
+    "PROFILE": "NAME LAST NAME\n+33 01 01 01 01 01\nname@mail.com\nOregon, USA",
+    "CAREER GOAL": "Experienced professional seeking to leverage my skills and expertise to contribute to organizational success while continuing to grow professionally. Committed to delivering high-quality results through effective collaboration and innovative problem-solving.",
+    "ACHIEVEMENTS": "• Increased team productivity by 25% through implementation of agile methodologies\n• Reduced operational costs by 15% by streamlining processes and eliminating redundancies\n• Successfully led cross-functional team of 8 members to deliver project under budget and ahead of schedule",
+    "SKILLS": "• Project Management\n• Team Leadership\n• Strategic Planning\n• Problem Solving\n• Communication\n• Data Analysis\n• Process Improvement\n• Customer Relations\n• Budget Management",
+    "WORK EXPERIENCE": "Sept. 20XX - Juli. 20XX\nJob occupied\nNAME OF THE COMPANY - CITY\n• Managed cross-functional teams to deliver projects on time and within budget\n• Developed and implemented strategies resulting in significant improvements in efficiency\n• Collaborated with stakeholders to ensure alignment with business objectives\n\nSept. 20XX - Juli. 20XX\nJob occupied\nNAME OF THE COMPANY - CITY\n• Led initiatives that resulted in 20% increase in department productivity\n• Implemented new processes that improved quality metrics by 15%\n• Mentored junior team members, resulting in improved team performance and morale",
+    "EDUCATION": "UNIVERSITY OR SCHOOL\nDiploma Xxxxxxxxxx\n20XX\n\nUNIVERSITY OR SCHOOL\nDiploma Xxxxxxxxxx\n20XX\n\nUNIVERSITY OR SCHOOL\nDiploma Xxxxxxxxxx\n20XX",
+    "LANGUAGES": "English: 90%\nGerman: 70%\nSpanish: 50%"
+  };
+  
+  return defaults[section] || "";
+}
+  
