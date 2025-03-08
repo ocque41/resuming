@@ -102,7 +102,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
           const cvId = statusData.id || statusData.cvId;
           
           if (cvId) {
-            const pdfResponse = await fetch(`/api/get-optimized-pdf?cvId=${cvId}`);
+            const pdfResponse = await fetch(`/api/cv-pdf-generator?cvId=${cvId}`);
             
             if (pdfResponse.ok) {
               const pdfData = await pdfResponse.json();

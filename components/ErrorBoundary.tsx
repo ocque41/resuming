@@ -58,11 +58,7 @@ class ErrorBoundary extends Component<Props, State> {
           </Alert>
           
           <div className="mt-4">
-            <Button 
-              onClick={this.handleReset}
-              variant="outline"
-              className="flex items-center"
-            >
+            <Button onClick={this.handleReset} className="mt-4 bg-red-500 hover:bg-red-600 text-white">
               <RefreshCw className="mr-2 h-4 w-4" />
               Try Again
             </Button>

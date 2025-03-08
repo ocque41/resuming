@@ -3,6 +3,8 @@ import { checkoutAction } from "@/lib/payments/actions";
 import { Check } from "lucide-react";
 import { getStripePrices, getStripeProducts } from "@/lib/payments/stripe";
 import { SubmitButton } from "./submit-button";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 // Revalidate prices every hour
 export const revalidate = 3600;
@@ -167,15 +169,19 @@ function PricingCard({
             </li>
           ))}
         </ul>
-        <form action={checkoutAction} className="w-full mt-auto">
+        <form action="/api/stripe/checkout" method="POST">
           <input type="hidden" name="priceId" value={priceId} />
-          <SubmitButton
-            className={`w-full ${
+          <Button
+            className={cn(
+              "w-full",
               highlight
-                ? "bg-[#B4916C] hover:bg-[#B4916C]/90 text-white"
-                : "bg-[#B4916C]/20 hover:bg-[#B4916C]/30 text-[#B4916C]"
-            } transition-colors duration-200 font-medium`}
-          />
+                ? "bg-gradient-to-r from-[#B4916C] to-[#A3815C] text-white hover:from-[#A3815C] hover:to-[#B4916C]"
+                : "bg-primary"
+            )}
+            size="lg"
+          >
+            {highlight ? "Upgrade to Pro" : "Subscribe"}
+          </Button>
         </form>
       </div>
     </div>

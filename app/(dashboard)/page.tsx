@@ -6,7 +6,7 @@ import { Article, ArticleTitle, ArticleContent } from "@/components/ui/article";
 import { Button } from "@/components/ui/button";
 import { motion, Variants } from "framer-motion";
 import Link from "next/link";
-import { FileText, TrendingUp, MapPin, Check } from "lucide-react";
+import { FileText, TrendingUp, MapPin, Check, ArrowRight, Diamond } from "lucide-react";
 
 export default function HomePage() {
   const containerVariants: Variants = {
@@ -49,7 +49,7 @@ export default function HomePage() {
           {/* Badge above title */}
           <div>
             <Link href="https://chromad.vercel.app/docs/products/resuming">
-              <Badge variant="outline">Documentation -&gt;</Badge>
+              <Badge className="bg-blue-500 text-white">Free</Badge>
             </Link>
           </div>
           <Article>

@@ -22,6 +22,19 @@ import { ArrowRight, Diamond } from "lucide-react";
 import JobsCard from "@/components/JobsCard.client";
 import ErrorBoundaryWrapper from "@/components/ErrorBoundaryWrapper";
 
+// Add a CV type definition
+interface CV {
+  id: string;
+  userId: string;
+  fileName: string;
+  filePath?: string;
+  filepath?: string;
+  createdAt: Date;
+  rawText?: string | null;
+  metadata?: any;
+  [key: string]: any;
+}
+
 export default async function DashboardPage() {
   const user = await getUser();
   if (!user) {
