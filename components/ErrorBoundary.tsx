@@ -1,6 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, RefreshCw } from "lucide-react";
+import { AlertCircle, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface Props {
@@ -59,7 +59,7 @@ class ErrorBoundary extends Component<Props, State> {
           
           <div className="mt-4">
             <Button onClick={this.handleReset} className="mt-4 bg-red-500 hover:bg-red-600 text-white">
-              <RefreshCw className="mr-2 h-4 w-4" />
+              <RefreshCcw className="mr-2 h-4 w-4" />
               Try Again
             </Button>
           </div>

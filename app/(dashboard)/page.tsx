@@ -6,7 +6,7 @@ import { Article, ArticleTitle, ArticleContent } from "@/components/ui/article";
 import { Button } from "@/components/ui/button";
 import { motion, Variants } from "framer-motion";
 import Link from "next/link";
-import { FileText, TrendingUp, MapPin, Check, ArrowRight, Diamond } from "lucide-react";
+import { FileText, Activity, MapPin, Check, ArrowRight, Diamond } from "lucide-react";
 
 export default function HomePage() {
   const containerVariants: Variants = {
@@ -128,7 +128,7 @@ export default function HomePage() {
               variants={itemVariants}
             >
               <div className="flex items-center gap-2">
-                <TrendingUp className="w-6 h-6 text-[#E8DCC4]" />
+                <Activity className="w-6 h-6 text-[#E8DCC4]" />
                 <h3 className="text-xl font-semibold text-[#E8DCC4]">CV Optimization</h3>
               </div>
               <div className="my-2 h-1 w-16 bg-[#E8DCC4] animate-pulse"></div>

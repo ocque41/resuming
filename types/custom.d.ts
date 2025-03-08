@@ -11,19 +11,27 @@ declare module 'lucide-react' {
   }
   
   export type Icon = FC<IconProps>;
+  export type LucideIcon = Icon;
   
   // Export all icons used in the project
   export const ArrowRight: Icon;
+  export const ArrowLeft: Icon;
+  export const ChevronLeft: Icon;
   export const Diamond: Icon;
   export const Download: Icon;
   export const AlertCircle: Icon;
   export const Check: Icon;
+  export const CheckCircle: Icon;
   export const X: Icon;
   export const ChevronRight: Icon;
   export const ChevronDown: Icon;
   export const ChevronUp: Icon;
   export const Menu: Icon;
   export const User: Icon;
+  export const Users: Icon;
+  export const UserPlus: Icon;
+  export const UserMinus: Icon;
+  export const UserCog: Icon;
   export const Settings: Icon;
   export const LogOut: Icon;
   export const Bell: Icon;
@@ -35,6 +43,7 @@ declare module 'lucide-react' {
   export const Trash: Icon;
   export const Edit: Icon;
   export const Plus: Icon;
+  export const PlusCircle: Icon;
   export const Minus: Icon;
   export const Search: Icon;
   export const ExternalLink: Icon;
@@ -47,6 +56,7 @@ declare module 'lucide-react' {
   export const Briefcase: Icon;
   export const Bookmark: Icon;
   export const Star: Icon;
+  export const StarHalf: Icon;
   export const Heart: Icon;
   export const Share: Icon;
   export const Copy: Icon;
@@ -113,6 +123,42 @@ declare module 'lucide-react' {
   export const AlertTriangle: Icon;
   export const AlertOctagon: Icon;
   export const HelpCircle: Icon;
+  export const CircleIcon: Icon;
+  export const Circle: Icon;
+  export const Shield: Icon;
+  export const PanelLeft: Icon;
+  export const GripVertical: Icon;
+  
+  // Chart and data visualization icons
+  export const TrendingUp: Icon;
+  export const TrendingDown: Icon;
+  export const Activity: Icon;
+  export const BarChart: Icon;
+  export const BarChart2: Icon;
+  export const BarChart3: Icon;
+  export const BarChart4: Icon;
+  export const LineChart: Icon;
+  export const PieChart: Icon;
+  export const DollarSign: Icon;
+  export const PercentCircle: Icon;
+  
+  // Map and location icons
+  export const Map: Icon;
+  export const Compass: Icon;
+  
+  // Building and organization icons
+  export const Building: Icon;
+  
+  // List and filter icons
+  export const List: Icon;
+  export const ListFilter: Icon;
+  export const Layers: Icon;
+  
+  // Loading and refresh icons
+  export const Loader: Icon;
+  export const Loader2: Icon;
+  export const RefreshCw: Icon;
+  export const RefreshCcw: Icon;
 }
 
 // Next.js modules

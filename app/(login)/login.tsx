@@ -6,7 +6,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
+import { Loader } from "lucide-react";
 import Image from "next/image";
 import { Card, CardHeader, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
 
@@ -90,7 +90,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
         >
           {pending ? (
             <>
-              <Loader2 className="animate-spin mr-2 h-4 w-4" />
+              <Loader className="animate-spin mr-2 h-4 w-4" />
               Loading...
             </>
           ) : mode === "signin" ? (
