@@ -452,21 +452,21 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
         
         {/* Optimization Results */}
         {isOptimized && (
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-            <h3 className="text-lg font-semibold mb-2">Optimization Results</h3>
+          <div className="mt-4 p-4 bg-[#121212] rounded-lg border border-[#B4916C]/20">
+            <h3 className="text-[#B4916C] font-medium mb-2">Optimization Results</h3>
             
             <div className="mb-4">
               <div className="flex justify-between items-center mb-2">
-                <span className="font-medium">ATS Score Improvement:</span>
+                <span className="text-white font-medium">ATS Score Improvement:</span>
                 <div className="flex items-center">
                   <span className="text-gray-400 line-through mr-2">{originalAtsScore}%</span>
-                  <span className="text-green-500 font-bold">{improvedAtsScore}%</span>
+                  <span className="text-[#B4916C] font-bold">{improvedAtsScore}%</span>
                 </div>
               </div>
               
-              <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div className="w-full bg-gray-700 rounded-full h-2.5">
                 <div 
-                  className="bg-green-500 h-2.5 rounded-full" 
+                  className="bg-[#B4916C] h-2.5 rounded-full" 
                   style={{ width: `${improvedAtsScore}%` }}
                 ></div>
               </div>
@@ -477,7 +477,7 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
                 <Button 
                   onClick={handleDownload}
                   disabled={!optimizedPdfData}
-                  className="w-full"
+                  className="w-full bg-[#B4916C] hover:bg-[#A3815C] text-white"
                 >
                   <Download className="mr-2 h-4 w-4" />
                   Download Optimized CV
@@ -485,11 +485,12 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
               </div>
               
               <div className="flex items-center">
-                <div className="flex items-center space-x-2 w-full">
+                <div className="flex items-center space-x-2 w-full text-white">
                   <Checkbox 
                     id="force-reoptimize" 
                     checked={forceReoptimize}
                     onCheckedChange={(checked) => setForceReoptimize(checked as boolean)}
+                    className="border-[#B4916C] data-[state=checked]:bg-[#B4916C]"
                   />
                   <label 
                     htmlFor="force-reoptimize" 
@@ -504,7 +505,7 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
                 onClick={handleOptimize}
                 disabled={isOptimizing || !selectedCV || !selectedTemplate}
                 variant="outline"
-                className="w-full"
+                className="w-full border-[#B4916C] text-[#B4916C] hover:bg-[#B4916C]/10"
               >
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Re-optimize CV

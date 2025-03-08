@@ -2880,46 +2880,120 @@ function extractTopAchievementsFromExperience(experienceText: string): string {
  * Formats the skills section
  */
 function formatSkills(skillsText: string, industry: string): string {
+  // Get industry-specific skills for this field
+  const industrySkills = getIndustrySpecificSkills(industry);
+  
   // Extract skills from text
   let skills: string[] = [];
   
-  // Try to extract bullet points first
-  const bulletPointRegex = /[-•*]\s*([^-•*\n]+)/g;
-  let match;
-  while ((match = bulletPointRegex.exec(skillsText)) !== null) {
-    skills.push(match[1].trim());
+  // Check for bullet points or line breaks
+  if (skillsText.includes('•') || skillsText.includes('-')) {
+    // Extract skills from bullet points
+    skills = skillsText.split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .map(line => line.replace(/^[-•*]\s*/, '').trim());
+  } else if (skillsText.includes(',')) {
+    // Split by commas
+    skills = skillsText.split(',')
+      .map(skill => skill.trim())
+      .filter(skill => skill.length > 0);
+  } else {
+    // Split by line breaks
+    skills = skillsText.split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
   }
   
-  // If no bullet points found, try comma-separated or line-by-line
-  if (skills.length === 0) {
-    if (skillsText.includes(',')) {
-      skills = skillsText.split(',').map(s => s.trim()).filter(s => s);
-    } else {
-      skills = skillsText.split('\n').map(s => s.trim()).filter(s => s);
-    }
+  // Remove any skills that are just numbers or email addresses (fixing the phone number issue)
+  skills = skills.filter(skill => {
+    // Skip if it looks like a phone number
+    if (/^\+?\d[\d\s-]{7,}$/.test(skill)) return false;
+    
+    // Skip if it looks like an email address
+    if (skill.includes('@') && skill.includes('.')) return false;
+    
+    // Skip if it's just a number
+    if (/^\d+$/.test(skill)) return false;
+    
+    return true;
+  });
+  
+  // Add industry-specific skills if we don't have enough skills
+  if (skills.length < 10 && industrySkills.length > 0) {
+    // Get skills we don't already have
+    const missingSkills = industrySkills.filter(skill => 
+      !skills.some(s => s.toLowerCase().includes(skill.toLowerCase()))
+    );
+    
+    // Add some of the missing skills
+    skills = [...skills, ...missingSkills.slice(0, 10 - skills.length)];
   }
   
-  // Add industry-specific skills if needed
-  const industrySkills = getIndustrySpecificSkills(industry);
+  // Group skills into categories when possible
+  const categories = {
+    'Technical': [] as string[],
+    'Software': [] as string[],
+    'Languages': [] as string[],
+    'Soft Skills': [] as string[],
+    'Other': [] as string[]
+  };
   
-  // Ensure we have a good mix of skills
-  const existingSkillsLower = skills.map(s => s.toLowerCase());
-  for (const skill of industrySkills) {
-    if (!existingSkillsLower.some(s => s.includes(skill.toLowerCase()))) {
-      skills.push(skill);
-    }
-  }
-  
-  // Limit to 9-12 skills (for 3 columns of 3-4 skills)
-  skills = skills.slice(0, 12);
-  
-  // Format skills as bullet points
-  let formattedSkills = "";
+  // Categorize skills
   for (const skill of skills) {
-    formattedSkills += `• ${skill}\n`;
+    if (skill.includes('Programming') || 
+        skill.includes('Development') || 
+        skill.includes('Engineering') ||
+        skill.includes('Algorithm') ||
+        skill.includes('Data')) {
+      categories['Technical'].push(skill);
+    } else if (skill.includes('Software') || 
+               skill.includes('Microsoft') || 
+               skill.includes('Adobe') ||
+               skill.includes('Excel') ||
+               skill.includes('Word') || 
+               skill.includes('PowerPoint') ||
+               skill.includes('Photoshop')) {
+      categories['Software'].push(skill);
+    } else if (skill.includes('English') || 
+               skill.includes('French') || 
+               skill.includes('Spanish') ||
+               skill.includes('German') ||
+               skill.includes('Chinese') ||
+               skill.includes('Japanese')) {
+      categories['Languages'].push(skill);
+    } else if (skill.includes('Communication') || 
+               skill.includes('Leadership') || 
+               skill.includes('Teamwork') ||
+               skill.includes('Management') ||
+               skill.includes('Problem-solving')) {
+      categories['Soft Skills'].push(skill);
+    } else {
+      categories['Other'].push(skill);
+    }
   }
   
-  return formattedSkills;
+  // Format each category
+  let formattedSkills = "";
+  
+  for (const [category, categorySkills] of Object.entries(categories)) {
+    if (categorySkills.length > 0) {
+      formattedSkills += `${category}:\n`;
+      for (const skill of categorySkills) {
+        formattedSkills += `• ${skill}\n`;
+      }
+      formattedSkills += "\n";
+    }
+  }
+  
+  // If we didn't categorize anything, just list all skills
+  if (formattedSkills.trim() === "") {
+    for (const skill of skills) {
+      formattedSkills += `• ${skill}\n`;
+    }
+  }
+  
+  return formattedSkills.trim();
 }
 
 /**
@@ -2973,13 +3047,13 @@ function getIndustrySpecificSkills(industry: string): string[] {
  * Formats the work experience section
  */
 function formatWorkExperience(experienceText: string): string {
-  // Split experience into entries (assuming double line breaks separate entries)
+  // Split experience into entries
   let entries: string[] = [];
   
   if (experienceText.includes('\n\n')) {
     entries = experienceText.split('\n\n').filter(entry => entry.trim());
   } else {
-    // Try to identify job entries by dates or company names
+    // Try to identify experience entries by years or company names
     const lines = experienceText.split('\n');
     let currentEntry = "";
     
@@ -2990,9 +3064,7 @@ function formatWorkExperience(experienceText: string): string {
       // Check if this line might be the start of a new entry
       if (
         /\b(19|20)\d{2}\b/.test(trimmed) || // Contains a year
-        /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{4}\b/i.test(trimmed) || // Contains a month and year
-        /\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}\b/i.test(trimmed) || // Contains a full month and year
-        trimmed.toUpperCase() === trimmed // All uppercase might be a company name
+        /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{4}\b/i.test(trimmed) // Contains a month and year
       ) {
         if (currentEntry) {
           entries.push(currentEntry);
@@ -3017,34 +3089,30 @@ function formatWorkExperience(experienceText: string): string {
     if (lines.length === 0) continue;
     
     // Extract date, job title, and company
-    let date = "Sept. 20XX - Juli. 20XX";
-    let jobTitle = "Job occupied";
-    let company = "NAME OF THE COMPANY - CITY";
+    let dateRange = "";
+    let jobTitle = "";
+    let company = "";
     let responsibilities: string[] = [];
     
-    // Try to extract date
+    // Try to extract date range
     for (const line of lines) {
-      if (/\b(19|20)\d{2}\b/.test(line) || 
-          /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{4}\b/i.test(line) ||
-          /\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}\b/i.test(line)) {
-        date = line;
+      if (/\b(19|20)\d{2}\b/.test(line) && (line.includes('-') || line.includes('to'))) {
+        dateRange = line;
+        break;
+      } else if (/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{4}\b/i.test(line)) {
+        dateRange = line;
         break;
       }
     }
     
-    // Try to extract company name (often in all caps or second line)
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (line !== date && (line.toUpperCase() === line || i === 1)) {
-        company = line;
-        break;
-      }
+    // If no date range found, create a standardized one
+    if (!dateRange) {
+      dateRange = "Sept. 20XX - Present";
     }
     
-    // Try to extract job title (often after date and before company)
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (line !== date && line !== company && 
+    // Try to extract job title (usually the first line that's not a date)
+    for (const line of lines) {
+      if (line !== dateRange && 
           (line.includes('Manager') || line.includes('Director') || 
            line.includes('Engineer') || line.includes('Developer') ||
            line.includes('Analyst') || line.includes('Specialist') ||
@@ -3054,37 +3122,70 @@ function formatWorkExperience(experienceText: string): string {
       }
     }
     
-    // Extract responsibilities (bullet points or remaining lines)
+    // If no job title found, use a default or the first non-date line
+    if (!jobTitle) {
+      for (const line of lines) {
+        if (line !== dateRange && !line.toUpperCase().includes('COMPANY')) {
+          jobTitle = line;
+          break;
+        }
+      }
+    }
+    
+    if (!jobTitle) {
+      jobTitle = "Position Title";
+    }
+    
+    // Try to extract company name (often in ALL CAPS or contains "Company")
     for (const line of lines) {
-      if (line !== date && line !== company && line !== jobTitle) {
+      if (line !== dateRange && line !== jobTitle && 
+          (line.toUpperCase() === line || line.includes('Company') || line.includes('COMPANY'))) {
+        company = line;
+        break;
+      }
+    }
+    
+    // If no company found, create a standard format
+    if (!company) {
+      company = "COMPANY NAME - CITY";
+    }
+    
+    // Extract responsibilities (remaining lines or bullet points)
+    for (const line of lines) {
+      if (line !== dateRange && line !== jobTitle && line !== company) {
         // Remove bullet points if present
         const cleaned = line.replace(/^[-•*]\s*/, '');
-        responsibilities.push(cleaned);
+        
+        if (cleaned.trim()) {
+          if (cleaned.toLowerCase().includes('mission') || cleaned.toLowerCase().includes('task')) {
+            // This is likely a header for responsibilities
+            continue;
+          }
+          responsibilities.push(cleaned);
+        }
       }
     }
     
     // Format the entry
-    formattedExperience += `${date}\n`;
+    formattedExperience += `${dateRange}\n`;
     formattedExperience += `${jobTitle}\n`;
     formattedExperience += `${company}\n`;
     
-    // Add up to 3 responsibilities as bullet points
-    const topResponsibilities = responsibilities.slice(0, 3);
-    for (const responsibility of topResponsibilities) {
-      formattedExperience += `• ${responsibility}\n`;
-    }
-    
-    // Add generic responsibilities if needed
-    if (topResponsibilities.length < 3) {
-      const genericResponsibilities = [
-        "Managed cross-functional teams to deliver projects on time and within budget",
-        "Developed and implemented strategies resulting in significant improvements in efficiency",
-        "Collaborated with stakeholders to ensure alignment with business objectives"
-      ];
-      
-      for (let i = topResponsibilities.length; i < 3; i++) {
-        formattedExperience += `• ${genericResponsibilities[i]}\n`;
+    // Add responsibilities as bullet points
+    if (responsibilities.length > 0) {
+      // Filter and limit to the most impactful responsibilities
+      const topResponsibilities = responsibilities
+        .filter(r => r.length > 10) // Filter out very short entries
+        .slice(0, 3); // Limit to top 3
+        
+      for (const responsibility of topResponsibilities) {
+        formattedExperience += `• ${responsibility}\n`;
       }
+    } else {
+      // Add generic responsibilities if none are found
+      formattedExperience += `• Managed projects and teams to deliver results on time and within budget\n`;
+      formattedExperience += `• Developed strategies resulting in significant improvements in efficiency\n`;
+      formattedExperience += `• Collaborated with stakeholders to align with business objectives\n`;
     }
     
     formattedExperience += "\n";

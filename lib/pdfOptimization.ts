@@ -1542,657 +1542,271 @@ async function createProfessionalClassicCV(
   boldFont: PDFFont,
   italicFont: PDFFont
 ): Promise<Uint8Array> {
-  console.log("Creating Professional Classic CV layout");
+  // Parse the sections
+  const { leftColumnSections, rightColumnSections } = parseOptimizedText(optimizedText);
   
-  // Create a new page
-  const page = doc.addPage([595, 842]); // A4 size
-  const { width, height } = page.getSize();
+  // Add a page
+  const page = doc.addPage([595, 842]); // A4 size in points
   
-  // Set margins
-  const margin = 40;
-  const textColor = rgb(0, 0, 0); // Black
-  const grayColor = rgb(0.4, 0.4, 0.4); // Gray for "LAST NAME"
+  // Define colors
+  const textColor = rgb(0.1, 0.1, 0.1); // Almost black
+  const accentColor = rgb(0.7, 0.57, 0.42); // #B4916C
+  const sectionBgColor = rgb(0.7, 0.57, 0.42); // #B4916C
+  const sectionTextColor = rgb(1, 1, 1); // White
   
-  // Parse the optimized text into sections
-  const sections: Record<string, string> = {};
+  // Define margins and column widths
+  const margin = 50;
+  const leftColumnWidth = 180;
+  const rightColumnWidth = page.getWidth() - margin * 2 - leftColumnWidth;
+  const columnSpacing = 15;
   
-  // Try different section regex patterns to ensure we capture all sections
-  let sectionRegex = /## ([A-Z\s]+)\n([\s\S]*?)(?=\n## |$)/g;
-  let match;
+  // Current Y position for each column
+  let leftColumnY = page.getHeight() - margin;
+  let rightColumnY = page.getHeight() - margin;
   
-  while ((match = sectionRegex.exec(optimizedText)) !== null) {
-    const title = match[1].trim();
-    const content = match[2].trim();
-    sections[title] = content;
-    console.log(`Found section: ${title} (${content.length} chars)`);
-  }
-  
-  // If we didn't find any sections with the first regex, try an alternative
-  if (Object.keys(sections).length === 0) {
-    console.log("No sections found with primary regex, trying alternative");
-    sectionRegex = /\n([A-Z][A-Z\s]+)[\n\r]+([^]*?)(?=\n[A-Z][A-Z\s]+[\n\r]+|$)/g;
-    
-    while ((match = sectionRegex.exec(optimizedText)) !== null) {
-      const title = match[1].trim();
-      const content = match[2].trim();
-      sections[title] = content;
-      console.log(`Found section with alt regex: ${title} (${content.length} chars)`);
-    }
-  }
-  
-  // If we still don't have sections, create default ones
-  if (Object.keys(sections).length === 0) {
-    console.log("No sections found, creating default sections");
-    sections["ABOUT ME"] = "Professional summary not available.";
-    sections["COMPETENCES"] = "Skills not available.";
-    sections["WORK EXPERIENCE"] = "Work experience not available.";
-    sections["EDUCATION"] = "Education not available.";
-    sections["LANGUAGES"] = "Languages not available.";
-    
-    // Try to extract some content from the raw text
-    const lines = optimizedText.split('\n');
-    let currentSection = "";
-    
-    for (const line of lines) {
-      const trimmedLine = line.trim();
-      if (trimmedLine.toUpperCase() === trimmedLine && trimmedLine.length > 3) {
-        // This might be a section header
-        currentSection = trimmedLine;
-        sections[currentSection] = "";
-      } else if (currentSection && trimmedLine) {
-        // Add content to the current section
-        sections[currentSection] += trimmedLine + "\n";
-      }
-    }
-  }
-  
-  // Extract name and contact info
-  let name = "NAME";
-  let lastName = "LAST NAME";
-  let jobTitle = "JOB OCCUPIED";
-  let phone = "+33 01 01 01 01 01";
-  let email = "name@mail.com";
-  let location = "Oregon, USA";
-  
-  // Try to extract contact info from CONTACT section or PERSONAL INFORMATION
-  const contactSection = sections["CONTACT"] || sections["PERSONAL INFORMATION"] || sections["PERSONAL DETAILS"];
-  
-  if (contactSection) {
-    console.log("Found contact section:", contactSection);
-    const contactLines = contactSection.split('\n');
-    
-    if (contactLines.length > 0) {
-      // First line is usually the name
-      const fullName = contactLines[0].trim();
-      const nameParts = fullName.split(' ');
-      if (nameParts.length > 1) {
-        name = nameParts[0];
-        lastName = nameParts.slice(1).join(' ');
-      } else {
-        name = fullName;
-      }
-      
-      // Extract other contact info
-      for (const line of contactLines) {
-        if (line.includes('@')) {
-          email = line.trim();
-        } else if (line.includes('+') || /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(line)) {
-          phone = line.trim();
-        } else if (line !== contactLines[0] && !jobTitle.includes(line)) {
-          // Check if this might be a job title
-          if (line.includes('Developer') || line.includes('Engineer') || line.includes('Manager') || 
-              line.includes('Designer') || line.includes('Analyst') || line.includes('Consultant')) {
-            jobTitle = line.trim();
-          } else {
-            // Assume it's a location
-            location = line.trim();
-          }
-        }
-      }
-    }
-  } else {
-    // Try to extract name from the beginning of the text
-    const firstLines = optimizedText.split('\n').slice(0, 5);
-    for (const line of firstLines) {
-      if (line.trim() && !line.includes(':') && line.split(' ').length <= 4) {
-        const nameParts = line.trim().split(' ');
-        if (nameParts.length > 1) {
-          name = nameParts[0];
-          lastName = nameParts.slice(1).join(' ');
-          break;
-        }
-      }
-    }
-  }
-  
-  console.log(`Extracted contact info - Name: ${name}, Last Name: ${lastName}, Job: ${jobTitle}`);
-  
-  // Draw header
-  // Name
+  // Draw header/name at the top
+  const name = leftColumnSections.find(s => s.title === "PROFILE")?.content?.split('\n')[0] || "NAME LAST NAME";
   page.drawText(name, {
     x: margin,
-    y: height - margin - 20,
+    y: page.getHeight() - margin,
     size: 24,
     font: boldFont,
     color: textColor
   });
   
-  // Last Name
-  page.drawText(lastName, {
-    x: margin + name.length * 14, // Adjust based on name length
-    y: height - margin - 20,
-    size: 24,
-    font: boldFont,
-    color: grayColor
-  });
-  
-  // Job Title
-  page.drawText(jobTitle, {
-    x: margin,
-    y: height - margin - 45,
-    size: 12,
-    font: regularFont,
-    color: textColor
-  });
-  
-  // Phone
-  page.drawText(phone, {
-    x: margin,
-    y: height - margin - 65,
-    size: 10,
-    font: regularFont,
-    color: textColor
-  });
-  
-  // Email
-  page.drawText(email, {
-    x: margin,
-    y: height - margin - 80,
-    size: 10,
-    font: regularFont,
-    color: textColor
-  });
-  
-  // Location
-  page.drawText(location, {
-    x: margin,
-    y: height - margin - 95,
-    size: 10,
-    font: regularFont,
-    color: textColor
-  });
-  
-  // Photo placeholder (right side)
-  const photoX = width - margin - 80; // 80px width
-  const photoY = height - margin - 100; // 100px height
-  page.drawRectangle({
-    x: photoX,
-    y: photoY,
-    width: 80,
-    height: 100,
-    borderColor: rgb(0.8, 0.8, 0.8),
-    borderWidth: 1,
-  });
-  
-  // Draw a line under the header
+  // Draw a header line under the name
   page.drawLine({
-    start: { x: margin, y: height - margin - 110 },
-    end: { x: width - margin, y: height - margin - 110 },
-    thickness: 1,
-    color: rgb(0.8, 0.8, 0.8)
+    start: { x: margin, y: page.getHeight() - margin - 30 },
+    end: { x: page.getWidth() - margin, y: page.getHeight() - margin - 30 },
+    thickness: 2,
+    color: accentColor
   });
   
-  // Current Y position for content
-  let currentY = height - margin - 140;
+  // Start positions for each column
+  leftColumnY = page.getHeight() - margin - 40;
+  rightColumnY = page.getHeight() - margin - 40;
   
-  // Draw sections in order
-  const sectionOrder = [
-    "ABOUT ME",
-    "COMPETENCES",
-    "WORK EXPERIENCE",
-    "EDUCATION",
-    "LANGUAGES"
-  ];
-  
-  for (const sectionName of sectionOrder) {
-    // Check for variations of section names
-    const sectionKey = Object.keys(sections).find(key => 
-      key.toUpperCase() === sectionName || 
-      key.toUpperCase().includes(sectionName) ||
-      (sectionName === "ABOUT ME" && (key.toUpperCase().includes("PROFILE") || key.toUpperCase().includes("SUMMARY"))) ||
-      (sectionName === "COMPETENCES" && (key.toUpperCase().includes("SKILLS") || key.toUpperCase().includes("EXPERTISE"))) ||
-      (sectionName === "WORK EXPERIENCE" && (key.toUpperCase().includes("EMPLOYMENT") || key.toUpperCase().includes("PROFESSIONAL"))) ||
-      (sectionName === "EDUCATION" && key.toUpperCase().includes("ACADEMIC")) ||
-      (sectionName === "LANGUAGES" && key.toUpperCase().includes("LANGUAGE"))
-    );
-    
-    const sectionContent = sectionKey ? sections[sectionKey] : null;
-    
-    if (sectionContent) {
-      console.log(`Processing section: ${sectionName} (${sectionContent.length} chars)`);
-      
-      // Draw section title
-      page.drawText(sectionName, {
-        x: margin,
-        y: currentY,
-        size: 14,
-        font: boldFont,
-        color: textColor
-      });
-      
-      currentY -= 25;
-      
-      // Process section content based on section type
-      if (sectionName === "COMPETENCES") {
-        // Draw competences as bullet points in columns
-        const competences = sectionContent.split('\n')
-          .map(line => line.trim())
-          .filter(line => line.length > 0)
-          .map(line => line.replace(/^[-•*]\s*/, ''));
-        
-        const columnWidth = (width - 2 * margin) / 3;
-        let columnY = currentY;
-        
-        for (let i = 0; i < competences.length; i++) {
-          const columnIndex = i % 3;
-          const competence = competences[i];
-          
-          if (competence) {
-            // Draw bullet point
-            page.drawText("•", {
-              x: margin + columnIndex * columnWidth,
-              y: columnY,
-              size: 10,
+  // Draw left column sections (sidebar)
+  for (const section of leftColumnSections) {
+    // Skip profile section as we already used the name
+    if (section.title === "PROFILE") {
+      const profileLines = section.content.split('\n').slice(1); // Skip name
+      if (profileLines.length > 0) {
+        // Draw contact info in left column
+        let contactY = leftColumnY;
+        for (const line of profileLines) {
+          if (line.trim()) {
+            page.drawText(line, {
+              x: margin,
+              y: contactY,
+              size: 9,
               font: regularFont,
               color: textColor
             });
-            
-            // Draw competence text
-            page.drawText(competence, {
-              x: margin + columnIndex * columnWidth + 15,
-              y: columnY,
-              size: 10,
-              font: regularFont,
-              color: textColor
-            });
-            
-            // Move to next row if we've filled all columns
-            if (columnIndex === 2) {
-              columnY -= 20;
-            }
+            contactY -= 14;
           }
         }
+        leftColumnY = contactY - 20;
+      }
+      continue;
+    }
+    
+    // Draw section header with rounded background
+    const sectionHeaderHeight = 22;
+    const sectionHeaderWidth = leftColumnWidth;
+    const cornerRadius = 6;
+    
+    // Draw rounded rectangle for section header
+    page.drawRectangle({
+      x: margin,
+      y: leftColumnY - sectionHeaderHeight,
+      width: sectionHeaderWidth,
+      height: sectionHeaderHeight,
+      color: sectionBgColor,
+      borderColor: sectionBgColor,
+      opacity: 1
+    });
+    
+    // Draw section title
+    page.drawText(section.title, {
+      x: margin + 10,
+      y: leftColumnY - 15,
+      size: 11,
+      font: boldFont,
+      color: sectionTextColor
+    });
+    
+    leftColumnY -= sectionHeaderHeight + 10;
+    
+    // Draw section content
+    const lines = section.content.split('\n');
+    for (const line of lines) {
+      if (line.trim()) {
+        // Check if the line starts with a bullet point
+        const isBullet = line.startsWith('•') || line.startsWith('-');
+        const textX = isBullet ? margin + 10 : margin;
+        const displayText = isBullet ? line : `• ${line}`;
         
-        // Update current Y to the lowest point
-        currentY = columnY - 20;
+        page.drawText(displayText, {
+          x: textX,
+          y: leftColumnY,
+          size: 9,
+          font: regularFont,
+          color: textColor
+        });
+        leftColumnY -= 14;
+      }
+    }
+    
+    leftColumnY -= 15; // Extra space after section
+  }
+  
+  // Draw right column sections (main content)
+  for (const section of rightColumnSections) {
+    const sectionHeaderHeight = 22;
+    const sectionHeaderWidth = rightColumnWidth;
+    const cornerRadius = 6;
+    
+    // Draw rounded rectangle for section header
+    page.drawRectangle({
+      x: margin + leftColumnWidth + columnSpacing,
+      y: rightColumnY - sectionHeaderHeight,
+      width: sectionHeaderWidth,
+      height: sectionHeaderHeight,
+      color: sectionBgColor,
+      borderColor: sectionBgColor,
+      opacity: 1
+    });
+    
+    // Draw section title
+    page.drawText(section.title, {
+      x: margin + leftColumnWidth + columnSpacing + 10,
+      y: rightColumnY - 15,
+      size: 11,
+      font: boldFont,
+      color: sectionTextColor
+    });
+    
+    rightColumnY -= sectionHeaderHeight + 10;
+    
+    // Special formatting for WORK EXPERIENCE
+    if (section.title === "WORK EXPERIENCE") {
+      const lines = section.content.split('\n');
+      let i = 0;
+      
+      while (i < lines.length) {
+        const line = lines[i].trim();
+        if (!line) { i++; continue; }
         
-      } else if (sectionName === "WORK EXPERIENCE") {
-        // Process work experience entries
-        let experiences = [];
-        
-        // Try to split by double newlines first
-        if (sectionContent.includes('\n\n')) {
-          experiences = sectionContent.split('\n\n');
-        } else {
-          // Try to identify job entries by dates or company names
-          const lines = sectionContent.split('\n');
-          let currentExp = "";
-          
-          for (const line of lines) {
-            // Check if this line might be the start of a new experience
-            if (
-              /\b(19|20)\d{2}\b/.test(line) || // Contains a year
-              /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{4}\b/i.test(line) || // Contains a month and year
-              /\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}\b/i.test(line) || // Contains a full month and year
-              line.toUpperCase() === line // All uppercase might be a company name
-            ) {
-              if (currentExp) {
-                experiences.push(currentExp);
-              }
-              currentExp = line;
-            } else {
-              currentExp += "\n" + line;
-            }
-          }
-          
-          if (currentExp) {
-            experiences.push(currentExp);
-          }
-        }
-        
-        for (const experience of experiences) {
-          const lines = experience.split('\n');
-          let dateAndPosition = "";
-          let company = "";
-          let details = [];
-          
-          if (lines.length > 0) {
-            dateAndPosition = lines[0].trim();
-            
-            // Draw date on the left
-            if (dateAndPosition.includes('-') || /\b(19|20)\d{2}\b/.test(dateAndPosition)) {
-              page.drawText(dateAndPosition, {
-                x: margin,
-                y: currentY,
-                size: 10,
-                font: italicFont,
-                color: textColor
-              });
-              
-              // Draw position
-              if (lines.length > 1 && !lines[1].startsWith('•') && !lines[1].startsWith('-')) {
-                page.drawText(lines[1].trim(), {
-                  x: margin + 100,
-                  y: currentY,
-                  size: 10,
-                  font: regularFont,
-                  color: textColor
-                });
-                company = lines[1].trim();
-              } else {
-                page.drawText("Job occupied", {
-                  x: margin + 100,
-                  y: currentY,
-                  size: 10,
-                  font: regularFont,
-                  color: textColor
-                });
-              }
-              
-              currentY -= 20;
-            }
-            
-            // Draw company name if not already drawn
-            if (lines.length > 1 && !company) {
-              company = lines[1].trim();
-              page.drawText(company.toUpperCase(), {
-                x: margin + 100,
-                y: currentY,
-                size: 10,
-                font: boldFont,
-                color: textColor
-              });
-              
-              currentY -= 20;
-            }
-            
-            // Process bullet points or responsibilities
-            for (let i = 2; i < lines.length; i++) {
-              const line = lines[i].trim();
-              if (line) {
-                // Draw bullet point
-                page.drawText("•", {
-                  x: margin + 100,
-                  y: currentY,
-                  size: 10,
-                  font: regularFont,
-                  color: textColor
-                });
-                
-                // Draw detail text
-                const textLines = splitTextIntoLines(
-                  line.replace(/^[-•*]\s*/, ''),
-                  width - margin - 125,
-                  regularFont,
-                  10
-                );
-                
-                for (let j = 0; j < textLines.length; j++) {
-                  page.drawText(textLines[j], {
-                    x: margin + 115,
-                    y: currentY - j * 15,
-                    size: 10,
-                    font: regularFont,
-                    color: textColor
-                  });
-                }
-                
-                currentY -= 15 * textLines.length;
-              }
-            }
-          }
-          
-          currentY -= 10; // Add space between experiences
-        }
-        
-      } else if (sectionName === "EDUCATION") {
-        // Process education entries
-        let educationEntries = [];
-        
-        // Try to split by double newlines first
-        if (sectionContent.includes('\n\n')) {
-          educationEntries = sectionContent.split('\n\n');
-        } else {
-          // Try to identify education entries by years or school names
-          const lines = sectionContent.split('\n');
-          let currentEdu = "";
-          
-          for (const line of lines) {
-            // Check if this line might be the start of a new education entry
-            if (
-              /\b(19|20)\d{2}\b/.test(line) || // Contains a year
-              /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{4}\b/i.test(line) || // Contains a month and year
-              /\b(University|College|School|Institute)\b/i.test(line) // Contains education keywords
-            ) {
-              if (currentEdu) {
-                educationEntries.push(currentEdu);
-              }
-              currentEdu = line;
-            } else {
-              currentEdu += "\n" + line;
-            }
-          }
-          
-          if (currentEdu) {
-            educationEntries.push(currentEdu);
-          }
-        }
-        
-        // If we couldn't identify multiple entries, create at least one
-        if (educationEntries.length === 0) {
-          educationEntries = [sectionContent];
-        }
-        
-        // Create a grid layout for education
-        const columnWidth = (width - 2 * margin) / 3;
-        let columnIndex = 0;
-        let rowY = currentY;
-        
-        // Limit to 3 entries for the layout
-        const maxEntries = Math.min(educationEntries.length, 3);
-        
-        for (let i = 0; i < maxEntries; i++) {
-          const entry = educationEntries[i];
-          const lines = entry.split('\n');
-          let school = "UNIVERSITY OR SCHOOL";
-          let diploma = "Diploma Xxxxxxxxxx";
-          let year = "20XX";
-          
-          // Extract school, diploma, and year from the entry
-          if (lines.length > 0) {
-            // Try to identify which line is which
-            for (const line of lines) {
-              if (/\b(19|20)\d{2}\b/.test(line)) {
-                // Line contains a year
-                const yearMatch = line.match(/\b(19|20)\d{2}\b/);
-                if (yearMatch && yearMatch[0]) {
-                  year = yearMatch[0];
-                }
-                if (!diploma.includes("Diploma")) {
-                  school = line;
-                }
-              } else if (/\b(University|College|School|Institute)\b/i.test(line)) {
-                // Line contains education institution keywords
-                school = line.trim();
-              } else if (/\b(Bachelor|Master|PhD|Diploma|Degree|Certificate)\b/i.test(line)) {
-                // Line contains degree keywords
-                diploma = line.trim();
-              }
-            }
-            
-            // If we couldn't identify specific parts, use the lines in order
-            if (school === "UNIVERSITY OR SCHOOL" && lines[0]) {
-              school = lines[0].trim();
-            }
-            
-            if (diploma === "Diploma Xxxxxxxxxx" && lines.length > 1) {
-              diploma = lines[1].trim();
-            }
-          }
-          
-          // Draw school name
-          page.drawText(school.toUpperCase(), {
-            x: margin + columnIndex * columnWidth,
-            y: rowY,
-            size: 10,
-            font: regularFont,
-            color: textColor
+        // Date line
+        if (line.includes('20XX') || /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i.test(line)) {
+          page.drawText(line, {
+            x: margin + leftColumnWidth + columnSpacing,
+            y: rightColumnY,
+            size: 9,
+            font: italicFont,
+            color: accentColor
           });
-          
-          // Draw diploma
-          page.drawText(diploma, {
-            x: margin + columnIndex * columnWidth,
-            y: rowY - 15,
+          rightColumnY -= 14;
+          i++;
+          continue;
+        }
+        
+        // Job title line
+        if (i < lines.length && !lines[i].startsWith('•') && !lines[i].startsWith('-') && 
+            !lines[i].includes('COMPANY') && lines[i].trim()) {
+          page.drawText(lines[i], {
+            x: margin + leftColumnWidth + columnSpacing,
+            y: rightColumnY,
             size: 10,
             font: boldFont,
             color: textColor
           });
-          
-          // Draw year
-          page.drawText(year, {
-            x: margin + columnIndex * columnWidth,
-            y: rowY - 30,
-            size: 10,
+          rightColumnY -= 14;
+          i++;
+          continue;
+        }
+        
+        // Company name line
+        if (i < lines.length && (lines[i].includes('COMPANY') || lines[i].includes('CITY'))) {
+          page.drawText(lines[i], {
+            x: margin + leftColumnWidth + columnSpacing,
+            y: rightColumnY,
+            size: 9,
             font: regularFont,
             color: textColor
           });
-          
-          // Move to next column or row
-          columnIndex++;
-          if (columnIndex >= 3) {
-            columnIndex = 0;
-            rowY -= 50;
-          }
+          rightColumnY -= 20; // More space after company
+          i++;
+          continue;
         }
         
-        // Update current Y to the lowest point
-        currentY = rowY - 30;
-        
-      } else if (sectionName === "LANGUAGES") {
-        // Process languages with progress bars
-        const languageLines = sectionContent.split('\n')
-          .map(line => line.trim())
-          .filter(line => line.length > 0);
-        
-        const columnWidth = (width - 2 * margin) / 3;
-        let columnIndex = 0;
-        let rowY = currentY;
-        
-        for (const line of languageLines) {
-          let languageName = line;
-          let proficiency = 0.7; // Default 70%
+        // Bullet points
+        if (i < lines.length && (lines[i].startsWith('•') || lines[i].startsWith('-') || lines[i].trim().startsWith('Missions'))) {
+          const bulletText = lines[i].startsWith('•') || lines[i].startsWith('-') 
+            ? lines[i] 
+            : `• ${lines[i].replace('Missions or tasks realized:', '').trim()}`;
           
-          // Extract proficiency if available
-          if (line.includes(':')) {
-            const parts = line.split(':');
-            languageName = parts[0].trim();
-            
-            // Parse proficiency
-            const proficiencyText = parts[1].trim().toLowerCase();
-            if (proficiencyText.includes('fluent') || proficiencyText.includes('native')) {
-              proficiency = 0.9;
-            } else if (proficiencyText.includes('advanced')) {
-              proficiency = 0.7;
-            } else if (proficiencyText.includes('intermediate')) {
-              proficiency = 0.5;
-            } else if (proficiencyText.includes('basic')) {
-              proficiency = 0.3;
-            } else if (proficiencyText.includes('%')) {
-              // Try to parse percentage
-              const percentMatch = proficiencyText.match(/(\d+)%/);
-              if (percentMatch) {
-                proficiency = parseInt(percentMatch[1]) / 100;
-              }
-            }
-          }
-          
-          // Draw language name
-          page.drawText(languageName, {
-            x: margin + columnIndex * columnWidth,
-            y: rowY,
-            size: 10,
+          page.drawText(bulletText, {
+            x: margin + leftColumnWidth + columnSpacing + 10,
+            y: rightColumnY,
+            size: 9,
+            font: regularFont,
+            color: textColor,
+            maxWidth: rightColumnWidth - 20
+          });
+          rightColumnY -= 14;
+          i++;
+          continue;
+        }
+        
+        // Other lines
+        if (line) {
+          page.drawText(line, {
+            x: margin + leftColumnWidth + columnSpacing,
+            y: rightColumnY,
+            size: 9,
             font: regularFont,
             color: textColor
           });
-          
-          // Draw progress bar background
-          page.drawRectangle({
-            x: margin + columnIndex * columnWidth,
-            y: rowY - 15,
-            width: 100,
-            height: 5,
-            color: rgb(0.9, 0.9, 0.9)
-          });
-          
-          // Draw progress bar fill
-          page.drawRectangle({
-            x: margin + columnIndex * columnWidth,
-            y: rowY - 15,
-            width: 100 * proficiency,
-            height: 5,
-            color: rgb(0, 0, 0)
-          });
-          
-          // Move to next column or row
-          columnIndex++;
-          if (columnIndex >= 3) {
-            columnIndex = 0;
-            rowY -= 30;
-          }
+          rightColumnY -= 14;
         }
-        
-        // Update current Y to the lowest point
-        if (languageLines.length % 3 !== 0) {
-          currentY = rowY - 30;
-        } else {
-          currentY = rowY;
-        }
-        
-      } else {
-        // Default text rendering for other sections (like ABOUT ME)
-        const textLines = splitTextIntoLines(
-          sectionContent,
-          width - 2 * margin,
-          regularFont,
-          10
-        );
-        
-        for (let i = 0; i < textLines.length; i++) {
-          page.drawText(textLines[i], {
-            x: margin,
-            y: currentY - i * 15,
-            size: 10,
-            font: regularFont,
-            color: textColor
-          });
-        }
-        
-        currentY -= 15 * textLines.length + 10;
+        i++;
       }
-      
-      // Draw a line under each section
-      page.drawLine({
-        start: { x: margin, y: currentY - 5 },
-        end: { x: width - margin, y: currentY - 5 },
-        thickness: 1,
-        color: rgb(0.8, 0.8, 0.8)
-      });
-      
-      currentY -= 20; // Space between sections
+    } else {
+      // For other sections, render normally
+      const lines = section.content.split('\n');
+      for (const line of lines) {
+        if (line.trim()) {
+          const isBullet = line.startsWith('•') || line.startsWith('-');
+          const textX = isBullet 
+            ? margin + leftColumnWidth + columnSpacing + 10 
+            : margin + leftColumnWidth + columnSpacing;
+          const displayText = isBullet ? line : line;
+          
+          page.drawText(displayText, {
+            x: textX,
+            y: rightColumnY,
+            size: 9,
+            font: regularFont,
+            color: textColor
+          });
+          rightColumnY -= 14;
+        }
+      }
     }
+    
+    rightColumnY -= 20; // Extra space after section
   }
   
-  // Serialize the PDF to bytes
-  return await doc.save();
+  // Draw a vertical line between columns
+  page.drawLine({
+    start: { x: margin + leftColumnWidth + columnSpacing / 2, y: page.getHeight() - margin - 40 },
+    end: { x: margin + leftColumnWidth + columnSpacing / 2, y: Math.min(leftColumnY, rightColumnY) - 20 },
+    thickness: 1,
+    color: accentColor
+  });
+  
+  return doc.save();
 }
 
