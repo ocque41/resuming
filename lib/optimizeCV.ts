@@ -3096,7 +3096,7 @@ function formatWorkExperience(experienceText: string): string {
 /**
  * Formats the education section
  */
-function formatEducation(educationText: string): string {
+function formatStandardizedEducation(educationText: string): string {
   // Split education into entries
   let entries: string[] = [];
   
@@ -3264,9 +3264,9 @@ function getDefaultContentForSection(section: string): string {
 }
 
 /**
- * Formats the education section
+ * Formats the education section for standardized CV
  */
-function formatStandardizedEducation(educationText: string): string {
+function formatStandardizedEducationV2(educationText: string): string {
   // Split education into entries
   let entries: string[] = [];
   

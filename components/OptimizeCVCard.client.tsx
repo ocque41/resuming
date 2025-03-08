@@ -11,13 +11,15 @@ import { ComboboxPopover } from "@/components/ui/combobox";
 import { Checkbox } from "@/components/ui/checkbox";
 
 // Minimal interface
-interface OptimizeCVCardProps {}
+interface OptimizeCVCardProps {
+  cvs?: string[]; // Format: "filename|id"
+}
 
 // Simplified component
-export default function OptimizeCVCard({}: OptimizeCVCardProps) {
+export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
   // State for CV selection
   const [selectedCV, setSelectedCV] = useState<string | null>(null);
-  const [cvOptions, setCvOptions] = useState<string[]>([]);
+  const [cvOptions, setCvOptions] = useState<string[]>(cvs);
   
   // State for template selection
   const [selectedTemplate, setSelectedTemplate] = useState<string>("professional-classic");
@@ -57,6 +59,14 @@ export default function OptimizeCVCard({}: OptimizeCVCardProps) {
   useEffect(() => {
     const fetchCVs = async () => {
       try {
+        // If cvs prop is provided, use it
+        if (cvs.length > 0) {
+          setCvOptions(cvs);
+          console.log(`Using ${cvs.length} CVs from props`);
+          return;
+        }
+        
+        // Otherwise fetch from API
         const response = await fetch('/api/cv-list');
         if (!response.ok) {
           throw new Error('Failed to fetch CV list');
@@ -71,7 +81,7 @@ export default function OptimizeCVCard({}: OptimizeCVCardProps) {
           });
           
           setCvOptions(formattedCVs);
-          console.log(`Loaded ${formattedCVs.length} CVs`);
+          console.log(`Loaded ${formattedCVs.length} CVs from API`);
         } else {
           console.error('Invalid CV data format:', data);
           setError('Failed to load CV list: Invalid data format');
@@ -83,7 +93,7 @@ export default function OptimizeCVCard({}: OptimizeCVCardProps) {
     };
     
     fetchCVs();
-  }, []);
+  }, [cvs]);
 
   // Handle CV selection
   const handleCVSelect = useCallback((cv: string) => {
