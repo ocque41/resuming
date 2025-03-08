@@ -133,7 +133,9 @@ export default async function DashboardPage() {
       
       <AnalyzeCVCard cvs={cvs.map((cv) => cv.fileName)} />
       
-      <OptimizeCVCard cvs={cvs.map((cv) => cv.fileName)} />
+      <div className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
+        <OptimizeCVCard cvs={cvs.map((cv) => `${cv.fileName}|${cv.id}`)} />
+      </div>
       
       <div className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
         <JobsCard cvs={mappedCVs} />
