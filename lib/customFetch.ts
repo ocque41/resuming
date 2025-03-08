@@ -35,5 +35,6 @@ export async function customFetch(input: RequestInfo | URL, init?: RequestInit):
   // Optionally log outgoing headers for debugging.
   console.log("customFetch - outgoing headers:", headers);
 
-  return crossFetch(input, init);
+  // Ensure input is compatible with cross-fetch
+  return crossFetch(input as string | URL | Request, init);
 }

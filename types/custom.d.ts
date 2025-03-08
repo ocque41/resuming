@@ -253,9 +253,12 @@ declare module 'drizzle-orm' {
   export function ilike(column: any, pattern: string): any;
   export function notLike(column: any, pattern: string): any;
   export function notIlike(column: any, pattern: string): any;
+  
+  // Add relations function
+  export function relations(table: any, relationBuilder: (helpers: { one: any; many: any }) => any): any;
 }
 
 // Cross-fetch
 declare module 'cross-fetch' {
-  export default function fetch(url: string | Request, init?: RequestInit): Promise<Response>;
+  export default function fetch(url: string | URL | Request, init?: RequestInit): Promise<Response>;
 } 

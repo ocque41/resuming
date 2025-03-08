@@ -19,17 +19,16 @@ export async function middleware(request: NextRequest) {
     try {
       const parsed = await verifyToken(sessionCookie.value);
       const expiresInOneDay = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-      res.cookies.set({
-        name: 'session',
-        value: await signToken({
-          ...parsed,
-          expires: expiresInOneDay.toISOString(),
-        }),
+      const maxAgeInSeconds = 24 * 60 * 60; // 1 day in seconds
+      
+      res.cookies.set('session', await signToken({
+        ...parsed,
+        expires: expiresInOneDay.toISOString(),
+      }), {
         httpOnly: true,
         secure: true,
         sameSite: 'lax',
-        expires: expiresInOneDay,
+        maxAge: maxAgeInSeconds,
       });
     } catch (error) {
       console.error('Error updating session:', error);

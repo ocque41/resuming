@@ -70,6 +70,6 @@ export function withTeam<T>(action: ActionWithTeamFunction<T>) {
       throw new Error('Team not found');
     }
 
-    return action(formData, team);
+    return action(formData, team as unknown as TeamDataWithMembers);
   };
 }
