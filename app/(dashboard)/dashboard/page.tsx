@@ -20,6 +20,7 @@ import ActionsDropdown from "@/components/ActionsDropdown";
 import Link from "next/link";
 import { ArrowRight, Diamond } from "lucide-react";
 import JobsCard from "@/components/JobsCard.client";
+import ErrorBoundaryWrapper from "@/components/ErrorBoundaryWrapper";
 
 export default async function DashboardPage() {
   const user = await getUser();
@@ -134,7 +135,9 @@ export default async function DashboardPage() {
       <AnalyzeCVCard cvs={cvs.map((cv) => cv.fileName)} />
       
       <div className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
-        <OptimizeCVCard cvs={cvs.map((cv) => `${cv.fileName}|${cv.id}`)} />
+        <ErrorBoundaryWrapper>
+          <OptimizeCVCard cvs={cvs.map((cv) => `${cv.fileName}|${cv.id}`)} />
+        </ErrorBoundaryWrapper>
       </div>
       
       <div className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
