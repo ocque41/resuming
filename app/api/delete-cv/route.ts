@@ -4,13 +4,7 @@ import { cvs, deletedCvMetadata } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getUser } from "@/lib/db/queries.server";
 
-interface RouteParams {
-  params: {
-    cvId: string;
-  };
-}
-
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest) {
   try {
     const user = await getUser();
     if (!user) {
@@ -20,7 +14,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const cvId = params.cvId;
+    // Get the CV ID from the query parameter
+    const cvId = request.nextUrl.searchParams.get('cvId');
+    
+    if (!cvId) {
+      return NextResponse.json(
+        { error: "Missing cvId parameter" },
+        { status: 400 }
+      );
+    }
+    
     console.log(`Attempting to delete CV with ID: ${cvId}`);
     
     // Get the CV record first to store metadata

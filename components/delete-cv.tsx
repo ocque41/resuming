@@ -18,12 +18,17 @@ export default function DeleteCVButton({ cvId }: DeleteCVButtonProps) {
 
     setIsDeleting(true);
     try {
-      const res = await fetch(`/api/cv/${cvId}`, {
+      // Use the new API endpoint with a query parameter
+      const res = await fetch(`/api/delete-cv?cvId=${cvId}`, {
         method: "DELETE",
       });
+      
       if (!res.ok) {
-        throw new Error("Failed to delete file");
+        const errorData = await res.json();
+        console.error("Delete CV error:", errorData);
+        throw new Error(errorData.error || "Failed to delete file");
       }
+      
       // Refresh the dashboard to update the list of files.
       router.refresh();
     } catch (error) {
