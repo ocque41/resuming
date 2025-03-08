@@ -598,6 +598,14 @@ export async function modifyPDFWithOptimizedContent(
         margin = 50;
         accentColor = rgb(0.2, 0.4, 0.8); // Blue accent for Google
         headerStyle = 'modern';
+      } else if (template.name === 'Professional Classic' || template.id === 'professional-classic') {
+        margin = 40; // Standard margins
+        accentColor = rgb(0, 0, 0); // Black accent for classic style
+        headerStyle = 'traditional';
+        layout = 'one-column'; // Force one-column layout
+        
+        // For the Professional Classic template, we'll use a custom rendering approach
+        return createProfessionalClassicCV(optimizedText, rawText, doc, regularFont, boldFont, italicFont);
       } else if (template.name === 'Amazon Leadership' || template.id === 'amazon-leadership') {
         margin = 45;
         accentColor = rgb(0.8, 0.5, 0.1); // Orange accent for Amazon
@@ -1521,5 +1529,478 @@ function balanceColumns(leftColumnSections: Section[], rightColumnSections: Sect
   }
   
   console.log(`After balancing - Left column: ${estimateContentLength(leftColumnSections)}, Right column: ${estimateContentLength(rightColumnSections)}`);
+}
+
+/**
+ * Creates a Professional Classic CV layout as shown in the reference image
+ */
+async function createProfessionalClassicCV(
+  optimizedText: string,
+  rawText: string,
+  doc: PDFDocument,
+  regularFont: PDFFont,
+  boldFont: PDFFont,
+  italicFont: PDFFont
+): Promise<Uint8Array> {
+  // Create a new page
+  const page = doc.addPage([595, 842]); // A4 size
+  const { width, height } = page.getSize();
+  
+  // Set margins
+  const margin = 40;
+  const textColor = rgb(0, 0, 0); // Black
+  const grayColor = rgb(0.4, 0.4, 0.4); // Gray for "LAST NAME"
+  
+  // Parse the optimized text into sections
+  const sections: Record<string, string> = {};
+  const sectionRegex = /## ([A-Z\s]+)\n([\s\S]*?)(?=\n## |$)/g;
+  let match;
+  
+  while ((match = sectionRegex.exec(optimizedText)) !== null) {
+    const title = match[1].trim();
+    const content = match[2].trim();
+    sections[title] = content;
+  }
+  
+  // Extract name and contact info
+  let name = "NAME";
+  let lastName = "LAST NAME";
+  let jobTitle = "JOB OCCUPIED";
+  let phone = "+33 01 01 01 01 01";
+  let email = "name@mail.com";
+  let location = "Oregon, USA";
+  
+  if (sections["CONTACT"]) {
+    const contactLines = sections["CONTACT"].split('\n');
+    if (contactLines.length > 0) {
+      const fullName = contactLines[0].trim();
+      const nameParts = fullName.split(' ');
+      if (nameParts.length > 1) {
+        name = nameParts[0];
+        lastName = nameParts.slice(1).join(' ');
+      } else {
+        name = fullName;
+      }
+    }
+    
+    // Extract other contact info
+    for (const line of contactLines) {
+      if (line.includes('@')) {
+        email = line.trim();
+      } else if (line.includes('+') || /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(line)) {
+        phone = line.trim();
+      } else if (line !== contactLines[0]) {
+        // Assume any non-name, non-email, non-phone line is location or job title
+        if (!jobTitle || jobTitle === "JOB OCCUPIED") {
+          jobTitle = line.trim();
+        } else {
+          location = line.trim();
+        }
+      }
+    }
+  }
+  
+  // Draw header
+  // Name
+  page.drawText(name, {
+    x: margin,
+    y: height - margin - 20,
+    size: 24,
+    font: boldFont,
+    color: textColor
+  });
+  
+  // Last Name
+  page.drawText(lastName, {
+    x: margin + 100, // Adjust based on name length
+    y: height - margin - 20,
+    size: 24,
+    font: boldFont,
+    color: grayColor
+  });
+  
+  // Job Title
+  page.drawText(jobTitle, {
+    x: margin,
+    y: height - margin - 45,
+    size: 12,
+    font: regularFont,
+    color: textColor
+  });
+  
+  // Phone
+  page.drawText(phone, {
+    x: margin,
+    y: height - margin - 65,
+    size: 10,
+    font: regularFont,
+    color: textColor
+  });
+  
+  // Email
+  page.drawText(email, {
+    x: margin,
+    y: height - margin - 80,
+    size: 10,
+    font: regularFont,
+    color: textColor
+  });
+  
+  // Location
+  page.drawText(location, {
+    x: margin,
+    y: height - margin - 95,
+    size: 10,
+    font: regularFont,
+    color: textColor
+  });
+  
+  // Photo placeholder (right side)
+  const photoX = width - margin - 80; // 80px width
+  const photoY = height - margin - 100; // 100px height
+  page.drawRectangle({
+    x: photoX,
+    y: photoY,
+    width: 80,
+    height: 100,
+    borderColor: rgb(0.8, 0.8, 0.8),
+    borderWidth: 1,
+  });
+  
+  // Draw a line under the header
+  page.drawLine({
+    start: { x: margin, y: height - margin - 110 },
+    end: { x: width - margin, y: height - margin - 110 },
+    thickness: 1,
+    color: rgb(0.8, 0.8, 0.8)
+  });
+  
+  // Current Y position for content
+  let currentY = height - margin - 140;
+  
+  // Draw sections in order
+  const sectionOrder = [
+    "ABOUT ME",
+    "COMPETENCES",
+    "WORK EXPERIENCE",
+    "EDUCATION",
+    "LANGUAGES"
+  ];
+  
+  for (const sectionName of sectionOrder) {
+    if (sections[sectionName]) {
+      // Draw section title
+      page.drawText(sectionName, {
+        x: margin,
+        y: currentY,
+        size: 14,
+        font: boldFont,
+        color: textColor
+      });
+      
+      currentY -= 25;
+      
+      // Process section content based on section type
+      if (sectionName === "COMPETENCES") {
+        // Draw competences as bullet points in columns
+        const competences = sections[sectionName].split('\n');
+        const columnWidth = (width - 2 * margin) / 3;
+        let columnY = currentY;
+        
+        for (let i = 0; i < competences.length; i++) {
+          const columnIndex = i % 3;
+          const competence = competences[i].trim();
+          
+          if (competence) {
+            // Draw bullet point
+            page.drawText("•", {
+              x: margin + columnIndex * columnWidth,
+              y: columnY,
+              size: 10,
+              font: regularFont,
+              color: textColor
+            });
+            
+            // Draw competence text
+            page.drawText(competence.replace(/^[-•*]\s*/, ''), {
+              x: margin + columnIndex * columnWidth + 15,
+              y: columnY,
+              size: 10,
+              font: regularFont,
+              color: textColor
+            });
+            
+            // Move to next row if we've filled all columns
+            if (columnIndex === 2) {
+              columnY -= 20;
+            }
+          }
+        }
+        
+        // Update current Y to the lowest point
+        currentY = columnY - 20;
+        
+      } else if (sectionName === "WORK EXPERIENCE") {
+        // Process work experience entries
+        const experiences = sections[sectionName].split('\n\n');
+        
+        for (const experience of experiences) {
+          const lines = experience.split('\n');
+          let dateAndPosition = "";
+          let company = "";
+          let details = [];
+          
+          if (lines.length > 0) {
+            dateAndPosition = lines[0].trim();
+            
+            // Draw date on the left
+            if (dateAndPosition.includes('-')) {
+              const dateParts = dateAndPosition.split('-');
+              page.drawText(dateParts[0].trim(), {
+                x: margin,
+                y: currentY,
+                size: 10,
+                font: italicFont,
+                color: textColor
+              });
+              
+              // Draw position
+              page.drawText("Job occupied", {
+                x: margin + 100,
+                y: currentY,
+                size: 10,
+                font: regularFont,
+                color: textColor
+              });
+              
+              currentY -= 20;
+            }
+            
+            // Draw company name
+            if (lines.length > 1) {
+              company = lines[1].trim();
+              page.drawText(company.toUpperCase(), {
+                x: margin + 100,
+                y: currentY,
+                size: 10,
+                font: boldFont,
+                color: textColor
+              });
+              
+              currentY -= 20;
+              
+              // Process bullet points
+              for (let i = 2; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
+                  details.push(line);
+                  
+                  // Draw bullet point
+                  page.drawText("•", {
+                    x: margin + 100,
+                    y: currentY,
+                    size: 10,
+                    font: regularFont,
+                    color: textColor
+                  });
+                  
+                  // Draw detail text
+                  const textLines = splitTextIntoLines(
+                    line.replace(/^[-•*]\s*/, ''),
+                    width - margin - 125,
+                    regularFont,
+                    10
+                  );
+                  
+                  for (let j = 0; j < textLines.length; j++) {
+                    page.drawText(textLines[j], {
+                      x: margin + 115,
+                      y: currentY - j * 15,
+                      size: 10,
+                      font: regularFont,
+                      color: textColor
+                    });
+                  }
+                  
+                  currentY -= 15 * textLines.length;
+                }
+              }
+            }
+          }
+          
+          currentY -= 10; // Add space between experiences
+        }
+        
+      } else if (sectionName === "EDUCATION") {
+        // Process education entries
+        const educationEntries = sections[sectionName].split('\n\n');
+        
+        // Create a grid layout for education
+        const columnWidth = (width - 2 * margin) / 3;
+        let columnIndex = 0;
+        let rowY = currentY;
+        
+        for (const entry of educationEntries) {
+          const lines = entry.split('\n');
+          let school = "UNIVERSITY OR SCHOOL";
+          let diploma = "Diploma Xxxxxxxxxx";
+          let year = "20XX";
+          
+          if (lines.length > 0) {
+            school = lines[0].trim();
+          }
+          
+          if (lines.length > 1) {
+            diploma = lines[1].trim();
+          }
+          
+          if (lines.length > 2) {
+            year = lines[2].trim();
+          }
+          
+          // Draw school name
+          page.drawText(school.toUpperCase(), {
+            x: margin + columnIndex * columnWidth,
+            y: rowY,
+            size: 10,
+            font: regularFont,
+            color: textColor
+          });
+          
+          // Draw diploma
+          page.drawText(diploma, {
+            x: margin + columnIndex * columnWidth,
+            y: rowY - 15,
+            size: 10,
+            font: boldFont,
+            color: textColor
+          });
+          
+          // Draw year
+          page.drawText(year, {
+            x: margin + columnIndex * columnWidth,
+            y: rowY - 30,
+            size: 10,
+            font: regularFont,
+            color: textColor
+          });
+          
+          // Move to next column or row
+          columnIndex++;
+          if (columnIndex >= 3) {
+            columnIndex = 0;
+            rowY -= 50;
+          }
+        }
+        
+        // Update current Y to the lowest point
+        currentY = rowY - 30;
+        
+      } else if (sectionName === "LANGUAGES") {
+        // Process languages with progress bars
+        const languages = sections[sectionName].split('\n');
+        const columnWidth = (width - 2 * margin) / 3;
+        
+        for (let i = 0; i < languages.length; i++) {
+          const columnIndex = i % 3;
+          const language = languages[i].trim();
+          
+          if (language) {
+            let languageName = language;
+            let proficiency = 0.7; // Default 70%
+            
+            // Extract proficiency if available
+            if (language.includes(':')) {
+              const parts = language.split(':');
+              languageName = parts[0].trim();
+              
+              // Parse proficiency
+              const proficiencyText = parts[1].trim().toLowerCase();
+              if (proficiencyText.includes('fluent') || proficiencyText.includes('native')) {
+                proficiency = 0.9;
+              } else if (proficiencyText.includes('advanced')) {
+                proficiency = 0.7;
+              } else if (proficiencyText.includes('intermediate')) {
+                proficiency = 0.5;
+              } else if (proficiencyText.includes('basic')) {
+                proficiency = 0.3;
+              }
+            }
+            
+            // Draw language name
+            page.drawText(languageName, {
+              x: margin + columnIndex * columnWidth,
+              y: currentY,
+              size: 10,
+              font: regularFont,
+              color: textColor
+            });
+            
+            // Draw progress bar background
+            page.drawRectangle({
+              x: margin + columnIndex * columnWidth,
+              y: currentY - 15,
+              width: 100,
+              height: 5,
+              color: rgb(0.9, 0.9, 0.9)
+            });
+            
+            // Draw progress bar fill
+            page.drawRectangle({
+              x: margin + columnIndex * columnWidth,
+              y: currentY - 15,
+              width: 100 * proficiency,
+              height: 5,
+              color: rgb(0, 0, 0)
+            });
+            
+            // Move to next row if we've filled all columns
+            if (columnIndex === 2) {
+              currentY -= 30;
+            }
+          }
+        }
+        
+        // Update current Y to the lowest point
+        if (languages.length % 3 !== 0) {
+          currentY -= 30;
+        }
+        
+      } else {
+        // Default text rendering for other sections (like ABOUT ME)
+        const textLines = splitTextIntoLines(
+          sections[sectionName],
+          width - 2 * margin,
+          regularFont,
+          10
+        );
+        
+        for (let i = 0; i < textLines.length; i++) {
+          page.drawText(textLines[i], {
+            x: margin,
+            y: currentY - i * 15,
+            size: 10,
+            font: regularFont,
+            color: textColor
+          });
+        }
+        
+        currentY -= 15 * textLines.length + 10;
+      }
+      
+      // Draw a line under each section
+      page.drawLine({
+        start: { x: margin, y: currentY - 5 },
+        end: { x: width - margin, y: currentY - 5 },
+        thickness: 1,
+        color: rgb(0.8, 0.8, 0.8)
+      });
+      
+      currentY -= 20; // Space between sections
+    }
+  }
+  
+  // Serialize the PDF to bytes
+  return await doc.save();
 }
 

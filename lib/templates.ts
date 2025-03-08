@@ -9,6 +9,36 @@ export function getTemplates(): CVTemplate[] {
     // For now, we'll define them statically
     const templates: CVTemplate[] = [
       {
+        id: 'professional-classic',
+        name: 'Professional Classic',
+        company: 'General',
+        description: 'Clean, professional layout with clear section organization',
+        thumbnail: '/templates/professional-classic.png',
+        previewImageUrl: '/templates/professional-classic/preview.jpg',
+        templatePath: '/templates/professional-classic/template.pdf',
+        metadata: {
+          layout: 'one-column',
+          preferredFonts: ['Arial', 'Helvetica', 'Times New Roman'],
+          colorScheme: {
+            primary: '#000000', // Black for main text
+            secondary: '#666666', // Gray for secondary text
+            accent: '#000000', // Black for accents
+            background: '#ffffff', // White background
+            text: '#000000', // Black text
+          },
+          sectionOrder: ['ABOUT ME', 'COMPETENCES', 'WORK EXPERIENCE', 'EDUCATION', 'LANGUAGES'],
+          keywordsEmphasis: ['professional', 'experience', 'skills', 'education', 'languages'],
+          industrySpecific: {
+            industry: 'General Professional',
+            requiredSkills: ['Communication', 'Organization', 'Teamwork', 'Technical Skills'],
+            valuePropositions: ['Clear presentation', 'Organized information', 'Professional appearance'],
+            recruiterPreferences: ['Clear work history', 'Well-organized sections', 'Bullet-point achievements'],
+            resumeStyle: 'Classic professional layout with clear section headers and organized content',
+            achievementFormat: 'Bullet points with clear descriptions of responsibilities and achievements'
+          }
+        }
+      },
+      {
         id: 'google-modern',
         name: 'Google Modern',
         company: 'Google',

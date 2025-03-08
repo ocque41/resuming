@@ -72,22 +72,36 @@ export async function GET(request: NextRequest) {
         // Get the template if specified
         let template = undefined;
         if (metadata.templateId) {
+          console.log(`Using template ID from metadata: ${metadata.templateId}`);
           template = getTemplateById(metadata.templateId);
+          console.log(`Template found: ${!!template}`);
+        } else if (metadata.selectedTemplate) {
+          console.log(`Using selectedTemplate from metadata: ${metadata.selectedTemplate}`);
+          template = getTemplateById(metadata.selectedTemplate);
+          console.log(`Template found: ${!!template}`);
+        } else {
+          console.log("No template specified, using default");
+          template = getTemplateById('professional-classic');
         }
         
         // Generate the PDF
+        console.log("Calling modifyPDFWithOptimizedContent with template:", template?.id || "none");
         const pdfBuffer = await modifyPDFWithOptimizedContent(
           metadata.optimizedText,
           cvRecord.rawText || "",
           template
         );
         
+        console.log(`PDF generated successfully, buffer size: ${pdfBuffer.length} bytes`);
+        
         // Convert to base64
         const pdfBase64 = Buffer.from(pdfBuffer).toString('base64');
+        console.log(`Converted PDF to base64, length: ${pdfBase64.length} chars`);
         
         // Cache the PDF data in metadata for future requests
         metadata.optimizedPdfBase64 = pdfBase64;
         await updateCVAnalysis(cvRecord.id, JSON.stringify(metadata));
+        console.log("Updated CV metadata with PDF base64 data");
         
         return NextResponse.json({ 
           pdfBase64,

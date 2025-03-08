@@ -47,37 +47,29 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     // Reset optimization state to start fresh
     metadata.optimizing = true;
     metadata.optimized = false; // Ensure we're not marked as optimized until complete
+    metadata.progress = 0;
+    metadata.startTime = new Date().toISOString();
+    metadata.lastProgressUpdate = new Date().toISOString();
+    metadata.templateId = templateId || 'professional-classic'; // Store the template ID, default to professional-classic
     
-    // Add startTime to the metadata to track optimization progress
-    const startTime = new Date().toISOString();
-    const updatedMetadata = {
-      ...metadata,
-      startTime: startTime,
-      progress: 10, // Initialize progress at 10%
-      lastProgressUpdate: new Date().toISOString() // Track when progress last changed
-    };
-    
-    // Save initial state to database
-    try {
+    // Save initial state
+    const updatedMetadata = { ...metadata };
     await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedMetadata));
-      console.log(`Initialized optimization state for CV ${cvRecord.id} at 10%`);
-    } catch (updateError) {
-      console.error("Failed to initialize optimization state:", updateError);
-      throw new Error(`Failed to initialize optimization: ${(updateError as Error).message}`);
-    }
     
-    // Use templateId from parameters or from stored metadata if available
-    const selectedTemplateId = templateId || metadata.selectedTemplate;
+    console.log(`Updated metadata with initial optimization state for CV ${cvRecord.id}`);
     
-    // Find the selected template if a template ID was provided
+    // Get the selected template
+    const selectedTemplateId = templateId || 'professional-classic';
     let selectedTemplate = undefined;
-    if (selectedTemplateId) {
-      selectedTemplate = CV_TEMPLATES.find(template => template.id === selectedTemplateId);
-      if (!selectedTemplate) {
-        console.warn(`Template with ID ${selectedTemplateId} not found. Using default optimization.`);
-      } else {
-        console.log(`Using template: ${selectedTemplate.name} (${selectedTemplate.company})`);
-      }
+    
+    try {
+      // Import the getTemplateById function dynamically
+      const { getTemplateById } = require('./templates');
+      selectedTemplate = getTemplateById(selectedTemplateId);
+      console.log(`Selected template: ${selectedTemplateId}, Found: ${!!selectedTemplate}`);
+    } catch (templateError) {
+      console.error("Error loading template:", templateError);
+      // Continue without template
     }
 
     // Verify raw text is available
@@ -437,7 +429,8 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
       ...metadata, // Start with original metadata (strengths, weaknesses, etc.)
       optimizedText: optimizedText,
       optimizedPDFBase64: modifiedPdfBase64,
-      selectedTemplate: selectedTemplateId,
+      templateId: selectedTemplateId, // Store the template ID
+      selectedTemplate: selectedTemplateId, // For backward compatibility
       optimized: true,
       optimizing: false,
       optimizedTimes: (metadata.optimizedTimes || 0) + 1,
@@ -544,11 +537,27 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     // Save the final optimization results
     try {
       await updateCVAnalysis(cvRecord.id, JSON.stringify(finalMetadata));
-    console.log(`CV optimization completed successfully for: ${cvRecord.id}`);
+      console.log(`CV optimization completed successfully for: ${cvRecord.id}`);
       console.log(`Saved optimized text (${optimizedText.length} chars) and PDF (${modifiedPdfBase64.length} base64 chars)`);
     } catch (finalUpdateError) {
       console.error("Failed to update final metadata:", finalUpdateError);
-      throw new Error(`Failed to save optimization results: ${(finalUpdateError as Error).message}`);
+      
+      // Try one more time with a simplified metadata object
+      try {
+        const simplifiedMetadata = {
+          ...metadata,
+          optimizedText: optimizedText,
+          optimized: true,
+          optimizing: false,
+          progress: 100,
+          error: null,
+          lastOptimizedAt: new Date().toISOString()
+        };
+        await updateCVAnalysis(cvRecord.id, JSON.stringify(simplifiedMetadata));
+        console.log("Saved simplified metadata as fallback");
+      } catch (retryError) {
+        console.error("Failed to save even simplified metadata:", retryError);
+      }
     }
     
     return finalMetadata;

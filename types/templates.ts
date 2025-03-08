@@ -31,6 +31,48 @@ export interface CVTemplate {
 
 // Template collection
 export const CV_TEMPLATES: CVTemplate[] = [
+  // Professional Classic Template (New)
+  {
+    id: 'professional-classic',
+    name: 'Professional Classic',
+    company: 'General',
+    description: 'Clean, professional layout with clear section organization',
+    previewImageUrl: '/templates/professional-classic/preview.jpg',
+    templatePath: '/templates/professional-classic/template.pdf',
+    thumbnail: '/templates/professional-classic/thumbnail.jpg',
+    metadata: {
+      preferredFonts: ['Arial', 'Helvetica', 'Times New Roman'],
+      colorScheme: {
+        primary: '#000000', // Black for main text
+        secondary: '#666666', // Gray for secondary text
+        accent: '#000000', // Black for accents
+        background: '#ffffff', // White background
+        text: '#000000', // Black text
+      },
+      layout: 'one-column',
+      sectionOrder: ['ABOUT ME', 'COMPETENCES', 'WORK EXPERIENCE', 'EDUCATION', 'LANGUAGES'],
+      keywordsEmphasis: ['professional', 'experience', 'skills', 'education', 'languages'],
+      industrySpecific: {
+        industry: 'General Professional',
+        requiredSkills: ['Communication', 'Organization', 'Teamwork', 'Technical Skills', 'Problem Solving'],
+        valuePropositions: [
+          'Clear presentation of experience',
+          'Organized information hierarchy',
+          'Professional appearance',
+          'Comprehensive skill presentation'
+        ],
+        recruiterPreferences: [
+          'Clear chronological work history',
+          'Well-organized sections',
+          'Bullet-point achievements',
+          'Quantifiable results'
+        ],
+        resumeStyle: 'Classic professional layout with clear section headers and organized content. Includes photo in the header section.',
+        achievementFormat: 'Bullet points with clear descriptions of responsibilities and achievements'
+      }
+    },
+  },
+  
   // Google Template
   {
     id: 'google-modern',

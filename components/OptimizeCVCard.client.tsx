@@ -30,6 +30,7 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
 
   // Templates for selection
   const templates = [
+    "Professional Classic",
     "Modern Professional",
     "Creative Design",
     "Executive",
@@ -132,15 +133,23 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
           const cvId = statusData.id || statusData.cvId;
           
           if (cvId) {
+            console.log(`Fetching optimized PDF for CV ID: ${cvId}`);
             const pdfResponse = await fetch(`/api/cv-pdf-generator?cvId=${cvId}`);
             
             if (pdfResponse.ok) {
               const pdfData = await pdfResponse.json();
+              console.log("PDF response received:", pdfData.message || "Success");
               
               if (pdfData.pdfBase64) {
+                console.log(`Received PDF base64 data (${pdfData.pdfBase64.length} chars)`);
                 setOptimizedPdfData(pdfData.pdfBase64);
                 console.log("Retrieved optimized PDF data");
+              } else {
+                console.warn("PDF response did not contain base64 data");
               }
+            } else {
+              const errorData = await pdfResponse.json();
+              console.error("Error fetching PDF:", errorData.error || "Unknown error");
             }
           } else {
             console.warn("Could not retrieve CV ID from status data");
@@ -255,30 +264,40 @@ export default function OptimizeCVCard({ cvs }: OptimizeCVCardProps) {
 
     try {
       if (optimizedPdfData) {
+        console.log(`Preparing to download PDF with base64 data (${optimizedPdfData.length} chars)`);
+        
         // Create and download PDF from base64 data
-        const byteCharacters = atob(optimizedPdfData);
-        const byteNumbers = new Array(byteCharacters.length);
-        
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        try {
+          const byteCharacters = atob(optimizedPdfData);
+          console.log(`Decoded base64 to ${byteCharacters.length} bytes`);
+          
+          const byteNumbers = new Array(byteCharacters.length);
+          
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: 'application/pdf' });
+          const url = URL.createObjectURL(blob);
+          
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `optimized_${selectedCV.replace(/\|.*$/, '')}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          
+          console.log("PDF download completed successfully");
+        } catch (pdfError) {
+          console.error("Error creating PDF from base64:", pdfError);
+          throw new Error(`Failed to create PDF: ${pdfError instanceof Error ? pdfError.message : String(pdfError)}`);
         }
-        
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `optimized_${selectedCV}`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        
-        console.log("PDF download completed successfully");
       } else {
+        console.log("No PDF data available, falling back to text summary");
         // Fallback to text file if PDF data is not available
-        const content = `Optimized CV for ${selectedCV}
+        const content = `Optimized CV for ${selectedCV.replace(/\|.*$/, '')}
 
 This CV has been optimized using the ${selectedTemplate} template.
 ATS Score improved from 65% to 85%.
@@ -296,7 +315,7 @@ Date: ${new Date().toLocaleDateString()}`;
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `optimized_${selectedCV.replace('.pdf', '')}.txt`;
+        link.download = `optimized_${selectedCV.replace(/\|.*$/, '').replace('.pdf', '')}.txt`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
