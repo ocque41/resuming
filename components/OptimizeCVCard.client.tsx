@@ -240,11 +240,36 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
       // Extract the CV ID from the selected CV
       const cvParts = selectedCV.split('|');
       const fileName = cvParts[0].trim();
-      const cvId = cvParts.length > 1 ? cvParts[1].trim() : undefined;
+      let cvId = cvParts.length > 1 ? cvParts[1].trim() : undefined;
       
-      if (!cvId) {
-        throw new Error("Could not determine CV ID for preview");
+      // Prepare the request data
+      const requestData: any = {};
+      
+      // If we have a CV ID, use it
+      if (cvId) {
+        requestData.cvId = cvId;
+      } 
+      // If we don't have a CV ID, we need to search by filename
+      else {
+        // First try to find the CV ID for this filename in our options
+        const matchingCV = cvOptions.find(cv => cv.startsWith(fileName + '|'));
+        if (matchingCV) {
+          const parts = matchingCV.split('|');
+          if (parts.length > 1) {
+            cvId = parts[1].trim();
+            requestData.cvId = cvId;
+          }
+        }
+        
+        // If we still don't have a CV ID, use the filename
+        if (!requestData.cvId) {
+          requestData.fileName = fileName;
+          // As a fallback, we can also provide dummy text if this is just a preview
+          requestData.rawText = "This is a preview of the CV optimization process.";
+        }
       }
+      
+      console.log("Preview request data:", requestData);
       
       // Call the preview API
       const response = await fetch('/api/cv/preview', {
@@ -252,7 +277,7 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ cvId }),
+        body: JSON.stringify(requestData),
       });
       
       if (!response.ok) {
@@ -290,7 +315,7 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
       setError(`Preview error: ${error instanceof Error ? error.message : String(error)}`);
       setIsPreviewLoading(false);
     }
-  }, [selectedCV]);
+  }, [selectedCV, cvOptions]);
 
   // Function to handle optimization
   const handleOptimize = useCallback(async () => {

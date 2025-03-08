@@ -64,9 +64,9 @@ export default async function DashboardPage() {
         <UserMenu teamData={teamData} activityLogs={activityLogs} />
       </header>
       
-      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg">
-        <CardHeader className="bg-[#B4916C]/10 pb-4">
-          <CardTitle className="text-xl font-bold text-white">Your CV Collection</CardTitle>
+      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#121212] shadow-lg">
+        <CardHeader className="bg-[#121212] pb-4">
+          <CardTitle className="text-xl font-bold text-[#B4916C]">Your CV Collection</CardTitle>
         </CardHeader>
         <CardContent className="p-6">
           <Table className="w-full">
@@ -100,16 +100,16 @@ export default async function DashboardPage() {
                     </TableCell>
                     <TableCell className="text-sm lg:text-base">
                       {metadata?.optimized ? (
-                        <span className="px-2 py-1 bg-green-900/30 rounded-full text-green-400 font-medium text-sm">
-                          Yes ({metadata.optimizedTimes || 1})
+                        <span className="px-2 py-1 bg-green-500/10 rounded-full text-green-500 font-medium text-sm">
+                          Yes
                         </span>
                       ) : (
-                        <span className="px-2 py-1 bg-[#B4916C]/10 rounded-full text-[#B4916C] font-medium text-sm">
+                        <span className="px-2 py-1 bg-gray-500/10 rounded-full text-gray-500 font-medium text-sm">
                           No
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="text-sm lg:text-base">
+                    <TableCell>
                       <ActionsDropdown cv={cv} />
                     </TableCell>
                   </TableRow>
@@ -117,6 +117,16 @@ export default async function DashboardPage() {
               })}
             </TableBody>
           </Table>
+          
+          <div className="mt-8">
+            <Link 
+              href="/dashboard/upload" 
+              className="flex items-center justify-center w-full py-2 px-4 bg-[#B4916C] text-white rounded-md hover:bg-[#A3815C] transition-colors"
+            >
+              Upload New CV
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </div>
         </CardContent>
       </Card>
       
@@ -147,14 +157,16 @@ export default async function DashboardPage() {
       
       <AnalyzeCVCard cvs={cvs.map((cv) => cv.fileName)} />
       
-      <div className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mx-auto max-w-md lg:max-w-6xl px-4 lg:px-8 pb-16">
         <ErrorBoundaryWrapper>
-          <OptimizeCVCard cvs={cvs.map((cv) => `${cv.fileName}|${cv.id}`)} />
+          <OptimizeCVCard 
+            cvs={cvs.map((cv: any) => `${cv.fileName}|${cv.id}`)}
+          />
         </ErrorBoundaryWrapper>
-      </div>
-      
-      <div className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl">
-        <JobsCard cvs={mappedCVs} />
+        
+        <ErrorBoundaryWrapper>
+          <JobsCard cvs={mappedCVs} />
+        </ErrorBoundaryWrapper>
       </div>
     </>
   );

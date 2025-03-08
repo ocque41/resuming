@@ -901,8 +901,11 @@ function createProficiencyBar(proficiency: string): Paragraph {
 
 // Helper function to parse a standardized CV from sections
 export function parseStandardCVFromSections(sections: Record<string, string>): StandardCV {
+  // Make sure sections exist, if not use empty object
+  sections = sections || {};
+  
   // Parse profile
-  const profileLines = sections["PROFILE"].split('\n').filter(line => line.trim());
+  const profileLines = (sections["PROFILE"] || "").split('\n').filter(line => line.trim());
   const profile = {
     name: profileLines[0] || "NAME LAST NAME",
     phone: profileLines.find(line => /phone|^\+|\d{3}[-.\s]?\d{3}[-.\s]?\d{4}|^\d+$/.test(line.toLowerCase())) || 
@@ -916,11 +919,11 @@ export function parseStandardCVFromSections(sections: Record<string, string>): S
   };
   
   // Parse career goal
-  const careerGoal = sections["CAREER GOAL"].trim() || 
+  const careerGoal = (sections["CAREER GOAL"] || "").trim() || 
                      "Experienced professional seeking to leverage skills and expertise...";
   
   // Parse achievements
-  const achievementLines = sections["ACHIEVEMENTS"].split('\n')
+  const achievementLines = (sections["ACHIEVEMENTS"] || "").split('\n')
     .filter(line => line.trim())
     .map(line => line.replace(/^[-•*]\s*/, '').trim());
   const achievements = achievementLines.slice(0, 3);
@@ -931,7 +934,7 @@ export function parseStandardCVFromSections(sections: Record<string, string>): S
   }
   
   // Parse skills
-  const skillsText = sections["SKILLS"];
+  const skillsText = sections["SKILLS"] || "";
   const skillCategories: StandardCV['skills'] = [];
   
   // Try to parse skill categories
@@ -995,7 +998,7 @@ export function parseStandardCVFromSections(sections: Record<string, string>): S
   }
   
   // Parse work experience
-  const workExperienceText = sections["WORK EXPERIENCE"];
+  const workExperienceText = sections["WORK EXPERIENCE"] || "";
   const experienceEntries: StandardCV['workExperience'] = [];
   
   // Split by double newlines or date patterns
@@ -1074,7 +1077,7 @@ export function parseStandardCVFromSections(sections: Record<string, string>): S
   }
   
   // Parse education
-  const educationText = sections["EDUCATION"];
+  const educationText = sections["EDUCATION"] || "";
   const educationEntries: StandardCV['education'] = [];
   
   // Split by double newlines or institution patterns
@@ -1103,41 +1106,41 @@ export function parseStandardCVFromSections(sections: Record<string, string>): S
   }
   
   // Parse languages
-  const languagesText = sections["LANGUAGES"];
+  const languagesText = sections["LANGUAGES"] || "";
   const languageEntries: StandardCV['languages'] = [];
   
-  // Split by newlines or language patterns
+  // Split by lines
   const languageLines = languagesText.split('\n').map(line => line.trim()).filter(line => line);
   
   for (const line of languageLines) {
-    // Check if the line contains a proficiency level
-    const proficiencySeparators = [':', '-', '•', '–', '—'];
-    const separatorIndex = proficiencySeparators.findIndex(sep => line.includes(sep));
+    // Handle bullet points
+    const languageText = line.replace(/^[-•*]\s*/, '').trim();
     
-    if (separatorIndex !== -1) {
-      const separator = proficiencySeparators[separatorIndex];
-      const parts = line.split(separator).map(part => part.trim());
+    // Try to extract language and proficiency (e.g., "English - Fluent" or "English (Fluent)")
+    const match = languageText.match(/^(.*?)(?:[-–—:]\s*|\s*\(\s*)(.*?)(?:\s*\))?$/);
+    
+    if (match) {
+      const language = match[1].trim();
+      const proficiency = match[2].trim();
       
-      if (parts.length >= 2) {
-        languageEntries.push({
-          language: parts[0],
-          proficiency: parts[1]
-        });
-      }
-    } else {
-      // If no proficiency level is specified, assume fluent
       languageEntries.push({
-        language: line,
-        proficiency: "Fluent"
+        language,
+        proficiency
+      });
+    } else {
+      // If we can't parse the format, just use the whole line as the language
+      languageEntries.push({
+        language: languageText,
+        proficiency: "Fluent" // Default proficiency
       });
     }
   }
   
-  // Ensure we have at least one language
+  // Ensure we have at least one language entry
   if (languageEntries.length === 0) {
     languageEntries.push({
       language: "English",
-      proficiency: "Native"
+      proficiency: "Fluent"
     });
   }
   

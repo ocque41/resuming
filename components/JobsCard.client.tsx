@@ -436,156 +436,144 @@ export default function JobsCard({ cvs }: JobsCardProps) {
   };
 
   return (
-    <Card className="mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#050505] shadow-lg relative group">
-      {/* Coming Soon Overlay - Always visible on mobile, visible on hover for desktop */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-md z-10 flex items-center justify-center md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300">
-        <div className="text-center p-6">
-          <span className="inline-block px-4 py-2 bg-[#B4916C] text-black rounded-full text-lg font-bold mb-4">
-            Coming Soon
-          </span>
-          <p className="text-white text-lg mb-2">Job search feature is under development</p>
-          <p className="text-gray-300 text-sm max-w-md">
-            We're working hard to bring you the best job matching experience. Stay tuned for updates!
-          </p>
-        </div>
-      </div>
-
-      <CardHeader className="bg-[#B4916C]/10 pb-4">
-        <CardTitle className="text-xl font-bold text-[#B4916C]">Job Opportunities</CardTitle>
-        <CardDescription className="text-gray-300">
-          Find job openings matching your CV and skills
-        </CardDescription>
+    <Card className="w-full shadow-lg border-0">
+      <CardHeader className="bg-[#121212] text-white rounded-t-lg">
+        <CardTitle className="text-[#B4916C] flex items-center gap-2">
+          <Briefcase className="h-5 w-5" />
+          <span>Find Matching Jobs</span>
+        </CardTitle>
       </CardHeader>
-
+      
       <CardContent className="p-6">
-        {renderCVSelector()}
-
-        {extractedKeywords && selectedCV && (
-          <div className="mb-4">
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {extractedKeywords.keywords.slice(0, 8).map((keyword, i) => (
-                <Badge key={i} variant="custom" className="bg-[#B4916C]/10 text-[#B4916C] border-[#B4916C]/20">
-                  {keyword}
-                </Badge>
-              ))}
-              {extractedKeywords.keywords.length > 8 && (
-                <Badge variant="outline" className="text-gray-400 border-gray-700">+{extractedKeywords.keywords.length - 8} more</Badge>
-              )}
-            </div>
-            
-            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
-              <span className="flex items-center gap-1">
-                <Briefcase size={12} />
-                {extractedKeywords.jobTypes[0] || 'Any role'}
-              </span>
-              
-              <span className="flex items-center gap-1">
-                <MapPin size={12} />
-                {extractedKeywords.locations.length > 0 ? extractedKeywords.locations[0] : 'Any location'}
-              </span>
-              
-              <span>{extractedKeywords.experience}</span>
-            </div>
-          </div>
-        )}
-
-        <div className="flex flex-col sm:flex-row gap-2 mb-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
-            <Input
-              type="search"
-              placeholder="Search jobs..."
-              className="pl-9 bg-[#0A0A0A] border border-[#B4916C]/20 rounded-md text-white py-2 px-3"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-          
-          <div className="relative flex-1">
-            <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
-            <Input
-              type="text"
-              placeholder="Location..."
-              className="pl-9 bg-[#0A0A0A] border border-[#B4916C]/20 rounded-md text-white py-2 px-3"
-              value={locationQuery}
-              onChange={(e) => setLocationQuery(e.target.value)}
-            />
-          </div>
-          
-          <Button 
-            variant="outline" 
-            size="sm"
-            className="sm:w-auto w-full border-[#B4916C]/20 hover:bg-[#B4916C]/10 text-white"
-            onClick={() => setShowFilters(!showFilters)}
-          >
-            <Filter size={16} className="mr-2" />
-            Filters
-            <ChevronDown size={16} className="ml-2" />
-          </Button>
+        {/* CV Selection */}
+        <div className="mb-4">
+          {renderCVSelector()}
         </div>
 
-        {showFilters && (
-          <div className="mb-4 p-3 border border-[#B4916C]/20 rounded-md bg-[#0A0A0A]">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-white">Additional Filters</h3>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setShowFilters(false)}
-                className="text-gray-400 hover:text-white hover:bg-[#B4916C]/10"
-              >
-                Close
-              </Button>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-400">Salary Range</label>
-                <select className="w-full text-sm rounded-md border border-[#B4916C]/20 bg-[#050505] text-white p-2">
-                  <option>Any salary</option>
-                  <option>$50k - $80k</option>
-                  <option>$80k - $100k</option>
-                  <option>$100k - $130k</option>
-                  <option>$130k+</option>
-                </select>
+        {/* Search Form */}
+        <form 
+          onSubmit={(e) => {
+            e.preventDefault();
+            searchJobs(
+              extractedKeywords?.keywords || [], 
+              locationQuery,
+              1 // Reset to page 1
+            );
+          }}
+          className="mb-6 space-y-4"
+        >
+          {selectedCV && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="keywords" className="block text-sm font-medium text-gray-300 mb-1">
+                    Keywords
+                  </label>
+                  <div className="relative rounded-md">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Search className="h-4 w-4 text-gray-400" />
+                    </div>
+                    <Input
+                      id="keywords"
+                      type="text"
+                      placeholder="Keywords from your CV"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10 bg-[#1a1a1a] border-gray-700 text-gray-200"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label htmlFor="location" className="block text-sm font-medium text-gray-300 mb-1">
+                    Location
+                  </label>
+                  <div className="relative rounded-md">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <MapPin className="h-4 w-4 text-gray-400" />
+                    </div>
+                    <Input
+                      id="location"
+                      type="text"
+                      placeholder="City, state, or remote"
+                      value={locationQuery}
+                      onChange={(e) => setLocationQuery(e.target.value)}
+                      className="pl-10 bg-[#1a1a1a] border-gray-700 text-gray-200"
+                    />
+                  </div>
+                </div>
               </div>
               
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-400">Job Type</label>
-                <select className="w-full text-sm rounded-md border border-[#B4916C]/20 bg-[#050505] text-white p-2">
-                  <option>All types</option>
-                  <option>Full-time</option>
-                  <option>Part-time</option>
-                  <option>Contract</option>
-                  <option>Remote</option>
-                </select>
+              <div className="flex justify-between items-center">
+                {extractedKeywords && (
+                  <div className="flex flex-wrap gap-2 text-sm">
+                    {extractedKeywords.keywords.slice(0, 3).map((keyword, idx) => (
+                      <Badge key={idx} variant="outline" className="bg-[#B4916C]/10 text-[#B4916C] border-[#B4916C]/20">
+                        {keyword}
+                      </Badge>
+                    ))}
+                    {extractedKeywords.keywords.length > 3 && (
+                      <Badge variant="outline" className="bg-[#B4916C]/10 text-[#B4916C] border-[#B4916C]/20">
+                        +{extractedKeywords.keywords.length - 3} more
+                      </Badge>
+                    )}
+                  </div>
+                )}
+                
+                <Button 
+                  type="submit"
+                  className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
+                  disabled={!selectedCV || isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <span className="mr-2">Searching...</span>
+                      <span className="loading loading-spinner loading-xs"></span>
+                    </>
+                  ) : (
+                    "Find Jobs"
+                  )}
+                </Button>
               </div>
-              
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-400">Date Posted</label>
-                <select className="w-full text-sm rounded-md border border-[#B4916C]/20 bg-[#050505] text-white p-2">
-                  <option>Any time</option>
-                  <option>Today</option>
-                  <option>Past 3 days</option>
-                  <option>Past week</option>
-                  <option>Past month</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        )}
+            </>
+          )}
+        </form>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="w-full mb-4 bg-[#121212]">
-            <TabsTrigger value="list" className="flex-1 data-[state=active]:bg-[#B4916C]/20 data-[state=active]:text-[#B4916C]">
-              <ListFilter className="mr-2 h-4 w-4" />
-              List View
-            </TabsTrigger>
-            <TabsTrigger value="map" className="flex-1 data-[state=active]:bg-[#B4916C]/20 data-[state=active]:text-[#B4916C]">
-              <MapPin className="mr-2 h-4 w-4" />
-              Map View
-            </TabsTrigger>
-          </TabsList>
+        {/* Job Results */}
+        <Tabs defaultValue="list" value={activeTab} onValueChange={setActiveTab}>
+          <div className="flex items-center justify-between mb-4">
+            <TabsList className="bg-[#1a1a1a]">
+              <TabsTrigger value="list" className="data-[state=active]:bg-[#B4916C] data-[state=active]:text-white">
+                <List className="h-4 w-4 mr-2" />
+                List View
+              </TabsTrigger>
+              <TabsTrigger value="map" className="data-[state=active]:bg-[#B4916C] data-[state=active]:text-white">
+                <Map className="h-4 w-4 mr-2" />
+                Map View
+              </TabsTrigger>
+            </TabsList>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+              className="text-[#B4916C] border-[#B4916C]/20 hover:bg-[#B4916C]/10"
+            >
+              <Filter className="h-4 w-4 mr-2" />
+              Filters
+              <ChevronDown className={`h-4 w-4 ml-2 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+            </Button>
+          </div>
+          
+          {/* Filter Options */}
+          {showFilters && (
+            <div className="mb-4 p-4 bg-[#1a1a1a] rounded-md border border-gray-800">
+              {/* Filter options go here */}
+              <div className="text-sm text-gray-400">
+                Filter options will be implemented in future updates.
+              </div>
+            </div>
+          )}
           
           <TabsContent value="list" className="mt-0">
             {renderJobListings()}
@@ -596,13 +584,29 @@ export default function JobsCard({ cvs }: JobsCardProps) {
           </TabsContent>
         </Tabs>
       </CardContent>
-
-      <CardFooter className="flex justify-between border-t border-[#B4916C]/20 pt-4 text-xs text-gray-500">
-        <div>Powered by multiple job search APIs</div>
-        {jobs.length > 0 && (
-          <div>{filteredJobs.length} jobs found</div>
-        )}
-      </CardFooter>
+      
+      {jobs.length > 0 && hasMore && (
+        <CardFooter className="bg-[#121212] border-t border-gray-800 p-4">
+          <Button
+            onClick={loadMoreJobs}
+            variant="outline"
+            className="w-full text-[#B4916C] border-[#B4916C]/20 hover:bg-[#B4916C]/10"
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <>
+                <span className="mr-2">Loading...</span>
+                <span className="loading loading-spinner loading-xs"></span>
+              </>
+            ) : (
+              <>
+                <span>Load More Jobs</span>
+                <ChevronDown className="ml-2 h-4 w-4" />
+              </>
+            )}
+          </Button>
+        </CardFooter>
+      )}
     </Card>
   );
 } 
