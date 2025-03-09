@@ -3,8 +3,6 @@ import { redirect } from "next/navigation";
 import { getUser, getTeamForUser, getCVsForUser, getActivityLogs } from "@/lib/db/queries.server";
 import { ArticleTitle } from "@/components/ui/article";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import AnalyzeCVCard from "@/components/AnalyzeCVCard.client";
-import OptimizeCVCard from "@/components/OptimizeCVCard.client";
 import {
   Table,
   TableHeader,
@@ -13,14 +11,16 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import DashboardClientWrapper from "@/components/dashboard-client-wrapper";
 import DeleteCVButton from "@/components/delete-cv";
 import UserMenu from "@/components/UserMenu";
 import ActionsDropdown from "@/components/ActionsDropdown";
 import Link from "next/link";
-import { ArrowRight, Diamond, Eye, ChevronRight } from "lucide-react";
-import JobsCard from "@/components/JobsCard.client";
+import { 
+  ArrowRight, Eye, ChevronRight, BarChart2, 
+  FileText, Briefcase, Upload, PieChart 
+} from "lucide-react";
 import ErrorBoundaryWrapper from "@/components/ErrorBoundaryWrapper";
+import CVUploader from "@/components/CVUploader.client";
 
 // Add a CV type definition
 interface CV {
@@ -46,14 +46,6 @@ export default async function DashboardPage() {
   }
   const cvs = await getCVsForUser(user.id);
   const activityLogs = await getActivityLogs(); // For UserMenu
-
-  // Map CVs to match the expected JobsCardCV interface
-  const mappedCVs = cvs.map(cv => ({
-    ...cv,
-    id: cv.id.toString(),
-    userId: cv.userId.toString(),
-    metadata: cv.metadata ? JSON.parse(cv.metadata) : undefined
-  }));
 
   return (
     <>
@@ -121,36 +113,85 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
         
+        {/* CV Upload Area */}
         <ErrorBoundaryWrapper>
-          <OptimizeCVCard 
-            cvs={cvs.map((cv: any) => `${cv.fileName}|${cv.id}`)}
-          />
-        </ErrorBoundaryWrapper>
-        
-        <ErrorBoundaryWrapper>
-          <JobsCard cvs={mappedCVs} />
-        </ErrorBoundaryWrapper>
-        
-        <ErrorBoundaryWrapper>
-          <AnalyzeCVCard cvs={cvs.map((cv) => cv.fileName)} />
-        </ErrorBoundaryWrapper>
-        
-        {/* Link to Enhanced CV Page */}
-        <Link 
-          href="/dashboard/enhance" 
-          className="flex items-center justify-between p-4 md:p-6 bg-black border border-[#B4916C]/20 rounded-lg shadow-lg hover:bg-[#1D1D1D] transition-colors"
-        >
-          <div className="flex items-center">
-            <div className="flex items-center justify-center h-10 w-10 rounded-full bg-[#B4916C]/10 text-[#B4916C] mr-3">
-              <Eye className="h-5 w-5" />
-            </div>
-            <div>
-              <h3 className="text-base md:text-lg font-medium text-[#B4916C]">Enhanced CV Preview</h3>
-              <p className="text-sm text-gray-400">Professional styling with custom formatting</p>
-            </div>
+          <div className="flex items-center mb-2">
+            <Upload className="h-5 w-5 text-[#B4916C] mr-2" />
+            <h2 className="text-lg font-medium text-white">Upload New CV</h2>
           </div>
-          <ChevronRight className="h-5 w-5 text-[#B4916C]" />
-        </Link>
+          <CVUploader />
+        </ErrorBoundaryWrapper>
+        
+        {/* Feature Links */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Optimize CV Link */}
+          <Link 
+            href="/dashboard/optimize" 
+            className="flex items-center justify-between p-4 md:p-6 bg-black border border-[#B4916C]/20 rounded-lg shadow-lg hover:bg-[#1D1D1D] transition-colors"
+          >
+            <div className="flex items-center">
+              <div className="flex items-center justify-center h-10 w-10 rounded-full bg-[#B4916C]/10 text-[#B4916C] mr-3">
+                <BarChart2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base md:text-lg font-medium text-[#B4916C]">Optimize CV</h3>
+                <p className="text-sm text-gray-400">Analyze & optimize for ATS</p>
+              </div>
+            </div>
+            <ChevronRight className="h-5 w-5 text-[#B4916C]" />
+          </Link>
+          
+          {/* Document Editor Link */}
+          <Link 
+            href="/dashboard/enhance" 
+            className="flex items-center justify-between p-4 md:p-6 bg-black border border-[#B4916C]/20 rounded-lg shadow-lg hover:bg-[#1D1D1D] transition-colors"
+          >
+            <div className="flex items-center">
+              <div className="flex items-center justify-center h-10 w-10 rounded-full bg-[#B4916C]/10 text-[#B4916C] mr-3">
+                <FileText className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base md:text-lg font-medium text-[#B4916C]">Document Editor</h3>
+                <p className="text-sm text-gray-400">Edit with AI assistance</p>
+              </div>
+            </div>
+            <ChevronRight className="h-5 w-5 text-[#B4916C]" />
+          </Link>
+          
+          {/* Document Analysis Link */}
+          <Link 
+            href="/dashboard/analyze" 
+            className="flex items-center justify-between p-4 md:p-6 bg-black border border-[#B4916C]/20 rounded-lg shadow-lg hover:bg-[#1D1D1D] transition-colors"
+          >
+            <div className="flex items-center">
+              <div className="flex items-center justify-center h-10 w-10 rounded-full bg-[#B4916C]/10 text-[#B4916C] mr-3">
+                <PieChart className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base md:text-lg font-medium text-[#B4916C]">Document Analysis</h3>
+                <p className="text-sm text-gray-400">Extract insights & visualize data</p>
+              </div>
+            </div>
+            <ChevronRight className="h-5 w-5 text-[#B4916C]" />
+          </Link>
+          
+          {/* Job Matching Link */}
+          <Link 
+            href="/dashboard/jobs" 
+            className="flex items-center justify-between p-4 md:p-6 bg-black border border-[#B4916C]/20 rounded-lg shadow-lg hover:bg-[#1D1D1D] transition-colors md:col-span-2"
+          >
+            <div className="flex items-center">
+              <div className="flex items-center justify-center h-10 w-10 rounded-full bg-[#B4916C]/10 text-[#B4916C] mr-3">
+                <Briefcase className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base md:text-lg font-medium text-[#B4916C]">Find Matching Jobs</h3>
+                <p className="text-sm text-gray-400">Discover jobs that match your CV</p>
+              </div>
+            </div>
+            <ChevronRight className="h-5 w-5 text-[#B4916C]" />
+          </Link>
+        </div>
       </div>
     </>
   );

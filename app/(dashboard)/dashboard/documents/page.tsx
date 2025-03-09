@@ -1,9 +1,8 @@
 import { redirect } from "next/navigation";
-import { getUser, getTeamForUser, getCVsForUser } from "@/lib/db/queries.server";
+import { getUser, getTeamForUser } from "@/lib/db/queries.server";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import Link from "next/link";
-import { ArrowLeft, File, FileText, Mail, Upload } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ArrowLeft, Mail, Upload, FileText } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 
@@ -17,8 +16,6 @@ export default async function DocumentEditorPage() {
   if (!teamData) {
     throw new Error("Team not found");
   }
-  
-  const documents = await getCVsForUser(user.id);
   
   return (
     <>
