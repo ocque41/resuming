@@ -905,7 +905,8 @@ export function parseStandardCVFromSections(sections: Record<string, string>): S
   sections = sections || {};
   
   // Parse profile
-  const profileLines = (sections["PROFILE"] || "").split('\n').filter(line => line.trim());
+  const profileText = sections["PROFILE"] || "";
+  const profileLines = profileText.split('\n').filter(line => line.trim());
   const profile = {
     name: profileLines[0] || "NAME LAST NAME",
     phone: profileLines.find(line => /phone|^\+|\d{3}[-.\s]?\d{3}[-.\s]?\d{4}|^\d+$/.test(line.toLowerCase())) || 
@@ -923,7 +924,8 @@ export function parseStandardCVFromSections(sections: Record<string, string>): S
                      "Experienced professional seeking to leverage skills and expertise...";
   
   // Parse achievements
-  const achievementLines = (sections["ACHIEVEMENTS"] || "").split('\n')
+  const achievementText = sections["ACHIEVEMENTS"] || "";
+  const achievementLines = achievementText.split('\n')
     .filter(line => line.trim())
     .map(line => line.replace(/^[-•*]\s*/, '').trim());
   const achievements = achievementLines.slice(0, 3);

@@ -61,9 +61,9 @@ export function ComboboxPopover({
           {label}
         </Combobox.Label>
         <div className="relative mt-1">
-          <div className={`relative w-full cursor-default overflow-hidden rounded-lg text-left shadow-sm border accent-border accent-shadow focus-within:ring-1 ${darkMode ? 'bg-[#121212]' : 'bg-white'}`}>
+          <div className={`relative w-full cursor-default overflow-hidden rounded-lg text-left shadow-sm border accent-border accent-shadow focus-within:ring-1 ${darkMode ? 'bg-black' : 'bg-white'}`}>
             <Combobox.Input
-              className={`w-full border-none py-2.5 pl-3 pr-10 leading-5 focus:ring-0 ${darkMode ? 'bg-[#121212] text-gray-200 placeholder-gray-500' : 'bg-white text-gray-900 placeholder-gray-400'}`}
+              className={`w-full border-none py-2.5 pl-3 pr-10 leading-5 focus:ring-0 ${darkMode ? 'bg-black text-gray-200 placeholder-gray-500' : 'bg-white text-gray-900 placeholder-gray-400'}`}
               placeholder="Select an option"
               onChange={(e) => setQuery(e.target.value)}
               displayValue={(option: string) => option}
@@ -95,7 +95,7 @@ export function ComboboxPopover({
           >
             <Combobox.Options
               className={`absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md py-1 text-base shadow-lg
-                         ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm ${darkMode ? 'bg-[#121212]' : 'bg-white'}`}
+                         ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm ${darkMode ? 'bg-black' : 'bg-white'}`}
             >
               {filteredOptions.length === 0 && query !== "" ? (
                 <div className={`relative cursor-default select-none py-2 px-4 ${darkMode ? 'text-gray-400' : 'text-gray-700'}`}>

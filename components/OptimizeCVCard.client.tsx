@@ -59,28 +59,32 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
           return;
         }
         
-        // Otherwise fetch from API
-        const response = await fetch('/api/cv-list');
-        if (!response.ok) {
-          throw new Error('Failed to fetch CV list');
-        }
-        
-        const data = await response.json();
-        
-        if (data.cvs && Array.isArray(data.cvs)) {
-          // Format the CVs as "filename|id"
-          const formattedCVs = data.cvs.map((cv: any) => {
-            return `${cv.fileName}|${cv.id}`;
-          });
+        // If no CVs are provided via props, try to fetch from API
+        try {
+          const response = await fetch('/api/cv/list');
+          if (!response.ok) {
+            throw new Error(`Failed to fetch CV list: ${response.statusText}`);
+          }
           
-          setCvOptions(formattedCVs);
-          console.log(`Loaded ${formattedCVs.length} CVs from API`);
-        } else {
-          console.error('Invalid CV data format:', data);
-          setError('Failed to load CV list: Invalid data format');
+          const data = await response.json();
+          
+          if (data.cvs && data.cvs.length > 0) {
+            const cvOptions = data.cvs.map((cv: any) => `${cv.fileName}|${cv.id}`);
+            setCvOptions(cvOptions);
+            console.log(`Fetched ${cvOptions.length} CVs from API`);
+          } else {
+            // No CVs found from API either
+            setError("No CVs available. Please upload a CV first.");
+          }
+        } catch (apiError) {
+          console.error('Error fetching CVs from API:', apiError);
+          // Since we have CVs from props, don't show an error
+          if (cvs.length === 0) {
+            setError(`Failed to load CV list: ${apiError instanceof Error ? apiError.message : String(apiError)}`);
+          }
         }
       } catch (error) {
-        console.error('Error fetching CV list:', error);
+        console.error('Error setting up CV options:', error);
         setError(`Failed to load CV list: ${error instanceof Error ? error.message : String(error)}`);
       }
     };

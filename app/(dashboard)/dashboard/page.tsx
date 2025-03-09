@@ -18,7 +18,7 @@ import DeleteCVButton from "@/components/delete-cv";
 import UserMenu from "@/components/UserMenu";
 import ActionsDropdown from "@/components/ActionsDropdown";
 import Link from "next/link";
-import { ArrowRight, Diamond } from "lucide-react";
+import { ArrowRight, Diamond, Eye, ChevronRight } from "lucide-react";
 import JobsCard from "@/components/JobsCard.client";
 import ErrorBoundaryWrapper from "@/components/ErrorBoundaryWrapper";
 
@@ -64,8 +64,8 @@ export default async function DashboardPage() {
         <UserMenu teamData={teamData} activityLogs={activityLogs} />
       </header>
       
-      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-[#121212] shadow-lg">
-        <CardHeader className="bg-[#121212] pb-4">
+      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-black shadow-lg">
+        <CardHeader className="bg-black pb-4">
           <CardTitle className="text-xl font-bold text-[#B4916C]">Your CV Collection</CardTitle>
         </CardHeader>
         <CardContent className="p-6">
@@ -167,6 +167,25 @@ export default async function DashboardPage() {
         <ErrorBoundaryWrapper>
           <JobsCard cvs={mappedCVs} />
         </ErrorBoundaryWrapper>
+        
+        {/* Link to Enhanced CV Page */}
+        <div className="lg:col-span-2 mt-4">
+          <Link 
+            href="/dashboard/enhance" 
+            className="flex items-center justify-between p-6 bg-black border border-[#B4916C]/20 rounded-lg shadow-lg hover:bg-[#1D1D1D] transition-colors"
+          >
+            <div className="flex items-center">
+              <div className="flex items-center justify-center h-12 w-12 rounded-full bg-[#B4916C]/10 text-[#B4916C] mr-4">
+                <Eye className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-medium text-[#B4916C]">Enhanced CV Preview</h3>
+                <p className="text-gray-400">Create professionally styled CVs with custom formatting and colors</p>
+              </div>
+            </div>
+            <ChevronRight className="h-5 w-5 text-[#B4916C]" />
+          </Link>
+        </div>
       </div>
     </>
   );

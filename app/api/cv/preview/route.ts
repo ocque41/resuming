@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@/lib/mock-auth";
 import { db } from "@/lib/mock-db";
 import { cv } from "@/lib/mock-schema";
-import { eq } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 import { formatError } from "@/lib/utils";
 import { generateDocx } from "@/lib/docx";
 import { convertDocxToPdf } from "@/lib/pdf";
@@ -32,48 +32,80 @@ export async function POST(request: NextRequest) {
     
     // Parse request body
     const body = await request.json();
-    const { cvId, rawText } = body;
+    const { cvId, fileName, rawText } = body;
     
     let cvText = '';
     let cvRecord = null;
     
+    // Try to find CV by ID first
     if (cvId) {
       // Fetch CV from database
       cvRecord = await db.query.cv.findFirst({
         where: eq(cv.id, cvId),
       });
       
-      if (!cvRecord) {
-        return NextResponse.json(
-          { error: "CV not found" },
-          { status: 404 }
-        );
+      if (cvRecord) {
+        if (cvRecord.userId !== userId) {
+          return NextResponse.json(
+            { error: "Unauthorized: CV does not belong to this user" },
+            { status: 403 }
+          );
+        }
+        
+        // Use existing raw text if available
+        if (cvRecord.rawText) {
+          cvText = cvRecord.rawText;
+        } else if (rawText) {
+          cvText = rawText;
+        } else {
+          return NextResponse.json(
+            { error: "No CV text available for preview" },
+            { status: 400 }
+          );
+        }
       }
+    }
+    
+    // If no CV found by ID but fileName is provided, try to find by fileName
+    if (!cvRecord && fileName) {
+      cvRecord = await db.query.cv.findFirst({
+        where: like(cv.fileName, fileName),
+      });
       
-      if (cvRecord.userId !== userId) {
-        return NextResponse.json(
-          { error: "Unauthorized: CV does not belong to this user" },
-          { status: 403 }
-        );
+      if (cvRecord) {
+        if (cvRecord.userId !== userId) {
+          return NextResponse.json(
+            { error: "Unauthorized: CV does not belong to this user" },
+            { status: 403 }
+          );
+        }
+        
+        // Use existing raw text if available
+        if (cvRecord.rawText) {
+          cvText = cvRecord.rawText;
+        } else if (rawText) {
+          cvText = rawText;
+        } else {
+          return NextResponse.json(
+            { error: "No CV text available for preview" },
+            { status: 400 }
+          );
+        }
       }
-      
-      // Use existing raw text if available
-      if (cvRecord.rawText) {
-        cvText = cvRecord.rawText;
-      } else if (rawText) {
-        cvText = rawText;
-      } else {
-        return NextResponse.json(
-          { error: "No CV text available for preview" },
-          { status: 400 }
-        );
-      }
-    } else if (rawText) {
-      // Use provided raw text
+    }
+    
+    // If we still don't have a CV record and raw text is provided, just use that
+    if (!cvRecord && rawText) {
+      // Use provided raw text for a temporary preview
       cvText = rawText;
-    } else {
+      
+      // Create a temporary CV ID for the response
+      const tempCvId = `temp-${Date.now()}`;
+      
+      console.log(`Using temporary CV with raw text for preview (no CV record found). Temp ID: ${tempCvId}`);
+    } else if (!cvRecord && !rawText) {
       return NextResponse.json(
-        { error: "Either cvId or rawText must be provided" },
+        { error: "Could not determine CV ID for preview and no raw text provided" },
         { status: 400 }
       );
     }
@@ -98,6 +130,7 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({
       success: true,
+      cvId: cvRecord?.id || `temp-${Date.now()}`, // Include CV ID or temp ID in response
       originalAtsScore,
       improvedAtsScore,
       docxBase64,

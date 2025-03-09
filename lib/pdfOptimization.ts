@@ -1553,263 +1553,378 @@ async function createProfessionalClassicCV(
   // Add a page
   const page = doc.addPage([595, 842]); // A4 size in points
   
-  // Define colors
-  const textColor = rgb(0.1, 0.1, 0.1); // Almost black
-  const accentColor = rgb(0.7, 0.57, 0.42); // #B4916C
-  const sectionBgColor = rgb(0.7, 0.57, 0.42); // #B4916C
-  const sectionTextColor = rgb(1, 1, 1); // White
+  // Define brand colors - Matching dashboard theme
+  const textColor = rgb(0.9, 0.9, 0.9); // Light gray for text on dark background
+  const darkBackground = rgb(0.07, 0.07, 0.07); // #121212
+  const accentColor = rgb(0.7, 0.57, 0.42); // #B4916C - Gold accent
+  const lighterAccent = rgb(0.8, 0.67, 0.52); // Lighter gold for hover states
+  const darkerAccent = rgb(0.6, 0.47, 0.32); // Darker gold for emphasis
+  const subtleGray = rgb(0.15, 0.15, 0.15); // Subtle gray for backgrounds
+  const highlightColor = rgb(0.95, 0.95, 0.95); // Near white for highlights
   
-  // Define margins and column widths
-  const margin = 50;
-  const leftColumnWidth = 180;
-  const rightColumnWidth = page.getWidth() - margin * 2 - leftColumnWidth;
-  const columnSpacing = 15;
+  // Layout constants
+  const pageWidth = page.getWidth();
+  const pageHeight = page.getHeight();
+  const margin = 40; // Reduced margin for more content space
+  const leftColumnWidth = 190; // Slightly wider left column
+  const rightColumnWidth = pageWidth - leftColumnWidth - (margin * 2);
+  const rightColumnX = margin + leftColumnWidth;
   
-  // Current Y position for each column
-  let leftColumnY = page.getHeight() - margin;
-  let rightColumnY = page.getHeight() - margin;
-  
-  // Draw header/name at the top
-  const name = leftColumnSections.find(s => s.title === "PROFILE")?.content?.split('\n')[0] || "NAME LAST NAME";
-  page.drawText(name, {
-    x: margin,
-    y: page.getHeight() - margin,
-    size: 24,
-    font: boldFont,
-    color: textColor
+  // Draw main background
+  page.drawRectangle({
+    x: 0,
+    y: 0,
+    width: pageWidth,
+    height: pageHeight,
+    color: darkBackground,
   });
   
-  // Draw a header line under the name
-  page.drawLine({
-    start: { x: margin, y: page.getHeight() - margin - 30 },
-    end: { x: page.getWidth() - margin, y: page.getHeight() - margin - 30 },
-    thickness: 2,
-    color: accentColor
+  // Draw left column background
+  page.drawRectangle({
+    x: margin - 10,
+    y: 0,
+    width: leftColumnWidth + 20,
+    height: pageHeight,
+    color: subtleGray,
   });
   
-  // Start positions for each column
-  leftColumnY = page.getHeight() - margin - 40;
-  rightColumnY = page.getHeight() - margin - 40;
+  // Add top accent border
+  page.drawRectangle({
+    x: 0,
+    y: pageHeight - 40,
+    width: pageWidth,
+    height: 8,
+    color: accentColor,
+  });
   
-  // Draw left column sections (sidebar)
-  for (const section of leftColumnSections) {
-    // Skip profile section as we already used the name
-    if (section.title === "PROFILE") {
-      const profileLines = section.content.split('\n').slice(1); // Skip name
-      if (profileLines.length > 0) {
-        // Draw contact info in left column
-        let contactY = leftColumnY;
-        for (const line of profileLines) {
-          if (line.trim()) {
-            page.drawText(line, {
-              x: margin,
-              y: contactY,
-              size: 9,
-              font: regularFont,
-              color: textColor
-            });
-            contactY -= 14;
-          }
-        }
-        leftColumnY = contactY - 20;
-      }
-      continue;
-    }
-    
-    // Draw section header with rounded background
-    const sectionHeaderHeight = 22;
-    const sectionHeaderWidth = leftColumnWidth;
-    const cornerRadius = 6;
-    
-    // Draw rounded rectangle for section header
-    page.drawRectangle({
-      x: margin,
-      y: leftColumnY - sectionHeaderHeight,
-      width: sectionHeaderWidth,
-      height: sectionHeaderHeight,
-      color: sectionBgColor,
-      borderColor: sectionBgColor,
-      opacity: 1
-    });
-    
-    // Draw section title
-    page.drawText(section.title, {
-      x: margin + 10,
-      y: leftColumnY - 15,
-      size: 11,
-      font: boldFont,
-      color: sectionTextColor
-    });
-    
-    leftColumnY -= sectionHeaderHeight + 10;
-    
-    // Draw section content
-    const lines = section.content.split('\n');
-    for (const line of lines) {
-      if (line.trim()) {
-        // Check if the line starts with a bullet point
-        const isBullet = line.startsWith('•') || line.startsWith('-');
-        const textX = isBullet ? margin + 10 : margin;
-        const displayText = isBullet ? line : `• ${line}`;
-        
-        page.drawText(displayText, {
-          x: textX,
-          y: leftColumnY,
-          size: 9,
-          font: regularFont,
-          color: textColor
-        });
-        leftColumnY -= 14;
-      }
-    }
-    
-    leftColumnY -= 15; // Extra space after section
-  }
+  // Extract name and contact info
+  let nameText = "Professional Resume";
+  let jobTitle = "";
+  let contactInfo = {
+    email: "",
+    phone: "",
+    location: "",
+    linkedin: ""
+  };
   
-  // Draw right column sections (main content)
-  for (const section of rightColumnSections) {
-    const sectionHeaderHeight = 22;
-    const sectionHeaderWidth = rightColumnWidth;
-    const cornerRadius = 6;
-    
-    // Draw rounded rectangle for section header
-    page.drawRectangle({
-      x: margin + leftColumnWidth + columnSpacing,
-      y: rightColumnY - sectionHeaderHeight,
-      width: sectionHeaderWidth,
-      height: sectionHeaderHeight,
-      color: sectionBgColor,
-      borderColor: sectionBgColor,
-      opacity: 1
-    });
-    
-    // Draw section title
-    page.drawText(section.title, {
-      x: margin + leftColumnWidth + columnSpacing + 10,
-      y: rightColumnY - 15,
-      size: 11,
-      font: boldFont,
-      color: sectionTextColor
-    });
-    
-    rightColumnY -= sectionHeaderHeight + 10;
-    
-    // Special formatting for WORK EXPERIENCE
-    if (section.title === "WORK EXPERIENCE") {
-      const lines = section.content.split('\n');
-      let i = 0;
+  // Look for PROFILE section to extract name and contact
+  const profileSection = leftColumnSections.find(section => 
+    section.title.toUpperCase().includes("PROFILE")) || 
+    rightColumnSections.find(section => 
+    section.title.toUpperCase().includes("PROFILE"));
+  
+  if (profileSection) {
+    const profileLines = profileSection.content.split('\n');
+    if (profileLines.length > 0) {
+      // First line is typically the name
+      nameText = profileLines[0].trim();
       
-      while (i < lines.length) {
-        const line = lines[i].trim();
-        if (!line) { i++; continue; }
-        
-        // Date line
-        if (line.includes('20XX') || /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i.test(line)) {
-          page.drawText(line, {
-            x: margin + leftColumnWidth + columnSpacing,
-            y: rightColumnY,
-            size: 9,
-            font: italicFont,
-            color: accentColor
-          });
-          rightColumnY -= 14;
-          i++;
-          continue;
-        }
-        
-        // Job title line
-        if (i < lines.length && !lines[i].startsWith('•') && !lines[i].startsWith('-') && 
-            !lines[i].includes('COMPANY') && lines[i].trim()) {
-          page.drawText(lines[i], {
-            x: margin + leftColumnWidth + columnSpacing,
-            y: rightColumnY,
-            size: 10,
-            font: boldFont,
-            color: textColor
-          });
-          rightColumnY -= 14;
-          i++;
-          continue;
-        }
-        
-        // Company name line
-        if (i < lines.length && (lines[i].includes('COMPANY') || lines[i].includes('CITY'))) {
-          page.drawText(lines[i], {
-            x: margin + leftColumnWidth + columnSpacing,
-            y: rightColumnY,
-            size: 9,
-            font: regularFont,
-            color: textColor
-          });
-          rightColumnY -= 20; // More space after company
-          i++;
-          continue;
-        }
-        
-        // Bullet points
-        if (i < lines.length && (lines[i].startsWith('•') || lines[i].startsWith('-') || lines[i].trim().startsWith('Missions'))) {
-          const bulletText = lines[i].startsWith('•') || lines[i].startsWith('-') 
-            ? lines[i] 
-            : `• ${lines[i].replace('Missions or tasks realized:', '').trim()}`;
-          
-          page.drawText(bulletText, {
-            x: margin + leftColumnWidth + columnSpacing + 10,
-            y: rightColumnY,
-            size: 9,
-            font: regularFont,
-            color: textColor,
-            maxWidth: rightColumnWidth - 20
-          });
-          rightColumnY -= 14;
-          i++;
-          continue;
-        }
-        
-        // Other lines
-        if (line) {
-          page.drawText(line, {
-            x: margin + leftColumnWidth + columnSpacing,
-            y: rightColumnY,
-            size: 9,
-            font: regularFont,
-            color: textColor
-          });
-          rightColumnY -= 14;
-        }
-        i++;
+      // Look for job title (usually second line)
+      if (profileLines.length > 1) {
+        jobTitle = profileLines[1].trim();
       }
-    } else {
-      // For other sections, render normally
-      const lines = section.content.split('\n');
-      for (const line of lines) {
-        if (line.trim()) {
-          const isBullet = line.startsWith('•') || line.startsWith('-');
-          const textX = isBullet 
-            ? margin + leftColumnWidth + columnSpacing + 10 
-            : margin + leftColumnWidth + columnSpacing;
-          const displayText = isBullet ? line : line;
-          
-          page.drawText(displayText, {
-            x: textX,
-            y: rightColumnY,
-            size: 9,
-            font: regularFont,
-            color: textColor
-          });
-          rightColumnY -= 14;
+      
+      // Extract contact info from remaining lines
+      for (let i = 2; i < profileLines.length; i++) {
+        const line = profileLines[i].trim().toLowerCase();
+        if (line.includes("@") || line.includes("email")) {
+          contactInfo.email = profileLines[i].trim();
+        } else if (line.includes("phone") || line.match(/\+?[\d\s\(\)-]{7,}/)) {
+          contactInfo.phone = profileLines[i].trim();
+        } else if (line.includes("location") || line.includes("address")) {
+          contactInfo.location = profileLines[i].trim();
+        } else if (line.includes("linkedin") || line.includes("in/")) {
+          contactInfo.linkedin = profileLines[i].trim();
         }
       }
     }
-    
-    rightColumnY -= 20; // Extra space after section
   }
   
-  // Draw a vertical line between columns
-  page.drawLine({
-    start: { x: margin + leftColumnWidth + columnSpacing / 2, y: page.getHeight() - margin - 40 },
-    end: { x: margin + leftColumnWidth + columnSpacing / 2, y: Math.min(leftColumnY, rightColumnY) - 20 },
-    thickness: 1,
-    color: accentColor
+  // Draw stylish header section
+  const headerHeight = 120;
+  page.drawRectangle({
+    x: 0,
+    y: pageHeight - headerHeight,
+    width: pageWidth,
+    height: headerHeight,
+    color: subtleGray,
+  });
+  
+  // Draw name with larger, elegant font
+  page.drawText(nameText.toUpperCase(), {
+    x: margin,
+    y: pageHeight - 75,
+    size: 28,
+    font: boldFont,
+    color: accentColor,
+  });
+  
+  // Draw job title
+  if (jobTitle) {
+    page.drawText(jobTitle, {
+      x: margin,
+      y: pageHeight - 100,
+      size: 14,
+      font: italicFont,
+      color: textColor,
+    });
+  }
+  
+  // Draw contact info in a horizontal layout
+  const contactY = pageHeight - headerHeight + 15;
+  const contactSpacing = rightColumnWidth / 4;
+  
+  // Email
+  if (contactInfo.email) {
+    page.drawText("Email:", {
+      x: rightColumnX,
+      y: contactY,
+      size: 9,
+      font: boldFont,
+      color: accentColor,
+    });
+    page.drawText(contactInfo.email, {
+      x: rightColumnX,
+      y: contactY - 15,
+      size: 9,
+      font: regularFont,
+      color: textColor,
+    });
+  }
+  
+  // Phone
+  if (contactInfo.phone) {
+    page.drawText("Phone:", {
+      x: rightColumnX + contactSpacing,
+      y: contactY,
+      size: 9,
+      font: boldFont,
+      color: accentColor,
+    });
+    page.drawText(contactInfo.phone, {
+      x: rightColumnX + contactSpacing,
+      y: contactY - 15,
+      size: 9,
+      font: regularFont,
+      color: textColor,
+    });
+  }
+  
+  // Location
+  if (contactInfo.location) {
+    page.drawText("Location:", {
+      x: rightColumnX + contactSpacing * 2,
+      y: contactY,
+      size: 9,
+      font: boldFont,
+      color: accentColor,
+    });
+    page.drawText(contactInfo.location, {
+      x: rightColumnX + contactSpacing * 2,
+      y: contactY - 15,
+      size: 9,
+      font: regularFont,
+      color: textColor,
+    });
+  }
+  
+  // Starting Y positions - adjusted for the header
+  let leftY = pageHeight - headerHeight - 30;
+  let rightY = pageHeight - headerHeight - 30;
+  
+  // Function to draw an enhanced section heading
+  const drawSectionHeading = (title: string, x: number, y: number, width: number, isLeftColumn: boolean) => {
+    const bgHeight = 30;
+    const bgColor = isLeftColumn ? subtleGray : accentColor;
+    const textCol = isLeftColumn ? accentColor : highlightColor;
+    
+    // Draw heading background
+    page.drawRectangle({
+      x,
+      y: y - 5,
+      width: width,
+      height: bgHeight,
+      color: bgColor,
+      opacity: isLeftColumn ? 1 : 0.9,
+    });
+    
+    // Draw section title
+    page.drawText(title.toUpperCase(), {
+      x: x + 10,
+      y: y + 7,
+      size: 12,
+      font: boldFont,
+      color: textCol,
+    });
+    
+    // Add decorative element
+    page.drawRectangle({
+      x: x + 5,
+      y: y - 5,
+      width: 3,
+      height: bgHeight,
+      color: accentColor,
+    });
+    
+    return y - bgHeight - 10; // Return the new Y position
+  };
+  
+  // Enhanced function to draw section content with better formatting
+  const drawSectionContent = (content: string, x: number, y: number, width: number, isLeftColumn: boolean) => {
+    const sectionTextColor = isLeftColumn ? rgb(0.9, 0.9, 0.9) : textColor;
+    const lines = content.split('\n');
+    let currentY = y;
+    let inBulletList = false;
+    let bulletIndent = 0;
+    
+    for (const line of lines) {
+      // Skip empty lines but keep a small gap
+      if (!line.trim()) {
+        currentY -= 5;
+        continue;
+      }
+      
+      // Detect bullet points (handle various bullet formats)
+      const bulletMatch = line.trim().match(/^([-•*]|\d+\.)\s+(.+)$/);
+      const isBulletPoint = !!bulletMatch;
+      let textToDraw = isBulletPoint ? bulletMatch[2] : line.trim();
+      let useBoldFont = false;
+      
+      // Detect section subheadings
+      if (line.trim().match(/^([A-Z][A-Za-z\s]+:)/)) {
+        useBoldFont = true;
+        // Add extra space before subheadings
+        currentY -= 5;
+      }
+      
+      // Handle highlighted text (bold)
+      if (textToDraw.includes("**")) {
+        // We'll just replace ** with the same text but in bold
+        // In a real implementation, you would need to split and handle mixed formatting
+        textToDraw = textToDraw.replace(/\*\*/g, "");
+        useBoldFont = true;
+      }
+      
+      // Detect date ranges or job titles (typically at start of entries)
+      const isDateOrTitle = textToDraw.match(/(\d{4}[-–—]\d{4}|present|current|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i);
+      if (isDateOrTitle) {
+        useBoldFont = true;
+      }
+      
+      // Calculate indent for bullet points
+      if (isBulletPoint) {
+        // Start of a bullet list
+        if (!inBulletList) {
+          inBulletList = true;
+          bulletIndent = 0;
+          // Add a small space before bullet lists
+          currentY -= 3;
+        }
+        
+        // Check for nested bullets (by indent)
+        const leadingSpaces = line.match(/^(\s+)/);
+        if (leadingSpaces) {
+          bulletIndent = Math.floor(leadingSpaces[1].length / 2) * 10;
+        } else {
+          bulletIndent = 0;
+        }
+      } else {
+        // End of a bullet list
+        if (inBulletList) {
+          inBulletList = false;
+          // Add a small space after bullet lists
+          currentY -= 3;
+        }
+      }
+      
+      // Wrap text with appropriate width (accounting for indentation)
+      const effectiveWidth = width - (isBulletPoint ? (15 + bulletIndent) : 0);
+      const fontToUse = useBoldFont ? boldFont : regularFont;
+      const wrappedLines = wrapText(textToDraw, fontToUse, 10, effectiveWidth);
+      
+      for (let i = 0; i < wrappedLines.length; i++) {
+        const wrappedLine = wrappedLines[i];
+        const lineIndent = isBulletPoint ? (15 + bulletIndent) : 0;
+        
+        // Draw bullet point for the first line if needed
+        if (isBulletPoint && i === 0) {
+          // Draw the appropriate bullet character
+          const bulletChar = bulletMatch[1] === "*" || bulletMatch[1] === "-" ? "•" : bulletMatch[1];
+          
+          page.drawText(bulletChar, {
+            x: x + 5 + bulletIndent,
+            y: currentY,
+            size: 10,
+            font: regularFont,
+            color: sectionTextColor,
+          });
+        }
+        
+        // Draw the text line
+        page.drawText(wrappedLine, {
+          x: x + 5 + lineIndent,
+          y: currentY,
+          size: 10,
+          font: fontToUse,
+          color: sectionTextColor,
+        });
+        
+        currentY -= 15; // Line spacing
+      }
+      
+      // Add small space after paragraphs (non-bullet points)
+      if (!isBulletPoint) {
+        currentY -= 5;
+      }
+    }
+    
+    return currentY - 10; // Return the new Y position with padding
+  };
+  
+  // Draw left column sections
+  for (const section of leftColumnSections) {
+    // Draw the section heading
+    leftY = drawSectionHeading(section.title, margin - 5, leftY, leftColumnWidth, true);
+    
+    // Draw the section content
+    leftY = drawSectionContent(section.content, margin - 5, leftY, leftColumnWidth - 10, true);
+    
+    // Add space between sections
+    leftY -= 20;
+  }
+  
+  // Draw right column sections
+  for (const section of rightColumnSections) {
+    // Draw the section heading
+    rightY = drawSectionHeading(section.title, rightColumnX, rightY, rightColumnWidth, false);
+    
+    // Draw the section content
+    rightY = drawSectionContent(section.content, rightColumnX, rightY, rightColumnWidth - 10, false);
+    
+    // Add space between sections
+    rightY -= 20;
+  }
+  
+  // Add footer with page number and subtle branding
+  const footerY = 25;
+  
+  // Page number
+  page.drawText('Page 1', {
+    x: pageWidth / 2,
+    y: footerY,
+    size: 9,
+    font: regularFont,
+    color: rgb(0.5, 0.5, 0.5),
+  });
+  
+  // Subtle branding
+  page.drawText('Created with CV Optimizer', {
+    x: pageWidth - margin - 100,
+    y: footerY,
+    size: 8,
+    font: italicFont,
+    color: accentColor,
+    opacity: 0.7,
   });
   
   return doc.save();
