@@ -5,6 +5,8 @@ import {
   text,
   timestamp,
   integer,
+  bigint,
+  jsonb,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
@@ -76,6 +78,19 @@ export const cvs = pgTable("cvs", {
   rawText: text("rawText"), // New column for extracted PDF text
   createdAt: timestamp("createdat").notNull().defaultNow(),
   metadata: text("metadata").default(""),
+});
+
+export const documents = pgTable('documents', {
+  id: text('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id),
+  fileName: text('file_name').notNull(),
+  fileType: text('file_type').notNull(),
+  fileSize: bigint('file_size', { mode: 'number' }).notNull(),
+  filePath: text('file_path'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  status: text('status').default('uploaded'),
+  metadata: jsonb('metadata'),
 });
 
 export const cvsRelations = relations(cvs, ({ one }) => ({
