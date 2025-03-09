@@ -905,7 +905,7 @@ export function parseStandardCVFromSections(sections: Record<string, string>): S
   sections = sections || {};
   
   // Parse profile information - use more careful extraction to get real data
-  const profileText = sections["PROFILE"] || "";
+  const profileText = sections["PROFILE"] || sections["PERSONAL INFORMATION"] || sections["CONTACT"] || "";
   const profileLines = profileText.split('\n').filter(line => line.trim());
   
   // Extract name - first line is usually the name
@@ -933,31 +933,27 @@ export function parseStandardCVFromSections(sections: Record<string, string>): S
   const email = emailMatch ? emailMatch[1].trim() : emailLine;
   
   // Extract location - lines that aren't name, phone, or email
-  const locationLineIndices = profileLines.findIndex(line => 
+  // Fix: Use filter instead of findIndex to handle multiple potential location lines
+  const locationLines = profileLines.filter(line => 
     line.trim() && 
     !line.includes('@') && 
     !/phone|mobile|\+|\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/i.test(line) &&
     line !== nameLine
   );
-  const locationLine = locationLineIndices !== -1 ? profileLines[locationLineIndices] : "";
+  
+  // Use the first location line found or empty string
+  const locationLine = locationLines.length > 0 ? locationLines[0] : "";
   
   // Create the profile object with best available data
   const profile = {
-    name: nameLine.trim() || "",
+    name: nameLine.trim() || "CV Owner",
     phone: phoneNumber.trim() || "",
     email: email.trim() || "",
     location: locationLine.trim() || ""
   };
   
-  // If any profile fields are empty, try to extract from other sections or use minimal placeholders
-  if (!profile.name) {
-    // Try to find name from document heading or metadata
-    // For now, use a simple placeholder but without fake data
-    profile.name = "CV Owner";
-  }
-  
   // Parse career goal - use actual content or leave empty
-  const careerGoalText = sections["CAREER GOAL"] || sections["SUMMARY"] || sections["OBJECTIVE"] || "";
+  const careerGoalText = sections["CAREER GOAL"] || sections["SUMMARY"] || sections["OBJECTIVE"] || sections["PROFESSIONAL SUMMARY"] || "";
   const careerGoal = careerGoalText.trim();
   
   // Parse achievements - use actual achievements or leave empty
@@ -965,7 +961,9 @@ export function parseStandardCVFromSections(sections: Record<string, string>): S
   const achievementLines = achievementText.split('\n')
     .filter(line => line.trim())
     .map(line => line.replace(/^[-•*]\s*/, '').trim());
-  const achievements = achievementLines;
+  
+  // Ensure achievements is always an array, even if empty
+  const achievements = achievementLines || [];
   
   // Parse skills section - identify real skills
   const skillsText = sections["SKILLS"] || sections["CORE COMPETENCIES"] || sections["TECHNICAL SKILLS"] || "";
@@ -1023,11 +1021,14 @@ export function parseStandardCVFromSections(sections: Record<string, string>): S
       if (skillCategories.length === 0) {
         skillCategories.push({ category: "Professional Skills", items: allSkills });
       }
+    } else {
+      // Ensure we have at least an empty category to avoid array length errors
+      skillCategories.push({ category: "Skills", items: [] });
     }
   }
   
   // Parse work experience - extract real experience data
-  const workExperienceText = sections["WORK EXPERIENCE"] || sections["EXPERIENCE"] || sections["EMPLOYMENT"] || "";
+  const workExperienceText = sections["WORK EXPERIENCE"] || sections["EXPERIENCE"] || sections["EMPLOYMENT"] || sections["PROFESSIONAL EXPERIENCE"] || "";
   const experienceEntries: StandardCV['workExperience'] = [];
   
   // Split by double newlines or date patterns
@@ -1080,8 +1081,18 @@ export function parseStandardCVFromSections(sections: Record<string, string>): S
     }
   }
   
+  // If no experience entries were found, add a placeholder to avoid array length errors
+  if (experienceEntries.length === 0) {
+    experienceEntries.push({
+      dateRange: '',
+      jobTitle: '',
+      company: '',
+      achievements: []
+    });
+  }
+  
   // Parse education
-  const educationText = sections["EDUCATION"] || "";
+  const educationText = sections["EDUCATION"] || sections["ACADEMIC BACKGROUND"] || "";
   const educationEntries: StandardCV['education'] = [];
   
   // Split by double newlines
@@ -1111,6 +1122,15 @@ export function parseStandardCVFromSections(sections: Record<string, string>): S
     }
   }
   
+  // If no education entries were found, add a placeholder to avoid array length errors
+  if (educationEntries.length === 0) {
+    educationEntries.push({
+      institution: '',
+      degree: '',
+      year: ''
+    });
+  }
+  
   // Parse languages
   const languagesText = sections["LANGUAGES"] || "";
   const languageEntries: StandardCV['languages'] = [];
@@ -1133,6 +1153,14 @@ export function parseStandardCVFromSections(sections: Record<string, string>): S
         });
       }
     }
+  }
+  
+  // If no language entries were found, add a placeholder to avoid array length errors
+  if (languageEntries.length === 0) {
+    languageEntries.push({
+      language: '',
+      proficiency: ''
+    });
   }
   
   // Create the standardized CV object with all parsed data
