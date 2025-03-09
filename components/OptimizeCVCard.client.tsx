@@ -21,6 +21,9 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
   const [selectedCV, setSelectedCV] = useState<string | null>(null);
   const [cvOptions, setCvOptions] = useState<string[]>(cvs);
   
+  // State for raw CV text (used for preview without CV ID)
+  const [rawText, setRawText] = useState<string | null>(null);
+  
   // State for optimization process
   const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
   const [isOptimized, setIsOptimized] = useState<boolean>(false);
@@ -244,50 +247,57 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
     }
   }, [pollingInterval, isOptimizing, optimizedDocxData]);
 
-  // Function to handle preview generation
-  const handlePreview = useCallback(async () => {
-    if (!selectedCV) {
+  // Function to extract CV ID from the selectedCV string with better error handling
+  const extractCvId = useCallback((selectedCVString: string | null) => {
+    if (!selectedCVString) return null;
+    
+    const parts = selectedCVString.split('|');
+    // Check if we have at least 2 parts (filename and ID)
+    if (parts.length < 2 || !parts[1] || parts[1].trim() === '') {
+      console.warn('Invalid CV format:', selectedCVString);
+      return null;
+    }
+    
+    return parts[1].trim();
+  }, []);
+
+  // Function to handle the preview generation
+  const handlePreviewCV = useCallback(async () => {
+    if (!selectedCV && !rawText) {
       setError("Please select a CV to preview");
       return;
     }
-
+    
+    // Reset states
+    setError(null);
+    setIsPreviewLoading(true);
+    setIsPreviewMode(false);
+    setPreviewSrc(null);
+    
     try {
-      setError(null);
-      setIsPreviewLoading(true);
-      
       // Extract the CV ID from the selected CV
-      const cvParts = selectedCV.split('|');
-      const fileName = cvParts[0].trim();
-      let cvId = cvParts.length > 1 ? cvParts[1].trim() : undefined;
+      const cvId = extractCvId(selectedCV);
+      const fileName = selectedCV ? selectedCV.split('|')[0].trim() : null;
       
-      // Prepare the request data
-      const requestData: any = {};
+      // Prepare the request payload
+      const payload: any = {};
       
-      // If we have a CV ID, use it
       if (cvId) {
-        requestData.cvId = cvId;
-      } 
-      // If we don't have a CV ID, we need to search by filename
-      else {
-        // First try to find the CV ID for this filename in our options
-        const matchingCV = cvOptions.find(cv => cv.startsWith(fileName + '|'));
-        if (matchingCV) {
-          const parts = matchingCV.split('|');
-          if (parts.length > 1) {
-            cvId = parts[1].trim();
-            requestData.cvId = cvId;
-          }
-        }
-        
-        // If we still don't have a CV ID, use the filename
-        if (!requestData.cvId) {
-          requestData.fileName = fileName;
-          // As a fallback, we can also provide dummy text if this is just a preview
-          requestData.rawText = "This is a preview of the CV optimization process.";
-        }
+        payload.cvId = cvId;
       }
       
-      console.log("Preview request data:", requestData);
+      if (fileName) {
+        payload.fileName = fileName;
+      }
+      
+      if (rawText) {
+        payload.rawText = rawText;
+      }
+      
+      // Check if we have enough data to proceed
+      if (!cvId && !fileName && !rawText) {
+        throw new Error("No CV data available to preview");
+      }
       
       // Call the preview API
       const response = await fetch('/api/cv/preview', {
@@ -295,7 +305,7 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestData),
+        body: JSON.stringify(payload),
       });
       
       if (!response.ok) {
@@ -333,7 +343,7 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
       setError(`Preview error: ${error instanceof Error ? error.message : String(error)}`);
       setIsPreviewLoading(false);
     }
-  }, [selectedCV, cvOptions]);
+  }, [selectedCV, rawText]);
 
   // Function to handle optimization
   const handleOptimize = useCallback(async () => {
@@ -414,8 +424,16 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
       link.href = `data:application/pdf;base64,${optimizedPdfData}`;
       
       // Set the download attribute with a filename
-      const fileName = selectedCV ? selectedCV.split('|')[0].trim() : 'optimized-cv';
-      link.download = `${fileName}-optimized.pdf`;
+      let fileName = 'optimized-cv';
+      
+      if (selectedCV) {
+        const parts = selectedCV.split('|');
+        if (parts.length > 0) {
+          fileName = `${parts[0].trim()}-optimized`;
+        }
+      }
+      
+      link.download = `${fileName}.pdf`;
       
       // Append to the document
       document.body.appendChild(link);
@@ -504,11 +522,10 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
 
     try {
       // Extract the CV ID from the selected CV
-      const cvParts = selectedCV.split('|');
-      const cvId = cvParts.length > 1 ? cvParts[1].trim() : undefined;
+      const cvId = extractCvId(selectedCV);
       
       if (!cvId) {
-        throw new Error("Could not determine CV ID");
+        throw new Error("Could not determine CV ID. Please select a valid CV.");
       }
       
       // Call the accept API
@@ -585,7 +602,7 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
           </Button>
           
           <Button 
-            onClick={handlePreview}
+            onClick={handlePreviewCV}
             disabled={isPreviewLoading || !selectedCV || isOptimizing}
             className="flex-1 bg-[#121212] hover:bg-[#333333] text-white"
           >
