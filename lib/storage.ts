@@ -83,14 +83,92 @@ export async function getOriginalPdfBytes(cvRecord: any): Promise<Uint8Array> {
 }
 
 /**
- * Extracts text from PDF bytes using pdf-parse.
- * @param pdfBytes - The PDF file as a Uint8Array.
- * @returns A Promise that resolves with the extracted text.
+ * Enhanced text extraction from PDF with better formatting and structure detection
+ * This improved version attempts to preserve document structure and formatting
  */
 export async function extractTextFromPdf(pdfBytes: Uint8Array): Promise<string> {
-  const buffer = Buffer.from(pdfBytes);
-  const data = await pdfParse(buffer);
-  return data.text;
+  try {
+    const buffer = Buffer.from(pdfBytes);
+    const data = await pdfParse(buffer, {
+      // Use more aggressive text extraction options
+      pagerender: render_page
+    });
+    
+    // Process the extracted text to improve structure
+    const processedText = processExtractedText(data.text);
+    
+    return processedText;
+  } catch (error) {
+    console.error("Error extracting text from PDF:", error);
+    throw new Error(`Failed to extract text from PDF: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * Custom page renderer for PDF.js to improve text extraction
+ */
+function render_page(pageData: any) {
+  // Check if the page has content
+  if (!pageData.getTextContent) {
+    return null;
+  }
+  
+  return pageData.getTextContent({
+    normalizeWhitespace: false,
+    disableCombineTextItems: false
+  })
+  .then(function(textContent: any) {
+    let lastY = -1;
+    let text = '';
+    
+    // Process each text item
+    for (const item of textContent.items) {
+      // Check if this is a new line based on Y position
+      if (lastY !== -1 && Math.abs(lastY - item.transform[5]) > 5) {
+        text += '\n';
+      }
+      
+      // Add the text content
+      text += item.str;
+      
+      // Update the last Y position
+      lastY = item.transform[5];
+    }
+    
+    return text;
+  });
+}
+
+/**
+ * Process extracted text to improve structure and formatting
+ */
+function processExtractedText(text: string): string {
+  // Remove excessive whitespace
+  let processed = text.replace(/\s+/g, ' ');
+  
+  // Detect and preserve paragraphs
+  processed = processed.replace(/\.\s+([A-Z])/g, '.\n\n$1');
+  
+  // Detect and preserve bullet points
+  processed = processed.replace(/•\s*/g, '\n• ');
+  processed = processed.replace(/\*\s*/g, '\n* ');
+  processed = processed.replace(/(\d+)\.\s+([A-Z])/g, '\n$1. $2');
+  
+  // Detect and preserve section headings
+  processed = processed.replace(/([A-Z][A-Z\s]{2,}:)/g, '\n\n$1\n');
+  
+  // Detect contact information patterns
+  processed = processed.replace(/([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/g, '\nEmail: $1\n');
+  processed = processed.replace(/(\+\d{1,3}[\s.-]?\d{3}[\s.-]?\d{3}[\s.-]?\d{4})/g, '\nPhone: $1\n');
+  processed = processed.replace(/(https?:\/\/[^\s]+)/g, '\nWebsite: $1\n');
+  
+  // Clean up multiple newlines
+  processed = processed.replace(/\n{3,}/g, '\n\n');
+  
+  // Ensure the text starts with a clean line
+  processed = processed.trim();
+  
+  return processed;
 }
 
 /**

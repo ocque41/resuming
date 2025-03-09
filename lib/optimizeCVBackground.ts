@@ -18,6 +18,7 @@ import { updateCVAnalysis } from "@/lib/db/queries.server";
 import { getOriginalPdfBytes } from "./storage"; // Using updated storage helper
 import { CV_TEMPLATES } from "@/types/templates";
 import { convertDOCXToPDF } from "./docxToPDF";
+import { saveFile, FileType, StorageType } from './fileStorage';
 
 export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
   try {
@@ -378,6 +379,54 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
       
       await updateCVAnalysis(cvRecord.id, JSON.stringify(finalMetadata));
       console.log(`Optimization completed successfully for CV ${cvRecord.id}`);
+      
+      // Store the DOCX file in the file storage service
+      try {
+        const docxMetadata = await saveFile(
+          docxBuffer,
+          `${cvRecord.fileName.replace(/\.[^/.]+$/, '')}-optimized`,
+          'docx',
+          'local' // Use local storage for now
+        );
+        
+        // Update the metadata with the file path
+        finalMetadata.optimizedDocxFilePath = docxMetadata.filePath;
+        finalMetadata.optimizedDocxFileName = docxMetadata.fileName;
+        
+        // Still keep the base64 data for backward compatibility
+        finalMetadata.optimizedDocxBase64 = docxBuffer.toString('base64');
+        
+        await updateCVAnalysis(cvRecord.id, JSON.stringify(finalMetadata));
+        
+        console.log(`Saved DOCX file to storage: ${docxMetadata.filePath}`);
+      } catch (storageError) {
+        console.error("Error saving DOCX to storage:", storageError);
+        // Continue with the process even if storage fails
+      }
+
+      // Store the PDF file in the file storage service
+      try {
+        const pdfMetadata = await saveFile(
+          pdfBuffer,
+          `${cvRecord.fileName.replace(/\.[^/.]+$/, '')}-optimized`,
+          'pdf',
+          'local' // Use local storage for now
+        );
+        
+        // Update the metadata with the file path
+        finalMetadata.optimizedPdfFilePath = pdfMetadata.filePath;
+        finalMetadata.optimizedPdfFileName = pdfMetadata.fileName;
+        
+        // Still keep the base64 data for backward compatibility
+        finalMetadata.optimizedPdfBase64 = pdfBuffer.toString('base64');
+        
+        await updateCVAnalysis(cvRecord.id, JSON.stringify(finalMetadata));
+        
+        console.log(`Saved PDF file to storage: ${pdfMetadata.filePath}`);
+      } catch (storageError) {
+        console.error("Error saving PDF to storage:", storageError);
+        // Continue with the process even if storage fails
+      }
       
       return {
         success: true,
