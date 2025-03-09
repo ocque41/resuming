@@ -12,6 +12,7 @@ import dynamic from "next/dynamic";
 
 // Dynamically import client components
 const DocumentCombobox = dynamic(() => import("@/components/DocumentCombobox.client"));
+const ErrorRefreshButton = dynamic(() => import("@/components/ErrorRefreshButton.client"));
 
 export default async function DocumentEditorPage() {
   try {
@@ -213,12 +214,7 @@ export default async function DocumentEditorPage() {
           </AlertDescription>
         </Alert>
         
-        <Button 
-          onClick={() => typeof window !== 'undefined' && window.location.reload()}
-          className="w-full md:w-auto bg-[#B4916C] hover:bg-[#A3815C] text-white"
-        >
-          Refresh Page
-        </Button>
+        <ErrorRefreshButton />
       </div>
     );
   }
