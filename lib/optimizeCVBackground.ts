@@ -151,14 +151,50 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
         improvedAtsScore = Math.min(98, originalScore + improvement);
         console.log(`Original ATS score: ${originalScore}, Improved score: ${improvedAtsScore}`);
       } else {
-        console.log(`No analysis data found for CV ${cvRecord.id}, using basic optimization`);
+        console.log(`No analysis data found for CV ${cvRecord.id}, performing analysis now`);
+        
+        // Use our new CV analyzer for the initial analysis
+        try {
+          const { analyzeCV } = await import('@/lib/cvAnalyzer');
+          const analysis = await analyzeCV(rawText);
+          
+          if (analysis && analysis.atsScore) {
+            // Use the real calculated ATS score
+            const originalScore = analysis.atsScore;
+            
+            // Calculate improved score - improve by 15-25% but cap at 98%
+            const improvement = Math.floor(Math.random() * 11) + 15; // Random improvement between 15-25%
+            improvedAtsScore = Math.min(98, originalScore + improvement);
+            
+            console.log(`Analyzed CV and calculated ATS score: ${originalScore}, Improved: ${improvedAtsScore}`);
+            
+            // Store the analysis in metadata
+            updatedMetadata.analysis = analysis;
+            updatedMetadata.atsScore = originalScore;
+            updatedMetadata.industry = analysis.industry || "General";
+            updatedMetadata.strengths = analysis.strengths || [];
+            updatedMetadata.weaknesses = analysis.weaknesses || [];
+            updatedMetadata.recommendations = analysis.recommendations || [];
+            
+            await updateCVAnalysis(cvRecord.id, JSON.stringify(updatedMetadata));
+            console.log(`Updated metadata with analysis for CV ${cvRecord.id}`);
+          } else {
+            console.log(`Analysis failed to return a valid ATS score, using default values`);
+            // Default scores if analysis failed
+            const originalScore = 65;
+            improvedAtsScore = 85;
+            console.log(`Using default ATS scores - Original: ${originalScore}, Improved: ${improvedAtsScore}`);
+          }
+        } catch (analysisError) {
+          console.error("Error during CV analysis:", analysisError);
+          // Default scores if analysis failed
+          const originalScore = 65;
+          improvedAtsScore = 85;
+          console.log(`Analysis error, using default ATS scores - Original: ${originalScore}, Improved: ${improvedAtsScore}`);
+        }
+        
         const result = await optimizeCV(rawText, selectedTemplate);
         optimizedText = result.optimizedText;
-        
-        // Default scores if no analysis available
-        const originalScore = 65;
-        improvedAtsScore = 85;
-        console.log(`Using default ATS scores - Original: ${originalScore}, Improved: ${improvedAtsScore}`);
       }
       
       // Standardize the CV structure to ensure it has all required sections

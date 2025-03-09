@@ -5,14 +5,18 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ComboboxPopover } from "@/components/ui/combobox";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, BarChart2 } from "lucide-react";
+import { AlertCircle, BarChart2, Building, FileText } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { getIndustrySpecificAtsInsights } from "@/lib/cvAnalyzer";
 
 interface AnalysisResult {
   atsScore: number | string;
   strengths: string[];
   weaknesses: string[];
   recommendations: string[];
+  industry: string;
+  keywordAnalysis?: { [key: string]: number };
+  sectionBreakdown?: { [key: string]: string };
   industryInsight?: string;
   targetRoles?: string[];
 }
@@ -38,6 +42,15 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
       if (data.error) {
         setError(data.error);
       } else {
+        // If industry is detected but no industry insight is provided, get one
+        if (data.industry && !data.industryInsight) {
+          try {
+            const insight = getIndustrySpecificAtsInsights(data.industry);
+            data.industryInsight = insight;
+          } catch (insightError) {
+            console.error("Failed to get industry insights:", insightError);
+          }
+        }
         setAnalysis(data);
       }
     } catch (err: any) {
@@ -55,38 +68,66 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
     return String(score);
   };
 
+  // Get the top keywords from keywordAnalysis
+  const getTopKeywords = () => {
+    if (!analysis?.keywordAnalysis) return [];
+    
+    // Convert to array, sort by count, and take top 5
+    return Object.entries(analysis.keywordAnalysis)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([keyword, count]) => ({ keyword, count }));
+  };
+
   return (
-    <Card className="w-full shadow-lg border-0">
-      <CardHeader className="bg-[#121212] text-white rounded-t-lg">
-        <CardTitle className="text-[#B4916C] flex items-center gap-2">
-          <BarChart2 className="h-5 w-5" />
-          <span>Analyze Your CV</span>
+    <Card className="bg-[#121212] border-gray-800 shadow-xl overflow-hidden">
+      <CardHeader className="bg-[#0A0A0A] border-b border-gray-800 pb-3">
+        <CardTitle className="flex items-center text-white">
+          <BarChart2 className="w-5 h-5 mr-2 text-[#B4916C]" />
+          CV Analysis
         </CardTitle>
       </CardHeader>
-      
       <CardContent className="p-6">
-        <div className="mb-4">
-          <ComboboxPopover
-            label="Select CV to Analyze"
-            options={cvs}
-            onSelect={handleAnalyze}
-            accentColor="#B4916C"
-          />
-        </div>
-        
+        {!analysis && (
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Select a CV to analyze
+            </label>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="md:col-span-3">
+                <ComboboxPopover
+                  options={cvs}
+                  label="Select a CV"
+                  onSelect={(cv) => setSelectedCV(cv)}
+                  accentColor="#B4916C"
+                  darkMode={true}
+                />
+              </div>
+              <Button
+                onClick={() => selectedCV && handleAnalyze(selectedCV)}
+                disabled={!selectedCV || loading}
+                className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
+              >
+                {loading ? "Analyzing..." : "Analyze"}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {error && (
-          <Alert className="mb-4 bg-red-900/20 border-red-900/20 text-red-400">
+          <Alert className="mb-4 bg-red-900/20 text-red-400 border border-red-900">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        
+
         {loading && (
-          <div className="flex justify-center items-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#B4916C]"></div>
+          <div className="flex flex-col items-center justify-center py-10">
+            <div className="w-10 h-10 border-2 border-[#B4916C] border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p className="text-gray-400">Analyzing your CV...</p>
           </div>
         )}
-        
+
         {analysis && !loading && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -95,6 +136,36 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
                 {formatAtsScore(analysis.atsScore)}
               </div>
             </div>
+            
+            {analysis.industry && (
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-2 flex items-center">
+                  <Building className="h-4 w-4 mr-2 text-[#B4916C]" />
+                  Industry
+                </h3>
+                <div className="text-gray-300 mb-2">
+                  <span className="px-2 py-1 bg-[#B4916C]/10 text-[#B4916C] rounded-md">
+                    {analysis.industry}
+                  </span>
+                </div>
+              </div>
+            )}
+            
+            {analysis.keywordAnalysis && (
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-2 flex items-center">
+                  <FileText className="h-4 w-4 mr-2 text-[#B4916C]" />
+                  Top Keywords
+                </h3>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {getTopKeywords().map((item, index) => (
+                    <span key={index} className="px-2 py-1 bg-[#B4916C]/10 text-[#B4916C] rounded-md text-sm">
+                      {item.keyword} ({item.count})
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             
             <div>
               <h3 className="text-lg font-semibold text-white mb-2">Strengths</h3>
@@ -135,7 +206,7 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
             {analysis.industryInsight && (
               <div>
                 <h3 className="text-lg font-semibold text-white mb-2">Industry Insight</h3>
-                <p className="text-gray-300">{analysis.industryInsight}</p>
+                <p className="text-gray-300 p-3 border border-[#B4916C]/20 rounded-md bg-[#B4916C]/5">{analysis.industryInsight}</p>
               </div>
             )}
             

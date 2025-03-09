@@ -1,6 +1,6 @@
 // app/api/analyze-cv/route.ts
 import { NextResponse } from 'next/server';
-import { analyzeCV } from '@/lib/analyzeCV';
+import { analyzeCV } from '@/lib/cvAnalyzer';
 import { getCVByFileName, updateCVAnalysis } from '@/lib/db/queries.server';
 
 export async function GET(request: Request) {
@@ -36,7 +36,11 @@ export async function GET(request: Request) {
       strengths: analysis.strengths,
       weaknesses: analysis.weaknesses,
       recommendations: analysis.recommendations,
-      optimized: true,
+      industry: analysis.industry,
+      keywordAnalysis: analysis.keywordAnalysis,
+      sectionBreakdown: analysis.sectionBreakdown,
+      analysisDate: new Date().toISOString(),
+      optimized: existingMetadata.optimized || false,
       optimizedTimes,
     };
 

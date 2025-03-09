@@ -1,4 +1,6 @@
-// lib/analyzeCV.ts
+/**
+ * Analyzes a CV's content to calculate scores and extract insights
+ */
 export async function analyzeCV(rawText: string): Promise<any> {
   try {
     // Get text content
@@ -508,4 +510,4 @@ export function getIndustrySpecificAtsInsights(industry: string): string {
   };
   
   return insights[industry] || insights["General"];
-}
+} 
