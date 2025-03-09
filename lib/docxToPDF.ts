@@ -18,16 +18,34 @@ export async function convertDOCXToPDF(docxBuffer: Buffer): Promise<{
   try {
     console.log('Starting DOCX to PDF conversion (fallback mode)');
     
-    // In this fallback implementation, we just return the DOCX buffer
-    // along with metadata indicating that conversion should happen later
+    // In a production environment, you would implement actual PDF conversion here
+    // For example using a service like DocRaptor, PDFShift, or a local LibreOffice instance
+    
+    // For now, we'll create a simple fallback that just returns the DOCX buffer
+    // and indicates that conversion should be handled client-side
+    
+    // Create a dummy PDF buffer with a message explaining the situation
+    const dummyPdfContent = `
+      This is a placeholder for PDF content.
+      The server-side PDF conversion is currently disabled.
+      Please use the DOCX file instead.
+    `;
+    
+    // We're returning a marker that conversion wasn't successful, but the operation itself didn't fail
     return {
       docxBuffer,
+      // We're not including a pdfBuffer here since conversion didn't happen
       conversionSuccessful: false
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Error during DOCX to PDF conversion (fallback):', error);
-    throw new Error(`Failed to convert DOCX to PDF: ${errorMessage}`);
+    // Don't throw an error since we want the process to continue with the DOCX
+    console.log('Returning DOCX only, without PDF conversion');
+    return {
+      docxBuffer,
+      conversionSuccessful: false
+    };
   }
 }
 

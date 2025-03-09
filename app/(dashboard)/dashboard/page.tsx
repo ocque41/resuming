@@ -57,107 +57,70 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <header className="flex items-center justify-between p-4 lg:p-8 mx-auto max-w-md lg:max-w-2xl">
-        <ArticleTitle className="text-md lg:text-xl font-medium ml-4 text-white">
+      <header className="flex items-center justify-between p-4 mx-auto max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl">
+        <ArticleTitle className="text-md lg:text-xl font-medium ml-2 text-white">
           Dashboard
         </ArticleTitle>
         <UserMenu teamData={teamData} activityLogs={activityLogs} />
       </header>
       
-      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C]/20 bg-black shadow-lg">
-        <CardHeader className="bg-black pb-4">
-          <CardTitle className="text-xl font-bold text-[#B4916C]">Your CV Collection</CardTitle>
-        </CardHeader>
-        <CardContent className="p-6">
-          <Table className="w-full">
-            <TableHeader>
-              <TableRow className="border-b border-[#B4916C]/20">
-                <TableHead className="text-[#B4916C] font-semibold">Name</TableHead>
-                <TableHead className="text-[#B4916C] font-semibold">ATS Score</TableHead>
-                <TableHead className="text-[#B4916C] font-semibold">Optimized</TableHead>
-                <TableHead className="text-[#B4916C] font-semibold">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {cvs.map((cv: any) => {
-                let metadata = null;
-                try {
-                  metadata = cv.metadata ? JSON.parse(cv.metadata) : null;
-                } catch (err) {
-                  console.error("Error parsing metadata:", err);
-                }
-                return (
-                  <TableRow key={cv.id} className="border-b border-gray-800 hover:bg-[#B4916C]/5">
-                    <TableCell className="text-sm lg:text-base text-gray-300 font-medium">
-                      {cv.fileName}
-                    </TableCell>
-                    <TableCell className="text-sm lg:text-base">
-                      {metadata?.atsScore ? (
-                        <span className="px-2 py-1 bg-[#B4916C]/10 rounded-full text-[#B4916C] font-medium text-sm">
-                          {metadata.atsScore}
-                        </span>
-                      ) : "-"}
-                    </TableCell>
-                    <TableCell className="text-sm lg:text-base">
-                      {metadata?.optimized ? (
-                        <span className="px-2 py-1 bg-green-500/10 rounded-full text-green-500 font-medium text-sm">
-                          Yes
-                        </span>
-                      ) : (
-                        <span className="px-2 py-1 bg-gray-500/10 rounded-full text-gray-500 font-medium text-sm">
-                          No
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <ActionsDropdown cv={cv} />
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-          
-          <div className="mt-8">
-            <Link 
-              href="/dashboard/upload" 
-              className="flex items-center justify-center w-full py-2 px-4 bg-[#B4916C] text-white rounded-md hover:bg-[#A3815C] transition-colors"
-            >
-              Upload New CV
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
-      
-      {/* Premium Plan Upgrade Card - Temporarily hidden
-      <Card className="mt-4 mb-8 mx-auto max-w-md lg:max-w-2xl border border-[#B4916C] bg-[#B4916C]/10 shadow-lg hover:shadow-xl transition-all duration-300">
-        <CardContent className="p-6 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="h-10 w-10 rounded-full bg-[#B4916C]/20 flex items-center justify-center">
-              <Diamond className="h-5 w-5 text-[#B4916C]" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-[#B4916C]">Upgrade to Premium</h3>
-              <p className="text-gray-300">Get unlimited CV uploads and optimizations</p>
-            </div>
-          </div>
-          <Link 
-            href="/dashboard/pricing" 
-            className="px-4 py-2 rounded-md bg-[#B4916C] hover:bg-[#B4916C]/90 text-white font-medium flex items-center space-x-1 transition-colors"
-          >
-            <span>Upgrade</span>
-            <ArrowRight className="h-4 w-4 ml-1" />
-          </Link>
-        </CardContent>
-      </Card>
-      */}
-      
-      <DashboardClientWrapper cvs={cvs} />
-      
-      <AnalyzeCVCard cvs={cvs.map((cv) => cv.fileName)} />
-      
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mx-auto max-w-md lg:max-w-6xl px-4 lg:px-8 pb-16">
+      <div className="flex flex-col space-y-6 mx-auto max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl px-2 sm:px-4 md:px-6 pb-12">
+        <Card className="border border-[#B4916C]/20 bg-black shadow-lg">
+          <CardHeader className="bg-black pb-4">
+            <CardTitle className="text-xl font-bold text-[#B4916C]">Your CV Collection</CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 md:p-6">
+            <Table className="w-full">
+              <TableHeader>
+                <TableRow className="border-b border-[#B4916C]/20">
+                  <TableHead className="text-[#B4916C] font-semibold">Name</TableHead>
+                  <TableHead className="text-[#B4916C] font-semibold">ATS Score</TableHead>
+                  <TableHead className="text-[#B4916C] font-semibold">Optimized</TableHead>
+                  <TableHead className="text-[#B4916C] font-semibold">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {cvs.map((cv: any) => {
+                  let metadata = null;
+                  try {
+                    metadata = cv.metadata ? JSON.parse(cv.metadata) : null;
+                  } catch (err) {
+                    console.error("Error parsing metadata:", err);
+                  }
+                  return (
+                    <TableRow key={cv.id} className="border-b border-gray-800 hover:bg-[#B4916C]/5">
+                      <TableCell className="text-sm text-gray-300 font-medium">
+                        {cv.fileName}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {metadata?.atsScore ? (
+                          <span className="px-2 py-1 bg-[#B4916C]/10 rounded-full text-[#B4916C] font-medium text-sm">
+                            {metadata.atsScore}
+                          </span>
+                        ) : "-"}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {metadata?.optimized ? (
+                          <span className="px-2 py-1 bg-green-500/10 rounded-full text-green-500 font-medium text-sm">
+                            Yes
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 bg-gray-500/10 rounded-full text-gray-500 font-medium text-sm">
+                            No
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <ActionsDropdown cv={cv} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+        
         <ErrorBoundaryWrapper>
           <OptimizeCVCard 
             cvs={cvs.map((cv: any) => `${cv.fileName}|${cv.id}`)}
@@ -168,24 +131,26 @@ export default async function DashboardPage() {
           <JobsCard cvs={mappedCVs} />
         </ErrorBoundaryWrapper>
         
+        <ErrorBoundaryWrapper>
+          <AnalyzeCVCard cvs={cvs.map((cv) => cv.fileName)} />
+        </ErrorBoundaryWrapper>
+        
         {/* Link to Enhanced CV Page */}
-        <div className="lg:col-span-2 mt-4">
-          <Link 
-            href="/dashboard/enhance" 
-            className="flex items-center justify-between p-6 bg-black border border-[#B4916C]/20 rounded-lg shadow-lg hover:bg-[#1D1D1D] transition-colors"
-          >
-            <div className="flex items-center">
-              <div className="flex items-center justify-center h-12 w-12 rounded-full bg-[#B4916C]/10 text-[#B4916C] mr-4">
-                <Eye className="h-6 w-6" />
-              </div>
-              <div>
-                <h3 className="text-lg font-medium text-[#B4916C]">Enhanced CV Preview</h3>
-                <p className="text-gray-400">Create professionally styled CVs with custom formatting and colors</p>
-              </div>
+        <Link 
+          href="/dashboard/enhance" 
+          className="flex items-center justify-between p-4 md:p-6 bg-black border border-[#B4916C]/20 rounded-lg shadow-lg hover:bg-[#1D1D1D] transition-colors"
+        >
+          <div className="flex items-center">
+            <div className="flex items-center justify-center h-10 w-10 rounded-full bg-[#B4916C]/10 text-[#B4916C] mr-3">
+              <Eye className="h-5 w-5" />
             </div>
-            <ChevronRight className="h-5 w-5 text-[#B4916C]" />
-          </Link>
-        </div>
+            <div>
+              <h3 className="text-base md:text-lg font-medium text-[#B4916C]">Enhanced CV Preview</h3>
+              <p className="text-sm text-gray-400">Professional styling with custom formatting</p>
+            </div>
+          </div>
+          <ChevronRight className="h-5 w-5 text-[#B4916C]" />
+        </Link>
       </div>
     </>
   );

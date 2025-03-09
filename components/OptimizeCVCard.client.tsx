@@ -193,6 +193,12 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
                 console.log(`Received PDF base64 data (${pdfData.pdfBase64.length} chars)`);
                 setOptimizedPdfData(pdfData.pdfBase64);
                 console.log("Retrieved optimized PDF data");
+              } else if (pdfData.docxBase64) {
+                // If PDF generation failed but we have DOCX data
+                console.log(`Received DOCX base64 data but PDF generation failed`);
+                setOptimizedDocxData(pdfData.docxBase64);
+                // Set a warning message instead of an error
+                setError(`Note: PDF preview is not available, but you can download the optimized DOCX file.`);
               } else {
                 console.warn("PDF response did not contain base64 data");
               }
@@ -205,20 +211,28 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
           }
         } catch (pdfError) {
           console.error("Error retrieving optimized PDF:", pdfError);
-          // Continue despite PDF retrieval error
+          // Set a friendlier error message
+          setError("PDF generation is temporarily unavailable. You can still download the optimized DOCX file.");
         }
       }
       
       // Check for errors
-      if (statusData.error) {
+      if (statusData.error && !statusData.optimized) {
         throw new Error(statusData.error);
       }
     } catch (error) {
       console.error("Error polling optimization status:", error);
       
-      // Only set error if we're still optimizing
-      if (isOptimizing) {
-        setError(`Optimization error: ${error instanceof Error ? error.message : String(error)}`);
+      // Only set error if we're still optimizing and there's no DOCX data available
+      if (isOptimizing && !optimizedDocxData) {
+        // Check if the error is related to PDF conversion
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes("PDF conversion failed") || errorMessage.includes("DOCX to PDF")) {
+          setError(`Optimization note: PDF creation is temporarily unavailable, but you can download the DOCX file.`);
+        } else {
+          setError(`Optimization error: ${errorMessage}`);
+        }
+        
         setIsOptimizing(false);
         
         // Clear polling interval
@@ -228,7 +242,7 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
         }
       }
     }
-  }, [pollingInterval]);
+  }, [pollingInterval, isOptimizing, optimizedDocxData]);
 
   // Function to handle preview generation
   const handlePreview = useCallback(async () => {

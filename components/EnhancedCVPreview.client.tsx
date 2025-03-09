@@ -370,13 +370,9 @@ export default function EnhancedCVPreview({ cvs = [] }: EnhancedCVPreviewProps) 
       </CardContent>
       
       <CardFooter className="bg-[#121212] p-4 border-t border-gray-800 rounded-b-lg">
-        <Link 
-          href="/dashboard/enhance" 
-          className="flex items-center justify-center w-full py-2 px-4 bg-[#121212] hover:bg-[#1D1D1D] text-[#B4916C] border border-[#B4916C]/20 rounded-md transition-colors"
-        >
-          <span>Advanced CV Enhancement Options</span>
-          <ChevronRight className="ml-2 h-4 w-4" />
-        </Link>
+        <div className="w-full text-center text-sm text-gray-500">
+          Professional CV enhancement powered by AI
+        </div>
       </CardFooter>
     </Card>
   );
