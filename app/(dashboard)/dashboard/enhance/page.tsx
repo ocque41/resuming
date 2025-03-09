@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import dynamic from "next/dynamic";
 
 // Dynamically import client components
-const DocumentUploader = dynamic(() => import("@/components/DocumentUploader.client"), { ssr: false });
+const DocumentUploader = dynamic(() => import("@/components/DocumentUploader.client"));
 
 export default async function DocumentEditorPage() {
   const user = await getUser();
