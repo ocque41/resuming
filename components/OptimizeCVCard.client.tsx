@@ -108,13 +108,28 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
       const id = parts[1].trim();
       
       console.log(`Selected CV: ${fileName}, ID: ${id}`);
-      setSelectedCV(fileName);
-      setCvOptions(prev => [...prev, `${fileName}|${id}`]);
+      // Set the full string format "filename|id" instead of just filename
+      setSelectedCV(originalCVString);
     } else {
-      // Fallback if we can't find the ID
-      console.log("Could not find ID for selected CV, using display name only");
-      setSelectedCV(cv);
-      setCvOptions(prev => [...prev, `${cv}|`]);
+      // If we can't find it in our options, create a proper ID format
+      console.log("Could not find ID for selected CV, looking for a matching ID");
+      
+      // Try to find the ID in another way - perhaps it's already in the selectedCV format
+      const possibleMatch = cvOptions.find(item => {
+        const itemFileName = item.split('|')[0].trim();
+        return itemFileName === cv;
+      });
+      
+      if (possibleMatch) {
+        console.log("Found a matching CV by filename:", possibleMatch);
+        setSelectedCV(possibleMatch);
+      } else {
+        console.log("No matching CV found, using display name only with empty ID");
+        // Create a properly formatted string but with an empty ID
+        const newCVString = `${cv}|unknown`;
+        setSelectedCV(newCVString);
+        setCvOptions(prev => [...prev, newCVString]);
+      }
     }
   }, [cvOptions]);
 
@@ -730,13 +745,44 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
             </div>
             
             <div className="border border-[#B4916C]/20 border-t-0 rounded-b-lg overflow-hidden">
+              {/* Console log to debug the preview source URL */}
+              {typeof window !== 'undefined' && (
+                console.log("PDF Preview Source:", previewSrc),
+                null
+              )}
+              
               <iframe 
                 src={previewSrc} 
                 className="w-full h-[500px]" 
                 title="CV Preview"
+                onError={(e) => {
+                  console.error("PDF iframe loading error:", e);
+                  setError("Failed to load PDF document. Please try downloading the file instead.");
+                }}
               ></iframe>
             </div>
             
+            {/* Fallback UI for when PDF loading fails */}
+            {error && error.includes("Failed to load PDF") && (
+              <div className="mt-4 p-4 bg-[#121212] border border-red-400 rounded-lg">
+                <h4 className="text-red-400 font-medium mb-2">Error</h4>
+                <p className="text-gray-300 mb-3">{error}</p>
+                <Button 
+                  onClick={() => {
+                    // Try to reload the preview
+                    setError(null);
+                    if (previewSrc) {
+                      const reloadSrc = previewSrc + '#' + new Date().getTime();
+                      setPreviewSrc(reloadSrc);
+                    }
+                  }}
+                  className="bg-[#333333] hover:bg-[#444444] text-white"
+                >
+                  Reload
+                </Button>
+              </div>
+            )}
+
             <div className="flex flex-col space-y-3 mt-4">
               <div className="flex items-center space-x-3">
                 <Button 
