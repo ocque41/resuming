@@ -904,46 +904,80 @@ export function parseStandardCVFromSections(sections: Record<string, string>): S
   // Make sure sections exist, if not use empty object
   sections = sections || {};
   
-  // Parse profile
+  // Parse profile information - use more careful extraction to get real data
   const profileText = sections["PROFILE"] || "";
   const profileLines = profileText.split('\n').filter(line => line.trim());
+  
+  // Extract name - first line is usually the name
+  const nameLineIndex = profileLines.findIndex(line => 
+    line.trim() && 
+    !line.includes('@') && 
+    !/phone|mobile|\+|\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/i.test(line)
+  );
+  const nameLine = nameLineIndex !== -1 ? profileLines[nameLineIndex] : profileLines[0] || "";
+  
+  // Extract phone - look for numbers and common phone formats
+  const phoneLineIndex = profileLines.findIndex(line => 
+    /phone|mobile|\+|\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/i.test(line)
+  );
+  const phoneLine = phoneLineIndex !== -1 ? profileLines[phoneLineIndex] : "";
+  // Extract just the phone number if there's additional text
+  const phoneMatch = phoneLine.match(/(\+?[\d\s\-\(\)\.]{7,})/);
+  const phoneNumber = phoneMatch ? phoneMatch[1].trim() : phoneLine;
+  
+  // Extract email - look for @ symbol
+  const emailLineIndex = profileLines.findIndex(line => line.includes('@'));
+  const emailLine = emailLineIndex !== -1 ? profileLines[emailLineIndex] : "";
+  // Extract just the email if there's additional text
+  const emailMatch = emailLine.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+  const email = emailMatch ? emailMatch[1].trim() : emailLine;
+  
+  // Extract location - lines that aren't name, phone, or email
+  const locationLineIndices = profileLines.findIndex(line => 
+    line.trim() && 
+    !line.includes('@') && 
+    !/phone|mobile|\+|\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/i.test(line) &&
+    line !== nameLine
+  );
+  const locationLine = locationLineIndices !== -1 ? profileLines[locationLineIndices] : "";
+  
+  // Create the profile object with best available data
   const profile = {
-    name: profileLines[0] || "NAME LAST NAME",
-    phone: profileLines.find(line => /phone|^\+|\d{3}[-.\s]?\d{3}[-.\s]?\d{4}|^\d+$/.test(line.toLowerCase())) || 
-           profileLines[1] || "+01 234 567 890",
-    email: profileLines.find(line => line.includes('@')) || 
-           profileLines[2] || "email@example.com",
-    location: profileLines.find(line => !line.includes('@') && 
-                                        !/phone|^\+|\d{3}[-.\s]?\d{3}[-.\s]?\d{4}|^\d+$/.test(line.toLowerCase()) && 
-                                        line !== profileLines[0]) || 
-              profileLines[3] || "City, Country"
+    name: nameLine.trim() || "",
+    phone: phoneNumber.trim() || "",
+    email: email.trim() || "",
+    location: locationLine.trim() || ""
   };
   
-  // Parse career goal
-  const careerGoal = (sections["CAREER GOAL"] || "").trim() || 
-                     "Experienced professional seeking to leverage skills and expertise...";
+  // If any profile fields are empty, try to extract from other sections or use minimal placeholders
+  if (!profile.name) {
+    // Try to find name from document heading or metadata
+    // For now, use a simple placeholder but without fake data
+    profile.name = "CV Owner";
+  }
   
-  // Parse achievements
-  const achievementText = sections["ACHIEVEMENTS"] || "";
+  // Parse career goal - use actual content or leave empty
+  const careerGoalText = sections["CAREER GOAL"] || sections["SUMMARY"] || sections["OBJECTIVE"] || "";
+  const careerGoal = careerGoalText.trim();
+  
+  // Parse achievements - use actual achievements or leave empty
+  const achievementText = sections["ACHIEVEMENTS"] || sections["ACCOMPLISHMENTS"] || "";
   const achievementLines = achievementText.split('\n')
     .filter(line => line.trim())
     .map(line => line.replace(/^[-•*]\s*/, '').trim());
-  const achievements = achievementLines.slice(0, 3);
+  const achievements = achievementLines;
   
-  // Ensure we have exactly 3 achievements
-  while (achievements.length < 3) {
-    achievements.push("Achieved significant results through strategic initiative and implementation.");
-  }
-  
-  // Parse skills
-  const skillsText = sections["SKILLS"] || "";
+  // Parse skills section - identify real skills
+  const skillsText = sections["SKILLS"] || sections["CORE COMPETENCIES"] || sections["TECHNICAL SKILLS"] || "";
   const skillCategories: StandardCV['skills'] = [];
   
   // Try to parse skill categories
-  const categoryPattern = /([A-Za-z\s]+):\n((?:[-•*]?[^\n]+\n?)+)/g;
+  const categoryPattern = /([A-Za-z\s&]+):\s*\n((?:[-•*]?[^\n]+\n?)+)/g;
   let match;
+  let matchFound = false;
   
   while ((match = categoryPattern.exec(skillsText)) !== null) {
+    matchFound = true;
     const category = match[1].trim();
     const items = match[2]
       .split('\n')
@@ -955,52 +989,45 @@ export function parseStandardCVFromSections(sections: Record<string, string>): S
     }
   }
   
-  // If no categories were found, create a default one
-  if (skillCategories.length === 0) {
+  // If no categories were found using the pattern, split by lines
+  if (!matchFound) {
     const allSkills = skillsText
-      .split('\n')
-      .map(line => line.replace(/^[-•*]\s*/, '').trim())
-      .filter(line => line);
+      .split(/[,;\n]/)
+      .map(skill => skill.replace(/^[-•*]\s*/, '').trim())
+      .filter(skill => skill.length > 1); // Filter out single characters
     
     if (allSkills.length > 0) {
-      skillCategories.push({ category: "Professional Skills", items: allSkills });
-    } else {
-      skillCategories.push({ 
-        category: "Professional Skills", 
-        items: ["Skill 1", "Skill 2", "Skill 3"] 
-      });
+      // Check if we can group skills by common characteristics
+      const technicalSkills = allSkills.filter(skill => 
+        /software|programming|development|coding|database|system|data|technical|technology|engineering|analysis|framework|language|sql|python|java|javascript|aws|cloud/i.test(skill));
+      
+      const softSkills = allSkills.filter(skill => 
+        /communication|leadership|team|management|organization|planning|problem.solving|critical|presentation|negotiation|interpersonal/i.test(skill));
+      
+      const domainSkills = allSkills.filter(skill => 
+        !technicalSkills.includes(skill) && !softSkills.includes(skill));
+      
+      if (technicalSkills.length > 0) {
+        skillCategories.push({ category: "Technical Skills", items: technicalSkills });
+      }
+      
+      if (softSkills.length > 0) {
+        skillCategories.push({ category: "Soft Skills", items: softSkills });
+      }
+      
+      if (domainSkills.length > 0) {
+        skillCategories.push({ category: "Domain Expertise", items: domainSkills });
+      }
+      
+      // If the filtering didn't work well, just use all skills
+      if (skillCategories.length === 0) {
+        skillCategories.push({ category: "Professional Skills", items: allSkills });
+      }
     }
   }
   
-  // Make sure we group skills into logical categories if they're not already
-  if (skillCategories.length === 1 && skillCategories[0].items.length > 6) {
-    const allItems = [...skillCategories[0].items];
-    skillCategories.length = 0;
-    
-    const technicalSkills = allItems.filter(skill => 
-      /software|programming|development|coding|database|system|data|technical|technology|engineering|analysis|framework|language/i.test(skill));
-    
-    const softSkills = allItems.filter(skill => 
-      /communication|leadership|team|management|organization|planning|problem.solving|critical|presentation|negotiation|interpersonal/i.test(skill));
-    
-    const domainSkills = allItems.filter(skill => 
-      !technicalSkills.includes(skill) && !softSkills.includes(skill));
-    
-    if (technicalSkills.length > 0) {
-      skillCategories.push({ category: "Technical Skills", items: technicalSkills });
-    }
-    
-    if (softSkills.length > 0) {
-      skillCategories.push({ category: "Soft Skills", items: softSkills });
-    }
-    
-    if (domainSkills.length > 0) {
-      skillCategories.push({ category: "Domain Expertise", items: domainSkills });
-    }
-  }
-  
-  // Parse work experience
-  const workExperienceText = sections["WORK EXPERIENCE"] || "";
+  // Parse work experience - extract real experience data
+  const workExperienceText = sections["WORK EXPERIENCE"] || sections["EXPERIENCE"] || sections["EMPLOYMENT"] || "";
   const experienceEntries: StandardCV['workExperience'] = [];
   
   // Split by double newlines or date patterns
@@ -1015,137 +1042,100 @@ export function parseStandardCVFromSections(sections: Record<string, string>): S
     // Find date line, job title, company, and achievements
     const dateRangeIndex = lines.findIndex(line => 
       /\b(19|20)\d{2}\b/.test(line) || 
-      /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i.test(line)
+      /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i.test(line) ||
+      /present|current|now/i.test(line)
     );
     
-    if (dateRangeIndex === -1) continue;
+    // If we can't find a date line, make best guess about structure
+    let dateRange = '';
+    let jobTitle = '';
+    let company = '';
+    let achievementLines: string[] = [];
     
-    const dateRange = lines[dateRangeIndex];
-    const jobTitle = lines[dateRangeIndex + 1] || "Position Title";
-    const company = lines[dateRangeIndex + 2] || "Company Name - Location";
+    if (dateRangeIndex !== -1) {
+      dateRange = lines[dateRangeIndex];
+      jobTitle = dateRangeIndex + 1 < lines.length ? lines[dateRangeIndex + 1] : '';
+      company = dateRangeIndex + 2 < lines.length ? lines[dateRangeIndex + 2] : '';
+      achievementLines = lines.slice(dateRangeIndex + 3);
+    } else {
+      // No clear date found, assume first line is title, second is company
+      jobTitle = lines[0];
+      company = lines.length > 1 ? lines[1] : '';
+      achievementLines = lines.slice(2);
+    }
     
-    // Extract achievements (bullet points or remaining lines)
-    const achievementLines = lines.slice(dateRangeIndex + 3)
+    // Clean up and extract achievements
+    const achievements = achievementLines
       .map(line => line.replace(/^[-•*]\s*/, '').trim())
       .filter(line => line);
     
-    // Enhance achievements if they're too short or not specific enough
-    const enhancedAchievements = achievementLines.map(achievement => {
-      if (achievement.length < 30 || !(/\d/.test(achievement) || /increase|improve|reduce|save|lead|manage|develop|create|implement/i.test(achievement))) {
-        // Add details if achievement is too general
-        if (achievement.toLowerCase().includes("manage")) {
-          return `${achievement} resulting in improved team efficiency and project delivery`;
-        } else if (achievement.toLowerCase().includes("develop")) {
-          return `${achievement} that increased productivity by 20% and reduced costs`;
-        } else if (achievement.toLowerCase().includes("implement")) {
-          return `${achievement} leading to streamlined operations and better outcomes`;
-        } else {
-          return `${achievement} with significant impact on business objectives`;
-        }
-      }
-      return achievement;
-    });
-    
-    // Ensure we have at least 3 achievements
-    const workAchievements = enhancedAchievements.slice(0, 3);
-    while (workAchievements.length < 3) {
-      workAchievements.push(
-        "Successfully implemented solutions that improved efficiency and productivity by 15%.",
-        "Collaborated with cross-functional teams to achieve project goals and exceed client expectations.",
-        "Managed resources effectively to ensure optimal performance and delivery of high-quality results."
-      );
+    // Only add if we have at least job title and company
+    if (jobTitle) {
+      experienceEntries.push({
+        dateRange: dateRange || '',
+        jobTitle: jobTitle || '',
+        company: company || '',
+        achievements: achievements || []
+      });
     }
-    
-    experienceEntries.push({
-      dateRange,
-      jobTitle,
-      company,
-      achievements: workAchievements.slice(0, 3) // Limit to 3 achievements
-    });
-  }
-  
-  // Ensure we have at least one work experience entry
-  if (experienceEntries.length === 0) {
-    experienceEntries.push({
-      dateRange: "Jan 20XX - Present",
-      jobTitle: "Position Title",
-      company: "Company Name - Location",
-      achievements: [
-        "Successfully implemented solutions that improved efficiency and productivity by 15%.",
-        "Collaborated with cross-functional teams to achieve project goals and exceed client expectations.",
-        "Managed resources effectively to ensure optimal performance and delivery of high-quality results."
-      ]
-    });
   }
   
   // Parse education
   const educationText = sections["EDUCATION"] || "";
   const educationEntries: StandardCV['education'] = [];
   
-  // Split by double newlines or institution patterns
+  // Split by double newlines
   const educationBlocks = educationText.split(/\n\s*\n/);
   
   for (const block of educationBlocks) {
     if (!block.trim()) continue;
     
     const lines = block.split('\n').map(line => line.trim()).filter(line => line);
-    if (lines.length < 2) continue;
+    if (lines.length < 1) continue;
     
-    educationEntries.push({
-      institution: lines[0] || "University or Institution",
-      degree: lines[1] || "Degree or Qualification",
-      year: lines[2] || "20XX"
-    });
-  }
-  
-  // Ensure we have at least one education entry
-  if (educationEntries.length === 0) {
-    educationEntries.push({
-      institution: "University or Institution",
-      degree: "Degree or Qualification",
-      year: "20XX"
-    });
+    // Try to identify institution and degree, with year
+    const institution = lines[0] || "";
+    const degree = lines.length > 1 ? lines[1] : "";
+    
+    // Try to find a year in the text
+    const yearMatch = block.match(/\b(19|20)\d{2}\b/);
+    const year = yearMatch ? yearMatch[0] : "";
+    
+    // Only add if we have at least institution
+    if (institution) {
+      educationEntries.push({
+        institution,
+        degree,
+        year
+      });
+    }
   }
   
   // Parse languages
   const languagesText = sections["LANGUAGES"] || "";
   const languageEntries: StandardCV['languages'] = [];
   
-  // Split by lines
-  const languageLines = languagesText.split('\n').map(line => line.trim()).filter(line => line);
+  const languageLines = languagesText.split('\n')
+    .map(line => line.trim())
+    .filter(line => line);
   
   for (const line of languageLines) {
-    // Handle bullet points
-    const languageText = line.replace(/^[-•*]\s*/, '').trim();
-    
-    // Try to extract language and proficiency (e.g., "English - Fluent" or "English (Fluent)")
-    const match = languageText.match(/^(.*?)(?:[-–—:]\s*|\s*\(\s*)(.*?)(?:\s*\))?$/);
-    
-    if (match) {
-      const language = match[1].trim();
-      const proficiency = match[2].trim();
+    // Try to identify language and proficiency
+    const parts = line.split(/[-–:,]/);
+    if (parts.length > 0) {
+      const language = parts[0].trim();
+      const proficiency = parts.length > 1 ? parts[1].trim() : "Proficient";
       
-      languageEntries.push({
-        language,
-        proficiency
-      });
-    } else {
-      // If we can't parse the format, just use the whole line as the language
-      languageEntries.push({
-        language: languageText,
-        proficiency: "Fluent" // Default proficiency
-      });
+      if (language) {
+        languageEntries.push({
+          language,
+          proficiency
+        });
+      }
     }
   }
   
-  // Ensure we have at least one language entry
-  if (languageEntries.length === 0) {
-    languageEntries.push({
-      language: "English",
-      proficiency: "Fluent"
-    });
-  }
-  
+  // Create the standardized CV object with all parsed data
   return {
     profile,
     careerGoal,

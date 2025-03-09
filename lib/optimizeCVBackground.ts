@@ -737,14 +737,113 @@ function convertTextToSections(text: string): Record<string, string> {
   if (!text) return {};
   
   // Extract sections based on headers (e.g., "PROFILE", "SKILLS", etc.)
-  const sectionRegex = /\n?([A-Z][A-Z\s]+)\n([\s\S]*?)(?=\n[A-Z][A-Z\s]+\n|$)/g;
+  // First, normalize the text with proper line breaks
+  const normalizedText = '\n' + text.replace(/\r\n/g, '\n').replace(/\r/g, '\n') + '\n';
+  
+  // First approach - look for uppercase section headers with newlines
+  const sectionRegex = /\n([A-Z][A-Z\s]+[A-Z])\n([\s\S]*?)(?=\n[A-Z][A-Z\s]+[A-Z]\n|$)/g;
   const sections: Record<string, string> = {};
   
   let match;
-  while ((match = sectionRegex.exec(text)) !== null) {
+  let matchFound = false;
+  while ((match = sectionRegex.exec(normalizedText)) !== null) {
+    matchFound = true;
     const sectionName = match[1].trim();
     const sectionContent = match[2].trim();
-    sections[sectionName] = sectionContent;
+    if (sectionName && !sections[sectionName]) {
+      sections[sectionName] = sectionContent;
+    }
+  }
+  
+  // If we didn't find any sections with the first regex, try a more flexible approach
+  if (!matchFound || Object.keys(sections).length === 0) {
+    // Look for common section headers with various formatting
+    const commonSections = [
+      { name: "PROFILE", patterns: ["profile", "summary", "about me", "professional summary", "objective"] },
+      { name: "EXPERIENCE", patterns: ["experience", "work experience", "employment history", "professional experience", "work history"] },
+      { name: "EDUCATION", patterns: ["education", "academic background", "qualifications", "academic qualifications", "training"] },
+      { name: "SKILLS", patterns: ["skills", "technical skills", "core competencies", "competencies", "expertise", "key skills"] },
+      { name: "ACHIEVEMENTS", patterns: ["achievements", "accomplishments", "key achievements", "honors", "awards"] },
+      { name: "LANGUAGES", patterns: ["languages", "language skills", "language proficiency"] },
+      { name: "CERTIFICATIONS", patterns: ["certifications", "certificates", "professional certifications", "qualifications"] },
+      { name: "PROJECTS", patterns: ["projects", "key projects", "project experience", "relevant projects"] },
+      { name: "REFERENCES", patterns: ["references", "testimonials", "recommendations"] },
+      { name: "INTERESTS", patterns: ["interests", "hobbies", "activities", "personal interests"] },
+      { name: "PUBLICATIONS", patterns: ["publications", "papers", "articles", "research"] },
+      { name: "VOLUNTEER", patterns: ["volunteer", "volunteering", "community service", "community involvement"] }
+    ];
+    
+    // Split text by lines for processing
+    const lines = normalizedText.split('\n');
+    
+    // Find indices of potential section headers
+    const sectionIndices: { index: number; name: string }[] = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim().toLowerCase();
+      
+      // Skip empty lines
+      if (!line) continue;
+      
+      // Check if this line matches any of our common section headers
+      for (const section of commonSections) {
+        if (section.patterns.some(pattern => line.includes(pattern) && line.length < 40)) {
+          // If yes, add to section indices with standardized name
+          sectionIndices.push({ index: i, name: section.name });
+          break;
+        }
+      }
+    }
+    
+    // If we found sections, extract content between them
+    if (sectionIndices.length > 0) {
+      // Sort indices to process sections in order
+      sectionIndices.sort((a, b) => a.index - b.index);
+      
+      // Extract sections
+      for (let i = 0; i < sectionIndices.length; i++) {
+        const startIndex = sectionIndices[i].index;
+        const endIndex = i < sectionIndices.length - 1 ? sectionIndices[i + 1].index : lines.length;
+        const sectionName = sectionIndices[i].name;
+        
+        // Get content between this section header and the next (or end of text)
+        // Skip the header line itself (+1) and trim any empty lines
+        const sectionContent = lines.slice(startIndex + 1, endIndex)
+          .join('\n')
+          .trim();
+        
+        if (sectionContent && !sections[sectionName]) {
+          sections[sectionName] = sectionContent;
+        }
+      }
+    }
+  }
+  
+  // If we still don't have sections, make a best guess based on the structure
+  if (Object.keys(sections).length === 0) {
+    const lines = normalizedText.split('\n').filter(line => line.trim());
+    
+    // If we have at least some content, create a basic profile section
+    if (lines.length > 0) {
+      // First 3-5 lines are usually contact/profile info
+      const profileLines = lines.slice(0, Math.min(5, Math.ceil(lines.length / 5)));
+      sections["PROFILE"] = profileLines.join('\n');
+      
+      // Next significant chunk is usually experience
+      const experienceLines = lines.slice(
+        profileLines.length, 
+        Math.min(lines.length, profileLines.length + Math.ceil(lines.length / 2))
+      );
+      if (experienceLines.length > 0) {
+        sections["EXPERIENCE"] = experienceLines.join('\n');
+      }
+      
+      // Remaining content is usually education, skills, etc.
+      const remainingLines = lines.slice(profileLines.length + experienceLines.length);
+      if (remainingLines.length > 0) {
+        sections["SKILLS"] = remainingLines.join('\n');
+      }
+    }
   }
   
   return sections;

@@ -32,12 +32,13 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleAnalyze(cv: string) {
-    setSelectedCV(cv);
+  async function handleAnalyze() {
+    if (!selectedCV) return;
+    
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/analyze-cv?fileName=${encodeURIComponent(cv)}`);
+      const response = await fetch(`/api/analyze-cv?fileName=${encodeURIComponent(selectedCV)}`);
       const data = await response.json();
       if (data.error) {
         setError(data.error);
@@ -90,26 +91,25 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
       <CardContent className="p-6">
         {!analysis && (
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Select a CV to analyze
-            </label>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="md:col-span-3">
-                <ComboboxPopover
-                  options={cvs}
-                  label="Select a CV"
-                  onSelect={(cv) => setSelectedCV(cv)}
-                  accentColor="#B4916C"
-                  darkMode={true}
-                />
+            <div className="grid grid-cols-1 gap-4">
+              <div className="flex items-center space-x-2">
+                <div className="flex-grow">
+                  <ComboboxPopover
+                    options={cvs}
+                    label="Select a CV"
+                    onSelect={(cv) => setSelectedCV(cv)}
+                    accentColor="#B4916C"
+                    darkMode={true}
+                  />
+                </div>
+                <Button
+                  onClick={handleAnalyze}
+                  disabled={!selectedCV || loading}
+                  className="bg-[#B4916C] hover:bg-[#A3815C] text-white whitespace-nowrap"
+                >
+                  {loading ? "Analyzing..." : "Analyze"}
+                </Button>
               </div>
-              <Button
-                onClick={() => selectedCV && handleAnalyze(selectedCV)}
-                disabled={!selectedCV || loading}
-                className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
-              >
-                {loading ? "Analyzing..." : "Analyze"}
-              </Button>
             </div>
           </div>
         )}
