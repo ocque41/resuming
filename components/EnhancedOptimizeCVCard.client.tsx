@@ -6,19 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Download, RefreshCw, FileText, Check } from "lucide-react";
-import { ComboboxPopover } from "@/components/ui/combobox";
 import { Checkbox } from "@/components/ui/checkbox";
 import PDFPreview from './PDFPreview.client';
+import CVCombobox from './CVCombobox.client';
 
 // Interface for the component props
 interface EnhancedOptimizeCVCardProps {
   cvs?: string[]; // Format: "filename|id"
-}
-
-// Define type for dropdown options
-interface DropdownOption {
-  label: string;
-  value: string;
 }
 
 // Component implementation
@@ -55,60 +49,19 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   // Add a new state for automatic PDF conversion
   const [autoPdfConvert, setAutoPdfConvert] = useState<boolean>(false);
   
-  // Prepare CV options for the dropdown
-  const dropdownOptions = useMemo(() => {
-    if (!Array.isArray(cvs) || cvs.length === 0) {
-      console.error('No CVs available for selection.');
-      return [];
-    }
-
-    // Get just the name part from each CV string
-    return cvs.map(cv => {
-      const parts = cv.split('|');
-      if (parts.length < 2) {
-        console.error('Invalid CV format:', cv);
-        return null;
-      }
-      return parts[0].trim();
-    }).filter(Boolean) as string[];
-  }, [cvs]);
+  // Add a state to track optimization completion
+  const [optimizationCompleted, setOptimizationCompleted] = useState<boolean>(false);
   
-  // Helper function to get CV ID from name
-  const getCvIdFromName = useCallback((name: string) => {
-    if (!Array.isArray(cvs) || cvs.length === 0) {
-      return null;
-    }
-    
-    const matchedCv = cvs.find(cv => {
-      const parts = cv.split('|');
-      return parts[0]?.trim() === name;
-    });
-    
-    if (matchedCv) {
-      const parts = matchedCv.split('|');
-      return parts[1]?.trim() || null;
-    }
-    
-    return null;
-  }, [cvs]);
+  // Add a state to track stalled optimization
+  const [optimizationStalled, setOptimizationStalled] = useState<boolean>(false);
   
   // Handle CV selection
-  const handleCVSelect = useCallback((name: string) => {
-    console.log("CV selected:", name);
-    setSelectedCVName(name);
-    
-    const cvId = getCvIdFromName(name);
-    console.log("CV ID found:", cvId);
-    
-    if (cvId) {
-      setSelectedCVId(cvId);
-      setSelectedCV(`${name}|${cvId}`);
-    } else {
-      setError("Could not find CV ID for the selected CV. Please try another CV.");
-      setSelectedCVId(null);
-      setSelectedCV(null);
-    }
-  }, [getCvIdFromName]);
+  const handleCVSelect = useCallback((cvId: string, cvName: string) => {
+    console.log("CV selected:", cvName, "ID:", cvId);
+    setSelectedCVId(cvId);
+    setSelectedCVName(cvName);
+    setSelectedCV(`${cvName}|${cvId}`);
+  }, []);
   
   // Generate DOCX file from processed CV
   const handleGenerateDocx = useCallback(async () => {
@@ -240,6 +193,8 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     setIsProcessing(true);
     setProgress(5);
     setProcessingStep("Initiating CV optimization");
+    setOptimizationCompleted(false);
+    setOptimizationStalled(false);
     
     // Reset any previous processing states
     setIsProcessed(false);
@@ -270,6 +225,8 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       
       // Start polling for status updates
       let statusCheckCount = 0;
+      let stalledProgressCount = 0;
+      let lastProgress = 0;
       const maxStatusChecks = 40; // Limit the number of status checks (2 minutes at 3-second intervals)
       
       const statusInterval = setInterval(async () => {
@@ -305,7 +262,37 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
           
           // Update progress
           if (statusData.processingProgress) {
-            setProgress(Math.min(95, statusData.processingProgress)); // Cap at 95% until fully complete
+            // Check if progress is stalled
+            if (statusData.processingProgress === lastProgress) {
+              stalledProgressCount++;
+              
+              // If progress is stalled for too long, force completion
+              if (stalledProgressCount >= 5 && statusData.processingProgress >= 95) {
+                console.log("Progress stalled at 95% or higher, forcing completion");
+                setOptimizationStalled(true);
+                clearInterval(statusInterval);
+                setIsProcessing(false);
+                setIsProcessed(true);
+                setProgress(100);
+                
+                // Update ATS scores
+                setOriginalAtsScore(statusData.atsScore || 65);
+                setImprovedAtsScore(statusData.improvedAtsScore || 85);
+                
+                // Automatically start generating DOCX if processing is completed
+                setTimeout(() => {
+                  console.log("Auto-generating DOCX after forced completion");
+                  handleGenerateDocx();
+                }, 1000);
+                
+                return;
+              }
+            } else {
+              stalledProgressCount = 0;
+              lastProgress = statusData.processingProgress;
+            }
+            
+            setProgress(Math.min(99, statusData.processingProgress)); // Cap at 99% until fully complete
           }
           
           if (statusData.processingStatus) {
@@ -319,6 +306,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             setIsProcessing(false);
             setIsProcessed(true);
             setProgress(100);
+            setOptimizationCompleted(true);
             
             // Update ATS scores
             setOriginalAtsScore(statusData.atsScore || 65);
@@ -437,6 +425,8 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     setPdfConverted(false);
     setPdfBase64(null);
     setAutoPdfConvert(false);
+    setOptimizationCompleted(false);
+    setOptimizationStalled(false);
   }, []);
   
   // Effect to handle automatic PDF conversion
@@ -470,16 +460,12 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         docxGenerated,
         pdfConverted,
         hasPdfData: !!pdfBase64,
-        hasDocxData: !!docxBase64
+        hasDocxData: !!docxBase64,
+        optimizationCompleted,
+        optimizationStalled
       });
     }
-  }, [pdfBase64, pdfConverted, isProcessed, isProcessing, docxGenerated, isGeneratingDocx, error, handleGenerateDocx, docxBase64]);
-
-  // Debug log for props and state
-  useEffect(() => {
-    console.log("EnhancedOptimizeCVCard props:", { cvs });
-    console.log("Dropdown options:", dropdownOptions);
-  }, [cvs, dropdownOptions]);
+  }, [pdfBase64, pdfConverted, isProcessed, isProcessing, docxGenerated, isGeneratingDocx, error, handleGenerateDocx, docxBase64, optimizationCompleted, optimizationStalled]);
 
   return (
     <Card className="w-full bg-[#050505] border-gray-800 shadow-xl overflow-hidden">
@@ -493,13 +479,13 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       <CardContent className="p-4 sm:p-6">
         {!isProcessed && !isProcessing && (
           <div className="mb-6">
-            {dropdownOptions.length > 0 ? (
+            {cvs.length > 0 ? (
               <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0 mb-4">
                 <div className="w-full">
-                  <ComboboxPopover
-                    options={dropdownOptions}
-                    label="Select a CV"
+                  <CVCombobox
+                    cvs={cvs}
                     onSelect={handleCVSelect}
+                    placeholder="Select a CV"
                     accentColor="#B4916C"
                     darkMode={true}
                   />
@@ -698,6 +684,16 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
               Convert to PDF
             </Button>
           </div>
+        )}
+        
+        {/* Message for stalled optimization */}
+        {optimizationStalled && (
+          <Alert className="mt-4 bg-yellow-900/20 text-yellow-400 border border-yellow-900">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              The optimization process took longer than expected to complete. We've proceeded with the available results. If you encounter any issues, please try the process again.
+            </AlertDescription>
+          </Alert>
         )}
       </CardContent>
     </Card>

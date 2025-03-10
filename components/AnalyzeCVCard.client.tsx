@@ -3,11 +3,11 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ComboboxPopover } from "@/components/ui/combobox";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, BarChart2, Building, FileText, ArrowRight } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getIndustrySpecificAtsInsights } from "@/lib/cvAnalyzer";
+import CVCombobox from "@/components/CVCombobox.client";
 
 interface AnalysisResult {
   atsScore: number | string;
@@ -19,6 +19,9 @@ interface AnalysisResult {
   sectionBreakdown?: { [key: string]: string };
   industryInsight?: string;
   targetRoles?: string[];
+  formattingStrengths?: string[];
+  formattingWeaknesses?: string[];
+  formattingRecommendations?: string[];
 }
 
 interface AnalyzeCVCardProps {
@@ -28,64 +31,18 @@ interface AnalyzeCVCardProps {
 }
 
 export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: AnalyzeCVCardProps) {
-  const [selectedCV, setSelectedCV] = useState<string | null>(null);
   const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
   const [selectedCVName, setSelectedCVName] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Prepare CV options for the dropdown
-  const dropdownOptions = useCallback(() => {
-    if (!Array.isArray(cvs)) {
-      console.error("CV options is not an array:", cvs);
-      return [];
-    }
-    
-    return cvs.map(cv => {
-      if (typeof cv !== 'string') {
-        console.error("CV option is not a string:", cv);
-        return null;
-      }
-      
-      const parts = cv.split('|');
-      return parts[0] ? parts[0].trim() : null;
-    }).filter(Boolean) as string[];
-  }, [cvs]);
-  
-  // Get CV ID from filename
-  const getCvIdFromName = useCallback((name: string) => {
-    if (!Array.isArray(cvs)) return null;
-    
-    const matchingCv = cvs.find(cv => {
-      if (typeof cv !== 'string') return false;
-      const parts = cv.split('|');
-      return parts[0] && parts[0].trim() === name;
-    });
-    
-    if (!matchingCv) return null;
-    
-    const parts = matchingCv.split('|');
-    return parts[1] || null;
-  }, [cvs]);
-  
   // Handle CV selection
-  const handleCVSelect = useCallback((name: string) => {
-    console.log("CV selected for analysis:", name);
-    setSelectedCVName(name);
-    
-    const cvId = getCvIdFromName(name);
-    console.log("CV ID found for analysis:", cvId);
-    
-    if (cvId) {
-      setSelectedCVId(cvId);
-      setSelectedCV(`${name}|${cvId}`);
-    } else {
-      setError("Could not find CV ID for the selected CV. Please try another CV.");
-      setSelectedCVId(null);
-      setSelectedCV(null);
-    }
-  }, [getCvIdFromName]);
+  const handleCVSelect = useCallback((cvId: string, cvName: string) => {
+    console.log("CV selected for analysis:", cvName, "ID:", cvId);
+    setSelectedCVId(cvId);
+    setSelectedCVName(cvName);
+  }, []);
 
   async function handleAnalyze() {
     if (!selectedCVName || !selectedCVId) {
@@ -117,7 +74,34 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
           }
         }
         
+        // Add formatting-specific analysis
+        data.formattingStrengths = generateFormattingStrengths(data);
+        data.formattingWeaknesses = generateFormattingWeaknesses(data);
+        data.formattingRecommendations = generateFormattingRecommendations(data);
+        
         setAnalysis(data);
+        
+        // Store the enhanced analysis in the database
+        try {
+          await fetch('/api/update-cv-analysis', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              cvId: selectedCVId,
+              analysis: {
+                ...data,
+                formattingStrengths: data.formattingStrengths,
+                formattingWeaknesses: data.formattingWeaknesses,
+                formattingRecommendations: data.formattingRecommendations
+              }
+            }),
+          });
+        } catch (updateError) {
+          console.error("Error updating analysis metadata:", updateError);
+          // Continue despite the error
+        }
         
         // Notify parent component that analysis is complete
         if (onAnalysisComplete && selectedCVId) {
@@ -130,6 +114,134 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
     } finally {
       setLoading(false);
     }
+  }
+
+  // Generate formatting-specific strengths
+  function generateFormattingStrengths(analysis: AnalysisResult): string[] {
+    const strengths: string[] = [];
+    const sections = analysis.sectionBreakdown || {};
+    
+    // Check for well-structured sections
+    if (Object.keys(sections).length >= 4) {
+      strengths.push("Well-structured with clear section divisions");
+    }
+    
+    // Check for appropriate length
+    let totalLength = 0;
+    for (const section of Object.values(sections)) {
+      totalLength += section.length;
+    }
+    
+    if (totalLength > 1500 && totalLength < 5000) {
+      strengths.push("Appropriate CV length for ATS scanning");
+    }
+    
+    // Check for consistent formatting
+    if (sections.experience && sections.experience.includes('\n')) {
+      const lines = sections.experience.split('\n');
+      const bulletPoints = lines.filter(line => line.trim().startsWith('•') || line.trim().startsWith('-')).length;
+      
+      if (bulletPoints > 3) {
+        strengths.push("Good use of bullet points to highlight achievements");
+      }
+    }
+    
+    // Check for contact information
+    if (sections.contact && sections.contact.length > 50) {
+      strengths.push("Complete contact information section");
+    }
+    
+    // Check for skills section
+    if (sections.skills && sections.skills.length > 100) {
+      strengths.push("Comprehensive skills section that aids ATS matching");
+    }
+    
+    // Return top 3 strengths
+    return strengths.slice(0, 3);
+  }
+  
+  // Generate formatting-specific weaknesses
+  function generateFormattingWeaknesses(analysis: AnalysisResult): string[] {
+    const weaknesses: string[] = [];
+    const sections = analysis.sectionBreakdown || {};
+    
+    // Check for missing important sections
+    const importantSections = ['summary', 'experience', 'education', 'skills'];
+    for (const section of importantSections) {
+      if (!sections[section] || sections[section].length < 50) {
+        weaknesses.push(`Missing or underdeveloped ${section} section`);
+      }
+    }
+    
+    // Check for overly long sections
+    for (const [name, content] of Object.entries(sections)) {
+      if (content.length > 2000) {
+        weaknesses.push(`${name.charAt(0).toUpperCase() + name.slice(1)} section is too verbose`);
+      }
+    }
+    
+    // Check for keyword density
+    if (analysis.keywordAnalysis && Object.keys(analysis.keywordAnalysis).length < 10) {
+      weaknesses.push("Low keyword density for ATS optimization");
+    }
+    
+    // Check for potential formatting issues
+    if (analysis.atsScore && typeof analysis.atsScore === 'number' && analysis.atsScore < 70) {
+      weaknesses.push("Potential formatting issues affecting ATS compatibility");
+    }
+    
+    // Return top 3 weaknesses
+    return weaknesses.slice(0, 3);
+  }
+  
+  // Generate formatting-specific recommendations
+  function generateFormattingRecommendations(analysis: AnalysisResult): string[] {
+    const recommendations: string[] = [];
+    const sections = analysis.sectionBreakdown || {};
+    
+    // Recommend adding missing sections
+    const importantSections = ['summary', 'experience', 'education', 'skills'];
+    for (const section of importantSections) {
+      if (!sections[section] || sections[section].length < 50) {
+        recommendations.push(`Add a clear ${section} section with appropriate headings`);
+      }
+    }
+    
+    // Recommend bullet points for readability
+    if (sections.experience && !sections.experience.includes('•') && !sections.experience.includes('-')) {
+      recommendations.push("Use bullet points to highlight achievements in your experience section");
+    }
+    
+    // Recommend consistent formatting
+    recommendations.push("Ensure consistent formatting throughout your CV (fonts, spacing, bullet styles)");
+    
+    // Recommend appropriate section headers
+    recommendations.push("Use standard section headers that ATS systems can easily recognize");
+    
+    // Recommend keyword optimization
+    if (analysis.industry) {
+      recommendations.push(`Include more ${analysis.industry}-specific keywords throughout your CV`);
+    } else {
+      recommendations.push("Include more industry-specific keywords throughout your CV");
+    }
+    
+    // Recommend quantifiable achievements
+    recommendations.push("Add metrics and numbers to quantify your achievements");
+    
+    // Recommend appropriate length
+    let totalLength = 0;
+    for (const section of Object.values(sections)) {
+      totalLength += section.length;
+    }
+    
+    if (totalLength < 1000) {
+      recommendations.push("Expand your CV with more detailed information about your experience and skills");
+    } else if (totalLength > 6000) {
+      recommendations.push("Consider condensing your CV to focus on the most relevant information");
+    }
+    
+    // Return top 3 recommendations
+    return recommendations.slice(0, 3);
   }
 
   const formatAtsScore = (score: number | string): string => {
@@ -148,12 +260,6 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
       .map(([keyword, score]) => ({ keyword, score }));
   };
 
-  // Debug log for props and state
-  useEffect(() => {
-    console.log("AnalyzeCVCard props:", { cvs });
-    console.log("Dropdown options:", dropdownOptions());
-  }, [cvs, dropdownOptions]);
-
   return (
     <Card className="w-full bg-[#050505] border-gray-800 shadow-xl overflow-hidden">
       <CardHeader className="bg-[#0A0A0A] border-b border-gray-800 pb-3">
@@ -168,12 +274,12 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
           <div className="mb-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0 mb-4">
               <div className="w-full">
-                <ComboboxPopover
-                  options={dropdownOptions()}
-                  label="Select a CV"
+                <CVCombobox
+                  cvs={cvs}
                   onSelect={handleCVSelect}
-                  accentColor="#B4916C"
+                  placeholder="Select a CV"
                   darkMode={true}
+                  accentColor="#B4916C"
                 />
               </div>
               <Button
@@ -235,6 +341,33 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
               )}
             </div>
             
+            <div>
+              <h3 className="text-lg font-semibold text-white mb-2">CV Format Strengths</h3>
+              <ul className="list-disc list-inside text-gray-300 space-y-1">
+                {(analysis.formattingStrengths || []).map((strength, index) => (
+                  <li key={`format-strength-${index}`} className="text-sm">{strength}</li>
+                ))}
+              </ul>
+            </div>
+            
+            <div>
+              <h3 className="text-lg font-semibold text-white mb-2">CV Format Weaknesses</h3>
+              <ul className="list-disc list-inside text-gray-300 space-y-1">
+                {(analysis.formattingWeaknesses || []).map((weakness, index) => (
+                  <li key={`format-weakness-${index}`} className="text-sm">{weakness}</li>
+                ))}
+              </ul>
+            </div>
+            
+            <div>
+              <h3 className="text-lg font-semibold text-white mb-2">CV Format Recommendations</h3>
+              <ul className="list-disc list-inside text-gray-300 space-y-1">
+                {(analysis.formattingRecommendations || []).map((recommendation, index) => (
+                  <li key={`format-recommendation-${index}`} className="text-sm">{recommendation}</li>
+                ))}
+              </ul>
+            </div>
+            
             {analysis.industry && (
               <div>
                 <h3 className="text-lg font-semibold text-white mb-2 flex items-center">
@@ -251,33 +384,6 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
                 )}
               </div>
             )}
-            
-            <div>
-              <h3 className="text-lg font-semibold text-white mb-2">Strengths</h3>
-              <ul className="list-disc list-inside text-gray-300 space-y-1">
-                {analysis.strengths.map((strength, index) => (
-                  <li key={`strength-${index}`} className="text-sm">{strength}</li>
-                ))}
-              </ul>
-            </div>
-            
-            <div>
-              <h3 className="text-lg font-semibold text-white mb-2">Weaknesses</h3>
-              <ul className="list-disc list-inside text-gray-300 space-y-1">
-                {analysis.weaknesses.map((weakness, index) => (
-                  <li key={`weakness-${index}`} className="text-sm">{weakness}</li>
-                ))}
-              </ul>
-            </div>
-            
-            <div>
-              <h3 className="text-lg font-semibold text-white mb-2">Recommendations</h3>
-              <ul className="list-disc list-inside text-gray-300 space-y-1">
-                {analysis.recommendations.map((recommendation, index) => (
-                  <li key={`recommendation-${index}`} className="text-sm">{recommendation}</li>
-                ))}
-              </ul>
-            </div>
             
             {analysis.keywordAnalysis && (
               <div>
