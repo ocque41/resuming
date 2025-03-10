@@ -29,6 +29,40 @@ interface AnalyzeCVCardProps {
   children?: React.ReactNode;
 }
 
+// New SimpleFileDropdown component to replace the problematic dropdown
+function SimpleFileDropdown({ cvs, onSelect, selectedCVName }: { cvs: string[]; onSelect: (cvId: string, cvName: string) => void; selectedCVName?: string; }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative w-full">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full px-3 py-2 bg-[#121212] border border-gray-700 text-gray-300 rounded"
+      >
+        {selectedCVName || "Select a CV"}
+      </button>
+      {open && (
+        <ul className="absolute z-10 bg-[#121212] border border-gray-700 w-full rounded mt-1 max-h-60 overflow-auto">
+          {(cvs || []).map(cv => {
+            const parts = cv.split('|');
+            if (parts.length >= 2) {
+              return (
+                <li
+                  key={parts[1]}
+                  className="px-3 py-2 hover:bg-gray-600 cursor-pointer"
+                  onClick={() => { setOpen(false); onSelect(parts[1].trim(), parts[0].trim()); }}
+                >
+                  {parts[0].trim()}
+                </li>
+              );
+            }
+            return null;
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: AnalyzeCVCardProps) {
   const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
   const [selectedCVName, setSelectedCVName] = useState<string | null>(null);
@@ -36,6 +70,17 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allowProceed, setAllowProceed] = useState<boolean>(false);
+
+  // Auto-select the first CV if available
+  useEffect(() => {
+    if (cvs && cvs.length > 0 && !selectedCVId) {
+      const parts = cvs[0].split('|');
+      if (parts.length >= 2) {
+        setSelectedCVId(parts[1].trim());
+        setSelectedCVName(parts[0].trim());
+      }
+    }
+  }, [cvs, selectedCVId]);
 
   // Handle CV selection
   const handleCVSelect = useCallback((cvId: string, cvName: string) => {
@@ -277,23 +322,7 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
           <div className="mb-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0 mb-4">
               <div className="w-full">
-                <select
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value) {
-                      const [name, id] = value.split('|');
-                      handleCVSelect(id, name);
-                    }
-                  }}
-                  defaultValue=""
-                  className="min-w-full px-3 py-2 bg-[#121212] border border-gray-700 text-gray-300 rounded"
-                >
-                  <option value="" disabled>Select a CV</option>
-                  {cvs.map((cv) => {
-                    const parts = cv.split('|');
-                    return <option key={parts[1]} value={cv}>{parts[0]}</option>;
-                  })}
-                </select>
+                <SimpleFileDropdown cvs={cvs} selectedCVName={selectedCVName || ""} onSelect={handleCVSelect} />
               </div>
               <Button
                 onClick={handleAnalyze}
@@ -347,11 +376,15 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
             
             <div>
               <h3 className="text-lg font-semibold text-white mb-2">CV Format Strengths</h3>
-              <ul className="list-disc list-inside text-gray-300 space-y-1">
-                {(analysis.formattingStrengths || []).map((strength, index) => (
-                  <li key={`format-strength-${index}`} className="text-sm">{strength}</li>
-                ))}
-              </ul>
+              {(analysis.formattingStrengths && analysis.formattingStrengths.length > 0) ? (
+                <ul className="list-disc list-inside text-gray-300 space-y-1">
+                  {analysis.formattingStrengths.map((strength, index) => (
+                    <li key={`format-strength-${index}`} className="text-sm">{strength}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-gray-300">No strengths</p>
+              )}
             </div>
             
             <div>
@@ -414,7 +447,14 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
                   </AlertDescription>
                 </Alert>
                 <Button 
-                  onClick={handleProceedToOptimize}
+                  onClick={() => {
+                    if (!selectedCVId) {
+                      alert('No CV selected');
+                      return;
+                    }
+                    console.log('Proceeding to Optimization with CV ID:', selectedCVId);
+                    onAnalysisComplete(selectedCVId);
+                  }}
                   className="bg-[#B4916C] hover:bg-[#A3815C] text-white w-full sm:w-auto"
                 >
                   Proceed to Optimization <ArrowRight className="ml-2 h-4 w-4" />

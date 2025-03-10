@@ -105,6 +105,9 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
             <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-[#B4916C] mr-2" />
             <h2 className="text-base sm:text-lg font-medium text-white">Optimize Your CV</h2>
           </div>
+          <p className="text-sm text-gray-400 mt-2">
+            Recommendation: Ensure your CV includes clear section divisions, accurate contact information, and a comprehensive skills section to maximize optimization results.
+          </p>
           <EnhancedOptimizeCVCard 
             cvs={getOptimizeCVs()} 
           />
