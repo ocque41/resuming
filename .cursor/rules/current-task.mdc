@@ -6,45 +6,67 @@ globs:
 
 **Workflow & Responsibilities:**
 
-1. **PDF Upload:**
-    - Users will upload their CV in PDF format.
-    - The file is sent to a backend API, and immediately upon receipt, a call is made to Chat-GPT Model 4o to initiate a preliminary analysis.
-2. **Backend API Processing & Text Extraction:**
-    - The backend API processes the PDF file using robust PDF parsing libraries.
-    - **Call to Chat-GPT Model 4o:** The extracted raw text is forwarded to Chat-GPT Model 4o, which is responsible for:
-        - Parsing the CV content.
-        - Extracting all metadata (e.g., contact details, work experience, education, skills, certifications).
-        - Generating an initial structured metadata object.
-3. **Deep Analysis & ATS Scoring:**
-    - The system references a comprehensive system-reference file that details best practices in hiring and ATS processes.
-    - **Call to Chat-GPT Model 4o:** This agent uses the extracted metadata and the reference file to:
-        - Perform a detailed analysis of the CV.
-        - Identify strengths, weaknesses, and gaps.
-        - Calculate an accurate ATS score (in percentage) based on industry standards.
-        - Provide detailed recommendations on how to improve each section.
-4. **DOCX Generation with Optimized Layout:**
-    - Based on the metadata and ATS analysis, a new DOCX file is generated with the following structured layout:
-        - **Profile:** A refined “About Me” section.
-        - **Achievements:** Three bullet points summarizing the user’s top career achievements.
-        - **Experience:** Detailed work experience entries (company, duration, and three major achievements per role).
-        - **Skills:** A comprehensive list of all software proficiencies and competencies.
-        - **Education:** Academic qualifications.
-        - **Languages:** Language proficiencies.
-    - **Call to Chat-GPT Model 4o:** The agent is responsible for organizing and generating the optimized content for each section. It ensures that the generated DOCX reflects the best practices for ATS optimization.
-    - Once generated, the DOCX file is stored in the Dropbox database, and the user’s CV collection table is updated to reference this new file.
-5. **Optimization Process Trigger:**
-    - When the user clicks the “Optimize” feature, the system retrieves the stored DOCX file.
-    - **Call to Chat-GPT Model 4o:** The agent is invoked again to:
-        - Re-assess the current DOCX file content.
-        - Re-extract metadata if necessary.
-        - Use AI optimization to refine each section (Profile, Achievements, Experience, Skills, Education, Languages) based on the previously generated recommendations.
-    - The optimized content is then injected into the DOCX document using the same layout as specified, ensuring consistency with the provided reference design.
-6. **DOCX to PDF Conversion & User Interaction:**
-    - The updated DOCX file is converted back to PDF using a reliable conversion tool.
-    - A preview of the final optimized PDF is presented to the user.
-    - **User Choices:**
-        - If the user accepts the optimized CV, they are given the option to download it as a PDF or DOCX.
-        - If not, they can trigger a re-optimization process from scratch.
+Overall Workflow & Tool Integration:
+PDF Upload and Initial Processing:
+
+User Action: The user uploads a CV in PDF format.
+Backend Handling: The file is sent to a backend API where pdf-parse is used to extract raw text and layout details.
+GPT-4o Call: Immediately after extraction, GPT-4o is called to perform an initial analysis of the PDF content, extracting essential metadata (e.g., contact information, work history, education, skills).
+Deep Metadata Extraction and ATS Analysis:
+
+Reference Material: Utilize a comprehensive system-reference file outlining current hiring practices and ATS requirements.
+GPT-4o Role:
+Analyze the extracted metadata.
+Generate a structured metadata object.
+Compute an ATS compatibility score (expressed as a percentage) by comparing the CV details with best practices.
+Provide detailed feedback and recommendations for improvement across every CV section.
+DOCX Generation Using Microsoft Word Libraries:
+
+Tool: Use a robust DOCX generation library (like the docx npm package) to create a new, editable document.
+Layout Structure: The DOCX should be organized with clearly defined sections:
+Profile: A refined “About Me” section.
+Achievements: Three key bullet points summarizing top career accomplishments.
+Experience: Detailed work experience entries with company name, date range, and three major achievements for each role.
+Skills: Comprehensive listing of all relevant skills and software proficiencies.
+Education: Academic background.
+Languages: Language proficiencies.
+GPT-4o Call: GPT-4o is invoked to re-organize and enhance the content for each section based on the extracted metadata and ATS recommendations. It also formats the content to align with best practices.
+Storage: The generated DOCX file is saved to Dropbox, and the user’s CV collection in the database is updated to reference this new version.
+Optimization Process with GPT-4o-Driven AI Enhancements:
+
+Trigger: When the user clicks the “Optimize” button, the system retrieves the stored DOCX file.
+GPT-4o Role:
+Re-extract and re-assess the metadata from the DOCX.
+Use its AI capabilities to optimize each section—Profile, Achievements, Experience, Skills, Education, Languages—by refining the content, enhancing clarity, and ensuring compliance with ATS criteria.
+Integrate any additional recommendations (e.g., using industry-specific keywords) to improve the overall CV effectiveness.
+DOCX to PDF Conversion and Adobe Acrobat Integration:
+
+Tool Options:
+Use Adobe Acrobat APIs or similar robust conversion tools to convert the optimized DOCX file back into a PDF format while preserving the layout and design.
+Ensure that the conversion process maintains all formatting and design elements.
+GPT-4o Role: Validate that the final PDF meets the structured layout and quality standards by comparing it to a reference design.
+User Interaction and Final Output:
+
+Preview Stage: The final PDF is presented to the user for preview.
+User Options:
+If satisfied, the user can download the CV in either PDF or DOCX format.
+If further adjustments are needed, the user can initiate a re-optimization process.
+Error Handling & Feedback: Throughout the process, any errors or inconsistencies trigger a call to GPT-4o for diagnostic analysis and troubleshooting recommendations.
+Additional Considerations & Best Practices:
+Modular Architecture:
+Develop each component (PDF parsing, metadata extraction, DOCX generation, AI optimization, and PDF conversion) as independent modules to ease debugging and maintenance.
+Asynchronous Processing:
+Implement asynchronous calls to GPT-4o and other external services to reduce latency and improve user experience.
+Robust Logging & Error Handling:
+Ensure every step logs detailed diagnostics. Use GPT-4o to provide actionable insights if errors occur.
+Security & Data Integrity:
+Secure all API interactions (Dropbox, Adobe, etc.) and ensure that user data is handled with strict privacy and security measures.
+Performance Optimization:
+Cache repetitive AI calls where applicable, and optimize file handling to reduce processing times.
+Final Objective:
+The entire process should operate seamlessly with GPT-4o managing and coordinating every aspect—from the initial PDF upload, through detailed metadata analysis, content optimization, document generation, conversion, and final preview—ensuring that the final CV output is not only ATS-friendly but also professionally structured and ready for any hiring process.
+
+This comprehensive prompt now incorporates a broader suite of tools while ensuring that GPT-4o is at the center of every operation. The approach is designed to be both flexible and scalable. If you have any further preferences or need additional optimizations, please let me know, and we can refine this strategy even further.
 
 **Additional Instructions & Best Practices:**
 

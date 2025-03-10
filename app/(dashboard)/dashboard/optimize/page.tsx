@@ -24,23 +24,27 @@ export default async function OptimizePage() {
   
   return (
     <div className="min-h-screen bg-black text-white">
-      <div className="px-4 py-4 max-w-md mx-auto">
-        {/* Back button */}
-        <div className="mb-6 flex items-center">
+      <div className="max-w-md mx-auto px-4 sm:px-6 py-6 relative">
+        {/* Back button - simple arrow */}
+        <div className="absolute top-6 left-4">
           <Link 
             href="/dashboard" 
-            className="flex items-center text-gray-400 hover:text-[#B4916C] transition-colors"
+            className="inline-flex items-center justify-center h-8 w-8 rounded-full hover:bg-gray-800 text-gray-400 hover:text-[#B4916C] transition-colors"
+            aria-label="Back to dashboard"
           >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            <span>Back to Dashboard</span>
+            <ArrowLeft className="h-5 w-5" />
           </Link>
         </div>
         
-        <h1 className="text-xl md:text-2xl font-bold mb-4 text-center">Optimize Your CV</h1>
+        <h1 className="text-xl md:text-2xl font-bold mb-8 text-center mt-2">
+          Optimize Your CV
+        </h1>
         
-        <ErrorBoundaryWrapper>
-          <OptimizationWorkflow cvs={formattedCvs} />
-        </ErrorBoundaryWrapper>
+        <div className="mt-6">
+          <ErrorBoundaryWrapper>
+            <OptimizationWorkflow cvs={formattedCvs} />
+          </ErrorBoundaryWrapper>
+        </div>
       </div>
     </div>
   );

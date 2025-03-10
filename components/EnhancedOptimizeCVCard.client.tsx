@@ -5,10 +5,85 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Download, RefreshCw, FileText, Check } from "lucide-react";
+import { AlertCircle, Download, RefreshCw, FileText, Check, Eye } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import PDFPreview from './PDFPreview.client';
-import CVCombobox from './CVCombobox.client';
+
+// Modern SimpleFileDropdown component
+function ModernFileDropdown({ 
+  cvs, 
+  onSelect, 
+  selectedCVName 
+}: { 
+  cvs: string[]; 
+  onSelect: (cvId: string, cvName: string) => void; 
+  selectedCVName?: string | null; 
+}) {
+  const [open, setOpen] = useState(false);
+  
+  return (
+    <div className="relative w-full">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full px-4 py-3 bg-[#0A0A0A] border border-gray-800 hover:border-[#B4916C] text-gray-300 rounded-md flex justify-between items-center transition-colors duration-200"
+      >
+        <span className="truncate">{selectedCVName || "Select a CV"}</span>
+        <svg 
+          className={`w-4 h-4 ml-2 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} 
+          fill="none" 
+          stroke="currentColor" 
+          viewBox="0 0 24 24" 
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      
+      {open && (
+        <div className="absolute z-50 w-full mt-1 bg-[#0A0A0A] border border-gray-800 rounded-md overflow-hidden shadow-lg">
+          <div className="max-h-60 overflow-y-auto py-1">
+            {(cvs || []).length > 0 ? (
+              (cvs || []).map(cv => {
+                try {
+                  const parts = cv.split('|');
+                  if (parts.length >= 2) {
+                    const name = parts[0].trim();
+                    const id = parts[1].trim();
+                    return (
+                      <div
+                        key={id}
+                        className={`px-4 py-2 cursor-pointer hover:bg-gray-800 transition-colors duration-100 ${
+                          selectedCVName === name ? 'bg-[#B4916C]/10 text-[#B4916C]' : 'text-gray-300'
+                        }`}
+                        onClick={() => { 
+                          setOpen(false); 
+                          onSelect(id, name); 
+                        }}
+                      >
+                        <div className="flex items-center">
+                          <FileText className="w-4 h-4 mr-2 flex-shrink-0" />
+                          <span className="truncate">{name}</span>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                } catch (error) {
+                  console.error("Error rendering CV option:", error);
+                  return null;
+                }
+              })
+            ) : (
+              <div className="px-4 py-3 text-gray-500 text-center">
+                No CVs available
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Interface for the component props
 interface EnhancedOptimizeCVCardProps {
@@ -58,6 +133,22 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   // Add new state for PDF preview
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   
+  // Auto-select the first CV if available
+  useEffect(() => {
+    if (cvs && cvs.length > 0 && !selectedCVId) {
+      try {
+        const parts = cvs[0].split('|');
+        if (parts.length >= 2) {
+          setSelectedCVId(parts[1].trim());
+          setSelectedCVName(parts[0].trim());
+          setSelectedCV(cvs[0]);
+        }
+      } catch (error) {
+        console.error("Error auto-selecting first CV:", error);
+      }
+    }
+  }, [cvs, selectedCVId]);
+  
   // Handle CV selection
   const handleCVSelect = useCallback((cvId: string, cvName: string) => {
     console.log("CV selected:", cvName, "ID:", cvId);
@@ -66,7 +157,11 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     setSelectedCV(`${cvName}|${cvId}`);
   }, []);
   
-  // Generate DOCX file from processed CV
+  const handleTogglePreview = useCallback(() => {
+    setShowPdfPreview(prev => !prev);
+  }, []);
+
+  // Generate DOCX file from processed CV with enhanced error handling
   const handleGenerateDocx = useCallback(async () => {
     if (!selectedCVId) {
       setError("CV ID not found. Please try selecting your CV again.");
@@ -135,7 +230,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       setAutoPdfConvert(true);
     } catch (error) {
       console.error("DOCX generation error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to generate DOCX file";
       
       // For demo purposes, generate mock data even on error
       console.warn("Using mock data after error for demo purposes");
@@ -155,6 +249,46 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       }, 1500);
     }
   }, [selectedCVId]);
+
+  // Update download handlers with validity checks
+  const handleDownloadDocx = useCallback(() => {
+    if (!docxBase64 || docxBase64.length < 100) {
+      alert('DOCX file is not generated correctly.');
+      return;
+    }
+    const link = document.createElement('a');
+    link.href = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${docxBase64}`;
+    link.download = `optimized-cv.docx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [docxBase64]);
+  
+  const handleDownloadDoc = useCallback(() => {
+    if (!docxBase64 || docxBase64.length < 100) {
+      alert('DOC file is not generated correctly.');
+      return;
+    }
+    const link = document.createElement('a');
+    link.href = `data:application/msword;base64,${docxBase64}`;
+    link.download = `optimized-cv.doc`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [docxBase64]);
+  
+  const handleDownloadPdf = useCallback(() => {
+    if (!pdfBase64 || pdfBase64.length < 100) {
+      alert('PDF file is not generated correctly.');
+      return;
+    }
+    const link = document.createElement('a');
+    link.href = `data:application/pdf;base64,${pdfBase64}`;
+    link.download = `optimized-cv.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [pdfBase64]);
   
   // Handle PDF conversion from DOCX
   const handleConvertToPdf = useCallback(async () => {
@@ -252,6 +386,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     setProcessingStep("Initiating CV optimization");
     setOptimizationCompleted(false);
     setOptimizationStalled(false);
+    setShowPdfPreview(false);
     
     // Reset any previous processing states
     setIsProcessed(false);
@@ -322,7 +457,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             // Check if progress is stalled
             if (statusData.processingProgress === lastProgress) {
               stalledProgressCount++;
-
+              
               // If progress is stalled for too long, force completion regardless of progress value
               if (stalledProgressCount >= 2) {
                 console.log("Progress stalled, forcing completion");
@@ -331,7 +466,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                 setIsProcessing(false);
                 setIsProcessed(true);
                 setProgress(100);
-
+                
                 // Update ATS scores - calculate a random improvement between 10-25%
                 const baseScore = statusData.atsScore || Math.floor(Math.random() * 20) + 60; // Random base score between 60-80 if not provided
                 const improvement = Math.floor(Math.random() * 15) + 10; // Random improvement between 10-25
@@ -339,13 +474,13 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                 
                 setOriginalAtsScore(baseScore);
                 setImprovedAtsScore(improvedScore);
-
+                
                 // Automatically start generating DOCX if processing is completed
                 setTimeout(() => {
                   console.log("Auto-generating DOCX after forced completion");
                   handleGenerateDocx();
                 }, 1000);
-
+                
                 return;
               }
             } else {
@@ -444,46 +579,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     }
   }, [errorType, handleProcessCV, handleGenerateDocx, handleConvertToPdf]);
   
-  // Update download handlers with validity checks
-  const handleDownloadDocx = useCallback(() => {
-    if (!docxBase64 || docxBase64.length < 100) {
-      alert('DOCX file is not generated correctly.');
-      return;
-    }
-    const link = document.createElement('a');
-    link.href = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${docxBase64}`;
-    link.download = `optimized-cv.docx`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }, [docxBase64]);
-  
-  const handleDownloadDoc = useCallback(() => {
-    if (!docxBase64 || docxBase64.length < 100) {
-      alert('DOC file is not generated correctly.');
-      return;
-    }
-    const link = document.createElement('a');
-    link.href = `data:application/msword;base64,${docxBase64}`;
-    link.download = `optimized-cv.doc`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }, [docxBase64]);
-  
-  const handleDownloadPdf = useCallback(() => {
-    if (!pdfBase64 || pdfBase64.length < 100) {
-      alert('PDF file is not generated correctly.');
-      return;
-    }
-    const link = document.createElement('a');
-    link.href = `data:application/pdf;base64,${pdfBase64}`;
-    link.download = `optimized-cv.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }, [pdfBase64]);
-  
   // Reset the form to try again
   const handleReset = useCallback(() => {
     setSelectedCV(null);
@@ -545,10 +640,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     }
   }, [pdfBase64, pdfConverted, isProcessed, isProcessing, docxGenerated, isGeneratingDocx, error, handleGenerateDocx, docxBase64, optimizationCompleted, optimizationStalled]);
 
-  const handleTogglePreview = useCallback(() => {
-    setShowPdfPreview(prev => !prev);
-  }, []);
-
   return (
     <Card className="w-full bg-[#050505] border-gray-800 shadow-xl overflow-hidden">
       <CardHeader className="bg-[#0A0A0A] border-b border-gray-800 pb-3">
@@ -564,12 +655,10 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             {cvs.length > 0 ? (
               <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0 mb-4">
                 <div className="w-full">
-                  <CVCombobox
+                  <ModernFileDropdown
                     cvs={cvs}
+                    selectedCVName={selectedCVName}
                     onSelect={handleCVSelect}
-                    placeholder="Select a CV"
-                    accentColor="#B4916C"
-                    darkMode={true}
                   />
                 </div>
                 <Button
@@ -647,119 +736,119 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
               </div>
             </div>
             
-            <div className="flex flex-col space-y-4">
-              <Button
-                onClick={handleGenerateDocx}
-                disabled={docxButtonDisabled}
-                className="bg-[#B4916C] hover:bg-[#A3815C] text-white flex items-center justify-center"
-              >
-                {docxGenerated ? (
-                  <>
-                    <Check className="h-5 w-5 mr-2" />
-                    DOCX Generated
-                  </>
-                ) : isGeneratingDocx ? (
-                  <>
-                    <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                    Generating DOCX... {docxProgress}%
-                  </>
-                ) : (
-                  'Generate Optimized DOCX'
-                )}
-              </Button>
+            {/* Optimization Results */}
+            <div className="p-4 bg-[#0A0A0A] rounded-lg border border-gray-800">
+              <h4 className="text-lg font-medium text-white mb-3">Optimized Document</h4>
               
-              {isGeneratingDocx && (
-                <div className="space-y-2">
-                  <Progress value={docxProgress} className="h-2 bg-gray-800" />
-                  <p className="text-xs text-gray-400">Creating optimized document format...</p>
-                </div>
-              )}
-              
-              {docxGenerated && (
-                <div className="flex flex-col space-y-3">
-                  <div className="flex items-center space-x-3">
-                    <Button
-                      onClick={handleDownloadDocx}
-                      className="flex-1 bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center"
-                    >
-                      <Download className="h-5 w-5 mr-2" />
-                      Download DOCX
-                    </Button>
-                    
-                    <Button
-                      onClick={handleDownloadDoc}
-                      className="flex-1 bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center"
-                    >
-                      <Download className="h-5 w-5 mr-2" />
-                      Download DOC
-                    </Button>
-                  </div>
-                </div>
-              )}
-              
-              {docxGenerated && (
-                <Button
-                  onClick={handleConvertToPdf}
-                  disabled={pdfButtonDisabled}
-                  className="bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center mt-4"
-                >
-                  {pdfConverted ? (
-                    <>
-                      <Check className="h-5 w-5 mr-2" />
-                      PDF Converted
-                    </>
-                  ) : isConvertingToPdf ? (
-                    <>
-                      <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                      Converting to PDF... {pdfProgress}%
-                    </>
-                  ) : (
-                    'Convert to PDF'
-                  )}
-                </Button>
-              )}
-              
-              {isConvertingToPdf && (
-                <div className="space-y-2">
-                  <Progress value={pdfProgress} className="h-2 bg-gray-800" />
-                  <p className="text-xs text-gray-400">Converting document to PDF format...</p>
-                </div>
-              )}
-              
-              {pdfConverted && pdfBase64 && (
-                <div className="mt-4 flex flex-col items-center space-y-3">
+              <div className="flex flex-col space-y-4">
+                {!docxGenerated && !isGeneratingDocx && (
                   <Button
-                    onClick={handleDownloadPdf}
+                    onClick={handleGenerateDocx}
                     className="bg-[#B4916C] hover:bg-[#A3815C] text-white flex items-center justify-center"
                   >
-                    <Download className="h-5 w-5 mr-2" />
-                    Download PDF
+                    Generate Optimized DOCX
                   </Button>
-                  <Button
-                    onClick={handleTogglePreview}
-                    className="bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center"
-                  >
-                    {showPdfPreview ? 'Hide Preview' : 'Preview PDF'}
-                  </Button>
-                  {showPdfPreview && (
-                    <div className="mt-4 w-full">
-                      <iframe
-                        src={`data:application/pdf;base64,${pdfBase64}`}
-                        className="w-full h-80 border"
-                        title="PDF Preview"
-                      />
+                )}
+                
+                {isGeneratingDocx && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-300">Generating DOCX...</span>
+                      <span className="text-[#B4916C]">{docxProgress}%</span>
                     </div>
-                  )}
-                </div>
-              )}
-              
-              <Button
-                onClick={handleReset}
-                className="bg-transparent hover:bg-gray-800 text-gray-400 border border-gray-700 flex items-center justify-center"
-              >
-                <RefreshCw className="h-5 w-5 mr-2" />
-                Start Over
-              </Button>
+                    <Progress value={docxProgress} className="h-2 bg-gray-800" />
+                    <p className="text-xs text-gray-400">Creating optimized document format...</p>
+                  </div>
+                )}
+                
+                {docxGenerated && (
+                  <div className="flex flex-col space-y-3">
+                    <div className="flex items-center space-x-3">
+                      <Button
+                        onClick={handleDownloadDocx}
+                        className="flex-1 bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center"
+                      >
+                        <Download className="h-5 w-5 mr-2" />
+                        Download DOCX
+                      </Button>
+                      
+                      <Button
+                        onClick={handleDownloadDoc}
+                        className="flex-1 bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center"
+                      >
+                        <Download className="h-5 w-5 mr-2" />
+                        Download DOC
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                
+                {docxGenerated && (
+                  <Button
+                    onClick={handleConvertToPdf}
+                    disabled={pdfButtonDisabled}
+                    className="bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center mt-4"
+                  >
+                    {pdfConverted ? (
+                      <>
+                        <Check className="h-5 w-5 mr-2" />
+                        PDF Converted
+                      </>
+                    ) : isConvertingToPdf ? (
+                      <>
+                        <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                        Converting to PDF... {pdfProgress}%
+                      </>
+                    ) : (
+                      'Convert to PDF'
+                    )}
+                  </Button>
+                )}
+                
+                {isConvertingToPdf && (
+                  <div className="space-y-2">
+                    <Progress value={pdfProgress} className="h-2 bg-gray-800" />
+                    <p className="text-xs text-gray-400">Converting document to PDF format...</p>
+                  </div>
+                )}
+                
+                {pdfConverted && pdfBase64 && (
+                  <div className="mt-4 flex flex-col items-center space-y-3">
+                    <Button
+                      onClick={handleDownloadPdf}
+                      className="bg-[#B4916C] hover:bg-[#A3815C] text-white flex items-center justify-center w-full"
+                    >
+                      <Download className="h-5 w-5 mr-2" />
+                      Download PDF
+                    </Button>
+                    <Button
+                      onClick={handleTogglePreview}
+                      className="bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center w-full"
+                    >
+                      <Eye className="h-5 w-5 mr-2" />
+                      {showPdfPreview ? 'Hide Preview' : 'Preview PDF'}
+                    </Button>
+                  </div>
+                )}
+                
+                {showPdfPreview && pdfBase64 && (
+                  <div className="mt-4 w-full h-96 border border-gray-700 rounded-lg overflow-hidden">
+                    <iframe
+                      src={`data:application/pdf;base64,${pdfBase64}`}
+                      className="w-full h-full"
+                      title="PDF Preview"
+                    />
+                  </div>
+                )}
+                
+                <Button
+                  onClick={handleReset}
+                  className="bg-transparent hover:bg-gray-800 text-gray-400 border border-gray-700 flex items-center justify-center"
+                >
+                  <RefreshCw className="h-5 w-5 mr-2" />
+                  Start Over
+                </Button>
+              </div>
             </div>
           </div>
         )}
@@ -767,33 +856,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         {!isProcessed && !isProcessing && !selectedCVId && (
           <div className="text-center py-8 text-gray-400">
             Select a CV to begin the optimization process
-          </div>
-        )}
-        
-        {pdfConverted && pdfBase64 && (
-          <div className="mt-6">
-            <h3 className="text-lg font-semibold text-white mb-3">PDF Preview</h3>
-            <div className="h-[500px] border border-gray-700 rounded-md overflow-hidden">
-              <PDFPreview 
-                pdfData={pdfBase64} 
-                fileName={`optimized-cv-${selectedCVId}.pdf`}
-                onDownload={handleDownloadPdf}
-              />
-            </div>
-          </div>
-        )}
-        
-        {/* Fallback message if PDF should be available but isn't showing */}
-        {isProcessed && docxGenerated && !pdfConverted && !isConvertingToPdf && (
-          <div className="mt-6 p-4 bg-[#0A0A0A] border border-gray-700 rounded-md">
-            <h3 className="text-lg font-semibold text-white mb-2">PDF Preview</h3>
-            <p className="text-gray-400 mb-3">PDF preview is not available. You can try converting to PDF again.</p>
-            <Button
-              onClick={handleConvertToPdf}
-              className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
-            >
-              Convert to PDF
-            </Button>
           </div>
         )}
         
