@@ -38,15 +38,18 @@ export function ComboboxPopover({
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(defaultValue || '');
   const firstRender = useRef(true);
+  
+  // Ensure options is always an array
+  const safeOptions = Array.isArray(options) ? options : [];
 
   // Set the first option as the default value if no default value is provided
   useEffect(() => {
-    if (firstRender.current && !defaultValue && options.length > 0) {
-      setValue(options[0]);
-      onSelect(options[0]);
+    if (firstRender.current && !defaultValue && safeOptions.length > 0) {
+      setValue(safeOptions[0]);
+      onSelect(safeOptions[0]);
       firstRender.current = false;
     }
-  }, [options, defaultValue, onSelect]);
+  }, [safeOptions, defaultValue, onSelect]);
 
   // Dynamic styles based on props
   const accentStyle = {
@@ -96,7 +99,7 @@ export function ComboboxPopover({
             No {label.toLowerCase()} found.
           </CommandEmpty>
           <CommandGroup>
-            {options.map((option) => (
+            {safeOptions.map((option) => (
               <CommandItem
                 key={option}
                 value={option}

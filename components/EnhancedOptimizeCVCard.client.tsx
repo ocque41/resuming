@@ -43,6 +43,9 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   const [originalAtsScore, setOriginalAtsScore] = useState<number>(0);
   const [improvedAtsScore, setImprovedAtsScore] = useState<number>(0);
   
+  // Add a new state for automatic PDF conversion
+  const [autoPdfConvert, setAutoPdfConvert] = useState<boolean>(false);
+  
   // Extract display names for the CV dropdown (without the ID part)
   const displayCVOptions = cvOptions.map(cv => {
     const parts = cv.split('|');
@@ -111,6 +114,11 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             // Update ATS scores
             setOriginalAtsScore(statusData.atsScore || 65);
             setImprovedAtsScore(statusData.improvedAtsScore || 85);
+            
+            // Automatically start generating DOCX if processing is completed
+            setTimeout(() => {
+              handleGenerateDocx();
+            }, 1000);
           }
         } catch (statusError) {
           console.error("Error checking processing status:", statusError);
@@ -163,6 +171,9 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       setDocxBase64(data.docxBase64);
       setDocxGenerated(true);
       setIsGeneratingDocx(false);
+      
+      // Set a flag to trigger PDF conversion
+      setAutoPdfConvert(true);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Failed to generate DOCX file");
       setIsGeneratingDocx(false);
@@ -245,7 +256,18 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     setIsConvertingToPdf(false);
     setPdfConverted(false);
     setPdfBase64(null);
+    setAutoPdfConvert(false);
   }, []);
+  
+  // Effect to handle automatic PDF conversion
+  useEffect(() => {
+    if (autoPdfConvert && docxGenerated && !pdfConverted && !isConvertingToPdf) {
+      // Start PDF conversion
+      handleConvertToPdf();
+      // Reset the flag
+      setAutoPdfConvert(false);
+    }
+  }, [autoPdfConvert, docxGenerated, pdfConverted, isConvertingToPdf, handleConvertToPdf]);
   
   return (
     <Card className="bg-[#121212] border-gray-800 shadow-xl overflow-hidden">
@@ -262,14 +284,16 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             <div className="flex items-center space-x-2 mb-4">
               <div className="flex-grow">
                 <ComboboxPopover
-                  options={cvOptions.map(cv => {
-                    const parts = cv.split('|');
-                    return parts[0].trim();
-                  })}
+                  options={displayCVOptions.length > 0 ? displayCVOptions : []}
                   label="Select a CV"
                   onSelect={(cv) => {
-                    const fullOption = cvOptions.find(option => option.startsWith(cv));
-                    setSelectedCV(fullOption || null);
+                    // Find the matching full option (with ID)
+                    const index = displayCVOptions.indexOf(cv);
+                    if (index !== -1) {
+                      setSelectedCV(cvOptions[index]);
+                    } else {
+                      setSelectedCV(null);
+                    }
                   }}
                   accentColor="#B4916C"
                   darkMode={true}
