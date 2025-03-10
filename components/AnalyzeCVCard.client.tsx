@@ -109,22 +109,35 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
       if (data.error) {
         setError(data.error);
       } else {
+        // Add safety checks for all data properties
+        const safeData = {
+          ...data,
+          atsScore: data.atsScore || 0,
+          strengths: Array.isArray(data.strengths) ? data.strengths : [],
+          weaknesses: Array.isArray(data.weaknesses) ? data.weaknesses : [],
+          recommendations: Array.isArray(data.recommendations) ? data.recommendations : [],
+          industry: data.industry || "General",
+          keywordAnalysis: data.keywordAnalysis || {},
+          sectionBreakdown: data.sectionBreakdown || {}
+        };
+        
         // If industry is detected but no industry insight is provided, get one
-        if (data.industry && !data.industryInsight) {
+        if (safeData.industry && !safeData.industryInsight) {
           try {
-            const insight = getIndustrySpecificAtsInsights(data.industry);
-            data.industryInsight = insight;
+            const insight = getIndustrySpecificAtsInsights(safeData.industry);
+            safeData.industryInsight = insight;
           } catch (error) {
             console.error("Error getting industry insights:", error);
+            // Continue without insight
           }
         }
         
-        // Add formatting-specific analysis
-        data.formattingStrengths = generateFormattingStrengths(data);
-        data.formattingWeaknesses = generateFormattingWeaknesses(data);
-        data.formattingRecommendations = generateFormattingRecommendations(data);
+        // Add formatting-specific analysis with safety checks
+        safeData.formattingStrengths = generateFormattingStrengths(safeData);
+        safeData.formattingWeaknesses = generateFormattingWeaknesses(safeData);
+        safeData.formattingRecommendations = generateFormattingRecommendations(safeData);
         
-        setAnalysis(data);
+        setAnalysis(safeData);
         
         // Store the enhanced analysis in the database
         try {
@@ -135,12 +148,7 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
             },
             body: JSON.stringify({
               cvId: selectedCVId,
-              analysis: {
-                ...data,
-                formattingStrengths: data.formattingStrengths,
-                formattingWeaknesses: data.formattingWeaknesses,
-                formattingRecommendations: data.formattingRecommendations
-              }
+              analysis: safeData
             }),
           });
         } catch (updateError) {
@@ -342,11 +350,15 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
     return recommendations.slice(0, 3);
   }
 
-  const formatAtsScore = (score: number | string): string => {
+  const formatAtsScore = (score: number | string | undefined | null): string => {
     if (typeof score === 'number') {
       return `${Math.round(score)}%`;
     }
-    return score.toString();
+    if (typeof score === 'string') {
+      return score;
+    }
+    // Return a default value if score is undefined or null
+    return "N/A";
   };
 
   const getTopKeywords = () => {
@@ -507,11 +519,17 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
                 <Button 
                   onClick={() => {
                     if (!selectedCVId) {
-                      alert('No CV selected');
+                      console.error('No CV selected for optimization');
                       return;
                     }
-                    console.log('Proceeding to Optimization with CV ID:', selectedCVId);
-                    onAnalysisComplete(selectedCVId);
+                    try {
+                      console.log('Proceeding to Optimization with CV ID:', selectedCVId);
+                      if (typeof onAnalysisComplete === 'function') {
+                        onAnalysisComplete(selectedCVId);
+                      }
+                    } catch (error) {
+                      console.error('Error calling onAnalysisComplete:', error);
+                    }
                   }}
                   className="bg-[#B4916C] hover:bg-[#A3815C] text-white w-full sm:w-auto"
                 >

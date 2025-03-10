@@ -139,46 +139,81 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
     };
   }, [statusPollingEnabled, statusPollingInterval, selectedCVId, activeStep]);
   
-  // Handle when analysis is complete
+  // Handle when analysis is complete with defensive coding 
   const handleAnalysisComplete = async (cvId: string) => {
-    setSelectedCVId(cvId);
-    
-    // Find the CV name from the ID
-    const selectedCV = cvs.find(cv => {
-      const parts = cv.split('|');
-      return parts.length >= 2 && parts[1] === cvId;
-    });
-    
-    if (selectedCV) {
-      const parts = selectedCV.split('|');
-      setSelectedCVName(parts[0]);
-    }
-    
-    // Start polling status
-    setStatusPollingEnabled(true);
-    setStatusPollingInterval(1000); // Start with 1s interval
-    
     try {
-      // Trigger optimization process
-      const response = await fetch(`/api/cv/process`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cvId }),
-      });
+      console.log("Analysis complete, handling completion for CV ID:", cvId);
       
-      if (response.ok) {
-        showToast({
-          title: "Optimization Started",
-          description: "Your CV is being optimized. This may take a moment.",
-          duration: 5000,
+      // Ensure cvId is a string
+      if (typeof cvId !== 'string' || !cvId) {
+        console.error("Invalid CV ID received:", cvId);
+        setError("Invalid CV ID. Please try analyzing again.");
+        return;
+      }
+      
+      // Set the selected CV ID safely
+      setSelectedCVId(cvId);
+      
+      // Find the CV name from the ID with safety checks
+      if (Array.isArray(cvs) && cvs.length > 0) {
+        const selectedCV = cvs.find(cv => {
+          if (typeof cv !== 'string') return false;
+          
+          try {
+            const parts = cv.split('|');
+            return parts.length >= 2 && parts[1] === cvId;
+          } catch (error) {
+            console.error("Error parsing CV string:", error);
+            return false;
+          }
         });
-      } else {
-        setError("Failed to start optimization process");
+        
+        if (selectedCV) {
+          try {
+            const parts = selectedCV.split('|');
+            if (parts.length >= 1) {
+              setSelectedCVName(parts[0]);
+            }
+          } catch (error) {
+            console.error("Error setting CV name:", error);
+            // Continue without setting the name
+          }
+        }
+      }
+      
+      // Start polling status
+      setStatusPollingEnabled(true);
+      setStatusPollingInterval(1000); // Start with 1s interval
+      
+      try {
+        // Trigger optimization process
+        const response = await fetch(`/api/cv/process`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cvId }),
+        });
+        
+        if (response.ok) {
+          showToast({
+            title: "Optimization Started",
+            description: "Your CV is being optimized. This may take a moment.",
+            duration: 5000,
+          });
+        } else {
+          const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+          console.error("Error response from optimization process:", errorData);
+          setError(errorData.error || "Failed to start optimization process");
+          setStatusPollingEnabled(false);
+        }
+      } catch (err) {
+        console.error("Error starting optimization:", err);
+        setError(typeof err === 'object' && err !== null && 'message' in err ? 
+          String(err.message) : "Failed to start optimization");
         setStatusPollingEnabled(false);
       }
-    } catch (err) {
-      console.error("Error starting optimization:", err);
-      setError("Failed to start optimization");
+    } catch (outerError) {
+      console.error("Unexpected error in handleAnalysisComplete:", outerError);
+      setError("An unexpected error occurred. Please try again.");
       setStatusPollingEnabled(false);
     }
   };
