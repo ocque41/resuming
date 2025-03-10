@@ -261,15 +261,13 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
       .map(([keyword, score]) => ({ keyword, score }));
   };
 
-  // Add effect to enable proceeding 5 seconds after analysis is ready
-  useEffect(() => {
-    if (analysis) {
-      const timer = setTimeout(() => {
-        setAllowProceed(true);
-      }, 5000);
-      return () => clearTimeout(timer);
+  // Instead, add a function to handle proceeding to the next step
+  const handleProceedToOptimize = useCallback(() => {
+    if (selectedCVId && onAnalysisComplete) {
+      setAllowProceed(true);
+      onAnalysisComplete(selectedCVId);
     }
-  }, [analysis]);
+  }, [selectedCVId, onAnalysisComplete]);
 
   return (
     <Card className="w-full bg-[#050505] border-gray-800 shadow-xl overflow-hidden">
@@ -404,18 +402,20 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
             )}
             
             {analysis && onAnalysisComplete && (
-              allowProceed ? (
+              <div className="mt-6 flex flex-col items-center">
+                <Alert className="mb-4 bg-blue-900/20 text-blue-400 border border-blue-900">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Please review your CV analysis above. When you're ready to proceed with optimization, click the button below.
+                  </AlertDescription>
+                </Alert>
                 <Button 
-                  onClick={() => onAnalysisComplete(selectedCVId || '')}
-                  className="bg-[#B4916C] hover:bg-[#A3815C] text-white mt-2 sm:mt-0 w-full sm:w-auto"
+                  onClick={handleProceedToOptimize}
+                  className="bg-[#B4916C] hover:bg-[#A3815C] text-white w-full sm:w-auto"
                 >
-                  Optimize CV <ArrowRight className="ml-2 h-4 w-4" />
+                  Proceed to Optimization <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
-              ) : (
-                <div className="text-gray-400 text-sm mt-2">
-                  Please review the analysis; button will enable shortly...
-                </div>
-              )
+              </div>
             )}
           </div>
         )}

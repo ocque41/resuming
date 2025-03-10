@@ -23,10 +23,24 @@ export default async function OptimizePage() {
   const formattedCvs = cvs.map((cv: any) => `${cv.fileName}|${cv.id}`);
   
   return (
-    <div className="min-h-screen bg-black text-white p-4">
-      <div className="max-w-sm mx-auto my-8">
-        <h1 className="text-2xl mb-4 text-center">Optimize Your CV</h1>
-        <OptimizationWorkflow cvs={formattedCvs} />
+    <div className="min-h-screen bg-black text-white">
+      <div className="px-4 py-4 max-w-md mx-auto">
+        {/* Back button */}
+        <div className="mb-6 flex items-center">
+          <Link 
+            href="/dashboard" 
+            className="flex items-center text-gray-400 hover:text-[#B4916C] transition-colors"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            <span>Back to Dashboard</span>
+          </Link>
+        </div>
+        
+        <h1 className="text-xl md:text-2xl font-bold mb-4 text-center">Optimize Your CV</h1>
+        
+        <ErrorBoundaryWrapper>
+          <OptimizationWorkflow cvs={formattedCvs} />
+        </ErrorBoundaryWrapper>
       </div>
     </div>
   );

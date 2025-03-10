@@ -47,36 +47,50 @@ export default function CVCombobox({
 
   // Parse the CV strings into objects
   useEffect(() => {
-    if (!Array.isArray(cvs)) {
-      console.error("CVs is not an array:", cvs);
-      setParsedCVs([]);
-      return;
-    }
+    try {
+      if (!Array.isArray(cvs)) {
+        console.error("CVs is not an array:", cvs);
+        setParsedCVs([]);
+        return;
+      }
 
-    const parsed = cvs.map(cv => {
-      if (typeof cv !== 'string') {
-        console.error("CV is not a string:", cv);
-        return null;
-      }
+      const parsed = cvs.map(cv => {
+        try {
+          if (typeof cv !== 'string') {
+            console.error("CV is not a string:", cv);
+            return null;
+          }
+          
+          const parts = cv.split('|');
+          if (parts.length < 2) {
+            console.error("Invalid CV format:", cv);
+            return null;
+          }
+          
+          return {
+            fileName: parts[0].trim(),
+            id: parts[1].trim()
+          };
+        } catch (innerError) {
+          console.error("Error parsing CV:", innerError);
+          return null;
+        }
+      }).filter(Boolean) as CV[];
       
-      const parts = cv.split('|');
-      if (parts.length < 2) {
-        console.error("Invalid CV format:", cv);
-        return null;
-      }
+      setParsedCVs(parsed);
       
-      return {
-        fileName: parts[0].trim(),
-        id: parts[1].trim()
-      };
-    }).filter(Boolean) as CV[];
-    
-    setParsedCVs(parsed);
-    
-    // Auto-select the first CV if available and none is selected
-    if (parsed.length > 0 && !selectedCVId) {
-      setSelectedCVId(parsed[0].id);
-      onSelect(parsed[0].id, parsed[0].fileName);
+      // Auto-select the first CV if available and none is selected
+      if (parsed.length > 0 && !selectedCVId) {
+        try {
+          setSelectedCVId(parsed[0].id);
+          onSelect(parsed[0].id, parsed[0].fileName);
+        } catch (selectError) {
+          console.error("Error auto-selecting first CV:", selectError);
+        }
+      }
+    } catch (error) {
+      console.error("Error in CVCombobox useEffect:", error);
+      setParsedCVs([]);
     }
   }, [cvs, selectedCVId, onSelect]);
 
@@ -85,11 +99,19 @@ export default function CVCombobox({
 
   // Handle CV selection
   const handleSelectCV = (cvId: string) => {
-    const selectedCV = parsedCVs.find(cv => cv.id === cvId);
-    if (selectedCV) {
-      setSelectedCVId(cvId);
+    try {
+      const selectedCV = parsedCVs.find(cv => cv.id === cvId);
+      if (selectedCV) {
+        setSelectedCVId(cvId);
+        setOpen(false);
+        onSelect(cvId, selectedCV.fileName);
+      } else {
+        console.error("Selected CV not found in parsed CVs");
+      }
+    } catch (error) {
+      console.error("Error in handleSelectCV:", error);
+      // Prevent the UI from crashing by handling the error gracefully
       setOpen(false);
-      onSelect(cvId, selectedCV.fileName);
     }
   };
 

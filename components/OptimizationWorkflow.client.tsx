@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart2, FileText, ArrowRight, CheckCircle } from "lucide-react";
 import AnalyzeCVCard from "@/components/AnalyzeCVCard.client";
@@ -13,12 +13,19 @@ interface OptimizationWorkflowProps {
 export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps) {
   const [activeStep, setActiveStep] = useState<"analyze" | "optimize">("analyze");
   const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   
   // Handle completion of analysis step
   const handleAnalysisComplete = useCallback((cvId: string) => {
     console.log("Analysis complete for CV ID:", cvId);
     setSelectedCVId(cvId);
-    setActiveStep("optimize");
+    
+    // Add a visual transition effect
+    setIsTransitioning(true);
+    setTimeout(() => {
+      setActiveStep("optimize");
+      setIsTransitioning(false);
+    }, 500);
   }, []);
   
   // Filter CVs for optimization step (only show the selected CV)
@@ -26,19 +33,36 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
     if (!selectedCVId) return cvs;
     
     return cvs.filter(cv => {
-      const parts = cv.split('|');
-      return parts[1] === selectedCVId;
+      try {
+        const parts = cv.split('|');
+        return parts[1] === selectedCVId;
+      } catch (error) {
+        console.error("Error filtering CV:", error);
+        return false;
+      }
     });
   }, [cvs, selectedCVId]);
   
+  // Handle manual tab change
+  const handleTabChange = useCallback((value: string) => {
+    if (value === "optimize" && !selectedCVId) {
+      // Don't allow going to optimize step without selecting a CV
+      return;
+    }
+    setActiveStep(value as "analyze" | "optimize");
+  }, [selectedCVId]);
+  
   return (
-    <div className="flex flex-col space-y-6">
+    <div className={`flex flex-col space-y-6 transition-opacity duration-500 ${isTransitioning ? 'opacity-50' : 'opacity-100'}`}>
       <div className="flex items-center justify-between mb-4 overflow-x-auto pb-2">
         <div className="flex items-center space-x-2 sm:space-x-4 min-w-max">
           <div 
             className={`flex items-center ${
               activeStep === "analyze" ? "text-[#B4916C]" : "text-gray-500"
             }`}
+            onClick={() => handleTabChange("analyze")}
+            role="button"
+            tabIndex={0}
           >
             <div className={`
               flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-full border-2 
@@ -55,7 +79,10 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
           <div 
             className={`flex items-center ${
               activeStep === "optimize" ? "text-[#B4916C]" : "text-gray-500"
-            }`}
+            } ${!selectedCVId ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+            onClick={() => selectedCVId && handleTabChange("optimize")}
+            role="button"
+            tabIndex={0}
           >
             <div className={`
               flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-full border-2 
@@ -68,7 +95,7 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
         </div>
       </div>
       
-      <Tabs value={activeStep} onValueChange={(value) => setActiveStep(value as "analyze" | "optimize")}>
+      <Tabs value={activeStep} onValueChange={handleTabChange}>
         <TabsContent value="analyze" className="mt-0">
           <div className="flex items-center mb-2">
             <BarChart2 className="h-4 w-4 sm:h-5 sm:w-5 text-[#B4916C] mr-2" />
