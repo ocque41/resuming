@@ -172,116 +172,219 @@ export async function generateEnhancedCVDocx(
   outputDir: string = '/tmp',
   fileName: string = 'optimized-cv.docx'
 ): Promise<{ filePath: string; base64: string }> {
-  // Parse the optimized CV content
-  const formattedCV = parseOptimizedCVContent(optimizedContent);
+  console.log(`Starting DOCX generation with content length: ${optimizedContent?.length || 0} characters`);
   
-  // Define colors
-  const primaryColor = "2F5496"; // Blue
-  const secondaryColor = "808080"; // Gray for secondary text
-  
-  // Create document
-  const doc = new Document({
-    styles: {
-      default: {
-        heading1: {
-          run: {
-            size: 28,
-            bold: true,
-            color: primaryColor,
-          },
-          paragraph: {
-            spacing: {
-              after: 120,
+  if (!optimizedContent || optimizedContent.trim().length === 0) {
+    console.error("Empty optimized content provided to DOCX generator");
+    throw new Error("Cannot generate DOCX from empty content");
+  }
+
+  try {
+    // Parse the optimized CV content
+    console.log("Parsing optimized CV content into formatted structure");
+    const formattedCV = parseOptimizedCVContent(optimizedContent);
+    
+    // Validate the parsed content to ensure we have required sections
+    if (!formattedCV.profile || formattedCV.profile.trim().length === 0) {
+      console.warn("Profile section is empty in the optimized content");
+    }
+    
+    if (!formattedCV.achievements || formattedCV.achievements.length === 0) {
+      console.warn("No achievements found in the optimized content");
+      // Add a placeholder achievement to prevent array length issues
+      formattedCV.achievements = ["No achievements specified."];
+    }
+    
+    if (!formattedCV.experience || formattedCV.experience.length === 0) {
+      console.warn("No experience entries found in the optimized content");
+      // Add a placeholder experience to prevent array length issues
+      formattedCV.experience = [{
+        company: "Not specified",
+        position: "Not specified",
+        duration: "Not specified",
+        responsibilities: ["No responsibilities specified."]
+      }];
+    } else {
+      // Ensure each experience entry has responsibilities
+      formattedCV.experience = formattedCV.experience.map(exp => {
+        if (!exp.responsibilities || exp.responsibilities.length === 0) {
+          console.warn(`Experience entry for ${exp.company} has no responsibilities`);
+          return {
+            ...exp,
+            responsibilities: ["No responsibilities specified."]
+          };
+        }
+        return exp;
+      });
+    }
+    
+    if (!formattedCV.skills || formattedCV.skills.length === 0) {
+      console.warn("No skills found in the optimized content");
+      // Add a placeholder skill
+      formattedCV.skills = ["No skills specified."];
+    }
+    
+    if (!formattedCV.education || formattedCV.education.length === 0) {
+      console.warn("No education entries found in the optimized content");
+      // Add a placeholder education entry
+      formattedCV.education = [{
+        degree: "Not specified",
+        institution: "Not specified", 
+        year: "Not specified"
+      }];
+    }
+    
+    if (!formattedCV.languages || formattedCV.languages.length === 0) {
+      console.warn("No languages found in the optimized content");
+      // Add a placeholder language
+      formattedCV.languages = [{ 
+        language: "Not specified", 
+        proficiency: "Not specified" 
+      }];
+    }
+    
+    console.log("Creating DOCX document with the formatted CV data");
+    
+    // Define colors
+    const primaryColor = "2F5496"; // Blue
+    const secondaryColor = "808080"; // Gray for secondary text
+    
+    // Create document
+    const doc = new Document({
+      styles: {
+        default: {
+          heading1: {
+            run: {
+              size: 28,
+              bold: true,
+              color: primaryColor,
             },
-          },
-        },
-        heading2: {
-          run: {
-            size: 26,
-            bold: true,
-            color: primaryColor,
-          },
-          paragraph: {
-            spacing: {
-              after: 120,
-            },
-          },
-        },
-      }
-    },
-    sections: [
-      {
-        properties: {
-          page: {
-            margin: {
-              top: 1000,
-              right: 1000,
-              bottom: 1000,
-              left: 1000,
-            },
-          },
-        },
-        children: [
-          // Profile Section
-          new Paragraph({
-            text: "PROFILE",
-            heading: HeadingLevel.HEADING_1,
-            thematicBreak: true,
-          }),
-          new Paragraph({
-            text: formattedCV.profile,
-            spacing: {
-              after: 200,
-            },
-          }),
-          
-          // Achievements Section
-          new Paragraph({
-            text: "ACHIEVEMENTS",
-            heading: HeadingLevel.HEADING_1,
-            thematicBreak: true,
-          }),
-          ...formattedCV.achievements.map(
-            achievement => new Paragraph({
-              text: achievement,
-              bullet: {
-                level: 0,
-              },
+            paragraph: {
               spacing: {
                 after: 120,
               },
-            })
-          ),
-          new Paragraph({
-            text: "",
-            spacing: {
-              after: 200,
             },
-          }),
-          
-          // Experience Section
-          new Paragraph({
-            text: "EXPERIENCE",
-            heading: HeadingLevel.HEADING_1,
-            thematicBreak: true,
-          }),
-          ...formattedCV.experience.flatMap(exp => [
-            new Paragraph({
-              text: `${exp.company} - ${exp.position}`,
-              heading: HeadingLevel.HEADING_2,
-              spacing: {
-                after: 80,
-              },
-            }),
-            new Paragraph({
-              text: exp.duration,
+          },
+          heading2: {
+            run: {
+              size: 26,
+              bold: true,
+              color: primaryColor,
+            },
+            paragraph: {
               spacing: {
                 after: 120,
               },
+            },
+          },
+        }
+      },
+      sections: [
+        {
+          properties: {
+            page: {
+              margin: {
+                top: 1000,
+                right: 1000,
+                bottom: 1000,
+                left: 1000,
+              },
+            },
+          },
+          children: [
+            // Profile Section
+            new Paragraph({
+              text: "PROFILE",
+              heading: HeadingLevel.HEADING_1,
+              thematicBreak: true,
             }),
-            ...exp.responsibilities.map(
-              resp => new Paragraph({
-                text: resp,
+            new Paragraph({
+              text: formattedCV.profile || "No profile information available.",
+              spacing: {
+                after: 200,
+              },
+            }),
+            
+            // Achievements Section
+            new Paragraph({
+              text: "ACHIEVEMENTS",
+              heading: HeadingLevel.HEADING_1,
+              thematicBreak: true,
+            }),
+            ...(formattedCV.achievements.length > 0 
+              ? formattedCV.achievements.map(
+                achievement => new Paragraph({
+                  text: achievement,
+                  bullet: {
+                    level: 0,
+                  },
+                  spacing: {
+                    after: 120,
+                  },
+                })
+              )
+              : [new Paragraph({
+                text: "No notable achievements specified.",
+                spacing: {
+                  after: 120,
+                },
+              })]
+            ),
+            new Paragraph({
+              text: "",
+              spacing: {
+                after: 200,
+              },
+            }),
+            
+            // Experience Section
+            new Paragraph({
+              text: "EXPERIENCE",
+              heading: HeadingLevel.HEADING_1,
+              thematicBreak: true,
+            }),
+            ...formattedCV.experience.flatMap(exp => [
+              new Paragraph({
+                text: `${exp.company} - ${exp.position}`,
+                heading: HeadingLevel.HEADING_2,
+                spacing: {
+                  after: 80,
+                },
+              }),
+              new Paragraph({
+                text: exp.duration,
+                spacing: {
+                  after: 120,
+                },
+              }),
+              ...exp.responsibilities.map(
+                resp => new Paragraph({
+                  text: resp,
+                  bullet: {
+                    level: 0,
+                  },
+                  spacing: {
+                    after: 80,
+                  },
+                })
+              ),
+              new Paragraph({
+                text: "",
+                spacing: {
+                  after: 160,
+                },
+              }),
+            ]),
+            
+            // Skills Section
+            new Paragraph({
+              text: "SKILLS",
+              heading: HeadingLevel.HEADING_1,
+              thematicBreak: true,
+            }),
+            ...formattedCV.skills.map(
+              skill => new Paragraph({
+                text: skill,
                 bullet: {
                   level: 0,
                 },
@@ -293,99 +396,86 @@ export async function generateEnhancedCVDocx(
             new Paragraph({
               text: "",
               spacing: {
-                after: 160,
+                after: 200,
               },
             }),
-          ]),
-          
-          // Skills Section
-          new Paragraph({
-            text: "SKILLS",
-            heading: HeadingLevel.HEADING_1,
-            thematicBreak: true,
-          }),
-          ...formattedCV.skills.map(
-            skill => new Paragraph({
-              text: skill,
-              bullet: {
-                level: 0,
-              },
-              spacing: {
-                after: 80,
-              },
-            })
-          ),
-          new Paragraph({
-            text: "",
-            spacing: {
-              after: 200,
-            },
-          }),
-          
-          // Education Section
-          new Paragraph({
-            text: "EDUCATION",
-            heading: HeadingLevel.HEADING_1,
-            thematicBreak: true,
-          }),
-          ...formattedCV.education.flatMap(edu => [
+            
+            // Education Section
             new Paragraph({
-              text: edu.degree,
-              heading: HeadingLevel.HEADING_2,
-              spacing: {
-                after: 80,
-              },
+              text: "EDUCATION",
+              heading: HeadingLevel.HEADING_1,
+              thematicBreak: true,
             }),
+            ...formattedCV.education.flatMap(edu => [
+              new Paragraph({
+                text: edu.degree,
+                heading: HeadingLevel.HEADING_2,
+                spacing: {
+                  after: 80,
+                },
+              }),
+              new Paragraph({
+                text: `${edu.institution}${edu.year ? `, ${edu.year}` : ''}`,
+                spacing: {
+                  after: 160,
+                },
+              }),
+            ]),
+            
+            // Languages Section
             new Paragraph({
-              text: `${edu.institution}${edu.year ? `, ${edu.year}` : ''}`,
-              spacing: {
-                after: 160,
-              },
+              text: "LANGUAGES",
+              heading: HeadingLevel.HEADING_1,
+              thematicBreak: true,
             }),
-          ]),
-          
-          // Languages Section
-          new Paragraph({
-            text: "LANGUAGES",
-            heading: HeadingLevel.HEADING_1,
-            thematicBreak: true,
-          }),
-          ...formattedCV.languages.map(
-            lang => new Paragraph({
-              text: `${lang.language}: ${lang.proficiency}`,
-              spacing: {
-                after: 80,
-              },
-            })
-          ),
-        ],
-      },
-    ],
-  });
-  
-  // Ensure the output directory exists
-  try {
-    await fsPromises.mkdir(outputDir, { recursive: true });
+            ...formattedCV.languages.map(
+              lang => new Paragraph({
+                text: `${lang.language}: ${lang.proficiency}`,
+                spacing: {
+                  after: 80,
+                },
+              })
+            ),
+          ],
+        },
+      ],
+    });
+    
+    // Ensure the output directory exists
+    console.log(`Creating output directory: ${outputDir}`);
+    try {
+      await fsPromises.mkdir(outputDir, { recursive: true });
+    } catch (error) {
+      console.error('Error creating output directory:', error);
+    }
+    
+    // Generate file path
+    const filePath = path.join(outputDir, fileName);
+    console.log(`Output file path: ${filePath}`);
+    
+    // Create a buffer with the docx
+    console.log("Generating DOCX buffer");
+    const buffer = await Packer.toBuffer(doc);
+    console.log(`Generated DOCX buffer with size: ${buffer.length} bytes`);
+    
+    // Write the file to disk
+    console.log(`Writing DOCX file to disk: ${filePath}`);
+    await fsPromises.writeFile(filePath, buffer);
+    
+    // Convert to base64 for preview
+    console.log("Converting DOCX buffer to base64");
+    const base64 = buffer.toString('base64');
+    console.log(`Generated base64 data with length: ${base64.length} characters`);
+    
+    console.log("DOCX generation completed successfully");
+    return {
+      filePath,
+      base64,
+    };
   } catch (error) {
-    console.error('Error creating output directory:', error);
+    console.error('Error in DOCX generation:', error);
+    throw new Error(`DOCX generation failed: ${error instanceof Error ? error.message : String(error)}`);
   }
-  
-  // Generate file path
-  const filePath = path.join(outputDir, fileName);
-  
-  // Create a buffer with the docx
-  const buffer = await Packer.toBuffer(doc);
-  
-  // Write the file to disk
-  await fsPromises.writeFile(filePath, buffer);
-  
-  // Convert to base64 for preview or download
-  const base64 = buffer.toString('base64');
-  
-  return {
-    filePath,
-    base64,
-  };
 }
 
 /**

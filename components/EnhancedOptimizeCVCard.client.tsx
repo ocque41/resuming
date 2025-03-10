@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Download, RefreshCw, FileText, Check } from "lucide-react";
 import { ComboboxPopover } from "@/components/ui/combobox";
 import { Checkbox } from "@/components/ui/checkbox";
+import PDFPreview from './PDFPreview.client';
 
 // Interface for the component props
 interface EnhancedOptimizeCVCardProps {
@@ -408,6 +409,19 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         {!isProcessed && !isProcessing && !selectedCV && (
           <div className="text-center py-8 text-gray-400">
             Select a CV to begin the optimization process
+          </div>
+        )}
+        
+        {pdfConverted && pdfBase64 && (
+          <div className="mt-6">
+            <h3 className="text-lg font-semibold text-white mb-3">PDF Preview</h3>
+            <div className="h-[500px] border border-gray-700 rounded-md overflow-hidden">
+              <PDFPreview 
+                pdfData={pdfBase64} 
+                fileName={`optimized-cv-${selectedCVId}.pdf`}
+                onDownload={handleDownloadPdf}
+              />
+            </div>
           </div>
         )}
       </CardContent>

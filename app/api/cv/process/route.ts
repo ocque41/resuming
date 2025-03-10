@@ -10,6 +10,8 @@ import OpenAI from "openai";
 import * as fs from 'fs';
 import * as path from 'path';
 import { promises as fsPromises } from 'fs';
+import { generateEnhancedCVDocx } from "@/lib/enhancedDocxGenerator";
+import { saveFile, FileType, StorageType } from "@/lib/fileStorage";
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -159,7 +161,7 @@ export async function POST(request: Request) {
  * Process CV asynchronously with OpenAI GPT-4o
  * This function handles the entire CV processing workflow without blocking the API response
  */
-async function processCV(cvId: number, rawText: string, currentMetadata: any) {
+export async function processCV(cvId: number, rawText: string, currentMetadata: any) {
   try {
     // Update progress - text extraction completed
     const metadata = {
@@ -332,13 +334,75 @@ Focus on presenting the information clearly and concisely, with specific achieve
       optimized: true,
       optimizedText: optimizedContent,
       improvedAtsScore: Math.min(98, (analysisMetadata.atsScore || 65) + 15 + Math.floor(Math.random() * 10)),
-      completedAt: new Date().toISOString(),
     };
     
     await db
       .update(cvs)
       .set({ metadata: JSON.stringify(finalMetadata) })
       .where(eq(cvs.id, cvId));
+    
+    // Now generate DOCX file from the optimized content
+    try {
+      const outputDir = path.join(process.cwd(), "tmp");
+      const fileName = `cv-${cvId}-${Date.now()}.docx`;
+      
+      // Generate the DOCX file
+      const { filePath, base64 } = await generateEnhancedCVDocx(
+        optimizedContent,
+        outputDir,
+        fileName
+      );
+      
+      // Save the file to storage
+      let storageFilePath = filePath;
+      let fileMetadata;
+      try {
+        fileMetadata = await saveFile(
+          Buffer.from(base64, "base64"),
+          fileName,
+          'docx' as FileType,
+          'local' as StorageType
+        );
+        storageFilePath = fileMetadata.filePath;
+      } catch (storageError) {
+        console.error("Error saving DOCX file to storage:", storageError);
+        // Continue anyway, we still have the local file
+      }
+      
+      // Update metadata with DOCX file information
+      const docxMetadata = {
+        ...finalMetadata,
+        processingProgress: 95,
+        processingStatus: "DOCX file generated",
+        optimizedDocxFilePath: storageFilePath,
+        optimizedDocxFileName: fileName,
+        docxBase64: base64, // Store the base64 data for later use
+        completedAt: new Date().toISOString(),
+      };
+      
+      await db
+        .update(cvs)
+        .set({ metadata: JSON.stringify(docxMetadata) })
+        .where(eq(cvs.id, cvId));
+      
+      console.log(`DOCX file generated successfully for CV ID: ${cvId}`);
+    } catch (docxError) {
+      console.error(`Error generating DOCX file for CV ID ${cvId}:`, docxError);
+      
+      // Update metadata with error but keep the optimized text
+      const errorMetadata = {
+        ...finalMetadata,
+        processingProgress: 100,
+        processingStatus: "Completed with DOCX error",
+        docxGenerationError: docxError instanceof Error ? docxError.message : "Unknown DOCX generation error",
+        completedAt: new Date().toISOString(),
+      };
+      
+      await db
+        .update(cvs)
+        .set({ metadata: JSON.stringify(errorMetadata) })
+        .where(eq(cvs.id, cvId));
+    }
     
     // Log success
     console.log(`CV processing completed successfully for CV ID: ${cvId}`);

@@ -23,9 +23,33 @@ export async function convertDocxToPdf(
   outputDir: string = path.join(process.cwd(), 'tmp'),
   outputFileName?: string
 ): Promise<ConversionResult> {
+  console.log(`Starting DOCX to PDF conversion for: ${docxPath}`);
+  
   try {
+    // Check if the DOCX file exists
+    try {
+      await fsPromises.access(docxPath, fs.constants.R_OK);
+      console.log(`DOCX file exists and is readable: ${docxPath}`);
+    } catch (accessError) {
+      console.error(`Cannot access DOCX file: ${docxPath}`, accessError);
+      return {
+        success: false,
+        error: `Cannot access DOCX file: ${accessError instanceof Error ? accessError.message : String(accessError)}`,
+      };
+    }
+    
     // Ensure the output directory exists
-    await fsPromises.mkdir(outputDir, { recursive: true });
+    console.log(`Creating output directory: ${outputDir}`);
+    try {
+      await fsPromises.mkdir(outputDir, { recursive: true });
+      console.log(`Output directory created or already exists: ${outputDir}`);
+    } catch (mkdirError) {
+      console.error(`Error creating output directory: ${outputDir}`, mkdirError);
+      return {
+        success: false,
+        error: `Error creating output directory: ${mkdirError instanceof Error ? mkdirError.message : String(mkdirError)}`,
+      };
+    }
     
     // Generate output file name if not provided
     if (!outputFileName) {
@@ -35,42 +59,66 @@ export async function convertDocxToPdf(
         outputFileName = `${docxFileName}.pdf`;
       }
     }
+    console.log(`Output PDF file name: ${outputFileName}`);
     
     // Complete output path
     const outputPath = path.join(outputDir, outputFileName);
+    console.log(`Complete output PDF path: ${outputPath}`);
     
     // First, check if we can use an external API service for conversion
+    console.log("Attempting to use external conversion service...");
     try {
       const conversionResult = await callExternalConversionService(docxPath, outputPath);
       if (conversionResult.success) {
+        console.log("Successfully converted DOCX to PDF using external service");
         return conversionResult;
+      } else {
+        console.log(`External conversion service failed: ${conversionResult.error}`);
+        console.log("Falling back to local conversion method");
       }
     } catch (apiError) {
-      console.error('External conversion service failed:', apiError);
-      // Fall back to local conversion method
+      console.error('External conversion service error:', apiError);
+      console.log("Falling back to local conversion method");
     }
     
     // Since we don't have a native PDF conversion library in Node.js,
     // we'll simulate the conversion by creating a mock PDF file
-    // In a production environment, you would use a proper conversion service or library
-    const mockPdfContent = await createMockPdfFromDocx(docxPath);
+    console.log("Using mock PDF generation as fallback");
     
-    // Write the mock PDF to disk
-    await fsPromises.writeFile(outputPath, mockPdfContent);
-    
-    // Read the file as base64 for preview
-    const base64 = mockPdfContent.toString('base64');
-    
-    return {
-      success: true,
-      filePath: outputPath,
-      base64,
-    };
+    try {
+      // Get DOCX file stats (size, etc.)
+      const stats = await fsPromises.stat(docxPath);
+      console.log(`DOCX file stats: size=${stats.size} bytes, modified=${stats.mtime}`);
+      
+      // Create mock PDF content
+      const mockPdfContent = await createMockPdfFromDocx(docxPath);
+      console.log(`Generated mock PDF content with length: ${mockPdfContent.length} bytes`);
+      
+      // Write the mock PDF to disk
+      await fsPromises.writeFile(outputPath, mockPdfContent);
+      console.log(`Wrote mock PDF file to: ${outputPath}`);
+      
+      // Read the file as base64 for preview
+      const base64 = mockPdfContent.toString('base64');
+      console.log(`Generated base64 PDF data with length: ${base64.length} characters`);
+      
+      return {
+        success: true,
+        filePath: outputPath,
+        base64,
+      };
+    } catch (mockError) {
+      console.error("Error in mock PDF generation:", mockError);
+      return {
+        success: false,
+        error: `Error in mock PDF generation: ${mockError instanceof Error ? mockError.message : String(mockError)}`,
+      };
+    }
   } catch (error) {
     console.error('Error converting DOCX to PDF:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: `Conversion failed: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }
