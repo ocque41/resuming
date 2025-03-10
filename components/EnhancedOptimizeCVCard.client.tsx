@@ -490,10 +490,10 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         </CardTitle>
       </CardHeader>
       
-      <CardContent className="p-6">
+      <CardContent className="p-4 sm:p-6">
         {!isProcessed && !isProcessing && (
           <div className="mb-6">
-            <div className="flex items-center space-x-2 mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0 mb-4">
               <div className="flex-grow">
                 <ComboboxPopover
                   options={dropdownOptions}
@@ -506,7 +506,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
               <Button
                 onClick={handleProcessCV}
                 disabled={processingButtonDisabled}
-                className="bg-[#B4916C] hover:bg-[#A3815C] text-white whitespace-nowrap"
+                className="bg-[#B4916C] hover:bg-[#A3815C] text-white whitespace-nowrap w-full sm:w-auto"
               >
                 {isProcessing ? "Processing..." : "Optimize CV"}
               </Button>

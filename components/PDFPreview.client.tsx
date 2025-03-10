@@ -5,6 +5,7 @@ import { Document, Page, pdfjs } from 'react-pdf';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChevronLeft, ChevronRight, Download, RefreshCw, Plus, Minus } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 // Initialize PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
@@ -103,113 +104,115 @@ export default function PDFPreview({ pdfData, fileName = 'document.pdf', onDownl
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#050505] rounded-md overflow-hidden">
-      <div className="flex items-center justify-between p-2 bg-[#0A0A0A] border-b border-gray-700">
-        <div className="flex items-center">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={goToPrevPage} 
-            disabled={pageNumber <= 1 || loading}
-            className="text-gray-300 hover:text-white hover:bg-gray-700"
+    <div className="flex flex-col h-full">
+      <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-2">
+        <h3 className="text-lg font-medium text-white">{fileName}</h3>
+        <div className="flex items-center space-x-2">
+          <Button
+            onClick={goToPrevPage}
+            disabled={pageNumber <= 1}
+            variant="outline"
+            size="sm"
+            className="bg-[#0A0A0A] border-gray-800 text-gray-300 hover:bg-[#1A1A1A] hover:text-white"
           >
-            <ChevronLeft size={20} />
+            Previous
           </Button>
-          <span className="text-gray-300 mx-2">
-            {loading ? '...' : `${pageNumber} / ${numPages || '...'}`}
+          <span className="text-sm text-gray-400">
+            Page {pageNumber} of {numPages || 1}
           </span>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={goToNextPage} 
-            disabled={!numPages || pageNumber >= numPages || loading}
-            className="text-gray-300 hover:text-white hover:bg-gray-700"
+          <Button
+            onClick={goToNextPage}
+            disabled={pageNumber >= numPages}
+            variant="outline"
+            size="sm"
+            className="bg-[#0A0A0A] border-gray-800 text-gray-300 hover:bg-[#1A1A1A] hover:text-white"
           >
-            <ChevronRight size={20} />
-          </Button>
-        </div>
-        
-        <div className="flex items-center">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={zoomOut} 
-            disabled={loading || scale <= 0.5}
-            className="text-gray-300 hover:text-white hover:bg-gray-700"
-          >
-            <Minus size={20} />
-          </Button>
-          <span className="text-gray-300 mx-2">{Math.round(scale * 100)}%</span>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={zoomIn} 
-            disabled={loading || scale >= 3.0}
-            className="text-gray-300 hover:text-white hover:bg-gray-700"
-          >
-            <Plus size={20} />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={rotate} 
-            disabled={loading}
-            className="text-gray-300 hover:text-white hover:bg-gray-700 ml-2"
-          >
-            <RefreshCw size={20} />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={handleDownload} 
-            className="text-gray-300 hover:text-white hover:bg-gray-700 ml-2"
-          >
-            <Download size={20} />
+            Next
           </Button>
         </div>
       </div>
       
-      <div 
-        ref={containerRef} 
-        className="flex-1 overflow-auto p-4 flex justify-center items-start bg-[#050505]"
-      >
-        {error ? (
-          <div className="flex flex-col items-center justify-center h-full text-red-400 p-4">
-            <span className="mb-2">⚠️</span>
-            <p className="text-center">{error}</p>
-          </div>
-        ) : (
-          <Document
-            file={`data:application/pdf;base64,${pdfData}`}
-            onLoadSuccess={onDocumentLoadSuccess}
-            onLoadError={onDocumentLoadError}
-            loading={
-              <div className="flex flex-col items-center justify-center w-full h-[500px] gap-4">
-                <Skeleton className="h-[640px] w-[480px] bg-[#0A0A0A]" />
-                <p className="text-gray-400">Loading PDF...</p>
-              </div>
-            }
-            error={
-              <div className="flex flex-col items-center justify-center w-full h-[500px] text-red-400">
-                <p>Failed to load PDF</p>
-              </div>
-            }
+      <div className="flex flex-wrap items-center justify-between mb-4 gap-2">
+        <div className="flex items-center space-x-2">
+          <Button
+            onClick={zoomOut}
+            variant="outline"
+            size="sm"
+            className="bg-[#0A0A0A] border-gray-800 text-gray-300 hover:bg-[#1A1A1A] hover:text-white"
           >
-            {loading ? null : (
+            Zoom Out
+          </Button>
+          <Button
+            onClick={zoomIn}
+            variant="outline"
+            size="sm"
+            className="bg-[#0A0A0A] border-gray-800 text-gray-300 hover:bg-[#1A1A1A] hover:text-white"
+          >
+            Zoom In
+          </Button>
+          <Button
+            onClick={rotate}
+            variant="outline"
+            size="sm"
+            className="bg-[#0A0A0A] border-gray-800 text-gray-300 hover:bg-[#1A1A1A] hover:text-white"
+          >
+            Rotate
+          </Button>
+        </div>
+        
+        {onDownload && (
+          <Button
+            onClick={handleDownload}
+            className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
+            size="sm"
+          >
+            Download PDF
+          </Button>
+        )}
+      </div>
+      
+      <div className="flex-grow overflow-auto bg-[#0A0A0A] rounded-lg border border-gray-800 p-2 sm:p-4">
+        <div className="flex justify-center">
+          {error ? (
+            <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+              <AlertCircle className="h-10 w-10 text-red-500 mb-4" />
+              <h3 className="text-lg font-medium text-white mb-2">Error Loading PDF</h3>
+              <p className="text-gray-400 mb-4">{error}</p>
+              <Button
+                onClick={handleDownload}
+                className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
+              >
+                Download Instead
+              </Button>
+            </div>
+          ) : (
+            <Document
+              file={`data:application/pdf;base64,${pdfData}`}
+              onLoadSuccess={onDocumentLoadSuccess}
+              onLoadError={onDocumentLoadError}
+              loading={
+                <div className="flex flex-col items-center justify-center h-40 sm:h-60">
+                  <div className="w-10 h-10 border-2 border-[#B4916C] border-t-transparent rounded-full animate-spin mb-4"></div>
+                  <p className="text-gray-400">Loading PDF...</p>
+                </div>
+              }
+            >
               <Page
                 pageNumber={pageNumber}
                 scale={scale}
                 rotate={rotation}
-                width={containerWidth ? Math.min(containerWidth - 40, 800) : undefined}
+                width={Math.min(containerWidth - 40, 800)}
                 renderTextLayer={false}
                 renderAnnotationLayer={false}
                 loading={
-                  <Skeleton className="h-[640px] w-[480px] bg-[#0A0A0A]" />
+                  <div className="flex flex-col items-center justify-center h-40 sm:h-60">
+                    <div className="w-10 h-10 border-2 border-[#B4916C] border-t-transparent rounded-full animate-spin"></div>
+                  </div>
                 }
               />
-            )}
-          </Document>
-        )}
+            </Document>
+          )}
+        </div>
       </div>
     </div>
   );

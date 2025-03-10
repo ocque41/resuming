@@ -162,53 +162,77 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
           CV Analysis
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-6">
-        {!analysis && (
+      
+      <CardContent className="p-4 sm:p-6">
+        {!analysis && !loading && (
           <div className="mb-6">
-            <div className="grid grid-cols-1 gap-4">
-              <div className="flex items-center space-x-2">
-                <div className="flex-grow">
-                  <ComboboxPopover
-                    options={dropdownOptions()}
-                    label="Select a CV"
-                    onSelect={handleCVSelect}
-                    accentColor="#B4916C"
-                    darkMode={true}
-                  />
-                </div>
-                <Button
-                  onClick={handleAnalyze}
-                  disabled={!selectedCVId || loading}
-                  className="bg-[#B4916C] hover:bg-[#A3815C] text-white whitespace-nowrap"
-                >
-                  {loading ? "Analyzing..." : "Analyze"}
-                </Button>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0 mb-4">
+              <div className="flex-grow">
+                <ComboboxPopover
+                  options={dropdownOptions()}
+                  label="Select a CV"
+                  onSelect={handleCVSelect}
+                  accentColor="#B4916C"
+                  darkMode={true}
+                />
               </div>
+              <Button
+                onClick={handleAnalyze}
+                disabled={!selectedCVId || loading}
+                className="bg-[#B4916C] hover:bg-[#A3815C] text-white whitespace-nowrap w-full sm:w-auto"
+              >
+                {loading ? "Analyzing..." : "Analyze CV"}
+              </Button>
+            </div>
+            
+            <div className="text-gray-400 text-sm">
+              Select your CV to begin the AI-powered analysis. Our system will evaluate your CV against ATS systems and industry standards.
             </div>
           </div>
         )}
-
+        
+        {loading && (
+          <div className="flex flex-col items-center justify-center py-8">
+            <div className="w-16 h-16 border-4 border-[#B4916C] border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p className="text-gray-300 text-center">Analyzing your CV...</p>
+            <p className="text-gray-500 text-sm text-center mt-2">This may take a minute or two.</p>
+          </div>
+        )}
+        
         {error && (
           <Alert className="mb-4 bg-red-900/20 text-red-400 border border-red-900">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-
-        {loading && (
-          <div className="flex flex-col items-center justify-center py-10">
-            <div className="w-10 h-10 border-2 border-[#B4916C] border-t-transparent rounded-full animate-spin mb-4"></div>
-            <p className="text-gray-400">Analyzing your CV...</p>
-          </div>
-        )}
-
-        {analysis && !loading && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-white">ATS Score</h3>
-              <div className="text-2xl font-bold text-[#B4916C]">
-                {formatAtsScore(analysis.atsScore)}
+        
+        {analysis && (
+          <div className="space-y-6 overflow-x-auto">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-4 bg-[#0A0A0A] rounded-lg border border-gray-800">
+              <div>
+                <h3 className="text-white font-medium mb-1">ATS Compatibility Score</h3>
+                <div className="flex items-center">
+                  <div className="text-3xl font-bold text-[#B4916C]">{formatAtsScore(analysis.atsScore)}</div>
+                  <div className="ml-2 text-gray-400 text-sm">/ 100</div>
+                </div>
               </div>
+              
+              <div>
+                <h3 className="text-white font-medium mb-1">Industry</h3>
+                <div className="flex items-center text-gray-300">
+                  <Building className="w-4 h-4 mr-1 text-[#B4916C]" />
+                  {analysis.industry}
+                </div>
+              </div>
+              
+              {onAnalysisComplete && (
+                <Button 
+                  onClick={() => selectedCVId && onAnalysisComplete(selectedCVId)}
+                  className="bg-[#B4916C] hover:bg-[#A3815C] text-white mt-2 sm:mt-0 w-full sm:w-auto"
+                >
+                  Optimize CV <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              )}
             </div>
             
             {analysis.industry && (
@@ -270,24 +294,6 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
                 </div>
               </div>
             )}
-            
-            {onAnalysisComplete && selectedCVId && (
-              <div className="mt-6">
-                <Button
-                  onClick={() => onAnalysisComplete(selectedCVId)}
-                  className="w-full bg-[#B4916C] hover:bg-[#A3815C] text-white flex items-center justify-center"
-                >
-                  Proceed to Optimization
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {!analysis && !loading && !selectedCVId && (
-          <div className="text-center py-8 text-gray-400">
-            Select a CV to analyze its strengths and weaknesses
           </div>
         )}
       </CardContent>

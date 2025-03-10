@@ -24,15 +24,15 @@ export default async function OptimizePage() {
   
   return (
     <>
-      <header className="flex items-center justify-between p-4 mx-auto max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl">
+      <header className="flex items-center justify-between p-2 sm:p-4 mx-auto max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl">
         <div className="flex items-center">
           <Link 
             href="/dashboard" 
-            className="flex items-center justify-center h-8 w-8 rounded-md bg-black hover:bg-[#1D1D1D] text-[#B4916C] mr-4 transition-colors"
+            className="flex items-center justify-center h-8 w-8 rounded-md bg-black hover:bg-[#1D1D1D] text-[#B4916C] mr-2 sm:mr-4 transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
           </Link>
-          <h1 className="text-lg lg:text-xl font-medium text-white">
+          <h1 className="text-base sm:text-lg lg:text-xl font-medium text-white">
             Optimize Your CV
           </h1>
         </div>
@@ -40,15 +40,15 @@ export default async function OptimizePage() {
       
       <div className="flex flex-col space-y-6 mx-auto max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl px-2 sm:px-4 md:px-6 pb-12">
         <Card className="border border-[#B4916C]/20 bg-black shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-xl font-bold text-[#B4916C]">CV Optimization Suite</CardTitle>
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="text-lg sm:text-xl font-bold text-[#B4916C]">CV Optimization Suite</CardTitle>
             <CardDescription className="text-gray-400">
               Analyze and optimize your CV to maximize your chances of landing interviews
             </CardDescription>
           </CardHeader>
           
-          <CardContent className="p-4 md:p-6">
-            <p className="mb-6 text-gray-300">
+          <CardContent className="p-2 sm:p-4 md:p-6">
+            <p className="mb-4 sm:mb-6 text-sm sm:text-base text-gray-300">
               Our AI-powered tools help you understand your CV's strengths and weaknesses, 
               optimize for ATS systems, and create professionally formatted documents that stand out 
               to recruiters and hiring managers.

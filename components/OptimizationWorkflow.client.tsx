@@ -33,24 +33,24 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
   
   return (
     <div className="flex flex-col space-y-6">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center space-x-4">
+      <div className="flex items-center justify-between mb-4 overflow-x-auto pb-2">
+        <div className="flex items-center space-x-2 sm:space-x-4 min-w-max">
           <div 
             className={`flex items-center ${
               activeStep === "analyze" ? "text-[#B4916C]" : "text-gray-500"
             }`}
           >
             <div className={`
-              flex items-center justify-center w-8 h-8 rounded-full border-2 
+              flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-full border-2 
               ${activeStep === "analyze" ? "border-[#B4916C] text-[#B4916C]" : 
                 activeStep === "optimize" ? "border-gray-500 text-gray-500" : "border-gray-700 text-gray-700"}
             `}>
-              {activeStep === "optimize" ? <CheckCircle className="w-6 h-6" /> : "1"}
+              {activeStep === "optimize" ? <CheckCircle className="w-4 h-4 sm:w-6 sm:h-6" /> : "1"}
             </div>
-            <span className="ml-2 font-medium">Analyze</span>
+            <span className="ml-2 font-medium text-sm sm:text-base">Analyze</span>
           </div>
           
-          <ArrowRight className="w-4 h-4 text-gray-600" />
+          <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 text-gray-600" />
           
           <div 
             className={`flex items-center ${
@@ -58,12 +58,12 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
             }`}
           >
             <div className={`
-              flex items-center justify-center w-8 h-8 rounded-full border-2 
+              flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-full border-2 
               ${activeStep === "optimize" ? "border-[#B4916C] text-[#B4916C]" : "border-gray-700 text-gray-700"}
             `}>
               2
             </div>
-            <span className="ml-2 font-medium">Optimize</span>
+            <span className="ml-2 font-medium text-sm sm:text-base">Optimize</span>
           </div>
         </div>
       </div>
@@ -71,8 +71,8 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
       <Tabs value={activeStep} onValueChange={(value) => setActiveStep(value as "analyze" | "optimize")}>
         <TabsContent value="analyze" className="mt-0">
           <div className="flex items-center mb-2">
-            <BarChart2 className="h-5 w-5 text-[#B4916C] mr-2" />
-            <h2 className="text-lg font-medium text-white">Analyze Your CV</h2>
+            <BarChart2 className="h-4 w-4 sm:h-5 sm:w-5 text-[#B4916C] mr-2" />
+            <h2 className="text-base sm:text-lg font-medium text-white">Analyze Your CV</h2>
           </div>
           <AnalyzeCVCard 
             cvs={cvs} 
@@ -82,8 +82,8 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
         
         <TabsContent value="optimize" className="mt-0">
           <div className="flex items-center mb-2">
-            <FileText className="h-5 w-5 text-[#B4916C] mr-2" />
-            <h2 className="text-lg font-medium text-white">Optimize Your CV</h2>
+            <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-[#B4916C] mr-2" />
+            <h2 className="text-base sm:text-lg font-medium text-white">Optimize Your CV</h2>
           </div>
           <EnhancedOptimizeCVCard 
             cvs={getOptimizeCVs()} 

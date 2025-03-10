@@ -49,7 +49,7 @@ export default function HomePage() {
           {/* Badge above title */}
           <div>
             <Link href="https://chromad.vercel.app/docs/products/resuming">
-              <Badge className="bg-blue-500 text-white">Free</Badge>
+              <Badge className="bg-[#B4916C] text-white">Documentation</Badge>
             </Link>
           </div>
           <Article>
