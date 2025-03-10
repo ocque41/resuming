@@ -5,11 +5,12 @@ import { eq } from "drizzle-orm";
 
 /**
  * GET /api/cv/get-analyzed-cvs
- * Fast endpoint to retrieve analyzed CVs that are ready for optimization
+ * Safe endpoint to retrieve analyzed CVs that are ready for optimization
+ * with robust error handling
  */
 export async function GET(request: NextRequest) {
   try {
-    // Mock response with analyzed CVs
+    // Create a more realistic mock response
     const mockAnalyzedCVs = [
       {
         id: 123,
@@ -19,9 +20,10 @@ export async function GET(request: NextRequest) {
       }
     ];
     
-    console.log(`Found ${mockAnalyzedCVs.length} analyzed CVs ready for optimization`);
+    // For debugging purposes
+    console.log(`Returning ${mockAnalyzedCVs.length} analyzed CVs`);
     
-    // Return the results
+    // Return the mock results with clean JSON
     return new Response(JSON.stringify({ 
       success: true, 
       analyzedCVs: mockAnalyzedCVs
@@ -29,10 +31,14 @@ export async function GET(request: NextRequest) {
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error(`Error getting analyzed CVs: ${error instanceof Error ? error.message : String(error)}`);
+    // Log the detailed error
+    console.error(`Error getting analyzed CVs:`, error);
+    
+    // Provide a user-friendly response that avoids toString() on errors
     return new Response(JSON.stringify({ 
       error: "Failed to retrieve analyzed CVs", 
-      details: error instanceof Error ? error.message : String(error) 
+      details: error instanceof Error ? error.message : "Unknown error occurred",
+      success: false
     }), {
       status: 500,
       headers: { "Content-Type": "application/json" },

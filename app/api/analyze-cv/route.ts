@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 
 /**
  * GET /api/analyze-cv
- * Streamlined CV analysis API endpoint
+ * Streamlined CV analysis API endpoint with robust error handling
  */
 export async function GET(request: NextRequest) {
   try {
@@ -15,16 +15,24 @@ export async function GET(request: NextRequest) {
     const fileName = searchParams.get("fileName");
     const cvId = searchParams.get("cvId");
 
-    // Early validations
+    // Early validations with helpful error messages
     if (!fileName) {
-      return new Response(JSON.stringify({ error: "Missing fileName parameter" }), {
+      console.error("Missing fileName parameter in analyze-cv request");
+      return new Response(JSON.stringify({ 
+        error: "Missing fileName parameter",
+        success: false 
+      }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
     }
 
     if (!cvId) {
-      return new Response(JSON.stringify({ error: "Missing cvId parameter" }), {
+      console.error("Missing cvId parameter in analyze-cv request");
+      return new Response(JSON.stringify({ 
+        error: "Missing cvId parameter",
+        success: false 
+      }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
@@ -32,24 +40,61 @@ export async function GET(request: NextRequest) {
 
     console.log(`Starting CV analysis for ${fileName} (ID: ${cvId})`);
 
-    // Fetch CV record
-    const cv = await db.query.cvs.findFirst({
-      where: eq(cvs.id, parseInt(cvId))
-    });
+    // Parse cvId to integer safely
+    let cvIdNumber: number;
+    try {
+      cvIdNumber = parseInt(cvId);
+      if (isNaN(cvIdNumber)) {
+        throw new Error(`Invalid cvId: ${cvId} is not a number`);
+      }
+    } catch (parseError) {
+      console.error(`Error parsing cvId: ${cvId}`, parseError);
+      return new Response(JSON.stringify({ 
+        error: `Invalid cvId: ${cvId} is not a valid number`,
+        success: false 
+      }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // Fetch CV record with safety checks
+    let cv;
+    try {
+      cv = await db.query.cvs.findFirst({
+        where: eq(cvs.id, cvIdNumber)
+      });
+    } catch (dbError) {
+      console.error(`Database error fetching CV ${cvId}:`, dbError);
+      return new Response(JSON.stringify({ 
+        error: "Database error while fetching CV",
+        details: dbError instanceof Error ? dbError.message : "Unknown database error",
+        success: false
+      }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
     if (!cv) {
       console.error(`CV not found: ${cvId}`);
-      return new Response(JSON.stringify({ error: "CV not found" }), {
+      return new Response(JSON.stringify({ 
+        error: "CV not found",
+        success: false 
+      }), {
         status: 404,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    // Get CV content
-    const cvContent = cv.rawText;
-    if (!cvContent) {
-      console.error(`CV content not found for ID: ${cvId}`);
-      return new Response(JSON.stringify({ error: "CV content not found" }), {
+    // Get CV content with null check
+    const cvContent = cv.rawText || "";
+    if (!cvContent || cvContent.trim() === "") {
+      console.error(`CV content is empty for ID: ${cvId}`);
+      return new Response(JSON.stringify({ 
+        error: "CV content is empty",
+        success: false 
+      }), {
         status: 404,
         headers: { "Content-Type": "application/json" },
       });
@@ -97,8 +142,9 @@ export async function GET(request: NextRequest) {
     if (cv.metadata) {
       try {
         metadata = JSON.parse(cv.metadata);
-      } catch (e) {
-        console.error(`Error parsing existing metadata: ${e instanceof Error ? e.message : String(e)}`);
+      } catch (parseError) {
+        console.error(`Error parsing existing metadata for CV ${cvId}:`, parseError);
+        // Continue with empty metadata instead of failing
         metadata = {};
       }
     }
@@ -120,12 +166,18 @@ export async function GET(request: NextRequest) {
       analysis_status: 'complete'
     };
 
-    // Update CV record with metadata
-    await db.update(cvs)
-      .set({ metadata: JSON.stringify(updatedMetadata) })
-      .where(eq(cvs.id, parseInt(cvId)));
+    // Update CV record with metadata safely
+    try {
+      await db.update(cvs)
+        .set({ metadata: JSON.stringify(updatedMetadata) })
+        .where(eq(cvs.id, cvIdNumber));
+    } catch (updateError) {
+      console.error(`Error updating metadata for CV ${cvId}:`, updateError);
+      // We don't want to fail the whole process if update fails
+      // Analysis results can still be returned to the user
+    }
 
-    console.log(`Metadata updated for CV ${fileName} (ID: ${cvId})`);
+    console.log(`Analysis completed successfully for CV ${fileName} (ID: ${cvId})`);
 
     // Return analysis results
     return new Response(JSON.stringify({ 
@@ -136,10 +188,14 @@ export async function GET(request: NextRequest) {
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error(`Error analyzing CV: ${error instanceof Error ? error.message : String(error)}`);
+    // Log the detailed error
+    console.error(`Unexpected error analyzing CV:`, error);
+    
+    // Provide a user-friendly response
     return new Response(JSON.stringify({ 
       error: "Failed to analyze CV", 
-      details: error instanceof Error ? error.message : String(error) 
+      details: error instanceof Error ? error.message : "Unknown error occurred",
+      success: false
     }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
