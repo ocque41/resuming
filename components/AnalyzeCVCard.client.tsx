@@ -161,9 +161,12 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
     const strengths: string[] = [];
     const sections = analysis.sectionBreakdown || {};
     
-    // Check for well-structured sections
-    if (Object.keys(sections).length >= 4) {
-      strengths.push("Well-structured with clear section divisions");
+    // Always add at least one basic strength
+    strengths.push("CV successfully uploaded and parsed");
+    
+    // Check for comprehensive sections
+    if (Object.keys(sections).length >= 2) {
+      strengths.push("Multiple sections identified in your CV");
     }
     
     // Check for appropriate length
@@ -172,28 +175,23 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
       totalLength += section.length;
     }
     
-    if (totalLength > 1500 && totalLength < 5000) {
-      strengths.push("Appropriate CV length for ATS scanning");
-    }
-    
-    // Check for consistent formatting
-    if (sections.experience && sections.experience.includes('\n')) {
-      const lines = sections.experience.split('\n');
-      const bulletPoints = lines.filter(line => line.trim().startsWith('•') || line.trim().startsWith('-')).length;
-      
-      if (bulletPoints > 3) {
-        strengths.push("Good use of bullet points to highlight achievements");
-      }
+    if (totalLength > 500) {
+      strengths.push("Appropriate content length for professional review");
     }
     
     // Check for contact information
-    if (sections.contact && sections.contact.length > 50) {
-      strengths.push("Complete contact information section");
+    if (sections.contact || sections.summary) {
+      strengths.push("Contact or summary information detected");
     }
     
-    // Check for skills section
-    if (sections.skills && sections.skills.length > 100) {
-      strengths.push("Comprehensive skills section that aids ATS matching");
+    // If we found keywords
+    if (analysis.keywordAnalysis && Object.keys(analysis.keywordAnalysis).length > 0) {
+      strengths.push("Industry-relevant keywords detected");
+    }
+    
+    // If the ATS score is reasonable
+    if (typeof analysis.atsScore === 'number' && analysis.atsScore > 40) {
+      strengths.push("Basic ATS compatibility detected");
     }
     
     // Return top 3 strengths
