@@ -161,55 +161,91 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
     const strengths: string[] = [];
     const sections = analysis.sectionBreakdown || {};
     
-    // Check for comprehensive sections instead of just adding a basic upload message
-    if (Object.keys(sections).length >= 2) {
-      strengths.push("Well-structured CV with multiple sections");
+    // Extract more meaningful strengths from the CV content
+    
+    // Analyze industry-specific keywords
+    if (analysis.keywordAnalysis) {
+      const keywordEntries = Object.entries(analysis.keywordAnalysis);
+      // Sort keywords by frequency (highest first)
+      keywordEntries.sort((a, b) => b[1] - a[1]);
+      
+      if (keywordEntries.length > 3) {
+        const topKeywords = keywordEntries.slice(0, 3).map(entry => entry[0]).join(', ');
+        strengths.push(`Strong presence of key terms: ${topKeywords}`);
+      }
     }
     
-    // Check for appropriate length
+    // Check for comprehensive structure
+    if (Object.keys(sections).length >= 4) {
+      strengths.push("Well-structured CV with comprehensive sections");
+    } else if (Object.keys(sections).length >= 2) {
+      strengths.push("Basic CV structure with essential sections");
+    }
+    
+    // Check if industry was correctly identified
+    if (analysis.industry && analysis.industry !== 'General') {
+      strengths.push(`CV is well-aligned with ${analysis.industry} industry standards`);
+    }
+    
+    // Check for experience section quality
+    if (sections.experience) {
+      const experienceText = sections.experience.toLowerCase();
+      
+      // Look for action verbs and achievements
+      const actionVerbs = ['achieved', 'led', 'managed', 'developed', 'created', 'improved', 'increased', 'decreased', 'implemented'];
+      const hasActionVerbs = actionVerbs.some(verb => experienceText.includes(verb));
+      
+      // Look for metrics and quantifiable results
+      const hasMetrics = /\d+%|\$\d+|\d+ years|\d+\+?/.test(experienceText);
+      
+      if (hasActionVerbs && hasMetrics) {
+        strengths.push("Experience section effectively highlights achievements with metrics");
+      } else if (hasActionVerbs) {
+        strengths.push("Experience descriptions use strong action verbs");
+      }
+    }
+    
+    // Check for skills section quality
+    if (sections.skills && sections.skills.length > 100) {
+      // Check if skills are relevant to the detected industry
+      if (analysis.industry && analysis.keywordAnalysis) {
+        const skillsRelevance = Object.keys(analysis.keywordAnalysis).length;
+        if (skillsRelevance > 5) {
+          strengths.push(`Comprehensive and relevant skills for ${analysis.industry}`);
+        } else {
+          strengths.push("Detailed skills section included");
+        }
+      } else {
+        strengths.push("Comprehensive skills section");
+      }
+    }
+    
+    // Check for education section
+    if (sections.education && sections.education.length > 50) {
+      strengths.push("Well-documented educational qualifications");
+    }
+    
+    // Check for appropriate length overall
     let totalLength = 0;
     for (const section of Object.values(sections)) {
       totalLength += section.length;
     }
     
-    if (totalLength > 500) {
-      strengths.push("Comprehensive content with appropriate detail level");
+    if (totalLength > 2000 && totalLength < 6000) {
+      strengths.push("Ideal CV length for thorough review");
+    } else if (totalLength > 1000) {
+      strengths.push("Appropriate content length");
     }
     
-    // Check for contact information
-    if (sections.contact || sections.summary) {
-      strengths.push("Clear contact information and/or professional summary");
-    }
-    
-    // If we found keywords
-    if (analysis.keywordAnalysis && Object.keys(analysis.keywordAnalysis).length > 3) {
-      strengths.push("Good use of industry-relevant keywords");
-    } else if (analysis.keywordAnalysis && Object.keys(analysis.keywordAnalysis).length > 0) {
-      strengths.push("Some industry-relevant keywords detected");
-    }
-    
-    // If the ATS score is reasonable
+    // If the ATS score is good
     if (typeof analysis.atsScore === 'number') {
-      if (analysis.atsScore > 60) {
-        strengths.push("Strong ATS compatibility");
+      if (analysis.atsScore > 75) {
+        strengths.push("Excellent ATS optimization");
+      } else if (analysis.atsScore > 60) {
+        strengths.push("Good ATS compatibility");
       } else if (analysis.atsScore > 40) {
-        strengths.push("Acceptable ATS compatibility");
+        strengths.push("Acceptable ATS formatting");
       }
-    }
-    
-    // Check for experience section
-    if (sections.experience && sections.experience.length > 200) {
-      strengths.push("Detailed work experience section");
-    }
-    
-    // Check for skills section
-    if (sections.skills && sections.skills.length > 100) {
-      strengths.push("Comprehensive skills section");
-    }
-    
-    // Check for education section
-    if (sections.education && sections.education.length > 50) {
-      strengths.push("Well-documented educational background");
     }
     
     // If no strengths were found, add a fallback message
@@ -218,7 +254,7 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
       strengths.push("Additional optimization recommended");
     }
     
-    // Return up to 3 strengths (more meaningful than before)
+    // Return up to 3 strengths
     return strengths.slice(0, 3);
   }
   
@@ -489,3 +525,4 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
     </Card>
   );
 }
+
