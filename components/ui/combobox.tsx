@@ -51,6 +51,14 @@ export function ComboboxPopover({
     }
   }, [safeOptions, defaultValue, onSelect]);
 
+  // Reset value if current value not in safeOptions
+  useEffect(() => {
+    if (safeOptions.length > 0 && !safeOptions.includes(value)) {
+      setValue(safeOptions[0]);
+      onSelect(safeOptions[0]);
+    }
+  }, [safeOptions, value, onSelect]);
+
   // Dynamic styles based on props
   const accentStyle = {
     color: accentColor,

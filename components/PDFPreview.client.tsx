@@ -122,7 +122,7 @@ export default function PDFPreview({ pdfData, fileName = 'document.pdf', onDownl
           </span>
           <Button
             onClick={goToNextPage}
-            disabled={pageNumber >= numPages}
+            disabled={numPages === null || pageNumber >= numPages}
             variant="outline"
             size="sm"
             className="bg-[#0A0A0A] border-gray-800 text-gray-300 hover:bg-[#1A1A1A] hover:text-white"

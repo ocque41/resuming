@@ -155,7 +155,7 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
   }, [cvs, dropdownOptions]);
 
   return (
-    <Card className="bg-[#050505] border-gray-800 shadow-xl overflow-hidden">
+    <Card className="w-full bg-[#050505] border-gray-800 shadow-xl overflow-hidden">
       <CardHeader className="bg-[#0A0A0A] border-b border-gray-800 pb-3">
         <CardTitle className="flex items-center text-white">
           <BarChart2 className="w-5 h-5 mr-2 text-[#B4916C]" />
@@ -167,7 +167,7 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
         {!analysis && !loading && (
           <div className="mb-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0 mb-4">
-              <div className="flex-grow">
+              <div className="w-full">
                 <ComboboxPopover
                   options={dropdownOptions()}
                   label="Select a CV"

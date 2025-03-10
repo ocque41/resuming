@@ -482,7 +482,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   }, [cvs, dropdownOptions]);
 
   return (
-    <Card className="bg-[#050505] border-gray-800 shadow-xl overflow-hidden">
+    <Card className="w-full bg-[#050505] border-gray-800 shadow-xl overflow-hidden">
       <CardHeader className="bg-[#0A0A0A] border-b border-gray-800 pb-3">
         <CardTitle className="flex items-center text-white">
           <FileText className="w-5 h-5 mr-2 text-[#B4916C]" />
@@ -493,24 +493,30 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       <CardContent className="p-4 sm:p-6">
         {!isProcessed && !isProcessing && (
           <div className="mb-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0 mb-4">
-              <div className="flex-grow">
-                <ComboboxPopover
-                  options={dropdownOptions}
-                  label="Select a CV"
-                  onSelect={handleCVSelect}
-                  accentColor="#B4916C"
-                  darkMode={true}
-                />
+            {dropdownOptions.length > 0 ? (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0 mb-4">
+                <div className="w-full">
+                  <ComboboxPopover
+                    options={dropdownOptions}
+                    label="Select a CV"
+                    onSelect={handleCVSelect}
+                    accentColor="#B4916C"
+                    darkMode={true}
+                  />
+                </div>
+                <Button
+                  onClick={handleProcessCV}
+                  disabled={processingButtonDisabled}
+                  className="bg-[#B4916C] hover:bg-[#A3815C] text-white whitespace-nowrap w-full sm:w-auto"
+                >
+                  {isProcessing ? "Processing..." : "Optimize CV"}
+                </Button>
               </div>
-              <Button
-                onClick={handleProcessCV}
-                disabled={processingButtonDisabled}
-                className="bg-[#B4916C] hover:bg-[#A3815C] text-white whitespace-nowrap w-full sm:w-auto"
-              >
-                {isProcessing ? "Processing..." : "Optimize CV"}
-              </Button>
-            </div>
+            ) : (
+              <div className="text-center py-4 text-gray-400">
+                No valid CV options available. Please upload a CV.
+              </div>
+            )}
             
             <div className="text-gray-400 text-sm">
               Select your CV to begin the AI-powered optimization process. Our system will analyze your CV, identify areas for improvement, and generate an optimized version.
