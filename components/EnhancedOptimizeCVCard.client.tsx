@@ -15,6 +15,12 @@ interface EnhancedOptimizeCVCardProps {
   cvs?: string[]; // Format: "filename|id"
 }
 
+// Define type for dropdown options
+interface DropdownOption {
+  label: string;
+  value: string;
+}
+
 // Component implementation
 export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVCardProps) {
   // State for CV selection
@@ -51,36 +57,39 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   
   // Prepare CV options for the dropdown
   const dropdownOptions = useMemo(() => {
-    if (!Array.isArray(cvs)) {
-      console.error("CV options is not an array:", cvs);
+    if (!Array.isArray(cvs) || cvs.length === 0) {
+      console.error('No CVs available for selection.');
       return [];
     }
-    
+
+    // Get just the name part from each CV string
     return cvs.map(cv => {
-      if (typeof cv !== 'string') {
-        console.error("CV option is not a string:", cv);
+      const parts = cv.split('|');
+      if (parts.length < 2) {
+        console.error('Invalid CV format:', cv);
         return null;
       }
-      
-      const parts = cv.split('|');
-      return parts[0] ? parts[0].trim() : null;
+      return parts[0].trim();
     }).filter(Boolean) as string[];
   }, [cvs]);
   
-  // Get CV ID from filename
+  // Helper function to get CV ID from name
   const getCvIdFromName = useCallback((name: string) => {
-    if (!Array.isArray(cvs)) return null;
+    if (!Array.isArray(cvs) || cvs.length === 0) {
+      return null;
+    }
     
-    const matchingCv = cvs.find(cv => {
-      if (typeof cv !== 'string') return false;
+    const matchedCv = cvs.find(cv => {
       const parts = cv.split('|');
-      return parts[0] && parts[0].trim() === name;
+      return parts[0]?.trim() === name;
     });
     
-    if (!matchingCv) return null;
+    if (matchedCv) {
+      const parts = matchedCv.split('|');
+      return parts[1]?.trim() || null;
+    }
     
-    const parts = matchingCv.split('|');
-    return parts[1] || null;
+    return null;
   }, [cvs]);
   
   // Handle CV selection
@@ -158,14 +167,15 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     }
   }, [selectedCVId]);
   
-  // Convert DOCX to PDF
+  // Handle PDF conversion from DOCX
   const handleConvertToPdf = useCallback(async () => {
-    if (!selectedCVId) {
-      setError("CV ID not found. Please try selecting your CV again.");
+    if (!docxBase64) {
+      setError("No DOCX file available for conversion");
       setErrorType('pdf');
       return;
     }
     
+    console.log("Starting PDF conversion");
     setError(null);
     setErrorType(null);
     setIsConvertingToPdf(true);
@@ -175,10 +185,10 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       // Simulate progress updates
       const progressInterval = setInterval(() => {
         setPdfProgress(prev => {
-          const newProgress = prev + 10;
+          const newProgress = prev + 15;
           return newProgress < 90 ? newProgress : prev;
         });
-      }, 700);
+      }, 800);
       
       // Call convert-to-pdf API
       const response = await fetch('/api/cv/convert-to-pdf', {
@@ -186,31 +196,35 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ cvId: selectedCVId }),
+        body: JSON.stringify({ docxBase64 }),
       });
       
       clearInterval(progressInterval);
       
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({ error: "Unknown error occurred" }));
+        console.error("PDF conversion API error:", errorData);
         throw new Error(errorData.error || "Failed to convert to PDF");
       }
       
       const data = await response.json();
       
-      // Store PDF data for download
+      // Store PDF data for preview and download
       setPdfBase64(data.pdfBase64);
       setPdfConverted(true);
       setIsConvertingToPdf(false);
       setPdfProgress(100);
+      
+      console.log("PDF conversion completed successfully");
     } catch (error) {
+      console.error("PDF conversion error:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to convert to PDF";
-      setError(`${errorMessage}. You can still download the DOCX file.`);
+      setError(`${errorMessage}. Please try again or contact support if the issue persists.`);
       setErrorType('pdf');
       setIsConvertingToPdf(false);
       setPdfProgress(0);
     }
-  }, [selectedCVId]);
+  }, [docxBase64]);
 
   // Process the selected CV with debouncing
   const handleProcessCV = useCallback(async () => {
@@ -220,6 +234,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       return;
     }
     
+    console.log("Starting optimization process for CV ID:", selectedCVId);
     setError(null);
     setErrorType(null);
     setIsProcessing(true);
@@ -234,9 +249,8 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     setPdfBase64(null);
     
     try {
-      console.log("Starting optimization for CV ID:", selectedCVId);
-      
       // Call process API
+      console.log("Calling process API for CV ID:", selectedCVId);
       const response = await fetch('/api/cv/process', {
         method: 'POST',
         headers: {
@@ -246,7 +260,8 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({ error: "Unknown error occurred" }));
+        console.error("Process API error:", errorData);
         throw new Error(errorData.error || "Failed to process CV");
       }
       
@@ -271,19 +286,26 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             return;
           }
           
-          const statusResponse = await fetch(`/api/cv/process/status?cvId=${selectedCVId}`);
+          // Call status API with error handling
+          const statusResponse = await fetch(`/api/cv/process/status?cvId=${selectedCVId}`).catch(err => {
+            console.error("Status fetch error:", err);
+            return new Response(JSON.stringify({ error: "Network error occurred" }), { status: 500 });
+          });
           
           if (!statusResponse.ok) {
-            console.error("Status response not OK:", await statusResponse.text());
+            console.error("Status response not OK:", await statusResponse.text().catch(() => "Could not read response"));
             throw new Error("Failed to get processing status");
           }
           
-          const statusData = await statusResponse.json();
+          const statusData = await statusResponse.json().catch(() => {
+            throw new Error("Invalid status response format");
+          });
+          
           console.log("Status data:", statusData);
           
           // Update progress
           if (statusData.processingProgress) {
-            setProgress(statusData.processingProgress);
+            setProgress(Math.min(95, statusData.processingProgress)); // Cap at 95% until fully complete
           }
           
           if (statusData.processingStatus) {
@@ -304,6 +326,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             
             // Automatically start generating DOCX if processing is completed
             setTimeout(() => {
+              console.log("Auto-generating DOCX after successful processing");
               handleGenerateDocx();
             }, 1000);
           }
