@@ -105,11 +105,11 @@ export async function POST(request: Request) {
       .set({ metadata: JSON.stringify(metadata) })
       .where(eq(cvs.id, cvRecord.id));
 
-    // Import processCV dynamically to avoid circular dependencies
-    const { processCV } = await import("../route");
+    // Import processCV from utility file
+    const { processCVWithAI } = await import("@/lib/utils/cvProcessor");
 
     // Start processing in the background
-    processCV(cvRecord.id, cvRecord.rawText, metadata);
+    processCVWithAI(cvRecord.id, cvRecord.rawText, metadata);
 
     return NextResponse.json({
       message: "CV processing restarted successfully.",

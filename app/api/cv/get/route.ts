@@ -8,10 +8,7 @@ import { db } from '@/lib/db/drizzle';
 import { cvs } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest) {
   try {
     const user = await getUser();
     
@@ -22,7 +19,18 @@ export async function GET(
       );
     }
     
-    const cvId = parseInt(params.id);
+    // Get CV ID from query parameter
+    const { searchParams } = new URL(request.url);
+    const cvIdParam = searchParams.get('id');
+    
+    if (!cvIdParam) {
+      return NextResponse.json(
+        { error: 'CV ID is required' },
+        { status: 400 }
+      );
+    }
+    
+    const cvId = parseInt(cvIdParam);
     
     if (isNaN(cvId)) {
       return NextResponse.json(
@@ -49,7 +57,7 @@ export async function GET(
           ? JSON.parse(cv.metadata) 
           : cv.metadata;
       } catch (e) {
-        logger.error('Error parsing CV metadata', { cvId });
+        logger.error('Error parsing CV metadata');
       }
     }
     
@@ -86,7 +94,7 @@ export async function GET(
           response.pdfBase64 = Buffer.from(pdfContent).toString('base64');
         }
       } catch (err) {
-        logger.error('Error reading PDF file', { cvId });
+        logger.error('Error reading PDF file');
       }
     }
     
@@ -107,7 +115,7 @@ export async function GET(
           response.docxBase64 = Buffer.from(docxContent).toString('base64');
         }
       } catch (err) {
-        logger.error('Error reading DOCX file', { cvId });
+        logger.error('Error reading DOCX file');
       }
     }
     

@@ -53,7 +53,7 @@ export default function CVPreviewCard({ userId }: CVPreviewCardProps) {
           setCvs(formattedCVs);
           
           // Auto-select the first CV that has optimized versions
-          const optimizedCV = formattedCVs.find(cv => cv.optimizedPdf || cv.optimizedDocx);
+          const optimizedCV = formattedCVs.find((cv: CVItem) => cv.optimizedPdf || cv.optimizedDocx);
           if (optimizedCV) {
             setSelectedCV(optimizedCV);
             fetchCVContent(optimizedCV.id);
@@ -80,7 +80,7 @@ export default function CVPreviewCard({ userId }: CVPreviewCardProps) {
       setPdfBase64(null);
       setDocxBase64(null);
       
-      const response = await fetch(`/api/cv/${cvId}`);
+      const response = await fetch(`/api/cv/get?id=${cvId}`);
       if (!response.ok) {
         throw new Error('Failed to fetch CV content');
       }
