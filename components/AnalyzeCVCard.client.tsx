@@ -36,6 +36,7 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [allowProceed, setAllowProceed] = useState<boolean>(false);
 
   // Handle CV selection
   const handleCVSelect = useCallback((cvId: string, cvName: string) => {
@@ -260,6 +261,16 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
       .map(([keyword, score]) => ({ keyword, score }));
   };
 
+  // Add effect to enable proceeding 5 seconds after analysis is ready
+  useEffect(() => {
+    if (analysis) {
+      const timer = setTimeout(() => {
+        setAllowProceed(true);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [analysis]);
+
   return (
     <Card className="w-full bg-[#050505] border-gray-800 shadow-xl overflow-hidden">
       <CardHeader className="bg-[#0A0A0A] border-b border-gray-800 pb-3">
@@ -330,15 +341,6 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
                   {analysis.industry}
                 </div>
               </div>
-              
-              {onAnalysisComplete && (
-                <Button 
-                  onClick={() => selectedCVId && onAnalysisComplete(selectedCVId)}
-                  className="bg-[#B4916C] hover:bg-[#A3815C] text-white mt-2 sm:mt-0 w-full sm:w-auto"
-                >
-                  Optimize CV <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              )}
             </div>
             
             <div>
@@ -399,6 +401,21 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
                   ))}
                 </div>
               </div>
+            )}
+            
+            {analysis && onAnalysisComplete && (
+              allowProceed ? (
+                <Button 
+                  onClick={() => onAnalysisComplete(selectedCVId || '')}
+                  className="bg-[#B4916C] hover:bg-[#A3815C] text-white mt-2 sm:mt-0 w-full sm:w-auto"
+                >
+                  Optimize CV <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              ) : (
+                <div className="text-gray-400 text-sm mt-2">
+                  Please review the analysis; button will enable shortly...
+                </div>
+              )
             )}
           </div>
         )}

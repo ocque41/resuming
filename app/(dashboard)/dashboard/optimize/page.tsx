@@ -23,21 +23,11 @@ export default async function OptimizePage() {
   const formattedCvs = cvs.map((cv: any) => `${cv.fileName}|${cv.id}`);
   
   return (
-    <div className="container mx-auto py-6 max-w-6xl">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">CV Optimization</h1>
-          <p className="text-gray-400 mt-1">Analyze and optimize your CV for ATS compatibility</p>
-        </div>
-        <Link href="/dashboard" className="flex items-center text-gray-400 hover:text-white">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Dashboard
-        </Link>
-      </div>
-      
-      <ErrorBoundaryWrapper>
+    <div className="min-h-screen bg-black text-white p-4">
+      <div className="max-w-sm mx-auto my-8">
+        <h1 className="text-2xl mb-4 text-center">Optimize Your CV</h1>
         <OptimizationWorkflow cvs={formattedCvs} />
-      </ErrorBoundaryWrapper>
+      </div>
     </div>
   );
 } 

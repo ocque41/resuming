@@ -265,26 +265,26 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             // Check if progress is stalled
             if (statusData.processingProgress === lastProgress) {
               stalledProgressCount++;
-              
-              // If progress is stalled for too long, force completion
-              if (stalledProgressCount >= 5 && statusData.processingProgress >= 95) {
-                console.log("Progress stalled at 95% or higher, forcing completion");
+
+              // If progress is stalled for too long, force completion regardless of progress value
+              if (stalledProgressCount >= 3) {
+                console.log("Progress stalled, forcing completion");
                 setOptimizationStalled(true);
                 clearInterval(statusInterval);
                 setIsProcessing(false);
                 setIsProcessed(true);
                 setProgress(100);
-                
+
                 // Update ATS scores
                 setOriginalAtsScore(statusData.atsScore || 65);
                 setImprovedAtsScore(statusData.improvedAtsScore || 85);
-                
+
                 // Automatically start generating DOCX if processing is completed
                 setTimeout(() => {
                   console.log("Auto-generating DOCX after forced completion");
                   handleGenerateDocx();
                 }, 1000);
-                
+
                 return;
               }
             } else {
@@ -292,7 +292,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
               lastProgress = statusData.processingProgress;
             }
             
-            setProgress(Math.min(99, statusData.processingProgress)); // Cap at 99% until fully complete
+            setProgress(Math.min(99, statusData.processingProgress));
           }
           
           if (statusData.processingStatus) {
