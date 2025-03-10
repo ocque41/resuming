@@ -81,7 +81,7 @@ export default function AnalyzeCVCard({ cvs, children }: AnalyzeCVCardProps) {
   };
 
   return (
-    <Card className="bg-[#121212] border-gray-800 shadow-xl overflow-hidden">
+    <Card className="bg-[#050505] border-gray-800 shadow-xl overflow-hidden">
       <CardHeader className="bg-[#0A0A0A] border-b border-gray-800 pb-3">
         <CardTitle className="flex items-center text-white">
           <BarChart2 className="w-5 h-5 mr-2 text-[#B4916C]" />

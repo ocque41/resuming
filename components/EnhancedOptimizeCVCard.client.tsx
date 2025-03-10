@@ -177,8 +177,17 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     const index = displayCVOptions.indexOf(cv);
     if (index !== -1 && index < cvOptions.length) {
       setSelectedCV(cvOptions[index]);
+      
+      // Extract CV ID from selected CV
+      const cvParts = cvOptions[index].split('|');
+      const cvIdStr = cvParts[1] || null;
+      
+      if (cvIdStr) {
+        setSelectedCVId(cvIdStr);
+      }
     } else {
       setSelectedCV(null);
+      setSelectedCVId(null);
     }
   }, [displayCVOptions, cvOptions]);
   
@@ -366,8 +375,16 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     }
   }, [autoPdfConvert, docxGenerated, pdfConverted, isConvertingToPdf, handleConvertToPdf]);
   
+  // Ensure we have the PDF preview and download options available
+  useEffect(() => {
+    // If we have a PDF but the state doesn't reflect it, update the state
+    if (pdfBase64 && !pdfConverted) {
+      setPdfConverted(true);
+    }
+  }, [pdfBase64, pdfConverted]);
+  
   return (
-    <Card className="bg-[#121212] border-gray-800 shadow-xl overflow-hidden">
+    <Card className="bg-[#050505] border-gray-800 shadow-xl overflow-hidden">
       <CardHeader className="bg-[#0A0A0A] border-b border-gray-800 pb-3">
         <CardTitle className="flex items-center text-white">
           <FileText className="w-5 h-5 mr-2 text-[#B4916C]" />

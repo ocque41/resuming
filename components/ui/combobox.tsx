@@ -58,7 +58,7 @@ export function ComboboxPopover({
   };
 
   const darkModeClasses = darkMode
-    ? 'bg-gray-900 border-gray-700 text-gray-300'
+    ? 'bg-[#050505] border-gray-700 text-gray-300'
     : 'bg-white border-gray-200 text-gray-900';
 
   return (
@@ -83,11 +83,11 @@ export function ComboboxPopover({
       <PopoverContent 
         className={cn(
           "w-full p-0",
-          darkMode ? "bg-gray-900 border-gray-700" : "bg-white"
+          darkMode ? "bg-[#050505] border-gray-700" : "bg-white"
         )}
       >
         <Command 
-          className={darkMode ? "bg-gray-900" : ""}
+          className={darkMode ? "bg-[#050505]" : ""}
         >
           <CommandInput 
             placeholder={`Search ${label.toLowerCase()}...`} 

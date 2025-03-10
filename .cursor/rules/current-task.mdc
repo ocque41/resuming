@@ -1,0 +1,55 @@
+---
+description: the current task we are implementing and the only thing we should focus on
+globs: 
+---
+*I am building an advanced CV optimization system within my Next.js application on the [page.tsx](mdc:app/(dashboard)/dashboard/optimize/page.tsx). The system must follow the detailed workflow outlined below, with every single step calling the OpenAI Chat-GPT Model 4o to act as an intelligent agent responsible for generating, analyzing, and optimizing all content and data.*
+
+**Workflow & Responsibilities:**
+
+1. **PDF Upload:**
+    - Users will upload their CV in PDF format.
+    - The file is sent to a backend API, and immediately upon receipt, a call is made to Chat-GPT Model 4o to initiate a preliminary analysis.
+2. **Backend API Processing & Text Extraction:**
+    - The backend API processes the PDF file using robust PDF parsing libraries.
+    - **Call to Chat-GPT Model 4o:** The extracted raw text is forwarded to Chat-GPT Model 4o, which is responsible for:
+        - Parsing the CV content.
+        - Extracting all metadata (e.g., contact details, work experience, education, skills, certifications).
+        - Generating an initial structured metadata object.
+3. **Deep Analysis & ATS Scoring:**
+    - The system references a comprehensive system-reference file that details best practices in hiring and ATS processes.
+    - **Call to Chat-GPT Model 4o:** This agent uses the extracted metadata and the reference file to:
+        - Perform a detailed analysis of the CV.
+        - Identify strengths, weaknesses, and gaps.
+        - Calculate an accurate ATS score (in percentage) based on industry standards.
+        - Provide detailed recommendations on how to improve each section.
+4. **DOCX Generation with Optimized Layout:**
+    - Based on the metadata and ATS analysis, a new DOCX file is generated with the following structured layout:
+        - **Profile:** A refined “About Me” section.
+        - **Achievements:** Three bullet points summarizing the user’s top career achievements.
+        - **Experience:** Detailed work experience entries (company, duration, and three major achievements per role).
+        - **Skills:** A comprehensive list of all software proficiencies and competencies.
+        - **Education:** Academic qualifications.
+        - **Languages:** Language proficiencies.
+    - **Call to Chat-GPT Model 4o:** The agent is responsible for organizing and generating the optimized content for each section. It ensures that the generated DOCX reflects the best practices for ATS optimization.
+    - Once generated, the DOCX file is stored in the Dropbox database, and the user’s CV collection table is updated to reference this new file.
+5. **Optimization Process Trigger:**
+    - When the user clicks the “Optimize” feature, the system retrieves the stored DOCX file.
+    - **Call to Chat-GPT Model 4o:** The agent is invoked again to:
+        - Re-assess the current DOCX file content.
+        - Re-extract metadata if necessary.
+        - Use AI optimization to refine each section (Profile, Achievements, Experience, Skills, Education, Languages) based on the previously generated recommendations.
+    - The optimized content is then injected into the DOCX document using the same layout as specified, ensuring consistency with the provided reference design.
+6. **DOCX to PDF Conversion & User Interaction:**
+    - The updated DOCX file is converted back to PDF using a reliable conversion tool.
+    - A preview of the final optimized PDF is presented to the user.
+    - **User Choices:**
+        - If the user accepts the optimized CV, they are given the option to download it as a PDF or DOCX.
+        - If not, they can trigger a re-optimization process from scratch.
+
+**Additional Instructions & Best Practices:**
+
+- **Robust Error Handling:** At every step, detailed error logging should be implemented. Any errors encountered should prompt a new call to Chat-GPT Model 4o to offer diagnostic insights and recommendations for recovery.
+- **Modular & Iterative Development:** Each component (PDF parsing, metadata extraction, ATS scoring, DOCX generation, and PDF conversion) should be developed and tested independently before full integration.
+- **Performance Optimization:** As the system relies on multiple calls to Chat-GPT Model 4o, consider implementing asynchronous processing and caching where possible to reduce latency.
+- **Documentation & User Feedback:** Maintain thorough documentation of each integration point and capture user feedback to iteratively improve the system.
+- **Security & Data Integrity:** Ensure that interactions with external services (like Dropbox and the conversion tools) are secure and that data integrity is maintained throughout the process.

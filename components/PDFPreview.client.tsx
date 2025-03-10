@@ -103,8 +103,8 @@ export default function PDFPreview({ pdfData, fileName = 'document.pdf', onDownl
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-900 rounded-md overflow-hidden">
-      <div className="flex items-center justify-between p-2 bg-gray-800 border-b border-gray-700">
+    <div className="flex flex-col h-full bg-[#050505] rounded-md overflow-hidden">
+      <div className="flex items-center justify-between p-2 bg-[#0A0A0A] border-b border-gray-700">
         <div className="flex items-center">
           <Button 
             variant="ghost" 
@@ -171,7 +171,7 @@ export default function PDFPreview({ pdfData, fileName = 'document.pdf', onDownl
       
       <div 
         ref={containerRef} 
-        className="flex-1 overflow-auto p-4 flex justify-center items-start bg-gray-900"
+        className="flex-1 overflow-auto p-4 flex justify-center items-start bg-[#050505]"
       >
         {error ? (
           <div className="flex flex-col items-center justify-center h-full text-red-400 p-4">
@@ -185,7 +185,7 @@ export default function PDFPreview({ pdfData, fileName = 'document.pdf', onDownl
             onLoadError={onDocumentLoadError}
             loading={
               <div className="flex flex-col items-center justify-center w-full h-[500px] gap-4">
-                <Skeleton className="h-[640px] w-[480px] bg-gray-800" />
+                <Skeleton className="h-[640px] w-[480px] bg-[#0A0A0A]" />
                 <p className="text-gray-400">Loading PDF...</p>
               </div>
             }
@@ -204,7 +204,7 @@ export default function PDFPreview({ pdfData, fileName = 'document.pdf', onDownl
                 renderTextLayer={false}
                 renderAnnotationLayer={false}
                 loading={
-                  <Skeleton className="h-[640px] w-[480px] bg-gray-800" />
+                  <Skeleton className="h-[640px] w-[480px] bg-[#0A0A0A]" />
                 }
               />
             )}
