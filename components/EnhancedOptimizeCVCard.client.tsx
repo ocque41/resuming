@@ -19,8 +19,8 @@ interface EnhancedOptimizeCVCardProps {
 export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVCardProps) {
   // State for CV selection
   const [selectedCV, setSelectedCV] = useState<string | null>(null);
-  const [cvOptions, setCvOptions] = useState<string[]>([]);
   const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
+  const [selectedCVName, setSelectedCVName] = useState<string | null>(null);
   
   // State for processing
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -49,53 +49,58 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   // Add a new state for automatic PDF conversion
   const [autoPdfConvert, setAutoPdfConvert] = useState<boolean>(false);
   
-  // Memoize the display options to prevent unnecessary re-renders
-  const displayCVOptions = useMemo(() => {
-    if (!Array.isArray(cvOptions) || cvOptions.length === 0) {
+  // Prepare CV options for the dropdown
+  const dropdownOptions = useMemo(() => {
+    if (!Array.isArray(cvs)) {
+      console.error("CV options is not an array:", cvs);
       return [];
     }
     
-    return cvOptions.map(cv => {
-      const parts = cv.split('|');
-      return parts[0] ? parts[0].trim() : '';
-    }).filter(Boolean); // Filter out empty strings
-  }, [cvOptions]);
-
-  // Update CV options when props change
-  useEffect(() => {
-    if (Array.isArray(cvs) && cvs.length > 0) {
-      setCvOptions(cvs);
-    } else {
-      setCvOptions([]);
-    }
-  }, [cvs]);
-
-  // Optimize the CV selection handler
-  const handleCVSelect = useCallback((cv: string) => {
-    if (!cv || !Array.isArray(displayCVOptions) || displayCVOptions.length === 0) {
-      setSelectedCV(null);
-      setSelectedCVId(null);
-      return;
-    }
-    
-    // Find the matching full option (with ID)
-    const index = displayCVOptions.indexOf(cv);
-    if (index !== -1 && index < cvOptions.length) {
-      setSelectedCV(cvOptions[index]);
-      
-      // Extract CV ID from selected CV
-      const cvParts = cvOptions[index].split('|');
-      const cvIdStr = cvParts[1] || null;
-      
-      if (cvIdStr) {
-        setSelectedCVId(cvIdStr);
+    return cvs.map(cv => {
+      if (typeof cv !== 'string') {
+        console.error("CV option is not a string:", cv);
+        return null;
       }
+      
+      const parts = cv.split('|');
+      return parts[0] ? parts[0].trim() : null;
+    }).filter(Boolean) as string[];
+  }, [cvs]);
+  
+  // Get CV ID from filename
+  const getCvIdFromName = useCallback((name: string) => {
+    if (!Array.isArray(cvs)) return null;
+    
+    const matchingCv = cvs.find(cv => {
+      if (typeof cv !== 'string') return false;
+      const parts = cv.split('|');
+      return parts[0] && parts[0].trim() === name;
+    });
+    
+    if (!matchingCv) return null;
+    
+    const parts = matchingCv.split('|');
+    return parts[1] || null;
+  }, [cvs]);
+  
+  // Handle CV selection
+  const handleCVSelect = useCallback((name: string) => {
+    console.log("CV selected:", name);
+    setSelectedCVName(name);
+    
+    const cvId = getCvIdFromName(name);
+    console.log("CV ID found:", cvId);
+    
+    if (cvId) {
+      setSelectedCVId(cvId);
+      setSelectedCV(`${name}|${cvId}`);
     } else {
-      setSelectedCV(null);
+      setError("Could not find CV ID for the selected CV. Please try another CV.");
       setSelectedCVId(null);
+      setSelectedCV(null);
     }
-  }, [displayCVOptions, cvOptions]);
-
+  }, [getCvIdFromName]);
+  
   // Generate DOCX file from processed CV
   const handleGenerateDocx = useCallback(async () => {
     if (!selectedCVId) {
@@ -209,7 +214,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
 
   // Process the selected CV with debouncing
   const handleProcessCV = useCallback(async () => {
-    if (!selectedCV) {
+    if (!selectedCVId) {
       setError("Please select a CV to optimize");
       setErrorType('process');
       return;
@@ -218,8 +223,8 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     setError(null);
     setErrorType(null);
     setIsProcessing(true);
-    setProgress(10);
-    setProcessingStep("Initiating CV processing");
+    setProgress(5);
+    setProcessingStep("Initiating CV optimization");
     
     // Reset any previous processing states
     setIsProcessed(false);
@@ -229,15 +234,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     setPdfBase64(null);
     
     try {
-      // Extract CV ID from selected CV
-      const cvParts = selectedCV.split('|');
-      const cvIdStr = cvParts[1] || null;
-      
-      if (!cvIdStr) {
-        throw new Error("Unable to determine CV ID");
-      }
-      
-      setSelectedCVId(cvIdStr);
+      console.log("Starting optimization for CV ID:", selectedCVId);
       
       // Call process API
       const response = await fetch('/api/cv/process', {
@@ -245,13 +242,16 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ cvId: cvIdStr }),
+        body: JSON.stringify({ cvId: selectedCVId }),
       });
       
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || "Failed to process CV");
       }
+      
+      const responseData = await response.json();
+      console.log("Initial process response:", responseData);
       
       // Start polling for status updates
       let statusCheckCount = 0;
@@ -260,6 +260,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       const statusInterval = setInterval(async () => {
         try {
           statusCheckCount++;
+          console.log(`Status check #${statusCheckCount} for CV ID: ${selectedCVId}`);
           
           // If we've exceeded the maximum number of checks, stop polling
           if (statusCheckCount > maxStatusChecks) {
@@ -270,20 +271,28 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             return;
           }
           
-          const statusResponse = await fetch(`/api/cv/process/status?cvId=${cvIdStr}`);
+          const statusResponse = await fetch(`/api/cv/process/status?cvId=${selectedCVId}`);
           
           if (!statusResponse.ok) {
+            console.error("Status response not OK:", await statusResponse.text());
             throw new Error("Failed to get processing status");
           }
           
           const statusData = await statusResponse.json();
+          console.log("Status data:", statusData);
           
           // Update progress
-          setProgress(statusData.processingProgress || progress);
-          setProcessingStep(statusData.processingStatus || processingStep);
+          if (statusData.processingProgress) {
+            setProgress(statusData.processingProgress);
+          }
+          
+          if (statusData.processingStatus) {
+            setProcessingStep(statusData.processingStatus);
+          }
           
           // Check if processing is complete
           if (statusData.completed) {
+            console.log("Processing completed successfully");
             clearInterval(statusInterval);
             setIsProcessing(false);
             setIsProcessed(true);
@@ -321,16 +330,17 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         }
       }, 2 * 60 * 1000); // 2 minutes
     } catch (error) {
+      console.error("Process CV error:", error);
       setError(error instanceof Error ? error.message : "Failed to process CV");
       setErrorType('process');
       setIsProcessing(false);
     }
-  }, [selectedCV, isProcessing, progress, processingStep, handleGenerateDocx]);
+  }, [selectedCVId, isProcessing, handleGenerateDocx]);
   
   // Memoize the processing button state
   const processingButtonDisabled = useMemo(() => {
-    return !selectedCV || isProcessing;
-  }, [selectedCV, isProcessing]);
+    return !selectedCVId || isProcessing;
+  }, [selectedCVId, isProcessing]);
   
   // Memoize the DOCX generation button state
   const docxButtonDisabled = useMemo(() => {
@@ -390,6 +400,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   const handleReset = useCallback(() => {
     setSelectedCV(null);
     setSelectedCVId(null);
+    setSelectedCVName(null);
     setIsProcessing(false);
     setIsProcessed(false);
     setProgress(0);
@@ -440,7 +451,13 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       });
     }
   }, [pdfBase64, pdfConverted, isProcessed, isProcessing, docxGenerated, isGeneratingDocx, error, handleGenerateDocx, docxBase64]);
-  
+
+  // Debug log for props and state
+  useEffect(() => {
+    console.log("EnhancedOptimizeCVCard props:", { cvs });
+    console.log("Dropdown options:", dropdownOptions);
+  }, [cvs, dropdownOptions]);
+
   return (
     <Card className="bg-[#050505] border-gray-800 shadow-xl overflow-hidden">
       <CardHeader className="bg-[#0A0A0A] border-b border-gray-800 pb-3">
@@ -456,7 +473,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             <div className="flex items-center space-x-2 mb-4">
               <div className="flex-grow">
                 <ComboboxPopover
-                  options={Array.isArray(displayCVOptions) ? displayCVOptions : []}
+                  options={dropdownOptions}
                   label="Select a CV"
                   onSelect={handleCVSelect}
                   accentColor="#B4916C"
@@ -621,7 +638,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
           </div>
         )}
         
-        {!isProcessed && !isProcessing && !selectedCV && (
+        {!isProcessed && !isProcessing && !selectedCVId && (
           <div className="text-center py-8 text-gray-400">
             Select a CV to begin the optimization process
           </div>

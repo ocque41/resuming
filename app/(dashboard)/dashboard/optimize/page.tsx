@@ -6,6 +6,7 @@ import { ArrowLeft, BarChart2, FileText } from "lucide-react";
 import AnalyzeCVCard from "@/components/AnalyzeCVCard.client";
 import EnhancedOptimizeCVCard from "@/components/EnhancedOptimizeCVCard.client";
 import ErrorBoundaryWrapper from "@/components/ErrorBoundaryWrapper";
+import OptimizationWorkflow from "@/components/OptimizationWorkflow.client";
 
 export default async function OptimizePage() {
   const user = await getUser();
@@ -19,6 +20,7 @@ export default async function OptimizePage() {
   }
   
   const cvs = await getCVsForUser(user.id);
+  const formattedCvs = cvs.map((cv: any) => `${cv.fileName}|${cv.id}`);
   
   return (
     <>
@@ -52,23 +54,9 @@ export default async function OptimizePage() {
               to recruiters and hiring managers.
             </p>
             
-            <div className="flex flex-col space-y-6">
-              <ErrorBoundaryWrapper>
-                <div className="flex items-center mb-2">
-                  <BarChart2 className="h-5 w-5 text-[#B4916C] mr-2" />
-                  <h2 className="text-lg font-medium text-white">Analyze Your CV</h2>
-                </div>
-                <AnalyzeCVCard cvs={cvs.map((cv) => cv.fileName)} />
-              </ErrorBoundaryWrapper>
-
-              <ErrorBoundaryWrapper>
-                <div className="flex items-center mb-2">
-                  <FileText className="h-5 w-5 text-[#B4916C] mr-2" />
-                  <h2 className="text-lg font-medium text-white">Optimize Your CV</h2>
-                </div>
-                <EnhancedOptimizeCVCard cvs={cvs.map((cv: any) => `${cv.fileName}|${cv.id}`)} />
-              </ErrorBoundaryWrapper>
-            </div>
+            <ErrorBoundaryWrapper>
+              <OptimizationWorkflow cvs={formattedCvs} />
+            </ErrorBoundaryWrapper>
           </CardContent>
         </Card>
       </div>
