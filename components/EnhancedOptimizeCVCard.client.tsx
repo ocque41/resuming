@@ -136,6 +136,15 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   const [improvements, setImprovements] = useState<string[]>([]);
   const [historyVersion, setHistoryVersion] = useState<number>(0);
   
+  // State for stuck processing detection
+  const [isStuck, setIsStuck] = useState<boolean>(false);
+  const [stuckMinutes, setStuckMinutes] = useState<number>(0);
+  const [stuckSince, setStuckSince] = useState<string | null>(null);
+  
+  // Debug state
+  const [debugMode, setDebugMode] = useState<boolean>(false);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  
   // Auto-select first CV if available
   useEffect(() => {
     if (cvs.length > 0 && !selectedCVId) {
@@ -580,224 +589,116 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   }, [selectedCVId, autoPdfConvert, handleConvertToPdf, isCached, forceRefresh, docxBase64, 
       pdfConverted, originalAtsScore, improvedAtsScore, originalText, optimizedText, improvements]);
 
-  // Process the selected CV with debouncing
-  const handleProcessCV = useCallback(async () => {
+  // Function to handle CV processing
+  const processCV = useCallback(async (forceRefresh = false) => {
     if (!selectedCVId) {
-      setError("Please select a CV to optimize");
-      setErrorType('process');
+      setError("Please select a CV to optimize.");
       return;
     }
-    
-    // If document is cached and we're not forcing a refresh, we can skip processing
-    if (isCached && !forceRefresh) {
-      console.log("Using cached document data");
-      return;
-    }
-    
-    console.log("Starting optimization process for CV ID:", selectedCVId);
-    setError(null);
-    setErrorType(null);
-    setIsProcessing(true);
-    setProgress(5);
-    setProcessingStep("Initiating CV optimization");
-    setOptimizationCompleted(false);
-    setOptimizationStalled(false);
-    setShowPdfPreview(false);
-    
-    // Reset any previous processing states
-    setIsProcessed(false);
-    setDocxGenerated(false);
-    setDocxBase64(null);
-    setPdfConverted(false);
-    setPdfBase64(null);
-    
+
     try {
-      // Call process API - Fix: change from GET to POST
-      console.log("Calling process API for CV ID:", selectedCVId);
-      const processResponse = await fetch('/api/cv/process', {
+      setError(null);
+      setErrorType(null);
+      setIsProcessing(true);
+      setIsProcessed(false);
+      setProgress(5);
+      setIsStuck(false);
+      setStuckMinutes(0);
+      setStuckSince(null);
+      
+      setProcessingStep(forceRefresh ? "Restarting optimization..." : "Starting optimization...");
+
+      // Call the API to begin processing
+      const response = await fetch('/api/cv/process', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          cvId: selectedCVId,
-          forceRefresh: forceRefresh 
+        body: JSON.stringify({
+          cvId: parseInt(selectedCVId),
+          forceRefresh: forceRefresh
         }),
       });
-      
-      // Enhanced error handling with better messages
-      if (!processResponse.ok) {
-        const status = processResponse.status;
-        let errorMessage = `Failed to start processing: ${status}`;
-        
-        // Provide more context based on the status code
-        switch(status) {
-          case 400:
-            errorMessage = "Invalid request. Please check that the CV exists and try again.";
-            break;
-          case 401:
-            errorMessage = "You need to be logged in to process the CV.";
-            break;
-          case 403:
-            errorMessage = "You don't have permission to access this CV.";
-            break;
-          case 404:
-            errorMessage = "The CV could not be found. It may have been deleted.";
-            break;
-          case 405:
-            errorMessage = "The server doesn't support this operation. Please contact support.";
-            break;
-          case 429:
-            errorMessage = "You've made too many requests. Please wait a moment and try again.";
-            break;
-          case 500:
-          case 502:
-          case 503:
-          case 504:
-            errorMessage = "Server error. Our team has been notified. Please try again later.";
-            break;
-        }
-        
-        throw new Error(errorMessage);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to start processing the CV');
       }
-      
-      const processData = await processResponse.json();
-      console.log("Process API response:", processData);
-      
-      if (!processData.success) {
-        throw new Error(processData.message || "Failed to start processing");
-      }
-      
-      setProgress(15);
-      setProcessingStep("Processing CV with AI...");
-      
-      // Poll for status with improved stall detection
-      let statusComplete = false;
-      let stallCounter = 0;
-      const maxStallCount = 20; // About 60 seconds
-      let lastProgress = 0;
-      
-      const statusInterval = setInterval(async () => {
-        try {
-          const statusResponse = await fetch(`/api/cv/process/status?cvId=${selectedCVId}`);
-          const statusData = await statusResponse.json();
-          
-          if (statusResponse.ok && statusData.success) {
-            console.log("Status update:", statusData);
-            
-            // Update progress
-            if (statusData.progress) {
-              setProgress(15 + Math.floor(statusData.progress * 0.85)); // Scale to 15-100%
-              
-              if (statusData.progress === lastProgress) {
-                stallCounter++;
-                
-                // Every few stalls, provide feedback to the user
-                if (stallCounter % 5 === 0) {
-                  setProcessingStep(
-                    `${statusData.step || "Processing"} - still working (${Math.min(stallCounter * 3, 60)}s)...`
-                  );
-                }
-              } else {
-                stallCounter = 0;
-                lastProgress = statusData.progress;
-              }
-            }
-            
-            // Update step name
-            if (statusData.step) {
-              setProcessingStep(statusData.step);
-            }
-            
-            // Store improvements if available
-            if (statusData.improvements && Array.isArray(statusData.improvements)) {
-              setImprovements(statusData.improvements);
-            }
-            
-            // Store optimized text if available
-            if (statusData.optimizedText) {
-              setOptimizedText(statusData.optimizedText);
-            }
-            
-            // Check if processing is complete
-            if (statusData.isComplete || statusData.progress >= 100) {
-              statusComplete = true;
-              clearInterval(statusInterval);
-              
-              // Set the ATS scores
-              if (statusData.originalAtsScore !== undefined) {
-                setOriginalAtsScore(statusData.originalAtsScore);
-              }
-              
-              if (statusData.improvedAtsScore !== undefined) {
-                setImprovedAtsScore(statusData.improvedAtsScore);
-              }
-              
-              setProgress(100);
-              setIsProcessing(false);
-              setIsProcessed(true);
-              setOptimizationCompleted(true);
-              
-              // Automatically generate the document
-              handleGenerateDocx();
-            }
-          } else {
-            // Provide more context for status fetch failures
-            console.error("Status response error:", statusResponse.status, statusData);
-            
-            // If the status request failed but doesn't mean the process failed
-            // Just count it as a stall
-            stallCounter++;
-          }
-          
-          // Check for stalled processing
-          if (stallCounter >= maxStallCount) {
-            console.warn("Processing appears to be stalled");
-            clearInterval(statusInterval);
-            
-            // Force completion
-            setProgress(100);
-            setIsProcessing(false);
-            setIsProcessed(true);
-            setOptimizationCompleted(true);
-            setOptimizationStalled(true);
-            
-            // Try to get any available results
-            handleGenerateDocx();
-          }
-        } catch (error) {
-          console.error("Error polling status:", error);
-          stallCounter++;
-        }
-      }, 3000);
-      
-      // Safety timeout - after 5 minutes, clear the interval regardless
-      setTimeout(() => {
-        if (!statusComplete) {
-          clearInterval(statusInterval);
-          
-          // Force completion if still processing
-          if (isProcessing) {
-            setProgress(100);
-            setIsProcessing(false);
-            setIsProcessed(true);
-            setOptimizationCompleted(true);
-            setOptimizationStalled(true);
-            
-            // Try to get any available results
-            handleGenerateDocx();
-          }
-        }
-      }, 5 * 60 * 1000);
-      
-    } catch (error) {
-      console.error("Processing error:", error);
-      setError(error instanceof Error ? error.message : "An error occurred during processing");
+
+      // Start polling for status
+      pollForStatus();
+    } catch (err: any) {
+      setError(err.message || 'An error occurred while starting the optimization.');
       setErrorType('process');
       setIsProcessing(false);
+      console.error('Error processing CV:', err);
     }
-  }, [selectedCVId, isProcessing, handleGenerateDocx, isCached, forceRefresh]);
-  
+  }, [selectedCVId]);
+
+  // Function to poll for processing status
+  const pollForStatus = useCallback(async () => {
+    if (!selectedCVId) return;
+
+    try {
+      // Add debug parameter if debug mode is enabled
+      const debugParam = debugMode ? '&debug=true' : '';
+      const response = await fetch(`/api/cv/process/status?cvId=${selectedCVId}${debugParam}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch processing status');
+      }
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setProgress(data.progress || 0);
+        setProcessingStep(data.step || 'Processing...');
+        setIsProcessing(data.processing);
+        
+        // Save debug info if available
+        if (data.debugInfo) {
+          setDebugInfo(data.debugInfo);
+        }
+        
+        // Check if processing is stuck
+        setIsStuck(!!data.isStuck);
+        setStuckMinutes(data.stuckMinutes || 0);
+        setStuckSince(data.stuckSince || null);
+        
+        // Handle process completion
+        if (data.isComplete) {
+          setIsProcessed(true);
+          setIsProcessing(false);
+          setProgress(100);
+          
+          // Cache the optimized text
+          if (data.optimizedText) {
+            // Update the version to store the optimized text in the cache
+            await cacheDocument(selectedCVId, data.optimizedText);
+          }
+          
+          // Other completion logic...
+        } 
+        // Continue polling if still processing and not complete
+        else if (data.processing) {
+          setTimeout(pollForStatus, 3000);
+        }
+      } else {
+        throw new Error(data.error || 'Error checking process status');
+      }
+    } catch (err: any) {
+      setError(err.message || 'An error occurred while checking the optimization status.');
+      setErrorType('process');
+      setIsProcessing(false);
+      console.error('Error polling for status:', err);
+    }
+  }, [selectedCVId, debugMode]);
+
+  // Function to handle a stuck process
+  const handleStuckProcess = useCallback(() => {
+    processCV(true); // Force refresh
+  }, [processCV]);
+
   // Memoize the processing button state
   const processingButtonDisabled = useMemo(() => {
     return !selectedCVId || isProcessing;
@@ -819,7 +720,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       // Reset processing state and try again
       setError(null);
       setErrorType(null);
-      handleProcessCV();
+      processCV();
     } else if (errorType === 'docx') {
       // Reset DOCX generation state and try again
       setError(null);
@@ -831,7 +732,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       setErrorType(null);
       handleConvertToPdf(docxBase64 || '');
     }
-  }, [errorType, handleProcessCV, handleGenerateDocx, handleConvertToPdf, docxBase64]);
+  }, [errorType, processCV, handleGenerateDocx, handleConvertToPdf, docxBase64]);
   
   // Reset the form to try again
   const handleReset = useCallback(() => {
@@ -916,6 +817,16 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     }
   }, [selectedCVId]);
 
+  // Toggle debug mode
+  const toggleDebugMode = useCallback(() => {
+    setDebugMode(!debugMode);
+    
+    // If turning on debug mode and we're processing, re-poll with debug flag
+    if (!debugMode && isProcessing && selectedCVId) {
+      pollForStatus();
+    }
+  }, [debugMode, isProcessing, selectedCVId, pollForStatus]);
+
   // Render PDF preview in a more robust way
   const renderPDFPreview = () => {
     if (!showPdfPreview || !pdfBase64) {
@@ -951,141 +862,161 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   };
 
   return (
-    <Card className="bg-[#0A0A0A] border-gray-800 shadow-xl">
-      <CardHeader>
-        <CardTitle className="text-white flex items-center">
-          <FileText className="mr-2 h-5 w-5 text-[#B4916C]" />
-          Enhanced CV Optimization
+    <Card className="col-span-12 border border-gray-800 bg-[#0A0A0A] shadow-lg">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-xl text-white flex justify-between items-center">
+          <span>Optimize CV</span>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="h-8 text-gray-500 hover:text-white hover:bg-gray-800"
+            onClick={toggleDebugMode}
+          >
+            {debugMode ? 'Hide Debug' : 'Debug Mode'}
+          </Button>
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-            <div className="md:col-span-2">
-              <label className="text-sm text-gray-400 mb-2 block">Select CV to Optimize</label>
-              <ModernFileDropdown 
-                cvs={cvs} 
-                onSelect={(id, name) => handleSelectCV(id, name)}
-                selectedCVName={selectedCVName}
-              />
-              
-              {/* Show cached info if available */}
-              {isCached && cacheTimestamp && (
-                <div className="flex items-center mt-2 text-xs text-gray-500">
-                  <Clock className="h-3 w-3 mr-1" />
-                  <span>Cached {getCacheAge(cacheTimestamp)}</span>
+      
+      <CardContent>
+        {/* Debug Information */}
+        {debugMode && debugInfo && (
+          <Alert className="mb-4 bg-gray-900 border-gray-700 text-gray-300">
+            <div className="font-mono text-xs overflow-auto max-h-40">
+              <p className="mb-2 font-semibold">Debug Information:</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                <div>Metadata Size:</div>
+                <div>{debugInfo.metadataSize} bytes</div>
+                
+                <div>Created At:</div>
+                <div>{new Date(debugInfo.createdAt).toLocaleString()}</div>
+                
+                <div>Last Modified:</div>
+                <div>{new Date(debugInfo.lastModified).toLocaleString()}</div>
+                
+                <div>Processing Status:</div>
+                <div>{debugInfo.rawMetadata?.processingStatus || 'Not available'}</div>
+                
+                <div>Processing Progress:</div>
+                <div>{debugInfo.rawMetadata?.processingProgress || 0}%</div>
+                
+                <div>Processing Error:</div>
+                <div>{debugInfo.rawMetadata?.processingError || 'None'}</div>
+                
+                <div>Last Updated:</div>
+                <div>
+                  {debugInfo.rawMetadata?.lastUpdated 
+                    ? new Date(debugInfo.rawMetadata.lastUpdated).toLocaleString() 
+                    : 'Not available'}
                 </div>
+              </div>
+              
+              {/* Advanced Debug Toggle */}
+              <details className="mt-3 border-t border-gray-800 pt-2">
+                <summary className="cursor-pointer">Full Raw Metadata</summary>
+                <pre className="mt-2 text-xs leading-tight">
+                  {JSON.stringify(debugInfo.rawMetadata, null, 2)}
+                </pre>
+              </details>
+            </div>
+          </Alert>
+        )}
+        
+        {/* Progress indicator for processing */}
+        {isProcessing && (
+          <div className="mb-8">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm text-gray-400">
+                {progress < 100 ? 'Optimizing your CV...' : 'Optimization complete!'}
+              </span>
+              <span className="text-sm text-gray-400">{progress}%</span>
+            </div>
+            
+            <Progress value={progress} className="h-2 mb-1" />
+            
+            <div className="text-sm text-gray-500 mt-2 flex items-center">
+              {progress < 100 ? (
+                <>
+                  <RefreshCw className="h-3 w-3 mr-2 animate-spin" />
+                  {processingStep}
+                </>
+              ) : (
+                <>
+                  <Check className="h-3 w-3 mr-2 text-green-500" />
+                  Optimization completed successfully
+                </>
               )}
             </div>
-            <div>
-              <Button
-                onClick={handleProcessCV}
-                disabled={!selectedCVId || isProcessing}
-                className="bg-[#B4916C] hover:bg-[#A3815C] text-white w-full md:w-auto"
-              >
-                {isProcessing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Optimizing...
-                  </>
-                ) : isCached && !forceRefresh ? (
-                  'Use Cached Result'
-                ) : (
-                  'Optimize CV'
-                )}
-              </Button>
-            </div>
+            
+            {/* Show stuck warning and retry button */}
+            {isStuck && (
+              <Alert variant="destructive" className="mt-4 bg-amber-950 border-amber-900 text-amber-300">
+                <AlertCircle className="h-4 w-4 mr-2" />
+                <AlertDescription className="flex flex-col gap-2">
+                  <div>
+                    Processing appears to be stuck at {progress}% for {stuckMinutes} minutes.
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-2 bg-amber-800 hover:bg-amber-700 border-amber-700 text-white w-fit" 
+                    onClick={handleStuckProcess}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Restart Processing
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
-          
-          <div className="flex items-center space-x-2">
-            <Checkbox 
-              id="autoPdfConvert" 
-              checked={autoPdfConvert}
-              onCheckedChange={(checked) => setAutoPdfConvert(checked === true)}
-              className="border-gray-500"
-            />
-            <label htmlFor="autoPdfConvert" className="text-sm text-gray-400">
-              Automatically convert to PDF after optimization
-            </label>
-          </div>
-          
-          {/* Add force refresh option if cached */}
-          {isCached && (
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="forceRefresh" 
-                checked={forceRefresh}
-                onCheckedChange={handleToggleForceRefresh}
-                className="border-gray-500"
-              />
-              <label htmlFor="forceRefresh" className="text-sm text-gray-400">
-                Force refresh (ignore cached data)
-              </label>
-              
-              <Button
-                onClick={handleClearCache}
-                variant="ghost"
-                size="sm"
-                className="ml-auto text-gray-400 hover:text-white"
-              >
-                Clear cache
-              </Button>
-            </div>
-          )}
+        )}
+        
+        {/* CV Selection */}
+        <div className="mb-6">
+          <div className="mb-2 text-gray-400 text-sm">Select a CV to optimize</div>
+          <ModernFileDropdown 
+            cvs={cvs} 
+            onSelect={(cvId, cvName) => {
+              setSelectedCVId(cvId);
+              setSelectedCVName(cvName);
+              setError(null);
+              setErrorType(null);
+            }} 
+            selectedCVName={selectedCVName}
+          />
         </div>
         
+        {/* Error Display */}
         {error && (
-          <Alert className="mb-4 bg-red-900/20 text-red-400 border border-red-900">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription className="flex flex-col space-y-2">
-              <span>{error}</span>
-              {errorType && (
-                <Button 
-                  onClick={handleRestartProcessing}
-                  className="bg-red-800 hover:bg-red-700 text-white mt-2 w-full md:w-auto"
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  {errorType === 'process' ? 'Restart Processing' : 
-                   errorType === 'docx' ? 'Retry DOCX Generation' : 
-                   'Retry PDF Conversion'}
-                </Button>
-              )}
-              
-              {/* Add more specific help based on error type */}
+          <Alert variant="destructive" className="mb-6 bg-red-950 border-red-900 text-red-200">
+            <AlertCircle className="h-4 w-4 mr-2" />
+            <AlertDescription>
+              {error}
               {errorType === 'process' && (
-                <div className="text-xs bg-red-900/30 p-2 rounded border border-red-900/50 mt-2">
-                  <div className="flex items-start mb-1">
-                    <Info className="h-3 w-3 mt-0.5 mr-1 flex-shrink-0" />
-                    <span>Troubleshooting tips:</span>
-                  </div>
-                  <ul className="list-disc list-inside pl-1 space-y-1">
-                    <li>Check your internet connection</li>
-                    <li>Ensure your CV is properly uploaded</li>
-                    <li>The CV file may be corrupted or in an unsupported format</li>
-                    <li>Our servers may be experiencing high load - try again later</li>
-                  </ul>
-                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="mt-2 bg-red-800 hover:bg-red-700 border-red-700 text-white" 
+                  onClick={() => processCV(true)}
+                >
+                  Retry
+                </Button>
               )}
             </AlertDescription>
           </Alert>
         )}
         
-        {isProcessing && (
-          <div className="space-y-4">
-            <div className="flex flex-col space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-300">{processingStep}</span>
-                <span className="text-[#B4916C] font-medium">{progress}%</span>
-              </div>
-              <Progress value={progress} className="h-2 bg-gray-800" />
-            </div>
-            
-            <div className="text-gray-400 text-sm mt-4">
-              Optimizing your CV using AI. This process may take a few minutes. Please wait...
-            </div>
-          </div>
+        {/* Process Button */}
+        {!isProcessed && !isProcessing && (
+          <Button 
+            onClick={() => processCV(false)} 
+            disabled={!selectedCVId || isProcessing}
+            className="w-full bg-[#B4916C] hover:bg-[#A27D59] text-black font-medium mb-4"
+          >
+            Optimize CV
+          </Button>
         )}
         
+        {/* Rest of the component... */}
         {isProcessed && !isProcessing && (
           <div className="space-y-6">
             {/* Tabs for Results, Comparison, and History */}

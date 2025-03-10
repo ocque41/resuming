@@ -13,6 +13,7 @@ import { promises as fsPromises } from 'fs';
 import { generateEnhancedCVDocx } from "@/lib/enhancedDocxGenerator";
 import { saveFile, FileType, StorageType } from "@/lib/fileStorage";
 import { processCVWithAI } from "@/lib/utils/cvProcessor";
+import { logger } from "@/lib/logger";
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
     const session = await getSession();
     if (!session || !session.user || !session.user.id) {
       return NextResponse.json(
-        { success: false, error: "You must be logged in to process your CV." },
+        { success: false, error: "You must be logged in to process a CV." },
         { status: 401 }
       );
     }
@@ -67,26 +68,20 @@ export async function POST(request: Request) {
     const userId = session.user.id;
     
     // Parse request body
-    const body = await request.json();
-    const { cvId, fileName, forceRefresh, optimizedText } = body;
+    const requestData = await request.json();
+    const { cvId, forceRefresh } = requestData;
     
-    if (!cvId && !fileName) {
+    if (!cvId) {
       return NextResponse.json(
-        { success: false, error: "Missing CV ID or file name." },
+        { success: false, error: "Missing CV ID." },
         { status: 400 }
       );
     }
     
     // Get CV record from database
-    let cvRecord;
-    
-    if (cvId) {
-      cvRecord = await db.query.cvs.findFirst({
-        where: eq(cvs.id, parseInt(cvId.toString())),
-      });
-    } else if (fileName) {
-      cvRecord = await getCVByFileName(fileName);
-    }
+    const cvRecord = await db.query.cvs.findFirst({
+      where: eq(cvs.id, cvId),
+    });
     
     if (!cvRecord) {
       return NextResponse.json({ success: false, error: "CV not found." }, { status: 404 });
@@ -100,106 +95,87 @@ export async function POST(request: Request) {
       );
     }
     
-    // Get raw text from CV or extract it if not available
-    let rawText = cvRecord.rawText;
-    
-    if (!rawText || rawText.trim().length === 0) {
+    // Parse existing metadata
+    let metadata = {};
+    if (cvRecord.metadata) {
       try {
-        // Get PDF bytes from storage
-        const pdfBytes = await getOriginalPdfBytes(cvRecord);
-        
-        // Extract text from PDF
-        rawText = await extractTextFromPdf(cvRecord.filepath);
-        
-        if (!rawText || rawText.trim().length === 0) {
-          return NextResponse.json(
-            { success: false, error: "Failed to extract text from PDF." },
-            { status: 500 }
-          );
-        }
-        
-        // Update CV record with extracted text
-        await db
-          .update(cvs)
-          .set({ rawText })
-          .where(eq(cvs.id, cvRecord.id));
+        metadata = JSON.parse(cvRecord.metadata);
       } catch (error) {
-        console.error("Error extracting text from PDF:", error);
-        return NextResponse.json(
-          { success: false, error: "Failed to extract text from PDF." },
-          { status: 500 }
-        );
+        logger.error(`Error parsing metadata for CV ID ${cvId}:`, error instanceof Error ? error.message : String(error));
       }
     }
     
-    // Parse existing metadata or initialize new metadata
-    let metadata: CVMetadata = {};
-    try {
-      metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
-    } catch (error) {
-      console.error("Error parsing metadata:", error);
-      metadata = {};
-    }
+    // Check if CV is already being processed and not forcing refresh
+    const isProcessing = metadata && (metadata as any).processing;
     
-    // Check if we should skip processing if it's already completed and we're not forcing a refresh
-    const isProcessingComplete = metadata.processingCompleted || metadata.optimized;
-    if (isProcessingComplete && !forceRefresh) {
-      console.log("CV already processed and forceRefresh is false. Returning existing data.");
+    if (isProcessing && !forceRefresh) {
       return NextResponse.json({
         success: true,
-        message: "CV already processed. Use forceRefresh=true to reprocess.",
-        cvId: cvRecord.id,
-        status: "completed",
-        isComplete: true,
-        originalAtsScore: metadata.atsScore || 0,
-        improvedAtsScore: metadata.improvedAtsScore || 0,
-        improvements: metadata.improvements || [],
-        optimizedText: metadata.optimizedText || ""
+        message: "CV is already being processed.",
+        cvId,
+        isProcessing: true,
+        metadata
       });
     }
     
-    // Create processing metadata
-    metadata = {
+    // Check if processing is already completed and not forcing refresh
+    const isCompleted = metadata && (metadata as any).processingCompleted;
+    
+    if (isCompleted && !forceRefresh) {
+      return NextResponse.json({
+        success: true,
+        message: "CV processing has already been completed.",
+        cvId,
+        isProcessing: false,
+        isCompleted: true,
+        metadata
+      });
+    }
+    
+    // Check if we have raw text content
+    if (!cvRecord.rawText) {
+      return NextResponse.json(
+        { success: false, error: "CV text content not available." },
+        { status: 400 }
+      );
+    }
+    
+    // Update metadata to mark as processing
+    const updatedMetadata = {
       ...metadata,
       processing: true,
-      processingStartTime: new Date().toISOString(),
-      processingStatus: "Initiating CV analysis with AI",
-      processingProgress: 5,
+      processingCompleted: false,
+      processingProgress: 0,
+      processingStatus: "Starting CV processing...",
+      processingError: null,
       lastUpdated: new Date().toISOString()
     };
     
-    // If optimizedText is provided, use it to enhance the process
-    if (optimizedText && optimizedText.trim().length > 0) {
-      metadata.optimizedText = optimizedText;
-    }
+    // Update the CV record to mark as processing
+    await db.update(cvs)
+      .set({
+        metadata: JSON.stringify(updatedMetadata)
+      })
+      .where(eq(cvs.id, cvId));
     
-    // Update CV record with processing status
-    await db
-      .update(cvs)
-      .set({ metadata: JSON.stringify(metadata) })
-      .where(eq(cvs.id, cvRecord.id));
+    // Process CV asynchronously to avoid blocking the API response
+    processCVWithAI(cvId, cvRecord.rawText, updatedMetadata, forceRefresh)
+      .catch((error) => {
+        logger.error(`Error processing CV ID ${cvId}:`, error instanceof Error ? error.message : String(error));
+      });
     
-    // Begin async processing (don't await here to avoid timeout)
-    // Check if processCVWithAI supports a forceRefresh parameter, if not, modify as needed
-    try {
-      // @ts-ignore - Ignoring potential parameter mismatch if the function signature hasn't been updated yet
-      processCVWithAI(cvRecord.id, rawText, metadata, forceRefresh);
-    } catch (e) {
-      // Fall back to original signature if needed
-      console.warn("Error calling processCVWithAI with forceRefresh, using original signature");
-      processCVWithAI(cvRecord.id, rawText, metadata);
-    }
-    
+    // Return success response
     return NextResponse.json({
       success: true,
-      message: "CV processing initiated successfully.",
-      cvId: cvRecord.id,
-      status: "processing",
-      fileName: cvRecord.fileName
+      message: forceRefresh ? "CV processing restarted." : "CV processing started.",
+      cvId,
+      isProcessing: true,
+      forceRefresh: !!forceRefresh,
+      metadata: updatedMetadata
     });
     
   } catch (error) {
-    console.error("Error in CV processing API:", error);
+    logger.error("Error in CV process API:", error instanceof Error ? error.message : String(error));
     return NextResponse.json(
       { success: false, error: "Failed to process CV." },
       { status: 500 }
