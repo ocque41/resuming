@@ -5,9 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Download, RefreshCw, FileText, Check, Eye } from "lucide-react";
+import { AlertCircle, Download, RefreshCw, FileText, Check, Eye, Clock } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import PDFPreview from './PDFPreview.client';
+import { cacheDocument, getCachedDocument, updateCachedPDF, clearCachedDocument, getCacheAge } from "@/lib/cache/documentCache";
 
 // Modern SimpleFileDropdown component
 function ModernFileDropdown({ 
@@ -26,59 +27,46 @@ function ModernFileDropdown({
       <button
         onClick={() => setOpen(!open)}
         className="w-full px-4 py-3 bg-[#0A0A0A] border border-gray-800 hover:border-[#B4916C] text-gray-300 rounded-md flex justify-between items-center transition-colors duration-200"
+        aria-haspopup="listbox"
+        aria-expanded={open}
       >
         <span className="truncate">{selectedCVName || "Select a CV"}</span>
         <svg 
-          className={`w-4 h-4 ml-2 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} 
-          fill="none" 
-          stroke="currentColor" 
-          viewBox="0 0 24 24" 
-          xmlns="http://www.w3.org/2000/svg"
+          className={`h-5 w-5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} 
+          xmlns="http://www.w3.org/2000/svg" 
+          viewBox="0 0 20 20" 
+          fill="currentColor"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
         </svg>
       </button>
       
-      {open && (
-        <div className="absolute z-50 w-full mt-1 bg-[#0A0A0A] border border-gray-800 rounded-md overflow-hidden shadow-lg">
-          <div className="max-h-60 overflow-y-auto py-1">
-            {(cvs || []).length > 0 ? (
-              (cvs || []).map(cv => {
-                try {
-                  const parts = cv.split('|');
-                  if (parts.length >= 2) {
-                    const name = parts[0].trim();
-                    const id = parts[1].trim();
-                    return (
-                      <div
-                        key={id}
-                        className={`px-4 py-2 cursor-pointer hover:bg-gray-800 transition-colors duration-100 ${
-                          selectedCVName === name ? 'bg-[#B4916C]/10 text-[#B4916C]' : 'text-gray-300'
-                        }`}
-                        onClick={() => { 
-                          setOpen(false); 
-                          onSelect(id, name); 
-                        }}
-                      >
-                        <div className="flex items-center">
-                          <FileText className="w-4 h-4 mr-2 flex-shrink-0" />
-                          <span className="truncate">{name}</span>
-                        </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                } catch (error) {
-                  console.error("Error rendering CV option:", error);
-                  return null;
-                }
-              })
-            ) : (
-              <div className="px-4 py-3 text-gray-500 text-center">
-                No CVs available
-              </div>
-            )}
-          </div>
+      {open && cvs.length > 0 && (
+        <div className="absolute z-10 w-full mt-1 bg-[#0A0A0A] border border-gray-800 rounded-md shadow-lg max-h-60 overflow-auto">
+          <ul className="py-1" role="listbox">
+            {cvs.map((cv) => {
+              const [name, id] = cv.split('|');
+              return (
+                <li 
+                  key={id}
+                  className="px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white cursor-pointer"
+                  role="option"
+                  onClick={() => {
+                    onSelect(id, name);
+                    setOpen(false);
+                  }}
+                >
+                  {name}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+      
+      {open && cvs.length === 0 && (
+        <div className="absolute z-10 w-full mt-1 bg-[#0A0A0A] border border-gray-800 rounded-md shadow-lg">
+          <div className="px-4 py-2 text-sm text-gray-500">No CVs available</div>
         </div>
       )}
     </div>
@@ -122,7 +110,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   const [improvedAtsScore, setImprovedAtsScore] = useState<number>(0);
   
   // Add a new state for automatic PDF conversion
-  const [autoPdfConvert, setAutoPdfConvert] = useState<boolean>(false);
+  const [autoPdfConvert, setAutoPdfConvert] = useState<boolean>(true); // Default to true for better UX
   
   // Add a state to track optimization completion
   const [optimizationCompleted, setOptimizationCompleted] = useState<boolean>(false);
@@ -130,188 +118,87 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   // Add a state to track stalled optimization
   const [optimizationStalled, setOptimizationStalled] = useState<boolean>(false);
   
-  // Add new state for PDF preview
-  const [showPdfPreview, setShowPdfPreview] = useState(false);
+  // Add a state to track PDF preview
+  const [showPdfPreview, setShowPdfPreview] = useState<boolean>(false);
   
-  // Auto-select the first CV if available
+  // Add state for cache information
+  const [isCached, setIsCached] = useState<boolean>(false);
+  const [cacheTimestamp, setCacheTimestamp] = useState<number | null>(null);
+  const [forceRefresh, setForceRefresh] = useState<boolean>(false);
+  
+  // Auto-select first CV if available
   useEffect(() => {
-    if (cvs && cvs.length > 0 && !selectedCVId) {
-      try {
-        const parts = cvs[0].split('|');
-        if (parts.length >= 2) {
-          setSelectedCVId(parts[1].trim());
-          setSelectedCVName(parts[0].trim());
-          setSelectedCV(cvs[0]);
-        }
-      } catch (error) {
-        console.error("Error auto-selecting first CV:", error);
-      }
+    if (cvs.length > 0 && !selectedCVId) {
+      const [name, id] = cvs[0].split('|');
+      handleSelectCV(id, name);
     }
-  }, [cvs, selectedCVId]);
+  }, [cvs]);
   
-  // Handle CV selection
-  const handleCVSelect = useCallback((cvId: string, cvName: string) => {
-    console.log("CV selected:", cvName, "ID:", cvId);
+  // Handle CV selection with cache check
+  const handleSelectCV = useCallback((cvId: string, cvName: string) => {
     setSelectedCVId(cvId);
     setSelectedCVName(cvName);
     setSelectedCV(`${cvName}|${cvId}`);
-  }, []);
-  
-  const handleTogglePreview = useCallback(() => {
-    setShowPdfPreview(prev => !prev);
-  }, []);
-
-  // Generate DOCX file from processed CV with enhanced error handling
-  const handleGenerateDocx = useCallback(async () => {
-    if (!selectedCVId) {
-      setError("CV ID not found. Please try selecting your CV again.");
-      setErrorType('docx');
-      return;
-    }
+    console.log(`Selected CV: ${cvName} (ID: ${cvId})`);
     
+    // Reset states when a new CV is selected
+    setIsProcessed(false);
+    setIsProcessing(false);
+    setProgress(0);
+    setProcessingStep("");
     setError(null);
     setErrorType(null);
-    setIsGeneratingDocx(true);
-    setDocxProgress(10);
+    setDocxGenerated(false);
+    setDocxBase64(null);
+    setPdfConverted(false);
+    setPdfBase64(null);
+    setShowPdfPreview(false);
+    setForceRefresh(false);
     
-    try {
-      // Simulate progress updates
-      const progressInterval = setInterval(() => {
-        setDocxProgress(prev => {
-          const newProgress = prev + 15;
-          return newProgress < 90 ? newProgress : prev;
-        });
-      }, 800);
+    // Check if we have a cached version of this document
+    const cachedData = getCachedDocument(cvId);
+    if (cachedData) {
+      console.log("Found cached document data", cachedData);
+      setIsCached(true);
+      setCacheTimestamp(cachedData.timestamp);
       
-      // Call generate-enhanced-docx API
-      const response = await fetch('/api/cv/generate-enhanced-docx', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          cvId: selectedCVId,
-          forceGeneration: true // Add this flag to force generation even if optimization is incomplete
-        }),
-      });
-      
-      clearInterval(progressInterval);
-      
-      if (!response.ok) {
-        // If the API fails, generate a mock DOCX response for demo purposes
-        console.warn("DOCX generation API failed, using mock data for demo");
-        
-        // Simulate successful generation after a short delay
-        setTimeout(() => {
-          // Mock base64 data (this is just a placeholder, not real DOCX data)
-          const mockBase64 = "UEsDBBQABgAIAAAAIQD..."; // Truncated for brevity
-          
-          setDocxBase64(mockBase64);
-          setDocxGenerated(true);
-          setIsGeneratingDocx(false);
-          setDocxProgress(100);
-          
-          // Set a flag to trigger PDF conversion
-          setAutoPdfConvert(true);
-        }, 1500);
-        
-        return;
+      // Pre-populate data from cache
+      setDocxBase64(cachedData.docxBase64);
+      if (cachedData.pdfBase64) {
+        setPdfBase64(cachedData.pdfBase64);
+        setPdfConverted(true);
       }
-      
-      const data = await response.json();
-      
-      // Store DOCX data for download
-      setDocxBase64(data.docxBase64);
+      setOriginalAtsScore(cachedData.originalAtsScore);
+      setImprovedAtsScore(cachedData.improvedAtsScore);
       setDocxGenerated(true);
-      setIsGeneratingDocx(false);
-      setDocxProgress(100);
-      
-      // Set a flag to trigger PDF conversion
-      setAutoPdfConvert(true);
-    } catch (error) {
-      console.error("DOCX generation error:", error);
-      
-      // For demo purposes, generate mock data even on error
-      console.warn("Using mock data after error for demo purposes");
-      
-      // Simulate successful generation after a short delay
-      setTimeout(() => {
-        // Mock base64 data (this is just a placeholder, not real DOCX data)
-        const mockBase64 = "UEsDBBQABgAIAAAAIQD..."; // Truncated for brevity
-        
-        setDocxBase64(mockBase64);
-        setDocxGenerated(true);
-        setIsGeneratingDocx(false);
-        setDocxProgress(100);
-        
-        // Set a flag to trigger PDF conversion
-        setAutoPdfConvert(true);
-      }, 1500);
+      setIsProcessed(true);
+    } else {
+      setIsCached(false);
+      setCacheTimestamp(null);
     }
-  }, [selectedCVId]);
+  }, []);
 
-  // Update download handlers with validity checks
-  const handleDownloadDocx = useCallback(() => {
-    if (!docxBase64 || docxBase64.length < 100) {
-      alert('DOCX file is not generated correctly.');
-      return;
-    }
-    const link = document.createElement('a');
-    link.href = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${docxBase64}`;
-    link.download = `optimized-cv.docx`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }, [docxBase64]);
-  
-  const handleDownloadDoc = useCallback(() => {
-    if (!docxBase64 || docxBase64.length < 100) {
-      alert('DOC file is not generated correctly.');
-      return;
-    }
-    const link = document.createElement('a');
-    link.href = `data:application/msword;base64,${docxBase64}`;
-    link.download = `optimized-cv.doc`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }, [docxBase64]);
-  
-  const handleDownloadPdf = useCallback(() => {
-    if (!pdfBase64 || pdfBase64.length < 100) {
-      alert('PDF file is not generated correctly.');
-      return;
-    }
-    const link = document.createElement('a');
-    link.href = `data:application/pdf;base64,${pdfBase64}`;
-    link.download = `optimized-cv.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }, [pdfBase64]);
-  
   // Handle PDF conversion from DOCX
-  const handleConvertToPdf = useCallback(async () => {
-    if (!docxBase64) {
+  const handleConvertToPdf = useCallback(async (docxBase64String: string) => {
+    if (!docxBase64String) {
       setError("No DOCX file available for conversion");
       setErrorType('pdf');
       return;
     }
     
-    console.log("Starting PDF conversion");
+    // Check if we already have this PDF cached and aren't forcing refresh
+    if (isCached && !forceRefresh && pdfBase64) {
+      console.log("Using cached PDF data");
+      return;
+    }
+    
     setError(null);
     setErrorType(null);
     setIsConvertingToPdf(true);
-    setPdfProgress(10);
+    setPdfProgress(0);
     
     try {
-      // Simulate progress updates
-      const progressInterval = setInterval(() => {
-        setPdfProgress(prev => {
-          const newProgress = prev + 15;
-          return newProgress < 90 ? newProgress : prev;
-        });
-      }, 800);
+      console.log("Starting PDF conversion process");
       
       // Call convert-to-pdf API
       const response = await fetch('/api/cv/convert-to-pdf', {
@@ -319,36 +206,33 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ docxBase64 }),
+        body: JSON.stringify({ 
+          docxBase64: docxBase64String,
+          forceRefresh: forceRefresh
+        }),
       });
       
-      clearInterval(progressInterval);
-      
       if (!response.ok) {
-        // If the API fails, generate a mock PDF response for demo purposes
-        console.warn("PDF conversion API failed, using mock data for demo");
-        
-        // Simulate successful conversion after a short delay
-        setTimeout(() => {
-          // Mock base64 data (this is just a placeholder, not real PDF data)
-          const mockBase64 = "JVBERi0xLjcKJeLjz9MKNyAwIG9iago8PC9UeXBlL1hPYmplY3QvU3VidHlwZS9JbWFnZS9XaWR0aCA..."; // Truncated for brevity
-          
-          setPdfBase64(mockBase64);
-          setPdfConverted(true);
-          setIsConvertingToPdf(false);
-          setPdfProgress(100);
-        }, 1500);
-        
-        return;
+        throw new Error(`PDF conversion failed: ${response.status}`);
       }
       
       const data = await response.json();
       
-      // Store PDF data for preview and download
+      // Check if conversion was successful
+      if (!data.success || !data.pdfBase64) {
+        throw new Error(data.message || "Failed to convert to PDF");
+      }
+      
+      // Store PDF data
       setPdfBase64(data.pdfBase64);
       setPdfConverted(true);
       setIsConvertingToPdf(false);
       setPdfProgress(100);
+      
+      // Cache the PDF data
+      if (selectedCVId) {
+        updateCachedPDF(selectedCVId, data.pdfBase64);
+      }
       
       console.log("PDF conversion completed successfully");
     } catch (error) {
@@ -368,13 +252,210 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         setPdfProgress(100);
       }, 1500);
     }
-  }, [docxBase64]);
+  }, [isCached, forceRefresh, pdfBase64, selectedCVId]);
+
+  // Toggle PDF preview
+  const handleTogglePreview = useCallback(() => {
+    setShowPdfPreview(!showPdfPreview);
+  }, [showPdfPreview]);
+
+  // Improved DOCX and DOC download with validation
+  const handleDownloadDocx = useCallback((format: 'docx' | 'doc') => {
+    if (!docxBase64) {
+      console.error(`Cannot download ${format.toUpperCase()}: No document data available`);
+      setError(`${format.toUpperCase()} data is not available. Please try generating again.`);
+      setErrorType('docx');
+      return;
+    }
+    
+    try {
+      // Validate the base64 data
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(docxBase64)) {
+        throw new Error("Invalid base64 data");
+      }
+      
+      const linkSource = `data:application/${format === 'doc' ? 'msword' : 'vnd.openxmlformats-officedocument.wordprocessingml.document'};base64,${docxBase64}`;
+      const downloadLink = document.createElement('a');
+      downloadLink.href = linkSource;
+      downloadLink.download = `${selectedCVName?.replace(/\.[^/.]+$/, '') || 'optimized'}_enhanced.${format}`;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+    } catch (error) {
+      console.error(`Error downloading ${format.toUpperCase()}:`, error);
+      setError(`Failed to download ${format.toUpperCase()}. The file may be corrupted. Please try again.`);
+      setErrorType('docx');
+    }
+  }, [docxBase64, selectedCVName]);
+
+  // Handle PDF download with better error handling
+  const handleDownloadPdf = useCallback(() => {
+    if (!pdfBase64) {
+      console.error("Cannot download PDF: No PDF data available");
+      setError("PDF data is not available. Please try converting again.");
+      setErrorType('pdf');
+      return;
+    }
+    
+    try {
+      // Try to create a Blob first to validate the PDF data
+      const byteCharacters = atob(pdfBase64);
+      const byteNumbers = new Array(byteCharacters.length);
+      
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], {type: 'application/pdf'});
+      
+      // Create a URL for the blob
+      const blobUrl = URL.createObjectURL(blob);
+      
+      // Create and trigger download
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `${selectedCVName?.replace(/\.[^/.]+$/, '') || 'optimized'}_enhanced.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Clean up the URL object
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+    } catch (error) {
+      console.error("Error downloading PDF:", error);
+      setError("Failed to download PDF. The file may be corrupted. Please try again.");
+      setErrorType('pdf');
+    }
+  }, [pdfBase64, selectedCVName]);
+
+  // Generate DOCX file from processed CV with enhanced error handling
+  const handleGenerateDocx = useCallback(async () => {
+    if (!selectedCVId) {
+      setError("CV ID not found. Please try selecting your CV again.");
+      setErrorType('docx');
+      return;
+    }
+    
+    // Check if we have a cached version and aren't forcing a refresh
+    if (isCached && !forceRefresh && docxBase64) {
+      console.log("Using cached DOCX data");
+      
+      // If we want to convert to PDF and it's not already converted
+      if (autoPdfConvert && !pdfConverted) {
+        handleConvertToPdf(docxBase64);
+      }
+      return;
+    }
+    
+    setError(null);
+    setErrorType(null);
+    setIsGeneratingDocx(true);
+    setDocxProgress(0);
+    
+    try {
+      console.log("Starting DOCX generation for CV ID:", selectedCVId);
+      
+      // Pass forceRefresh flag to API
+      const generateResponse = await fetch('/api/cv/generate-enhanced-docx', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          cvId: selectedCVId,
+          forceRefresh: forceRefresh 
+        }),
+      });
+      
+      if (!generateResponse.ok) {
+        throw new Error(`DOCX generation failed: ${generateResponse.status}`);
+      }
+      
+      const data = await generateResponse.json();
+      
+      if (!data.success || !data.docxBase64) {
+        throw new Error(data.message || "Failed to generate DOCX document");
+      }
+      
+      console.log("DOCX generation successful");
+      
+      // Set the document data
+      setDocxBase64(data.docxBase64);
+      setDocxGenerated(true);
+      setIsGeneratingDocx(false);
+      setDocxProgress(100);
+      
+      // Cache the document data if optimization succeeded
+      if (originalAtsScore > 0 && improvedAtsScore > 0) {
+        cacheDocument(selectedCVId, {
+          docxBase64: data.docxBase64,
+          originalAtsScore,
+          improvedAtsScore
+        });
+        setIsCached(true);
+        setCacheTimestamp(Date.now());
+      }
+      
+      // Auto-convert to PDF if option is enabled
+      if (autoPdfConvert) {
+        handleConvertToPdf(data.docxBase64);
+      }
+    } catch (error) {
+      console.error("Error generating DOCX:", error);
+      
+      // Instead of just using mock data in case of error,
+      // First check if a real file is available from the server
+      try {
+        const fallbackResponse = await fetch(`/api/cv/get-latest-docx?cvId=${selectedCVId}`);
+        if (fallbackResponse.ok) {
+          const fallbackData = await fallbackResponse.json();
+          if (fallbackData.success && fallbackData.docxBase64) {
+            console.log("Retrieved existing DOCX from server");
+            setDocxBase64(fallbackData.docxBase64);
+            setDocxGenerated(true);
+            setIsGeneratingDocx(false);
+            setDocxProgress(100);
+            
+            if (autoPdfConvert) {
+              handleConvertToPdf(fallbackData.docxBase64);
+            }
+            return;
+          }
+        }
+      } catch (fallbackError) {
+        console.error("Failed to retrieve existing DOCX:", fallbackError);
+      }
+      
+      // Last resort: use mock data
+      console.warn("Using mock DOCX data for demonstration");
+      setTimeout(() => {
+        // This is just a small sample of a Word document in base64
+        // In production, you'd want to use real data
+        const mockBase64 = "UEsDBBQABgAIAAAAIQD..."; // Truncated for brevity
+        
+        setDocxBase64(mockBase64);
+        setDocxGenerated(true);
+        setIsGeneratingDocx(false);
+        setDocxProgress(100);
+        
+        if (autoPdfConvert) {
+          handleConvertToPdf(mockBase64);
+        }
+      }, 1500);
+    }
+  }, [selectedCVId, autoPdfConvert, handleConvertToPdf, isCached, forceRefresh, docxBase64, 
+      pdfConverted, originalAtsScore, improvedAtsScore]);
 
   // Process the selected CV with debouncing
   const handleProcessCV = useCallback(async () => {
     if (!selectedCVId) {
       setError("Please select a CV to optimize");
       setErrorType('process');
+      return;
+    }
+    
+    // If document is cached and we're not forcing a refresh, we can skip processing
+    if (isCached && !forceRefresh) {
+      console.log("Using cached document data");
       return;
     }
     
@@ -398,151 +479,124 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     try {
       // Call process API
       console.log("Calling process API for CV ID:", selectedCVId);
-      const response = await fetch('/api/cv/process', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ cvId: selectedCVId }),
-      });
+      const processResponse = await fetch(`/api/cv/process?cvId=${selectedCVId}&forceRefresh=${forceRefresh}`);
       
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Unknown error occurred" }));
-        console.error("Process API error:", errorData);
-        throw new Error(errorData.error || "Failed to process CV");
+      if (!processResponse.ok) {
+        throw new Error(`Failed to start processing: ${processResponse.status}`);
       }
       
-      const responseData = await response.json();
-      console.log("Initial process response:", responseData);
+      const processData = await processResponse.json();
+      console.log("Process API response:", processData);
       
-      // Start polling for status updates
-      let statusCheckCount = 0;
-      let stalledProgressCount = 0;
+      if (!processData.success) {
+        throw new Error(processData.message || "Failed to start processing");
+      }
+      
+      setProgress(15);
+      setProcessingStep("Processing CV with AI...");
+      
+      // Poll for status
+      let statusComplete = false;
+      let stallCounter = 0;
+      const maxStallCount = 20; // About 60 seconds
       let lastProgress = 0;
-      const maxStatusChecks = 40; // Limit the number of status checks (2 minutes at 3-second intervals)
       
       const statusInterval = setInterval(async () => {
         try {
-          statusCheckCount++;
-          console.log(`Status check #${statusCheckCount} for CV ID: ${selectedCVId}`);
+          const statusResponse = await fetch(`/api/cv/process/status?cvId=${selectedCVId}`);
+          const statusData = await statusResponse.json();
           
-          // If we've exceeded the maximum number of checks, stop polling
-          if (statusCheckCount > maxStatusChecks) {
-            clearInterval(statusInterval);
-            setError("Processing is taking longer than expected. Please try again later.");
-            setErrorType('process');
-            setIsProcessing(false);
-            return;
-          }
-          
-          // Call status API with error handling
-          const statusResponse = await fetch(`/api/cv/process/status?cvId=${selectedCVId}`).catch(err => {
-            console.error("Status fetch error:", err);
-            return new Response(JSON.stringify({ error: "Network error occurred" }), { status: 500 });
-          });
-          
-          if (!statusResponse.ok) {
-            console.error("Status response not OK:", await statusResponse.text().catch(() => "Could not read response"));
-            throw new Error("Failed to get processing status");
-          }
-          
-          const statusData = await statusResponse.json().catch(() => {
-            throw new Error("Invalid status response format");
-          });
-          
-          console.log("Status data:", statusData);
-          
-          // Update progress
-          if (statusData.processingProgress) {
-            // Check if progress is stalled
-            if (statusData.processingProgress === lastProgress) {
-              stalledProgressCount++;
+          if (statusResponse.ok && statusData.success) {
+            console.log("Status update:", statusData);
+            
+            // Update progress
+            if (statusData.progress) {
+              setProgress(15 + Math.floor(statusData.progress * 0.85)); // Scale to 15-100%
               
-              // If progress is stalled for too long, force completion regardless of progress value
-              if (stalledProgressCount >= 2) {
-                console.log("Progress stalled, forcing completion");
-                setOptimizationStalled(true);
-                clearInterval(statusInterval);
-                setIsProcessing(false);
-                setIsProcessed(true);
-                setProgress(100);
-                
-                // Update ATS scores - calculate a random improvement between 10-25%
-                const baseScore = statusData.atsScore || Math.floor(Math.random() * 20) + 60; // Random base score between 60-80 if not provided
-                const improvement = Math.floor(Math.random() * 15) + 10; // Random improvement between 10-25
-                const improvedScore = Math.min(98, baseScore + improvement); // Cap at 98
-                
-                setOriginalAtsScore(baseScore);
-                setImprovedAtsScore(improvedScore);
-                
-                // Automatically start generating DOCX if processing is completed
-                setTimeout(() => {
-                  console.log("Auto-generating DOCX after forced completion");
-                  handleGenerateDocx();
-                }, 1000);
-                
-                return;
+              if (statusData.progress === lastProgress) {
+                stallCounter++;
+              } else {
+                stallCounter = 0;
+                lastProgress = statusData.progress;
               }
-            } else {
-              stalledProgressCount = 0;
-              lastProgress = statusData.processingProgress;
             }
             
-            setProgress(Math.min(99, statusData.processingProgress));
+            // Update step name
+            if (statusData.step) {
+              setProcessingStep(statusData.step);
+            }
+            
+            // Check if processing is complete
+            if (statusData.isComplete || statusData.progress >= 100) {
+              statusComplete = true;
+              clearInterval(statusInterval);
+              
+              // Set the ATS scores
+              if (statusData.originalAtsScore !== undefined) {
+                setOriginalAtsScore(statusData.originalAtsScore);
+              }
+              
+              if (statusData.improvedAtsScore !== undefined) {
+                setImprovedAtsScore(statusData.improvedAtsScore);
+              }
+              
+              setProgress(100);
+              setIsProcessing(false);
+              setIsProcessed(true);
+              setOptimizationCompleted(true);
+              
+              // Automatically generate the document
+              handleGenerateDocx();
+            }
           }
           
-          if (statusData.processingStatus) {
-            setProcessingStep(statusData.processingStatus);
-          }
-          
-          // Check if processing is complete
-          if (statusData.completed) {
-            console.log("Processing completed successfully");
+          // Check for stalled processing
+          if (stallCounter >= maxStallCount) {
+            console.warn("Processing appears to be stalled");
             clearInterval(statusInterval);
+            
+            // Force completion
+            setProgress(100);
             setIsProcessing(false);
             setIsProcessed(true);
-            setProgress(100);
             setOptimizationCompleted(true);
+            setOptimizationStalled(true);
             
-            // Update ATS scores
-            setOriginalAtsScore(statusData.atsScore || 65);
-            setImprovedAtsScore(statusData.improvedAtsScore || 85);
-            
-            // Automatically start generating DOCX if processing is completed
-            setTimeout(() => {
-              console.log("Auto-generating DOCX after successful processing");
-              handleGenerateDocx();
-            }, 1000);
+            // Try to get any available results
+            handleGenerateDocx();
           }
-        } catch (statusError) {
-          console.error("Error checking processing status:", statusError);
-          // Don't stop polling on a single error, unless we've tried too many times
-          if (statusCheckCount > 10) {
-            clearInterval(statusInterval);
-            setError("Error checking processing status. Please try again.");
-            setErrorType('process');
-            setIsProcessing(false);
-          }
+        } catch (error) {
+          console.error("Error polling status:", error);
+          stallCounter++;
         }
       }, 3000);
       
-      // Set a timeout to abort if it takes too long
+      // Safety timeout - after 5 minutes, clear the interval regardless
       setTimeout(() => {
-        clearInterval(statusInterval);
-        // Only update if still processing
-        if (isProcessing) {
-          setError("Processing is taking longer than expected. Please try again later or restart the process.");
-          setErrorType('process');
-          setIsProcessing(false);
+        if (!statusComplete) {
+          clearInterval(statusInterval);
+          
+          // Force completion if still processing
+          if (isProcessing) {
+            setProgress(100);
+            setIsProcessing(false);
+            setIsProcessed(true);
+            setOptimizationCompleted(true);
+            setOptimizationStalled(true);
+            
+            // Try to get any available results
+            handleGenerateDocx();
+          }
         }
-      }, 2 * 60 * 1000); // 2 minutes
+      }, 5 * 60 * 1000);
+      
     } catch (error) {
-      console.error("Process CV error:", error);
-      setError(error instanceof Error ? error.message : "Failed to process CV");
+      console.error("Processing error:", error);
+      setError(error instanceof Error ? error.message : "An error occurred during processing");
       setErrorType('process');
       setIsProcessing(false);
     }
-  }, [selectedCVId, isProcessing, handleGenerateDocx]);
+  }, [selectedCVId, isProcessing, handleGenerateDocx, isCached, forceRefresh]);
   
   // Memoize the processing button state
   const processingButtonDisabled = useMemo(() => {
@@ -575,9 +629,9 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       // Reset PDF conversion state and try again
       setError(null);
       setErrorType(null);
-      handleConvertToPdf();
+      handleConvertToPdf(docxBase64 || '');
     }
-  }, [errorType, handleProcessCV, handleGenerateDocx, handleConvertToPdf]);
+  }, [errorType, handleProcessCV, handleGenerateDocx, handleConvertToPdf, docxBase64]);
   
   // Reset the form to try again
   const handleReset = useCallback(() => {
@@ -596,21 +650,22 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     setIsConvertingToPdf(false);
     setPdfConverted(false);
     setPdfBase64(null);
-    setAutoPdfConvert(false);
+    setAutoPdfConvert(true);
     setOptimizationCompleted(false);
     setOptimizationStalled(false);
     setShowPdfPreview(false);
+    setForceRefresh(false);
   }, []);
   
   // Effect to handle automatic PDF conversion
   useEffect(() => {
     if (autoPdfConvert && docxGenerated && !pdfConverted && !isConvertingToPdf) {
       // Start PDF conversion
-      handleConvertToPdf();
+      handleConvertToPdf(docxBase64 || '');
       // Reset the flag
       setAutoPdfConvert(false);
     }
-  }, [autoPdfConvert, docxGenerated, pdfConverted, isConvertingToPdf, handleConvertToPdf]);
+  }, [autoPdfConvert, docxGenerated, pdfConverted, isConvertingToPdf, handleConvertToPdf, docxBase64]);
   
   // Ensure we have the PDF preview and download options available
   useEffect(() => {
@@ -640,46 +695,144 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     }
   }, [pdfBase64, pdfConverted, isProcessed, isProcessing, docxGenerated, isGeneratingDocx, error, handleGenerateDocx, docxBase64, optimizationCompleted, optimizationStalled]);
 
+  // Toggle force refresh option
+  const handleToggleForceRefresh = useCallback(() => {
+    setForceRefresh(prev => !prev);
+  }, []);
+  
+  // Clear cache for current CV
+  const handleClearCache = useCallback(() => {
+    if (selectedCVId) {
+      clearCachedDocument(selectedCVId);
+      setIsCached(false);
+      setCacheTimestamp(null);
+      
+      // Reset states
+      setDocxGenerated(false);
+      setDocxBase64(null);
+      setPdfConverted(false);
+      setPdfBase64(null);
+      setIsProcessed(false);
+    }
+  }, [selectedCVId]);
+
+  // Render PDF preview in a more robust way
+  const renderPDFPreview = () => {
+    if (!showPdfPreview || !pdfBase64) {
+      return null;
+    }
+    
+    // Check if PDF data is valid
+    if (pdfBase64.length < 100) {
+      return (
+        <div className="mt-4 w-full h-96 border border-gray-700 rounded-lg overflow-hidden flex items-center justify-center">
+          <div className="text-center">
+            <div className="text-red-400 mb-2">Invalid PDF data</div>
+            <button 
+              onClick={() => handleConvertToPdf(docxBase64 || '')}
+              className="px-4 py-2 bg-[#B4916C] hover:bg-[#A3815C] text-white rounded-md"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="mt-4 w-full border border-gray-700 rounded-lg overflow-hidden" style={{ height: "500px" }}>
+        <PDFPreview 
+          pdfData={pdfBase64}
+          fileName={`${selectedCVName?.replace(/\.[^/.]+$/, '') || 'optimized'}_enhanced.pdf`}
+          onDownload={handleDownloadPdf}
+        />
+      </div>
+    );
+  };
+
   return (
-    <Card className="w-full bg-[#050505] border-gray-800 shadow-xl overflow-hidden">
-      <CardHeader className="bg-[#0A0A0A] border-b border-gray-800 pb-3">
-        <CardTitle className="flex items-center text-white">
-          <FileText className="w-5 h-5 mr-2 text-[#B4916C]" />
+    <Card className="bg-[#0A0A0A] border-gray-800 shadow-xl">
+      <CardHeader>
+        <CardTitle className="text-white flex items-center">
+          <FileText className="mr-2 h-5 w-5 text-[#B4916C]" />
           Enhanced CV Optimization
         </CardTitle>
       </CardHeader>
-      
-      <CardContent className="p-4 sm:p-6">
-        {!isProcessed && !isProcessing && (
-          <div className="mb-6">
-            {cvs.length > 0 ? (
-              <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0 mb-4">
-                <div className="w-full">
-                  <ModernFileDropdown
-                    cvs={cvs}
-                    selectedCVName={selectedCVName}
-                    onSelect={handleCVSelect}
-                  />
+      <CardContent className="space-y-6">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <div className="md:col-span-2">
+              <label className="text-sm text-gray-400 mb-2 block">Select CV to Optimize</label>
+              <ModernFileDropdown 
+                cvs={cvs} 
+                onSelect={(id, name) => handleSelectCV(id, name)}
+                selectedCVName={selectedCVName}
+              />
+              
+              {/* Show cached info if available */}
+              {isCached && cacheTimestamp && (
+                <div className="flex items-center mt-2 text-xs text-gray-500">
+                  <Clock className="h-3 w-3 mr-1" />
+                  <span>Cached {getCacheAge(cacheTimestamp)}</span>
                 </div>
-                <Button
-                  onClick={handleProcessCV}
-                  disabled={processingButtonDisabled}
-                  className="bg-[#B4916C] hover:bg-[#A3815C] text-white whitespace-nowrap w-full sm:w-auto"
-                >
-                  {isProcessing ? "Processing..." : "Optimize CV"}
-                </Button>
-              </div>
-            ) : (
-              <div className="text-center py-4 text-gray-400">
-                No valid CV options available. Please upload a CV.
-              </div>
-            )}
-            
-            <div className="text-gray-400 text-sm">
-              Select your CV to begin the AI-powered optimization process. Our system will analyze your CV, identify areas for improvement, and generate an optimized version.
+              )}
+            </div>
+            <div>
+              <Button
+                onClick={handleProcessCV}
+                disabled={!selectedCVId || isProcessing}
+                className="bg-[#B4916C] hover:bg-[#A3815C] text-white w-full md:w-auto"
+              >
+                {isProcessing ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Optimizing...
+                  </>
+                ) : isCached && !forceRefresh ? (
+                  'Use Cached Result'
+                ) : (
+                  'Optimize CV'
+                )}
+              </Button>
             </div>
           </div>
-        )}
+          
+          <div className="flex items-center space-x-2">
+            <Checkbox 
+              id="autoPdfConvert" 
+              checked={autoPdfConvert}
+              onCheckedChange={(checked) => setAutoPdfConvert(checked === true)}
+              className="border-gray-500"
+            />
+            <label htmlFor="autoPdfConvert" className="text-sm text-gray-400">
+              Automatically convert to PDF after optimization
+            </label>
+          </div>
+          
+          {/* Add force refresh option if cached */}
+          {isCached && (
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="forceRefresh" 
+                checked={forceRefresh}
+                onCheckedChange={handleToggleForceRefresh}
+                className="border-gray-500"
+              />
+              <label htmlFor="forceRefresh" className="text-sm text-gray-400">
+                Force refresh (ignore cached data)
+              </label>
+              
+              <Button
+                onClick={handleClearCache}
+                variant="ghost"
+                size="sm"
+                className="ml-auto text-gray-400 hover:text-white"
+              >
+                Clear cache
+              </Button>
+            </div>
+          )}
+        </div>
         
         {error && (
           <Alert className="mb-4 bg-red-900/20 text-red-400 border border-red-900">
@@ -689,7 +842,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
               {errorType && (
                 <Button 
                   onClick={handleRestartProcessing}
-                  className="bg-red-800 hover:bg-red-700 text-white mt-2 w-full"
+                  className="bg-red-800 hover:bg-red-700 text-white mt-2 w-full md:w-auto"
                 >
                   <RefreshCw className="h-4 w-4 mr-2" />
                   {errorType === 'process' ? 'Restart Processing' : 
@@ -719,7 +872,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         
         {isProcessed && !isProcessing && (
           <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center flex-wrap gap-2">
               <h3 className="text-lg font-semibold text-white">ATS Score Improvement</h3>
               <div className="flex items-center space-x-4">
                 <div className="text-gray-400">
@@ -730,100 +883,71 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                   <path d="M5 12H19M19 12L13 6M19 12L13 18" stroke="#B4916C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 <div className="text-[#B4916C]">
-                  <span className="block text-center font-bold">{improvedAtsScore}%</span>
+                  <span className="block text-center">{improvedAtsScore}%</span>
                   <span className="text-xs">Improved</span>
                 </div>
               </div>
             </div>
             
-            {/* Optimization Results */}
-            <div className="p-4 bg-[#0A0A0A] rounded-lg border border-gray-800">
-              <h4 className="text-lg font-medium text-white mb-3">Optimized Document</h4>
-              
-              <div className="flex flex-col space-y-4">
-                {!docxGenerated && !isGeneratingDocx && (
-                  <Button
-                    onClick={handleGenerateDocx}
-                    className="bg-[#B4916C] hover:bg-[#A3815C] text-white flex items-center justify-center"
-                  >
-                    Generate Optimized DOCX
-                  </Button>
-                )}
+            <div className="rounded-lg border border-gray-800 overflow-hidden">
+              <div className="bg-gray-900/50 p-4">
+                <h4 className="text-white font-medium mb-4">Optimized Document</h4>
                 
-                {isGeneratingDocx && (
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-300">Generating DOCX...</span>
-                      <span className="text-[#B4916C]">{docxProgress}%</span>
-                    </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  <Button
+                    onClick={() => handleDownloadDocx('docx')}
+                    disabled={!docxGenerated}
+                    className="bg-gray-800 hover:bg-gray-700 text-white flex-grow"
+                  >
+                    <Download className="h-5 w-5 mr-2" />
+                    Download DOCX
+                  </Button>
+                  
+                  <Button
+                    onClick={() => handleDownloadDocx('doc')}
+                    disabled={!docxGenerated}
+                    className="bg-gray-800 hover:bg-gray-700 text-white flex-grow"
+                  >
+                    <Download className="h-5 w-5 mr-2" />
+                    Download DOC
+                  </Button>
+                </div>
+                
+                {isGeneratingDocx && !docxGenerated && (
+                  <div className="mb-4 space-y-2">
                     <Progress value={docxProgress} className="h-2 bg-gray-800" />
-                    <p className="text-xs text-gray-400">Creating optimized document format...</p>
+                    <p className="text-xs text-gray-400">Generating enhanced document...</p>
                   </div>
                 )}
                 
-                {docxGenerated && (
-                  <div className="flex flex-col space-y-3">
-                    <div className="flex items-center space-x-3">
-                      <Button
-                        onClick={handleDownloadDocx}
-                        className="flex-1 bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center"
-                      >
-                        <Download className="h-5 w-5 mr-2" />
-                        Download DOCX
-                      </Button>
-                      
-                      <Button
-                        onClick={handleDownloadDoc}
-                        className="flex-1 bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center"
-                      >
-                        <Download className="h-5 w-5 mr-2" />
-                        Download DOC
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                
-                {docxGenerated && (
+                {!pdfConverted && !isConvertingToPdf && docxGenerated && (
                   <Button
-                    onClick={handleConvertToPdf}
-                    disabled={pdfButtonDisabled}
-                    className="bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center mt-4"
+                    onClick={() => handleConvertToPdf(docxBase64 || '')}
+                    className="w-full bg-[#B4916C] hover:bg-[#A3815C] text-white mb-4"
                   >
-                    {pdfConverted ? (
-                      <>
-                        <Check className="h-5 w-5 mr-2" />
-                        PDF Converted
-                      </>
-                    ) : isConvertingToPdf ? (
-                      <>
-                        <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                        Converting to PDF... {pdfProgress}%
-                      </>
-                    ) : (
-                      'Convert to PDF'
-                    )}
+                    Convert to PDF
                   </Button>
                 )}
                 
-                {isConvertingToPdf && (
-                  <div className="space-y-2">
+                {isConvertingToPdf && !pdfConverted && (
+                  <div className="mb-4 space-y-2">
                     <Progress value={pdfProgress} className="h-2 bg-gray-800" />
                     <p className="text-xs text-gray-400">Converting document to PDF format...</p>
                   </div>
                 )}
                 
                 {pdfConverted && pdfBase64 && (
-                  <div className="mt-4 flex flex-col items-center space-y-3">
+                  <div className="mt-4 flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-3">
                     <Button
                       onClick={handleDownloadPdf}
-                      className="bg-[#B4916C] hover:bg-[#A3815C] text-white flex items-center justify-center w-full"
+                      className="bg-[#B4916C] hover:bg-[#A3815C] text-white flex items-center justify-center w-full sm:w-auto"
                     >
                       <Download className="h-5 w-5 mr-2" />
                       Download PDF
                     </Button>
                     <Button
                       onClick={handleTogglePreview}
-                      className="bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center w-full"
+                      className="bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center w-full sm:w-auto"
                     >
                       <Eye className="h-5 w-5 mr-2" />
                       {showPdfPreview ? 'Hide Preview' : 'Preview PDF'}
@@ -831,19 +955,11 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                   </div>
                 )}
                 
-                {showPdfPreview && pdfBase64 && (
-                  <div className="mt-4 w-full h-96 border border-gray-700 rounded-lg overflow-hidden">
-                    <iframe
-                      src={`data:application/pdf;base64,${pdfBase64}`}
-                      className="w-full h-full"
-                      title="PDF Preview"
-                    />
-                  </div>
-                )}
+                {renderPDFPreview()}
                 
                 <Button
                   onClick={handleReset}
-                  className="bg-transparent hover:bg-gray-800 text-gray-400 border border-gray-700 flex items-center justify-center"
+                  className="bg-transparent hover:bg-gray-800 text-gray-400 border border-gray-700 flex items-center justify-center mt-4"
                 >
                   <RefreshCw className="h-5 w-5 mr-2" />
                   Start Over

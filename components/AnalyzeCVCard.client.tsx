@@ -161,12 +161,9 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
     const strengths: string[] = [];
     const sections = analysis.sectionBreakdown || {};
     
-    // Always add at least one basic strength
-    strengths.push("CV successfully uploaded and parsed");
-    
-    // Check for comprehensive sections
+    // Check for comprehensive sections instead of just adding a basic upload message
     if (Object.keys(sections).length >= 2) {
-      strengths.push("Multiple sections identified in your CV");
+      strengths.push("Well-structured CV with multiple sections");
     }
     
     // Check for appropriate length
@@ -176,25 +173,52 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
     }
     
     if (totalLength > 500) {
-      strengths.push("Appropriate content length for professional review");
+      strengths.push("Comprehensive content with appropriate detail level");
     }
     
     // Check for contact information
     if (sections.contact || sections.summary) {
-      strengths.push("Contact or summary information detected");
+      strengths.push("Clear contact information and/or professional summary");
     }
     
     // If we found keywords
-    if (analysis.keywordAnalysis && Object.keys(analysis.keywordAnalysis).length > 0) {
-      strengths.push("Industry-relevant keywords detected");
+    if (analysis.keywordAnalysis && Object.keys(analysis.keywordAnalysis).length > 3) {
+      strengths.push("Good use of industry-relevant keywords");
+    } else if (analysis.keywordAnalysis && Object.keys(analysis.keywordAnalysis).length > 0) {
+      strengths.push("Some industry-relevant keywords detected");
     }
     
     // If the ATS score is reasonable
-    if (typeof analysis.atsScore === 'number' && analysis.atsScore > 40) {
-      strengths.push("Basic ATS compatibility detected");
+    if (typeof analysis.atsScore === 'number') {
+      if (analysis.atsScore > 60) {
+        strengths.push("Strong ATS compatibility");
+      } else if (analysis.atsScore > 40) {
+        strengths.push("Acceptable ATS compatibility");
+      }
     }
     
-    // Return top 3 strengths
+    // Check for experience section
+    if (sections.experience && sections.experience.length > 200) {
+      strengths.push("Detailed work experience section");
+    }
+    
+    // Check for skills section
+    if (sections.skills && sections.skills.length > 100) {
+      strengths.push("Comprehensive skills section");
+    }
+    
+    // Check for education section
+    if (sections.education && sections.education.length > 50) {
+      strengths.push("Well-documented educational background");
+    }
+    
+    // If no strengths were found, add a fallback message
+    if (strengths.length === 0) {
+      strengths.push("CV accepted for analysis");
+      strengths.push("Additional optimization recommended");
+    }
+    
+    // Return up to 3 strengths (more meaningful than before)
     return strengths.slice(0, 3);
   }
   

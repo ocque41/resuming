@@ -3,7 +3,7 @@ description: systematic approach for all prompts
 globs: 
 ---
 1. `#plan` - Plans next 5 steps
-2. `#step` - Implement one step and writes next and completes output.
+2. `#step` - Implement one step at a time, step by step and writes next and completes output.
 3. `#status` - Shows current progress in implementation workflow
 4. `#next` - After implementation of #plan continue by recommending next steps based on current 
 
