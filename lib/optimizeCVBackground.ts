@@ -346,10 +346,10 @@ export async function optimizeCVBackground(cvRecord: any, templateId?: string) {
     try {
       console.log(`Generating DOCX for CV ${cvId}`);
       
-      // Create a standardized CV object
+      // Create a standardized CV object - use the original function that accepts sections
       const standardCV = parseStandardCVFromSections(standardizedSections);
       
-      // Generate the DOCX file
+      // Generate the DOCX file - use the original function that accepts StandardCV
       docxBuffer = await generateCVDocx(standardCV);
       
       console.log(`Generated DOCX (${docxBuffer.length} bytes)`);

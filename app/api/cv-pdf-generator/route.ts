@@ -149,10 +149,10 @@ export async function GET(request: NextRequest) {
         // Parse the optimized text into sections
         const sections = parseTextIntoSections(metadata.optimizedText);
         
-        // Convert sections to StandardCV format
+        // Convert sections to StandardCV format - now use the original function that accepts sections
         const standardCV = parseStandardCVFromSections(sections);
         
-        // Generate DOCX
+        // Generate DOCX - use the original function that accepts StandardCV
         const docxBuffer = await generateCVDocx(standardCV);
         
         // Convert DOCX to base64

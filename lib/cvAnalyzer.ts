@@ -125,6 +125,8 @@ export interface CVAnalysisResult {
     formatScore: number;
     sectionScore: number;
   };
+  keywordAnalysis?: Record<string, number>;
+  sectionBreakdown?: Record<string, string>;
 }
 
 /**
@@ -644,4 +646,37 @@ function generateRecommendations(weaknesses: string[], industry: string): string
  */
 export function getIndustryKeywords(industry: string): string[] {
   return INDUSTRY_KEYWORDS[industry] || INDUSTRY_KEYWORDS['General'] || [];
+}
+
+/**
+ * Get industry-specific ATS insights for a given industry
+ * @param industry The industry to get insights for
+ * @returns A string with industry-specific ATS optimization insights
+ */
+export function getIndustrySpecificAtsInsights(industry: string): string {
+  const industryMap: Record<string, string> = {
+    'Technology': 'Technology resumes should highlight technical skills, programming languages, and frameworks relevant to the role. Include specific projects, their impact, and any quantifiable metrics. Use keywords from job descriptions like "software development", "agile methodology", or specific technologies like "React", "Python", etc.',
+    
+    'Finance': 'Finance resumes should emphasize analytical skills, financial modeling expertise, and regulatory knowledge. Include specific metrics about portfolio performance, cost savings, or revenue growth. Keywords like "financial analysis", "risk management", "compliance", and relevant certifications (CFA, CPA) are essential.',
+    
+    'Healthcare': 'Healthcare resumes should focus on patient care outcomes, compliance with healthcare regulations, and any specialized certifications. Include specific examples of improvements in patient satisfaction or operational efficiency. Keywords like "patient care", "HIPAA compliance", and relevant medical terminologies are important.',
+    
+    'Marketing': 'Marketing resumes should showcase campaign results, social media metrics, and content strategy successes. Include specific ROI, engagement rates, or conversion improvements. Keywords like "digital marketing", "SEO", "content strategy", and analytics tools are highly valued by ATS systems.',
+    
+    'Sales': 'Sales resumes should highlight revenue generation, client acquisition metrics, and territory management. Include quota attainment percentages and specific sales figures. Keywords like "revenue growth", "client relationship management", "negotiation", and CRM tools like "Salesforce" stand out to ATS systems.',
+    
+    'Human Resources': 'HR resumes should emphasize employee engagement initiatives, recruitment metrics, and policy implementation. Include specific improvements in retention rates or hiring efficiency. Keywords like "talent acquisition", "employee relations", "HRIS", and relevant HR certifications improve ATS ranking.',
+    
+    'Operations': 'Operations resumes should focus on process improvements, cost reductions, and supply chain optimizations. Include specific efficiency metrics and project outcomes. Keywords like "process optimization", "supply chain management", "lean methodology", and relevant ERP systems are crucial for ATS filters.',
+    
+    'Legal': 'Legal resumes should highlight case outcomes, regulatory compliance work, and contract negotiations. Include specific examples of risk mitigation or legal strategy implementation. Keywords related to relevant laws, regulations, and legal processes improve ATS visibility.',
+    
+    'Education': 'Education resumes should emphasize teaching methodologies, student outcomes, and curriculum development. Include specific improvements in student performance or program innovations. Keywords like "instructional design", "student assessment", and relevant educational technologies help with ATS ranking.',
+    
+    'Construction': 'Construction resumes should focus on project management, safety compliance, and building code knowledge. Include specific projects with budget and timeline metrics. Keywords like "project management", "OSHA compliance", "blueprint reading", and construction methodologies are essential for ATS systems.'
+  };
+  
+  // Return the industry-specific insight or a general one if the industry isn't found
+  return industryMap[industry] || 
+    'Focus on relevant keywords from the job description, quantify achievements, use standard section headings, and ensure your format is ATS-friendly. Include industry-specific terminology and highlight skills that are most relevant to the positions you\'re applying for.';
 }

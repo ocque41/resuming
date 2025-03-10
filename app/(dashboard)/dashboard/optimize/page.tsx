@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import Link from "next/link";
 import { ArrowLeft, BarChart2, FileText } from "lucide-react";
 import AnalyzeCVCard from "@/components/AnalyzeCVCard.client";
-import OptimizeCVCard from "@/components/OptimizeCVCard.client";
+import EnhancedOptimizeCVCard from "@/components/EnhancedOptimizeCVCard.client";
 import ErrorBoundaryWrapper from "@/components/ErrorBoundaryWrapper";
 
 export default async function OptimizePage() {
@@ -66,7 +66,7 @@ export default async function OptimizePage() {
                   <FileText className="h-5 w-5 text-[#B4916C] mr-2" />
                   <h2 className="text-lg font-medium text-white">Optimize Your CV</h2>
                 </div>
-                <OptimizeCVCard cvs={cvs.map((cv: any) => `${cv.fileName}|${cv.id}`)} />
+                <EnhancedOptimizeCVCard cvs={cvs.map((cv: any) => `${cv.fileName}|${cv.id}`)} />
               </ErrorBoundaryWrapper>
             </div>
           </CardContent>
