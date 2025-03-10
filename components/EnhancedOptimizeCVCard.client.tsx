@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -19,7 +19,7 @@ interface EnhancedOptimizeCVCardProps {
 export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVCardProps) {
   // State for CV selection
   const [selectedCV, setSelectedCV] = useState<string | null>(null);
-  const [cvOptions, setCvOptions] = useState<string[]>(cvs);
+  const [cvOptions, setCvOptions] = useState<string[]>(Array.isArray(cvs) ? cvs : []);
   const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
   
   // State for processing
@@ -28,16 +28,19 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   const [progress, setProgress] = useState<number>(0);
   const [processingStep, setProcessingStep] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const [errorType, setErrorType] = useState<'process' | 'docx' | 'pdf' | null>(null);
   
   // State for DOCX generation
   const [isGeneratingDocx, setIsGeneratingDocx] = useState<boolean>(false);
   const [docxGenerated, setDocxGenerated] = useState<boolean>(false);
   const [docxBase64, setDocxBase64] = useState<string | null>(null);
+  const [docxProgress, setDocxProgress] = useState<number>(0);
   
   // State for PDF conversion
   const [isConvertingToPdf, setIsConvertingToPdf] = useState<boolean>(false);
   const [pdfConverted, setPdfConverted] = useState<boolean>(false);
   const [pdfBase64, setPdfBase64] = useState<string | null>(null);
+  const [pdfProgress, setPdfProgress] = useState<number>(0);
   
   // State for ATS scores
   const [originalAtsScore, setOriginalAtsScore] = useState<number>(0);
@@ -46,20 +49,31 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   // Add a new state for automatic PDF conversion
   const [autoPdfConvert, setAutoPdfConvert] = useState<boolean>(false);
   
-  // Extract display names for the CV dropdown (without the ID part)
-  const displayCVOptions = cvOptions.map(cv => {
-    const parts = cv.split('|');
-    return parts[0].trim();
-  });
+  // Memoize the display options to prevent unnecessary re-renders
+  const displayCVOptions = useMemo(() => {
+    return cvOptions.map(cv => {
+      const parts = cv.split('|');
+      return parts[0].trim();
+    });
+  }, [cvOptions]);
 
-  // Process the selected CV
+  // Update CV options when props change
+  useEffect(() => {
+    if (Array.isArray(cvs) && cvs.length > 0) {
+      setCvOptions(cvs);
+    }
+  }, [cvs]);
+
+  // Process the selected CV with debouncing
   const handleProcessCV = useCallback(async () => {
     if (!selectedCV) {
       setError("Please select a CV to optimize");
+      setErrorType('process');
       return;
     }
     
     setError(null);
+    setErrorType(null);
     setIsProcessing(true);
     setProgress(10);
     setProcessingStep("Initiating CV processing");
@@ -130,27 +144,66 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         clearInterval(statusInterval);
         // Only update if still processing
         if (isProcessing) {
-          setError("Processing is taking longer than expected. Please try again later.");
+          setError("Processing is taking longer than expected. Please try again later or restart the process.");
+          setErrorType('process');
           setIsProcessing(false);
         }
       }, 2 * 60 * 1000); // 2 minutes
     } catch (error) {
       setError(error instanceof Error ? error.message : "Failed to process CV");
+      setErrorType('process');
       setIsProcessing(false);
     }
   }, [selectedCV, isProcessing, progress, processingStep]);
   
+  // Memoize the processing button state
+  const processingButtonDisabled = useMemo(() => {
+    return !selectedCV || isProcessing;
+  }, [selectedCV, isProcessing]);
+  
+  // Memoize the DOCX generation button state
+  const docxButtonDisabled = useMemo(() => {
+    return isGeneratingDocx || docxGenerated;
+  }, [isGeneratingDocx, docxGenerated]);
+  
+  // Memoize the PDF conversion button state
+  const pdfButtonDisabled = useMemo(() => {
+    return isConvertingToPdf || pdfConverted;
+  }, [isConvertingToPdf, pdfConverted]);
+  
+  // Optimize the CV selection handler
+  const handleCVSelect = useCallback((cv: string) => {
+    // Find the matching full option (with ID)
+    const index = displayCVOptions.indexOf(cv);
+    if (index !== -1 && index < cvOptions.length) {
+      setSelectedCV(cvOptions[index]);
+    } else {
+      setSelectedCV(null);
+    }
+  }, [displayCVOptions, cvOptions]);
+  
   // Generate DOCX file from processed CV
   const handleGenerateDocx = useCallback(async () => {
     if (!selectedCVId) {
-      setError("CV ID not found");
+      setError("CV ID not found. Please try selecting your CV again.");
+      setErrorType('docx');
       return;
     }
     
     setError(null);
+    setErrorType(null);
     setIsGeneratingDocx(true);
+    setDocxProgress(10);
     
     try {
+      // Simulate progress updates
+      const progressInterval = setInterval(() => {
+        setDocxProgress(prev => {
+          const newProgress = prev + 15;
+          return newProgress < 90 ? newProgress : prev;
+        });
+      }, 800);
+      
       // Call generate-enhanced-docx API
       const response = await fetch('/api/cv/generate-enhanced-docx', {
         method: 'POST',
@@ -159,6 +212,8 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         },
         body: JSON.stringify({ cvId: selectedCVId }),
       });
+      
+      clearInterval(progressInterval);
       
       if (!response.ok) {
         const errorData = await response.json();
@@ -171,26 +226,41 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       setDocxBase64(data.docxBase64);
       setDocxGenerated(true);
       setIsGeneratingDocx(false);
+      setDocxProgress(100);
       
       // Set a flag to trigger PDF conversion
       setAutoPdfConvert(true);
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to generate DOCX file");
+      const errorMessage = error instanceof Error ? error.message : "Failed to generate DOCX file";
+      setError(`${errorMessage}. Please try again or contact support if the issue persists.`);
+      setErrorType('docx');
       setIsGeneratingDocx(false);
+      setDocxProgress(0);
     }
   }, [selectedCVId]);
   
   // Convert DOCX to PDF
   const handleConvertToPdf = useCallback(async () => {
     if (!selectedCVId) {
-      setError("CV ID not found");
+      setError("CV ID not found. Please try selecting your CV again.");
+      setErrorType('pdf');
       return;
     }
     
     setError(null);
+    setErrorType(null);
     setIsConvertingToPdf(true);
+    setPdfProgress(10);
     
     try {
+      // Simulate progress updates
+      const progressInterval = setInterval(() => {
+        setPdfProgress(prev => {
+          const newProgress = prev + 10;
+          return newProgress < 90 ? newProgress : prev;
+        });
+      }, 700);
+      
       // Call convert-to-pdf API
       const response = await fetch('/api/cv/convert-to-pdf', {
         method: 'POST',
@@ -199,6 +269,8 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         },
         body: JSON.stringify({ cvId: selectedCVId }),
       });
+      
+      clearInterval(progressInterval);
       
       if (!response.ok) {
         const errorData = await response.json();
@@ -211,11 +283,35 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       setPdfBase64(data.pdfBase64);
       setPdfConverted(true);
       setIsConvertingToPdf(false);
+      setPdfProgress(100);
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to convert to PDF");
+      const errorMessage = error instanceof Error ? error.message : "Failed to convert to PDF";
+      setError(`${errorMessage}. You can still download the DOCX file.`);
+      setErrorType('pdf');
       setIsConvertingToPdf(false);
+      setPdfProgress(0);
     }
   }, [selectedCVId]);
+  
+  // Restart the processing if it failed
+  const handleRestartProcessing = useCallback(() => {
+    if (errorType === 'process') {
+      // Reset processing state and try again
+      setError(null);
+      setErrorType(null);
+      handleProcessCV();
+    } else if (errorType === 'docx') {
+      // Reset DOCX generation state and try again
+      setError(null);
+      setErrorType(null);
+      handleGenerateDocx();
+    } else if (errorType === 'pdf') {
+      // Reset PDF conversion state and try again
+      setError(null);
+      setErrorType(null);
+      handleConvertToPdf();
+    }
+  }, [errorType, handleProcessCV, handleGenerateDocx, handleConvertToPdf]);
   
   // Download DOCX file
   const handleDownloadDocx = useCallback(() => {
@@ -250,6 +346,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     setProgress(0);
     setProcessingStep("");
     setError(null);
+    setErrorType(null);
     setIsGeneratingDocx(false);
     setDocxGenerated(false);
     setDocxBase64(null);
@@ -286,22 +383,14 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                 <ComboboxPopover
                   options={displayCVOptions.length > 0 ? displayCVOptions : []}
                   label="Select a CV"
-                  onSelect={(cv) => {
-                    // Find the matching full option (with ID)
-                    const index = displayCVOptions.indexOf(cv);
-                    if (index !== -1) {
-                      setSelectedCV(cvOptions[index]);
-                    } else {
-                      setSelectedCV(null);
-                    }
-                  }}
+                  onSelect={handleCVSelect}
                   accentColor="#B4916C"
                   darkMode={true}
                 />
               </div>
               <Button
                 onClick={handleProcessCV}
-                disabled={!selectedCV || isProcessing}
+                disabled={processingButtonDisabled}
                 className="bg-[#B4916C] hover:bg-[#A3815C] text-white whitespace-nowrap"
               >
                 {isProcessing ? "Processing..." : "Optimize CV"}
@@ -317,7 +406,20 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         {error && (
           <Alert className="mb-4 bg-red-900/20 text-red-400 border border-red-900">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription className="flex flex-col space-y-2">
+              <span>{error}</span>
+              {errorType && (
+                <Button 
+                  onClick={handleRestartProcessing}
+                  className="bg-red-800 hover:bg-red-700 text-white mt-2 w-full"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  {errorType === 'process' ? 'Restart Processing' : 
+                   errorType === 'docx' ? 'Retry DOCX Generation' : 
+                   'Retry PDF Conversion'}
+                </Button>
+              )}
+            </AlertDescription>
           </Alert>
         )}
         
@@ -359,7 +461,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             <div className="flex flex-col space-y-4">
               <Button
                 onClick={handleGenerateDocx}
-                disabled={isGeneratingDocx || docxGenerated}
+                disabled={docxButtonDisabled}
                 className="bg-[#B4916C] hover:bg-[#A3815C] text-white flex items-center justify-center"
               >
                 {docxGenerated ? (
@@ -370,12 +472,19 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                 ) : isGeneratingDocx ? (
                   <>
                     <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                    Generating DOCX...
+                    Generating DOCX... {docxProgress}%
                   </>
                 ) : (
                   'Generate Optimized DOCX'
                 )}
               </Button>
+              
+              {isGeneratingDocx && (
+                <div className="space-y-2">
+                  <Progress value={docxProgress} className="h-2 bg-gray-800" />
+                  <p className="text-xs text-gray-400">Creating optimized document format...</p>
+                </div>
+              )}
               
               {docxGenerated && (
                 <Button
@@ -390,7 +499,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
               {docxGenerated && (
                 <Button
                   onClick={handleConvertToPdf}
-                  disabled={isConvertingToPdf || pdfConverted}
+                  disabled={pdfButtonDisabled}
                   className="bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center"
                 >
                   {pdfConverted ? (
@@ -401,12 +510,19 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                   ) : isConvertingToPdf ? (
                     <>
                       <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                      Converting to PDF...
+                      Converting to PDF... {pdfProgress}%
                     </>
                   ) : (
                     'Convert to PDF'
                   )}
                 </Button>
+              )}
+              
+              {isConvertingToPdf && (
+                <div className="space-y-2">
+                  <Progress value={pdfProgress} className="h-2 bg-gray-800" />
+                  <p className="text-xs text-gray-400">Converting document to PDF format...</p>
+                </div>
               )}
               
               {pdfConverted && (

@@ -103,22 +103,19 @@ export function ComboboxPopover({
               <CommandItem
                 key={option}
                 value={option}
-                onSelect={() => {
-                  setValue(option);
-                  onSelect(option);
+                onSelect={(currentValue) => {
+                  setValue(currentValue);
                   setOpen(false);
+                  onSelect(currentValue);
                 }}
-                className={cn(
-                  darkMode ? "text-gray-300 hover:bg-gray-800" : "",
-                  "cursor-pointer"
-                )}
+                className={darkMode ? "text-gray-300 hover:bg-gray-800" : ""}
               >
                 <Check
                   className={cn(
                     "mr-2 h-4 w-4",
                     value === option ? "opacity-100" : "opacity-0"
                   )}
-                  style={value === option ? { color: accentColor } : {}}
+                  style={value === option ? accentStyle : {}}
                 />
                 {option}
               </CommandItem>
