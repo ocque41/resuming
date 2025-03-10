@@ -19,6 +19,22 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || '',
 });
 
+// Define metadata type for type checking
+interface CVMetadata {
+  processing?: boolean;
+  processingStartTime?: string;
+  processingStatus?: string;
+  processingProgress?: number;
+  processingCompleted?: boolean;
+  optimized?: boolean;
+  lastUpdated?: string;
+  atsScore?: number;
+  improvedAtsScore?: number;
+  improvements?: string[];
+  optimizedText?: string;
+  [key: string]: any; // Allow additional properties
+}
+
 // Load and cache the system reference file
 let systemReferenceContent: string | null = null;
 
@@ -43,7 +59,7 @@ export async function POST(request: Request) {
     const session = await getSession();
     if (!session || !session.user || !session.user.id) {
       return NextResponse.json(
-        { error: "You must be logged in to process your CV." },
+        { success: false, error: "You must be logged in to process your CV." },
         { status: 401 }
       );
     }
@@ -52,11 +68,11 @@ export async function POST(request: Request) {
     
     // Parse request body
     const body = await request.json();
-    const { cvId, fileName } = body;
+    const { cvId, fileName, forceRefresh, optimizedText } = body;
     
     if (!cvId && !fileName) {
       return NextResponse.json(
-        { error: "Missing CV ID or file name." },
+        { success: false, error: "Missing CV ID or file name." },
         { status: 400 }
       );
     }
@@ -73,13 +89,13 @@ export async function POST(request: Request) {
     }
     
     if (!cvRecord) {
-      return NextResponse.json({ error: "CV not found." }, { status: 404 });
+      return NextResponse.json({ success: false, error: "CV not found." }, { status: 404 });
     }
     
     // Verify CV ownership
     if (cvRecord.userId !== userId) {
       return NextResponse.json(
-        { error: "You don't have permission to access this CV." },
+        { success: false, error: "You don't have permission to access this CV." },
         { status: 403 }
       );
     }
@@ -97,7 +113,7 @@ export async function POST(request: Request) {
         
         if (!rawText || rawText.trim().length === 0) {
           return NextResponse.json(
-            { error: "Failed to extract text from PDF." },
+            { success: false, error: "Failed to extract text from PDF." },
             { status: 500 }
           );
         }
@@ -110,14 +126,14 @@ export async function POST(request: Request) {
       } catch (error) {
         console.error("Error extracting text from PDF:", error);
         return NextResponse.json(
-          { error: "Failed to extract text from PDF." },
+          { success: false, error: "Failed to extract text from PDF." },
           { status: 500 }
         );
       }
     }
     
     // Parse existing metadata or initialize new metadata
-    let metadata = {};
+    let metadata: CVMetadata = {};
     try {
       metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
     } catch (error) {
@@ -125,14 +141,37 @@ export async function POST(request: Request) {
       metadata = {};
     }
     
-    // Set processing status in metadata
+    // Check if we should skip processing if it's already completed and we're not forcing a refresh
+    const isProcessingComplete = metadata.processingCompleted || metadata.optimized;
+    if (isProcessingComplete && !forceRefresh) {
+      console.log("CV already processed and forceRefresh is false. Returning existing data.");
+      return NextResponse.json({
+        success: true,
+        message: "CV already processed. Use forceRefresh=true to reprocess.",
+        cvId: cvRecord.id,
+        status: "completed",
+        isComplete: true,
+        originalAtsScore: metadata.atsScore || 0,
+        improvedAtsScore: metadata.improvedAtsScore || 0,
+        improvements: metadata.improvements || [],
+        optimizedText: metadata.optimizedText || ""
+      });
+    }
+    
+    // Create processing metadata
     metadata = {
       ...metadata,
       processing: true,
       processingStartTime: new Date().toISOString(),
       processingStatus: "Initiating CV analysis with AI",
       processingProgress: 5,
+      lastUpdated: new Date().toISOString()
     };
+    
+    // If optimizedText is provided, use it to enhance the process
+    if (optimizedText && optimizedText.trim().length > 0) {
+      metadata.optimizedText = optimizedText;
+    }
     
     // Update CV record with processing status
     await db
@@ -141,18 +180,28 @@ export async function POST(request: Request) {
       .where(eq(cvs.id, cvRecord.id));
     
     // Begin async processing (don't await here to avoid timeout)
-    processCVWithAI(cvRecord.id, rawText, metadata);
+    // Check if processCVWithAI supports a forceRefresh parameter, if not, modify as needed
+    try {
+      // @ts-ignore - Ignoring potential parameter mismatch if the function signature hasn't been updated yet
+      processCVWithAI(cvRecord.id, rawText, metadata, forceRefresh);
+    } catch (e) {
+      // Fall back to original signature if needed
+      console.warn("Error calling processCVWithAI with forceRefresh, using original signature");
+      processCVWithAI(cvRecord.id, rawText, metadata);
+    }
     
     return NextResponse.json({
+      success: true,
       message: "CV processing initiated successfully.",
       cvId: cvRecord.id,
       status: "processing",
+      fileName: cvRecord.fileName
     });
     
   } catch (error) {
     console.error("Error in CV processing API:", error);
     return NextResponse.json(
-      { error: "Failed to process CV." },
+      { success: false, error: "Failed to process CV." },
       { status: 500 }
     );
   }

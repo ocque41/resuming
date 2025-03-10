@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     const session = await getSession();
     if (!session || !session.user || !session.user.id) {
       return NextResponse.json(
-        { error: "You must be logged in to generate DOCX files." },
+        { success: false, error: "You must be logged in to generate DOCX files." },
         { status: 401 }
       );
     }
@@ -24,11 +24,11 @@ export async function POST(request: Request) {
     
     // Parse request body
     const body = await request.json();
-    const { cvId } = body;
+    const { cvId, forceRefresh, optimizedText } = body;
     
     if (!cvId) {
       return NextResponse.json(
-        { error: "Missing CV ID." },
+        { success: false, error: "Missing CV ID." },
         { status: 400 }
       );
     }
@@ -39,13 +39,13 @@ export async function POST(request: Request) {
     });
     
     if (!cvRecord) {
-      return NextResponse.json({ error: "CV not found." }, { status: 404 });
+      return NextResponse.json({ success: false, error: "CV not found." }, { status: 404 });
     }
     
     // Verify CV ownership
     if (cvRecord.userId !== userId) {
       return NextResponse.json(
-        { error: "You don't have permission to access this CV." },
+        { success: false, error: "You don't have permission to access this CV." },
         { status: 403 }
       );
     }
@@ -57,15 +57,31 @@ export async function POST(request: Request) {
     } catch (error) {
       console.error("Error parsing metadata:", error);
       return NextResponse.json(
-        { error: "Invalid CV metadata." },
+        { success: false, error: "Invalid CV metadata." },
         { status: 500 }
       );
     }
     
+    // Check if DOCX was already generated and we're not forcing a refresh
+    if (!forceRefresh && metadata.optimizedDocxFilePath && metadata.optimizedDocxBase64) {
+      console.log("DOCX already generated and forceRefresh is false. Returning cached data.");
+      return NextResponse.json({
+        success: true,
+        message: "Using cached DOCX file. Use forceRefresh=true to regenerate.",
+        fileName: metadata.optimizedDocxFileName || `optimized-cv-${cvId}.docx`,
+        docxBase64: metadata.optimizedDocxBase64,
+      });
+    }
+    
+    // Use provided optimized text or get from metadata
+    const textToUse = optimizedText && optimizedText.trim().length > 0 ? 
+      optimizedText : 
+      metadata.optimizedText;
+    
     // Check if optimized text exists
-    if (!metadata.optimizedText) {
+    if (!textToUse) {
       return NextResponse.json(
-        { error: "CV has not been optimized yet." },
+        { success: false, error: "CV has not been optimized yet." },
         { status: 400 }
       );
     }
@@ -75,9 +91,14 @@ export async function POST(request: Request) {
     const fileName = `optimized-cv-${cvId}-${Date.now()}.docx`;
     
     try {
+      // Ensure the output directory exists
+      if (!fs.existsSync(outputDir)) {
+        await fsPromises.mkdir(outputDir, { recursive: true });
+      }
+      
       // Generate the DOCX file
       const { filePath, base64 } = await generateEnhancedCVDocx(
-        metadata.optimizedText,
+        textToUse,
         outputDir,
         fileName
       );
@@ -103,6 +124,7 @@ export async function POST(request: Request) {
         ...metadata,
         optimizedDocxFilePath: storageFilePath,
         optimizedDocxFileName: fileName,
+        optimizedDocxBase64: base64, // Store base64 in metadata for caching
         lastGeneratedAt: new Date().toISOString(),
       };
       
@@ -114,6 +136,7 @@ export async function POST(request: Request) {
       
       // Return success with file data
       return NextResponse.json({
+        success: true,
         message: "DOCX file generated successfully.",
         fileName: fileName,
         docxBase64: base64,
@@ -122,7 +145,7 @@ export async function POST(request: Request) {
     } catch (error) {
       console.error("Error generating DOCX file:", error);
       return NextResponse.json(
-        { error: "Failed to generate DOCX file." },
+        { success: false, error: "Failed to generate DOCX file." },
         { status: 500 }
       );
     }
@@ -130,7 +153,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Error in generate-enhanced-docx API:", error);
     return NextResponse.json(
-      { error: "Failed to process request." },
+      { success: false, error: "Failed to process request." },
       { status: 500 }
     );
   }
