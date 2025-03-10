@@ -1,160 +1,116 @@
-import { NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth/session";
-import { db } from "@/lib/db/drizzle";
+import { db } from "@/lib/db";
 import { cvs } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { generateEnhancedCVDocx } from "@/lib/enhancedDocxGenerator";
-import { saveFile, FileType, StorageType } from "@/lib/fileStorage";
-import * as path from "path";
-import * as fs from "fs";
-import { promises as fsPromises } from "fs";
+import { DocumentGenerator } from "@/lib/utils/documentGenerator";
+import { logger } from "@/lib/logger";
 
-export async function POST(request: Request) {
+/**
+ * POST /api/cv/generate-enhanced-docx
+ * Optimized endpoint for generating enhanced DOCX files from CV content
+ */
+export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  
   try {
-    // Get user session
+    // Check session
     const session = await getSession();
-    if (!session || !session.user || !session.user.id) {
-      return NextResponse.json(
-        { success: false, error: "You must be logged in to generate DOCX files." },
-        { status: 401 }
-      );
+    if (!session || !session.user) {
+      logger.warn("Unauthorized access attempt to generate-enhanced-docx");
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
     }
-
-    const userId = session.user.id;
     
     // Parse request body
     const body = await request.json();
-    const { cvId, forceRefresh, optimizedText } = body;
+    const { cvId } = body;
     
+    // Validate cvId
     if (!cvId) {
-      return NextResponse.json(
-        { success: false, error: "Missing CV ID." },
-        { status: 400 }
-      );
+      return new Response(JSON.stringify({ error: "Missing cvId parameter" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
     }
     
-    // Get CV record from database
-    const cvRecord = await db.query.cvs.findFirst({
-      where: eq(cvs.id, parseInt(cvId.toString())),
+    logger.info(`Starting enhanced DOCX generation for CV ID: ${cvId}`);
+    
+    // Get CV record
+    const cv = await db.query.cv.findFirst({
+      where: eq(cvs.id, parseInt(cvId)),
     });
     
-    if (!cvRecord) {
-      return NextResponse.json({ success: false, error: "CV not found." }, { status: 404 });
-    }
-    
-    // Verify CV ownership
-    if (cvRecord.userId !== userId) {
-      return NextResponse.json(
-        { success: false, error: "You don't have permission to access this CV." },
-        { status: 403 }
-      );
+    if (!cv) {
+      logger.error(`CV not found for ID: ${cvId}`);
+      return new Response(JSON.stringify({ error: "CV not found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
     }
     
     // Parse metadata
-    let metadata: Record<string, any> = {};
-    try {
-      metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
-    } catch (error) {
-      console.error("Error parsing metadata:", error);
-      return NextResponse.json(
-        { success: false, error: "Invalid CV metadata." },
-        { status: 500 }
-      );
-    }
-    
-    // Check if DOCX was already generated and we're not forcing a refresh
-    if (!forceRefresh && metadata.optimizedDocxFilePath && metadata.optimizedDocxBase64) {
-      console.log("DOCX already generated and forceRefresh is false. Returning cached data.");
-      return NextResponse.json({
-        success: true,
-        message: "Using cached DOCX file. Use forceRefresh=true to regenerate.",
-        fileName: metadata.optimizedDocxFileName || `optimized-cv-${cvId}.docx`,
-        docxBase64: metadata.optimizedDocxBase64,
-      });
-    }
-    
-    // Use provided optimized text or get from metadata
-    const textToUse = optimizedText && optimizedText.trim().length > 0 ? 
-      optimizedText : 
-      metadata.optimizedText;
-    
-    // Check if optimized text exists
-    if (!textToUse) {
-      return NextResponse.json(
-        { success: false, error: "CV has not been optimized yet." },
-        { status: 400 }
-      );
-    }
-    
-    // Generate enhanced DOCX file
-    const outputDir = path.join(process.cwd(), "tmp");
-    const fileName = `optimized-cv-${cvId}-${Date.now()}.docx`;
-    
-    try {
-      // Ensure the output directory exists
-      if (!fs.existsSync(outputDir)) {
-        await fsPromises.mkdir(outputDir, { recursive: true });
-      }
-      
-      // Generate the DOCX file
-      const { filePath, base64 } = await generateEnhancedCVDocx(
-        textToUse,
-        outputDir,
-        fileName
-      );
-      
-      // Save the file to storage (optionally)
-      let storageFilePath = filePath;
-      let fileMetadata;
+    let metadata: { optimizedText?: string } = {};
+    if (cv.metadata) {
       try {
-        fileMetadata = await saveFile(
-          Buffer.from(base64, "base64"),
-          fileName,
-          'docx' as FileType,
-          'local' as StorageType
-        );
-        storageFilePath = fileMetadata.filePath;
-      } catch (storageError) {
-        console.error("Error saving file to storage:", storageError);
-        // Continue anyway, we still have the local file
+        metadata = JSON.parse(cv.metadata);
+      } catch (e) {
+        logger.error(`Error parsing CV metadata: ${e instanceof Error ? e.message : String(e)}`);
       }
-      
-      // Update metadata with DOCX file information
-      metadata = {
-        ...metadata,
-        optimizedDocxFilePath: storageFilePath,
-        optimizedDocxFileName: fileName,
-        optimizedDocxBase64: base64, // Store base64 in metadata for caching
-        lastGeneratedAt: new Date().toISOString(),
-      };
-      
-      // Update CV record with new metadata
-      await db
-        .update(cvs)
-        .set({ metadata: JSON.stringify(metadata) })
-        .where(eq(cvs.id, cvRecord.id));
-      
-      // Return success with file data
-      return NextResponse.json({
-        success: true,
-        message: "DOCX file generated successfully.",
-        fileName: fileName,
-        docxBase64: base64,
-      });
-      
-    } catch (error) {
-      console.error("Error generating DOCX file:", error);
-      return NextResponse.json(
-        { success: false, error: "Failed to generate DOCX file." },
-        { status: 500 }
-      );
     }
     
+    // Check if we have optimized text
+    const optimizedText = metadata.optimizedText;
+    if (!optimizedText) {
+      logger.error(`Optimized text not found for CV ID: ${cvId}`);
+      return new Response(JSON.stringify({ 
+        error: "CV has not been optimized yet", 
+        needsOptimization: true 
+      }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    
+    // Generate DOCX using our fast document generator
+    const docxBuffer = await DocumentGenerator.generateDocx(optimizedText, metadata);
+    
+    // Convert to base64
+    const base64Docx = docxBuffer.toString('base64');
+    
+    // Update metadata to record document generation
+    const updatedMetadata = {
+      ...metadata,
+      enhancedDocxGenerated: true,
+      enhancedDocxGeneratedAt: new Date().toISOString(),
+      enhancedDocxGenerationTime: Date.now() - startTime,
+    };
+    
+    // Update CV record
+    await db.update(cvs)
+      .set({ metadata: JSON.stringify(updatedMetadata) })
+      .where(eq(cvs.id, parseInt(cvId)));
+    
+    logger.info(`Enhanced DOCX generated for CV ID: ${cvId} in ${Date.now() - startTime}ms`);
+    
+    // Return base64 encoded DOCX
+    return new Response(JSON.stringify({ 
+      success: true, 
+      base64Docx,
+      generationTimeMs: Date.now() - startTime,
+    }), {
+      headers: { "Content-Type": "application/json" },
+    });
   } catch (error) {
-    console.error("Error in generate-enhanced-docx API:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to process request." },
-      { status: 500 }
-    );
+    logger.error(`Error generating enhanced DOCX: ${error instanceof Error ? error.message : String(error)}`);
+    return new Response(JSON.stringify({ 
+      error: "Failed to generate enhanced DOCX", 
+      details: error instanceof Error ? error.message : String(error) 
+    }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 } 

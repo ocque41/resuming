@@ -1,63 +1,147 @@
 "use client";
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BarChart2, FileText, ArrowRight, CheckCircle, AlertCircle } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert"; 
 import AnalyzeCVCard from "@/components/AnalyzeCVCard.client";
 import EnhancedOptimizeCVCard from "@/components/EnhancedOptimizeCVCard.client";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
+// Toast functionality without using the use-toast hook
+function showToast(message: { title: string; description: string; duration: number }) {
+  // Simple implementation - you might want to replace this with a proper toast library
+  console.log(`TOAST: ${message.title} - ${message.description}`);
+  // Alternatively, create a DOM element for the toast and remove it after duration
+}
 
 interface OptimizationWorkflowProps {
   cvs: string[];
 }
 
+/**
+ * Streamlined Optimization Workflow
+ * A lightweight, high-performance workflow for analyzing and optimizing CVs
+ */
 export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps) {
+  // Core states for workflow
   const [activeStep, setActiveStep] = useState<"analyze" | "optimize">("analyze");
   const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
   const [selectedCVName, setSelectedCVName] = useState<string | null>(null);
-  const [analysisCompleted, setAnalysisCompleted] = useState<boolean>(false);
-  const [workflowError, setWorkflowError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [processingStatus, setProcessingStatus] = useState<string | null>(null);
+  const [processingProgress, setProcessingProgress] = useState<number | null>(null);
   
-  // Check for previously analyzed CVs on component mount
+  // Lighter polling mechanism with backoff
+  const [statusPollingInterval, setStatusPollingInterval] = useState<number>(1000);
+  const [statusPollingEnabled, setStatusPollingEnabled] = useState<boolean>(false);
+  
+  // Check for pre-analyzed CV
   useEffect(() => {
-    // If no CVs available, don't do anything
-    if (!cvs || cvs.length === 0) return;
-    
-    // Get the first CV
-    const firstCV = cvs[0];
-    const parts = firstCV.split('|');
-    if (parts.length < 2) return;
-    
-    const cvId = parts[1];
-    const cvName = parts[0];
-    
-    // Check if this CV has been analyzed before
-    const checkAnalysisStatus = async () => {
-      try {
-        // Call the status API to check if analysis exists
-        const response = await fetch(`/api/cv/process/status?cvId=${cvId}`);
-        if (!response.ok) return;
-        
-        const data = await response.json();
-        
-        // If the CV has been analyzed (has an ATS score), pre-select it
-        if (data.success && data.atsScore) {
-          console.log(`CV ${cvName} has existing analysis, pre-selecting for workflow`);
-          setSelectedCVId(cvId);
-          setSelectedCVName(cvName);
-          setAnalysisCompleted(true);
+    const checkForPreAnalyzedCV = async () => {
+      // Only check when on analyze step with no selection yet
+      if (activeStep === "analyze" && !selectedCVId && cvs.length > 0) {
+        try {
+          // Check if any CV has been analyzed but not optimized - lightweight check
+          const response = await fetch(`/api/cv/get-analyzed-cvs`);
+          if (response.ok) {
+            const data = await response.json();
+            
+            if (data.analyzedCVs && data.analyzedCVs.length > 0) {
+              // Find the most recently analyzed CV
+              const mostRecent = data.analyzedCVs[0];
+              
+              // Auto-select this CV
+              setSelectedCVId(String(mostRecent.id));
+              setSelectedCVName(mostRecent.filename);
+              
+              showToast({
+                title: "CV Ready for Optimization",
+                description: `${mostRecent.filename} has been analyzed and is ready for optimization.`,
+                duration: 5000,
+              });
+            }
+          }
+        } catch (err) {
+          console.error("Error checking for pre-analyzed CVs:", err);
         }
-      } catch (error) {
-        console.error("Error checking analysis status:", error);
       }
     };
     
-    checkAnalysisStatus();
-  }, [cvs]);
+    checkForPreAnalyzedCV();
+  }, [activeStep, cvs, selectedCVId]);
   
-  // Handle completion of analysis step
-  const handleAnalysisComplete = useCallback((cvId: string) => {
-    console.log("Analysis complete for CV ID:", cvId);
+  // Polling mechanism for process status with exponential backoff
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout | null = null;
+    
+    const checkStatus = async () => {
+      if (!statusPollingEnabled || !selectedCVId) return;
+      
+      try {
+        const response = await fetch(`/api/cv/process/status?cvId=${selectedCVId}`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          
+          if (data.processing) {
+            // Still processing
+            setIsProcessing(true);
+            setProcessingStatus(data.processingStatus || "Processing...");
+            setProcessingProgress(data.processingProgress || 0);
+            
+            // Continue polling, but back off if progress is slow
+            const newInterval = data.processingProgress > 80 ? 1000 :
+                               data.processingProgress > 60 ? 2000 :
+                               data.processingProgress > 40 ? 3000 : 5000;
+            
+            setStatusPollingInterval(newInterval);
+            timeoutId = setTimeout(checkStatus, newInterval);
+          } else if (data.processingCompleted) {
+            // Processing completed
+            setIsProcessing(false);
+            setProcessingStatus("Processing completed");
+            setProcessingProgress(100);
+            setStatusPollingEnabled(false);
+            
+            // Auto-transition to optimize step if not already there
+            if (activeStep !== "optimize") {
+              setActiveStep("optimize");
+            }
+          } else {
+            // Not processing or idle
+            setIsProcessing(false);
+            setProcessingStatus(null);
+            setProcessingProgress(null);
+            
+            // Stop polling if nothing is happening
+            if (!data.processing && !data.processingCompleted) {
+              setStatusPollingEnabled(false);
+            }
+          }
+        } else {
+          // Stop polling on error
+          setStatusPollingEnabled(false);
+          setError("Error checking processing status");
+        }
+      } catch (err) {
+        console.error("Error checking CV processing status:", err);
+        setStatusPollingEnabled(false);
+      }
+    };
+    
+    if (statusPollingEnabled) {
+      timeoutId = setTimeout(checkStatus, statusPollingInterval);
+    }
+    
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [statusPollingEnabled, statusPollingInterval, selectedCVId, activeStep]);
+  
+  // Handle when analysis is complete
+  const handleAnalysisComplete = async (cvId: string) => {
+    setSelectedCVId(cvId);
     
     // Find the CV name from the ID
     const selectedCV = cvs.find(cv => {
@@ -70,14 +154,37 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
       setSelectedCVName(parts[0]);
     }
     
-    setSelectedCVId(cvId);
-    setAnalysisCompleted(true);
-    setActiveStep("optimize");
-    setWorkflowError(null);
-  }, [cvs]);
+    // Start polling status
+    setStatusPollingEnabled(true);
+    setStatusPollingInterval(1000); // Start with 1s interval
+    
+    try {
+      // Trigger optimization process
+      const response = await fetch(`/api/cv/process`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cvId }),
+      });
+      
+      if (response.ok) {
+        showToast({
+          title: "Optimization Started",
+          description: "Your CV is being optimized. This may take a moment.",
+          duration: 5000,
+        });
+      } else {
+        setError("Failed to start optimization process");
+        setStatusPollingEnabled(false);
+      }
+    } catch (err) {
+      console.error("Error starting optimization:", err);
+      setError("Failed to start optimization");
+      setStatusPollingEnabled(false);
+    }
+  };
   
-  // Filter CVs for optimization step (only show the selected CV)
-  const getOptimizeCVs = useCallback((): string[] => {
+  // Filter CVs for the optimization step
+  const getOptimizeCVs = () => {
     if (!selectedCVId) return [];
     
     return cvs.filter((cv: string) => {
@@ -89,100 +196,79 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
         return false;
       }
     });
-  }, [cvs, selectedCVId]);
+  };
   
-  // Handle manual tab change
-  const handleTabChange = useCallback((value: string) => {
-    if (value === "optimize" && !analysisCompleted) {
-      setWorkflowError("Please complete the analysis step before optimizing.");
+  // Handle tab changes
+  const handleTabChange = (value: string) => {
+    if (value === "optimize" && !selectedCVId) {
+      setError("Please analyze a CV first before proceeding to optimization");
       return;
     }
     
     setActiveStep(value as "analyze" | "optimize");
-    setWorkflowError(null);
-  }, [analysisCompleted]);
+    setError(null);
+  };
   
   return (
-    <div className="flex flex-col space-y-6 transition-opacity duration-500 opacity-100">
-      <div className="flex items-center justify-between mb-4 overflow-x-auto pb-2">
-        <div className="flex items-center space-x-2 sm:space-x-4 min-w-max">
-          <div 
-            className={`flex items-center ${
-              activeStep === "analyze" ? "text-[#B4916C]" : "text-gray-500"
-            }`}
-            onClick={() => handleTabChange("analyze")}
-            role="button"
-            tabIndex={0}
-          >
-            <div className={`
-              flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-full border-2 
-              ${activeStep === "analyze" ? "border-[#B4916C] text-[#B4916C]" : 
-                analysisCompleted ? "border-green-500 text-green-500" : "border-gray-700 text-gray-700"}
-            `}>
-              {analysisCompleted ? <CheckCircle className="w-4 h-4 sm:w-6 sm:h-6" /> : "1"}
-            </div>
-            <span className="ml-2 font-medium text-sm sm:text-base">Analyze</span>
-          </div>
-          
-          <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 text-gray-600" />
-          
-          <div 
-            className={`flex items-center ${
-              activeStep === "optimize" ? "text-[#B4916C]" : "text-gray-500"
-            } ${!analysisCompleted ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-            onClick={() => analysisCompleted && handleTabChange("optimize")}
-            role="button"
-            tabIndex={0}
-          >
-            <div className={`
-              flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-full border-2 
-              ${activeStep === "optimize" ? "border-[#B4916C] text-[#B4916C]" : "border-gray-700 text-gray-700"}
-            `}>
-              2
-            </div>
-            <span className="ml-2 font-medium text-sm sm:text-base">Optimize</span>
-          </div>
-        </div>
-      </div>
-      
-      {workflowError && (
-        <Alert variant="destructive" className="bg-red-950 border-red-900 text-red-200">
-          <AlertCircle className="h-4 w-4 mr-2" />
-          <AlertDescription>{workflowError}</AlertDescription>
+    <div className="w-full max-w-6xl mx-auto">
+      {error && (
+        <Alert className="mb-4 bg-destructive/10">
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
       
-      {selectedCVName && activeStep === "optimize" && (
-        <div className="bg-[#1A1A1A] p-3 rounded-md border border-gray-800">
-          <p className="text-sm text-gray-300">
-            <span className="text-[#B4916C] font-medium">Selected CV:</span> {selectedCVName}
-          </p>
+      {isProcessing && (
+        <div className="mb-4 p-4 border rounded-md bg-background">
+          <h3 className="text-lg font-semibold">Processing CV</h3>
+          <p className="text-sm text-muted-foreground">{processingStatus}</p>
+          <div className="w-full h-2 bg-secondary mt-2 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-primary transition-all duration-300 ease-in-out" 
+              style={{ width: `${processingProgress || 0}%` }}
+            />
+          </div>
+          <p className="text-sm text-right mt-1">{processingProgress || 0}%</p>
         </div>
       )}
       
-      <Tabs value={activeStep} onValueChange={handleTabChange}>
-        <TabsContent value="analyze" className="mt-0">
-          <div className="flex items-center mb-2">
-            <BarChart2 className="h-4 w-4 sm:h-5 sm:w-5 text-[#B4916C] mr-2" />
-            <h2 className="text-base sm:text-lg font-medium text-white">Analyze Your CV</h2>
-          </div>
-          <AnalyzeCVCard 
-            cvs={cvs} 
-            onAnalysisComplete={handleAnalysisComplete} 
-          />
+      <Tabs defaultValue="analyze" onValueChange={handleTabChange} value={activeStep}>
+        <TabsList className="w-full grid grid-cols-2">
+          <TabsTrigger value="analyze">Analyze</TabsTrigger>
+          <TabsTrigger value="optimize" disabled={!selectedCVId}>
+            Optimize
+          </TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="analyze" className="space-y-4 mt-4">
+          <h2 className="text-2xl font-bold">Analyze Your CV</h2>
+          <p className="text-muted-foreground">
+            Upload your CV to analyze its ATS compatibility and get recommendations.
+          </p>
+          
+          <AnalyzeCVCard onAnalysisComplete={handleAnalysisComplete} cvs={cvs} />
         </TabsContent>
         
-        <TabsContent value="optimize" className="mt-0">
-          <div className="flex items-center mb-2">
-            <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-[#B4916C] mr-2" />
-            <h2 className="text-base sm:text-lg font-medium text-white">Optimize Your CV</h2>
+        <TabsContent value="optimize" className="space-y-4 mt-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold">Optimize Your CV</h2>
+              <p className="text-muted-foreground">
+                {selectedCVName ? `Optimizing: ${selectedCVName}` : 'Enhance your CV with AI-powered optimization.'}
+              </p>
+            </div>
+            
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setActiveStep("analyze");
+                setError(null);
+              }}
+            >
+              Back to Analyze
+            </Button>
           </div>
-          <p className="text-sm text-gray-400 mt-2 mb-4">
-            The optimization uses the results from your CV analysis to improve ATS compatibility and highlight your strengths.
-          </p>
-          <EnhancedOptimizeCVCard 
-            cvs={getOptimizeCVs()} 
-          />
+          
+          <EnhancedOptimizeCVCard cvs={getOptimizeCVs()} />
         </TabsContent>
       </Tabs>
     </div>
