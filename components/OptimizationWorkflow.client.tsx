@@ -18,7 +18,7 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
   const handleAnalysisComplete = useCallback((cvId: string) => {
     console.log("Analysis complete for CV ID:", cvId);
     setSelectedCVId(cvId);
-    // Do not auto-switch; let the user manually select the tab when ready.
+    setActiveStep("optimize");
   }, []);
   
   // Filter CVs for optimization step (only show the selected CV)

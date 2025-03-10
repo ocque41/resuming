@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { AlertCircle, BarChart2, Building, FileText, ArrowRight } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getIndustrySpecificAtsInsights } from "@/lib/cvAnalyzer";
-import CVCombobox from "@/components/CVCombobox.client";
 
 interface AnalysisResult {
   atsScore: number | string;
@@ -278,13 +277,23 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
           <div className="mb-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0 mb-4">
               <div className="w-full">
-                <CVCombobox
-                  cvs={cvs}
-                  onSelect={handleCVSelect}
-                  placeholder="Select a CV"
-                  darkMode={true}
-                  accentColor="#B4916C"
-                />
+                <select
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value) {
+                      const [name, id] = value.split('|');
+                      handleCVSelect(id, name);
+                    }
+                  }}
+                  defaultValue=""
+                  className="min-w-full px-3 py-2 bg-[#121212] border border-gray-700 text-gray-300 rounded"
+                >
+                  <option value="" disabled>Select a CV</option>
+                  {cvs.map((cv) => {
+                    const parts = cv.split('|');
+                    return <option key={parts[1]} value={cv}>{parts[0]}</option>;
+                  })}
+                </select>
               </div>
               <Button
                 onClick={handleAnalyze}
