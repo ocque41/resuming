@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser } from '@/lib/db/queries.server';
-import { db } from '@/lib/db';
-import { createAdminClient } from '@/lib/supabase/server';
 import { logger } from '@/lib/logger';
 import fs from 'fs';
 import path from 'path';
 import { getCachedAnalysis, getCachedFilePath } from '@/lib/utils/cvCache';
+import { db } from '@/lib/db/drizzle';
+import { cvs } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 
 export async function GET(
   request: NextRequest,
@@ -31,21 +32,25 @@ export async function GET(
     }
     
     // Fetch the CV from the database to ensure it belongs to the user
-    const cv = await db.cv.findFirst({
-      where: {
-        id: cvId,
-        userId: user.id,
-      },
-      include: {
-        metadata: true,
-      },
-    });
+    const [cv] = await db.select().from(cvs).where(eq(cvs.id, cvId));
     
-    if (!cv) {
+    if (!cv || cv.userId !== user.id) {
       return NextResponse.json(
         { error: 'CV not found' },
         { status: 404 }
       );
+    }
+    
+    // Get metadata if available
+    let metadata = null;
+    if (cv.metadata) {
+      try {
+        metadata = typeof cv.metadata === 'string' 
+          ? JSON.parse(cv.metadata) 
+          : cv.metadata;
+      } catch (e) {
+        logger.error('Error parsing CV metadata', { cvId });
+      }
     }
     
     // Prepare the response
@@ -65,84 +70,50 @@ export async function GET(
     const cachedDocxPath = getCachedFilePath(cvId, 'docx');
     
     // Try to get the PDF content
-    if (cv.metadata?.optimizedPdfFilePath) {
+    if (metadata?.optimizedPdfFilePath) {
       try {
         let pdfContent;
         
         // Try cache first
         if (cachedPdfPath && fs.existsSync(cachedPdfPath)) {
           pdfContent = fs.readFileSync(cachedPdfPath);
-        } else {
-          // If not in cache, try to get from storage
-          const supabase = createAdminClient();
-          const bucketName = 'cvs';
-          const filePath = cv.metadata.optimizedPdfFilePath;
-          
-          const { data, error } = await supabase
-            .storage
-            .from(bucketName)
-            .download(filePath);
-            
-          if (error) {
-            logger.error(`Error downloading PDF: ${error.message}`, { 
-              cvId,
-              filePath,
-              userId: user.id
-            });
-          } else if (data) {
-            pdfContent = await data.arrayBuffer();
-          }
+        } else if (fs.existsSync(metadata.optimizedPdfFilePath)) {
+          // If not in cache but file exists on disk
+          pdfContent = fs.readFileSync(metadata.optimizedPdfFilePath);
         }
         
         if (pdfContent) {
           response.pdfBase64 = Buffer.from(pdfContent).toString('base64');
         }
-      } catch (error) {
-        logger.error('Error reading PDF file', { error, cvId, userId: user.id });
+      } catch (err) {
+        logger.error('Error reading PDF file', { cvId });
       }
     }
     
     // Try to get the DOCX content
-    if (cv.metadata?.optimizedDocxFilePath) {
+    if (metadata?.optimizedDocxFilePath) {
       try {
         let docxContent;
         
         // Try cache first
         if (cachedDocxPath && fs.existsSync(cachedDocxPath)) {
           docxContent = fs.readFileSync(cachedDocxPath);
-        } else {
-          // If not in cache, try to get from storage
-          const supabase = createAdminClient();
-          const bucketName = 'cvs';
-          const filePath = cv.metadata.optimizedDocxFilePath;
-          
-          const { data, error } = await supabase
-            .storage
-            .from(bucketName)
-            .download(filePath);
-            
-          if (error) {
-            logger.error(`Error downloading DOCX: ${error.message}`, { 
-              cvId,
-              filePath,
-              userId: user.id
-            });
-          } else if (data) {
-            docxContent = await data.arrayBuffer();
-          }
+        } else if (fs.existsSync(metadata.optimizedDocxFilePath)) {
+          // If not in cache but file exists on disk
+          docxContent = fs.readFileSync(metadata.optimizedDocxFilePath);
         }
         
         if (docxContent) {
           response.docxBase64 = Buffer.from(docxContent).toString('base64');
         }
-      } catch (error) {
-        logger.error('Error reading DOCX file', { error, cvId, userId: user.id });
+      } catch (err) {
+        logger.error('Error reading DOCX file', { cvId });
       }
     }
     
     return NextResponse.json(response);
-  } catch (error) {
-    logger.error('Error fetching CV data', { error, cvId: params.id });
+  } catch (err) {
+    logger.error('Error fetching CV data');
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
