@@ -103,11 +103,6 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
           console.error("Error updating analysis metadata:", updateError);
           // Continue despite the error
         }
-        
-        // Notify parent component that analysis is complete
-        if (onAnalysisComplete && selectedCVId) {
-          onAnalysisComplete(selectedCVId);
-        }
       }
     } catch (error) {
       console.error("Error analyzing CV:", error);

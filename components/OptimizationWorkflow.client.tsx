@@ -13,26 +13,19 @@ interface OptimizationWorkflowProps {
 export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps) {
   const [activeStep, setActiveStep] = useState<"analyze" | "optimize">("analyze");
   const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
-  const [isTransitioning, setIsTransitioning] = useState(false);
   
   // Handle completion of analysis step
   const handleAnalysisComplete = useCallback((cvId: string) => {
     console.log("Analysis complete for CV ID:", cvId);
     setSelectedCVId(cvId);
-    
-    // Add a visual transition effect
-    setIsTransitioning(true);
-    setTimeout(() => {
-      setActiveStep("optimize");
-      setIsTransitioning(false);
-    }, 500);
+    // Do not auto-switch; let the user manually select the tab when ready.
   }, []);
   
   // Filter CVs for optimization step (only show the selected CV)
-  const getOptimizeCVs = useCallback(() => {
+  const getOptimizeCVs = useCallback((): string[] => {
     if (!selectedCVId) return cvs;
     
-    return cvs.filter(cv => {
+    return cvs.filter((cv: string) => {
       try {
         const parts = cv.split('|');
         return parts[1] === selectedCVId;
@@ -53,7 +46,7 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
   }, [selectedCVId]);
   
   return (
-    <div className={`flex flex-col space-y-6 transition-opacity duration-500 ${isTransitioning ? 'opacity-50' : 'opacity-100'}`}>
+    <div className="flex flex-col space-y-6 transition-opacity duration-500 opacity-100">
       <div className="flex items-center justify-between mb-4 overflow-x-auto pb-2">
         <div className="flex items-center space-x-2 sm:space-x-4 min-w-max">
           <div 

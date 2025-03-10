@@ -48,13 +48,8 @@ export default function CVCombobox({
   // Parse the CV strings into objects
   useEffect(() => {
     try {
-      if (!Array.isArray(cvs)) {
-        console.error("CVs is not an array:", cvs);
-        setParsedCVs([]);
-        return;
-      }
-
-      const parsed = cvs.map(cv => {
+      const safeCVs = Array.isArray(cvs) ? cvs : [];
+      const parsed = safeCVs.map(cv => {
         try {
           if (typeof cv !== 'string') {
             console.error("CV is not a string:", cv);

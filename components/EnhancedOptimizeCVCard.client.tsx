@@ -55,6 +55,9 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   // Add a state to track stalled optimization
   const [optimizationStalled, setOptimizationStalled] = useState<boolean>(false);
   
+  // Add new state for PDF preview
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
+  
   // Handle CV selection
   const handleCVSelect = useCallback((cvId: string, cvName: string) => {
     console.log("CV selected:", cvName, "ID:", cvId);
@@ -441,10 +444,12 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     }
   }, [errorType, handleProcessCV, handleGenerateDocx, handleConvertToPdf]);
   
-  // Download DOCX file
+  // Update download handlers with validity checks
   const handleDownloadDocx = useCallback(() => {
-    if (!docxBase64) return;
-    
+    if (!docxBase64 || docxBase64.length < 100) {
+      alert('DOCX file is not generated correctly.');
+      return;
+    }
     const link = document.createElement('a');
     link.href = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${docxBase64}`;
     link.download = `optimized-cv.docx`;
@@ -453,24 +458,11 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     document.body.removeChild(link);
   }, [docxBase64]);
   
-  // Download PDF file
-  const handleDownloadPdf = useCallback(() => {
-    if (!pdfBase64) return;
-    
-    const link = document.createElement('a');
-    link.href = `data:application/pdf;base64,${pdfBase64}`;
-    link.download = `optimized-cv.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }, [pdfBase64]);
-  
-  // Add a new function to handle DOC download
   const handleDownloadDoc = useCallback(() => {
-    if (!docxBase64) return;
-    
-    // For DOC format, we'll use the same DOCX data but change the extension
-    // In a real implementation, you would convert the DOCX to DOC format
+    if (!docxBase64 || docxBase64.length < 100) {
+      alert('DOC file is not generated correctly.');
+      return;
+    }
     const link = document.createElement('a');
     link.href = `data:application/msword;base64,${docxBase64}`;
     link.download = `optimized-cv.doc`;
@@ -478,6 +470,19 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     link.click();
     document.body.removeChild(link);
   }, [docxBase64]);
+  
+  const handleDownloadPdf = useCallback(() => {
+    if (!pdfBase64 || pdfBase64.length < 100) {
+      alert('PDF file is not generated correctly.');
+      return;
+    }
+    const link = document.createElement('a');
+    link.href = `data:application/pdf;base64,${pdfBase64}`;
+    link.download = `optimized-cv.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [pdfBase64]);
   
   // Reset the form to try again
   const handleReset = useCallback(() => {
@@ -499,6 +504,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     setAutoPdfConvert(false);
     setOptimizationCompleted(false);
     setOptimizationStalled(false);
+    setShowPdfPreview(false);
   }, []);
   
   // Effect to handle automatic PDF conversion
@@ -538,6 +544,10 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       });
     }
   }, [pdfBase64, pdfConverted, isProcessed, isProcessing, docxGenerated, isGeneratingDocx, error, handleGenerateDocx, docxBase64, optimizationCompleted, optimizationStalled]);
+
+  const handleTogglePreview = useCallback(() => {
+    setShowPdfPreview(prev => !prev);
+  }, []);
 
   return (
     <Card className="w-full bg-[#050505] border-gray-800 shadow-xl overflow-hidden">
@@ -691,7 +701,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                 <Button
                   onClick={handleConvertToPdf}
                   disabled={pdfButtonDisabled}
-                  className="bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center"
+                  className="bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center mt-4"
                 >
                   {pdfConverted ? (
                     <>
@@ -716,14 +726,31 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                 </div>
               )}
               
-              {pdfConverted && (
-                <Button
-                  onClick={handleDownloadPdf}
-                  className="bg-[#B4916C] hover:bg-[#A3815C] text-white flex items-center justify-center"
-                >
-                  <Download className="h-5 w-5 mr-2" />
-                  Download PDF
-                </Button>
+              {pdfConverted && pdfBase64 && (
+                <div className="mt-4 flex flex-col items-center space-y-3">
+                  <Button
+                    onClick={handleDownloadPdf}
+                    className="bg-[#B4916C] hover:bg-[#A3815C] text-white flex items-center justify-center"
+                  >
+                    <Download className="h-5 w-5 mr-2" />
+                    Download PDF
+                  </Button>
+                  <Button
+                    onClick={handleTogglePreview}
+                    className="bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center"
+                  >
+                    {showPdfPreview ? 'Hide Preview' : 'Preview PDF'}
+                  </Button>
+                  {showPdfPreview && (
+                    <div className="mt-4 w-full">
+                      <iframe
+                        src={`data:application/pdf;base64,${pdfBase64}`}
+                        className="w-full h-80 border"
+                        title="PDF Preview"
+                      />
+                    </div>
+                  )}
+                </div>
               )}
               
               <Button
