@@ -10,6 +10,7 @@ import { getIndustrySpecificAtsInsights } from "@/lib/cvAnalyzer";
 
 interface AnalysisResult {
   atsScore: number | string;
+  language?: string;
   strengths: string[];
   weaknesses: string[];
   recommendations: string[];
@@ -121,6 +122,7 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
         atsScore: typeof data.analysis.atsScore === 'number' || typeof data.analysis.atsScore === 'string' 
           ? data.analysis.atsScore 
           : 0,
+        language: typeof data.analysis.language === 'string' ? data.analysis.language : undefined,
         industry: typeof data.analysis.industry === 'string' ? data.analysis.industry : 'General',
         strengths: Array.isArray(data.analysis.strengths) ? data.analysis.strengths : [],
         weaknesses: Array.isArray(data.analysis.weaknesses) ? data.analysis.weaknesses : [],
@@ -416,6 +418,18 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
     }
   }, [selectedCVId, onAnalysisComplete]);
 
+  // Add helper function to convert language code to name
+  const getLanguageName = (langCode: string): string => {
+    const languages: Record<string, string> = {
+      "en": "English",
+      "es": "Spanish",
+      "fr": "French",
+      "de": "German"
+    };
+    
+    return languages[langCode] || langCode;
+  };
+
   return (
     <Card className="w-full bg-[#050505] border-gray-800 shadow-xl overflow-hidden">
       <CardHeader className="bg-[#0A0A0A] border-b border-gray-800 pb-3">
@@ -480,10 +494,15 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
                   <Building className="h-4 w-4 mr-2 text-[#B4916C]" />
                   Industry
                 </h3>
-                <div className="mt-1">
+                <div className="flex items-center gap-2">
                   <span className="px-2 py-1 bg-[#B4916C]/10 text-[#B4916C] rounded-md">
                     {analysis.industry || "General"}
                   </span>
+                  {analysis.language && (
+                    <span className="px-2 py-1 bg-blue-500/10 text-blue-400 rounded-md text-xs uppercase">
+                      {getLanguageName(analysis.language)}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

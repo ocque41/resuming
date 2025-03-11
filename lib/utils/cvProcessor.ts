@@ -473,27 +473,75 @@ async function performQuickAnalysis(rawText: string, localAnalysis: any): Promis
  * Perform quick optimization with minimal OpenAI interaction
  */
 async function performQuickOptimization(rawText: string, analysis: any): Promise<string> {
-  // Prepare a very simplified prompt for quick optimization
-  const prompt = `
-    Quickly optimize this CV for ATS compatibility. Focus on:
-    1. Adding relevant keywords for the ${analysis.industry} industry
-    2. Using action verbs for achievements
-    3. Quantifying accomplishments
-    4. Maintaining original structure and information
-    
-    Return ONLY the optimized CV text, no explanations.
-    
-    CV text (truncated):
-    ${rawText.substring(0, 3000)}${rawText.length > 3000 ? '...' : ''}
-    
-    Key weaknesses to address:
-    ${analysis.weaknesses.join(', ')}
-  `;
-  
+  // Determine language from analysis; default to English
+  const language = analysis.language || "en";
+
+  // Define optimization prompt templates per language
+  const optimizationPrompts: Record<string, string> = {
+    en: `Quickly optimize this CV for ATS compatibility. Focus on:
+1. Adding relevant keywords for the ${analysis.industry} industry
+2. Using action verbs for achievements
+3. Quantifying accomplishments
+4. Maintaining original structure and information
+5. Optimizing formatting for readability
+
+Return ONLY the optimized CV text, no explanations.
+
+CV text (truncated):
+${rawText.substring(0, 3000)}${rawText.length > 3000 ? '...' : ''}
+
+Key weaknesses to address:
+${analysis.weaknesses.join(', ')}`,
+    es: `Optimiza rápidamente este CV para que sea compatible con ATS. Enfócate en:
+1. Agregar palabras clave relevantes para la industria de ${analysis.industry}
+2. Usar verbos de acción para describir logros
+3. Cuantificar los logros con métricas
+4. Mantener la estructura e información original
+5. Optimizar el formato para mejorar la legibilidad
+
+Devuelve ÚNICAMENTE el texto optimizado del CV, sin explicaciones.
+
+CV (truncado):
+${rawText.substring(0,3000)}${rawText.length > 3000 ? '...' : ''}
+
+Aspectos a mejorar:
+${analysis.weaknesses.join(', ')}`,
+    fr: `Optimisez rapidement ce CV pour une compatibilité ATS. Concentrez-vous sur :
+1. Ajouter des mots-clés pertinents pour le secteur de ${analysis.industry}
+2. Utiliser des verbes d'action pour décrire les réalisations
+3. Quantifier les accomplissements avec des métriques
+4. Maintenir la structure et les informations originales
+5. Optimiser le format pour une meilleure lisibilité
+
+Renvoie UNIQUEMENT le texte optimisé du CV, sans explications.
+
+CV (tronqué) :
+${rawText.substring(0,3000)}${rawText.length > 3000 ? '...' : ''}
+
+Points faibles à corriger :
+${analysis.weaknesses.join(', ')}`,
+    de: `Optimieren Sie diesen Lebenslauf schnell, um die ATS-Kompatibilität zu verbessern. Konzentrieren Sie sich auf:
+1. Hinzufügen relevanter Schlüsselwörter für die ${analysis.industry} Branche
+2. Verwendung von Aktionsverben zur Beschreibung von Erfolgen
+3. Quantifizierung der Leistungen mit Kennzahlen
+4. Beibehaltung der ursprünglichen Struktur und Information
+5. Optimierung des Formats zur Verbesserung der Lesbarkeit
+
+Geben Sie NUR den optimierten Text des Lebenslaufs zurück, ohne Erklärungen.
+
+Lebenslauf (abgeschnitten):
+${rawText.substring(0,3000)}${rawText.length > 3000 ? '...' : ''}
+
+Zu verbessernde Punkte:
+${analysis.weaknesses.join(', ')}`
+  };
+
+  const prompt = optimizationPrompts[language] || optimizationPrompts["en"];
+
   const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
   });
-  
+
   const response = await openai.chat.completions.create({
     model: "gpt-3.5-turbo", // Use the fastest model
     messages: [
@@ -507,9 +555,9 @@ async function performQuickOptimization(rawText: string, analysis: any): Promise
       }
     ],
     temperature: 0.4,
-    max_tokens: 2000, // Keep response size manageable
+    max_tokens: 2000,
   });
-  
+
   return response.choices[0]?.message?.content || "";
 }
 

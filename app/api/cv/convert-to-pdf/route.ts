@@ -199,8 +199,9 @@ async function generatePDFFromDOCX(docxBase64: string): Promise<string> {
 async function convertDocxToPdf(docxBase64: string): Promise<string> {
   // Create temporary directory
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cv-pdf-'));
-  const tempDocxPath = path.join(tempDir, `${uuidv4()}.docx`);
-  const tempPdfPath = path.join(tempDir, `${uuidv4()}.pdf`);
+  const docxFileName = `${uuidv4()}.docx`;
+  const tempDocxPath = path.join(tempDir, docxFileName);
+  const tempPdfPath = path.join(tempDir, docxFileName.replace(/\.docx$/, '.pdf'));
 
   try {
     // Validate base64 input
@@ -219,21 +220,20 @@ async function convertDocxToPdf(docxBase64: string): Promise<string> {
 
     logger.info(`Converting DOCX (${docxBuffer.length} bytes) to PDF`);
 
-    // Convert DOCX to PDF using LibreOffice
-    // Note: This requires LibreOffice to be installed on the server
-    await execPromise(`libreoffice --headless --convert-to pdf --outdir "${tempDir}" "${tempDocxPath}"`);
+    // Determine the appropriate office command based on platform
+    const officeCmd = process.platform === 'win32' ? 'soffice' : 'libreoffice';
+    await execPromise(`${officeCmd} --headless --convert-to pdf --outdir "${tempDir}" "${tempDocxPath}"`);
+    // Wait for a short period to allow the PDF conversion to complete
+    await new Promise(resolve => setTimeout(resolve, 1500));
 
     // Check if PDF was generated
     if (!fs.existsSync(tempPdfPath)) {
-      // Try to find the PDF file with a different name
+      // If not found by expected name, try to locate any PDF in the temp directory
       const files = fs.readdirSync(tempDir);
       const pdfFile = files.find(file => file.endsWith('.pdf'));
       
       if (pdfFile) {
-        // Use the found PDF file
         const actualPdfPath = path.join(tempDir, pdfFile);
-        
-        // Read and encode the PDF file
         const pdfBuffer = fs.readFileSync(actualPdfPath);
         return pdfBuffer.toString('base64');
       } else {
