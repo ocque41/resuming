@@ -1056,7 +1056,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   };
 
   return (
-    <Card className="rounded-lg border-t-4 border-t-[#B4916C] shadow-md bg-[#050505] text-white">
+    <Card className="rounded-lg border-t-4 border-t-[#B4916C] shadow-md bg-[#050505] text-white w-full max-w-[95vw] mx-auto">
       <CardHeader className="pb-3">
         <CardTitle className="text-xl font-semibold flex items-center justify-between">
           <div className="flex items-center">
@@ -1247,15 +1247,15 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
               </div>
             </div>
             
-                <div className="rounded-lg border border-gray-800 overflow-hidden mt-4">
-                  <div className="bg-gray-900/50 p-4">
+                <div className="rounded-lg border border-[#B4916C]/30 overflow-hidden mt-4">
+                  <div className="bg-[#1A1A1A] p-4">
                     <h4 className="text-white font-medium mb-4">Optimized Document</h4>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <Button
                         onClick={() => handleDownloadDocx('docx')}
                         disabled={!docxGenerated}
-                        className="bg-gray-800 hover:bg-gray-700 text-white flex-grow"
+                        className="bg-[#B4916C] hover:bg-[#9A7A5B] text-white flex-grow flex items-center justify-center"
                       >
                         <Download className="h-5 w-5 mr-2" />
                         Download DOCX
@@ -1264,7 +1264,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                 <Button
                         onClick={() => handleDownloadDocx('doc')}
                         disabled={!docxGenerated}
-                        className="bg-gray-800 hover:bg-gray-700 text-white flex-grow"
+                        className="bg-[#1A1A1A] hover:bg-[#333333] border border-[#B4916C]/30 text-white flex-grow flex items-center justify-center"
                 >
                   <Download className="h-5 w-5 mr-2" />
                         Download DOC
@@ -1295,62 +1295,67 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
               )}
               
                     {pdfConverted && pdfBase64 && (
-                      <div className="mt-4 flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-3">
-                <Button
-                  onClick={downloadPDF}
-                  className="bg-[#B4916C] hover:bg-[#A3815C] text-white flex items-center justify-center w-full sm:w-auto"
-                  disabled={isDownloading || isPDFRefreshing}
-                >
-                  {isDownloading ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                      Downloading...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="h-4 w-4 mr-2" />
-                      Download PDF
-                    </>
-                  )}
-                </Button>
+                      <div className="mt-4 space-y-4">
+                        <div className="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-3">
+                          <Button
+                            onClick={downloadPDF}
+                            className="bg-[#B4916C] hover:bg-[#9A7A5B] text-white flex items-center justify-center w-full sm:w-auto"
+                            disabled={isDownloading || isPDFRefreshing}
+                          >
+                            {isDownloading ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                Downloading...
+                              </>
+                            ) : (
+                              <>
+                                <Download className="h-4 w-4 mr-2" />
+                                Download PDF
+                              </>
+                            )}
+                          </Button>
 
-                <Button
-                  onClick={() => refreshPDF(true)}
-                  className="bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center w-full sm:w-auto"
-                  disabled={isDownloading || isPDFRefreshing}
-                >
-                  {isPDFRefreshing ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                      Refreshing...
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Refresh PDF
-                    </>
-                  )}
-                </Button>
-
-                {/* Add error message if there was a download error */}
-                {downloadError && (
-                  <Alert variant="destructive" className="mt-2">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      {downloadError.includes("Unauthorized") 
-                        ? "Session expired. Please refresh the page and try again."
-                        : downloadError}
-                    </AlertDescription>
-                  </Alert>
-                )}
-
-                <Button
-                  onClick={handleTogglePreview}
-                  className="bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center w-full sm:w-auto"
-                >
-                  <Eye className="h-5 w-5 mr-2" />
-                  {showPdfPreview ? 'Hide Preview' : 'Preview PDF'}
-                </Button>
+                          <Button
+                            onClick={() => refreshPDF(true)}
+                            className="bg-[#1A1A1A] hover:bg-[#333333] border border-[#B4916C]/30 text-white flex items-center justify-center w-full sm:w-auto"
+                            disabled={isDownloading || isPDFRefreshing}
+                          >
+                            {isPDFRefreshing ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                Refreshing...
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                                Refresh PDF
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                        
+                        {/* Error message */}
+                        {downloadError && (
+                          <Alert variant="destructive" className="mt-2 border border-red-800 bg-red-900/20 text-white">
+                            <AlertCircle className="h-4 w-4 text-red-400" />
+                            <AlertDescription>
+                              {downloadError.includes("Unauthorized") 
+                                ? "Session expired. Please refresh the page and try again."
+                                : downloadError}
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                        
+                        {/* Second row: Preview PDF button */}
+                        <div className="flex">
+                          <Button
+                            onClick={handleTogglePreview}
+                            className="bg-[#1A1A1A] hover:bg-[#333333] border border-[#B4916C]/30 text-white flex items-center justify-center w-full"
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            {showPdfPreview ? "Hide PDF Preview" : "Preview PDF"}
+                          </Button>
+                        </div>
                       </div>
                     )}
                     
