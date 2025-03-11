@@ -100,8 +100,9 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Perform basic CV analysis to determine industry and calculate ATS score
+    // Perform CV analysis to determine industry and calculate ATS score
     const analysis = analyzeCV(cvContent);
+    console.log(`Analysis completed for CV ${cvId} with ATS score: ${analysis.atsScore}`);
 
     // Merge with existing metadata (if any)
     let metadata = {};
@@ -115,7 +116,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Create updated metadata
+    // Create updated metadata with analysis results
     const updatedMetadata = {
       ...metadata,
       atsScore: analysis.atsScore,
@@ -137,13 +138,19 @@ export async function GET(request: NextRequest) {
       await db.update(cvs)
         .set({ metadata: JSON.stringify(updatedMetadata) })
         .where(eq(cvs.id, cvIdNumber));
+      
+      console.log(`Successfully updated metadata for CV ${cvId}`);
     } catch (updateError) {
       console.error(`Error updating metadata for CV ${cvId}:`, updateError);
-      // We don't want to fail the whole process if update fails
-      // Analysis results can still be returned to the user
+      return new Response(JSON.stringify({ 
+        error: "Failed to update CV metadata",
+        details: updateError instanceof Error ? updateError.message : "Unknown database error",
+        success: false
+      }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
     }
-
-    console.log(`Analysis completed successfully for CV ${fileName} (ID: ${cvId})`);
 
     // Return analysis results
     return new Response(JSON.stringify({ 

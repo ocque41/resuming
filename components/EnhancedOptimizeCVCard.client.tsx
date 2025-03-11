@@ -456,6 +456,11 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     }
     
     try {
+      // Validate the base64 data
+      if (!pdfBase64 || typeof pdfBase64 !== 'string' || pdfBase64.trim() === '') {
+        throw new Error("Invalid PDF data");
+      }
+      
       // Try to create a Blob first to validate the PDF data
       const byteCharacters = atob(pdfBase64);
       const byteNumbers = new Array(byteCharacters.length);
@@ -493,7 +498,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     }
   }, [pdfBase64, selectedCVName]);
 
-  // Generate DOCX file from processed CV with enhanced error handling
+  // Update the handleGenerateDocx function to properly handle document generation
   const handleGenerateDocx = useCallback(async () => {
     if (!selectedCVId) {
       setError("CV ID not found. Please try selecting your CV again.");
@@ -504,6 +509,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     // Check if we have a cached version and aren't forcing a refresh
     if (isCached && !forceRefresh && docxBase64) {
       console.log("Using cached DOCX data");
+      setDocxGenerated(true);
       
       // If we want to convert to PDF and it's not already converted
       if (autoPdfConvert && !pdfConverted) {
@@ -520,6 +526,11 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     try {
       console.log("Starting DOCX generation for CV ID:", selectedCVId);
       
+      // Simulate progress
+      const progressInterval = setInterval(() => {
+        setDocxProgress(prev => Math.min(prev + 10, 90));
+      }, 500);
+      
       // Pass forceRefresh and text data to the API
       const generateResponse = await fetch('/api/cv/generate-enhanced-docx', {
         method: 'POST',
@@ -530,6 +541,8 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
           optimizedText: optimizedText || undefined
         }),
       });
+      
+      clearInterval(progressInterval);
       
       // Enhanced error handling
       if (!generateResponse.ok) {
@@ -564,44 +577,132 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         throw new Error(data.message || "Failed to generate DOCX document");
       }
       
-      console.log("DOCX generation successful");
-      
-      // Set the document data
+      // Store DOCX data
       setDocxBase64(data.docxBase64);
       setDocxGenerated(true);
       setIsGeneratingDocx(false);
       setDocxProgress(100);
       
-      // Cache the document data with all available information
-      if (originalAtsScore > 0 && improvedAtsScore > 0) {
-        cacheDocument(selectedCVId, {
-          docxBase64: data.docxBase64,
-          originalAtsScore,
-          improvedAtsScore,
-          originalText,
-          optimizedText,
-          improvements
-        });
-        setIsCached(true);
-        setCacheTimestamp(Date.now());
+      // Get ATS scores from the response
+      if (data.originalAtsScore !== undefined) {
+        setOriginalAtsScore(data.originalAtsScore);
       }
       
-      // Auto-convert to PDF if option is enabled
+      if (data.improvedAtsScore !== undefined) {
+        setImprovedAtsScore(data.improvedAtsScore);
+      }
+      
+      // Get optimized text if available
+      if (data.optimizedText) {
+        setOptimizedText(data.optimizedText);
+      }
+      
+      // Get improvements if available
+      if (data.improvements) {
+        setImprovements(data.improvements);
+      }
+      
+      // Cache the document data
+      if (selectedCVId) {
+        cacheDocument(selectedCVId, {
+          docxBase64: data.docxBase64,
+          originalAtsScore: data.originalAtsScore || originalAtsScore,
+          improvedAtsScore: data.improvedAtsScore || improvedAtsScore,
+          expiryTime: 24 * 60 * 60 * 1000, // 24 hours
+          originalText: originalText,
+          optimizedText: data.optimizedText || optimizedText,
+          improvements: data.improvements || improvements
+        });
+      }
+      
+      console.log("DOCX generation completed successfully");
+      
+      // Auto-convert to PDF if enabled
       if (autoPdfConvert) {
         handleConvertToPdf(data.docxBase64);
       }
     } catch (error) {
-      // Error handling with fallbacks
-      console.error("Error generating DOCX:", error);
-      setError(error instanceof Error ? error.message : "An error occurred generating the document");
+      console.error("DOCX generation error:", error);
+      setError(error instanceof Error ? error.message : "Failed to generate DOCX document");
       setErrorType('docx');
       setIsGeneratingDocx(false);
-      
-      // Provide recovery options in the UI
-      // These will be rendered as part of the error message
+      setDocxProgress(0);
     }
-  }, [selectedCVId, autoPdfConvert, handleConvertToPdf, isCached, forceRefresh, docxBase64, 
-      pdfConverted, originalAtsScore, improvedAtsScore, originalText, optimizedText, improvements]);
+  }, [selectedCVId, isCached, forceRefresh, docxBase64, autoPdfConvert, pdfConverted, 
+      handleConvertToPdf, optimizedText, originalAtsScore, improvedAtsScore, originalText, improvements]);
+
+  // Update the pollForStatus function to properly handle ATS scores and document generation
+  const pollForStatus = useCallback(async () => {
+    if (!selectedCVId) return;
+
+    try {
+      // Add debug parameter if debug mode is enabled
+      const debugParam = debugMode ? '&debug=true' : '';
+      const response = await fetch(`/api/cv/process/status?cvId=${selectedCVId}${debugParam}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch processing status');
+      }
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setProgress(data.progress || 0);
+        setProcessingStep(data.step || 'Processing...');
+        setIsProcessing(data.processing);
+        
+        // Save debug info if available
+        if (data.debugInfo) {
+          setDebugInfo(data.debugInfo);
+        }
+        
+        // Check if processing is stuck
+        setIsStuck(!!data.isStuck);
+        setStuckMinutes(data.stuckMinutes || 0);
+        setStuckSince(data.stuckSince || null);
+        
+        // Update ATS scores if available
+        if (data.atsScore !== undefined) {
+          setOriginalAtsScore(data.atsScore);
+        }
+        
+        if (data.improvedAtsScore !== undefined) {
+          setImprovedAtsScore(data.improvedAtsScore);
+        }
+        
+        // Handle process completion
+        if (data.isComplete) {
+          setIsProcessed(true);
+          setIsProcessing(false);
+          setProgress(100);
+          
+          // Update optimized text if available
+          if (data.optimizedText) {
+            setOptimizedText(data.optimizedText);
+          }
+          
+          // Update improvements if available
+          if (data.improvements) {
+            setImprovements(data.improvements);
+          }
+          
+          // Start document generation
+          handleGenerateDocx();
+        } 
+        // Continue polling if still processing and not complete
+        else if (data.processing) {
+          setTimeout(pollForStatus, 3000);
+        }
+      } else {
+        throw new Error(data.error || 'Error checking process status');
+      }
+    } catch (err: any) {
+      setError(err.message || 'An error occurred while checking the optimization status.');
+      setErrorType('process');
+      setIsProcessing(false);
+      console.error('Error polling for status:', err);
+    }
+  }, [selectedCVId, debugMode, handleGenerateDocx]);
 
   // Function to handle CV processing
   const processCV = useCallback(async (forceRefresh = false) => {
@@ -648,65 +749,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       console.error('Error processing CV:', err);
     }
   }, [selectedCVId]);
-
-  // Function to poll for processing status
-  const pollForStatus = useCallback(async () => {
-    if (!selectedCVId) return;
-
-    try {
-      // Add debug parameter if debug mode is enabled
-      const debugParam = debugMode ? '&debug=true' : '';
-      const response = await fetch(`/api/cv/process/status?cvId=${selectedCVId}${debugParam}`);
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch processing status');
-      }
-
-      const data = await response.json();
-      
-      if (data.success) {
-        setProgress(data.progress || 0);
-        setProcessingStep(data.step || 'Processing...');
-        setIsProcessing(data.processing);
-        
-        // Save debug info if available
-        if (data.debugInfo) {
-          setDebugInfo(data.debugInfo);
-        }
-        
-        // Check if processing is stuck
-        setIsStuck(!!data.isStuck);
-        setStuckMinutes(data.stuckMinutes || 0);
-        setStuckSince(data.stuckSince || null);
-        
-        // Handle process completion
-        if (data.isComplete) {
-          setIsProcessed(true);
-          setIsProcessing(false);
-          setProgress(100);
-          
-          // Cache the optimized text
-          if (data.optimizedText) {
-            // Update the version to store the optimized text in the cache
-            await cacheDocument(selectedCVId, data.optimizedText);
-          }
-          
-          // Other completion logic...
-        } 
-        // Continue polling if still processing and not complete
-        else if (data.processing) {
-          setTimeout(pollForStatus, 3000);
-        }
-      } else {
-        throw new Error(data.error || 'Error checking process status');
-      }
-    } catch (err: any) {
-      setError(err.message || 'An error occurred while checking the optimization status.');
-      setErrorType('process');
-      setIsProcessing(false);
-      console.error('Error polling for status:', err);
-    }
-  }, [selectedCVId, debugMode]);
 
   // Function to handle a stuck process
   const handleStuckProcess = useCallback(() => {
@@ -843,8 +885,24 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
 
   // Render PDF preview in a more robust way
   const renderPDFPreview = () => {
-    if (!showPdfPreview || !pdfBase64) {
+    if (!showPdfPreview) {
       return null;
+    }
+    
+    if (!pdfBase64) {
+      return (
+        <div className="mt-4 w-full h-96 border border-gray-700 rounded-lg overflow-hidden flex items-center justify-center">
+          <div className="text-center">
+            <div className="text-red-400 mb-2">PDF preview not available</div>
+            <Button 
+              onClick={() => handleConvertToPdf(docxBase64 || '')}
+              className="px-4 py-2 bg-[#B4916C] hover:bg-[#A3815C] text-white rounded-md"
+            >
+              Generate PDF
+            </Button>
+          </div>
+        </div>
+      );
     }
     
     // Check if PDF data is valid
@@ -853,12 +911,12 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         <div className="mt-4 w-full h-96 border border-gray-700 rounded-lg overflow-hidden flex items-center justify-center">
           <div className="text-center">
             <div className="text-red-400 mb-2">Invalid PDF data</div>
-            <button 
+            <Button 
               onClick={() => handleConvertToPdf(docxBase64 || '')}
               className="px-4 py-2 bg-[#B4916C] hover:bg-[#A3815C] text-white rounded-md"
             >
               Try Again
-            </button>
+            </Button>
           </div>
         </div>
       );

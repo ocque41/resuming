@@ -541,16 +541,17 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
                 <Button 
                   onClick={() => {
                     if (!selectedCVId) {
-                      console.error('No CV selected for optimization');
+                      setError("No CV selected for optimization");
                       return;
                     }
                     try {
                       console.log('Proceeding to Optimization with CV ID:', selectedCVId);
-                      if (typeof onAnalysisComplete === 'function') {
-                        onAnalysisComplete(selectedCVId);
-                      }
+                      // Ensure we're passing a string ID
+                      const cvIdString = String(selectedCVId);
+                      onAnalysisComplete(cvIdString);
                     } catch (error) {
                       console.error('Error calling onAnalysisComplete:', error);
+                      setError("Failed to proceed to optimization. Please try again.");
                     }
                   }}
                   className="bg-[#B4916C] hover:bg-[#A3815C] text-white w-full sm:w-auto"
