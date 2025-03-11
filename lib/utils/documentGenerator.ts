@@ -450,49 +450,172 @@ export class DocumentGenerator {
    */
   private static identifySections(content: string): Record<string, string> {
     const sections: Record<string, string> = {};
-    const sectionRegex = /^(EXPERIENCE|EDUCATION|SKILLS|PROFILE|SUMMARY|PROJECTS|CERTIFICATIONS|PUBLICATIONS|LANGUAGES|ACHIEVEMENTS|INTERESTS|REFERENCES|PERSONAL|PROFESSIONAL EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY|GOALS)(?:\s*|:|$)/im;
     
-    // First pass - find all section headers
-    const sectionStarts: { name: string, index: number }[] = [];
-    let match;
-    let searchContent = content;
-    let offset = 0;
+    // Define section keywords to match against
+    const sectionKeywords = {
+      'PROFILE': ['profile', 'summary', 'about me', 'personal statement', 'professional summary', 'career objective'],
+      'EXPERIENCE': ['experience', 'employment', 'work history', 'professional experience', 'career history', 'job history'],
+      'EDUCATION': ['education', 'academic background', 'academic history', 'qualifications', 'degrees', 'academic qualifications'],
+      'SKILLS': ['skills', 'technical skills', 'core competencies', 'competencies', 'expertise', 'key skills', 'proficiencies', 'technical proficiencies'],
+      'PROJECTS': ['projects', 'key projects', 'project experience', 'professional projects'],
+      'CERTIFICATIONS': ['certifications', 'certificates', 'professional certifications', 'credentials'],
+      'LANGUAGES': ['languages', 'language proficiency', 'language skills'],
+      'INTERESTS': ['interests', 'hobbies', 'activities', 'personal interests'],
+      'REFERENCES': ['references', 'professional references'],
+      'PUBLICATIONS': ['publications', 'research', 'papers', 'articles'],
+      'AWARDS': ['awards', 'honors', 'achievements', 'recognitions']
+    };
     
-    while ((match = searchContent.match(sectionRegex)) !== null) {
-      if (match.index !== undefined) {
-        sectionStarts.push({
-          name: match[1].trim(),
-          index: offset + match.index
-        });
+    // Split content by lines
+    const lines = content.split('\n');
+    let currentSection = '';
+    let sectionContent = '';
+    
+    // Process each line
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      // Skip empty lines
+      if (line === '') continue;
+      
+      // Check if line is a section header (all caps or followed by colon)
+      const isHeader = (
+        (line === line.toUpperCase() && line.length > 3) || 
+        /^[A-Z][a-zA-Z\s]{2,}:/.test(line)
+      );
+      
+      if (isHeader) {
+        // Save previous section if exists
+        if (currentSection && sectionContent) {
+          sections[currentSection] = sectionContent.trim();
+        }
         
-        offset += match.index + match[0].length;
-        searchContent = content.substring(offset);
-      } else {
-        break;
+        // Clean up header (remove colons and trim)
+        let header = line.replace(':', '').trim();
+        
+        // Standardize section name based on keywords
+        let matchedSection = '';
+        for (const [section, keywords] of Object.entries(sectionKeywords)) {
+          if (keywords.some(keyword => header.toLowerCase().includes(keyword.toLowerCase()))) {
+            matchedSection = section;
+            break;
+          }
+        }
+        
+        // Handle combined sections (e.g., "EDUCATION & SKILLS")
+        if (!matchedSection) {
+          // Check for combined sections like "EDUCATION & SKILLS" or "SKILLS AND QUALIFICATIONS"
+          if (/education.+skill|skill.+education|qualification.+skill|skill.+qualification/i.test(header)) {
+            // This is likely a combined section - we'll process it carefully later
+            matchedSection = 'COMBINED_EDU_SKILLS';
+          } else {
+            // Use the header as is if no match found
+            matchedSection = header.toUpperCase();
+          }
+        }
+        
+        currentSection = matchedSection;
+        sectionContent = '';
+      } else if (currentSection) {
+        // Add line to current section content
+        sectionContent += line + '\n';
       }
     }
     
-    // Second pass - extract section content
-    if (sectionStarts.length > 0) {
-      for (let i = 0; i < sectionStarts.length; i++) {
-        const currentSection = sectionStarts[i];
-        const nextSection = sectionStarts[i + 1];
+    // Save the last section
+    if (currentSection && sectionContent) {
+      sections[currentSection] = sectionContent.trim();
+    }
+    
+    // Handle combined education & skills sections
+    if (sections['COMBINED_EDU_SKILLS']) {
+      const combinedContent = sections['COMBINED_EDU_SKILLS'];
+      delete sections['COMBINED_EDU_SKILLS'];
+      
+      // Look for skill-related keywords to split the content
+      const skillLines = [];
+      const eduLines = [];
+      
+      const skillKeywords = ['proficient in', 'experienced with', 'knowledge of', 'familiar with', 'skills:', 'skill set', 'programming', 'software', 'technologies', 'tools', 'languages', 'frameworks'];
+      const eduKeywords = ['university', 'college', 'degree', 'bachelor', 'master', 'phd', 'gpa', 'graduated', 'diploma', 'major'];
+      
+      // Split the combined content into lines
+      const contentLines = combinedContent.split('\n');
+      
+      // Try to identify which lines belong to which section
+      for (const line of contentLines) {
+        const lowerLine = line.toLowerCase();
         
-        const sectionStart = currentSection.index;
-        const sectionEnd = nextSection ? nextSection.index : content.length;
+        // Check if this line contains skill keywords
+        const isSkillLine = skillKeywords.some(keyword => lowerLine.includes(keyword.toLowerCase())) || 
+                            /^[•\-\*]?\s*[A-Za-z]+(,|:|\s-|\s–)/.test(line);
         
-        // Extract section content
-        const sectionContent = content.substring(sectionStart, sectionEnd).trim();
+        // Check if this line contains education keywords
+        const isEduLine = eduKeywords.some(keyword => lowerLine.includes(keyword.toLowerCase()));
         
-        // Remove the header from the content
-        const headerEndMatch = sectionContent.match(/^.*?(?:\r?\n|$)/);
-        const headerEnd = headerEndMatch ? headerEndMatch[0].length : 0;
-        
-        sections[currentSection.name.toUpperCase()] = sectionContent.substring(headerEnd).trim();
+        if (isSkillLine && !isEduLine) {
+          skillLines.push(line);
+        } else if (isEduLine) {
+          eduLines.push(line);
+        } else {
+          // If we can't determine, put in the most recently used category or education as default
+          if (skillLines.length > eduLines.length) {
+            skillLines.push(line);
+          } else {
+            eduLines.push(line);
+          }
+        }
       }
-    } else {
-      // If no sections found, treat the whole content as a single section
-      sections["CONTENT"] = content.trim();
+      
+      // Add the split sections if they have content
+      if (skillLines.length > 0) {
+        sections['SKILLS'] = skillLines.join('\n');
+      }
+      
+      if (eduLines.length > 0) {
+        sections['EDUCATION'] = eduLines.join('\n');
+      }
+    }
+    
+    // If there's no SKILLS section but we find skills in other sections, extract them
+    if (!sections['SKILLS']) {
+      const skillIndicators = [
+        'technical skills:', 'skills:', 'skill set:', 'proficient in:', 'proficient with:',
+        'experienced in:', 'experienced with:', 'expertise in:', 'competencies:'
+      ];
+      
+      for (const [section, content] of Object.entries(sections)) {
+        if (section !== 'SKILLS') {
+          // Check if this section contains a skills subsection
+          for (const indicator of skillIndicators) {
+            if (content.toLowerCase().includes(indicator.toLowerCase())) {
+              // Extract the skills section
+              const parts = content.split(new RegExp(`(${indicator})`, 'i'));
+              if (parts.length >= 3) {
+                const index = parts.findIndex(p => p.toLowerCase() === indicator.toLowerCase());
+                if (index >= 0 && index < parts.length - 1) {
+                  // Extract the skills content (everything after the indicator)
+                  let skillsContent = parts.slice(index + 1).join('');
+                  
+                  // Try to find where skills section ends (next section header or end of content)
+                  const nextHeaderMatch = skillsContent.match(/\n\s*[A-Z][A-Z\s]+:/);
+                  if (nextHeaderMatch) {
+                    skillsContent = skillsContent.substring(0, nextHeaderMatch.index);
+                  }
+                  
+                  // Add to SKILLS section
+                  sections['SKILLS'] = (sections['SKILLS'] || '') + 
+                                      (sections['SKILLS'] ? '\n' : '') + 
+                                      skillsContent.trim();
+                  
+                  // Remove from original section
+                  sections[section] = content.replace(indicator + skillsContent, '').trim();
+                }
+              }
+            }
+          }
+        }
+      }
     }
     
     return sections;
