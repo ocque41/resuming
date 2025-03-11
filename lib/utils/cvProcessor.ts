@@ -333,7 +333,12 @@ export async function processCVWithAI(
           metadata: updatedMetadata
         };
       } catch (error) {
-        logger.error(`Error processing CV ID: ${cvId}`, error);
+        // Ensure error is properly typed for the logger
+        const errorForLog = error instanceof Error 
+          ? error 
+          : new Error(typeof error === 'string' ? error : 'Unknown error during CV processing');
+        
+        logger.error(`Error processing CV ID: ${cvId}`, errorForLog);
         
         // Check if it's a timeout error
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -357,7 +362,7 @@ export async function processCVWithAI(
           cvId,
           userId,
           timestamp: new Date().toISOString(),
-          error: errorMessage,
+          error: errorMessage || 'Unknown error',
           duration: Date.now() - processingStartTime
         });
         
@@ -369,7 +374,12 @@ export async function processCVWithAI(
       }
     }
   } catch (error) {
-    logger.error(`Unhandled error in processCVWithAI for CV ID: ${cvId}`, error);
+    // Ensure error is properly typed for the logger
+    const errorForLog = error instanceof Error 
+      ? error 
+      : new Error(typeof error === 'string' ? error : 'Unknown error in processCVWithAI');
+    
+    logger.error(`Unhandled error in processCVWithAI for CV ID: ${cvId}`, errorForLog);
     
     // Ensure CV metadata is updated to reflect the error
     const errorMetadata = {
