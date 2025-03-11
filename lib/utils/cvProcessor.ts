@@ -550,7 +550,7 @@ async function performQuickOptimization(rawText: string, analysis: any): Promise
   try {
     // Set a timeout for the optimization process
     const optimizationStartTime = Date.now();
-    const OPTIMIZATION_TIMEOUT = 30000; // 30 seconds timeout
+    const OPTIMIZATION_TIMEOUT = 10000; // 10 seconds timeout
     
     // Initialize the RAG service
     logger.info('Initializing RAG service for CV optimization');
@@ -649,6 +649,7 @@ Geben Sie NUR den optimierten Text des Lebenslaufs zurück, ohne Erklärungen.`
       
       // Race the optimization against the timeout
       optimizedText = await Promise.race([ragOptimizationPromise, ragTimeoutPromise]);
+      logger.info('RAG optimization returned text of length: ' + optimizedText.length);
       
       // Basic validation to ensure we got reasonable output
       if (optimizedText && optimizedText.length > rawText.length * 0.5) {
