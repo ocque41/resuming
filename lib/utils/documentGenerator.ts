@@ -313,68 +313,67 @@ export class DocumentGenerator {
         new Paragraph({
           text: 'SKILLS',
           heading: HeadingLevel.HEADING_1,
-          spacing: {
-            before: 400,
-            after: 200
-          }
+          spacing: { before: 400, after: 200 }
         })
       );
+      
+      // Prioritize skills from metadata if available
       if (metadata && metadata.skills && Array.isArray(metadata.skills) && metadata.skills.length > 0) {
         // Use skills from metadata
         metadata.skills.forEach((skill: string) => {
           children.push(
             new Paragraph({
               text: skill,
-              bullet: {
-                level: 0
-              },
-              spacing: {
-                before: 100,
-                after: 100
-              }
+              bullet: { level: 0 },
+              spacing: { before: 100, after: 100 }
             })
           );
         });
-      } else if (contentSections['SKILLS']) {
+      } 
+      // Next try to use skills from content sections
+      else if (contentSections['SKILLS']) {
         // Otherwise, use the content from the SKILLS section
         const skillsLines = contentSections['SKILLS'].split('\n');
         skillsLines.forEach(line => {
           const trimmedLine = line.trim();
           if (trimmedLine.length === 0) return;
-          
-          // Check if this is a bullet point
-          const isBullet = trimmedLine.startsWith('-') || 
-                           trimmedLine.startsWith('•') || 
-                           trimmedLine.startsWith('*');
-          
-          // Add the paragraph with appropriate formatting
+          const isBullet = trimmedLine.startsWith('-') || trimmedLine.startsWith('•') || trimmedLine.startsWith('*');
           if (isBullet) {
             children.push(
-              new Paragraph({
-                text: trimmedLine.substring(1).trim(),
-                bullet: {
-                  level: 0
-                },
-                spacing: {
-                  before: 100,
-                  after: 100
-                }
-              })
+              new Paragraph({ text: trimmedLine.substring(1).trim(), bullet: { level: 0 }, spacing: { before: 100, after: 100 } })
             );
           } else {
             children.push(
-              new Paragraph({
-                text: trimmedLine,
-                spacing: {
-                  before: 100,
-                  after: 100
-                }
-              })
+              new Paragraph({ text: trimmedLine, spacing: { before: 100, after: 100 } })
             );
           }
         });
+      } 
+      // Try to get skills from industry-relevant keywords if we know the industry
+      else if (metadata && metadata.industry) {
+        const industrySkills = this.getIndustrySkills(metadata.industry);
+        industrySkills.forEach(skill => {
+          children.push(
+            new Paragraph({
+              text: skill,
+              bullet: { level: 0 },
+              spacing: { before: 100, after: 100 }
+            })
+          );
+        });
       } else {
         // If no skills found, do not add any default skills
+        children.push(
+          new Paragraph({ 
+            children: [
+              new TextRun({ 
+                text: "No specific skills found. Please add relevant skills in your CV.",
+                italics: true 
+              })
+            ],
+            spacing: { before: 100, after: 100 },
+          })
+        );
       }
       
       // Add remaining sections (Education, etc.)
@@ -450,49 +449,69 @@ export class DocumentGenerator {
    */
   private static identifySections(content: string): Record<string, string> {
     const sections: Record<string, string> = {};
-    const sectionRegex = /^(EXPERIENCE|EDUCATION|SKILLS|PROFILE|SUMMARY|PROJECTS|CERTIFICATIONS|PUBLICATIONS|LANGUAGES|ACHIEVEMENTS|INTERESTS|REFERENCES|PERSONAL|PROFESSIONAL EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY|GOALS)(?:\s*|:|$)/im;
     
-    // First pass - find all section headers
-    const sectionStarts: { name: string, index: number }[] = [];
-    let match;
-    let searchContent = content;
-    let offset = 0;
+    // Define section headers regex patterns for improved detection
+    const sectionPatterns = [
+      { name: 'PROFILE', pattern: /(?:profile|summary|about me|objective)(?:\n|:|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|skills|languages|interests|references|profile|summary|\Z)|\Z)/is },
+      { name: 'EXPERIENCE', pattern: /(?:experience|work history|employment|professional background|career|work)(?:\n|:|\s{2,})(.*?)(?=\n\s*(?:education|skills|languages|interests|references|profile|summary|\Z)|\Z)/is },
+      { name: 'EDUCATION', pattern: /(?:education|academic|qualifications|degrees|university|college)(?:\n|:|\s{2,})(.*?)(?=\n\s*(?:experience|work|employment|skills|languages|interests|references|profile|summary|\Z)|\Z)/is },
+      { name: 'SKILLS', pattern: /(?:skills|proficiencies|competencies|expertise|technical skills|core competencies)(?:\n|:|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|languages|interests|references|profile|summary|\Z)|\Z)/is },
+      { name: 'LANGUAGES', pattern: /(?:languages|linguistic skills|language proficiency)(?:\n|:|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|skills|interests|references|profile|summary|\Z)|\Z)/is },
+      { name: 'INTERESTS', pattern: /(?:interests|hobbies|activities|extracurricular)(?:\n|:|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|skills|languages|references|profile|summary|\Z)|\Z)/is },
+      { name: 'REFERENCES', pattern: /(?:references|referees)(?:\n|:|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|skills|languages|interests|profile|summary|\Z)|\Z)/is }
+    ];
     
-    while ((match = searchContent.match(sectionRegex)) !== null) {
-      if (match.index !== undefined) {
-        sectionStarts.push({
-          name: match[1].trim(),
-          index: offset + match.index
-        });
-        
-        offset += match.index + match[0].length;
-        searchContent = content.substring(offset);
-      } else {
-        break;
+    // Additional keywords for better education section identification
+    const educationKeywords = [
+      'university', 'college', 'school', 'degree', 'bachelor', 'master', 'phd', 'doctorate', 
+      'diploma', 'certificate', 'thesis', 'gpa', 'grade', 'graduated', 'graduation', 
+      'major', 'minor', 'academic', 'study', 'studies', 'mba', 'bsc', 'ba', 'bs', 'ma', 'ms', 'msc'
+    ];
+    
+    // Additional keywords for better work experience section identification
+    const experienceKeywords = [
+      'managed', 'led', 'developed', 'created', 'implemented', 'responsible', 'achievements',
+      'delivered', 'improved', 'increased', 'reduced', 'supervised', 'team', 'project',
+      'client', 'customer', 'report', 'business', 'strategy', 'market', 'sales', 'revenue',
+      'manager', 'director', 'supervisor', 'position', 'role', 'company', 'organization', 'firm'
+    ];
+    
+    // Try to find sections based on patterns
+    sectionPatterns.forEach(({ name, pattern }) => {
+      const match = content.match(pattern);
+      if (match && match[1]) {
+        sections[name] = match[1].trim();
       }
-    }
+    });
     
-    // Second pass - extract section content
-    if (sectionStarts.length > 0) {
-      for (let i = 0; i < sectionStarts.length; i++) {
-        const currentSection = sectionStarts[i];
-        const nextSection = sectionStarts[i + 1];
-        
-        const sectionStart = currentSection.index;
-        const sectionEnd = nextSection ? nextSection.index : content.length;
-        
-        // Extract section content
-        const sectionContent = content.substring(sectionStart, sectionEnd).trim();
-        
-        // Remove the header from the content
-        const headerEndMatch = sectionContent.match(/^.*?(?:\r?\n|$)/);
-        const headerEnd = headerEndMatch ? headerEndMatch[0].length : 0;
-        
-        sections[currentSection.name.toUpperCase()] = sectionContent.substring(headerEnd).trim();
+    // Post-processing validation for education vs experience to reduce confusion
+    if (sections['EDUCATION'] && sections['EXPERIENCE']) {
+      // Check if education section contains more experience keywords than education keywords
+      const educationText = sections['EDUCATION'].toLowerCase();
+      const experienceText = sections['EXPERIENCE'].toLowerCase();
+      
+      let educationKeywordCount = 0;
+      let experienceKeywordCount = 0;
+      
+      educationKeywords.forEach(keyword => {
+        if (educationText.includes(keyword.toLowerCase())) {
+          educationKeywordCount++;
+        }
+      });
+      
+      experienceKeywords.forEach(keyword => {
+        if (educationText.includes(keyword.toLowerCase())) {
+          experienceKeywordCount++;
+        }
+      });
+      
+      // If the education section has more experience keywords than education keywords,
+      // it's likely mislabeled. Either merge with experience or keep separate depending on the difference.
+      if (experienceKeywordCount > educationKeywordCount * 2) {
+        // Very clear mismatch - merge with experience
+        sections['EXPERIENCE'] += '\n' + sections['EDUCATION'];
+        delete sections['EDUCATION'];
       }
-    } else {
-      // If no sections found, treat the whole content as a single section
-      sections["CONTENT"] = content.trim();
     }
     
     return sections;
@@ -603,5 +622,87 @@ export class DocumentGenerator {
     }
     
     return achievements;
+  }
+  
+  /**
+   * Get industry-specific skills for the given industry
+   * @param industry The industry to get skills for
+   * @returns Array of industry-specific skills
+   */
+  private static getIndustrySkills(industry: string): string[] {
+    const industrySkills: Record<string, string[]> = {
+      'Technology': [
+        'Programming (e.g., Python, JavaScript, Java)',
+        'Cloud Services (AWS, Azure, GCP)',
+        'Version Control Systems (Git)',
+        'Database Management',
+        'Agile/Scrum Methodologies',
+        'Software Development Lifecycle',
+        'API Development & Integration',
+        'DevOps Practices'
+      ],
+      'Finance': [
+        'Financial Analysis',
+        'Risk Management',
+        'Financial Reporting',
+        'Budgeting & Forecasting',
+        'Regulatory Compliance',
+        'Investment Analysis',
+        'Banking Operations',
+        'Financial Modeling'
+      ],
+      'Healthcare': [
+        'Electronic Health Records (EHR)',
+        'Healthcare Regulation Compliance',
+        'Medical Terminology',
+        'Patient Care',
+        'Clinical Documentation',
+        'Healthcare Informatics',
+        'Care Coordination',
+        'Medical Coding'
+      ],
+      'Marketing': [
+        'Digital Marketing',
+        'Social Media Management',
+        'Content Creation',
+        'SEO/SEM',
+        'Brand Development',
+        'Market Research',
+        'Campaign Management',
+        'Analytics & Performance Tracking'
+      ],
+      'Education': [
+        'Curriculum Development',
+        'Student Assessment',
+        'Learning Management Systems',
+        'Instructional Design',
+        'Educational Technology',
+        'Classroom Management',
+        'Student Engagement Strategies',
+        'Differentiated Instruction'
+      ],
+      'Manufacturing': [
+        'Supply Chain Management',
+        'Quality Control',
+        'Lean Manufacturing',
+        'Production Planning',
+        'Inventory Management',
+        'Process Improvement',
+        'ERP Systems',
+        'Six Sigma Methodologies'
+      ]
+    };
+    
+    // Return industry-specific skills if available, or general professional skills
+    return industrySkills[industry] || [
+      'Project Management',
+      'Communication Skills',
+      'Problem Solving',
+      'Team Collaboration',
+      'Time Management',
+      'Analytical Thinking',
+      'Adaptability',
+      'Leadership'
+    ];
   }
 } 

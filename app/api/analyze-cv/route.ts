@@ -129,6 +129,7 @@ export async function GET(request: NextRequest) {
       formattingStrengths: analysis.formattingStrengths,
       formattingWeaknesses: analysis.formattingWeaknesses,
       formattingRecommendations: analysis.formattingRecommendations,
+      skills: analysis.skills,
       analyzedAt: new Date().toISOString(),
       ready_for_optimization: true,
       analysis_status: 'complete'
@@ -183,350 +184,177 @@ export async function GET(request: NextRequest) {
  * @returns Analysis results including ATS score, industry, and recommendations
  */
 function analyzeCV(cvContent: string) {
-  // Normalize text for analysis
-  const normalizedText = cvContent.toLowerCase();
+  const analysis: any = {};
+  
+  // Set default values
+  analysis.strengths = [];
+  analysis.weaknesses = [];
+  analysis.recommendations = [];
+  analysis.keywordAnalysis = {};
+  analysis.skills = [];
+  analysis.sectionBreakdown = {};
   
   // Detect language
-  const language = detectLanguage(cvContent);
-  console.log(`Detected language: ${language}`);
+  analysis.language = detectLanguage(cvContent);
   
-  // Define industry keywords for detection (multiple languages)
-  const INDUSTRY_KEYWORDS: Record<string, Record<string, string[]>> = {
-    "en": {
-      "Technology": ["software", "development", "programming", "api", "cloud", "infrastructure", "data", "analytics", "frontend", "backend", "fullstack", "devops", "agile", "scrum", "jira", "git", "aws", "azure", "javascript", "python", "java", "c#", "react", "angular", "vue", "node"],
-      "Finance": ["investment", "portfolio", "financial", "trading", "assets", "banking", "analysis", "compliance", "risk", "audit", "accounting", "budget", "forecast", "revenue", "profit", "loss", "balance sheet", "income statement", "cash flow", "equity", "debt", "credit", "loan", "mortgage"],
-      "Healthcare": ["patient", "clinical", "medical", "health", "care", "treatment", "diagnostic", "therapy", "hospital", "doctor", "nurse", "physician", "surgeon", "pharmacy", "medication", "prescription", "diagnosis", "prognosis", "symptoms", "disease", "illness", "wellness", "recovery"],
-      "Marketing": ["campaign", "brand", "market", "strategy", "audience", "content", "social", "media", "advertising", "promotion", "seo", "sem", "ppc", "conversion", "funnel", "engagement", "retention", "acquisition", "customer", "client", "demographic", "psychographic", "segmentation"],
-      "Sales": ["sales", "revenue", "quota", "pipeline", "prospect", "lead", "opportunity", "close", "deal", "customer", "client", "account", "territory", "region", "market", "upsell", "cross-sell", "negotiation", "presentation", "proposal", "contract", "commission", "bonus"],
-      "Human Resources": ["hr", "recruit", "talent", "acquisition", "onboarding", "training", "development", "performance", "review", "compensation", "benefits", "payroll", "employee", "retention", "engagement", "culture", "diversity", "inclusion", "compliance", "policy", "procedure"],
-      "General": ["project", "management", "team", "business", "client", "service", "process", "solution", "communication", "collaboration", "leadership", "organization", "planning", "execution", "monitoring", "evaluation", "reporting", "presentation", "documentation"]
-    },
-    "es": {
-      "Tecnología": ["software", "desarrollo", "programación", "api", "nube", "infraestructura", "datos", "analítica", "frontend", "backend", "fullstack", "devops", "ágil", "scrum", "jira", "git", "aws", "azure", "javascript", "python", "java", "c#", "react", "angular", "vue", "node"],
-      "Finanzas": ["inversión", "cartera", "financiero", "comercio", "activos", "banca", "análisis", "cumplimiento", "riesgo", "auditoría", "contabilidad", "presupuesto", "pronóstico", "ingresos", "beneficio", "pérdida", "balance", "cuenta de resultados", "flujo de caja", "capital", "deuda", "crédito", "préstamo", "hipoteca"],
-      "Salud": ["paciente", "clínico", "médico", "salud", "cuidado", "tratamiento", "diagnóstico", "therapia", "hospital", "doctor", "enfermera", "médico", "cirujano", "farmacia", "medicamento", "receta", "diagnóstico", "pronóstico", "síntomas", "enfermedad", "malestar", "bienestar", "recuperación"],
-      "Marketing": ["campaña", "marca", "mercado", "estrategia", "audiencia", "contenido", "social", "medios", "publicidad", "promoción", "seo", "sem", "ppc", "conversión", "embudo", "compromiso", "retención", "adquisición", "cliente", "cliente", "demográfico", "psicográfico", "segmentación"],
-      "Ventas": ["ventas", "ingresos", "cuota", "tubería", "prospecto", "cliente potencial", "oportunidad", "cerrar", "acuerdo", "cliente", "cliente", "cuenta", "territorio", "región", "mercado", "up-sell", "cross-sell", "negociación", "présentation", "proposition", "contrat", "comisión", "bono"],
-      "Recursos Humanos": ["rrhh", "reclutar", "talento", "adquisición", "incorporación", "formación", "desarrollo", "desempeño", "revisión", "compensación", "beneficios", "nómina", "empleado", "retención", "compromiso", "cultura", "diversidad", "inclusión", "cumplimiento", "política", "procedimiento"],
-      "General": ["proyecto", "gestión", "equipo", "negocio", "cliente", "servicio", "proceso", "solución", "comunicación", "colaboración", "liderazgo", "organización", "planificación", "ejecución", "monitoreo", "evaluación", "informes", "presentación", "documentación"]
-    },
-    "fr": {
-      "Technologie": ["logiciel", "développement", "programmation", "api", "cloud", "infrastructure", "données", "analytique", "frontend", "backend", "fullstack", "devops", "agile", "scrum", "jira", "git", "aws", "azure", "javascript", "python", "java", "c#", "react", "angular", "vue", "node"],
-      "Finance": ["investissement", "portefeuille", "financier", "trading", "actifs", "banque", "analyse", "conformité", "risque", "audit", "comptabilité", "budget", "prévision", "revenu", "profit", "perte", "bilan", "compte de résultat", "flux de trésorerie", "capitaux propres", "dette", "crédit", "prêt", "hypothèque"],
-      "Santé": ["patient", "clinique", "médical", "santé", "soins", "traitement", "diagnostic", "thérapie", "hôpital", "médecin", "infirmière", "médecin", "chirurgien", "pharmacie", "médicament", "prescription", "diagnostic", "pronostic", "symptômes", "maladie", "maladie", "bien-être", "récupération"],
-      "Marketing": ["campagne", "marque", "marché", "stratégie", "audience", "contenu", "social", "médias", "publicité", "promotion", "seo", "sem", "ppc", "conversion", "entonnoir", "engagement", "rétention", "acquisition", "client", "client", "démographique", "psychographique", "segmentation"],
-      "Ventes": ["ventes", "revenu", "quota", "pipeline", "prospect", "lead", "opportunité", "clôture", "affaire", "client", "client", "compte", "territoire", "région", "marché", "up-sell", "cross-sell", "négociation", "présentation", "proposition", "contrat", "commission", "bonus"],
-      "Ressources Humaines": ["rh", "recruter", "talent", "acquisition", "intégration", "formation", "développement", "performance", "révision", "rémunération", "avantages", "paie", "employé", "rétention", "engagement", "culture", "diversité", "inclusion", "conformité", "politique", "procédure"],
-      "Général": ["projet", "gestion", "équipe", "entreprise", "client", "service", "processus", "solution", "communication", "collaboration", "leadership", "organisation", "planification", "exécution", "surveillance", "évaluation", "rapports", "présentation", "documentation"]
-    },
-    "de": {
-      "Technologie": ["software", "entwicklung", "programmierung", "api", "cloud", "infrastruktur", "daten", "analytik", "frontend", "backend", "fullstack", "devops", "agil", "scrum", "jira", "git", "aws", "azure", "javascript", "python", "java", "c#", "react", "angular", "vue", "node"],
-      "Finanzen": ["investition", "portfolio", "finanziell", "handel", "vermögenswerte", "bankwesen", "analyse", "compliance", "risiko", "prüfung", "buchhaltung", "budget", "prognose", "umsatz", "gewinn", "verlust", "bilanz", "gewinn- und verlustrechnung", "cashflow", "eigenkapital", "schulden", "kredit", "darlehen", "hypothek"],
-      "Gesundheitswesen": ["patient", "klinisch", "medizinisch", "gesundheit", "pflege", "behandlung", "diagnostik", "therapie", "krankenhaus", "arzt", "krankenschwester", "arzt", "chirurg", "apotheke", "medikament", "verschreibung", "diagnose", "prognose", "symptome", "krankheit", "erkrankung", "wellness", "genesung"],
-      "Marketing": ["kampagne", "marke", "markt", "strategie", "zielgruppe", "inhalt", "sozial", "medien", "werbung", "förderung", "seo", "sem", "ppc", "konversion", "trichter", "engagement", "bindung", "akquisition", "kunde", "klient", "demografisch", "psychografisch", "segmentierung"],
-      "Vertrieb": ["vertrieb", "umsatz", "quote", "pipeline", "prospect", "lead", "chance", "abschluss", "deal", "kunde", "klient", "konto", "territorium", "region", "markt", "up-selling", "cross-selling", "verhandlung", "präsentation", "vorschlag", "vertrag", "provision", "bonus"],
-      "Personal": ["hr", "rekrutieren", "talent", "akquisition", "onboarding", "training", "entwicklung", "leistung", "überprüfung", "vergütung", "benefits", "gehalt", "mitarbeiter", "bindung", "engagement", "kultur", "diversität", "inklusion", "compliance", "richtlinie", "verfahren"],
-      "Allgemein": ["projekt", "management", "team", "geschäft", "kunde", "service", "prozess", "lösung", "kommunikation", "zusammenarbeit", "führung", "organisation", "planung", "ausführung", "überwachung", "bewertung", "berichterstattung", "präsentation", "dokumentation"]
+  // Look for basic structure elements
+  const hasContact = /(?:phone|tel|email|address|location)[:. ]?/i.test(cvContent);
+  const hasEducation = /(?:education|university|college|degree|bachelor|master)[:. ]?/i.test(cvContent);
+  const hasExperience = /(?:experience|work history|employment|job)[:. ]?/i.test(cvContent);
+  const hasProfile = /(?:profile|summary|about me|objective)[:. ]?/i.test(cvContent);
+  
+  // Look for skills section and extract skills
+  let skillsExtracted: string[] = [];
+  
+  // Try to find a skills section using different patterns
+  const skillsRegex = /(?:skills|competencies|proficiencies|expertise|technologies|technical skills)[:\s]+((?:.+(?:\n|$))+)/i;
+  const skillsMatch = cvContent.match(skillsRegex);
+  
+  if (skillsMatch && skillsMatch[1]) {
+    const skillsContent = skillsMatch[1];
+    
+    // Extract skills from the skills section
+    // Look for bullet points, commas, or other separators
+    const bulletPointSkills = skillsContent.match(/[•\-\*][^\n•\-\*]*/g);
+    if (bulletPointSkills) {
+      skillsExtracted = bulletPointSkills.map(skill => 
+        skill.replace(/^[•\-\*\s]+/, '').trim()
+      ).filter(skill => skill.length > 1);
+    } else {
+      // Split by commas or new lines if no bullet points found
+      skillsExtracted = skillsContent
+        .split(/[,\n]/)
+        .map(skill => skill.trim())
+        .filter(skill => skill.length > 1 && !skill.match(/^[\d\.]+$/));
     }
-  };
+  }
   
-  // Define action verbs for achievement detection (multiple languages)
-  const ACTION_VERBS: Record<string, string[]> = {
-    "en": [
-      "achieved", "improved", "trained", "managed", "created", "increased", "reduced", "negotiated",
-      "developed", "led", "organized", "provided", "delivered", "generated", "implemented", "produced"
-    ],
-    "es": [
-      "logrado", "mejorado", "capacitado", "gestionado", "creado", "aumentado", "reducido", "negociado",
-      "desarrollado", "liderado", "organizado", "proporcionado", "entregado", "generado", "implementado", "producido"
-    ],
-    "fr": [
-      "réalisé", "amélioré", "formé", "géré", "créé", "augmenté", "réduit", "négocié",
-      "développé", "dirigé", "organisé", "fourni", "livré", "généré", "mis en œuvre", "produit"
-    ],
-    "de": [
-      "erreicht", "verbessert", "trainiert", "verwaltet", "erstellt", "erhöht", "reduziert", "verhandelt",
-      "entwickelt", "geleitet", "organisiert", "bereitgestellt", "geliefert", "generiert", "implementiert", "produziert"
-    ]
-  };
-  
-  // Define section names in multiple languages
-  const SECTION_NAMES: Record<string, Record<string, string[]>> = {
-    "en": {
-      "contact": ["contact", "email", "phone", "address", "linkedin"],
-      "education": ["education", "degree", "university", "college", "bachelor", "master", "phd"],
-      "experience": ["experience", "work", "employment", "job", "position", "role"],
-      "skills": ["skills", "proficient", "proficiency", "familiar", "expertise", "expert"],
-      "summary": ["summary", "profile", "objective", "about"]
-    },
-    "es": {
-      "contact": ["contacto", "email", "correo", "teléfono", "dirección", "linkedin"],
-      "education": ["educación", "formación", "título", "universidad", "licenciatura", "máster", "doctorado"],
-      "experience": ["experiencia", "trabajo", "empleo", "puesto", "posición", "rol"],
-      "skills": ["habilidades", "competencias", "capacidades", "destrezas", "conocimientos"],
-      "summary": ["resumen", "perfil", "objetivo", "sobre mí"]
-    },
-    "fr": {
-      "contact": ["contact", "email", "courriel", "téléphone", "adresse", "linkedin"],
-      "education": ["éducation", "formation", "diplôme", "université", "licence", "master", "doctorat"],
-      "experience": ["expérience", "travail", "emploi", "poste", "position", "rôle"],
-      "skills": ["compétences", "aptitudes", "connaissances", "expertise", "maîtrise"],
-      "summary": ["résumé", "profil", "objectif", "à propos"]
-    },
-    "de": {
-      "contact": ["kontakt", "email", "telefon", "adresse", "linkedin"],
-      "education": ["bildung", "ausbildung", "studium", "universität", "bachelor", "master", "promotion"],
-      "experience": ["erfahrung", "arbeit", "beschäftigung", "beruf", "position", "rolle"],
-      "skills": ["fähigkeiten", "kenntnisse", "kompetenzen", "fertigkeiten", "expertise"],
-      "summary": ["zusammenfassung", "profil", "ziel", "über mich"]
+  // If no skills section found, try to extract skills from the content
+  if (skillsExtracted.length === 0) {
+    // Common technical skills
+    const techSkillsPattern = /\b(?:java|python|javascript|typescript|react|node\.js|angular|vue\.js|c\+\+|html|css|sql|nosql|aws|azure|cloud|docker|kubernetes|terraform|git|agile|scrum|ml|ai|data science)\b/gi;
+    const techMatches = cvContent.match(techSkillsPattern);
+    
+    // Common soft skills
+    const softSkillsPattern = /\b(?:leadership|communication|teamwork|problem.solving|analytical|project management|time management|creativity|adaptability|collaboration)\b/gi;
+    const softMatches = cvContent.match(softSkillsPattern);
+    
+    // Combine and deduplicate
+    if (techMatches || softMatches) {
+      const allSkills = [...(techMatches || []), ...(softMatches || [])];
+      const uniqueSkills = [...new Set(allSkills.map(s => s.trim()))];
+      skillsExtracted = uniqueSkills.filter(s => s.length > 2);
     }
-  };
+  }
   
-  // Get keywords for the detected language (fallback to English)
-  const industryKeywords = INDUSTRY_KEYWORDS[language] || INDUSTRY_KEYWORDS["en"];
-  const actionVerbs = ACTION_VERBS[language] || ACTION_VERBS["en"];
-  const sectionNames = SECTION_NAMES[language] || SECTION_NAMES["en"];
+  // Ensure skills are non-empty and unique
+  analysis.skills = [...new Set(skillsExtracted)].filter(Boolean);
   
-  // Check for key elements based on language
-  const hasContact = new RegExp(sectionNames.contact.join("|"), "i").test(normalizedText);
-  const hasEducation = new RegExp(sectionNames.education.join("|"), "i").test(normalizedText);
-  const hasExperience = new RegExp(sectionNames.experience.join("|"), "i").test(normalizedText);
-  const hasSkills = new RegExp(sectionNames.skills.join("|"), "i").test(normalizedText);
-  const hasSummary = new RegExp(sectionNames.summary.join("|"), "i").test(normalizedText);
+  // Detect industry based on content keywords
+  const industries = [
+    'Technology', 'Finance', 'Healthcare', 'Education', 'Marketing',
+    'Manufacturing', 'Retail', 'Consulting', 'Law', 'Engineering',
+    'Media', 'Hospitality', 'Automotive', 'Agriculture', 'Energy',
+    'Real Estate', 'Transportation', 'Telecommunications', 'Pharmaceutical'
+  ];
   
-  // Count action verbs
-  let actionVerbCount = 0;
-  const actionVerbMatches: Record<string, number> = {};
-  
-  actionVerbs.forEach(verb => {
-    const regex = new RegExp(`\\b${verb}\\b`, 'gi');
-    const matches = normalizedText.match(regex);
-    if (matches) {
-      actionVerbCount += matches.length;
-      actionVerbMatches[verb] = matches.length;
-    }
-  });
-  
-  // Count metrics (numbers followed by % or other indicators)
-  const metricsMatches = normalizedText.match(/\b\d+\s*(?:%|percent|million|billion|k|thousand|users|clients|customers|increase|decrease|growth)\b/gi);
-  const metricsCount = metricsMatches ? metricsMatches.length : 0;
-  
-  // Assess keyword relevance by industry
-  const keywordsByIndustry: Record<string, number> = {};
-  const keywordMatches: Record<string, number> = {};
-  
-  Object.entries(industryKeywords).forEach(([industry, keywords]) => {
-    let count = 0;
-    keywords.forEach(keyword => {
+  // Calculate industry scores based on keyword matches
+  const industryScores = industries.map(industry => {
+    const keywords = getIndustryKeywords(industry);
+    const score = keywords.reduce((total, keyword) => {
       const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
-      const matches = normalizedText.match(regex);
-      if (matches) {
-        count += matches.length;
-        keywordMatches[keyword] = (keywordMatches[keyword] || 0) + matches.length;
-      }
+      const matches = (cvContent.match(regex) || []).length;
+      return total + matches;
+    }, 0);
+    return { industry, score };
+  });
+  
+  // Find the industry with the highest score
+  const topIndustry = industryScores.sort((a, b) => b.score - a.score)[0];
+  analysis.industry = topIndustry.industry;
+  
+  // If we have industry information, sort skills by relevance to the industry
+  if (analysis.industry && analysis.skills.length > 0) {
+    // Get industry-specific keywords
+    const industryKeywords = getIndustryKeywords(analysis.industry);
+    
+    // Sort skills by relevance to the industry
+    analysis.skills.sort((a: string, b: string) => {
+      // Higher score for skills that match industry keywords
+      const aIsIndustryRelevant = industryKeywords.some(keyword => 
+        a.toLowerCase().includes(keyword.toLowerCase())
+      );
+      const bIsIndustryRelevant = industryKeywords.some(keyword => 
+        b.toLowerCase().includes(keyword.toLowerCase())
+      );
+      
+      if (aIsIndustryRelevant && !bIsIndustryRelevant) return -1;
+      if (!aIsIndustryRelevant && bIsIndustryRelevant) return 1;
+      
+      // If both are industry-relevant or both are not, secondary sort by length
+      return a.length - b.length;
     });
-    keywordsByIndustry[industry] = count;
-  });
+  }
   
-  // Determine most likely industry
-  let topIndustry = Object.keys(industryKeywords)[0]; // Default to first industry in current language
-  let topCount = 0;
-  Object.entries(keywordsByIndustry).forEach(([industry, count]) => {
-    if (count > topCount) {
-      topIndustry = industry;
-      topCount = count;
-    }
-  });
+  // Calculate approximate ATS score
+  let score = 60; // Base score
   
-  // Calculate ATS score based on multiple factors
-  let atsScore = 50; // Start at 50
+  // Add points for structure
+  if (hasContact) score += 5;
+  if (hasEducation) score += 5;
+  if (hasExperience) score += 10;
+  if (hasProfile) score += 5;
   
-  // Add points for having essential sections (up to 20 points)
-  if (hasContact) atsScore += 5;
-  if (hasEducation) atsScore += 5;
-  if (hasExperience) atsScore += 5;
-  if (hasSkills) atsScore += 5;
-  if (hasSummary) atsScore += 5;
+  // Look for action verbs and achievements
+  const actionVerbsPattern = /\b(led|managed|developed|created|implemented|achieved|improved|increased|reduced|designed|launched|negotiated|delivered)\b/gi;
+  const actionVerbs = cvContent.match(actionVerbsPattern) || [];
+  const hasActionVerbs = actionVerbs.length > 0;
   
-  // Add points for action verbs (up to 15 points)
-  atsScore += Math.min(15, Math.floor(actionVerbCount / 2));
+  if (hasActionVerbs) score += 5;
   
-  // Add points for metrics (up to 15 points)
-  atsScore += Math.min(15, metricsCount * 3);
+  // Check for measurable results
+  const measurableResultsPattern = /\b(\d+%|\$\d+|increased|decreased|reduced|improved|by \d+)\b/gi;
+  const measurableResults = cvContent.match(measurableResultsPattern) || [];
+  const hasMeasurableResults = measurableResults.length > 0;
   
-  // Add points for industry relevance (up to 15 points)
-  atsScore += Math.min(15, topCount);
+  if (hasMeasurableResults) score += 5;
   
-  // Ensure score is between 0-100
-  atsScore = Math.max(0, Math.min(100, atsScore));
+  // Check length - too short might be an issue
+  if (cvContent.length < 1500) score -= 10;
   
-  // Sort keywords by frequency
-  const sortedKeywords = Object.entries(keywordMatches)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .reduce((obj, [key, value]) => {
-      obj[key] = value;
-      return obj;
-    }, {} as Record<string, number>);
-  
-  // Define strengths and weaknesses messages for each language
-  const MESSAGES: Record<string, {
-    strengths: Record<string, string>;
-    weaknesses: Record<string, string>;
-    recommendations: Record<string, string>;
-  }> = {
-    "en": {
-      strengths: {
-        contact: "Contact information is present",
-        education: "Education section is included",
-        experience: "Work experience is detailed",
-        skills: "Skills section is present",
-        actionVerbs: "Good use of action verbs",
-        metrics: "Metrics are included to quantify achievements"
-      },
-      weaknesses: {
-        contact: "Contact information could be clearer",
-        education: "Education section could be enhanced",
-        experience: "Work experience section needs more detail",
-        skills: "Skills section is missing or incomplete",
-        actionVerbs: "Could use more action verbs",
-        metrics: "No metrics used to quantify achievements"
-      },
-      recommendations: {
-        sections: "Ensure all key sections are included: contact, summary, experience, education, and skills",
-        actionVerbs: "Add more action verbs to describe achievements (e.g., achieved, implemented, led)",
-        metrics: "Quantify achievements with specific metrics and percentages where possible"
-      }
-    },
-    "es": {
-      strengths: {
-        contact: "La información de contacto está presente",
-        education: "Se incluye sección de educación",
-        experience: "La experiencia laboral está detallada",
-        skills: "La sección de habilidades está presente",
-        actionVerbs: "Buen uso de verbos de acción",
-        metrics: "Se incluyen métricas para cuantificar logros"
-      },
-      weaknesses: {
-        contact: "La información de contacto podría ser más clara",
-        education: "La sección de educación podría mejorarse",
-        experience: "La sección de experiencia laboral necesita más detalle",
-        skills: "La sección de habilidades está ausente o incompleta",
-        actionVerbs: "Podría usar más verbos de acción",
-        metrics: "No se utilizan métricas para cuantificar logros"
-      },
-      recommendations: {
-        sections: "Asegúrate de incluir todas las secciones clave: contacto, resumen, experiencia, educación y habilidades",
-        actionVerbs: "Añade más verbos de acción para describir logros (por ejemplo, logrado, implementado, liderado)",
-        metrics: "Cuantifica logros con métricas específicas y porcentajes donde sea posible"
-      }
-    },
-    "fr": {
-      strengths: {
-        contact: "Les informations de contact sont présentes",
-        education: "La section formation est incluse",
-        experience: "L'expérience professionnelle est détaillée",
-        skills: "La section compétences est présente",
-        actionVerbs: "Bonne utilisation des verbes d'action",
-        metrics: "Des métriques sont incluses pour quantifier les réalisations"
-      },
-      weaknesses: {
-        contact: "Les informations de contact pourraient être plus claires",
-        education: "La section formation pourrait être améliorée",
-        experience: "La section expérience professionnelle nécessite plus de détails",
-        skills: "La section compétences est manquante ou incomplète",
-        actionVerbs: "Pourrait utiliser plus de verbes d'action",
-        metrics: "Aucune métrique utilisée pour quantifier les réalisations"
-      },
-      recommendations: {
-        sections: "Assurez-vous d'inclure toutes les sections clés : contact, résumé, expérience, formation et compétences",
-        actionVerbs: "Ajoutez plus de verbes d'action pour décrire vos réalisations (par exemple, réalisé, mis en œuvre, dirigé)",
-        metrics: "Quantifiez les réalisations avec des métriques spécifiques et des pourcentages lorsque c'est possible"
-      }
-    },
-    "de": {
-      strengths: {
-        contact: "Kontaktinformationen sind vorhanden",
-        education: "Bildungsabschnitt ist enthalten",
-        experience: "Berufserfahrung ist detailliert",
-        skills: "Fähigkeiten-Abschnitt ist vorhanden",
-        actionVerbs: "Gute Verwendung von Aktionsverben",
-        metrics: "Metriken zur Quantifizierung von Leistungen sind enthalten"
-      },
-      weaknesses: {
-        contact: "Kontaktinformationen könnten klarer sein",
-        education: "Bildungsabschnitt könnte verbessert werden",
-        experience: "Abschnitt zur Berufserfahrung benötigt mehr Details",
-        skills: "Fähigkeiten-Abschnitt fehlt oder ist unvollständig",
-        actionVerbs: "Könnte mehr Aktionsverben verwenden",
-        metrics: "Keine Metriken zur Quantifizierung von Leistungen"
-      },
-      recommendations: {
-        sections: "Stellen Sie sicher, dass alle wichtigen Abschnitte enthalten sind: Kontakt, Zusammenfassung, Erfahrung, Bildung und Fähigkeiten",
-        actionVerbs: "Fügen Sie mehr Aktionsverben hinzu, um Leistungen zu beschreiben (z.B. erreicht, implementiert, geleitet)",
-        metrics: "Quantifizieren Sie Leistungen mit spezifischen Metriken und Prozentsätzen, wo möglich"
-      }
-    }
-  } as const;
-  
-  // Use language specific messages or default to English
-  const messages = MESSAGES[language] || MESSAGES["en"];
+  // Cap the score at 100
+  analysis.atsScore = Math.min(100, Math.max(1, score));
   
   // Generate strengths
-  const strengths = [];
-  if (hasContact) strengths.push(messages.strengths.contact);
-  if (hasEducation) strengths.push(messages.strengths.education);
-  if (hasExperience) strengths.push(messages.strengths.experience);
-  if (hasSkills) strengths.push(messages.strengths.skills);
-  if (actionVerbCount > 5) strengths.push(messages.strengths.actionVerbs);
-  if (metricsCount > 0) strengths.push(messages.strengths.metrics);
+  if (hasContact) analysis.strengths.push('Includes contact information');
+  if (hasProfile) analysis.strengths.push('Includes a professional summary');
+  if (hasExperience) analysis.strengths.push('Details work experience');
+  if (hasEducation) analysis.strengths.push('Includes educational background');
+  if (hasActionVerbs) analysis.strengths.push('Uses strong action verbs');
+  if (hasMeasurableResults) analysis.strengths.push('Quantifies achievements with measurable results');
+  if (analysis.skills.length > 0) analysis.strengths.push(`Includes ${analysis.skills.length} relevant skills`);
   
   // Generate weaknesses
-  const weaknesses = [];
-  if (!hasContact) weaknesses.push(messages.weaknesses.contact);
-  if (!hasEducation) weaknesses.push(messages.weaknesses.education);
-  if (!hasExperience) weaknesses.push(messages.weaknesses.experience);
-  if (!hasSkills) weaknesses.push(messages.weaknesses.skills);
-  if (actionVerbCount < 5) weaknesses.push(messages.weaknesses.actionVerbs);
-  if (metricsCount === 0) weaknesses.push(messages.weaknesses.metrics);
+  if (!hasContact) analysis.weaknesses.push('Missing contact information');
+  if (!hasProfile) analysis.weaknesses.push('Missing professional summary');
+  if (!hasExperience) analysis.weaknesses.push('Work experience section needs enhancement');
+  if (!hasEducation) analysis.weaknesses.push('Educational background should be included');
+  if (!hasActionVerbs) analysis.weaknesses.push('Needs stronger action verbs');
+  if (!hasMeasurableResults) analysis.weaknesses.push('Should quantify achievements with metrics');
+  if (cvContent.length < 1500) analysis.weaknesses.push('CV is too short, consider adding more details');
+  if (analysis.skills.length < 5) analysis.weaknesses.push('Skills section needs enhancement with more relevant skills');
   
   // Generate recommendations
-  const recommendations = [];
-  if (!hasContact || !hasEducation || !hasExperience || !hasSkills) {
-    recommendations.push(messages.recommendations.sections);
-  }
-  if (actionVerbCount < 5) {
-    recommendations.push(messages.recommendations.actionVerbs);
-  }
-  if (metricsCount === 0) {
-    recommendations.push(messages.recommendations.metrics);
-  }
+  if (!hasContact) analysis.recommendations.push('Add complete contact information including phone, email, and LinkedIn');
+  if (!hasProfile) analysis.recommendations.push('Add a compelling professional summary that highlights your value proposition');
+  if (!hasExperience) analysis.recommendations.push('Enhance work experience section with detailed responsibilities and achievements');
+  if (!hasEducation) analysis.recommendations.push('Include your educational background with degrees, institutions, and graduation dates');
+  if (!hasActionVerbs) analysis.recommendations.push('Use strong action verbs to describe your achievements');
+  if (!hasMeasurableResults) analysis.recommendations.push('Quantify your achievements with specific numbers and percentages');
+  if (analysis.skills.length < 5) analysis.recommendations.push('Expand your skills section with relevant technical and soft skills');
   
-  // Return analysis results with language information
-  return {
-    atsScore,
-    language,
-    industry: topIndustry,
-    keywordAnalysis: sortedKeywords,
-    strengths: strengths.slice(0, 3),
-    weaknesses: weaknesses.slice(0, 3),
-    recommendations: recommendations.slice(0, 3),
-    formattingStrengths: [
-      messages.strengths.contact,
-      "Section headers are clear",
-      "Content length is appropriate"
-    ],
-    formattingWeaknesses: [
-      "Format could be more consistent",
-      messages.weaknesses.actionVerbs,
-      "Content could be more focused"
-    ],
-    formattingRecommendations: [
-      messages.recommendations.sections,
-      messages.recommendations.actionVerbs,
-      "Use consistent formatting throughout the document"
-    ]
-  };
+  // Return the analysis
+  return analysis;
 }
 
 /**
