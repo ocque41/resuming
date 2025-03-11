@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Download, RefreshCw, FileText, Check, Eye, Clock, Info } from "lucide-react";
+import { AlertCircle, Download, RefreshCw, FileText, Check, Eye, Clock, Info, Loader2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import PDFPreview from './PDFPreview.client';
 import ComparisonView from './ComparisonView.client';
@@ -841,22 +841,27 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     }
   }, [debugMode, isProcessing, selectedCVId, pollForStatus]);
 
-  // Render PDF preview in a more robust way
+  // Update the PDF preview section
   const renderPDFPreview = () => {
-    if (!showPdfPreview) {
-      return null;
-    }
-    
     if (!pdfBase64) {
-  return (
-        <div className="mt-4 w-full h-96 border border-gray-700 rounded-lg overflow-hidden flex items-center justify-center">
+      return (
+        <div className="mt-4 w-full h-96 border border-gray-700 rounded-lg overflow-hidden flex items-center justify-center bg-[#050505]">
           <div className="text-center">
-            <div className="text-red-400 mb-2">PDF preview not available</div>
+            <FileText className="h-12 w-12 mx-auto text-gray-400 mb-2" />
+            <p className="text-sm text-gray-400 mb-4">PDF preview not available yet</p>
             <Button 
-              onClick={() => handleConvertToPdf(docxBase64 || '')}
-              className="px-4 py-2 bg-[#B4916C] hover:bg-[#A3815C] text-white rounded-md"
+              variant="outline" 
+              size="sm" 
+              onClick={() => refreshPDF(true)}
+              disabled={isPDFRefreshing}
+              className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
             >
-              Generate PDF
+              {isPDFRefreshing ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Generate PDF Preview
             </Button>
           </div>
         </div>
@@ -866,13 +871,22 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     // Check if PDF data is valid
     if (pdfBase64.length < 100) {
       return (
-        <div className="mt-4 w-full h-96 border border-gray-700 rounded-lg overflow-hidden flex items-center justify-center">
+        <div className="mt-4 w-full h-96 border border-gray-700 rounded-lg overflow-hidden flex items-center justify-center bg-[#050505]">
           <div className="text-center">
-            <div className="text-red-400 mb-2">Invalid PDF data</div>
+            <AlertCircle className="h-12 w-12 mx-auto text-red-400 mb-2" />
+            <p className="text-sm text-red-400 mb-4">Invalid PDF data</p>
             <Button 
-              onClick={() => handleConvertToPdf(docxBase64 || '')}
-              className="px-4 py-2 bg-[#B4916C] hover:bg-[#A3815C] text-white rounded-md"
+              variant="outline" 
+              size="sm" 
+              onClick={() => refreshPDF(true)}
+              disabled={isPDFRefreshing}
+              className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
             >
+              {isPDFRefreshing ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
               Try Again
             </Button>
           </div>
@@ -880,15 +894,103 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       );
     }
     
-    return (
-      <div className="mt-4 w-full border border-gray-700 rounded-lg overflow-hidden" style={{ height: "500px" }}>
-        <PDFPreview 
-          pdfData={pdfBase64}
-          fileName={`${selectedCVName?.replace(/\.[^/.]+$/, '') || 'optimized'}_enhanced.pdf`}
-          onDownload={downloadPDF}
-                  />
-                </div>
-    );
+    try {
+      // Create a blob URL for the PDF preview
+      const pdfBlob = base64ToBlob(pdfBase64, 'application/pdf');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      
+      return (
+        <div className="mt-4 w-full border border-gray-700 rounded-lg overflow-hidden bg-[#050505]">
+          <div className="flex justify-between items-center p-2 bg-gray-800">
+            <h3 className="text-sm font-medium text-gray-300">PDF Preview</h3>
+            <div className="flex space-x-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => refreshPDF(true)}
+                disabled={isPDFRefreshing}
+                className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
+              >
+                {isPDFRefreshing ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Refresh PDF
+              </Button>
+              <Button 
+                variant="default" 
+                size="sm" 
+                onClick={downloadPDF}
+                disabled={isDownloading}
+                className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
+              >
+                {isDownloading ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
+                )}
+                Download PDF
+              </Button>
+            </div>
+          </div>
+          <iframe 
+            src={pdfUrl} 
+            className="w-full h-[500px]" 
+            title="PDF Preview"
+          />
+        </div>
+      );
+    } catch (error) {
+      console.error('Error creating PDF preview:', error);
+      return (
+        <div className="mt-4 w-full h-96 border border-gray-700 rounded-lg overflow-hidden flex items-center justify-center bg-[#050505]">
+          <div className="text-center">
+            <AlertCircle className="h-12 w-12 mx-auto text-red-400 mb-2" />
+            <p className="text-sm text-red-400 mb-4">Error creating PDF preview: {error instanceof Error ? error.message : 'Unknown error'}</p>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => refreshPDF(true)}
+              disabled={isPDFRefreshing}
+              className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
+            >
+              {isPDFRefreshing ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Try Again
+            </Button>
+          </div>
+        </div>
+      );
+    }
+  };
+
+  // Helper function to convert base64 to Blob
+  const base64ToBlob = (base64: string, mimeType: string) => {
+    try {
+      const byteCharacters = atob(base64);
+      const byteArrays = [];
+      
+      for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+        const slice = byteCharacters.slice(offset, offset + 512);
+        
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {
+          byteNumbers[i] = slice.charCodeAt(i);
+        }
+        
+        const byteArray = new Uint8Array(byteNumbers);
+        byteArrays.push(byteArray);
+      }
+      
+      return new Blob(byteArrays, { type: mimeType });
+    } catch (error) {
+      console.error('Error converting base64 to blob:', error);
+      throw error;
+    }
   };
 
   // Update both functions for more reliable PDF handling

@@ -97,6 +97,7 @@
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^1.1.1",
     "pdfjs-dist": "^4.10.38",
+    "pdfmake": "^0.2.18",
     "pg-connection-string": "^2.7.0",
     "postgres": "^3.4.3",
     "react": "18.2.0",
