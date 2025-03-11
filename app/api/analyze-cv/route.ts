@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     const cvId = searchParams.get("cvId");
 
     // Early validations with helpful error messages
-    if (!fileName) {
+  if (!fileName) {
       console.error("Missing fileName parameter in analyze-cv request");
       return new Response(JSON.stringify({ 
         error: "Missing fileName parameter",

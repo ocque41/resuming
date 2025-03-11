@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
         status: 401, headers: { "Content-Type": "application/json" }
       });
     }
-
+    
     // Parse request body
     const body = await request.json();
     const { cvId, docxBase64 } = body;
@@ -61,21 +61,21 @@ export async function POST(request: NextRequest) {
 
     if (cvId) {
       // Fetch the CV record
-      const cvRecord = await db.query.cvs.findFirst({
+    const cvRecord = await db.query.cvs.findFirst({
         where: eq(cvs.id, parseInt(cvId))
-      });
-
-      if (!cvRecord) {
+    });
+    
+    if (!cvRecord) {
         return new Response(JSON.stringify({ error: "CV not found" }), {
           status: 404, headers: { "Content-Type": "application/json" }
         });
-      }
-
-      // Parse metadata
+    }
+    
+    // Parse metadata
       let metadata: CVMetadata = {};
-      try {
-        metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
-      } catch (error) {
+    try {
+      metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
+    } catch (error) {
         logger.error(`Error parsing metadata for CV ${cvId}:`, error);
       }
 

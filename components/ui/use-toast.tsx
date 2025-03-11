@@ -1,0 +1,22 @@
+import { toast as sonnerToast } from "sonner";
+
+type ToastProps = {
+  title: string;
+  description?: string;
+  duration?: number;
+  variant?: "default" | "destructive";
+};
+
+export function toast({ title, description, duration = 3000, variant = "default" }: ToastProps) {
+  if (variant === "destructive") {
+    return sonnerToast.error(title, {
+      description,
+      duration,
+    });
+  }
+
+  return sonnerToast(title, {
+    description,
+    duration,
+  });
+} 

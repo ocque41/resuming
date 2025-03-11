@@ -12,6 +12,8 @@ import ComparisonView from './ComparisonView.client';
 import OptimizationHistory from './OptimizationHistory.client';
 import { cacheDocument, getCachedDocument, updateCachedPDF, clearCachedDocument, getCacheAge, getHistoryVersion } from "@/lib/cache/documentCache";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "@/components/ui/use-toast";
+import { saveAs } from "file-saver";
 
 // Modern SimpleFileDropdown component
 function ModernFileDropdown({ 
@@ -145,6 +147,14 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   const [debugMode, setDebugMode] = useState<boolean>(false);
   const [debugInfo, setDebugInfo] = useState<any>(null);
   
+  // Add new states for PDF download
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [downloadError, setDownloadError] = useState<string>("");
+  const [pdfData, setPdfData] = useState<string | null>(null);
+  
+  // Add new states for PDF refreshing
+  const [isPDFRefreshing, setIsPDFRefreshing] = useState<boolean>(false);
+  
   // Auto-select first CV if available
   useEffect(() => {
     if (cvs.length > 0 && !selectedCVId) {
@@ -246,7 +256,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       if (versionData.pdfBase64) {
         setPdfBase64(versionData.pdfBase64);
         setPdfConverted(true);
-      } else {
+    } else {
         setPdfBase64(null);
         setPdfConverted(false);
       }
@@ -321,7 +331,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         document.body.appendChild(downloadLink);
         downloadLink.click();
         document.body.removeChild(downloadLink);
-      } catch (error) {
+    } catch (error) {
         console.error(`Error downloading ${format.toUpperCase()}:`, error);
         setError(`Failed to download ${format.toUpperCase()}. The file may be corrupted.`);
       }
@@ -398,7 +408,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         
         setPdfBase64(mockBase64);
         setPdfConverted(true);
-        setIsConvertingToPdf(false);
+      setIsConvertingToPdf(false);
         setPdfProgress(100);
       }, 1500);
     }
@@ -445,62 +455,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       setErrorType('docx');
     }
   }, [docxBase64, selectedCVName]);
-
-  // Fix the PDF download functionality
-  const handleDownloadPdf = useCallback(() => {
-    if (!pdfBase64) {
-      console.error("Cannot download PDF: No PDF data available");
-      setError("PDF data is not available. Please try converting again.");
-      setErrorType('pdf');
-      return;
-    }
-    
-    try {
-      // Validate the base64 data
-      if (!pdfBase64 || typeof pdfBase64 !== 'string' || pdfBase64.trim() === '') {
-        throw new Error("Invalid PDF data");
-      }
-      
-      // Create a blob from the base64 data
-      const byteCharacters = atob(pdfBase64);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], {type: 'application/pdf'});
-      
-      // Create a URL for the blob
-      const blobUrl = URL.createObjectURL(blob);
-      
-      // Create and trigger download using a hidden iframe approach
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      document.body.appendChild(iframe);
-      
-      iframe.onload = () => {
-        // Once iframe is loaded, navigate to PDF
-        if (iframe.contentWindow) {
-          iframe.contentWindow.location.href = blobUrl;
-          
-          // Set up cleanup to run after the download starts
-          setTimeout(() => {
-            URL.revokeObjectURL(blobUrl);
-            document.body.removeChild(iframe);
-          }, 1000);
-        }
-      };
-      
-      // Using about:blank to avoid cross-origin issues
-      iframe.src = 'about:blank';
-      
-      console.log("PDF download initiated successfully");
-    } catch (error) {
-      console.error("Error downloading PDF:", error);
-      setError("Failed to download PDF. The file may be corrupted. Please try again.");
-      setErrorType('pdf');
-    }
-  }, [pdfBase64]);
 
   // Update the handleGenerateDocx function to properly handle document generation
   const handleGenerateDocx = useCallback(async () => {
@@ -676,10 +630,10 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         
         // Handle process completion
         if (data.isComplete) {
-          setIsProcessed(true);
+            setIsProcessed(true);
           setIsProcessing(false);
-          setProgress(100);
-          
+            setProgress(100);
+            
           // Update optimized text if available
           if (data.optimizedText) {
             setOptimizedText(data.optimizedText);
@@ -691,7 +645,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
           }
           
           // Start document generation
-          handleGenerateDocx();
+              handleGenerateDocx();
         } 
         // Continue polling if still processing and not complete
         else if (data.processing) {
@@ -702,8 +656,8 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred while checking the optimization status.');
-      setErrorType('process');
-      setIsProcessing(false);
+            setErrorType('process');
+            setIsProcessing(false);
       console.error('Error polling for status:', err);
     }
   }, [selectedCVId, debugMode, handleGenerateDocx]);
@@ -758,7 +712,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   const handleStuckProcess = useCallback(() => {
     processCV(true); // Force refresh
   }, [processCV]);
-
+  
   // Memoize the processing button state
   const processingButtonDisabled = useMemo(() => {
     return !selectedCVId || isProcessing;
@@ -894,7 +848,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     }
     
     if (!pdfBase64) {
-      return (
+  return (
         <div className="mt-4 w-full h-96 border border-gray-700 rounded-lg overflow-hidden flex items-center justify-center">
           <div className="text-center">
             <div className="text-red-400 mb-2">PDF preview not available</div>
@@ -931,10 +885,152 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         <PDFPreview 
           pdfData={pdfBase64}
           fileName={`${selectedCVName?.replace(/\.[^/.]+$/, '') || 'optimized'}_enhanced.pdf`}
-          onDownload={handleDownloadPdf}
-        />
-      </div>
+          onDownload={downloadPDF}
+                  />
+                </div>
     );
+  };
+
+  // Update both functions for more reliable PDF handling
+  const downloadPDF = async () => {
+    if (!selectedCVId) return;
+    
+    setIsDownloading(true);
+    setDownloadError('');
+    
+    try {
+      // Check if we have PDF data in the cache first
+      const cachedDoc = getCachedDocument(selectedCVId);
+      
+      if (cachedDoc?.pdfBase64) {
+        // Use cached PDF if available
+        const pdfBlob = await fetch(`data:application/pdf;base64,${cachedDoc.pdfBase64}`)
+          .then(res => res.blob());
+        
+        saveAs(pdfBlob, `${selectedCVName || 'optimized-cv'}.pdf`);
+        setIsDownloading(false);
+        return;
+      }
+      
+      // If no cached PDF, fetch from API
+      const response = await fetch('/api/cv/convert-to-pdf', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ cvId: selectedCVId }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error downloading PDF');
+      }
+      
+      const data = await response.json();
+      
+      if (!data.pdfBase64 || data.pdfBase64.trim() === '') {
+        throw new Error('Empty PDF data received');
+      }
+      
+      // Validate PDF data by checking for PDF header
+      if (!data.pdfBase64.startsWith('JVBER')) {
+        throw new Error('Invalid PDF data received');
+      }
+      
+      // Cache the PDF data
+      if (cachedDoc) {
+        updateCachedPDF(selectedCVId, data.pdfBase64);
+      }
+      
+      // Create and download the blob
+      const pdfBlob = await fetch(`data:application/pdf;base64,${data.pdfBase64}`)
+        .then(res => res.blob());
+      
+      if (pdfBlob.size < 100) {
+        throw new Error('PDF file is too small and may be corrupt');
+      }
+      
+      saveAs(pdfBlob, `${selectedCVName || 'optimized-cv'}.pdf`);
+      
+      // Update state for preview
+      setPdfData(data.pdfBase64);
+      setPdfBase64(data.pdfBase64);
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      setDownloadError(error instanceof Error ? error.message : 'Failed to download PDF');
+      setError(error instanceof Error ? error.message : 'Failed to download PDF');
+      setErrorType('pdf');
+      
+      // Attempt regeneration if there was an error
+      await refreshPDF(true);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  // Improved refreshPDF function with force option and better error handling
+  const refreshPDF = async (force = false) => {
+    if (!selectedCVId) return;
+    
+    setIsPDFRefreshing(true);
+    setDownloadError('');
+    
+    try {
+      // First try to generate a new PDF
+      const response = await fetch('/api/cv/convert-to-pdf', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          cvId: selectedCVId,
+          forceRefresh: true // Always force a fresh generation
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error refreshing PDF');
+      }
+      
+      const data = await response.json();
+      
+      if (!data.pdfBase64 || data.pdfBase64.trim() === '') {
+        throw new Error('Empty PDF data received during refresh');
+      }
+      
+      // Update the cache with the new PDF
+      const cachedDoc = getCachedDocument(selectedCVId);
+      if (cachedDoc) {
+        updateCachedPDF(selectedCVId, data.pdfBase64);
+      }
+      
+      // Update state for preview
+      setPdfData(data.pdfBase64);
+      setPdfBase64(data.pdfBase64);
+      
+      // Show success toast
+      toast({
+        title: "PDF Regenerated",
+        description: "Your PDF has been successfully regenerated.",
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error('Error refreshing PDF:', error);
+      setDownloadError(error instanceof Error ? error.message : 'Failed to refresh PDF');
+      setError(error instanceof Error ? error.message : 'Failed to refresh PDF');
+      setErrorType('pdf');
+      
+      // Show error toast
+      toast({
+        title: "PDF Regeneration Failed",
+        description: error instanceof Error ? error.message : 'Could not regenerate the PDF file',
+        variant: "destructive",
+        duration: 5000,
+      });
+    } finally {
+      setIsPDFRefreshing(false);
+    }
   };
 
   return (
@@ -942,14 +1038,14 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       <CardHeader className="pb-4">
         <CardTitle className="text-xl text-white flex justify-between items-center">
           <span>Optimize CV</span>
-          <Button 
+                <Button
             variant="ghost" 
             size="sm" 
             className="h-8 text-gray-500 hover:text-white hover:bg-gray-800"
             onClick={toggleDebugMode}
           >
             {debugMode ? 'Hide Debug' : 'Debug Mode'}
-          </Button>
+                </Button>
         </CardTitle>
       </CardHeader>
       
@@ -983,7 +1079,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                   {debugInfo.rawMetadata?.lastUpdated 
                     ? new Date(debugInfo.rawMetadata.lastUpdated).toLocaleString() 
                     : 'Not available'}
-                </div>
+              </div>
               </div>
               
               {/* Advanced Debug Toggle */}
@@ -1031,19 +1127,19 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                   <div>
                     Processing appears to be stuck at {progress}% for {stuckMinutes} minutes.
                   </div>
-                  <Button 
+                <Button 
                     variant="outline" 
                     size="sm" 
                     className="mt-2 bg-amber-800 hover:bg-amber-700 border-amber-700 text-white w-fit" 
                     onClick={handleStuckProcess}
-                  >
-                    <RefreshCw className="h-4 w-4 mr-2" />
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
                     Restart Processing
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            )}
-          </div>
+                </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+              </div>
         )}
         
         {/* CV Selection */}
@@ -1059,7 +1155,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             }} 
             selectedCVName={selectedCVName}
           />
-        </div>
+            </div>
         
         {/* Error Display */}
         {error && (
@@ -1111,44 +1207,44 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
               
               <TabsContent value="results" className="pt-4">
                 <div className="flex justify-between items-center flex-wrap gap-2">
-                  <h3 className="text-lg font-semibold text-white">ATS Score Improvement</h3>
-                  <div className="flex items-center space-x-4">
-                    <div className="text-gray-400">
-                      <span className="block text-center">{originalAtsScore}%</span>
-                      <span className="text-xs">Original</span>
-                    </div>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M5 12H19M19 12L13 6M19 12L13 18" stroke="#B4916C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                    <div className="text-[#B4916C]">
-                      <span className="block text-center">{improvedAtsScore}%</span>
-                      <span className="text-xs">Improved</span>
-                    </div>
-                  </div>
+              <h3 className="text-lg font-semibold text-white">ATS Score Improvement</h3>
+              <div className="flex items-center space-x-4">
+                <div className="text-gray-400">
+                  <span className="block text-center">{originalAtsScore}%</span>
+                  <span className="text-xs">Original</span>
                 </div>
-                
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M5 12H19M19 12L13 6M19 12L13 18" stroke="#B4916C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <div className="text-[#B4916C]">
+                      <span className="block text-center">{improvedAtsScore}%</span>
+                  <span className="text-xs">Improved</span>
+                </div>
+              </div>
+            </div>
+            
                 <div className="rounded-lg border border-gray-800 overflow-hidden mt-4">
                   <div className="bg-gray-900/50 p-4">
                     <h4 className="text-white font-medium mb-4">Optimized Document</h4>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                      <Button
+              <Button
                         onClick={() => handleDownloadDocx('docx')}
                         disabled={!docxGenerated}
                         className="bg-gray-800 hover:bg-gray-700 text-white flex-grow"
                       >
                         <Download className="h-5 w-5 mr-2" />
                         Download DOCX
-                      </Button>
-                      
-                      <Button
+              </Button>
+              
+                <Button
                         onClick={() => handleDownloadDocx('doc')}
                         disabled={!docxGenerated}
                         className="bg-gray-800 hover:bg-gray-700 text-white flex-grow"
-                      >
-                        <Download className="h-5 w-5 mr-2" />
+                >
+                  <Download className="h-5 w-5 mr-2" />
                         Download DOC
-                      </Button>
+                </Button>
                     </div>
                     
                     {isGeneratingDocx && !docxGenerated && (
@@ -1159,50 +1255,88 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                     )}
                     
                     {!pdfConverted && !isConvertingToPdf && docxGenerated && (
-                      <Button
+                <Button
                         onClick={() => handleConvertToPdf(docxBase64 || '')}
                         className="w-full bg-[#B4916C] hover:bg-[#A3815C] text-white mb-4"
                       >
                         Convert to PDF
-                      </Button>
-                    )}
-                    
+                </Button>
+              )}
+              
                     {isConvertingToPdf && !pdfConverted && (
                       <div className="mb-4 space-y-2">
-                        <Progress value={pdfProgress} className="h-2 bg-gray-800" />
-                        <p className="text-xs text-gray-400">Converting document to PDF format...</p>
-                      </div>
-                    )}
-                    
+                  <Progress value={pdfProgress} className="h-2 bg-gray-800" />
+                  <p className="text-xs text-gray-400">Converting document to PDF format...</p>
+                </div>
+              )}
+              
                     {pdfConverted && pdfBase64 && (
                       <div className="mt-4 flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-3">
-                        <Button
-                          onClick={handleDownloadPdf}
-                          className="bg-[#B4916C] hover:bg-[#A3815C] text-white flex items-center justify-center w-full sm:w-auto"
-                        >
-                          <Download className="h-5 w-5 mr-2" />
-                          Download PDF
-                        </Button>
-                        <Button
-                          onClick={handleTogglePreview}
-                          className="bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center w-full sm:w-auto"
-                        >
-                          <Eye className="h-5 w-5 mr-2" />
-                          {showPdfPreview ? 'Hide Preview' : 'Preview PDF'}
-                        </Button>
+                <Button
+                  onClick={downloadPDF}
+                  className="bg-[#B4916C] hover:bg-[#A3815C] text-white flex items-center justify-center w-full sm:w-auto"
+                  disabled={isDownloading || isPDFRefreshing}
+                >
+                  {isDownloading ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Downloading...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4 mr-2" />
+                      Download PDF
+                    </>
+                  )}
+                </Button>
+
+                {/* Add refresh PDF button */}
+                <Button
+                  onClick={() => refreshPDF(true)}
+                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 flex items-center justify-center w-full sm:w-auto"
+                  disabled={isDownloading || isPDFRefreshing}
+                >
+                  {isPDFRefreshing ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Refreshing...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Refresh PDF
+                    </>
+                  )}
+                </Button>
+
+                {/* Add error message if there was a download error */}
+                {downloadError && (
+                  <Alert variant="destructive" className="mt-2">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{downloadError}</AlertDescription>
+                  </Alert>
+                )}
+
+                <Button
+                  onClick={handleTogglePreview}
+                  className="bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center w-full sm:w-auto"
+                >
+                  <Eye className="h-5 w-5 mr-2" />
+                  {showPdfPreview ? 'Hide Preview' : 'Preview PDF'}
+                </Button>
                       </div>
                     )}
                     
                     {renderPDFPreview()}
-                    
-                    <Button
-                      onClick={handleReset}
+              
+              <Button
+                onClick={handleReset}
                       className="bg-transparent hover:bg-gray-800 text-gray-400 border border-gray-700 flex items-center justify-center mt-4"
-                    >
-                      <RefreshCw className="h-5 w-5 mr-2" />
-                      Start Over
-                    </Button>
-                  </div>
+              >
+                <RefreshCw className="h-5 w-5 mr-2" />
+                Start Over
+              </Button>
+            </div>
                 </div>
               </TabsContent>
               
@@ -1219,7 +1353,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                   } : undefined}
                   improvements={improvements}
                   onDownloadOriginal={() => {/* original download functionality */}}
-                  onDownloadOptimized={handleDownloadPdf}
+                  onDownloadOptimized={downloadPDF}
                   displayMode="vertical"
                 />
               </TabsContent>

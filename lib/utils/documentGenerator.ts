@@ -442,6 +442,28 @@ export class DocumentGenerator {
       });
     }
     
+    // Remove any "KEY WEAKNESSES ADDRESSED" section that might be in the sections
+    if (sections['KEY WEAKNESSES ADDRESSED'] || sections['WEAKNESSES ADDRESSED']) {
+      delete sections['KEY WEAKNESSES ADDRESSED'];
+      delete sections['WEAKNESSES ADDRESSED'];
+    }
+    
+    // Check if any sections contain "Weaknesses Addressed" text (case insensitive)
+    Object.keys(sections).forEach(sectionKey => {
+      const content = sections[sectionKey];
+      if (content && typeof content === 'string') {
+        // Check for headers or subsections related to weaknesses
+        if (/weaknesses\s+addressed|key\s+weaknesses|areas\s+to\s+improve/i.test(content)) {
+          // Try to extract and remove the weaknesses section
+          const lines = content.split('\n');
+          const filteredLines = lines.filter(line => 
+            !/weaknesses\s+addressed|key\s+weaknesses|areas\s+to\s+improve/i.test(line)
+          );
+          sections[sectionKey] = filteredLines.join('\n');
+        }
+      }
+    });
+    
     return children;
   }
   

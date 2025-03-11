@@ -195,24 +195,24 @@ export default function HomePage() {
                   <Check className="w-4 h-4 text-[#E8DCC4]" /> Analyze PDF Document
                 </li>
                 <li className="flex items-center gap-1">
-                  <Check className="w-4 h-4 text-[#E8DCC4]" /> Compare To Perfect CVs
+                  <Check className="w-4 h-4 text-[#E8DCC4]" /> Intelligent CV Optimization
                 </li>
                 <li className="flex items-center gap-1">
-                  <Check className="w-4 h-4 text-[#E8DCC4]" /> Wanted Job Description Injection
+                  <Check className="w-4 h-4 text-[#E8DCC4]" /> Industry-specific keyword optimization
                 </li>
               </ul>
               <ArticleContent className="text-sm text-gray-300 mb-2">
-                <strong>Trained Model "Resuming"</strong>
+                <strong>Professional Development</strong>
               </ArticleContent>
               <ul className="list-disc list-inside text-gray-300">
                 <li className="flex items-center gap-1">
                   <Check className="w-4 h-4 text-[#E8DCC4]" /> Knowledge On High Level CV Building
                 </li>
                 <li className="flex items-center gap-1">
-                  <Check className="w-4 h-4 text-[#E8DCC4]" /> Job Compatibility Scoring
+                  <Check className="w-4 h-4 text-[#E8DCC4]" /> Skill gap analysis
                 </li>
                 <li className="flex items-center gap-1">
-                  <Check className="w-4 h-4 text-[#E8DCC4]" /> Customizable Path For Each User
+                  <Check className="w-4 h-4 text-[#E8DCC4]" /> Structure and content analysis
                 </li>
               </ul>
             </motion.div>
@@ -221,16 +221,16 @@ export default function HomePage() {
               className="bg-[#050505] p-6 rounded-lg shadow-md transition-all duration-base ease-default group border border-[#E8DCC4]"
               variants={itemVariants}
             >
-              <h3 className="text-xl font-semibold text-[#E8DCC4] mb-2">Current Training Process</h3>
+              <h3 className="text-xl font-semibold text-[#E8DCC4] mb-2">How It Works</h3>
               <ul className="list-disc list-inside text-gray-300">
                 <li>
-                  <strong>CV Industry Recognition:</strong> For less description injection and a more seamless path.
+                  <strong>Upload:</strong> Submit your CV in PDF format.
                 </li>
                 <li>
-                  <strong>Analytics Suite:</strong> For users who want Resuming to guide their career choices.
+                  <strong>Analyze:</strong> Get detailed ATS compatibility scoring and content analysis.
                 </li>
                 <li>
-                  <strong>Portfolio Optimization:</strong> Enhance and organize your portfolio to represent your best image, tailored for Artists and Finance professionals.
+                  <strong>Optimize:</strong> Receive AI-powered suggestions for structure, keywords, and formatting.
                 </li>
               </ul>
             </motion.div>
@@ -253,7 +253,7 @@ export default function HomePage() {
         <div className="container mx-auto px-4 text-center">
           <div className="flex justify-center space-x-6 mb-6">
             <a
-              href="https://twitter.com/resumingai"
+              href="https://x.com/chromadai"
               target="_blank"
               rel="noopener noreferrer"
               className="text-[#E8DCC4] hover:text-white transition-colors"
@@ -273,7 +273,7 @@ export default function HomePage() {
               </svg>
             </a>
             <a
-              href="https://instagram.com/resuming"
+              href="https://www.instagram.com/resuming_ai/"
               target="_blank"
               rel="noopener noreferrer"
               className="text-[#E8DCC4] hover:text-white transition-colors"
