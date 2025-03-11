@@ -19,6 +19,7 @@ interface ComparisonViewProps {
   improvements?: string[];
   onDownloadOriginal?: () => void;
   onDownloadOptimized?: () => void;
+  displayMode?: 'horizontal' | 'vertical';
 }
 
 export default function ComparisonView({
@@ -26,7 +27,8 @@ export default function ComparisonView({
   optimizedContent,
   improvements = [],
   onDownloadOriginal,
-  onDownloadOptimized
+  onDownloadOptimized,
+  displayMode = 'horizontal'
 }: ComparisonViewProps) {
   const [view, setView] = useState<'split' | 'diff'>('split');
   
@@ -91,9 +93,9 @@ export default function ComparisonView({
       
       <CardContent className="p-0">
         {view === 'split' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
+          <div className={`grid grid-cols-1 ${displayMode === 'horizontal' ? 'md:grid-cols-2' : ''} gap-0`}>
             {/* Original CV */}
-            <div className="p-6 border-r border-gray-800">
+            <div className={`p-6 ${displayMode === 'horizontal' ? 'border-r border-gray-800' : 'border-b border-gray-800'}`}>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg text-white font-medium">Original CV</h3>
                 <Badge variant="outline" className="text-gray-400 border-gray-700">
@@ -101,7 +103,7 @@ export default function ComparisonView({
                 </Badge>
               </div>
               
-              <div className="h-[500px] overflow-y-auto pr-4 text-gray-300 text-sm">
+              <div className={`${displayMode === 'horizontal' ? 'h-[500px]' : 'h-[300px]'} overflow-y-auto pr-4 text-gray-300 text-sm`}>
                 {originalContent ? formatContent(originalContent.text) : 'No original content available'}
               </div>
               
@@ -134,7 +136,7 @@ export default function ComparisonView({
                 </div>
               </div>
               
-              <div className="h-[500px] overflow-y-auto pr-4 text-gray-300 text-sm">
+              <div className={`${displayMode === 'horizontal' ? 'h-[500px]' : 'h-[300px]'} overflow-y-auto pr-4 text-gray-300 text-sm`}>
                 {optimizedContent ? formatContent(optimizedContent.text) : 'No optimized content available'}
               </div>
               
@@ -171,10 +173,10 @@ export default function ComparisonView({
               
               <div className="mt-6 flex items-center justify-center">
                 <div className="text-center bg-[#0A0A0A] border border-gray-800 rounded-lg p-4 w-full md:w-auto">
-                  <div className="flex items-center justify-center mb-2">
-                    <div className="text-gray-400 mr-4">Original ATS Score: {originalContent?.atsScore || 'N/A'}%</div>
-                    <ArrowRight className="h-5 w-5 text-[#B4916C]" />
-                    <div className="text-[#B4916C] ml-4">Optimized ATS Score: {optimizedContent?.atsScore || 'N/A'}%</div>
+                  <div className="flex flex-col md:flex-row items-center justify-center mb-2">
+                    <div className="text-gray-400 mb-2 md:mb-0 md:mr-4">Original ATS Score: {originalContent?.atsScore || 'N/A'}%</div>
+                    <ArrowRight className="h-5 w-5 text-[#B4916C] hidden md:block" />
+                    <div className="text-[#B4916C] md:ml-4">Optimized ATS Score: {optimizedContent?.atsScore || 'N/A'}%</div>
                   </div>
                   
                   {scoreImprovement > 0 && (

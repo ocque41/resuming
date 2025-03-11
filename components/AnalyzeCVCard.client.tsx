@@ -90,75 +90,95 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
   }, []);
 
   async function handleAnalyze() {
-    if (!selectedCVName || !selectedCVId) {
+    if (!selectedCVId) {
       setError("Please select a CV to analyze");
       return;
     }
-    
+
     setLoading(true);
     setError(null);
+    setAnalysis(null);
+
     try {
       console.log(`Analyzing CV: ${selectedCVName} (ID: ${selectedCVId})`);
-      const response = await fetch(`/api/analyze-cv?fileName=${encodeURIComponent(selectedCVName)}&cvId=${encodeURIComponent(selectedCVId)}`);
+      const encodedFileName = selectedCVName ? encodeURIComponent(selectedCVName) : '';
+      const encodedCVId = encodeURIComponent(selectedCVId);
+      const response = await fetch(`/api/analyze-cv?fileName=${encodedFileName}&cvId=${encodedCVId}`);
       
       if (!response.ok) {
-        throw new Error(`Failed to analyze CV: ${response.statusText}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to analyze CV");
       }
       
       const data = await response.json();
-      if (data.error) {
-        setError(data.error);
-      } else {
-        // Add safety checks for all data properties
-        const safeData = {
-          ...data,
-          atsScore: data.atsScore || 0,
-          strengths: Array.isArray(data.strengths) ? data.strengths : [],
-          weaknesses: Array.isArray(data.weaknesses) ? data.weaknesses : [],
-          recommendations: Array.isArray(data.recommendations) ? data.recommendations : [],
-          industry: data.industry || "General",
-          keywordAnalysis: data.keywordAnalysis || {},
-          sectionBreakdown: data.sectionBreakdown || {}
-        };
-        
-        // If industry is detected but no industry insight is provided, get one
-        if (safeData.industry && !safeData.industryInsight) {
-          try {
-            const insight = getIndustrySpecificAtsInsights(safeData.industry);
-            safeData.industryInsight = insight;
-          } catch (error) {
-            console.error("Error getting industry insights:", error);
-            // Continue without insight
-          }
-        }
-        
-        // Add formatting-specific analysis with safety checks
-        safeData.formattingStrengths = generateFormattingStrengths(safeData);
-        safeData.formattingWeaknesses = generateFormattingWeaknesses(safeData);
-        safeData.formattingRecommendations = generateFormattingRecommendations(safeData);
-        
-        setAnalysis(safeData);
-        
-        // Store the enhanced analysis in the database
+      
+      if (!data.success) {
+        throw new Error(data.error || "Analysis failed");
+      }
+      
+      // Create a safe version of the analysis data with proper type checking
+      const safeData = {
+        atsScore: typeof data.analysis.atsScore === 'number' || typeof data.analysis.atsScore === 'string' 
+          ? data.analysis.atsScore 
+          : 0,
+        industry: typeof data.analysis.industry === 'string' ? data.analysis.industry : 'General',
+        strengths: Array.isArray(data.analysis.strengths) ? data.analysis.strengths : [],
+        weaknesses: Array.isArray(data.analysis.weaknesses) ? data.analysis.weaknesses : [],
+        recommendations: Array.isArray(data.analysis.recommendations) ? data.analysis.recommendations : [],
+        keywordAnalysis: typeof data.analysis.keywordAnalysis === 'object' ? data.analysis.keywordAnalysis : {},
+        formattingStrengths: Array.isArray(data.analysis.formattingStrengths) ? data.analysis.formattingStrengths : [],
+        formattingWeaknesses: Array.isArray(data.analysis.formattingWeaknesses) ? data.analysis.formattingWeaknesses : [],
+        formattingRecommendations: Array.isArray(data.analysis.formattingRecommendations) ? data.analysis.formattingRecommendations : [],
+        sectionBreakdown: typeof data.analysis.sectionBreakdown === 'object' ? data.analysis.sectionBreakdown : {},
+        industryInsight: typeof data.analysis.industryInsight === 'string' ? data.analysis.industryInsight : undefined,
+        targetRoles: Array.isArray(data.analysis.targetRoles) ? data.analysis.targetRoles : undefined,
+      };
+      
+      // If industry is detected but no industry insight is provided, get one
+      if (safeData.industry && !safeData.industryInsight) {
         try {
-          await fetch('/api/update-cv-analysis', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              cvId: selectedCVId,
-              analysis: safeData
-            }),
-          });
-        } catch (updateError) {
-          console.error("Error updating analysis metadata:", updateError);
-          // Continue despite the error
+          const insight = getIndustrySpecificAtsInsights(safeData.industry);
+          safeData.industryInsight = insight;
+        } catch (error) {
+          console.error("Error getting industry insights:", error);
+          // Continue without insight
+        }
+      }
+      
+      // Set the analysis result
+      setAnalysis(safeData);
+      
+      // Store the analysis in the database
+      try {
+        const updateResponse = await fetch('/api/update-cv-analysis', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            cvId: selectedCVId,
+            analysis: safeData
+          }),
+        });
+        
+        if (!updateResponse.ok) {
+          console.error("Failed to update CV analysis in database");
+        }
+      } catch (updateError) {
+        console.error("Error updating CV analysis:", updateError);
+      }
+      
+      // Call the onAnalysisComplete callback if provided
+      if (onAnalysisComplete && typeof onAnalysisComplete === 'function') {
+        try {
+          onAnalysisComplete(selectedCVId);
+        } catch (callbackError) {
+          console.error("Error in onAnalysisComplete callback:", callbackError);
         }
       }
     } catch (error) {
-      console.error("Error analyzing CV:", error);
-      setError(error instanceof Error ? error.message : "An error occurred while analyzing your CV");
+      console.error("Analysis error:", error);
+      setError(error instanceof Error ? error.message : "An unknown error occurred");
     } finally {
       setLoading(false);
     }
@@ -351,23 +371,41 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
   }
 
   const formatAtsScore = (score: number | string | undefined | null): string => {
-    if (typeof score === 'number') {
-      return `${Math.round(score)}%`;
+    // Handle undefined or null
+    if (score === undefined || score === null) {
+      return "0%";
     }
-    if (typeof score === 'string') {
-      return score;
+    
+    // Convert to number if it's a string
+    const numericScore = typeof score === 'string' ? parseFloat(score) : score;
+    
+    // Check if it's a valid number
+    if (isNaN(numericScore)) {
+      return "0%";
     }
-    // Return a default value if score is undefined or null
-    return "N/A";
+    
+    // Format the score
+    return `${Math.round(numericScore)}%`;
   };
 
   const getTopKeywords = () => {
-    if (!analysis?.keywordAnalysis) return [];
+    if (!analysis || !analysis.keywordAnalysis) {
+      return [];
+    }
     
-    return Object.entries(analysis.keywordAnalysis)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([keyword, score]) => ({ keyword, score }));
+    try {
+      // Convert keywordAnalysis object to array of [keyword, count] pairs
+      const keywordEntries = Object.entries(analysis.keywordAnalysis);
+      
+      // Sort by count (descending) and take top 5
+      return keywordEntries
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([keyword]) => keyword);
+    } catch (error) {
+      console.error("Error processing keywords:", error);
+      return [];
+    }
   };
 
   // Instead, add a function to handle proceeding to the next step
@@ -492,22 +530,6 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
               </div>
             )}
             
-            {analysis.keywordAnalysis && (
-              <div>
-                <h3 className="text-lg font-semibold text-white mb-2">Top Keywords</h3>
-                <div className="flex flex-wrap gap-2">
-                  {getTopKeywords().map(({ keyword, score }) => (
-                    <span 
-                      key={keyword} 
-                      className="px-2 py-1 bg-[#B4916C]/10 text-[#B4916C] rounded-md text-sm"
-                    >
-                      {keyword} ({score})
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            
             {analysis && onAnalysisComplete && (
               <div className="mt-6 flex flex-col items-center">
                 <Alert className="mb-4 bg-blue-900/20 text-blue-400 border border-blue-900">
@@ -537,6 +559,31 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
                 </Button>
               </div>
             )}
+          </div>
+        )}
+
+        {analysis && (
+          <div className="mt-6">
+            <h3 className="text-xl font-semibold mb-2 flex items-center">
+              <span className="text-amber-500 mr-2">
+                <FileText size={20} />
+              </span>
+              Top Keywords
+            </h3>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {getTopKeywords().length > 0 ? (
+                getTopKeywords().map((keyword, index) => (
+                  <span
+                    key={index}
+                    className="px-3 py-1 bg-amber-100/10 border border-amber-200/20 rounded-full text-amber-200 text-sm"
+                  >
+                    {keyword}
+                  </span>
+                ))
+              ) : (
+                <span className="text-gray-400">No keywords detected</span>
+              )}
+            </div>
           </div>
         )}
       </CardContent>

@@ -428,9 +428,17 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       const downloadLink = document.createElement('a');
       downloadLink.href = linkSource;
       downloadLink.download = `${selectedCVName?.replace(/\.[^/.]+$/, '') || 'optimized'}_enhanced.${format}`;
+      
+      // Append to body, click, and remove - this is crucial for the download to work
       document.body.appendChild(downloadLink);
       downloadLink.click();
-      document.body.removeChild(downloadLink);
+      
+      // Small delay before removing to ensure download starts
+      setTimeout(() => {
+        document.body.removeChild(downloadLink);
+      }, 100);
+      
+      console.log(`${format.toUpperCase()} download initiated successfully`);
     } catch (error) {
       console.error(`Error downloading ${format.toUpperCase()}:`, error);
       setError(`Failed to download ${format.toUpperCase()}. The file may be corrupted. Please try again.`);
@@ -466,12 +474,18 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       const link = document.createElement('a');
       link.href = blobUrl;
       link.download = `${selectedCVName?.replace(/\.[^/.]+$/, '') || 'optimized'}_enhanced.pdf`;
+      
+      // Append to body, click, and remove - this is crucial for the download to work
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
       
-      // Clean up the URL object
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+      // Small delay before removing to ensure download starts
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl); // Clean up the URL object
+      }, 100);
+      
+      console.log("PDF download initiated successfully");
     } catch (error) {
       console.error("Error downloading PDF:", error);
       setError("Failed to download PDF. The file may be corrupted. Please try again.");
@@ -1144,6 +1158,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                   improvements={improvements}
                   onDownloadOriginal={() => {/* original download functionality */}}
                   onDownloadOptimized={handleDownloadPdf}
+                  displayMode="vertical"
                 />
               </TabsContent>
               

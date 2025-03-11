@@ -1,309 +1,249 @@
-import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
+import { NextRequest } from "next/server";
+import { getServerSession } from "next-auth/next";
 import { db } from "@/lib/db/drizzle";
 import { cvs } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { convertDocxToPdf } from "@/lib/docxToPdfConverter";
-import { saveFile, FileType, StorageType } from "@/lib/fileStorage";
-import * as path from "path";
-import * as fs from "fs";
-import { promises as fsPromises } from "fs";
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import { v4 as uuidv4 } from 'uuid';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 
-export async function POST(request: Request) {
-  console.log("PDF conversion API called");
-  
+const execPromise = promisify(exec);
+
+// Simple logger implementation if the imported one is not available
+const logger = {
+  info: (message: string, ...args: any[]) => console.log(`[INFO] ${message}`, ...args),
+  warn: (message: string, ...args: any[]) => console.warn(`[WARN] ${message}`, ...args),
+  error: (message: string, ...args: any[]) => console.error(`[ERROR] ${message}`, ...args)
+};
+
+interface CVMetadata {
+  docxBase64?: string;
+  pdfBase64?: string;
+  pdfGeneratedAt?: string;
+  [key: string]: any;
+}
+
+/**
+ * POST /api/cv/convert-to-pdf
+ * Converts a DOCX file to PDF format
+ */
+export async function POST(request: NextRequest) {
   try {
-    // Get user session
-    const session = await getSession();
-    if (!session || !session.user || !session.user.id) {
-      console.error("Unauthorized: No valid session found");
-      return NextResponse.json(
-        { success: false, error: "You must be logged in to convert files." },
-        { status: 401 }
-      );
+    // Verify user session
+    const session = await getServerSession();
+    if (!session?.user) {
+      logger.warn("Unauthorized attempt to convert PDF");
+      return new Response(JSON.stringify({ 
+        error: "Unauthorized", 
+        success: false 
+      }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
-    const userId = session.user.id;
-    console.log(`Request from user: ${userId}`);
-    
     // Parse request body
-    let body;
-    try {
-      body = await request.json();
-    } catch (parseError) {
-      console.error("Failed to parse request body:", parseError);
-      return NextResponse.json(
-        { success: false, error: "Invalid request format." },
-        { status: 400 }
-      );
+    const body = await request.json();
+    const { cvId, docxBase64, forceRefresh = false } = body;
+
+    // Validate required parameters
+    if (!cvId && !docxBase64) {
+      logger.error("Missing required parameters: either cvId or docxBase64 must be provided");
+      return new Response(JSON.stringify({ 
+        error: "Missing required parameters: either cvId or docxBase64 must be provided", 
+        success: false 
+      }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
     }
-    
-    const { cvId, docxBase64, forceRefresh } = body;
-    
-    // Handle direct docxBase64 conversion (no CV ID needed)
-    if (docxBase64 && typeof docxBase64 === 'string') {
-      console.log("Converting directly provided docxBase64 data to PDF");
-      
+
+    let pdfBase64;
+
+    // If docxBase64 is provided directly, use it for conversion
+    if (docxBase64) {
+      logger.info("Converting directly provided DOCX to PDF");
+      pdfBase64 = await convertDocxToPdf(docxBase64);
+    } 
+    // Otherwise, fetch the CV record and use its DOCX data
+    else {
+      // Parse cvId to integer safely
+      let cvIdNumber;
       try {
-        // Create temp directory for DOCX file
-        const tempDir = path.join(process.cwd(), "tmp");
-        await fsPromises.mkdir(tempDir, { recursive: true });
-        
-        // Create temp DOCX file from base64
-        const tempDocxPath = path.join(tempDir, `temp-docx-direct-${Date.now()}.docx`);
-        await fsPromises.writeFile(tempDocxPath, Buffer.from(docxBase64, 'base64'));
-        console.log(`Created temporary DOCX file at: ${tempDocxPath}`);
-        
-        // Convert the temp DOCX to PDF
-        const pdfFileName = `converted-document-${Date.now()}.pdf`;
-        
-        const conversionResult = await convertDocxToPdf(
-          tempDocxPath,
-          tempDir,
-          pdfFileName
-        );
-        
-        if (!conversionResult.success) {
-          console.error(`PDF conversion failed: ${conversionResult.error}`);
-          return NextResponse.json(
-            { success: false, error: conversionResult.error || "PDF conversion failed." },
-            { status: 500 }
-          );
+        cvIdNumber = parseInt(cvId);
+        if (isNaN(cvIdNumber)) {
+          throw new Error(`Invalid cvId: ${cvId} is not a number`);
         }
-        
-        // Clean up temp file
-        try {
-          await fsPromises.unlink(tempDocxPath);
-        } catch (cleanupError) {
-          console.warn(`Failed to clean up temp file: ${tempDocxPath}`, cleanupError);
-        }
-        
-        return NextResponse.json({
-          success: true,
-          message: "DOCX data successfully converted to PDF.",
-          fileName: pdfFileName,
-          pdfBase64: conversionResult.base64,
+      } catch (parseError) {
+        logger.error(`Error parsing cvId: ${cvId}`, parseError);
+        return new Response(JSON.stringify({ 
+          error: `Invalid cvId: ${cvId} is not a valid number`,
+          success: false 
+        }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
         });
-      } catch (error) {
-        console.error("Error converting direct docxBase64 to PDF:", error);
-        return NextResponse.json(
-          { 
-            success: false, 
-            error: `Failed to convert DOCX data to PDF: ${error instanceof Error ? error.message : String(error)}` 
-          },
-          { status: 500 }
-        );
       }
-    }
-    
-    // If no direct docxBase64 provided, we need a CV ID
-    if (!cvId) {
-      console.error("Missing CV ID in request and no docxBase64 provided");
-      return NextResponse.json(
-        { success: false, error: "Missing CV ID or docxBase64 data." },
-        { status: 400 }
-      );
-    }
-    
-    console.log(`Processing convert-to-pdf request for CV ID: ${cvId}`);
-    
-    // Get CV record from database
-    const cvRecord = await db.query.cvs.findFirst({
-      where: eq(cvs.id, parseInt(cvId.toString())),
-    });
-    
-    if (!cvRecord) {
-      console.error(`CV not found with ID: ${cvId}`);
-      return NextResponse.json({ success: false, error: "CV not found." }, { status: 404 });
-    }
-    
-    // Verify CV ownership
-    if (cvRecord.userId !== userId) {
-      console.error(`User ${userId} tried to access CV ${cvId} belonging to user ${cvRecord.userId}`);
-      return NextResponse.json(
-        { success: false, error: "You don't have permission to access this CV." },
-        { status: 403 }
-      );
-    }
-    
-    // Parse metadata
-    let metadata: Record<string, any> = {};
-    try {
-      metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
-    } catch (error) {
-      console.error("Error parsing metadata:", error);
-      return NextResponse.json(
-        { success: false, error: "Invalid CV metadata." },
-        { status: 500 }
-      );
-    }
-    
-    // Check if we already have PDF data in the metadata and are not forcing refresh
-    if (!forceRefresh && metadata.optimizedPdfBase64) {
-      console.log("Using previously generated PDF data from metadata");
-      return NextResponse.json({
-        success: true,
-        message: "PDF data retrieved from metadata.",
-        fileName: metadata.optimizedPdfFileName || `optimized-cv-${cvId}.pdf`,
-        pdfBase64: metadata.optimizedPdfBase64,
+
+      // Fetch CV record
+      const cv = await db.query.cvs.findFirst({
+        where: eq(cvs.id, cvIdNumber)
       });
-    }
-    
-    // Use provided docxBase64 or get from metadata
-    let docxData = docxBase64;
-    
-    // Check if we have DocX base64 in the metadata if not provided directly
-    if (!docxData && metadata.optimizedDocxBase64) {
-      console.log("Found DOCX base64 data in metadata, will convert to PDF");
-      docxData = metadata.optimizedDocxBase64;
-    }
-    
-    if (docxData) {
-      // Create temp directory for DOCX file
-      const tempDir = path.join(process.cwd(), "tmp");
-      await fsPromises.mkdir(tempDir, { recursive: true });
-      
-      // Create temp DOCX file from base64
-      const tempDocxPath = path.join(tempDir, `temp-docx-${cvId}-${Date.now()}.docx`);
-      await fsPromises.writeFile(tempDocxPath, Buffer.from(docxData, 'base64'));
-      console.log(`Created temporary DOCX file at: ${tempDocxPath}`);
-      
-      // Convert the temp DOCX to PDF
-      const pdfFileName = `optimized-cv-${cvId}-${Date.now()}.pdf`;
-      
-      const conversionResult = await convertDocxToPdf(
-        tempDocxPath,
-        tempDir,
-        pdfFileName
-      );
-      
-      if (!conversionResult.success) {
-        console.error(`PDF conversion failed: ${conversionResult.error}`);
-        return NextResponse.json(
-          { success: false, error: conversionResult.error || "PDF conversion failed." },
-          { status: 500 }
-        );
+
+      if (!cv) {
+        logger.error(`CV not found: ${cvId}`);
+        return new Response(JSON.stringify({ 
+          error: "CV not found", 
+          success: false 
+        }), {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+        });
       }
-      
-      // Update metadata with PDF information
-      metadata.optimizedPdfFileName = pdfFileName;
-      metadata.optimizedPdfFilePath = conversionResult.filePath;
-      metadata.optimizedPdfBase64 = conversionResult.base64;
-      metadata.lastConvertedAt = new Date().toISOString();
-      
-      await db
-        .update(cvs)
-        .set({ metadata: JSON.stringify(metadata) })
-        .where(eq(cvs.id, cvRecord.id));
-        
-      console.log(`PDF conversion completed successfully for CV ${cvId}`);
-      
-      // Clean up temp file
-      try {
-        await fsPromises.unlink(tempDocxPath);
-      } catch (cleanupError) {
-        console.warn(`Failed to clean up temp file: ${tempDocxPath}`, cleanupError);
+
+      // Check if we have metadata with docxBase64
+      let metadata: CVMetadata = {};
+      if (cv.metadata) {
+        try {
+          metadata = JSON.parse(cv.metadata) as CVMetadata;
+        } catch (parseError) {
+          logger.error(`Error parsing metadata for CV ${cvId}:`, parseError);
+          return new Response(JSON.stringify({ 
+            error: "Invalid metadata format", 
+            success: false 
+          }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
       }
-      
-      return NextResponse.json({
-        success: true,
-        message: "DOCX file successfully converted to PDF.",
-        fileName: pdfFileName,
-        pdfBase64: conversionResult.base64,
-      });
-    }
-    
-    // Check if optimized DOCX file path exists
-    if (!metadata.optimizedDocxFilePath) {
-      console.error("No DOCX file path found in metadata");
-      return NextResponse.json(
-        { success: false, error: "Optimized DOCX file not found." },
-        { status: 400 }
-      );
-    }
-    
-    const docxPath = metadata.optimizedDocxFilePath;
-    console.log(`Using DOCX file from path: ${docxPath}`);
-    
-    const outputDir = path.join(process.cwd(), "tmp");
-    const pdfFileName = `optimized-cv-${cvId}-${Date.now()}.pdf`;
-    
-    try {
+
+      // Check if we already have a PDF and aren't forcing a refresh
+      if (!forceRefresh && metadata.pdfBase64) {
+        logger.info(`Using existing PDF for CV ${cvId}`);
+        return new Response(JSON.stringify({ 
+          success: true, 
+          pdfBase64: metadata.pdfBase64,
+          message: "Using existing PDF"
+        }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      // Check if we have a DOCX to convert
+      if (!metadata.docxBase64) {
+        logger.error(`No DOCX data found for CV ${cvId}`);
+        return new Response(JSON.stringify({ 
+          error: "No DOCX data found for this CV. Please generate a DOCX first.", 
+          success: false 
+        }), {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
       // Convert DOCX to PDF
-      console.log("Starting DOCX to PDF conversion");
-      const conversionResult = await convertDocxToPdf(
-        docxPath,
-        outputDir,
-        pdfFileName
-      );
-      
-      if (!conversionResult.success) {
-        console.error(`PDF conversion failed: ${conversionResult.error}`);
-        return NextResponse.json(
-          { success: false, error: conversionResult.error || "PDF conversion failed." },
-          { status: 500 }
-        );
-      }
-      
-      // Save the PDF file to storage (optionally)
-      let storageFilePath = conversionResult.filePath;
-      let fileMetadata;
-      
-      try {
-        fileMetadata = await saveFile(
-          Buffer.from(conversionResult.base64 || "", "base64"),
-          pdfFileName,
-          'pdf' as FileType,
-          'local' as StorageType
-        );
-        storageFilePath = fileMetadata.filePath;
-        console.log(`Saved PDF to storage at: ${storageFilePath}`);
-      } catch (storageError) {
-        console.error("Error saving PDF to storage:", storageError);
-        // Continue anyway, we still have the local file
-      }
-      
-      // Update metadata with PDF file information
-      metadata = {
-        ...metadata,
-        optimizedPdfFilePath: storageFilePath,
-        optimizedPdfFileName: pdfFileName,
-        optimizedPdfBase64: conversionResult.base64, // Store base64 data in metadata for quick access
-        lastConvertedAt: new Date().toISOString(),
-      };
-      
-      // Update CV record with new metadata
-      await db
-        .update(cvs)
+      logger.info(`Converting DOCX to PDF for CV ${cvId}`);
+      pdfBase64 = await convertDocxToPdf(metadata.docxBase64);
+
+      // Update metadata with PDF data
+      metadata.pdfBase64 = pdfBase64;
+      metadata.pdfGeneratedAt = new Date().toISOString();
+
+      // Update CV record
+      await db.update(cvs)
         .set({ metadata: JSON.stringify(metadata) })
-        .where(eq(cvs.id, cvRecord.id));
-      
-      console.log(`PDF conversion completed successfully for CV ${cvId}`);
-      
-      // Return success with file data
-      return NextResponse.json({
-        success: true,
-        message: "DOCX file successfully converted to PDF.",
-        fileName: pdfFileName,
-        pdfBase64: conversionResult.base64,
-      });
-      
-    } catch (error) {
-      console.error("Error converting DOCX to PDF:", error);
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: `Failed to convert DOCX to PDF: ${error instanceof Error ? error.message : String(error)}` 
-        },
-        { status: 500 }
-      );
+        .where(eq(cvs.id, cvIdNumber));
     }
-    
+
+    // Return PDF data
+    return new Response(JSON.stringify({ 
+      success: true, 
+      pdfBase64,
+      message: "PDF conversion successful"
+    }), {
+      headers: { "Content-Type": "application/json" },
+    });
   } catch (error) {
-    console.error("Error in convert-to-pdf API:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to process request." },
-      { status: 500 }
-    );
+    logger.error("Error converting to PDF:", error);
+    return new Response(JSON.stringify({ 
+      error: "Failed to convert to PDF", 
+      details: error instanceof Error ? error.message : "Unknown error",
+      success: false 
+    }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
+
+/**
+ * Converts a base64 encoded DOCX file to a base64 encoded PDF
+ * @param docxBase64 Base64 encoded DOCX file
+ * @returns Base64 encoded PDF file
+ */
+async function convertDocxToPdf(docxBase64: string): Promise<string> {
+  // Create temporary directory
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cv-pdf-'));
+  const tempDocxPath = path.join(tempDir, `${uuidv4()}.docx`);
+  const tempPdfPath = path.join(tempDir, `${uuidv4()}.pdf`);
+
+  try {
+    // Validate base64 input
+    if (!docxBase64 || typeof docxBase64 !== 'string' || docxBase64.trim() === '') {
+      throw new Error('Invalid DOCX data: Empty or invalid base64 string');
+    }
+
+    // Write DOCX file to disk
+    const docxBuffer = Buffer.from(docxBase64, 'base64');
+    fs.writeFileSync(tempDocxPath, docxBuffer);
+
+    // Check if file was written successfully
+    if (!fs.existsSync(tempDocxPath) || fs.statSync(tempDocxPath).size === 0) {
+      throw new Error('Failed to write DOCX file to disk');
+    }
+
+    logger.info(`Converting DOCX (${docxBuffer.length} bytes) to PDF`);
+
+    // Convert DOCX to PDF using LibreOffice
+    // Note: This requires LibreOffice to be installed on the server
+    await execPromise(`libreoffice --headless --convert-to pdf --outdir "${tempDir}" "${tempDocxPath}"`);
+
+    // Check if PDF was generated
+    if (!fs.existsSync(tempPdfPath)) {
+      // Try to find the PDF file with a different name
+      const files = fs.readdirSync(tempDir);
+      const pdfFile = files.find(file => file.endsWith('.pdf'));
+      
+      if (pdfFile) {
+        // Use the found PDF file
+        const actualPdfPath = path.join(tempDir, pdfFile);
+        
+        // Read and encode the PDF file
+        const pdfBuffer = fs.readFileSync(actualPdfPath);
+        return pdfBuffer.toString('base64');
+      } else {
+        throw new Error('PDF file not generated');
+      }
+    }
+
+    // Read and encode the PDF file
+    const pdfBuffer = fs.readFileSync(tempPdfPath);
+    return pdfBuffer.toString('base64');
+  } catch (error) {
+    logger.error('Error in PDF conversion:', error);
+    throw error;
+  } finally {
+    // Clean up temporary files
+    try {
+      if (fs.existsSync(tempDocxPath)) fs.unlinkSync(tempDocxPath);
+      if (fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
+      fs.rmdirSync(tempDir);
+    } catch (cleanupError) {
+      logger.error('Error cleaning up temporary files:', cleanupError);
+    }
   }
 } 
