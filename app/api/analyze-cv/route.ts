@@ -6,6 +6,28 @@ import { eq } from "drizzle-orm";
 import { MistralRAGService } from "@/lib/utils/mistralRagService";
 import { logger } from "@/lib/utils/logger";
 
+// Type definition for analysis result
+interface AnalysisResult {
+  cvId: string;
+  userId: string | number;
+  atsScore: number;
+  industry: string;
+  language: string;
+  keywords: string[];
+  keyRequirements: string[];
+  strengths: string[];
+  weaknesses: string[];
+  recommendations: string[];
+  formatStrengths: string[];
+  formatWeaknesses: string[];
+  formatRecommendations: string[];
+  metadata: Record<string, any>;
+  sections: Record<string, string>;
+  skills: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 /**
  * GET /api/analyze-cv
  * Enhanced CV analysis API endpoint with proper ATS scoring
@@ -184,9 +206,9 @@ export async function GET(request: NextRequest) {
  * Analyzes the CV content and extracts key information
  * Enhanced with RAG for better analysis accuracy
  */
-async function analyzeCV(cvId: string, cvText: string, currentUserId: string | number): Promise<any> {
+async function analyzeCV(cvId: string, cvText: string, currentUserId: string | number): Promise<AnalysisResult> {
   // Create initial analysis result to be populated with proper typing
-  const analysis = {
+  const analysis: AnalysisResult = {
     cvId,
     userId: currentUserId,
     atsScore: 0,
@@ -372,8 +394,8 @@ async function analyzeCV(cvId: string, cvText: string, currentUserId: string | n
 /**
  * Performs a basic analysis of CV text when the advanced RAG analysis fails
  */
-function performBasicAnalysis(cvText: string, cvId: string, userId: string): any {
-  const basicAnalysis = {
+function performBasicAnalysis(cvText: string, cvId: string, userId: string): AnalysisResult {
+  const basicAnalysis: AnalysisResult = {
     cvId,
     userId,
     atsScore: 50, // Default average score

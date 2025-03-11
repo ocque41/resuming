@@ -1,5 +1,4 @@
-import { Mistral } from '@mistralai/mistralai';
-import * as faiss from 'faiss-node';
+import OpenAI from 'openai';
 import { logger } from '@/lib/utils/logger';
 
 /**
@@ -13,17 +12,118 @@ interface EmbeddingCache {
 }
 
 /**
+ * Simple in-memory vector store for nearest neighbor search
+ */
+class SimpleVectorStore {
+  private vectors: number[][] = [];
+  private documents: string[] = [];
+
+  /**
+   * Add vectors and their corresponding documents to the store
+   * @param vectors Array of embedding vectors
+   * @param documents Array of document texts
+   */
+  public add(vectors: number[][], documents: string[]): void {
+    if (vectors.length !== documents.length) {
+      throw new Error('Vectors and documents arrays must have the same length');
+    }
+    this.vectors.push(...vectors);
+    this.documents.push(...documents);
+  }
+
+  /**
+   * Search for nearest neighbors using cosine similarity
+   * @param queryVector Query vector to search for
+   * @param k Number of neighbors to return
+   * @returns Object with indices and distances
+   */
+  public search(queryVector: number[], k: number): { indices: number[], distances: number[] } {
+    if (this.vectors.length === 0) {
+      return { indices: [], distances: [] };
+    }
+
+    // Calculate cosine similarity between query and all vectors
+    const similarities: { index: number, similarity: number }[] = this.vectors.map((vector, index) => ({
+      index,
+      similarity: this.cosineSimilarity(queryVector, vector)
+    }));
+
+    // Sort by similarity (descending)
+    similarities.sort((a, b) => b.similarity - a.similarity);
+
+    // Get top k results
+    const topK = similarities.slice(0, k);
+    const indices = topK.map(item => item.index);
+    const distances = topK.map(item => 1 - item.similarity); // Convert similarity to distance
+
+    return { indices, distances };
+  }
+
+  /**
+   * Calculate cosine similarity between two vectors
+   * @param a First vector
+   * @param b Second vector
+   * @returns Cosine similarity value (0-1)
+   */
+  private cosineSimilarity(a: number[], b: number[]): number {
+    if (a.length !== b.length) {
+      throw new Error('Vectors must have the same dimension');
+    }
+
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+
+    for (let i = 0; i < a.length; i++) {
+      dotProduct += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+
+    if (normA === 0 || normB === 0) {
+      return 0; // Avoid division by zero
+    }
+
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  /**
+   * Get the document at a specific index
+   * @param index Document index
+   * @returns Document text
+   */
+  public getDocument(index: number): string {
+    return this.documents[index];
+  }
+
+  /**
+   * Clear all vectors and documents from the store
+   */
+  public clear(): void {
+    this.vectors = [];
+    this.documents = [];
+  }
+
+  /**
+   * Get the number of vectors in the store
+   * @returns Number of vectors
+   */
+  public size(): number {
+    return this.vectors.length;
+  }
+}
+
+/**
  * MistralRAGService provides retrieval-augmented generation capabilities for CV analysis
- * using Mistral AI API and FAISS vector database for embedding storage and retrieval.
+ * using LLM APIs and in-memory vector storage for embedding storage and retrieval.
  */
 export class MistralRAGService {
-  private client: any; // Using any type for compatibility
-  private index: any = null;
+  private client: any; // Using OpenAI client for compatibility
+  private vectorStore: SimpleVectorStore = new SimpleVectorStore();
   private chunks: string[] = [];
   private chunkSize: number = 1024;
-  private embeddingModel: string = 'mistral-embed';
-  private generationModel: string = 'mistral-medium';
-  private dimensions: number = 1024; // Dimensions of Mistral embeddings
+  private embeddingModel: string = 'text-embedding-ada-002'; // OpenAI embedding model
+  private generationModel: string = 'gpt-3.5-turbo'; // Fallback to OpenAI model
   private embeddingCache: EmbeddingCache = {};
   private cacheTTL: number = 3600000; // Cache TTL: 1 hour in milliseconds
 
@@ -31,24 +131,25 @@ export class MistralRAGService {
    * Create a new MistralRAGService
    */
   constructor() {
-    // Initialize the Mistral client with API key from environment variables
-    const apiKey = process.env.MISTRAL_API_KEY;
+    // Initialize the OpenAI client with API key from environment variables
+    const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      throw new Error('MISTRAL_API_KEY environment variable not set');
+      throw new Error('OPENAI_API_KEY environment variable not set');
     }
-    // Use compatible Mistral client initialization with proper options object
-    this.client = new Mistral({ apiKey });
+    // Use OpenAI client for compatibility
+    this.client = new OpenAI({
+      apiKey: apiKey
+    });
 
-    // Initialize FAISS index
+    // Initialize vector store
     this.resetIndex();
   }
 
   /**
-   * Reset the FAISS index
+   * Reset the vector store
    */
   private resetIndex(): void {
-    // Create a new FAISS index for L2 distance with proper 'new' keyword
-    this.index = new faiss.IndexFlatL2(this.dimensions);
+    this.vectorStore = new SimpleVectorStore();
     this.chunks = [];
   }
 
@@ -75,9 +176,9 @@ export class MistralRAGService {
       const embeddings = await this.createEmbeddingsForChunks(this.chunks);
       logger.info(`Created embeddings for ${embeddings.length} chunks`);
       
-      // Add embeddings to FAISS index
-      this.index.add(embeddings);
-      logger.info('Added embeddings to FAISS index');
+      // Add embeddings to vector store
+      this.vectorStore.add(embeddings, this.chunks);
+      logger.info('Added embeddings to vector store');
       
       return;
     } catch (error) {
@@ -221,8 +322,8 @@ export class MistralRAGService {
         return cachedItem.embedding;
       }
       
-      // Generate new embedding
-      const response = await this.client.embeddings({
+      // Generate new embedding using OpenAI
+      const response = await this.client.embeddings.create({
         model: this.embeddingModel,
         input: text
       });
@@ -268,7 +369,7 @@ export class MistralRAGService {
   }
 
   /**
-   * Retrieve chunks most relevant to a query
+   * Retrieve relevant chunks for a query
    * @param query Query to find relevant chunks for
    * @param k Number of chunks to return
    * @returns Array of relevant chunks
@@ -279,15 +380,10 @@ export class MistralRAGService {
       const queryEmbedding = await this.createEmbedding(query);
       
       // Find k nearest neighbors
-      const { distances, indices } = this.index.search(queryEmbedding, k);
+      const { indices } = this.vectorStore.search(queryEmbedding, k);
       
       // Get the corresponding chunks
-      const relevantChunks: string[] = [];
-      for (let i = 0; i < indices.length; i++) {
-        if (indices[i] >= 0 && indices[i] < this.chunks.length) {
-          relevantChunks.push(this.chunks[indices[i]]);
-        }
-      }
+      const relevantChunks = indices.map(index => this.vectorStore.getDocument(index));
       
       return relevantChunks;
     } catch (error) {
@@ -317,8 +413,8 @@ export class MistralRAGService {
       // Combine chunks into context
       const context = chunks.join('\n\n');
       
-      // Generate response with context
-      const response = await this.client.chat({
+      // Generate response with context using OpenAI
+      const response = await this.client.chat.completions.create({
         model: this.generationModel,
         messages: [
           {
@@ -332,7 +428,7 @@ export class MistralRAGService {
         ]
       });
       
-      return response.choices[0].message.content;
+      return response.choices[0].message.content || '';
     } catch (error) {
       // Fix error type handling for logger
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -350,7 +446,7 @@ export class MistralRAGService {
    */
   private async generateDirectResponse(query: string, systemPrompt?: string): Promise<string> {
     try {
-      const response = await this.client.chat({
+      const response = await this.client.chat.completions.create({
         model: this.generationModel,
         messages: [
           {
@@ -364,7 +460,7 @@ export class MistralRAGService {
         ]
       });
       
-      return response.choices[0].message.content;
+      return response.choices[0].message.content || '';
     } catch (error) {
       // Fix error type handling for logger
       const errorMessage = error instanceof Error ? error.message : String(error);

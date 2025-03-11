@@ -95,7 +95,7 @@
     "next-themes": "^0.2.1",
     "node-fetch": "^2.7.0",
     "novel": "^1.0.2",
-    "openai": "^4.86.2",
+    "openai": "^4.87.2",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^1.1.1",
     "pdfjs-dist": "^4.10.38",
