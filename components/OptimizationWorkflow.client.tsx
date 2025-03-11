@@ -195,13 +195,13 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
         
         if (response.ok) {
           showToast({
-            title: "Optimization Started",
-            description: "Your CV is being optimized. This may take a moment.",
+            title: "Analysis Complete",
+            description: "Your CV has been analyzed. Review results and click the Optimize tab when ready.",
             duration: 5000,
           });
           
-          // Explicitly switch to the optimize tab
-          setActiveStep("optimize");
+          // Do NOT switch tabs automatically - let the user review the analysis
+          // setActiveStep("optimize");
         } else {
           const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
           console.error("Error response from optimization process:", errorData);

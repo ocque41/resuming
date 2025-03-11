@@ -464,20 +464,26 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
         
         {analysis && (
           <div className="space-y-6 overflow-x-auto">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-4 bg-[#0A0A0A] rounded-lg border border-gray-800">
-              <div>
-                <h3 className="text-white font-medium mb-1">ATS Compatibility Score</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+              <div className="bg-[#050505] p-4 rounded-lg border border-gray-800">
+                <h3 className="text-lg text-white font-semibold mb-3">ATS Compatibility Score</h3>
                 <div className="flex items-center">
-                  <div className="text-3xl font-bold text-[#B4916C]">{formatAtsScore(analysis.atsScore)}</div>
-                  <div className="ml-2 text-gray-400 text-sm">/ 100</div>
+                  <div className="text-[#B4916C] font-bold text-4xl">
+                    {formatAtsScore(analysis.atsScore)}
+                  </div>
+                  <div className="text-sm text-gray-400 ml-1">/&nbsp;100</div>
                 </div>
               </div>
               
-              <div>
-                <h3 className="text-white font-medium mb-1">Industry</h3>
-                <div className="flex items-center text-gray-300">
-                  <Building className="w-4 h-4 mr-1 text-[#B4916C]" />
-                  {analysis.industry}
+              <div className="bg-[#050505] p-4 rounded-lg border border-gray-800">
+                <h3 className="text-lg text-white font-semibold mb-3 flex items-center">
+                  <Building className="h-4 w-4 mr-2 text-[#B4916C]" />
+                  Industry
+                </h3>
+                <div className="mt-1">
+                  <span className="px-2 py-1 bg-[#B4916C]/10 text-[#B4916C] rounded-md">
+                    {analysis.industry || "General"}
+                  </span>
                 </div>
               </div>
             </div>
@@ -527,37 +533,6 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
                 {analysis.industryInsight && (
                   <p className="text-gray-400 text-sm">{analysis.industryInsight}</p>
                 )}
-              </div>
-            )}
-            
-            {analysis && onAnalysisComplete && (
-              <div className="mt-6 flex flex-col items-center">
-                <Alert className="mb-4 bg-blue-900/20 text-blue-400 border border-blue-900">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Please review your CV analysis above. When you're ready to proceed with optimization, click the button below.
-                  </AlertDescription>
-                </Alert>
-                <Button 
-                  onClick={() => {
-                    if (!selectedCVId) {
-                      setError("No CV selected for optimization");
-                      return;
-                    }
-                    try {
-                      console.log('Proceeding to Optimization with CV ID:', selectedCVId);
-                      // Ensure we're passing a string ID
-                      const cvIdString = String(selectedCVId);
-                      onAnalysisComplete(cvIdString);
-                    } catch (error) {
-                      console.error('Error calling onAnalysisComplete:', error);
-                      setError("Failed to proceed to optimization. Please try again.");
-                    }
-                  }}
-                  className="bg-[#B4916C] hover:bg-[#A3815C] text-white w-full sm:w-auto"
-                >
-                  Proceed to Optimization <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
               </div>
             )}
           </div>

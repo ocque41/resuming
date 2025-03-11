@@ -163,54 +163,54 @@ export class DocumentGenerator {
         });
       }
       
-      // Add Achievements section (new section)
-      children.push(
-        new Paragraph({
-          text: 'ACHIEVEMENTS',
-          heading: HeadingLevel.HEADING_1,
-          spacing: {
-            before: 400,
-            after: 200
-          }
-        })
-      );
-      
-      // Add achievement bullet points
-      const achievements = [
-        "Successfully increased team productivity by 35% through implementation of agile methodologies",
-        "Led cross-functional team to deliver project under budget and ahead of schedule",
-        "Recognized with company-wide award for innovative solution that saved $50,000 annually"
-      ];
-      
-      achievements.forEach(achievement => {
-        children.push(
-          new Paragraph({
-            text: achievement,
-            bullet: {
-              level: 0
-            },
-            spacing: {
-              before: 100,
-              after: 100
-            }
-          })
-        );
-      });
-      
       // Check if Experience section exists
       const hasExperience = contentSections['EXPERIENCE'] || 
                            contentSections['WORK EXPERIENCE'] || 
                            contentSections['PROFESSIONAL EXPERIENCE'] ||
                            contentSections['EMPLOYMENT HISTORY'];
       
+      // Only add Achievements section if there's work experience
       if (hasExperience) {
-        // Add Experience section
+        // Extract achievements from work experience
         const experienceContent = contentSections['EXPERIENCE'] || 
                                  contentSections['WORK EXPERIENCE'] || 
                                  contentSections['PROFESSIONAL EXPERIENCE'] ||
                                  contentSections['EMPLOYMENT HISTORY'];
         
-        // Add section heading
+        // Parse the experience content to find achievement-like statements
+        const achievements = this.extractAchievements(experienceContent);
+        
+        if (achievements.length > 0) {
+          // Add Achievements section
+          children.push(
+            new Paragraph({
+              text: 'ACHIEVEMENTS',
+              heading: HeadingLevel.HEADING_1,
+              spacing: {
+                before: 400,
+                after: 200
+              }
+            })
+          );
+          
+          // Add achievement bullet points (limit to top 3)
+          achievements.slice(0, 3).forEach(achievement => {
+            children.push(
+              new Paragraph({
+                text: achievement,
+                bullet: {
+                  level: 0
+                },
+                spacing: {
+                  before: 100,
+                  after: 100
+                }
+              })
+            );
+          });
+        }
+        
+        // Add Experience section
         children.push(
           new Paragraph({
             text: 'EXPERIENCE',
@@ -528,5 +528,112 @@ export class DocumentGenerator {
     }
     
     return sections;
+  }
+  
+  /**
+   * Extract achievements from work experience content
+   * Looks for sentences that appear to be achievements based on certain patterns
+   */
+  private static extractAchievements(experienceContent: string): string[] {
+    const lines = experienceContent.split('\n');
+    const achievements: string[] = [];
+    
+    // Action verbs that often indicate achievements
+    const achievementVerbs = [
+      "increased", "decreased", "improved", "reduced", "saved", "grew", 
+      "developed", "created", "established", "implemented", "launched", 
+      "generated", "delivered", "achieved", "won", "awarded", "recognized"
+    ];
+    
+    // Patterns that might indicate metrics or quantifiable results
+    const metricPatterns = [
+      /\d+\s*%/, // Percentage (e.g., 25%)
+      /\$\s*\d+/, // Dollar amount (e.g., $500K)
+      /\d+\s*k/i, // Thousands (e.g., 500K)
+      /\d+\s*m/i, // Millions (e.g., 2M)
+      /\d+\s*million/i, // Written millions (e.g., 2 million)
+      /\d+\s*billion/i, // Written billions (e.g., 1 billion)
+    ];
+    
+    // Search through each line for achievement-like content
+    lines.forEach((line) => {
+      // Skip empty lines
+      if (line.trim().length === 0) return;
+      
+      // Clean the line (remove bullet points)
+      let cleanLine = line.trim();
+      if (cleanLine.startsWith('-') || cleanLine.startsWith('•') || cleanLine.startsWith('*')) {
+        cleanLine = cleanLine.substring(1).trim();
+      }
+      
+      // Skip if line is too short
+      if (cleanLine.length < 20) return;
+      
+      // Check if line contains achievement verbs
+      const containsAchievementVerb = achievementVerbs.some(verb => 
+        cleanLine.toLowerCase().includes(verb)
+      );
+      
+      // Check if line contains metrics
+      const containsMetrics = metricPatterns.some(pattern => 
+        pattern.test(cleanLine)
+      );
+      
+      // If line has either achievement verbs or metrics, consider it an achievement
+      if (containsAchievementVerb || containsMetrics) {
+        // Ensure first letter is capitalized
+        const firstChar = cleanLine.charAt(0).toUpperCase();
+        const restOfLine = cleanLine.slice(1);
+        
+        // Add to achievements
+        achievements.push(firstChar + restOfLine);
+      }
+    });
+    
+    // If no achievements found using patterns, look for longest bullet points
+    if (achievements.length === 0) {
+      const bulletPoints = lines
+        .filter(line => {
+          const trimmed = line.trim();
+          return (trimmed.startsWith('-') || trimmed.startsWith('•') || trimmed.startsWith('*')) && 
+                 trimmed.length > 30; // Only consider substantial bullet points
+        })
+        .map(line => {
+          let cleaned = line.trim();
+          if (cleaned.startsWith('-') || cleaned.startsWith('•') || cleaned.startsWith('*')) {
+            cleaned = cleaned.substring(1).trim();
+          }
+          return cleaned;
+        })
+        .sort((a, b) => b.length - a.length); // Sort by length (longest first)
+      
+      // Take up to 3 longest bullet points
+      achievements.push(...bulletPoints.slice(0, 3));
+    }
+    
+    // If still no achievements, create generic achievements based on job titles
+    if (achievements.length === 0) {
+      // Try to extract job titles
+      const jobTitlePattern = /(?:^|\n)([A-Z][A-Za-z\s]+(?:Manager|Director|Engineer|Developer|Specialist|Analyst|Consultant|Designer|Coordinator|Assistant|Representative|Officer|Lead|Head|Chief))/g;
+      const jobTitleMatches = [...experienceContent.matchAll(jobTitlePattern)];
+      
+      if (jobTitleMatches.length > 0) {
+        // Use job titles to create achievements
+        jobTitleMatches.slice(0, 2).forEach(match => {
+          const jobTitle = match[1].trim();
+          achievements.push(`Successfully performed key responsibilities as ${jobTitle}, exceeding expectations`);
+          achievements.push(`Demonstrated excellence in problem-solving and teamwork as ${jobTitle}`);
+        });
+      } else {
+        // Fallback to generic achievements
+        achievements.push(
+          "Successfully implemented process improvements resulting in increased efficiency",
+          "Collaborated effectively with cross-functional teams to achieve organizational goals",
+          "Recognized for exceptional performance and contribution to team success"
+        );
+      }
+    }
+    
+    return achievements;
   }
 } 
