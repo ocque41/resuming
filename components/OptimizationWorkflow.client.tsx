@@ -199,6 +199,9 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
             description: "Your CV is being optimized. This may take a moment.",
             duration: 5000,
           });
+          
+          // Explicitly switch to the optimize tab
+          setActiveStep("optimize");
         } else {
           const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
           console.error("Error response from optimization process:", errorData);

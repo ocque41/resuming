@@ -112,26 +112,26 @@ export default function OptimizationHistory({
               </Select>
             </div>
             
-            <div className="flex space-x-2">
+            <div className="flex space-x-3">
               <Button
                 variant="outline"
-                size="sm"
-                className="bg-gray-800 text-gray-300 border-gray-700"
+                size="icon"
+                className="bg-[#050505] text-gray-300 border-gray-700 h-8 w-8 rounded-full"
                 disabled={selectedVersion <= 1}
                 onClick={() => handleVersionChange((selectedVersion - 1).toString())}
               >
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                Previous
+                <ArrowLeft className="h-4 w-4" />
+                <span className="sr-only">Previous</span>
               </Button>
               <Button
                 variant="outline"
-                size="sm"
-                className="bg-gray-800 text-gray-300 border-gray-700"
+                size="icon"
+                className="bg-[#050505] text-gray-300 border-gray-700 h-8 w-8 rounded-full"
                 disabled={selectedVersion >= history.versions.length}
                 onClick={() => handleVersionChange((selectedVersion + 1).toString())}
               >
-                Next
-                <ArrowRight className="h-4 w-4 ml-1" />
+                <ArrowRight className="h-4 w-4" />
+                <span className="sr-only">Next</span>
               </Button>
             </div>
           </div>
