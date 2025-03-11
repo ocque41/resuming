@@ -432,165 +432,166 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
   };
 
   return (
-    <Card className="rounded-lg border-t-4 border-t-[#B4916C] shadow-md bg-[#050505] text-white w-full max-w-[95vw] mx-auto">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-xl font-semibold flex items-center justify-between">
-          <div className="flex items-center">
-            <FileText className="h-5 w-5 mr-2 text-[#B4916C]" />
-            Analyze CV
+    <>
+      <Card className="rounded-lg border-t-4 border-t-[#B4916C] shadow-md bg-[#050505] text-white w-full max-w-[95vw] mx-auto">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl font-semibold flex items-center justify-between">
+            <div className="flex items-center">
+              <FileText className="h-5 w-5 mr-2 text-[#B4916C]" />
+              Analyze CV
+            </div>
+          </CardTitle>
+          <CardDescription className="text-gray-400">
+            Analyze your CV for ATS compatibility and improvement opportunities
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {/* File selection area */}
+          <div className="mb-6">
+            <div className="text-sm text-gray-400 mb-2">
+              Select a CV to analyze
+            </div>
+            <SimpleFileDropdown
+              cvs={cvs}
+              onSelect={handleCVSelect}
+              selectedCVName={selectedCVName}
+            />
           </div>
-        </CardTitle>
-        <CardDescription className="text-gray-400">
-          Analyze your CV for ATS compatibility and improvement opportunities
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {/* File selection area */}
-        <div className="mb-6">
-          <div className="text-sm text-gray-400 mb-2">
-            Select a CV to analyze
-          </div>
-          <SimpleFileDropdown
-            cvs={cvs}
-            onSelect={handleCVSelect}
-            selectedCVName={selectedCVName}
-          />
-        </div>
 
-        {/* Analysis button */}
-        <div className="mt-4">
-          <Button
-            onClick={handleAnalyze}
-            className="w-full bg-[#B4916C] hover:bg-[#9A7A5B] text-white flex items-center justify-center"
-            disabled={loading || !selectedCVName}
-          >
-            {loading ? (
-              <>
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                Analyzing...
-              </>
-            ) : (
-              <>
-                <BarChart2 className="h-4 w-4 mr-2" />
-                Analyze CV
-              </>
-            )}
-          </Button>
-        </div>
-
-        {/* Loading state */}
-        {loading && (
+          {/* Analysis button */}
           <div className="mt-4">
-            <Progress value={45} className="h-2 bg-gray-700" />
-            <p className="text-sm text-gray-400 mt-2 text-center">Analyzing CV for ATS compatibility...</p>
-          </div>
-        )}
-
-        {/* Error message */}
-        {error && (
-          <Alert variant="destructive" className="mt-4 border border-red-800 bg-red-900/20">
-            <AlertCircle className="h-4 w-4 text-red-400" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {/* Analysis results */}
-        {analysis && !loading && (
-          <div className="mt-6 space-y-6">
-            {/* ATS Score */}
-            <div className="rounded-lg border border-[#B4916C]/30 p-4 bg-[#1A1A1A]">
-              <h3 className="text-lg font-semibold mb-4">ATS Compatibility Score</h3>
-              <div className="flex items-center">
-                <div className="w-full max-w-sm">
-                  <Progress value={Number(formatAtsScore(analysis.atsScore))} className="h-3 bg-gray-700" />
-                </div>
-                <span className="ml-4 text-xl font-bold text-[#B4916C]">{formatAtsScore(analysis.atsScore)}%</span>
-              </div>
-              
-              <div className="mt-2 text-sm text-gray-400">
-                {Number(formatAtsScore(analysis.atsScore)) >= 70
-                  ? "Good score! Your CV is well-optimized for ATS systems."
-                  : Number(formatAtsScore(analysis.atsScore)) >= 50
-                  ? "Average score. Your CV needs some improvements for better ATS compatibility."
-                  : "Low score. Your CV needs significant optimization for ATS systems."}
-              </div>
-            </div>
-            
-            {/* Industry & Language */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-lg border border-[#B4916C]/30 p-4 bg-[#1A1A1A]">
-                <h3 className="text-sm font-medium text-gray-400 mb-1">Industry</h3>
-                <p className="text-lg font-semibold">{analysis.industry}</p>
-              </div>
-              
-              {analysis.language && (
-                <div className="rounded-lg border border-[#B4916C]/30 p-4 bg-[#1A1A1A]">
-                  <h3 className="text-sm font-medium text-gray-400 mb-1">Language</h3>
-                  <p className="text-lg font-semibold">{getLanguageName(analysis.language)}</p>
-                </div>
+            <Button
+              onClick={handleAnalyze}
+              className="w-full bg-[#B4916C] hover:bg-[#9A7A5B] text-white flex items-center justify-center"
+              disabled={loading || !selectedCVName}
+            >
+              {loading ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <BarChart2 className="h-4 w-4 mr-2" />
+                  Analyze CV
+                </>
               )}
+            </Button>
+          </div>
+
+          {/* Loading state */}
+          {loading && (
+            <div className="mt-4">
+              <Progress value={45} className="h-2 bg-gray-700" />
+              <p className="text-sm text-gray-400 mt-2 text-center">Analyzing CV for ATS compatibility...</p>
             </div>
-            
-            {/* Strengths and Weaknesses */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Strengths */}
+          )}
+
+          {/* Error message */}
+          {error && (
+            <Alert variant="destructive" className="mt-4 border border-red-800 bg-red-900/20">
+              <AlertCircle className="h-4 w-4 text-red-400" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Analysis results */}
+          {analysis && !loading && (
+            <div className="mt-6 space-y-6">
+              {/* ATS Score */}
               <div className="rounded-lg border border-[#B4916C]/30 p-4 bg-[#1A1A1A]">
-                <h3 className="text-lg font-semibold mb-4 flex items-center">
-                  <Check className="h-4 w-4 mr-2 text-green-500" />
-                  Strengths
-                </h3>
-                <ul className="space-y-2">
-                  {analysis.strengths.map((strength, index) => (
-                    <li key={index} className="flex items-start">
-                      <Check className="h-4 w-4 mr-2 text-green-500 mt-1 flex-shrink-0" />
-                      <span>{strength}</span>
-                    </li>
-                  ))}
-                </ul>
+                <h3 className="text-lg font-semibold mb-4">ATS Compatibility Score</h3>
+                <div className="flex items-center">
+                  <div className="w-full max-w-sm">
+                    <Progress value={Number(formatAtsScore(analysis.atsScore))} className="h-3 bg-gray-700" />
+                  </div>
+                  <span className="ml-4 text-xl font-bold text-[#B4916C]">{formatAtsScore(analysis.atsScore)}%</span>
+                </div>
+                
+                <div className="mt-2 text-sm text-gray-400">
+                  {Number(formatAtsScore(analysis.atsScore)) >= 70
+                    ? "Good score! Your CV is well-optimized for ATS systems."
+                    : Number(formatAtsScore(analysis.atsScore)) >= 50
+                    ? "Average score. Your CV needs some improvements for better ATS compatibility."
+                    : "Low score. Your CV needs significant optimization for ATS systems."}
+                </div>
               </div>
               
-              {/* Weaknesses */}
+              {/* Industry & Language */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="rounded-lg border border-[#B4916C]/30 p-4 bg-[#1A1A1A]">
+                  <h3 className="text-sm font-medium text-gray-400 mb-1">Industry</h3>
+                  <p className="text-lg font-semibold">{analysis.industry}</p>
+                </div>
+                
+                {analysis.language && (
+                  <div className="rounded-lg border border-[#B4916C]/30 p-4 bg-[#1A1A1A]">
+                    <h3 className="text-sm font-medium text-gray-400 mb-1">Language</h3>
+                    <p className="text-lg font-semibold">{getLanguageName(analysis.language)}</p>
+                  </div>
+                )}
+              </div>
+              
+              {/* Strengths and Weaknesses */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Strengths */}
+                <div className="rounded-lg border border-[#B4916C]/30 p-4 bg-[#1A1A1A]">
+                  <h3 className="text-lg font-semibold mb-4 flex items-center">
+                    <Check className="h-4 w-4 mr-2 text-green-500" />
+                    Strengths
+                  </h3>
+                  <ul className="space-y-2">
+                    {analysis.strengths.map((strength, index) => (
+                      <li key={index} className="flex items-start">
+                        <Check className="h-4 w-4 mr-2 text-green-500 mt-1 flex-shrink-0" />
+                        <span>{strength}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                
+                {/* Weaknesses */}
+                <div className="rounded-lg border border-[#B4916C]/30 p-4 bg-[#1A1A1A]">
+                  <h3 className="text-lg font-semibold mb-4 flex items-center">
+                    <AlertCircle className="h-4 w-4 mr-2 text-red-500" />
+                    Areas to Improve
+                  </h3>
+                  <ul className="space-y-2">
+                    {analysis.weaknesses.map((weakness, index) => (
+                      <li key={index} className="flex items-start">
+                        <AlertCircle className="h-4 w-4 mr-2 text-red-500 mt-1 flex-shrink-0" />
+                        <span>{weakness}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+              
+              {/* Recommendations */}
               <div className="rounded-lg border border-[#B4916C]/30 p-4 bg-[#1A1A1A]">
-                <h3 className="text-lg font-semibold mb-4 flex items-center">
-                  <AlertCircle className="h-4 w-4 mr-2 text-red-500" />
-                  Areas to Improve
-                </h3>
+                <h3 className="text-lg font-semibold mb-4">Recommendations</h3>
                 <ul className="space-y-2">
-                  {analysis.weaknesses.map((weakness, index) => (
+                  {analysis.recommendations.map((recommendation, index) => (
                     <li key={index} className="flex items-start">
-                      <AlertCircle className="h-4 w-4 mr-2 text-red-500 mt-1 flex-shrink-0" />
-                      <span>{weakness}</span>
+                      <ArrowRight className="h-4 w-4 mr-2 text-[#B4916C] mt-1 flex-shrink-0" />
+                      <span>{recommendation}</span>
                     </li>
                   ))}
                 </ul>
               </div>
             </div>
-            
-            {/* Recommendations */}
-            <div className="rounded-lg border border-[#B4916C]/30 p-4 bg-[#1A1A1A]">
-              <h3 className="text-lg font-semibold mb-4">Recommendations</h3>
-              <ul className="space-y-2">
-                {analysis.recommendations.map((recommendation, index) => (
-                  <li key={index} className="flex items-start">
-                    <ArrowRight className="h-4 w-4 mr-2 text-[#B4916C] mt-1 flex-shrink-0" />
-                    <span>{recommendation}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        )}
+          )}
 
-        {/* Children (if any) */}
-        {children}
-      </CardContent>
-    </Card>
+          {/* Children (if any) */}
+          {children}
+        </CardContent>
+      </Card>
+      <style jsx global>{`
+        .h-3.bg-gray-700 > div {
+          background-color: #B4916C;
+        }
+      `}</style>
+    </>
   );
 }
-
-<style jsx global>{`
-  .h-3.bg-gray-700 > div {
-    background-color: #B4916C;
-  }
-`}</style>
 
