@@ -918,23 +918,24 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ cvId: selectedCVId }),
+        body: JSON.stringify({ 
+          cvId: selectedCVId,
+          // Add a timestamp to avoid caching issues
+          timestamp: new Date().getTime()
+        }),
       });
       
+      // Handle non-OK responses
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Error downloading PDF');
+        const errorMessage = errorData.error || `Error: ${response.status} ${response.statusText}`;
+        throw new Error(errorMessage);
       }
       
       const data = await response.json();
       
       if (!data.pdfBase64 || data.pdfBase64.trim() === '') {
         throw new Error('Empty PDF data received');
-      }
-      
-      // Validate PDF data by checking for PDF header
-      if (!data.pdfBase64.startsWith('JVBER')) {
-        throw new Error('Invalid PDF data received');
       }
       
       // Cache the PDF data
@@ -944,7 +945,10 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       
       // Create and download the blob
       const pdfBlob = await fetch(`data:application/pdf;base64,${data.pdfBase64}`)
-        .then(res => res.blob());
+        .then(res => res.blob())
+        .catch(error => {
+          throw new Error(`Failed to create PDF blob: ${error.message}`);
+        });
       
       if (pdfBlob.size < 100) {
         throw new Error('PDF file is too small and may be corrupt');
@@ -955,14 +959,32 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       // Update state for preview
       setPdfData(data.pdfBase64);
       setPdfBase64(data.pdfBase64);
+      
+      // Show success toast
+      toast({
+        title: "PDF Downloaded",
+        description: "Your PDF has been successfully downloaded.",
+        duration: 3000,
+      });
     } catch (error) {
       console.error('Error downloading PDF:', error);
-      setDownloadError(error instanceof Error ? error.message : 'Failed to download PDF');
-      setError(error instanceof Error ? error.message : 'Failed to download PDF');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to download PDF';
+      setDownloadError(errorMessage);
+      setError(errorMessage);
       setErrorType('pdf');
       
-      // Attempt regeneration if there was an error
-      await refreshPDF(true);
+      // Show error toast
+      toast({
+        title: "PDF Download Failed",
+        description: errorMessage,
+        variant: "destructive",
+        duration: 5000,
+      });
+      
+      // Only attempt regeneration for specific errors
+      if (errorMessage.includes('corrupt') || errorMessage.includes('invalid')) {
+        await refreshPDF(true);
+      }
     } finally {
       setIsDownloading(false);
     }
@@ -1034,21 +1056,23 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   };
 
   return (
-    <Card className="col-span-12 border border-gray-800 bg-[#0A0A0A] shadow-lg">
-      <CardHeader className="pb-4">
-        <CardTitle className="text-xl text-white flex justify-between items-center">
-          <span>Optimize CV</span>
-                <Button
+    <Card className="rounded-lg border-t-4 border-t-[#B4916C] shadow-md bg-[#050505] text-white">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-xl font-semibold flex items-center justify-between">
+          <div className="flex items-center">
+            <FileText className="h-5 w-5 mr-2 text-[#B4916C]" />
+            Optimize CV
+          </div>
+          <Button
             variant="ghost" 
             size="sm" 
             className="h-8 text-gray-500 hover:text-white hover:bg-gray-800"
             onClick={toggleDebugMode}
           >
             {debugMode ? 'Hide Debug' : 'Debug Mode'}
-                </Button>
+          </Button>
         </CardTitle>
       </CardHeader>
-      
       <CardContent>
         {/* Debug Information */}
         {debugMode && debugInfo && (
@@ -1290,10 +1314,9 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                   )}
                 </Button>
 
-                {/* Add refresh PDF button */}
                 <Button
                   onClick={() => refreshPDF(true)}
-                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 flex items-center justify-center w-full sm:w-auto"
+                  className="bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center w-full sm:w-auto"
                   disabled={isDownloading || isPDFRefreshing}
                 >
                   {isPDFRefreshing ? (
@@ -1313,7 +1336,11 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                 {downloadError && (
                   <Alert variant="destructive" className="mt-2">
                     <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>{downloadError}</AlertDescription>
+                    <AlertDescription>
+                      {downloadError.includes("Unauthorized") 
+                        ? "Session expired. Please refresh the page and try again."
+                        : downloadError}
+                    </AlertDescription>
                   </Alert>
                 )}
 
