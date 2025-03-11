@@ -12,6 +12,8 @@ import path from "path";
 import { eq } from "drizzle-orm";
 import { extractTextFromPdf } from "@/lib/metadata/extract";
 import { uploadFileToDropbox } from "@/lib/dropboxStorage"; // Dropbox upload function
+import { processCVWithAI } from "@/lib/utils/cvProcessor"; // Import the CV processor
+import { logger } from "@/lib/logger"; // Import the logger
 
 export const config = {
   api: {
@@ -122,15 +124,45 @@ export async function POST(request: Request) {
   try {
     // Insert the new CV record with rawText and default metadata.
     // IMPORTANT: Use 'filepath' (all lowercase) to match your database schema.
+    const initialMetadata = {
+      atsScore: "N/A", 
+      optimized: "No", 
+      sent: "No",
+      processing: false,
+      processingStatus: "Uploaded, waiting to start processing",
+      processingProgress: 0,
+      lastUpdated: new Date().toISOString()
+    };
+    
     const [newCV] = await db.insert(cvs).values({
       userId: session.user.id,
       fileName,
       filepath: dropboxUrl,
       rawText,
-      metadata: JSON.stringify({ atsScore: "N/A", optimized: "No", sent: "No" }),
+      metadata: JSON.stringify(initialMetadata),
     }).returning();
+    
     console.log("CV record inserted successfully:", newCV);
-    return NextResponse.json({ message: "CV uploaded successfully!" });
+    
+    // Start CV processing immediately, but don't wait for it to complete
+    const cvId = newCV.id;
+    if (rawText && rawText.length > 0) {
+      logger.info(`Starting immediate processing for CV ID: ${cvId}`);
+      // Don't await this - let it run in the background
+      processCVWithAI(cvId, rawText, initialMetadata, false, session.user.id)
+        .catch(error => {
+          logger.error(`Error starting CV processing for CV ID ${cvId}:`, 
+                      error instanceof Error ? error.message : String(error));
+        });
+    } else {
+      logger.warn(`CV ID ${cvId} has no text content, skipping immediate processing`);
+    }
+    
+    return NextResponse.json({ 
+      message: "CV uploaded successfully!", 
+      cvId: newCV.id,
+      processingStarted: rawText && rawText.length > 0
+    });
   } catch (dbError) {
     console.error("Database error:", dbError);
     return NextResponse.json(

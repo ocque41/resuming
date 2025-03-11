@@ -548,11 +548,30 @@ async function performQuickAnalysis(rawText: string, localAnalysis: any): Promis
  */
 async function performQuickOptimization(rawText: string, analysis: any): Promise<string> {
   try {
+    // Set a timeout for the optimization process
+    const optimizationStartTime = Date.now();
+    const OPTIMIZATION_TIMEOUT = 30000; // 30 seconds timeout
+    
     // Initialize the RAG service
+    logger.info('Initializing RAG service for CV optimization');
     const ragService = new MistralRAGService();
     
-    // Process the CV document
-    await ragService.processCVDocument(rawText);
+    // Process the CV document with timeout protection
+    try {
+      logger.info('Processing CV document with RAG service');
+      // Add timeout for document processing
+      const processingPromise = ragService.processCVDocument(rawText);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('CV document processing timed out')), 10000);
+      });
+      
+      await Promise.race([processingPromise, timeoutPromise]);
+      logger.info('Successfully processed CV document with RAG service');
+    } catch (processingError) {
+      logger.warn('Error processing CV document with RAG service, falling back to direct optimization', 
+        processingError instanceof Error ? processingError.message : String(processingError));
+      // Continue with fallback optimization
+    }
     
     // Determine language from analysis; default to English
     const language = analysis.language || "en";
@@ -615,15 +634,32 @@ Geben Sie NUR den optimierten Text des Lebenslaufs zurück, ohne Erklärungen.`
     // Craft the optimization query
     const optimizationQuery = `Optimize the following CV text for ATS compatibility in the ${analysis.industry || 'general'} industry:`;
     
-    // Generate optimized content using RAG
+    let optimizedText = '';
+    
+    // Try with RAG first with proper timeout handling
+    logger.info('Attempting CV optimization with RAG');
     try {
-      // Try with RAG first for better context-aware optimization
-      logger.info('Generating optimized CV content with RAG');
-      const optimizedText = await ragService.generateResponse(optimizationQuery, systemPrompt);
+      // Create a promise for the RAG optimization
+      const ragOptimizationPromise = ragService.generateResponse(optimizationQuery, systemPrompt);
+      
+      // Create a timeout promise
+      const ragTimeoutPromise = new Promise<string>((_, reject) => {
+        setTimeout(() => reject(new Error('RAG optimization timed out')), OPTIMIZATION_TIMEOUT);
+      });
+      
+      // Race the optimization against the timeout
+      optimizedText = await Promise.race([ragOptimizationPromise, ragTimeoutPromise]);
       
       // Basic validation to ensure we got reasonable output
       if (optimizedText && optimizedText.length > rawText.length * 0.5) {
         logger.info('Successfully generated optimized CV content with RAG');
+        
+        // Check if we're taking too long overall
+        if (Date.now() - optimizationStartTime > OPTIMIZATION_TIMEOUT) {
+          logger.warn('Optimization process is taking too long, returning current result');
+          return optimizedText;
+        }
+        
         return optimizedText;
       } else {
         logger.warn('Generated content too short or empty, falling back to direct optimization');
@@ -632,11 +668,12 @@ Geben Sie NUR den optimierten Text des Lebenslaufs zurück, ohne Erklärungen.`
     } catch (error) {
       // Fall back to direct OpenAI call if RAG fails
       logger.warn('RAG optimization failed, falling back to direct API call', 
-                error instanceof Error ? error : undefined);
+                error instanceof Error ? error.message : String(error));
       
-      // Define optimization prompt templates per language
-      const optimizationPrompts: Record<string, string> = {
-        en: `Quickly optimize this CV for ATS compatibility. Focus on:
+      try {
+        // Define optimization prompt templates per language
+        const optimizationPrompts: Record<string, string> = {
+          en: `Quickly optimize this CV for ATS compatibility. Focus on:
 1. Adding relevant keywords for the ${analysis.industry} industry
 2. Using action verbs for achievements
 3. Quantifying accomplishments
@@ -650,7 +687,7 @@ ${rawText.substring(0, 3000)}${rawText.length > 3000 ? '...' : ''}
 
 Key weaknesses to address:
 ${analysis.weaknesses?.join(', ') || 'Improve overall ATS compatibility'}`,
-        es: `Optimiza rápidamente este CV para que sea compatible con ATS. Enfócate en:
+          es: `Optimiza rápidamente este CV para que sea compatible con ATS. Enfócate en:
 1. Agregar palabras clave relevantes para la industria de ${analysis.industry}
 2. Usar verbos de acción para describir logros
 3. Cuantificar los logros con métricas
@@ -664,7 +701,7 @@ ${rawText.substring(0,3000)}${rawText.length > 3000 ? '...' : ''}
 
 Aspectos a mejorar:
 ${analysis.weaknesses?.join(', ') || 'Mejorar la compatibilidad general con ATS'}`,
-        fr: `Optimisez rapidement ce CV pour une compatibilité ATS. Concentrez-vous sur :
+          fr: `Optimisez rapidement ce CV pour une compatibilité ATS. Concentrez-vous sur :
 1. Ajouter des mots-clés pertinents pour le secteur de ${analysis.industry}
 2. Utiliser des verbes d'action pour décrire les réalisations
 3. Quantifier les accomplissements avec des métriques
@@ -678,7 +715,7 @@ ${rawText.substring(0,3000)}${rawText.length > 3000 ? '...' : ''}
 
 Points faibles à corriger :
 ${analysis.weaknesses?.join(', ') || 'Améliorer la compatibilité globale avec les ATS'}`,
-        de: `Optimieren Sie diesen Lebenslauf schnell, um die ATS-Kompatibilität zu verbessern. Konzentrieren Sie sich auf:
+          de: `Optimieren Sie diesen Lebenslauf schnell, um die ATS-Kompatibilität zu verbessern. Konzentrieren Sie sich auf:
 1. Hinzufügen relevanter Schlüsselwörter für die ${analysis.industry} Branche
 2. Verwendung von Aktionsverben zur Beschreibung von Erfolgen
 3. Quantifizierung der Leistungen mit Kennzahlen
@@ -692,39 +729,63 @@ ${rawText.substring(0,3000)}${rawText.length > 3000 ? '...' : ''}
 
 Zu verbessernde Punkte:
 ${analysis.weaknesses?.join(', ') || 'Verbessern Sie die allgemeine ATS-Kompatibilität'}`
-      };
+        };
 
-      const prompt = optimizationPrompts[language] || optimizationPrompts["en"];
+        const prompt = optimizationPrompts[language] || optimizationPrompts["en"];
 
-      const openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-      });
+        logger.info('Attempting direct API optimization with OpenAI');
+        const openai = new OpenAI({
+          apiKey: process.env.OPENAI_API_KEY,
+        });
 
-      const response = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "system",
-            content: "You are a fast CV optimizer. Return ONLY the optimized CV text, no explanations."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        temperature: 0.4,
-        max_tokens: 2000,
-      });
-
-      return response.choices[0]?.message?.content || "";
+        // Create a promise for the direct API optimization
+        const directOptimizationPromise = openai.chat.completions.create({
+          model: "gpt-3.5-turbo",
+          messages: [
+            {
+              role: "system",
+              content: "You are a fast CV optimizer. Return ONLY the optimized CV text, no explanations."
+            },
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+          temperature: 0.4,
+          max_tokens: 2000,
+        });
+        
+        // Create a timeout promise
+        const directTimeoutPromise = new Promise<any>((_, reject) => {
+          setTimeout(() => reject(new Error('Direct API optimization timed out')), 15000);
+        });
+        
+        // Race the direct optimization against the timeout
+        const response = await Promise.race([directOptimizationPromise, directTimeoutPromise]);
+        
+        optimizedText = response.choices[0]?.message?.content || "";
+        
+        if (optimizedText && optimizedText.length > 0) {
+          logger.info('Successfully generated optimized CV content with direct API call');
+          return optimizedText;
+        } else {
+          throw new Error('Empty response from direct API call');
+        }
+      } catch (directApiError) {
+        logger.error('Direct API optimization failed', 
+          directApiError instanceof Error ? directApiError.message : String(directApiError));
+        
+        // As a last resort, return the original text with minimal improvements
+        return enhanceTextWithLocalRules(rawText, analysis);
+      }
     }
   } catch (error) {
     // Log error and return original text if all attempts fail
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error(`Error in CV optimization: ${errorMessage}`);
     
-    // Return original text as fallback
-    return rawText;
+    // Return original text with minimal enhancements as fallback
+    return enhanceTextWithLocalRules(rawText, analysis);
   }
 }
 
