@@ -1,4 +1,4 @@
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, BorderStyle } from "docx";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, BorderStyle, AlignmentType } from "docx";
 import { logger } from "@/lib/logger";
 
 /**
@@ -19,7 +19,7 @@ export class DocumentGenerator {
       // Split the CV text into sections based on common headers
       const sections = this.splitIntoSections(cvText);
       
-      // Create document
+      // Create document with valid Paragraph objects
       const doc = new Document({
         sections: [
           {
@@ -68,50 +68,49 @@ export class DocumentGenerator {
   /**
    * Create document content with appropriate formatting
    */
-  private static createDocumentContent(sections: Record<string, string>, metadata?: any): any[] {
-    const content: any[] = [];
+  private static createDocumentContent(sections: Record<string, string>, metadata?: any): Paragraph[] {
+    const content: Paragraph[] = [];
     
     // Add title
-    content.push({
+    content.push(new Paragraph({
       text: 'OPTIMIZED CURRICULUM VITAE',
-      style: 'header',
-      alignment: 'center',
-      margin: [0, 0, 0, 20]
-    });
+      heading: HeadingLevel.HEADING_1,
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 20 }
+    }));
     
     // Add contact information if available
     if (sections['Contact Information'] || sections['CONTACT INFORMATION']) {
       const contactInfo = sections['Contact Information'] || sections['CONTACT INFORMATION'];
-      content.push({
+      content.push(new Paragraph({
         text: contactInfo,
-        style: 'contactInfo',
-        margin: [0, 0, 0, 20]
-      });
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 20 }
+      }));
     }
     
     // Add summary/profile if available
     if (sections['Summary'] || sections['SUMMARY'] || sections['Profile'] || sections['PROFILE']) {
       const summary = sections['Summary'] || sections['SUMMARY'] || sections['Profile'] || sections['PROFILE'];
-      content.push({
+      content.push(new Paragraph({
         text: 'PROFESSIONAL SUMMARY',
-        style: 'sectionHeader',
-        margin: [0, 10, 0, 10]
-      });
-      content.push({
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 10, after: 10 }
+      }));
+      content.push(new Paragraph({
         text: summary,
-        style: 'normal',
-        margin: [0, 0, 0, 15]
-      });
+        spacing: { after: 15 }
+      }));
     }
     
     // Add skills section - ensure it's always present with actual data
-    const skillsContent = sections['Skills'] || sections['SKILLS'] || '';
+    let skillsContent = sections['Skills'] || sections['SKILLS'] || '';
     let skillsList: string[] = [];
     
     if (skillsContent.trim()) {
       // Extract skills from the content
       skillsList = skillsContent
-        .split(/[,;•\n]/)
+        .split(/[,;\n]/)
         .map(skill => skill.trim())
         .filter(skill => skill.length > 0);
     }
@@ -140,118 +139,90 @@ export class DocumentGenerator {
     }
     
     // Add the skills section with the skills we found or generated
-    content.push({
+    content.push(new Paragraph({
       text: 'SKILLS',
-      style: 'sectionHeader',
-      margin: [0, 10, 0, 10]
-    });
+      heading: HeadingLevel.HEADING_2,
+      spacing: { before: 10, after: 10 }
+    }));
     
     // Format skills in a clean, organized way
-    const formattedSkills = {
-      columns: [
-        {
-          ul: skillsList.slice(0, Math.ceil(skillsList.length / 2)).map(skill => ({
-            text: skill,
-            style: 'skillItem'
-          }))
-        },
-        {
-          ul: skillsList.slice(Math.ceil(skillsList.length / 2)).map(skill => ({
-            text: skill,
-            style: 'skillItem'
-          }))
-        }
-      ],
-      style: 'skills',
-      margin: [0, 0, 0, 15]
-    };
-    
-    content.push(formattedSkills);
+    content.push(new Paragraph({
+      text: skillsList.join(', '),
+      spacing: { after: 15 }
+    }));
     
     // Add experience section if available
     if (sections['Experience'] || sections['EXPERIENCE'] || sections['Work Experience'] || sections['WORK EXPERIENCE']) {
       const experience = sections['Experience'] || sections['EXPERIENCE'] || sections['Work Experience'] || sections['WORK EXPERIENCE'];
-      content.push({
+      content.push(new Paragraph({
         text: 'PROFESSIONAL EXPERIENCE',
-        style: 'sectionHeader',
-        margin: [0, 10, 0, 10]
-      });
-      content.push({
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 10, after: 10 }
+      }));
+      content.push(new Paragraph({
         text: experience,
-        style: 'normal',
-        margin: [0, 0, 0, 15]
-      });
+        spacing: { after: 15 }
+      }));
       
       // Add achievements section based on experience
       if (experience && experience.trim().length > 0) {
         const achievements = this.extractAchievements(experience);
         
         if (achievements.length > 0) {
-          content.push({
+          content.push(new Paragraph({
             text: 'KEY ACHIEVEMENTS',
-            style: 'sectionHeader',
-            margin: [0, 10, 0, 10]
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 10, after: 10 }
+          }));
+          
+          achievements.slice(0, 3).forEach(ach => {
+            content.push(new Paragraph({
+              text: `• ${ach}`,
+              spacing: { after: 5 }
+            }));
           });
-          
-          const achievementsList = {
-            ul: achievements.slice(0, 3).map(achievement => ({
-              text: achievement,
-              style: 'achievementItem'
-            }))
-          };
-          
-          content.push(achievementsList);
-          content.push({ text: '', margin: [0, 0, 0, 15] });
         }
       }
     } else {
       // If no experience section, add a goals section instead
-      content.push({
+      content.push(new Paragraph({
         text: 'CAREER GOALS',
-        style: 'sectionHeader',
-        margin: [0, 10, 0, 10]
-      });
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 10, after: 10 }
+      }));
       
-      const goalsList = {
-        ul: [
-          { text: 'To secure a challenging position that utilizes my skills and experience while providing opportunities for professional growth.', style: 'goalItem' },
-          { text: 'To contribute to organizational success through innovative solutions and dedication to excellence.', style: 'goalItem' },
-          { text: 'To continuously develop my expertise and stay at the forefront of industry developments.', style: 'goalItem' }
-        ]
-      };
-      
-      content.push(goalsList);
-      content.push({ text: '', margin: [0, 0, 0, 15] });
+      content.push(new Paragraph({
+        text: "To secure a challenging position that utilizes my skills and experience while providing opportunities for professional growth. To contribute to organizational success through innovative solutions and dedication to excellence. To continuously develop my expertise and stay at the forefront of industry developments.",
+        spacing: { after: 15 }
+      }));
     }
     
     // Add education section if available
     if (sections['Education'] || sections['EDUCATION']) {
       const education = sections['Education'] || sections['EDUCATION'];
-      content.push({
+      content.push(new Paragraph({
         text: 'EDUCATION',
-        style: 'sectionHeader',
-        margin: [0, 10, 0, 10]
-      });
-      content.push({
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 10, after: 10 }
+      }));
+      content.push(new Paragraph({
         text: education,
-        style: 'normal',
-        margin: [0, 0, 0, 15]
-      });
+        spacing: { after: 15 }
+      }));
     }
     
     // Add certifications if available
     if (sections['Certifications'] || sections['CERTIFICATIONS']) {
       const certifications = sections['Certifications'] || sections['CERTIFICATIONS'];
-      content.push({
+      content.push(new Paragraph({
         text: 'CERTIFICATIONS',
-        style: 'sectionHeader',
-        margin: [0, 10, 0, 10]
-      });
-      content.push({
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 10, after: 10 }
+      }));
+      content.push(new Paragraph({
         text: certifications,
-        style: 'normal',
-        margin: [0, 0, 0, 15]
-      });
+        spacing: { after: 15 }
+      }));
     }
     
     // Add additional sections
@@ -266,16 +237,15 @@ export class DocumentGenerator {
     
     for (const [key, value] of Object.entries(sections)) {
       if (!knownSections.includes(key) && value.trim()) {
-        content.push({
+        content.push(new Paragraph({
           text: key.toUpperCase(),
-          style: 'sectionHeader',
-          margin: [0, 10, 0, 10]
-        });
-        content.push({
+          heading: HeadingLevel.HEADING_2,
+          spacing: { before: 10, after: 10 }
+        }));
+        content.push(new Paragraph({
           text: value,
-          style: 'normal',
-          margin: [0, 0, 0, 15]
-        });
+          spacing: { after: 15 }
+        }));
       }
     }
     

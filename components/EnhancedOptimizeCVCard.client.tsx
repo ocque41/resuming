@@ -155,6 +155,9 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   // Add new states for PDF refreshing
   const [isPDFRefreshing, setIsPDFRefreshing] = useState<boolean>(false);
   
+  // Add new states for PDF preview
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  
   // Auto-select first CV if available
   useEffect(() => {
     if (cvs.length > 0 && !selectedCVId) {
@@ -868,7 +871,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       );
     }
     
-    // Check if PDF data is valid
     if (pdfBase64.length < 100) {
       return (
         <div className="mt-4 w-full h-96 border border-gray-700 rounded-lg overflow-hidden flex items-center justify-center bg-[#050505]">
@@ -894,60 +896,22 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       );
     }
     
-    try {
-      // Create a blob URL for the PDF preview
-      const pdfBlob = base64ToBlob(pdfBase64, 'application/pdf');
-      const pdfUrl = URL.createObjectURL(pdfBlob);
-      
-      return (
-        <div className="mt-4 w-full border border-gray-700 rounded-lg overflow-hidden bg-[#050505]">
-          <div className="flex justify-between items-center p-2 bg-gray-800">
-            <h3 className="text-sm font-medium text-gray-300">PDF Preview</h3>
-            <div className="flex space-x-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => refreshPDF(true)}
-                disabled={isPDFRefreshing}
-                className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
-              >
-                {isPDFRefreshing ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                )}
-                Refresh PDF
-              </Button>
-              <Button 
-                variant="default" 
-                size="sm" 
-                onClick={downloadPDF}
-                disabled={isDownloading}
-                className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
-              >
-                {isDownloading ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Download className="h-4 w-4 mr-2" />
-                )}
-                Download PDF
-              </Button>
-            </div>
-          </div>
-          <iframe 
-            src={pdfUrl} 
-            className="w-full h-[500px]" 
-            title="PDF Preview"
-          />
-        </div>
-      );
-    } catch (error) {
-      console.error('Error creating PDF preview:', error);
+    if (!pdfPreviewUrl) {
       return (
         <div className="mt-4 w-full h-96 border border-gray-700 rounded-lg overflow-hidden flex items-center justify-center bg-[#050505]">
           <div className="text-center">
-            <AlertCircle className="h-12 w-12 mx-auto text-red-400 mb-2" />
-            <p className="text-sm text-red-400 mb-4">Error creating PDF preview: {error instanceof Error ? error.message : 'Unknown error'}</p>
+            <Loader2 className="h-12 w-12 mx-auto text-gray-400 mb-2 animate-spin" />
+            <p className="text-sm text-gray-400 mb-4">Preparing PDF preview...</p>
+          </div>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="mt-4 w-full border border-gray-700 rounded-lg overflow-hidden bg-[#050505]">
+        <div className="flex justify-between items-center p-2 bg-gray-800">
+          <h3 className="text-sm font-medium text-gray-300">PDF Preview</h3>
+          <div className="flex space-x-2">
             <Button 
               variant="outline" 
               size="sm" 
@@ -960,12 +924,31 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
               ) : (
                 <RefreshCw className="h-4 w-4 mr-2" />
               )}
-              Try Again
+              Refresh PDF
+            </Button>
+            <Button 
+              variant="default" 
+              size="sm" 
+              onClick={downloadPDF}
+              disabled={isDownloading}
+              className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
+            >
+              {isDownloading ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
+              Download PDF
             </Button>
           </div>
         </div>
-      );
-    }
+        <iframe 
+          src={pdfPreviewUrl} 
+          className="w-full h-[500px]" 
+          title="PDF Preview"
+        />
+      </div>
+    );
   };
 
   // Helper function to convert base64 to Blob
@@ -1100,6 +1083,13 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     setDownloadError('');
     
     try {
+      // Show loading toast
+      toast({
+        title: "Refreshing PDF",
+        description: "Please wait while we regenerate your PDF...",
+        duration: 3000,
+      });
+      
       // First try to generate a new PDF
       const response = await fetch('/api/cv/convert-to-pdf', {
         method: 'POST',
@@ -1108,13 +1098,14 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         },
         body: JSON.stringify({ 
           cvId: selectedCVId,
-          forceRefresh: true // Always force a fresh generation
+          forceRefresh: true, // Always force a fresh generation
+          timestamp: Date.now() // Add timestamp to prevent caching
         }),
       });
       
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Error refreshing PDF');
+        throw new Error(errorData.error || `Error refreshing PDF: ${response.status}`);
       }
       
       const data = await response.json();
@@ -1123,15 +1114,30 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         throw new Error('Empty PDF data received during refresh');
       }
       
+      // Validate the PDF data
+      if (data.pdfBase64.length < 100) {
+        throw new Error('PDF data is too small and may be invalid');
+      }
+      
       // Update the cache with the new PDF
       const cachedDoc = getCachedDocument(selectedCVId);
       if (cachedDoc) {
         updateCachedPDF(selectedCVId, data.pdfBase64);
       }
       
+      // Create a blob from the base64 data
+      const pdfBlob = base64ToBlob(data.pdfBase64, 'application/pdf');
+      
+      // Create a download URL for preview
+      const downloadUrl = URL.createObjectURL(pdfBlob);
+      
+      // Update the PDF preview
+      setPdfPreviewUrl(downloadUrl);
+      
       // Update state for preview
       setPdfData(data.pdfBase64);
       setPdfBase64(data.pdfBase64);
+      setPdfConverted(true);
       
       // Show success toast
       toast({

@@ -48,14 +48,35 @@ async function validateUserSession() {
 // Simplified PDF generation function that returns a valid PDF
 async function generatePDFFromDOCX(docxBase64: string): Promise<string> {
   try {
+    // Validate input
+    if (!docxBase64 || typeof docxBase64 !== 'string' || docxBase64.trim() === '') {
+      logger.error('Invalid DOCX data provided to generatePDFFromDOCX');
+      throw new Error('Invalid DOCX data provided');
+    }
+    
+    logger.info('Starting PDF generation from DOCX');
+    
     // For now, we'll use a simple approach that returns a valid PDF
-    // This is a placeholder until we can implement a more robust solution
     const pdfBase64 = await convertDocxToPdfSimple(docxBase64);
+    
+    // Validate the generated PDF
+    if (!pdfBase64 || typeof pdfBase64 !== 'string' || pdfBase64.trim() === '') {
+      logger.error('PDF generation failed: Empty result');
+      throw new Error('PDF generation failed: Empty result');
+    }
+    
+    // Check if the PDF is valid (at least has a minimum size)
+    if (pdfBase64.length < 100) {
+      logger.error('PDF generation failed: Result too small');
+      throw new Error('PDF generation failed: Result too small');
+    }
+    
+    logger.info(`PDF generation successful, size: ${pdfBase64.length} characters`);
     return pdfBase64;
   } catch (error) {
     logger.error('Error in PDF generation:', error);
     // Return a fallback PDF if conversion fails
-    return getEmergencyFallbackPDF("We couldn't generate a PDF from your document. Please download the DOCX version instead.");
+    return getEmergencyFallbackPDF(`We couldn't generate a PDF from your document. Error: ${error instanceof Error ? error.message : 'Unknown error'}. Please download the DOCX version instead.`);
   }
 }
 
@@ -76,74 +97,89 @@ async function convertDocxToPdfSimple(docxBase64: string): Promise<string> {
     const { jsPDF } = require('jspdf');
     const mammoth = require('mammoth');
     
-    // Extract text from DOCX
-    const result = await mammoth.extractRawText({ path: tempDocxPath });
+    // Extract text from DOCX with formatting options
+    const result = await mammoth.extractRawText({ 
+      path: tempDocxPath,
+      preserveEmptyParagraphs: true
+    });
     const text = result.value;
     
     // Create a PDF with the text
-    const doc = new jsPDF();
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
     
-    // Add a title
-    doc.setFontSize(16);
-    doc.text("Optimized CV", 105, 20, { align: 'center' });
+    // Split the text into sections
+    const sections = text.split(/\n\s*\n/);
     
-    // Add the content
-    doc.setFontSize(12);
+    let y = 20; // Starting y position
+    const margin = 20; // Left margin
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const textWidth = pageWidth - (margin * 2);
     
-    // Split the text into lines and add to PDF
-    const lines = text.split('\n');
-    let y = 40;
-    
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
+    // Process each section
+    for (let i = 0; i < sections.length; i++) {
+      const section = sections[i].trim();
+      if (!section) continue;
       
-      // Check if this is a section header (all caps)
-      if (line === line.toUpperCase() && line.length > 2) {
-        // Add some space before section headers
-        y += 5;
-        doc.setFont(undefined, 'bold');
-        doc.text(line, 20, y);
-        doc.setFont(undefined, 'normal');
-        y += 10;
-      } else {
-        // Regular line
-        // Handle word wrapping
-        const textWidth = doc.getTextWidth(line);
-        if (textWidth > 170) {
-          // Split long lines
-          const words = line.split(' ');
-          let currentLine = '';
+      // Split section into lines
+      const lines = section.split('\n');
+      
+      // Process each line in the section
+      for (let j = 0; j < lines.length; j++) {
+        const line = lines[j].trim();
+        if (!line) continue;
+        
+        // Check if this is a section header (all caps)
+        if (line === line.toUpperCase() && line.length > 2) {
+          // Add some space before section headers
+          y += 5;
+          doc.setFont(undefined, 'bold');
+          doc.setFontSize(14);
+          doc.text(line, margin, y);
+          doc.setFont(undefined, 'normal');
+          doc.setFontSize(12);
+          y += 10;
+        } else {
+          // Regular line
+          doc.setFontSize(12);
           
-          for (const word of words) {
-            const testLine = currentLine + (currentLine ? ' ' : '') + word;
-            const testWidth = doc.getTextWidth(testLine);
+          // Check if it's a bullet point
+          let indent = margin;
+          if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
+            indent = margin + 5;
+          }
+          
+          // Handle word wrapping for long lines
+          const splitText = doc.splitTextToSize(line, textWidth - (indent - margin));
+          
+          // Add each line of wrapped text
+          for (let k = 0; k < splitText.length; k++) {
+            doc.text(splitText[k], indent, y);
+            y += 7;
             
-            if (testWidth > 170) {
-              doc.text(currentLine, 20, y);
-              currentLine = word;
-              y += 7;
-              
-              // Check if we need a new page
-              if (y > 280) {
-                doc.addPage();
-                y = 20;
-              }
-            } else {
-              currentLine = testLine;
+            // Check if we need a new page
+            if (y > 280) {
+              doc.addPage();
+              y = 20;
             }
           }
-          
-          // Output the remaining line
-          if (currentLine) {
-            doc.text(currentLine, 20, y);
-            y += 7;
-          }
-        } else {
-          doc.text(line, 20, y);
-          y += 7;
+        }
+        
+        // Add a small space between lines
+        y += 2;
+        
+        // Check if we need a new page
+        if (y > 280) {
+          doc.addPage();
+          y = 20;
         }
       }
+      
+      // Add space between sections
+      y += 5;
       
       // Check if we need a new page
       if (y > 280) {
@@ -176,22 +212,28 @@ function getEmergencyFallbackPDF(message: string): string {
     const { jsPDF } = require('jspdf');
     
     // Create a new PDF document
-    const doc = new jsPDF();
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
     
     // Add a header
-    doc.setFontSize(20);
-    doc.text("CV Optimizer", 105, 20, { align: 'center' });
+    doc.setFontSize(16);
+    doc.setFont(undefined, 'bold');
+    doc.text("CV Optimizer - Error Report", 105, 30, { align: 'center' });
+    doc.setFont(undefined, 'normal');
     
     // Add a message
     doc.setFontSize(14);
-    doc.text("We couldn't generate a complete PDF of your optimized CV", 105, 40, { align: 'center' });
+    doc.text("We couldn't generate a complete PDF of your optimized CV", 105, 50, { align: 'center' });
     
     // Add the specific message
     doc.setFontSize(12);
     
     // Split the message into lines for better formatting
     const splitMessage = doc.splitTextToSize(message, 170);
-    doc.text(splitMessage, 105, 60, { align: 'center' });
+    doc.text(splitMessage, 105, 70, { align: 'center' });
     
     // Add help information
     doc.setFontSize(12);
@@ -201,6 +243,15 @@ function getEmergencyFallbackPDF(message: string): string {
       "2. Try refreshing the PDF generation",
       "3. Contact support if the problem persists"
     ], 20, 100);
+    
+    // Add technical information
+    doc.setFontSize(10);
+    doc.text("Technical Information:", 20, 140);
+    doc.text([
+      `Error Time: ${new Date().toISOString()}`,
+      `Error Type: PDF Generation Failure`,
+      `Browser: ${typeof navigator !== 'undefined' ? navigator.userAgent : 'Server-side generation'}`
+    ], 20, 150);
     
     // Add a timestamp
     const timestamp = new Date().toLocaleString();
@@ -221,12 +272,14 @@ export async function POST(request: NextRequest) {
   try {
     // Verify user session first for security
     const { user, session } = await validateUserSession();
+    logger.info(`PDF conversion requested by user: ${user.id}`);
     
     // Parse request body
     let body;
     try {
       body = await request.json();
     } catch (error) {
+      logger.error('Invalid request body:', error);
       return new Response(JSON.stringify({ 
         error: "Invalid request body"
       }), {
@@ -235,9 +288,11 @@ export async function POST(request: NextRequest) {
       });
     }
     
-    const { cvId, docxBase64 } = body;
+    const { cvId, docxBase64, forceRefresh = false } = body;
+    logger.info(`PDF conversion parameters: cvId=${cvId}, forceRefresh=${forceRefresh}, hasDocxData=${!!docxBase64}`);
 
     if (!cvId && !docxBase64) {
+      logger.error('Missing required parameters');
       return new Response(JSON.stringify({ 
         error: "Missing required parameters: either cvId or docxBase64 must be provided"
       }), {
@@ -251,11 +306,13 @@ export async function POST(request: NextRequest) {
 
     if (cvId) {
       // Fetch the CV record
+      logger.info(`Fetching CV record for ID: ${cvId}`);
       const cvRecord = await db.query.cvs.findFirst({
         where: eq(cvs.id, parseInt(cvId))
       });
 
       if (!cvRecord) {
+        logger.error(`CV not found: ${cvId}`);
         return new Response(JSON.stringify({ error: "CV not found" }), {
           status: 404, headers: { "Content-Type": "application/json" }
         });
@@ -269,8 +326,8 @@ export async function POST(request: NextRequest) {
         logger.error(`Error parsing metadata for CV ${cvId}:`, error);
       }
 
-      // Check if we already have PDF data in metadata
-      if (metadata.pdfBase64) {
+      // Check if we already have PDF data in metadata and not forcing refresh
+      if (metadata.pdfBase64 && !forceRefresh) {
         logger.info(`Returning existing PDF data for CV ${cvId}`);
         pdfBase64 = metadata.pdfBase64;
       } else if (metadata.docxBase64) {
@@ -284,13 +341,14 @@ export async function POST(request: NextRequest) {
           metadata.pdfGeneratedAt = new Date().toISOString();
 
           // Update the CV record with the new metadata
+          logger.info(`Updating CV record with new PDF data for CV ${cvId}`);
           await db.update(cvs)
             .set({ metadata: JSON.stringify(metadata) })
             .where(eq(cvs.id, parseInt(cvId)));
         } catch (error) {
           logger.error(`Error generating PDF for CV ${cvId}:`, error);
           // Provide a fallback PDF if conversion fails
-          pdfBase64 = getEmergencyFallbackPDF("We couldn't generate your PDF at this time. Please try again or contact support.");
+          pdfBase64 = getEmergencyFallbackPDF(`We couldn't generate your PDF at this time. Error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or contact support.`);
         }
       } else {
         logger.error(`No DOCX data found for CV ${cvId}`);
@@ -305,7 +363,7 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         logger.error("Error generating PDF from provided DOCX:", error);
         // Provide a fallback PDF if conversion fails
-        pdfBase64 = getEmergencyFallbackPDF("We couldn't convert your document to PDF. Please try again or contact support.");
+        pdfBase64 = getEmergencyFallbackPDF(`We couldn't convert your document to PDF. Error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or contact support.`);
       }
     }
 
@@ -316,6 +374,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    logger.info("PDF conversion completed successfully");
     return new Response(JSON.stringify({ pdfBase64 }), {
       status: 200, headers: { "Content-Type": "application/json" }
     });

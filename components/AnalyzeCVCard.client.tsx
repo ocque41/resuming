@@ -379,8 +379,14 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
       return "0%";
     }
     
-    // Convert to number if it's a string
-    const numericScore = typeof score === 'string' ? parseFloat(score) : score;
+    // If the score is a string and includes a % symbol, remove it before parsing
+    let cleanScore = score;
+    if (typeof score === 'string' && score.includes('%')) {
+      cleanScore = score.replace('%', '');
+    }
+    
+    // Convert to number
+    const numericScore = typeof cleanScore === 'string' ? parseFloat(cleanScore) : cleanScore;
     
     // Check if it's a valid number
     if (isNaN(numericScore)) {
