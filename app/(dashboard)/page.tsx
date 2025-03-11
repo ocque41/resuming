@@ -277,19 +277,6 @@ export default function HomePage() {
               - Quantify achievements with metrics
             </p>
             
-            <div itemScope itemType="https://schema.org/Review">
-              <p itemProp="description">
-                Use Case: A software engineer increased interview callbacks by 40% after using our ATS optimization and keyword enhancement features.
-              </p>
-              <div itemProp="author" itemScope itemType="https://schema.org/Person">
-                <meta itemProp="name" content="Verified User" />
-              </div>
-              <div itemProp="reviewRating" itemScope itemType="https://schema.org/Rating">
-                <meta itemProp="ratingValue" content="4.8" />
-                <meta itemProp="bestRating" content="5" />
-              </div>
-            </div>
-
             <div itemScope itemType="https://schema.org/AggregateRating">
               <meta itemProp="ratingValue" content="4.8" />
               <meta itemProp="bestRating" content="5" />

@@ -5,15 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Download, RefreshCw, FileText, Check, Eye, Clock, Info, Loader2 } from "lucide-react";
+import { AlertCircle, Download, RefreshCw, FileText, Check, Eye, Clock, Info } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import PDFPreview from './PDFPreview.client';
 import ComparisonView from './ComparisonView.client';
 import OptimizationHistory from './OptimizationHistory.client';
 import { cacheDocument, getCachedDocument, updateCachedPDF, clearCachedDocument, getCacheAge, getHistoryVersion } from "@/lib/cache/documentCache";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { toast } from "@/components/ui/use-toast";
-import { saveAs } from "file-saver";
 
 // Modern SimpleFileDropdown component
 function ModernFileDropdown({ 
@@ -146,17 +144,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   // Debug state
   const [debugMode, setDebugMode] = useState<boolean>(false);
   const [debugInfo, setDebugInfo] = useState<any>(null);
-  
-  // Add new states for PDF download
-  const [isDownloading, setIsDownloading] = useState<boolean>(false);
-  const [downloadError, setDownloadError] = useState<string>("");
-  const [pdfData, setPdfData] = useState<string | null>(null);
-  
-  // Add new states for PDF refreshing
-  const [isPDFRefreshing, setIsPDFRefreshing] = useState<boolean>(false);
-  
-  // Add new states for PDF preview
-  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   
   // Auto-select first CV if available
   useEffect(() => {
@@ -458,6 +445,62 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       setErrorType('docx');
     }
   }, [docxBase64, selectedCVName]);
+
+  // Fix the PDF download functionality
+  const handleDownloadPdf = useCallback(() => {
+    if (!pdfBase64) {
+      console.error("Cannot download PDF: No PDF data available");
+      setError("PDF data is not available. Please try converting again.");
+      setErrorType('pdf');
+      return;
+    }
+    
+    try {
+      // Validate the base64 data
+      if (!pdfBase64 || typeof pdfBase64 !== 'string' || pdfBase64.trim() === '') {
+        throw new Error("Invalid PDF data");
+      }
+      
+      // Create a blob from the base64 data
+      const byteCharacters = atob(pdfBase64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], {type: 'application/pdf'});
+      
+      // Create a URL for the blob
+      const blobUrl = URL.createObjectURL(blob);
+      
+      // Create and trigger download using a hidden iframe approach
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      document.body.appendChild(iframe);
+      
+      iframe.onload = () => {
+        // Once iframe is loaded, navigate to PDF
+        if (iframe.contentWindow) {
+          iframe.contentWindow.location.href = blobUrl;
+          
+          // Set up cleanup to run after the download starts
+          setTimeout(() => {
+            URL.revokeObjectURL(blobUrl);
+            document.body.removeChild(iframe);
+          }, 1000);
+        }
+      };
+      
+      // Using about:blank to avoid cross-origin issues
+      iframe.src = 'about:blank';
+      
+      console.log("PDF download initiated successfully");
+    } catch (error) {
+      console.error("Error downloading PDF:", error);
+      setError("Failed to download PDF. The file may be corrupted. Please try again.");
+      setErrorType('pdf');
+    }
+  }, [pdfBase64]);
 
   // Update the handleGenerateDocx function to properly handle document generation
   const handleGenerateDocx = useCallback(async () => {
@@ -844,51 +887,38 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     }
   }, [debugMode, isProcessing, selectedCVId, pollForStatus]);
 
-  // Update the PDF preview section
+  // Render PDF preview in a more robust way
   const renderPDFPreview = () => {
+    if (!showPdfPreview) {
+      return null;
+    }
+    
     if (!pdfBase64) {
-      return (
-        <div className="mt-4 w-full h-96 border border-gray-700 rounded-lg overflow-hidden flex items-center justify-center bg-[#050505]">
+  return (
+        <div className="mt-4 w-full h-96 border border-gray-700 rounded-lg overflow-hidden flex items-center justify-center">
           <div className="text-center">
-            <FileText className="h-12 w-12 mx-auto text-gray-400 mb-2" />
-            <p className="text-sm text-gray-400 mb-4">PDF preview not available yet</p>
+            <div className="text-red-400 mb-2">PDF preview not available</div>
             <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => refreshPDF(true)}
-              disabled={isPDFRefreshing}
-              className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
+              onClick={() => handleConvertToPdf(docxBase64 || '')}
+              className="px-4 py-2 bg-[#B4916C] hover:bg-[#A3815C] text-white rounded-md"
             >
-              {isPDFRefreshing ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Generate PDF Preview
+              Generate PDF
             </Button>
           </div>
         </div>
       );
     }
     
+    // Check if PDF data is valid
     if (pdfBase64.length < 100) {
       return (
-        <div className="mt-4 w-full h-96 border border-gray-700 rounded-lg overflow-hidden flex items-center justify-center bg-[#050505]">
+        <div className="mt-4 w-full h-96 border border-gray-700 rounded-lg overflow-hidden flex items-center justify-center">
           <div className="text-center">
-            <AlertCircle className="h-12 w-12 mx-auto text-red-400 mb-2" />
-            <p className="text-sm text-red-400 mb-4">Invalid PDF data</p>
+            <div className="text-red-400 mb-2">Invalid PDF data</div>
             <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => refreshPDF(true)}
-              disabled={isPDFRefreshing}
-              className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
+              onClick={() => handleConvertToPdf(docxBase64 || '')}
+              className="px-4 py-2 bg-[#B4916C] hover:bg-[#A3815C] text-white rounded-md"
             >
-              {isPDFRefreshing ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
               Try Again
             </Button>
           </div>
@@ -896,291 +926,33 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       );
     }
     
-    if (!pdfPreviewUrl) {
-      return (
-        <div className="mt-4 w-full h-96 border border-gray-700 rounded-lg overflow-hidden flex items-center justify-center bg-[#050505]">
-          <div className="text-center">
-            <Loader2 className="h-12 w-12 mx-auto text-gray-400 mb-2 animate-spin" />
-            <p className="text-sm text-gray-400 mb-4">Preparing PDF preview...</p>
-          </div>
-        </div>
-      );
-    }
-    
     return (
-      <div className="mt-4 w-full border border-gray-700 rounded-lg overflow-hidden bg-[#050505]">
-        <div className="flex justify-between items-center p-2 bg-gray-800">
-          <h3 className="text-sm font-medium text-gray-300">PDF Preview</h3>
-          <div className="flex space-x-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => refreshPDF(true)}
-              disabled={isPDFRefreshing}
-              className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
-            >
-              {isPDFRefreshing ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Refresh PDF
-            </Button>
-            <Button 
-              variant="default" 
-              size="sm" 
-              onClick={downloadPDF}
-              disabled={isDownloading}
-              className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
-            >
-              {isDownloading ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Download className="h-4 w-4 mr-2" />
-              )}
-              Download PDF
-            </Button>
-          </div>
-        </div>
-        <iframe 
-          src={pdfPreviewUrl} 
-          className="w-full h-[500px]" 
-          title="PDF Preview"
-        />
-      </div>
+      <div className="mt-4 w-full border border-gray-700 rounded-lg overflow-hidden" style={{ height: "500px" }}>
+        <PDFPreview 
+          pdfData={pdfBase64}
+          fileName={`${selectedCVName?.replace(/\.[^/.]+$/, '') || 'optimized'}_enhanced.pdf`}
+          onDownload={handleDownloadPdf}
+                  />
+                </div>
     );
   };
 
-  // Helper function to convert base64 to Blob
-  const base64ToBlob = (base64: string, mimeType: string) => {
-    try {
-      const byteCharacters = atob(base64);
-      const byteArrays = [];
-      
-      for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-        const slice = byteCharacters.slice(offset, offset + 512);
-        
-        const byteNumbers = new Array(slice.length);
-        for (let i = 0; i < slice.length; i++) {
-          byteNumbers[i] = slice.charCodeAt(i);
-        }
-        
-        const byteArray = new Uint8Array(byteNumbers);
-        byteArrays.push(byteArray);
-      }
-      
-      return new Blob(byteArrays, { type: mimeType });
-    } catch (error) {
-      console.error('Error converting base64 to blob:', error);
-      throw error;
-    }
-  };
-
-  // Update both functions for more reliable PDF handling
-  const downloadPDF = async () => {
-    if (!selectedCVId) return;
-    
-    setIsDownloading(true);
-    setDownloadError('');
-    
-    try {
-      // Check if we have PDF data in the cache first
-      const cachedDoc = getCachedDocument(selectedCVId);
-      
-      if (cachedDoc?.pdfBase64) {
-        // Use cached PDF if available
-        const pdfBlob = await fetch(`data:application/pdf;base64,${cachedDoc.pdfBase64}`)
-          .then(res => res.blob());
-        
-        saveAs(pdfBlob, `${selectedCVName || 'optimized-cv'}.pdf`);
-        setIsDownloading(false);
-        return;
-      }
-      
-      // If no cached PDF, fetch from API
-      const response = await fetch('/api/cv/convert-to-pdf', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          cvId: selectedCVId,
-          // Add a timestamp to avoid caching issues
-          timestamp: new Date().getTime()
-        }),
-      });
-      
-      // Handle non-OK responses
-      if (!response.ok) {
-        const errorData = await response.json();
-        const errorMessage = errorData.error || `Error: ${response.status} ${response.statusText}`;
-        throw new Error(errorMessage);
-      }
-      
-      const data = await response.json();
-      
-      if (!data.pdfBase64 || data.pdfBase64.trim() === '') {
-        throw new Error('Empty PDF data received');
-      }
-      
-      // Cache the PDF data
-      if (cachedDoc) {
-        updateCachedPDF(selectedCVId, data.pdfBase64);
-      }
-      
-      // Create and download the blob
-      const pdfBlob = await fetch(`data:application/pdf;base64,${data.pdfBase64}`)
-        .then(res => res.blob())
-        .catch(error => {
-          throw new Error(`Failed to create PDF blob: ${error.message}`);
-        });
-      
-      if (pdfBlob.size < 100) {
-        throw new Error('PDF file is too small and may be corrupt');
-      }
-      
-      saveAs(pdfBlob, `${selectedCVName || 'optimized-cv'}.pdf`);
-      
-      // Update state for preview
-      setPdfData(data.pdfBase64);
-      setPdfBase64(data.pdfBase64);
-      
-      // Show success toast
-      toast({
-        title: "PDF Downloaded",
-        description: "Your PDF has been successfully downloaded.",
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error('Error downloading PDF:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to download PDF';
-      setDownloadError(errorMessage);
-      setError(errorMessage);
-      setErrorType('pdf');
-      
-      // Show error toast
-      toast({
-        title: "PDF Download Failed",
-        description: errorMessage,
-        variant: "destructive",
-        duration: 5000,
-      });
-      
-      // Only attempt regeneration for specific errors
-      if (errorMessage.includes('corrupt') || errorMessage.includes('invalid')) {
-        await refreshPDF(true);
-      }
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
-  // Improved refreshPDF function with force option and better error handling
-  const refreshPDF = async (force = false) => {
-    if (!selectedCVId) return;
-    
-    setIsPDFRefreshing(true);
-    setDownloadError('');
-    
-    try {
-      // Show loading toast
-      toast({
-        title: "Refreshing PDF",
-        description: "Please wait while we regenerate your PDF...",
-        duration: 3000,
-      });
-      
-      // First try to generate a new PDF
-      const response = await fetch('/api/cv/convert-to-pdf', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          cvId: selectedCVId,
-          forceRefresh: true, // Always force a fresh generation
-          timestamp: Date.now() // Add timestamp to prevent caching
-        }),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Error refreshing PDF: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      if (!data.pdfBase64 || data.pdfBase64.trim() === '') {
-        throw new Error('Empty PDF data received during refresh');
-      }
-      
-      // Validate the PDF data
-      if (data.pdfBase64.length < 100) {
-        throw new Error('PDF data is too small and may be invalid');
-      }
-      
-      // Update the cache with the new PDF
-      const cachedDoc = getCachedDocument(selectedCVId);
-      if (cachedDoc) {
-        updateCachedPDF(selectedCVId, data.pdfBase64);
-      }
-      
-      // Create a blob from the base64 data
-      const pdfBlob = base64ToBlob(data.pdfBase64, 'application/pdf');
-      
-      // Create a download URL for preview
-      const downloadUrl = URL.createObjectURL(pdfBlob);
-      
-      // Update the PDF preview
-      setPdfPreviewUrl(downloadUrl);
-      
-      // Update state for preview
-      setPdfData(data.pdfBase64);
-      setPdfBase64(data.pdfBase64);
-      setPdfConverted(true);
-      
-      // Show success toast
-      toast({
-        title: "PDF Regenerated",
-        description: "Your PDF has been successfully regenerated.",
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error('Error refreshing PDF:', error);
-      setDownloadError(error instanceof Error ? error.message : 'Failed to refresh PDF');
-      setError(error instanceof Error ? error.message : 'Failed to refresh PDF');
-      setErrorType('pdf');
-      
-      // Show error toast
-      toast({
-        title: "PDF Regeneration Failed",
-        description: error instanceof Error ? error.message : 'Could not regenerate the PDF file',
-        variant: "destructive",
-        duration: 5000,
-      });
-    } finally {
-      setIsPDFRefreshing(false);
-    }
-  };
-
   return (
-    <Card className="rounded-lg border-t-4 border-t-[#B4916C] shadow-md bg-[#050505] text-white w-full max-w-[95vw] mx-auto">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-xl font-semibold flex items-center justify-between">
-          <div className="flex items-center">
-            <FileText className="h-5 w-5 mr-2 text-[#B4916C]" />
-            Optimize CV
-          </div>
-          <Button
+    <Card className="col-span-12 border border-gray-800 bg-[#0A0A0A] shadow-lg">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-xl text-white flex justify-between items-center">
+          <span>Optimize CV</span>
+                <Button
             variant="ghost" 
             size="sm" 
             className="h-8 text-gray-500 hover:text-white hover:bg-gray-800"
             onClick={toggleDebugMode}
           >
             {debugMode ? 'Hide Debug' : 'Debug Mode'}
-          </Button>
+                </Button>
         </CardTitle>
       </CardHeader>
+      
       <CardContent>
         {/* Debug Information */}
         {debugMode && debugInfo && (
@@ -1355,15 +1127,15 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
               </div>
             </div>
             
-                <div className="rounded-lg border border-[#B4916C]/30 overflow-hidden mt-4">
-                  <div className="bg-[#1A1A1A] p-4">
+                <div className="rounded-lg border border-gray-800 overflow-hidden mt-4">
+                  <div className="bg-gray-900/50 p-4">
                     <h4 className="text-white font-medium mb-4">Optimized Document</h4>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <Button
                         onClick={() => handleDownloadDocx('docx')}
                         disabled={!docxGenerated}
-                        className="bg-[#B4916C] hover:bg-[#9A7A5B] text-white flex-grow flex items-center justify-center"
+                        className="bg-gray-800 hover:bg-gray-700 text-white flex-grow"
                       >
                         <Download className="h-5 w-5 mr-2" />
                         Download DOCX
@@ -1372,7 +1144,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                 <Button
                         onClick={() => handleDownloadDocx('doc')}
                         disabled={!docxGenerated}
-                        className="bg-[#1A1A1A] hover:bg-[#333333] border border-[#B4916C]/30 text-white flex-grow flex items-center justify-center"
+                        className="bg-gray-800 hover:bg-gray-700 text-white flex-grow"
                 >
                   <Download className="h-5 w-5 mr-2" />
                         Download DOC
@@ -1403,67 +1175,21 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
               )}
               
                     {pdfConverted && pdfBase64 && (
-                      <div className="mt-4 space-y-4">
-                        <div className="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-3">
-                          <Button
-                            onClick={downloadPDF}
-                            className="bg-[#B4916C] hover:bg-[#9A7A5B] text-white flex items-center justify-center w-full sm:w-auto"
-                            disabled={isDownloading || isPDFRefreshing}
-                          >
-                            {isDownloading ? (
-                              <>
-                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                                Downloading...
-                              </>
-                            ) : (
-                              <>
-                                <Download className="h-4 w-4 mr-2" />
-                                Download PDF
-                              </>
-                            )}
-                          </Button>
-
-                          <Button
-                            onClick={() => refreshPDF(true)}
-                            className="bg-[#1A1A1A] hover:bg-[#333333] border border-[#B4916C]/30 text-white flex items-center justify-center w-full sm:w-auto"
-                            disabled={isDownloading || isPDFRefreshing}
-                          >
-                            {isPDFRefreshing ? (
-                              <>
-                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                                Refreshing...
-                              </>
-                            ) : (
-                              <>
-                                <RefreshCw className="h-4 w-4 mr-2" />
-                                Refresh PDF
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                        
-                        {/* Error message */}
-                        {downloadError && (
-                          <Alert variant="destructive" className="mt-2 border border-red-800 bg-red-900/20 text-white">
-                            <AlertCircle className="h-4 w-4 text-red-400" />
-                            <AlertDescription>
-                              {downloadError.includes("Unauthorized") 
-                                ? "Session expired. Please refresh the page and try again."
-                                : downloadError}
-                            </AlertDescription>
-                          </Alert>
-                        )}
-                        
-                        {/* Second row: Preview PDF button */}
-                        <div className="flex">
-                          <Button
-                            onClick={handleTogglePreview}
-                            className="bg-[#1A1A1A] hover:bg-[#333333] border border-[#B4916C]/30 text-white flex items-center justify-center w-full"
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            {showPdfPreview ? "Hide PDF Preview" : "Preview PDF"}
-                          </Button>
-                        </div>
+                      <div className="mt-4 flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-3">
+                <Button
+                  onClick={handleDownloadPdf}
+                          className="bg-[#B4916C] hover:bg-[#A3815C] text-white flex items-center justify-center w-full sm:w-auto"
+                >
+                  <Download className="h-5 w-5 mr-2" />
+                  Download PDF
+                </Button>
+                        <Button
+                          onClick={handleTogglePreview}
+                          className="bg-gray-700 hover:bg-gray-600 text-white flex items-center justify-center w-full sm:w-auto"
+                        >
+                          <Eye className="h-5 w-5 mr-2" />
+                          {showPdfPreview ? 'Hide Preview' : 'Preview PDF'}
+                        </Button>
                       </div>
                     )}
                     
@@ -1493,7 +1219,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                   } : undefined}
                   improvements={improvements}
                   onDownloadOriginal={() => {/* original download functionality */}}
-                  onDownloadOptimized={downloadPDF}
+                  onDownloadOptimized={handleDownloadPdf}
                   displayMode="vertical"
                 />
               </TabsContent>

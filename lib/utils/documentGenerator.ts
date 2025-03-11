@@ -1,4 +1,4 @@
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, BorderStyle, AlignmentType } from "docx";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, BorderStyle } from "docx";
 import { logger } from "@/lib/logger";
 
 /**
@@ -19,7 +19,7 @@ export class DocumentGenerator {
       // Split the CV text into sections based on common headers
       const sections = this.splitIntoSections(cvText);
       
-      // Create document with valid Paragraph objects
+      // Create document
       const doc = new Document({
         sections: [
           {
@@ -68,188 +68,374 @@ export class DocumentGenerator {
   /**
    * Create document content with appropriate formatting
    */
-  private static createDocumentContent(sections: Record<string, string>, metadata?: any): Paragraph[] {
-    const content: Paragraph[] = [];
+  private static createDocumentContent(sections: Record<string, string>, metadata?: any): any[] {
+    const children: any[] = [];
     
-    // Add title
-    content.push(new Paragraph({
-      text: 'OPTIMIZED CURRICULUM VITAE',
-      heading: HeadingLevel.HEADING_1,
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 20 }
-    }));
-    
-    // Add contact information if available
-    if (sections['Contact Information'] || sections['CONTACT INFORMATION']) {
-      const contactInfo = sections['Contact Information'] || sections['CONTACT INFORMATION'];
-      content.push(new Paragraph({
-        text: contactInfo,
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 20 }
-      }));
-    }
-    
-    // Add summary/profile if available
-    if (sections['Summary'] || sections['SUMMARY'] || sections['Profile'] || sections['PROFILE']) {
-      const summary = sections['Summary'] || sections['SUMMARY'] || sections['Profile'] || sections['PROFILE'];
-      content.push(new Paragraph({
-        text: 'PROFESSIONAL SUMMARY',
-        heading: HeadingLevel.HEADING_2,
-        spacing: { before: 10, after: 10 }
-      }));
-      content.push(new Paragraph({
-        text: summary,
-        spacing: { after: 15 }
-      }));
-    }
-    
-    // Add skills section - ensure it's always present with actual data
-    let skillsContent = sections['Skills'] || sections['SKILLS'] || '';
-    let skillsList: string[] = [];
-    
-    if (skillsContent.trim()) {
-      // Extract skills from the content
-      skillsList = skillsContent
-        .split(/[,;\n]/)
-        .map(skill => skill.trim())
-        .filter(skill => skill.length > 0);
-    }
-    
-    // If no skills found or empty skills section, use a fallback
-    if (skillsList.length === 0 && metadata && metadata.keywordAnalysis) {
-      // Extract skills from keyword analysis if available
-      skillsList = Object.keys(metadata.keywordAnalysis).slice(0, 10);
-    }
-    
-    // If still no skills, use a generic set based on industry
-    if (skillsList.length === 0 && metadata && metadata.industry) {
-      const industry = metadata.industry.toLowerCase();
+    // Add header with name and contact info
+    if (sections.header) {
+      const headerLines = sections.header.split('\n');
       
-      if (industry.includes('tech') || industry.includes('software') || industry.includes('it')) {
-        skillsList = ['Programming', 'Software Development', 'Problem Solving', 'Agile Methodologies', 'Database Management', 'System Architecture', 'Cloud Computing', 'API Integration', 'Version Control', 'Technical Documentation'];
-      } else if (industry.includes('finance') || industry.includes('accounting')) {
-        skillsList = ['Financial Analysis', 'Budgeting', 'Forecasting', 'Risk Assessment', 'Financial Reporting', 'Regulatory Compliance', 'Data Analysis', 'Strategic Planning', 'Financial Modeling', 'Accounting Principles'];
-      } else if (industry.includes('marketing') || industry.includes('sales')) {
-        skillsList = ['Digital Marketing', 'Market Research', 'Content Strategy', 'Social Media Management', 'SEO/SEM', 'Campaign Management', 'Customer Relationship Management', 'Brand Development', 'Analytics', 'Presentation Skills'];
-      } else if (industry.includes('healthcare') || industry.includes('medical')) {
-        skillsList = ['Patient Care', 'Medical Documentation', 'Healthcare Compliance', 'Clinical Procedures', 'Medical Terminology', 'Electronic Health Records', 'Patient Education', 'Case Management', 'Medical Research', 'Healthcare Regulations'];
-      } else {
-        skillsList = ['Communication', 'Leadership', 'Project Management', 'Problem Solving', 'Team Collaboration', 'Time Management', 'Critical Thinking', 'Adaptability', 'Attention to Detail', 'Organization'];
-      }
-    }
-    
-    // Add the skills section with the skills we found or generated
-    content.push(new Paragraph({
-      text: 'SKILLS',
-      heading: HeadingLevel.HEADING_2,
-      spacing: { before: 10, after: 10 }
-    }));
-    
-    // Format skills in a clean, organized way
-    content.push(new Paragraph({
-      text: skillsList.join(', '),
-      spacing: { after: 15 }
-    }));
-    
-    // Add experience section if available
-    if (sections['Experience'] || sections['EXPERIENCE'] || sections['Work Experience'] || sections['WORK EXPERIENCE']) {
-      const experience = sections['Experience'] || sections['EXPERIENCE'] || sections['Work Experience'] || sections['WORK EXPERIENCE'];
-      content.push(new Paragraph({
-        text: 'PROFESSIONAL EXPERIENCE',
-        heading: HeadingLevel.HEADING_2,
-        spacing: { before: 10, after: 10 }
-      }));
-      content.push(new Paragraph({
-        text: experience,
-        spacing: { after: 15 }
-      }));
-      
-      // Add achievements section based on experience
-      if (experience && experience.trim().length > 0) {
-        const achievements = this.extractAchievements(experience);
+      // First line is usually the name - make it prominent
+      if (headerLines.length > 0) {
+        children.push(
+          new Paragraph({
+            text: headerLines[0].trim(),
+            heading: HeadingLevel.TITLE,
+            spacing: {
+              after: 200
+            }
+          })
+        );
         
-        if (achievements.length > 0) {
-          content.push(new Paragraph({
-            text: 'KEY ACHIEVEMENTS',
-            heading: HeadingLevel.HEADING_2,
-            spacing: { before: 10, after: 10 }
-          }));
-          
-          achievements.slice(0, 3).forEach(ach => {
-            content.push(new Paragraph({
-              text: `• ${ach}`,
-              spacing: { after: 5 }
-            }));
-          });
+        // Add remaining header lines (contact info)
+        const contactInfoLines = headerLines.slice(1).filter(line => line.trim().length > 0);
+        if (contactInfoLines.length > 0) {
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: contactInfoLines.join(' | '),
+                  size: 22
+                })
+              ],
+              spacing: {
+                after: 400
+              },
+              alignment: 'center'
+            })
+          );
         }
       }
-    } else {
-      // If no experience section, add a goals section instead
-      content.push(new Paragraph({
-        text: 'CAREER GOALS',
-        heading: HeadingLevel.HEADING_2,
-        spacing: { before: 10, after: 10 }
-      }));
-      
-      content.push(new Paragraph({
-        text: "To secure a challenging position that utilizes my skills and experience while providing opportunities for professional growth. To contribute to organizational success through innovative solutions and dedication to excellence. To continuously develop my expertise and stay at the forefront of industry developments.",
-        spacing: { after: 15 }
-      }));
     }
     
-    // Add education section if available
-    if (sections['Education'] || sections['EDUCATION']) {
-      const education = sections['Education'] || sections['EDUCATION'];
-      content.push(new Paragraph({
-        text: 'EDUCATION',
-        heading: HeadingLevel.HEADING_2,
-        spacing: { before: 10, after: 10 }
-      }));
-      content.push(new Paragraph({
-        text: education,
-        spacing: { after: 15 }
-      }));
-    }
+    // Add horizontal separator
+    children.push(
+      new Paragraph({
+        border: {
+          bottom: {
+            color: "999999",
+            space: 1,
+            style: BorderStyle.SINGLE,
+            size: 6
+          }
+        },
+        spacing: {
+          after: 300
+        }
+      })
+    );
     
-    // Add certifications if available
-    if (sections['Certifications'] || sections['CERTIFICATIONS']) {
-      const certifications = sections['Certifications'] || sections['CERTIFICATIONS'];
-      content.push(new Paragraph({
-        text: 'CERTIFICATIONS',
-        heading: HeadingLevel.HEADING_2,
-        spacing: { before: 10, after: 10 }
-      }));
-      content.push(new Paragraph({
-        text: certifications,
-        spacing: { after: 15 }
-      }));
-    }
-    
-    // Add additional sections
-    const knownSections = [
-      'Contact Information', 'CONTACT INFORMATION',
-      'Summary', 'SUMMARY', 'Profile', 'PROFILE',
-      'Skills', 'SKILLS',
-      'Experience', 'EXPERIENCE', 'Work Experience', 'WORK EXPERIENCE',
-      'Education', 'EDUCATION',
-      'Certifications', 'CERTIFICATIONS'
-    ];
-    
-    for (const [key, value] of Object.entries(sections)) {
-      if (!knownSections.includes(key) && value.trim()) {
-        content.push(new Paragraph({
-          text: key.toUpperCase(),
-          heading: HeadingLevel.HEADING_2,
-          spacing: { before: 10, after: 10 }
-        }));
-        content.push(new Paragraph({
-          text: value,
-          spacing: { after: 15 }
-        }));
+    // Process main content
+    if (sections.content) {
+      // Adjust Education vs Experience confusion: if 'education' section exists but lacks clear education keywords, merge it into 'experience'
+      if (sections['education']) {
+        if (!/university|college|degree|bachelor|master|phd/i.test(sections['education'])) {
+          // Merge education content into experience
+          if (sections['experience']) {
+            sections['experience'] += "\n" + sections['education'];
+          } else {
+            sections['experience'] = sections['education'];
+          }
+          delete sections['education'];
+        }
       }
+      
+      const contentSections = this.identifySections(sections.content);
+      
+      // Add Profile section if it exists
+      if (contentSections['PROFILE'] || contentSections['SUMMARY']) {
+        const profileContent = contentSections['PROFILE'] || contentSections['SUMMARY'];
+        
+        // Add section heading
+        children.push(
+          new Paragraph({
+            text: 'PROFILE',
+            heading: HeadingLevel.HEADING_1,
+            spacing: {
+              before: 400,
+              after: 200
+            }
+          })
+        );
+        
+        // Add profile content
+        const profileLines = profileContent.split('\n');
+        profileLines.forEach(line => {
+          const trimmedLine = line.trim();
+          if (trimmedLine.length === 0) return;
+          
+          children.push(
+            new Paragraph({
+              text: trimmedLine,
+              spacing: {
+                before: 100,
+                after: 100
+              }
+            })
+          );
+        });
+      }
+      
+      // Check if Experience section exists
+      const hasExperience = contentSections['EXPERIENCE'] || 
+                           contentSections['WORK EXPERIENCE'] || 
+                           contentSections['PROFESSIONAL EXPERIENCE'] ||
+                           contentSections['EMPLOYMENT HISTORY'];
+      
+      // Only add Achievements section if there's work experience
+      if (hasExperience) {
+        // Extract achievements from work experience
+        const experienceContent = contentSections['EXPERIENCE'] || 
+                                 contentSections['WORK EXPERIENCE'] || 
+                                 contentSections['PROFESSIONAL EXPERIENCE'] ||
+                                 contentSections['EMPLOYMENT HISTORY'];
+        
+        // Parse the experience content to find achievement-like statements
+        const achievements = this.extractAchievements(experienceContent);
+        
+        if (achievements.length > 0) {
+          // Add Achievements section
+          children.push(
+            new Paragraph({
+              text: 'ACHIEVEMENTS',
+              heading: HeadingLevel.HEADING_1,
+              spacing: {
+                before: 400,
+                after: 200
+              }
+            })
+          );
+          
+          // Add achievement bullet points (limit to top 3)
+          achievements.slice(0, 3).forEach(achievement => {
+            children.push(
+              new Paragraph({
+                text: achievement,
+                bullet: {
+                  level: 0
+                },
+                spacing: {
+                  before: 100,
+                  after: 100
+                }
+              })
+            );
+          });
+        }
+        
+        // Add Experience section
+        children.push(
+          new Paragraph({
+            text: 'EXPERIENCE',
+            heading: HeadingLevel.HEADING_1,
+            spacing: {
+              before: 400,
+              after: 200
+            }
+          })
+        );
+        
+        // Add experience content
+        const experienceLines = experienceContent.split('\n');
+        experienceLines.forEach(line => {
+          const trimmedLine = line.trim();
+          if (trimmedLine.length === 0) return;
+          
+          // Check if this is a bullet point
+          const isBullet = trimmedLine.startsWith('-') || 
+                           trimmedLine.startsWith('•') || 
+                           trimmedLine.startsWith('*');
+          
+          // Add the paragraph with appropriate formatting
+          if (isBullet) {
+            children.push(
+              new Paragraph({
+                text: trimmedLine.substring(1).trim(),
+                bullet: {
+                  level: 0
+                },
+                spacing: {
+                  before: 100,
+                  after: 100
+                }
+              })
+            );
+          } else {
+            children.push(
+              new Paragraph({
+                text: trimmedLine,
+                spacing: {
+                  before: 100,
+                  after: 100
+                }
+              })
+            );
+          }
+        });
+      } else {
+        // If no experience section, add Goals section instead
+        children.push(
+          new Paragraph({
+            text: 'GOALS',
+            heading: HeadingLevel.HEADING_1,
+            spacing: {
+              before: 400,
+              after: 200
+            }
+          })
+        );
+        
+        // Add goals bullet points based on skills
+        const goals = [
+          "Secure a challenging position that leverages my skills in problem-solving and innovation",
+          "Contribute to a forward-thinking organization where I can apply my expertise to drive meaningful results",
+          "Develop professionally through continuous learning and collaboration with industry experts"
+        ];
+        
+        goals.forEach(goal => {
+          children.push(
+            new Paragraph({
+              text: goal,
+              bullet: {
+                level: 0
+              },
+              spacing: {
+                before: 100,
+                after: 100
+              }
+            })
+          );
+        });
+      }
+      
+      // Add Skills section -- use metadata.skills if available
+      children.push(
+        new Paragraph({
+          text: 'SKILLS',
+          heading: HeadingLevel.HEADING_1,
+          spacing: {
+            before: 400,
+            after: 200
+          }
+        })
+      );
+      if (metadata && metadata.skills && Array.isArray(metadata.skills) && metadata.skills.length > 0) {
+        // Sort skills based on relevance to the industry if available
+        let sortedSkills = metadata.skills.slice();
+        if (metadata.industry) {
+          const industryKeywordsMapping: Record<string, string[]> = {
+            'Technology': ['javascript', 'python', 'react', 'node', 'frontend', 'backend', 'development', 'software'],
+            'Finance': ['financial', 'accounting', 'forecasting', 'investment', 'budget', 'reporting'],
+            'Healthcare': ['clinical', 'patient', 'medical', 'health'],
+            'Marketing': ['seo', 'marketing', 'branding', 'social media', 'advertising'],
+            'Sales': ['sales', 'prospecting', 'lead generation', 'negotiation']
+          };
+          const keywords = industryKeywordsMapping[metadata.industry] || [];
+          sortedSkills = sortedSkills.sort((a: string, b: string) => {
+            const lowerA = a.toLowerCase();
+            const lowerB = b.toLowerCase();
+            const rankA = keywords.some(keyword => lowerA.includes(keyword)) ? 0 : 1;
+            const rankB = keywords.some(keyword => lowerB.includes(keyword)) ? 0 : 1;
+            if (rankA === rankB) {
+              return lowerA.localeCompare(lowerB);
+            }
+            return rankA - rankB;
+          });
+        }
+        sortedSkills.forEach((skill: string) => {
+          children.push(
+            new Paragraph({
+              text: skill,
+              bullet: { level: 0 },
+              spacing: { before: 100, after: 100 }
+            })
+          );
+        });
+      } else if (contentSections['SKILLS']) {
+        // Otherwise, use the content from the SKILLS section
+        const skillsLines = contentSections['SKILLS'].split('\n');
+        skillsLines.forEach(line => {
+          const trimmedLine = line.trim();
+          if (trimmedLine.length === 0) return;
+          const isBullet = trimmedLine.startsWith('-') || trimmedLine.startsWith('•') || trimmedLine.startsWith('*');
+          if (isBullet) {
+            children.push(
+              new Paragraph({ text: trimmedLine.substring(1).trim(), bullet: { level: 0 }, spacing: { before: 100, after: 100 } })
+            );
+          } else {
+            children.push(
+              new Paragraph({ text: trimmedLine, spacing: { before: 100, after: 100 } })
+            );
+          }
+        });
+      }
+      
+      // Add remaining sections (Education, etc.)
+      Object.entries(contentSections).forEach(([sectionName, sectionContent]) => {
+        // Skip sections we've already handled
+        if (sectionName === 'PROFILE' || 
+            sectionName === 'SUMMARY' || 
+            sectionName === 'SKILLS' || 
+            sectionName === 'EXPERIENCE' || 
+            sectionName === 'WORK EXPERIENCE' || 
+            sectionName === 'PROFESSIONAL EXPERIENCE' ||
+            sectionName === 'EMPLOYMENT HISTORY') {
+          return;
+        }
+        
+        // Add section heading
+        children.push(
+          new Paragraph({
+            text: sectionName.toUpperCase(),
+            heading: HeadingLevel.HEADING_1,
+            spacing: {
+              before: 400,
+              after: 200
+            }
+          })
+        );
+        
+        // Add section content - split by lines or bullet points
+        const contentLines = sectionContent.split('\n');
+        contentLines.forEach(line => {
+          const trimmedLine = line.trim();
+          if (trimmedLine.length === 0) return;
+          
+          // Check if this is a bullet point
+          const isBullet = trimmedLine.startsWith('-') || 
+                           trimmedLine.startsWith('•') || 
+                           trimmedLine.startsWith('*');
+          
+          // Add the paragraph with appropriate formatting
+          if (isBullet) {
+            children.push(
+              new Paragraph({
+                text: trimmedLine.substring(1).trim(),
+                bullet: {
+                  level: 0
+                },
+                spacing: {
+                  before: 100,
+                  after: 100
+                }
+              })
+            );
+          } else {
+            children.push(
+              new Paragraph({
+                text: trimmedLine,
+                spacing: {
+                  before: 100,
+                  after: 100
+                }
+              })
+            );
+          }
+        });
+      });
     }
     
-    return content;
+    return children;
   }
   
   /**
@@ -257,444 +443,158 @@ export class DocumentGenerator {
    */
   private static identifySections(content: string): Record<string, string> {
     const sections: Record<string, string> = {};
+    const sectionRegex = /^(EXPERIENCE|EDUCATION|SKILLS|PROFILE|SUMMARY|PROJECTS|CERTIFICATIONS|PUBLICATIONS|LANGUAGES|ACHIEVEMENTS|INTERESTS|REFERENCES|PERSONAL|PROFESSIONAL EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY|GOALS)(?:\s*|:|$)/im;
     
-    // Define section keywords to match against
-    const sectionKeywords = {
-      'PROFILE': ['profile', 'summary', 'about me', 'personal statement', 'professional summary', 'career objective'],
-      'EXPERIENCE': ['experience', 'employment', 'work history', 'professional experience', 'career history', 'job history'],
-      'EDUCATION': ['education', 'academic background', 'academic history', 'qualifications', 'degrees', 'academic qualifications'],
-      'SKILLS': ['skills', 'technical skills', 'core competencies', 'competencies', 'expertise', 'key skills', 'proficiencies', 'technical proficiencies'],
-      'PROJECTS': ['projects', 'key projects', 'project experience', 'professional projects'],
-      'CERTIFICATIONS': ['certifications', 'certificates', 'professional certifications', 'credentials'],
-      'LANGUAGES': ['languages', 'language proficiency', 'language skills'],
-      'INTERESTS': ['interests', 'hobbies', 'activities', 'personal interests'],
-      'REFERENCES': ['references', 'professional references'],
-      'PUBLICATIONS': ['publications', 'research', 'papers', 'articles'],
-      'AWARDS': ['awards', 'honors', 'achievements', 'recognitions']
-    };
+    // First pass - find all section headers
+    const sectionStarts: { name: string, index: number }[] = [];
+    let match;
+    let searchContent = content;
+    let offset = 0;
     
-    // Split content by lines
-    const lines = content.split('\n');
-    let currentSection = '';
-    let sectionContent = '';
-    
-    // Process each line
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      
-      // Skip empty lines
-      if (line === '') continue;
-      
-      // Check if line is a section header (all caps or followed by colon)
-      const isHeader = (
-        (line === line.toUpperCase() && line.length > 3) || 
-        /^[A-Z][a-zA-Z\s]{2,}:/.test(line)
-      );
-      
-      if (isHeader) {
-        // Save previous section if exists
-        if (currentSection && sectionContent) {
-          sections[currentSection] = sectionContent.trim();
-        }
+    while ((match = searchContent.match(sectionRegex)) !== null) {
+      if (match.index !== undefined) {
+        sectionStarts.push({
+          name: match[1].trim(),
+          index: offset + match.index
+        });
         
-        // Clean up header (remove colons and trim)
-        let header = line.replace(':', '').trim();
-        
-        // Standardize section name based on keywords
-        let matchedSection = '';
-        for (const [section, keywords] of Object.entries(sectionKeywords)) {
-          if (keywords.some(keyword => header.toLowerCase().includes(keyword.toLowerCase()))) {
-            matchedSection = section;
-            break;
-          }
-        }
-        
-        // Handle combined sections (e.g., "EDUCATION & SKILLS")
-        if (!matchedSection) {
-          // Check for combined sections like "EDUCATION & SKILLS" or "SKILLS AND QUALIFICATIONS"
-          if (/education.+skill|skill.+education|qualification.+skill|skill.+qualification/i.test(header)) {
-            // This is likely a combined section - we'll process it carefully later
-            matchedSection = 'COMBINED_EDU_SKILLS';
-          } else {
-            // Use the header as is if no match found
-            matchedSection = header.toUpperCase();
-          }
-        }
-        
-        currentSection = matchedSection;
-        sectionContent = '';
-      } else if (currentSection) {
-        // Add line to current section content
-        sectionContent += line + '\n';
+        offset += match.index + match[0].length;
+        searchContent = content.substring(offset);
+      } else {
+        break;
       }
     }
     
-    // Save the last section
-    if (currentSection && sectionContent) {
-      sections[currentSection] = sectionContent.trim();
-    }
-    
-    // Handle combined education & skills sections
-    if (sections['COMBINED_EDU_SKILLS']) {
-      const combinedContent = sections['COMBINED_EDU_SKILLS'];
-      delete sections['COMBINED_EDU_SKILLS'];
-      
-      // Look for skill-related keywords to split the content
-      const skillLines = [];
-      const eduLines = [];
-      
-      const skillKeywords = ['proficient in', 'experienced with', 'knowledge of', 'familiar with', 'skills:', 'skill set', 'programming', 'software', 'technologies', 'tools', 'languages', 'frameworks'];
-      const eduKeywords = ['university', 'college', 'degree', 'bachelor', 'master', 'phd', 'gpa', 'graduated', 'diploma', 'major'];
-      
-      // Split the combined content into lines
-      const contentLines = combinedContent.split('\n');
-      
-      // Try to identify which lines belong to which section
-      for (const line of contentLines) {
-        const lowerLine = line.toLowerCase();
+    // Second pass - extract section content
+    if (sectionStarts.length > 0) {
+      for (let i = 0; i < sectionStarts.length; i++) {
+        const currentSection = sectionStarts[i];
+        const nextSection = sectionStarts[i + 1];
         
-        // Check if this line contains skill keywords
-        const isSkillLine = skillKeywords.some(keyword => lowerLine.includes(keyword.toLowerCase())) || 
-                            /^[•\-\*]?\s*[A-Za-z]+(,|:|\s-|\s–)/.test(line);
+        const sectionStart = currentSection.index;
+        const sectionEnd = nextSection ? nextSection.index : content.length;
         
-        // Check if this line contains education keywords
-        const isEduLine = eduKeywords.some(keyword => lowerLine.includes(keyword.toLowerCase()));
+        // Extract section content
+        const sectionContent = content.substring(sectionStart, sectionEnd).trim();
         
-        if (isSkillLine && !isEduLine) {
-          skillLines.push(line);
-        } else if (isEduLine) {
-          eduLines.push(line);
-        } else {
-          // If we can't determine, put in the most recently used category or education as default
-          if (skillLines.length > eduLines.length) {
-            skillLines.push(line);
-          } else {
-            eduLines.push(line);
-          }
-        }
+        // Remove the header from the content
+        const headerEndMatch = sectionContent.match(/^.*?(?:\r?\n|$)/);
+        const headerEnd = headerEndMatch ? headerEndMatch[0].length : 0;
+        
+        sections[currentSection.name.toUpperCase()] = sectionContent.substring(headerEnd).trim();
       }
-      
-      // Add the split sections if they have content
-      if (skillLines.length > 0) {
-        sections['SKILLS'] = skillLines.join('\n');
-      }
-      
-      if (eduLines.length > 0) {
-        sections['EDUCATION'] = eduLines.join('\n');
-      }
-    }
-    
-    // If there's no SKILLS section but we find skills in other sections, extract them
-    if (!sections['SKILLS']) {
-      const skillIndicators = [
-        'technical skills:', 'skills:', 'skill set:', 'proficient in:', 'proficient with:',
-        'experienced in:', 'experienced with:', 'expertise in:', 'competencies:'
-      ];
-      
-      for (const [section, content] of Object.entries(sections)) {
-        if (section !== 'SKILLS') {
-          // Check if this section contains a skills subsection
-          for (const indicator of skillIndicators) {
-            if (content.toLowerCase().includes(indicator.toLowerCase())) {
-              // Extract the skills section
-              const parts = content.split(new RegExp(`(${indicator})`, 'i'));
-              if (parts.length >= 3) {
-                const index = parts.findIndex(p => p.toLowerCase() === indicator.toLowerCase());
-                if (index >= 0 && index < parts.length - 1) {
-                  // Extract the skills content (everything after the indicator)
-                  let skillsContent = parts.slice(index + 1).join('');
-                  
-                  // Try to find where skills section ends (next section header or end of content)
-                  const nextHeaderMatch = skillsContent.match(/\n\s*[A-Z][A-Z\s]+:/);
-                  if (nextHeaderMatch) {
-                    skillsContent = skillsContent.substring(0, nextHeaderMatch.index);
-                  }
-                  
-                  // Add to SKILLS section
-                  sections['SKILLS'] = (sections['SKILLS'] || '') + 
-                                      (sections['SKILLS'] ? '\n' : '') + 
-                                      skillsContent.trim();
-                  
-                  // Remove from original section
-                  sections[section] = content.replace(indicator + skillsContent, '').trim();
-                }
-              }
-            }
-          }
-        }
-      }
+    } else {
+      // If no sections found, treat the whole content as a single section
+      sections["CONTENT"] = content.trim();
     }
     
     return sections;
   }
   
   /**
-   * Extract achievements from work experience text
+   * Extract achievements from work experience content
+   * Looks for sentences that appear to be achievements based on certain patterns
    */
-  private static extractAchievements(experienceText: string): string[] {
+  private static extractAchievements(experienceContent: string): string[] {
+    const lines = experienceContent.split('\n');
     const achievements: string[] = [];
     
-    // Split the experience text into lines
-    const lines = experienceText.split('\n');
-    
-    // Define patterns that indicate achievements
-    const achievementPatterns = [
-      // Action verbs that often indicate achievements
-      /\b(achieved|accomplished|improved|increased|decreased|reduced|saved|generated|delivered|created|developed|implemented|launched|led|managed|negotiated|organized|produced|resolved|streamlined|succeeded|transformed|won)\b/i,
-      
-      // Metrics and numbers often indicate achievements
-      /\b(\d+%|\$\d+|\d+ percent|million|billion|thousand)\b/i,
-      
-      // Results and outcomes
-      /\b(resulting in|which led to|leading to|improved|increased|decreased|reduced|enhanced|boosted|grew|expanded)\b/i
+    // Action verbs that often indicate achievements
+    const achievementVerbs = [
+      "increased", "decreased", "improved", "reduced", "saved", "grew", 
+      "developed", "created", "established", "implemented", "launched", 
+      "generated", "delivered", "achieved", "won", "awarded", "recognized"
     ];
     
-    // Look for lines that match achievement patterns
-    for (const line of lines) {
-      const trimmedLine = line.trim();
-      
+    // Patterns that might indicate metrics or quantifiable results
+    const metricPatterns = [
+      /\d+\s*%/, // Percentage (e.g., 25%)
+      /\$\s*\d+/, // Dollar amount (e.g., $500K)
+      /\d+\s*k/i, // Thousands (e.g., 500K)
+      /\d+\s*m/i, // Millions (e.g., 2M)
+      /\d+\s*million/i, // Written millions (e.g., 2 million)
+      /\d+\s*billion/i, // Written billions (e.g., 1 billion)
+    ];
+    
+    // Search through each line for achievement-like content
+    lines.forEach((line) => {
       // Skip empty lines
-      if (!trimmedLine) continue;
+      if (line.trim().length === 0) return;
       
-      // Check if the line matches any achievement pattern
-      const isAchievement = achievementPatterns.some(pattern => pattern.test(trimmedLine));
-      
-      if (isAchievement) {
-        // Clean up the achievement text
-        let achievement = trimmedLine;
-        
-        // Remove bullet points or numbering
-        achievement = achievement.replace(/^[-•*]\s*/, '');
-        achievement = achievement.replace(/^\d+\.\s*/, '');
-        
-        // Ensure the first letter is capitalized
-        achievement = achievement.charAt(0).toUpperCase() + achievement.slice(1);
-        
-        // Add a period at the end if missing
-        if (!achievement.endsWith('.') && !achievement.endsWith('!') && !achievement.endsWith('?')) {
-          achievement += '.';
-        }
-        
-        achievements.push(achievement);
+      // Clean the line (remove bullet points)
+      let cleanLine = line.trim();
+      if (cleanLine.startsWith('-') || cleanLine.startsWith('•') || cleanLine.startsWith('*')) {
+        cleanLine = cleanLine.substring(1).trim();
       }
-    }
+      
+      // Skip if line is too short
+      if (cleanLine.length < 20) return;
+      
+      // Check if line contains achievement verbs
+      const containsAchievementVerb = achievementVerbs.some(verb => 
+        cleanLine.toLowerCase().includes(verb)
+      );
+      
+      // Check if line contains metrics
+      const containsMetrics = metricPatterns.some(pattern => 
+        pattern.test(cleanLine)
+      );
+      
+      // If line has either achievement verbs or metrics, consider it an achievement
+      if (containsAchievementVerb || containsMetrics) {
+        // Ensure first letter is capitalized
+        const firstChar = cleanLine.charAt(0).toUpperCase();
+        const restOfLine = cleanLine.slice(1);
+        
+        // Add to achievements
+        achievements.push(firstChar + restOfLine);
+      }
+    });
     
-    // If no achievements found using patterns, try to extract based on job titles or responsibilities
+    // If no achievements found using patterns, look for longest bullet points
     if (achievements.length === 0) {
-      // Look for job titles or positions
-      const jobTitlePattern = /\b(manager|director|lead|senior|supervisor|coordinator|specialist|analyst|engineer|developer|consultant|advisor)\b/i;
-      
-      for (const line of lines) {
-        const trimmedLine = line.trim();
-        
-        // Skip empty lines
-        if (!trimmedLine) continue;
-        
-        // Check if the line contains a job title
-        if (jobTitlePattern.test(trimmedLine)) {
-          // Create a generic achievement based on the job title
-          const jobTitle = trimmedLine.match(jobTitlePattern)?.[0] || '';
-          
-          if (jobTitle) {
-            const capitalizedJobTitle = jobTitle.charAt(0).toUpperCase() + jobTitle.slice(1).toLowerCase();
-            
-            // Generate a generic achievement
-            const genericAchievement = `Successfully performed as ${capitalizedJobTitle}, demonstrating leadership and expertise in the role.`;
-            achievements.push(genericAchievement);
-            
-            // Only add one generic achievement based on job title
-            break;
+      const bulletPoints = lines
+        .filter(line => {
+          const trimmed = line.trim();
+          return (trimmed.startsWith('-') || trimmed.startsWith('•') || trimmed.startsWith('*')) && 
+                 trimmed.length > 30; // Only consider substantial bullet points
+        })
+        .map(line => {
+          let cleaned = line.trim();
+          if (cleaned.startsWith('-') || cleaned.startsWith('•') || cleaned.startsWith('*')) {
+            cleaned = cleaned.substring(1).trim();
           }
-        }
-      }
+          return cleaned;
+        })
+        .sort((a, b) => b.length - a.length); // Sort by length (longest first)
       
-      // If still no achievements, add generic ones
-      if (achievements.length === 0) {
-        achievements.push('Successfully completed projects on time and within budget constraints.');
-        achievements.push('Collaborated effectively with cross-functional teams to achieve organizational goals.');
-        achievements.push('Demonstrated strong problem-solving skills and attention to detail in all assignments.');
-      }
+      // Take up to 3 longest bullet points
+      achievements.push(...bulletPoints.slice(0, 3));
     }
     
-    // Return the top achievements (limit to 5)
-    return achievements.slice(0, 5);
-  }
-
-  public static async generateDocument(cvData: string, metadata?: any): Promise<{ docxBase64: string }> {
-    try {
-      // Parse the CV data
-      const sections = this.parseCVSections(cvData);
+    // If still no achievements, create generic achievements based on job titles
+    if (achievements.length === 0) {
+      // Try to extract job titles
+      const jobTitlePattern = /(?:^|\n)([A-Z][A-Za-z\s]+(?:Manager|Director|Engineer|Developer|Specialist|Analyst|Consultant|Designer|Coordinator|Assistant|Representative|Officer|Lead|Head|Chief))/g;
+      const jobTitleMatches = [...experienceContent.matchAll(jobTitlePattern)];
       
-      // Create document content
-      const content = this.createDocumentContent(sections, metadata);
-      
-      // Define document styles
-      const documentDefinition = {
-        content: content,
-        styles: {
-          header: {
-            fontSize: 18,
-            bold: true,
-            color: '#333333'
-          },
-          contactInfo: {
-            fontSize: 11,
-            alignment: 'center'
-          },
-          sectionHeader: {
-            fontSize: 14,
-            bold: true,
-            color: '#333333',
-            decoration: 'underline'
-          },
-          normal: {
-            fontSize: 11,
-            lineHeight: 1.2
-          },
-          skills: {
-            fontSize: 11,
-            lineHeight: 1.2
-          },
-          skillItem: {
-            fontSize: 11,
-            lineHeight: 1.5
-          },
-          achievementItem: {
-            fontSize: 11,
-            lineHeight: 1.5
-          },
-          goalItem: {
-            fontSize: 11,
-            lineHeight: 1.5
-          }
-        },
-        defaultStyle: {
-          fontSize: 11,
-          font: 'Helvetica'
-        },
-        pageMargins: [40, 40, 40, 40]
-      };
-      
-      // Generate PDF
-      const pdfDoc = require('pdfmake/build/pdfmake');
-      const pdfFonts = require('pdfmake/build/vfs_fonts');
-      pdfDoc.vfs = pdfFonts.pdfMake.vfs;
-      
-      // Create a buffer from the PDF
-      const pdfBuffer = await new Promise<Buffer>((resolve) => {
-        const pdfDocGenerator = pdfDoc.createPdf(documentDefinition);
-        pdfDocGenerator.getBuffer((buffer: Buffer) => {
-          resolve(buffer);
+      if (jobTitleMatches.length > 0) {
+        // Use job titles to create achievements
+        jobTitleMatches.slice(0, 2).forEach(match => {
+          const jobTitle = match[1].trim();
+          achievements.push(`Successfully performed key responsibilities as ${jobTitle}, exceeding expectations`);
+          achievements.push(`Demonstrated excellence in problem-solving and teamwork as ${jobTitle}`);
         });
-      });
-      
-      // Convert to base64
-      const docxBase64 = pdfBuffer.toString('base64');
-      
-      return { docxBase64 };
-    } catch (error) {
-      console.error('Error generating document:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Parse CV data into sections
-   */
-  private static parseCVSections(cvData: string): Record<string, string> {
-    const sections: Record<string, string> = {};
-    
-    // Split the CV data by section headers (all caps followed by newline)
-    const sectionRegex = /^([A-Z][A-Z\s]+)(?:\r?\n|\r)/gm;
-    let match;
-    let lastIndex = 0;
-    let lastSectionName = '';
-    
-    // Find all section headers
-    while ((match = sectionRegex.exec(cvData)) !== null) {
-      // If this isn't the first match, add the previous section content
-      if (lastSectionName) {
-        const sectionContent = cvData.substring(lastIndex, match.index).trim();
-        sections[lastSectionName] = sectionContent;
+      } else {
+        // Fallback to generic achievements
+        achievements.push(
+          "Successfully implemented process improvements resulting in increased efficiency",
+          "Collaborated effectively with cross-functional teams to achieve organizational goals",
+          "Recognized for exceptional performance and contribution to team success"
+        );
       }
-      
-      // Update for the next section
-      lastSectionName = match[1].trim();
-      lastIndex = match.index + match[0].length;
     }
     
-    // Add the last section
-    if (lastSectionName) {
-      const sectionContent = cvData.substring(lastIndex).trim();
-      sections[lastSectionName] = sectionContent;
-    }
-    
-    // If no sections were found, try to identify common sections
-    if (Object.keys(sections).length === 0) {
-      // Try to identify contact information (usually at the top)
-      const lines = cvData.split('\n');
-      let contactInfo = '';
-      let i = 0;
-      
-      // First few lines are usually contact info
-      while (i < lines.length && i < 5) {
-        const line = lines[i].trim();
-        if (line && (line.includes('@') || line.includes('phone') || line.includes('tel') || 
-                    /^\d{3}[-.\s]?\d{3}[-.\s]?\d{4}$/.test(line.replace(/\D/g, '')))) {
-          contactInfo += line + '\n';
-        }
-        i++;
-      }
-      
-      if (contactInfo) {
-        sections['Contact Information'] = contactInfo.trim();
-      }
-      
-      // Look for common section indicators
-      let currentSection = '';
-      for (i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        
-        if (!line) continue;
-        
-        // Check for section headers based on content
-        if (line.toLowerCase().includes('experience') || 
-            line.toLowerCase().includes('employment') || 
-            line.toLowerCase().includes('work history')) {
-          currentSection = 'Experience';
-          sections[currentSection] = '';
-        } else if (line.toLowerCase().includes('education') || 
-                  line.toLowerCase().includes('academic') || 
-                  line.toLowerCase().includes('university') || 
-                  line.toLowerCase().includes('college')) {
-          currentSection = 'Education';
-          sections[currentSection] = '';
-        } else if (line.toLowerCase().includes('skills') || 
-                  line.toLowerCase().includes('proficiencies') || 
-                  line.toLowerCase().includes('expertise')) {
-          currentSection = 'Skills';
-          sections[currentSection] = '';
-        } else if (line.toLowerCase().includes('summary') || 
-                  line.toLowerCase().includes('profile') || 
-                  line.toLowerCase().includes('objective')) {
-          currentSection = 'Summary';
-          sections[currentSection] = '';
-        } else if (line.toLowerCase().includes('certification') || 
-                  line.toLowerCase().includes('license')) {
-          currentSection = 'Certifications';
-          sections[currentSection] = '';
-        } else if (currentSection) {
-          // Add content to the current section
-          sections[currentSection] += line + '\n';
-        }
-      }
-      
-      // Clean up section content
-      Object.keys(sections).forEach(key => {
-        sections[key] = sections[key].trim();
-      });
-    }
-    
-    return sections;
+    return achievements;
   }
 } 
