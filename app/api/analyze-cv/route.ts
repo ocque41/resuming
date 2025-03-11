@@ -407,3 +407,135 @@ function detectLanguage(text: string): string {
   
   return detectedLang;
 }
+
+/**
+ * Get industry-specific keywords for a given industry
+ * @param industry The industry to get keywords for
+ * @returns Array of keywords relevant to the industry
+ */
+function getIndustryKeywords(industry: string): string[] {
+  const industryKeywordsMap: Record<string, string[]> = {
+    'Technology': [
+      'software', 'development', 'programming', 'code', 'java', 'python', 'javascript',
+      'react', 'angular', 'node', 'cloud', 'aws', 'azure', 'devops', 'agile', 'scrum',
+      'frontend', 'backend', 'fullstack', 'mobile', 'app', 'web', 'data', 'analytics',
+      'ai', 'machine learning', 'security', 'network', 'database', 'sql', 'nosql'
+    ],
+    'Finance': [
+      'banking', 'investment', 'financial', 'accounting', 'audit', 'tax', 'budget',
+      'forecast', 'revenue', 'profit', 'loss', 'cash flow', 'balance sheet', 'equity',
+      'asset', 'liability', 'portfolio', 'risk', 'compliance', 'regulatory', 'trading',
+      'securities', 'stocks', 'bonds', 'derivatives', 'hedge', 'capital', 'market'
+    ],
+    'Healthcare': [
+      'medical', 'clinical', 'healthcare', 'patient', 'doctor', 'nurse', 'hospital',
+      'treatment', 'therapy', 'diagnosis', 'care', 'health', 'pharmaceutical', 'drug',
+      'medicine', 'surgery', 'physician', 'practitioner', 'wellness', 'rehabilitation',
+      'insurance', 'regulatory', 'compliance', 'ehr', 'electronic health record'
+    ],
+    'Education': [
+      'teaching', 'learning', 'education', 'school', 'student', 'classroom', 'curriculum',
+      'instruction', 'assessment', 'evaluation', 'pedagogy', 'academic', 'faculty',
+      'professor', 'teacher', 'principal', 'administration', 'course', 'degree', 'grade',
+      'university', 'college', 'research', 'scholarship', 'lecture', 'study'
+    ],
+    'Marketing': [
+      'marketing', 'advertising', 'brand', 'campaign', 'strategy', 'digital', 'social media',
+      'content', 'seo', 'sem', 'ppc', 'lead generation', 'conversion', 'analytics', 'market',
+      'consumer', 'customer', 'audience', 'target', 'demographic', 'segmentation', 'engagement',
+      'promotion', 'public relations', 'communications', 'creative', 'design'
+    ],
+    'Manufacturing': [
+      'manufacturing', 'production', 'factory', 'assembly', 'quality', 'control', 'operations',
+      'supply chain', 'logistics', 'inventory', 'procurement', 'lean', 'six sigma', 'process',
+      'improvement', 'efficiency', 'automation', 'machinery', 'equipment', 'materials',
+      'product', 'fabrication', 'engineering', 'industrial', 'safety', 'compliance'
+    ],
+    'Retail': [
+      'retail', 'sales', 'customer', 'merchandising', 'inventory', 'store', 'e-commerce',
+      'omnichannel', 'pos', 'point of sale', 'consumer', 'product', 'pricing', 'promotion',
+      'display', 'layout', 'shopping', 'buyer', 'purchasing', 'supply chain', 'logistics',
+      'distribution', 'fulfillment', 'brand', 'marketing', 'customer service'
+    ],
+    'Consulting': [
+      'consulting', 'advisor', 'strategy', 'solution', 'client', 'engagement', 'project',
+      'management', 'business', 'analysis', 'process', 'improvement', 'transformation',
+      'change', 'implementation', 'recommendation', 'assessment', 'stakeholder', 'deliverable',
+      'benchmark', 'best practice', 'framework', 'methodology', 'expertise'
+    ],
+    'Law': [
+      'legal', 'law', 'attorney', 'lawyer', 'counsel', 'litigation', 'contract', 'compliance',
+      'regulatory', 'statute', 'legislation', 'corporate', 'intellectual property', 'patent',
+      'trademark', 'copyright', 'negotiation', 'dispute', 'resolution', 'mediation', 'arbitration',
+      'court', 'judge', 'prosecution', 'defense', 'client'
+    ],
+    'Engineering': [
+      'engineering', 'design', 'development', 'technical', 'specifications', 'prototype',
+      'testing', 'validation', 'mechanical', 'electrical', 'civil', 'chemical', 'software',
+      'industrial', 'biomedical', 'environmental', 'materials', 'structural', 'systems',
+      'project', 'cad', 'simulation', 'analysis', 'quality', 'safety'
+    ],
+    'Media': [
+      'media', 'content', 'publishing', 'broadcast', 'production', 'journalism', 'reporter',
+      'editor', 'writer', 'creative', 'film', 'television', 'radio', 'digital', 'social media',
+      'advertising', 'marketing', 'audience', 'engagement', 'streaming', 'entertainment',
+      'news', 'story', 'editorial', 'podcast', 'video'
+    ],
+    'Hospitality': [
+      'hospitality', 'hotel', 'restaurant', 'food', 'beverage', 'tourism', 'travel',
+      'accommodation', 'guest', 'service', 'catering', 'event', 'planning', 'management',
+      'operations', 'housekeeping', 'front desk', 'reservation', 'concierge', 'chef',
+      'culinary', 'dining', 'entertainment', 'leisure', 'recreation'
+    ],
+    'Automotive': [
+      'automotive', 'vehicle', 'car', 'truck', 'manufacturing', 'assembly', 'engineering',
+      'design', 'production', 'dealership', 'sales', 'service', 'maintenance', 'repair',
+      'parts', 'components', 'engine', 'transmission', 'safety', 'testing', 'quality',
+      'supply chain', 'logistics', 'inventory', 'warranty'
+    ],
+    'Agriculture': [
+      'agriculture', 'farming', 'crop', 'livestock', 'production', 'cultivation', 'harvest',
+      'soil', 'irrigation', 'fertilization', 'pesticide', 'organic', 'sustainable', 'farm',
+      'management', 'agribusiness', 'food', 'processing', 'distribution', 'supply chain',
+      'equipment', 'machinery', 'seed', 'breeding', 'genetics'
+    ],
+    'Energy': [
+      'energy', 'power', 'electricity', 'generation', 'distribution', 'transmission', 'utility',
+      'renewable', 'solar', 'wind', 'hydroelectric', 'geothermal', 'biomass', 'oil', 'gas',
+      'coal', 'nuclear', 'sustainability', 'efficiency', 'conservation', 'grid', 'storage',
+      'carbon', 'emissions', 'climate'
+    ],
+    'Real Estate': [
+      'real estate', 'property', 'development', 'construction', 'commercial', 'residential',
+      'leasing', 'rental', 'sales', 'broker', 'agent', 'buyer', 'seller', 'investment',
+      'management', 'appraisal', 'valuation', 'mortgage', 'financing', 'zoning', 'planning',
+      'land', 'building', 'renovation', 'maintenance'
+    ],
+    'Transportation': [
+      'transportation', 'logistics', 'shipping', 'freight', 'cargo', 'distribution', 'supply chain',
+      'warehouse', 'inventory', 'fleet', 'vehicle', 'truck', 'rail', 'maritime', 'air', 'port',
+      'terminal', 'transit', 'route', 'scheduling', 'operations', 'delivery', 'tracking',
+      'safety', 'compliance'
+    ],
+    'Telecommunications': [
+      'telecommunications', 'telecom', 'network', 'infrastructure', 'wireless', 'mobile',
+      'broadband', 'internet', 'data', 'voice', 'service', 'provider', 'operator', 'carrier',
+      'equipment', 'technology', 'fiber', 'satellite', 'spectrum', 'regulatory', 'compliance',
+      '5g', '4g', 'lte', 'voip', 'communications'
+    ],
+    'Pharmaceutical': [
+      'pharmaceutical', 'pharma', 'drug', 'medicine', 'development', 'research', 'clinical',
+      'trial', 'fda', 'regulatory', 'compliance', 'manufacturing', 'quality', 'control',
+      'assurance', 'safety', 'efficacy', 'patient', 'healthcare', 'biotechnology', 'therapy',
+      'treatment', 'disease', 'diagnosis', 'medical'
+    ]
+  };
+  
+  // Return keywords for the specified industry, or generic business keywords if not found
+  return industryKeywordsMap[industry] || [
+    'management', 'leadership', 'strategy', 'project', 'team', 'client', 'customer',
+    'service', 'business', 'communication', 'analysis', 'planning', 'implementation',
+    'development', 'coordination', 'organization', 'administration', 'operation',
+    'budget', 'report', 'presentation', 'meeting', 'collaboration', 'problem-solving'
+  ];
+}
