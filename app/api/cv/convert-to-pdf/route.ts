@@ -164,193 +164,202 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Function to create a fallback PDF in case of conversion errors
-function getEmergencyFallbackPDF(message: string): string {
-  // This is a minimal valid PDF file encoded as base64
-  // It contains a simple single-page PDF with the error message
-  return "JVBERi0xLjcKJeLjz9MKNSAwIG9iago8PCAvVHlwZSAvUGFnZSAvUGFyZW50IDEgMCBSIC9MYXN0TW9kaWZpZWQgKEQ6MjAyMzA1MTUxMjMwMDBaKSAvUmVzb3VyY2VzIDIgMCBSIC9NZWRpYUJveCBbMCAwIDU5NS4yNzU2IDg0MS44ODk4XSAvQ3JvcEJveCBbMCAwIDU5NS4yNzU2IDg0MS44ODk4XSAvQmxlZWRCb3ggWzAgMCA1OTUuMjc1NiA4NDEuODg5OF0gL1RyaW1Cb3ggWzAgMCA1OTUuMjc1NiA4NDEuODg5OF0gL0FydEJveCBbMCAwIDU5NS4yNzU2IDg0MS44ODk4XSAvQ29udGVudHMgNiAwIFIgL1JvdGF0ZSAwIC9Hcm91cCA8PCAvVHlwZSAvR3JvdXAgL1MgL1RyYW5zcGFyZW5jeSAvQ1MgL0RldmljZVJHQiA+PiAvQW5ub3RzIFsgXSAvUFogMSA+PgplbmRvYmoKNiAwIG9iago8PC9GaWx0ZXIgL0ZsYXRlRGVjb2RlIC9MZW5ndGggMTc0Pj4gc3RyZWFtCnicXY8xDoMwDEX3nMI3iGMSkhQxdWGAEwRVqAsSQ4cuvb0OhQ5d/KVn+X+yLLN91Qk0gzfSYUINOiUf8TbugggD+pQJVqDRTXdVbqJTCFnw3C8Zp5oGMKZsALzD25ziBgdHH3HEVvqEGnTC4XMdxVr7Jcb4wIRaQQWmBTrU5zJ/1RdlMlHIcqqyBT3B/qdYXJptuauS3JTEIlYxJ3AlJXmJJcXyFasM5QtFRWYhCmVX1Vb5fgHVZUooCmVuZHN0cmVhbQplbmRvYmoKMSAwIG9iago8PCAvVHlwZSAvUGFnZXMgL0tpZHMgWyA1IDAgUiBdIC9Db3VudCAxID4+CmVuZG9iagozIDAgb2JqCjw8L1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhIC9FbmNvZGluZyAvV2luQW5zaUVuY29kaW5nPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1Byb2NTZXQgWy9QREYgL1RleHQgL0ltYWdlQiAvSW1hZ2VDIC9JbWFnZUldIC9Gb250IDw8IC9GMyAzIDAgUiA+PiAvWE9iamVjdCA8PCAgPj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1Byb2R1Y2VyIChjYWlybyAxLjE2LjAgKGh0dHBzOi8vY2Fpcm9ncmFwaGljcy5vcmcpKQovQ3JlYXRpb25EYXRlIChEOjIwMjMwNTE1MTIzMDAwWikKPj4KZW5kb2JqCjcgMCBvYmoKPDwgL1R5cGUgL0NhdGFsb2cgL1BhZ2VzIDEgMCBSIC9WZXJzaW9uIC8xLjcgPj4KZW5kb2JqCnhyZWYKMCA4CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDM5MiAwMDAwMCBuIAowMDAwMDAwNTc0IDAwMDAwIG4gCjAwMDAwMDA0NTEgMDAwMDAgbiAKMDAwMDAwMDY4OCAwMDAwMCBuIAowMDAwMDAwMDE1IDAwMDAwIG4gCjAwMDAwMDAxNDkgMDAwMDAgbiAKMDAwMDAwMDc2NyAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDggL1Jvb3QgNyAwIFIgL0luZm8gNCAwIFIgL0lEIFsgPDRkYjg0ZmVlNmQ4YTRjMzQwYWEyYzc4MjBiYzRmMTI5Pgo8NGRiODRmZWU2ZDhhNGMzNDBhYTJjNzgyMGJjNGYxMjk+IF0gPj4Kc3RhcnR4cmVmCjgyMAolJUVPRgo=";
-}
-
-// Update the generatePDFFromDOCX function to better handle blank PDFs
-async function generatePDFFromDOCX(docxBase64: string): Promise<string> {
-  // Create temporary directory
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cv-pdf-'));
-  const docxFileName = `${uuidv4()}.docx`;
-  const tempDocxPath = path.join(tempDir, docxFileName);
-  const tempPdfPath = path.join(tempDir, docxFileName.replace(/\.docx$/, '.pdf'));
-
-  try {
-    // Validate base64 input
-    if (!docxBase64 || typeof docxBase64 !== 'string' || docxBase64.trim() === '') {
-      throw new Error('Invalid DOCX data: Empty or invalid base64 string');
-    }
-
-    // Write DOCX file to disk
-    const docxBuffer = Buffer.from(docxBase64, 'base64');
-    fs.writeFileSync(tempDocxPath, docxBuffer);
-
-    // Check if file was written successfully
-    if (!fs.existsSync(tempDocxPath) || fs.statSync(tempDocxPath).size === 0) {
-      throw new Error('Failed to write DOCX file to disk');
-    }
-
-    logger.info(`Converting DOCX (${docxBuffer.length} bytes) to PDF`);
-
-    // Try to generate the PDF with multiple methods in sequence
-    let pdfBuffer;
-    let conversionMethod = '';
-
-    try {
-      // METHOD 1: Try platform-specific LibreOffice/soffice command with extended options
-      conversionMethod = 'libreoffice';
-      const officeCmd = process.platform === 'win32' ? 'soffice' : 'libreoffice';
+// First, add Puppeteer-like minimal PDF generation function
+async function createMinimalPDF(docxContent: string, title: string = "Optimized CV"): Promise<Buffer> {
+  // Use jspdf to create a basic PDF
+  const { jsPDF } = require('jspdf');
+  
+  // Create a new PDF document
+  const doc = new jsPDF();
+  
+  // Add title
+  doc.setFontSize(20);
+  doc.text(title, 105, 20, { align: 'center' });
+  
+  // Add content
+  doc.setFontSize(12);
+  
+  // Split content into lines and add to PDF
+  const contentLines = docxContent.split('\n');
+  let y = 40;
+  const linesPerPage = 40;
+  let pageNum = 1;
+  
+  for (let i = 0; i < contentLines.length; i++) {
+    const line = contentLines[i].trim();
+    if (!line) continue;
+    
+    // Check if line is a section header (all caps)
+    if (line === line.toUpperCase() && line.length > 2) {
+      // Add some space before section headers
+      y += 5;
+      doc.setFont(undefined, 'bold');
+      doc.text(line, 20, y);
+      doc.setFont(undefined, 'normal');
+    } else {
+      // Regular line
+      let indent = 20;
+      // Check if line is a bullet point
+      if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
+        indent = 25;
+      }
       
-      // Enhanced conversion command with explicit formatting preservation options
-      const conversionCmd = `${officeCmd} --headless --convert-to pdf --outdir "${tempDir}" "${tempDocxPath}"`;
-      logger.info(`Running conversion command: ${conversionCmd}`);
+      // Handle word wrapping by splitting long lines
+      const words = line.split(' ');
+      let currentLine = '';
       
-      const cmdOutput = await execPromise(conversionCmd);
-      logger.info(`Conversion command output: ${cmdOutput}`);
-      
-      // Increase delay to ensure PDF conversion completes
-      await new Promise(resolve => setTimeout(resolve, 8000));
-      
-      // Check if PDF was generated
-      let pdfFilePath = tempPdfPath;
-      if (!fs.existsSync(tempPdfPath)) {
-        // Try to find any PDF in the temp directory
-        const files = fs.readdirSync(tempDir);
-        logger.info(`Files in temp directory: ${files.join(', ')}`);
+      for (const word of words) {
+        const testLine = currentLine + (currentLine ? ' ' : '') + word;
+        const testWidth = doc.getStringUnitWidth(testLine) * 12;
         
-        const pdfFile = files.find(file => file.endsWith('.pdf'));
-        if (pdfFile) {
-          pdfFilePath = path.join(tempDir, pdfFile);
-          logger.info(`Found PDF at different path: ${pdfFilePath}`);
+        if (testWidth > 170) {
+          doc.text(currentLine, indent, y);
+          currentLine = word;
+          y += 7;
+          
+          // Check if we need a new page
+          if (y > 280) {
+            doc.addPage();
+            pageNum++;
+            y = 20;
+          }
         } else {
-          throw new Error('PDF file not generated with LibreOffice');
+          currentLine = testLine;
         }
       }
       
-      // Read the PDF file and log its size
-      pdfBuffer = fs.readFileSync(pdfFilePath);
-      logger.info(`Generated PDF size: ${pdfBuffer.length} bytes`);
-      
-      // For additional verification, log the first few bytes of the PDF
-      if (pdfBuffer.length > 0) {
-        logger.info(`PDF header (first 20 bytes): ${pdfBuffer.slice(0, 20).toString('hex')}`);
-      }
-      
-      // Basic check for valid PDF
-      if (pdfBuffer.length < 100) {
-        throw new Error(`Generated PDF is too small (${pdfBuffer.length} bytes) and likely invalid`);
-      }
-      
-      logger.info(`Successfully generated PDF using ${conversionMethod}`);
-    } catch (conversionError) {
-      logger.error(`PDF conversion with ${conversionMethod} failed:`, conversionError);
-      
-      // If conversion failed, try using convertDocxToPdf as a fallback
-      logger.info('Attempting fallback conversion method');
-      try {
-        conversionMethod = 'fallback';
-        const fallbackPdf = await convertDocxToPdf(docxBase64);
-        pdfBuffer = Buffer.from(fallbackPdf, 'base64');
-        logger.info(`Successfully generated PDF using fallback method: ${pdfBuffer.length} bytes`);
-      } catch (fallbackError) {
-        logger.error('Fallback conversion also failed:', fallbackError);
-        
-        // Final fallback to emergency PDF
-        logger.info('Using emergency fallback PDF');
-        const fallbackPdfBase64 = getEmergencyFallbackPDF("Your CV was optimized successfully, but we couldn't generate a PDF. You can still download the DOCX version.");
-        pdfBuffer = Buffer.from(fallbackPdfBase64, 'base64');
+      // Output the remaining line
+      if (currentLine) {
+        doc.text(currentLine, indent, y);
+        y += 7;
       }
     }
     
-    // Final validation check
-    if (!pdfBuffer || pdfBuffer.length < 100) {
-      throw new Error(`Invalid PDF buffer: ${pdfBuffer ? 'Too small' : 'Empty'}`);
-    }
-    
-    return pdfBuffer.toString('base64');
-  } catch (error) {
-    logger.error('Error in PDF conversion:', error);
-    throw error;
-  } finally {
-    // Clean up temporary files
-    try {
-      if (fs.existsSync(tempDocxPath)) fs.unlinkSync(tempDocxPath);
-      if (fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
-      fs.rmdirSync(tempDir);
-    } catch (cleanupError) {
-      logger.error('Error cleaning up temporary files:', cleanupError);
+    // Check if we need a new page
+    if (y > 280) {
+      doc.addPage();
+      pageNum++;
+      y = 20;
     }
   }
+  
+  // Add page numbers
+  for (let i = 1; i <= pageNum; i++) {
+    doc.setPage(i);
+    doc.setFontSize(10);
+    doc.text(`Page ${i} of ${pageNum}`, 105, 290, { align: 'center' });
+  }
+  
+  // Return the PDF as a buffer
+  return Buffer.from(doc.output('arraybuffer'));
 }
 
-/**
- * Converts a base64 encoded DOCX file to a base64 encoded PDF
- * @param docxBase64 Base64 encoded DOCX file
- * @returns Base64 encoded PDF file
- */
-async function convertDocxToPdf(docxBase64: string): Promise<string> {
-  // Create temporary directory
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cv-pdf-'));
-  const docxFileName = `${uuidv4()}.docx`;
-  const tempDocxPath = path.join(tempDir, docxFileName);
-  const tempPdfPath = path.join(tempDir, docxFileName.replace(/\.docx$/, '.pdf'));
-
+// Now completely rewrite the generatePDFFromDOCX function
+async function generatePDFFromDOCX(docxBase64: string): Promise<string> {
   try {
     // Validate base64 input
     if (!docxBase64 || typeof docxBase64 !== 'string' || docxBase64.trim() === '') {
       throw new Error('Invalid DOCX data: Empty or invalid base64 string');
     }
-
-    // Write DOCX file to disk
+    
+    // Create a buffer from the base64 string
     const docxBuffer = Buffer.from(docxBase64, 'base64');
-    fs.writeFileSync(tempDocxPath, docxBuffer);
-
-    // Check if file was written successfully
-    if (!fs.existsSync(tempDocxPath) || fs.statSync(tempDocxPath).size === 0) {
-      throw new Error('Failed to write DOCX file to disk');
-    }
-
-    logger.info(`Converting DOCX (${docxBuffer.length} bytes) to PDF`);
-
-    // Determine the appropriate office command based on platform
-    const officeCmd = process.platform === 'win32' ? 'soffice' : 'libreoffice';
-    await execPromise(`${officeCmd} --headless --convert-to pdf --outdir "${tempDir}" "${tempDocxPath}"`);
-    // Wait for a short period to allow the PDF conversion to complete
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    // Check if PDF was generated
-    if (!fs.existsSync(tempPdfPath)) {
-      // If not found by expected name, try to locate any PDF in the temp directory
-      const files = fs.readdirSync(tempDir);
-      const pdfFile = files.find(file => file.endsWith('.pdf'));
+    
+    // First, try to use the normal conversion process
+    try {
+      logger.info('Attempting PDF conversion using standard method');
       
-      if (pdfFile) {
-        const actualPdfPath = path.join(tempDir, pdfFile);
-        const pdfBuffer = fs.readFileSync(actualPdfPath);
-        return pdfBuffer.toString('base64');
-      } else {
-        throw new Error('PDF file not generated');
+      // Use a temporary directory for the conversion
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cv-pdf-'));
+      const docxFileName = `${uuidv4()}.docx`;
+      const tempDocxPath = path.join(tempDir, docxFileName);
+      
+      // Write the DOCX to disk
+      fs.writeFileSync(tempDocxPath, docxBuffer);
+      
+      // Use mammoth.js to extract text from DOCX
+      const mammoth = require('mammoth');
+      const result = await mammoth.extractRawText({path: tempDocxPath});
+      const extractedText = result.value;
+      
+      if (!extractedText || extractedText.trim() === '') {
+        throw new Error('Could not extract text from DOCX');
       }
+      
+      logger.info(`Successfully extracted ${extractedText.length} characters from DOCX`);
+      
+      // Use the text to create a basic PDF
+      const pdfBuffer = await createMinimalPDF(extractedText);
+      logger.info(`Created PDF with size ${pdfBuffer.length} bytes`);
+      
+      // Clean up temp files
+      try {
+        fs.unlinkSync(tempDocxPath);
+        fs.rmdirSync(tempDir);
+      } catch (cleanupError) {
+        logger.error('Error cleaning up temporary files:', cleanupError);
+      }
+      
+      // Return the PDF as base64
+      return pdfBuffer.toString('base64');
+    } catch (conversionError) {
+      logger.error('Standard PDF conversion failed:', conversionError);
+      
+      // Fall back to emergency PDF
+      logger.warn('Using emergency fallback PDF');
+      return getEmergencyFallbackPDF("We couldn't generate a PDF from your document. Please download the DOCX version instead.");
     }
+  } catch (error) {
+    logger.error('Fatal error in PDF generation:', error);
+    return getEmergencyFallbackPDF("An error occurred while generating your PDF. Please try again later or download the DOCX version.");
+  }
+}
 
-    // Read and encode the PDF file
-    const pdfBuffer = fs.readFileSync(tempPdfPath);
+// As a final fallback, enhance the emergency PDF to be more useful
+function getEmergencyFallbackPDF(message: string): string {
+  // Rather than using a static PDF, generate one with useful information
+  try {
+    const { jsPDF } = require('jspdf');
+    
+    // Create a new PDF document
+    const doc = new jsPDF();
+    
+    // Add a header
+    doc.setFontSize(20);
+    doc.text("CV Optimizer", 105, 20, { align: 'center' });
+    
+    // Add a message
+    doc.setFontSize(14);
+    doc.text("We couldn't generate a complete PDF of your optimized CV", 105, 40, { align: 'center' });
+    
+    // Add the specific message
+    doc.setFontSize(12);
+    
+    // Split the message into lines for better formatting
+    const splitMessage = doc.splitTextToSize(message, 170);
+    doc.text(splitMessage, 105, 60, { align: 'center' });
+    
+    // Add help information
+    doc.setFontSize(12);
+    doc.text([
+      "Please try one of the following options:",
+      "1. Download the DOCX version instead",
+      "2. Try refreshing the PDF generation",
+      "3. Contact support if the problem persists"
+    ], 20, 100);
+    
+    // Add a timestamp
+    const timestamp = new Date().toLocaleString();
+    doc.setFontSize(10);
+    doc.text(`Generated on: ${timestamp}`, 20, 280);
+    
+    // Return the PDF as base64
+    const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
     return pdfBuffer.toString('base64');
   } catch (error) {
-    logger.error('Error in PDF conversion:', error);
-    throw error;
-  } finally {
-    // Clean up temporary files
-    try {
-      if (fs.existsSync(tempDocxPath)) fs.unlinkSync(tempDocxPath);
-      if (fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
-      fs.rmdirSync(tempDir);
-    } catch (cleanupError) {
-      logger.error('Error cleaning up temporary files:', cleanupError);
-    }
+    logger.error('Error creating emergency PDF:', error);
+    
+    // If even our emergency PDF generation fails, use the static version
+    return "JVBERi0xLjcKJeLjz9MKNSAwIG9iago8PCAvVHlwZSAvUGFnZSAvUGFyZW50IDEgMCBSIC9MYXN0TW9kaWZpZWQgKEQ6MjAyMzA1MTUxMjMwMDBaKSAvUmVzb3VyY2VzIDIgMCBSIC9NZWRpYUJveCBbMCAwIDU5NS4yNzU2IDg0MS44ODk4XSAvQ3JvcEJveCBbMCAwIDU5NS4yNzU2IDg0MS44ODk4XSAvQmxlZWRCb3ggWzAgMCA1OTUuMjc1NiA4NDEuODg5OF0gL1RyaW1Cb3ggWzAgMCA1OTUuMjc1NiA4NDEuODg5OF0gL0FydEJveCBbMCAwIDU5NS4yNzU2IDg0MS44ODk4XSAvQ29udGVudHMgNiAwIFIgL1JvdGF0ZSAwIC9Hcm91cCA8PCAvVHlwZSAvR3JvdXAgL1MgL1RyYW5zcGFyZW5jeSAvQ1MgL0RldmljZVJHQiA+PiAvQW5ub3RzIFsgXSAvUFogMSA+PgplbmRvYmoKNiAwIG9iago8PC9GaWx0ZXIgL0ZsYXRlRGVjb2RlIC9MZW5ndGggMTc0Pj4gc3RyZWFtCnicXY8xDoMwDEX3nMI3iGMSkhQxdWGAEwRVqAsSQ4cuvb0OhQ5d/KVn+X+yLLN91Qk0gzfSYUINOiUf8TbugggD+pQJVqDRTXdVbqJTCFnw3C8Zp5oGMKZsALzD25ziBgdHH3HEVvqEGnTC4XMdxVr7Jcb4wIRaQQWmBTrU5zJ/1RdlMlHIcqqyBT3B/qdYXJptuauS3JTEIlYxJ3AlJXmJJcXyFasM5QtFRWYhCmVX1Vb5fgHVZUooCmVuZHN0cmVhbQplbmRvYmoKMSAwIG9iago8PCAvVHlwZSAvUGFnZXMgL0tpZHMgWyA1IDAgUiBdIC9Db3VudCAxID4+CmVuZG9iagozIDAgb2JqCjw8L1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhIC9FbmNvZGluZyAvV2luQW5zaUVuY29kaW5nPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1Byb2NTZXQgWy9QREYgL1RleHQgL0ltYWdlQiAvSW1hZ2VDIC9JbWFnZUldIC9Gb250IDw8IC9GMyAzIDAgUiA+PiAvWE9iamVjdCA8PCAgPj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1Byb2R1Y2VyIChjYWlybyAxLjE2LjAgKGh0dHBzOi8vY2Fpcm9ncmFwaGljcy5vcmcpKQovQ3JlYXRpb25EYXRlIChEOjIwMjMwNTE1MTIzMDAwWikKPj4KZW5kb2JqCjcgMCBvYmoKPDwgL1R5cGUgL0NhdGFsb2cgL1BhZ2VzIDEgMCBSIC9WZXJzaW9uIC8xLjcgPj4KZW5kb2JqCnhyZWYKMCA4CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDM5MiAwMDAwMCBuIAowMDAwMDAwNTc0IDAwMDAwIG4gCjAwMDAwMDA0NTEgMDAwMDAgbiAKMDAwMDAwMDY4OCAwMDAwMCBuIAowMDAwMDAwMDE1IDAwMDAwIG4gCjAwMDAwMDAxNDkgMDAwMDAgbiAKMDAwMDAwMDc2NyAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDggL1Jvb3QgNyAwIFIgL0luZm8gNCAwIFIgL0lEIFsgPDRkYjg0ZmVlNmQ4YTRjMzQwYWEyYzc4MjBiYzRmMTI5Pgo8NGRiODRmZWU2ZDhhNGMzNDBhYTJjNzgyMGJjNGYxMjk+IF0gPj4Kc3RhcnR4cmVmCjgyMAolJUVPRgo=";
   }
 } 

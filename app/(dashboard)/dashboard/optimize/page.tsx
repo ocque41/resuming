@@ -19,33 +19,25 @@ export default async function OptimizePage() {
     throw new Error("Team not found");
   }
   
-  const cvs = await getCVsForUser(user.id);
-  const formattedCvs = cvs.map((cv: any) => `${cv.fileName}|${cv.id}`);
+  const userCVs = await getCVsForUser(user.id);
+  const formattedCVs = userCVs.map((cv) => `${cv.fileName}|${cv.id}`);
   
   return (
-    <div className="min-h-screen bg-black text-white">
-      <div className="max-w-md mx-auto px-4 sm:px-6 py-6 relative">
-        {/* Back button - simple arrow */}
-        <div className="absolute top-6 left-4">
-          <Link 
-            href="/dashboard" 
-            className="inline-flex items-center justify-center h-8 w-8 rounded-full hover:bg-gray-800 text-gray-400 hover:text-[#B4916C] transition-colors"
-            aria-label="Back to dashboard"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-        </div>
-        
-        <h1 className="text-xl md:text-2xl font-bold mb-8 text-center mt-2">
-          Optimize Your CV
-        </h1>
-        
-        <div className="mt-6">
-          <ErrorBoundaryWrapper>
-            <OptimizationWorkflow cvs={formattedCvs} />
-          </ErrorBoundaryWrapper>
-        </div>
+    <div className="w-full max-w-[1400px] mx-auto px-2 sm:px-4 md:px-6">
+      <div className="flex items-center mb-6">
+        <Link 
+          href="/dashboard" 
+          className="text-[#B4916C] hover:text-[#9A7A5B] mr-4 flex items-center"
+        >
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Back to Dashboard
+        </Link>
+        <h1 className="text-2xl md:text-3xl font-bold text-white">CV Optimization</h1>
       </div>
+      
+      <ErrorBoundaryWrapper>
+        <OptimizationWorkflow cvs={formattedCVs} />
+      </ErrorBoundaryWrapper>
     </div>
   );
 } 

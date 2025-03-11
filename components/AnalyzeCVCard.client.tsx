@@ -2,11 +2,12 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, BarChart2, Building, FileText, ArrowRight } from "lucide-react";
+import { AlertCircle, BarChart2, Building, FileText, ArrowRight, Check, RefreshCw } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getIndustrySpecificAtsInsights } from "@/lib/cvAnalyzer";
+import { Progress } from "@/components/ui/progress";
 
 interface AnalysisResult {
   atsScore: number | string;
@@ -31,7 +32,7 @@ interface AnalyzeCVCardProps {
 }
 
 // New SimpleFileDropdown component to replace the problematic dropdown
-function SimpleFileDropdown({ cvs, onSelect, selectedCVName }: { cvs: string[]; onSelect: (cvId: string, cvName: string) => void; selectedCVName?: string; }) {
+function SimpleFileDropdown({ cvs, onSelect, selectedCVName }: { cvs: string[]; onSelect: (cvId: string, cvName: string) => void; selectedCVName?: string | null; }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="relative w-full">
@@ -431,158 +432,165 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
   };
 
   return (
-    <Card className="w-full bg-[#050505] border-gray-800 shadow-xl overflow-hidden">
-      <CardHeader className="bg-[#0A0A0A] border-b border-gray-800 pb-3">
-        <CardTitle className="flex items-center text-white">
-          <BarChart2 className="w-5 h-5 mr-2 text-[#B4916C]" />
-          CV Analysis
+    <Card className="rounded-lg border-t-4 border-t-[#B4916C] shadow-md bg-[#050505] text-white w-full max-w-[95vw] mx-auto">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-xl font-semibold flex items-center justify-between">
+          <div className="flex items-center">
+            <FileText className="h-5 w-5 mr-2 text-[#B4916C]" />
+            Analyze CV
+          </div>
         </CardTitle>
+        <CardDescription className="text-gray-400">
+          Analyze your CV for ATS compatibility and improvement opportunities
+        </CardDescription>
       </CardHeader>
-      
-      <CardContent className="p-4 sm:p-6">
-        {!analysis && !loading && (
-          <div className="mb-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0 mb-4">
-              <div className="w-full">
-                <SimpleFileDropdown cvs={cvs} selectedCVName={selectedCVName || ""} onSelect={handleCVSelect} />
-              </div>
-              <Button
-                onClick={handleAnalyze}
-                disabled={!selectedCVId || loading}
-                className="bg-[#B4916C] hover:bg-[#A3815C] text-white whitespace-nowrap w-full sm:w-auto"
-              >
-                {loading ? "Analyzing..." : "Analyze CV"}
-              </Button>
-            </div>
-            
-            <div className="text-gray-400 text-sm">
-              Select your CV to begin the AI-powered analysis. Our system will evaluate your CV against ATS systems and industry standards.
-            </div>
+      <CardContent>
+        {/* File selection area */}
+        <div className="mb-6">
+          <div className="text-sm text-gray-400 mb-2">
+            Select a CV to analyze
           </div>
-        )}
-        
-        {loading && (
-          <div className="flex flex-col items-center justify-center py-8">
-            <div className="w-16 h-16 border-4 border-[#B4916C] border-t-transparent rounded-full animate-spin mb-4"></div>
-            <p className="text-gray-300 text-center">Analyzing your CV...</p>
-            <p className="text-gray-500 text-sm text-center mt-2">This may take a minute or two.</p>
-          </div>
-        )}
-        
-        {error && (
-          <Alert className="mb-4 bg-red-900/20 text-red-400 border border-red-900">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        
-        {analysis && (
-          <div className="space-y-6 overflow-x-auto">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-              <div className="bg-[#050505] p-4 rounded-lg border border-gray-800">
-                <h3 className="text-lg text-white font-semibold mb-3">ATS Compatibility Score</h3>
-                <div className="flex items-center">
-                  <div className="text-[#B4916C] font-bold text-4xl">
-                    {formatAtsScore(analysis.atsScore)}
-                  </div>
-                  <div className="text-sm text-gray-400 ml-1">/&nbsp;100</div>
-                </div>
-              </div>
-              
-              <div className="bg-[#050505] p-4 rounded-lg border border-gray-800">
-                <h3 className="text-lg text-white font-semibold mb-3 flex items-center">
-                  <Building className="h-4 w-4 mr-2 text-[#B4916C]" />
-                  Industry
-                </h3>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-1 bg-[#B4916C]/10 text-[#B4916C] rounded-md">
-                    {analysis.industry || "General"}
-                  </span>
-                  {analysis.language && (
-                    <span className="px-2 py-1 bg-blue-500/10 text-blue-400 rounded-md text-xs uppercase">
-                      {getLanguageName(analysis.language)}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-            
-            <div>
-              <h3 className="text-lg font-semibold text-white mb-2">CV Format Strengths</h3>
-              {(analysis.formattingStrengths && analysis.formattingStrengths.length > 0) ? (
-                <ul className="list-disc list-inside text-gray-300 space-y-1">
-                  {analysis.formattingStrengths.map((strength, index) => (
-                    <li key={`format-strength-${index}`} className="text-sm">{strength}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-gray-300">No strengths</p>
-              )}
-            </div>
-            
-            <div>
-              <h3 className="text-lg font-semibold text-white mb-2">CV Format Weaknesses</h3>
-              <ul className="list-disc list-inside text-gray-300 space-y-1">
-                {(analysis.formattingWeaknesses || []).map((weakness, index) => (
-                  <li key={`format-weakness-${index}`} className="text-sm">{weakness}</li>
-                ))}
-              </ul>
-            </div>
-            
-            <div>
-              <h3 className="text-lg font-semibold text-white mb-2">CV Format Recommendations</h3>
-              <ul className="list-disc list-inside text-gray-300 space-y-1">
-                {(analysis.formattingRecommendations || []).map((recommendation, index) => (
-                  <li key={`format-recommendation-${index}`} className="text-sm">{recommendation}</li>
-                ))}
-              </ul>
-            </div>
-            
-            {analysis.industry && (
-              <div>
-                <h3 className="text-lg font-semibold text-white mb-2 flex items-center">
-                  <Building className="h-4 w-4 mr-2 text-[#B4916C]" />
-                  Industry
-                </h3>
-                <div className="text-gray-300 mb-2">
-                  <span className="px-2 py-1 bg-[#B4916C]/10 text-[#B4916C] rounded-md">
-                    {analysis.industry}
-                  </span>
-                </div>
-                {analysis.industryInsight && (
-                  <p className="text-gray-400 text-sm">{analysis.industryInsight}</p>
-                )}
-              </div>
+          <SimpleFileDropdown
+            cvs={cvs}
+            onSelect={handleCVSelect}
+            selectedCVName={selectedCVName}
+          />
+        </div>
+
+        {/* Analysis button */}
+        <div className="mt-4">
+          <Button
+            onClick={handleAnalyze}
+            className="w-full bg-[#B4916C] hover:bg-[#9A7A5B] text-white flex items-center justify-center"
+            disabled={loading || !selectedCVName}
+          >
+            {loading ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                Analyzing...
+              </>
+            ) : (
+              <>
+                <BarChart2 className="h-4 w-4 mr-2" />
+                Analyze CV
+              </>
             )}
+          </Button>
+        </div>
+
+        {/* Loading state */}
+        {loading && (
+          <div className="mt-4">
+            <Progress value={45} className="h-2 bg-gray-700" />
+            <p className="text-sm text-gray-400 mt-2 text-center">Analyzing CV for ATS compatibility...</p>
           </div>
         )}
 
-        {analysis && (
-          <div className="mt-6">
-            <h3 className="text-xl font-semibold mb-2 flex items-center">
-              <span className="text-amber-500 mr-2">
-                <FileText size={20} />
-              </span>
-              Top Keywords
-            </h3>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {getTopKeywords().length > 0 ? (
-                getTopKeywords().map((keyword, index) => (
-                  <span
-                    key={index}
-                    className="px-3 py-1 bg-amber-100/10 border border-amber-200/20 rounded-full text-amber-200 text-sm"
-                  >
-                    {keyword}
-                  </span>
-                ))
-              ) : (
-                <span className="text-gray-400">No keywords detected</span>
+        {/* Error message */}
+        {error && (
+          <Alert variant="destructive" className="mt-4 border border-red-800 bg-red-900/20">
+            <AlertCircle className="h-4 w-4 text-red-400" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Analysis results */}
+        {analysis && !loading && (
+          <div className="mt-6 space-y-6">
+            {/* ATS Score */}
+            <div className="rounded-lg border border-[#B4916C]/30 p-4 bg-[#1A1A1A]">
+              <h3 className="text-lg font-semibold mb-4">ATS Compatibility Score</h3>
+              <div className="flex items-center">
+                <div className="w-full max-w-sm">
+                  <Progress value={Number(formatAtsScore(analysis.atsScore))} className="h-3 bg-gray-700" />
+                </div>
+                <span className="ml-4 text-xl font-bold text-[#B4916C]">{formatAtsScore(analysis.atsScore)}%</span>
+              </div>
+              
+              <div className="mt-2 text-sm text-gray-400">
+                {Number(formatAtsScore(analysis.atsScore)) >= 70
+                  ? "Good score! Your CV is well-optimized for ATS systems."
+                  : Number(formatAtsScore(analysis.atsScore)) >= 50
+                  ? "Average score. Your CV needs some improvements for better ATS compatibility."
+                  : "Low score. Your CV needs significant optimization for ATS systems."}
+              </div>
+            </div>
+            
+            {/* Industry & Language */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-lg border border-[#B4916C]/30 p-4 bg-[#1A1A1A]">
+                <h3 className="text-sm font-medium text-gray-400 mb-1">Industry</h3>
+                <p className="text-lg font-semibold">{analysis.industry}</p>
+              </div>
+              
+              {analysis.language && (
+                <div className="rounded-lg border border-[#B4916C]/30 p-4 bg-[#1A1A1A]">
+                  <h3 className="text-sm font-medium text-gray-400 mb-1">Language</h3>
+                  <p className="text-lg font-semibold">{getLanguageName(analysis.language)}</p>
+                </div>
               )}
+            </div>
+            
+            {/* Strengths and Weaknesses */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Strengths */}
+              <div className="rounded-lg border border-[#B4916C]/30 p-4 bg-[#1A1A1A]">
+                <h3 className="text-lg font-semibold mb-4 flex items-center">
+                  <Check className="h-4 w-4 mr-2 text-green-500" />
+                  Strengths
+                </h3>
+                <ul className="space-y-2">
+                  {analysis.strengths.map((strength, index) => (
+                    <li key={index} className="flex items-start">
+                      <Check className="h-4 w-4 mr-2 text-green-500 mt-1 flex-shrink-0" />
+                      <span>{strength}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              
+              {/* Weaknesses */}
+              <div className="rounded-lg border border-[#B4916C]/30 p-4 bg-[#1A1A1A]">
+                <h3 className="text-lg font-semibold mb-4 flex items-center">
+                  <AlertCircle className="h-4 w-4 mr-2 text-red-500" />
+                  Areas to Improve
+                </h3>
+                <ul className="space-y-2">
+                  {analysis.weaknesses.map((weakness, index) => (
+                    <li key={index} className="flex items-start">
+                      <AlertCircle className="h-4 w-4 mr-2 text-red-500 mt-1 flex-shrink-0" />
+                      <span>{weakness}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            
+            {/* Recommendations */}
+            <div className="rounded-lg border border-[#B4916C]/30 p-4 bg-[#1A1A1A]">
+              <h3 className="text-lg font-semibold mb-4">Recommendations</h3>
+              <ul className="space-y-2">
+                {analysis.recommendations.map((recommendation, index) => (
+                  <li key={index} className="flex items-start">
+                    <ArrowRight className="h-4 w-4 mr-2 text-[#B4916C] mt-1 flex-shrink-0" />
+                    <span>{recommendation}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         )}
+
+        {/* Children (if any) */}
+        {children}
       </CardContent>
     </Card>
   );
 }
+
+<style jsx global>{`
+  .h-3.bg-gray-700 > div {
+    background-color: #B4916C;
+  }
+`}</style>
 
