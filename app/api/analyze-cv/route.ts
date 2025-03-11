@@ -4,7 +4,7 @@ import { db } from "@/lib/db/drizzle";
 import { cvs } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { MistralRAGService } from "@/lib/utils/mistralRagService";
-import { logger } from "@/lib/utils/logger";
+import { logger } from "@/lib/logger";
 
 // Type definition for analysis result
 interface AnalysisResult {
@@ -21,11 +21,9 @@ interface AnalysisResult {
   formatStrengths: string[];
   formatWeaknesses: string[];
   formatRecommendations: string[];
-  metadata: Record<string, any>;
-  sections: Record<string, string>;
+  metadata: any;
+  sections: Array<{ name: string; content: string }>;
   skills: string[];
-  createdAt: Date;
-  updatedAt: Date;
 }
 
 /**
@@ -125,7 +123,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Perform CV analysis to determine industry, language, and calculate ATS score
-    const analysis = await analyzeCV(cvId, cvContent, String(cv.userId));
+    const analysis = await analyzeCV(cvId, String(cv.userId), cvContent, cv.metadata);
     console.log(`Analysis completed for CV ${cvId} with ATS score: ${analysis.atsScore}`);
 
     // Merge with existing metadata (if any)
@@ -203,20 +201,19 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * Analyzes the CV content and extracts key information
- * Enhanced with RAG for better analysis accuracy
+ * Analyzes a CV using the RAG service
  */
-async function analyzeCV(cvId: string, cvText: string, currentUserId: string | number): Promise<AnalysisResult> {
+async function analyzeCV(cvId: string, userId: string, rawText: string, metadata: any): Promise<AnalysisResult> {
+  logger.info(`Starting CV analysis for CV ID: ${cvId}`);
+  
   try {
-    logger.info(`Starting CV analysis for CV ID: ${cvId}`);
-    
-    // Create initial result object with default values
-    const result: AnalysisResult = {
-      cvId: cvId,
-      userId: currentUserId,
+    // Create initial analysis result object
+    const analysisResult: AnalysisResult = {
+      cvId,
+      userId,
       atsScore: 0,
-      industry: "Unknown",
-      language: "en",
+      industry: '',
+      language: '',
       keywords: [],
       keyRequirements: [],
       strengths: [],
@@ -226,503 +223,352 @@ async function analyzeCV(cvId: string, cvText: string, currentUserId: string | n
       formatWeaknesses: [],
       formatRecommendations: [],
       metadata: {},
-      sections: {},
-      skills: [],
-      createdAt: new Date(),
-      updatedAt: new Date()
+      sections: [],
+      skills: []
     };
-
-    // Start RAG processing
-    logger.info(`Initializing RAG service for CV ID: ${cvId}`);
+    
+    // Initialize RAG service
     const ragService = new MistralRAGService();
     
-    // Process the document
-    try {
-      logger.info(`Processing document for CV ID: ${cvId}`);
-      await ragService.processCVDocument(cvText);
-      logger.info(`Document processing complete for CV ID: ${cvId}`);
-    } catch (error) {
-      logger.error(`Error processing document: ${error instanceof Error ? error.message : String(error)}`);
-      logger.info(`Falling back to basic analysis for CV ID: ${cvId}`);
-      return performBasicAnalysis(cvText, cvId, currentUserId.toString());
-    }
+    // Process the CV document
+    await ragService.processCVDocument(rawText);
     
     // Extract skills
+    logger.info(`Extracting skills for CV ID: ${cvId}`);
     try {
-      logger.info(`Extracting skills for CV ID: ${cvId}`);
       const skills = await ragService.extractSkills();
-      result.skills = skills;
+      analysisResult.skills = skills;
       logger.info(`Extracted ${skills.length} skills for CV ID: ${cvId}`);
     } catch (error) {
-      logger.warn(`Error extracting skills: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error(`Error extracting skills for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
+      analysisResult.skills = [];
     }
     
-    // Extract keywords with retry mechanism
+    // Extract keywords
+    logger.info(`Extracting keywords for CV ID: ${cvId}`);
     try {
-      logger.info(`Extracting keywords for CV ID: ${cvId}`);
-      let retries = 0;
-      const MAX_RETRIES = 2;
-      
-      while (retries <= MAX_RETRIES) {
-        try {
-          const keywords = await ragService.extractKeywords();
-          if (keywords && keywords.length > 0) {
-            result.keywords = keywords;
-            logger.info(`Successfully extracted ${keywords.length} keywords for CV ID: ${cvId}`);
-            break;
-          } else {
-            throw new Error("Empty keywords response");
-          }
-        } catch (keywordError) {
-          retries++;
-          if (retries <= MAX_RETRIES) {
-            logger.warn(`Retry ${retries}/${MAX_RETRIES} for keyword extraction`);
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
-          } else {
-            logger.error(`Failed to extract keywords after ${MAX_RETRIES} retries`);
-            // Use fallback keywords
-            result.keywords = ["Communication skills", "Problem solving", "Team work", "Leadership", "Project management"];
-          }
-        }
-      }
+      const keywords = await ragService.extractKeywords();
+      analysisResult.keywords = keywords;
+      logger.info(`Extracted ${keywords.length} keywords for CV ID: ${cvId}`);
     } catch (error) {
-      logger.warn(`Error extracting keywords: ${error instanceof Error ? error.message : String(error)}`);
-      result.keywords = ["Communication skills", "Problem solving", "Team work", "Leadership", "Project management"];
+      logger.error(`Error extracting keywords for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
+      analysisResult.keywords = [];
     }
     
     // Extract key requirements
+    logger.info(`Extracting key requirements for CV ID: ${cvId}`);
     try {
-      logger.info(`Extracting key requirements for CV ID: ${cvId}`);
       const keyRequirements = await ragService.extractKeyRequirements();
-      result.keyRequirements = keyRequirements;
+      analysisResult.keyRequirements = keyRequirements;
       logger.info(`Extracted ${keyRequirements.length} key requirements for CV ID: ${cvId}`);
     } catch (error) {
-      logger.warn(`Error extracting key requirements: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error(`Error extracting key requirements for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
+      analysisResult.keyRequirements = [];
     }
     
-    // Analyze CV format with retry mechanism
+    // Analyze CV format
+    logger.info(`Analyzing CV format for CV ID: ${cvId}`);
     try {
-      logger.info(`Analyzing CV format for CV ID: ${cvId}`);
-      let retries = 0;
-      const MAX_RETRIES = 2;
-      
-      while (retries <= MAX_RETRIES) {
-        try {
-          const formatAnalysis = await ragService.analyzeCVFormat();
-          
-          // Verify we got useful results
-          if (formatAnalysis && 
-              formatAnalysis.strengths.length > 0 && 
-              formatAnalysis.weaknesses.length > 0 && 
-              formatAnalysis.recommendations.length > 0) {
-            
-            result.formatStrengths = formatAnalysis.strengths;
-            result.formatWeaknesses = formatAnalysis.weaknesses;
-            result.formatRecommendations = formatAnalysis.recommendations;
-            
-            logger.info(`Successfully analyzed CV format: ${formatAnalysis.strengths.length} strengths, ${formatAnalysis.weaknesses.length} weaknesses, ${formatAnalysis.recommendations.length} recommendations`);
-            break;
-          } else {
-            throw new Error("Incomplete format analysis response");
-          }
-        } catch (formatError) {
-          retries++;
-          if (retries <= MAX_RETRIES) {
-            logger.warn(`Retry ${retries}/${MAX_RETRIES} for format analysis`);
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
-          } else {
-            logger.error(`Failed to analyze format after ${MAX_RETRIES} retries`);
-            // Use fallback format analysis
-            result.formatStrengths = ["Clear section organization", "Consistent formatting"];
-            result.formatWeaknesses = ["Could improve visual hierarchy", "Layout could be more ATS-friendly"];
-            result.formatRecommendations = ["Use bullet points for key achievements", "Add more white space"];
-          }
-        }
-      }
+      const formatAnalysis = await ragService.analyzeCVFormat();
+      analysisResult.formatStrengths = formatAnalysis.strengths;
+      analysisResult.formatWeaknesses = formatAnalysis.weaknesses;
+      analysisResult.formatRecommendations = formatAnalysis.recommendations;
+      logger.info(`Format analysis complete for CV ID: ${cvId}: ${formatAnalysis.strengths.length} strengths, ${formatAnalysis.weaknesses.length} weaknesses, ${formatAnalysis.recommendations.length} recommendations`);
     } catch (error) {
-      logger.warn(`Error analyzing CV format: ${error instanceof Error ? error.message : String(error)}`);
-      // Provide fallback format analysis
-      result.formatStrengths = ["Clear section organization", "Consistent formatting"];
-      result.formatWeaknesses = ["Could improve visual hierarchy", "Layout could be more ATS-friendly"];
-      result.formatRecommendations = ["Use bullet points for key achievements", "Add more white space"];
+      logger.error(`Error analyzing CV format for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
+      analysisResult.formatStrengths = [];
+      analysisResult.formatWeaknesses = [];
+      analysisResult.formatRecommendations = [];
     }
     
-    // Determine industry based on skill matches
-    const industryKeywords = {
-      "IT & Software": ["software", "developer", "programming", "javascript", "python", "java", "web", "frontend", "backend", "fullstack", "database"],
-      "Finance": ["finance", "accounting", "financial", "investment", "banking", "analyst", "portfolio", "trading", "risk management"],
-      "Healthcare": ["healthcare", "medical", "clinical", "patient", "doctor", "nurse", "care", "health", "hospital"],
-      "Marketing": ["marketing", "digital marketing", "social media", "content", "seo", "sem", "advertising", "brand", "market research"],
-      "Sales": ["sales", "business development", "account management", "customer", "revenue", "closing", "pipeline", "leads", "negotiation"]
-    };
-    
-    // Count industry keyword matches
-    const industryCounts: Record<string, number> = {};
-    const normalizedText = cvText.toLowerCase();
-    
-    for (const [industry, keywords] of Object.entries(industryKeywords)) {
-      industryCounts[industry] = keywords.reduce((count, keyword) => {
-        return count + (normalizedText.includes(keyword.toLowerCase()) ? 1 : 0);
-      }, 0);
+    // Analyze CV content
+    logger.info(`Analyzing CV content for CV ID: ${cvId}`);
+    try {
+      const contentAnalysis = await ragService.analyzeContent();
+      analysisResult.strengths = contentAnalysis.strengths;
+      analysisResult.weaknesses = contentAnalysis.weaknesses;
+      analysisResult.recommendations = contentAnalysis.recommendations;
+      logger.info(`Content analysis complete for CV ID: ${cvId}: ${contentAnalysis.strengths.length} strengths, ${contentAnalysis.weaknesses.length} weaknesses, ${contentAnalysis.recommendations.length} recommendations`);
+    } catch (error) {
+      logger.error(`Error analyzing CV content for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
+      analysisResult.strengths = [];
+      analysisResult.weaknesses = [];
+      analysisResult.recommendations = [];
     }
     
-    // Determine the most likely industry
-    let maxCount = 0;
-    let detectedIndustry = "General";
-    
-    for (const [industry, count] of Object.entries(industryCounts)) {
-      if (count > maxCount) {
-        maxCount = count;
-        detectedIndustry = industry;
-      }
+    // Determine industry based on keyword matches
+    logger.info(`Determining industry for CV ID: ${cvId}`);
+    try {
+      const industry = await ragService.determineIndustry();
+      analysisResult.industry = industry;
+      logger.info(`Determined industry for CV ID: ${cvId}: ${industry}`);
+    } catch (error) {
+      logger.error(`Error determining industry for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
+      analysisResult.industry = 'General';
     }
-    
-    result.industry = detectedIndustry;
     
     // Detect language
+    logger.info(`Detecting language for CV ID: ${cvId}`);
     try {
-      const detectedLanguage = detectLanguage(cvText);
-      result.language = detectedLanguage;
+      const language = await ragService.detectLanguage();
+      analysisResult.language = language;
+      logger.info(`Detected language for CV ID: ${cvId}: ${language}`);
     } catch (error) {
-      logger.warn(`Error detecting language: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error(`Error detecting language for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
+      analysisResult.language = 'English';
     }
     
     // Extract sections
+    logger.info(`Extracting sections for CV ID: ${cvId}`);
     try {
-      result.sections = extractSections(cvText);
+      const sections = await ragService.extractSections();
+      analysisResult.sections = sections;
+      logger.info(`Extracted ${sections.length} sections for CV ID: ${cvId}`);
     } catch (error) {
-      logger.warn(`Error extracting sections: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error(`Error extracting sections for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
+      analysisResult.sections = [];
     }
     
-    // Calculate ATS score based on various factors
-    const hasSummary = result.sections["summary"] || result.sections["profile"] || result.sections["objective"];
-    const hasExperience = result.sections["experience"] || result.sections["work experience"] || result.sections["employment history"];
-    const hasEducation = result.sections["education"];
-    const hasSkills = result.sections["skills"] || result.sections["technical skills"];
+    // Calculate ATS score
+    logger.info(`Calculating ATS score for CV ID: ${cvId}`);
+    try {
+      const atsScore = calculateATSScore(
+        analysisResult.skills.length,
+        analysisResult.keywords.length,
+        analysisResult.sections.length,
+        analysisResult.formatStrengths.length,
+        analysisResult.formatWeaknesses.length
+      );
+      analysisResult.atsScore = atsScore;
+      logger.info(`Calculated ATS score for CV ID: ${cvId}: ${atsScore}`);
+    } catch (error) {
+      logger.error(`Error calculating ATS score for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
+      analysisResult.atsScore = 50; // Default score
+    }
     
-    let atsScore = 50; // Base score
+    // Ensure all arrays are populated
+    ensureArraysArePopulated(analysisResult);
     
-    // Adjust based on key sections
-    if (hasSummary) atsScore += 5;
-    if (hasExperience) atsScore += 10;
-    if (hasEducation) atsScore += 5;
-    if (hasSkills) atsScore += 10;
-    
-    // Adjust based on keyword count
-    atsScore += Math.min(10, result.keywords.length);
-    
-    // Adjust based on format analysis
-    atsScore -= Math.min(10, result.formatWeaknesses.length * 2);
-    
-    // Ensure score stays within reasonable bounds
-    atsScore = Math.max(30, Math.min(90, atsScore));
-    
-    result.atsScore = atsScore;
-    
-    // Set metadata with sections info
-    result.metadata = {
-      hasSummary,
-      hasExperience,
-      hasEducation,
-      hasSkills,
-      sectionCount: Object.keys(result.sections).length
+    // Add metadata
+    analysisResult.metadata = {
+      ...metadata,
+      analysisTimestamp: new Date().toISOString(),
+      analysisMethod: 'rag'
     };
     
-    logger.info(`Completed analysis for CV ID: ${cvId} with ATS score: ${atsScore}`);
-    
-    return result;
+    logger.info(`CV analysis complete for CV ID: ${cvId}`);
+    return analysisResult;
   } catch (error) {
-    logger.error(`Error analyzing CV ID ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
-    // Return basic analysis as fallback
-    return performBasicAnalysis(cvText, cvId, currentUserId.toString());
+    logger.error(`Error in CV analysis for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
+    // Fall back to basic analysis
+    return performBasicAnalysis(cvId, userId, rawText, metadata);
   }
+}
+
+/**
+ * Ensures that all arrays in the analysis result are populated
+ */
+function ensureArraysArePopulated(result: AnalysisResult): void {
+  // Define default values for empty arrays
+  const defaultStrengths = [
+    "Clear presentation of professional experience",
+    "Includes contact information",
+    "Lists relevant skills"
+  ];
+  
+  const defaultWeaknesses = [
+    "Could benefit from more quantifiable achievements",
+    "May need more specific examples of skills application",
+    "Consider adding more industry-specific keywords"
+  ];
+  
+  const defaultRecommendations = [
+    "Add measurable achievements with numbers and percentages",
+    "Include more industry-specific keywords",
+    "Ensure all experience is relevant to target positions"
+  ];
+  
+  const defaultFormatStrengths = [
+    "Organized structure",
+    "Consistent formatting",
+    "Clear section headings"
+  ];
+  
+  const defaultFormatWeaknesses = [
+    "Could improve visual hierarchy",
+    "Consider adding more white space",
+    "Ensure consistent alignment"
+  ];
+  
+  const defaultFormatRecommendations = [
+    "Use bullet points for achievements",
+    "Add more white space between sections",
+    "Ensure consistent date formatting"
+  ];
+  
+  const defaultKeywords = [
+    "Professional Experience",
+    "Skills",
+    "Education",
+    "Communication",
+    "Problem Solving"
+  ];
+  
+  const defaultKeyRequirements = [
+    "Professional experience",
+    "Relevant education",
+    "Technical skills",
+    "Communication skills"
+  ];
+  
+  const defaultSections = [
+    { name: "Contact Information", content: "Contact details" },
+    { name: "Professional Experience", content: "Work history" },
+    { name: "Education", content: "Educational background" },
+    { name: "Skills", content: "Professional skills" }
+  ];
+  
+  const defaultSkills = [
+    "Communication",
+    "Problem Solving",
+    "Teamwork",
+    "Time Management"
+  ];
+  
+  // Check and populate empty arrays
+  if (!result.strengths || result.strengths.length === 0) {
+    result.strengths = defaultStrengths;
+    logger.warn(`Using default strengths for CV ID: ${result.cvId}`);
+  }
+  
+  if (!result.weaknesses || result.weaknesses.length === 0) {
+    result.weaknesses = defaultWeaknesses;
+    logger.warn(`Using default weaknesses for CV ID: ${result.cvId}`);
+  }
+  
+  if (!result.recommendations || result.recommendations.length === 0) {
+    result.recommendations = defaultRecommendations;
+    logger.warn(`Using default recommendations for CV ID: ${result.cvId}`);
+  }
+  
+  if (!result.formatStrengths || result.formatStrengths.length === 0) {
+    result.formatStrengths = defaultFormatStrengths;
+    logger.warn(`Using default format strengths for CV ID: ${result.cvId}`);
+  }
+  
+  if (!result.formatWeaknesses || result.formatWeaknesses.length === 0) {
+    result.formatWeaknesses = defaultFormatWeaknesses;
+    logger.warn(`Using default format weaknesses for CV ID: ${result.cvId}`);
+  }
+  
+  if (!result.formatRecommendations || result.formatRecommendations.length === 0) {
+    result.formatRecommendations = defaultFormatRecommendations;
+    logger.warn(`Using default format recommendations for CV ID: ${result.cvId}`);
+  }
+  
+  if (!result.keywords || result.keywords.length === 0) {
+    result.keywords = defaultKeywords;
+    logger.warn(`Using default keywords for CV ID: ${result.cvId}`);
+  }
+  
+  if (!result.keyRequirements || result.keyRequirements.length === 0) {
+    result.keyRequirements = defaultKeyRequirements;
+    logger.warn(`Using default key requirements for CV ID: ${result.cvId}`);
+  }
+  
+  if (!result.sections || result.sections.length === 0) {
+    result.sections = defaultSections;
+    logger.warn(`Using default sections for CV ID: ${result.cvId}`);
+  }
+  
+  if (!result.skills || result.skills.length === 0) {
+    result.skills = defaultSkills;
+    logger.warn(`Using default skills for CV ID: ${result.cvId}`);
+  }
+  
+  // Ensure industry and language are set
+  if (!result.industry || result.industry.trim() === '') {
+    result.industry = 'General';
+    logger.warn(`Using default industry for CV ID: ${result.cvId}`);
+  }
+  
+  if (!result.language || result.language.trim() === '') {
+    result.language = 'English';
+    logger.warn(`Using default language for CV ID: ${result.cvId}`);
+  }
+}
+
+/**
+ * Calculates an ATS score based on various factors
+ */
+function calculateATSScore(
+  skillsCount: number,
+  keywordsCount: number,
+  sectionsCount: number,
+  formatStrengthsCount: number,
+  formatWeaknessesCount: number
+): number {
+  // Base score
+  let score = 50;
+  
+  // Add points for skills (up to 10 points)
+  score += Math.min(skillsCount, 10);
+  
+  // Add points for keywords (up to 10 points)
+  score += Math.min(keywordsCount / 2, 10);
+  
+  // Add points for sections (up to 10 points)
+  score += Math.min(sectionsCount * 2, 10);
+  
+  // Add points for format strengths (up to 10 points)
+  score += Math.min(formatStrengthsCount * 2, 10);
+  
+  // Subtract points for format weaknesses (up to 10 points)
+  score -= Math.min(formatWeaknessesCount, 10);
+  
+  // Ensure score is between 30 and 95
+  score = Math.max(30, Math.min(score, 95));
+  
+  // Round to nearest integer
+  return Math.round(score);
 }
 
 /**
  * Performs a basic analysis of CV text when the advanced RAG analysis fails
  */
-function performBasicAnalysis(cvText: string, cvId: string, userId: string): AnalysisResult {
-  // Log that we're falling back to basic analysis
-  logger.info(`Performing basic analysis for CV ID: ${cvId} as RAG analysis failed`);
+function performBasicAnalysis(cvId: string, userId: string, rawText: string, metadata: any): AnalysisResult {
+  logger.info(`Falling back to basic analysis for CV ID: ${cvId}`);
   
-  // Extract basic information
-  const detectedLanguage = detectLanguage(cvText);
-  const sections = extractSections(cvText);
-  const extractedSkills = extractSkillsBasic(cvText);
-  
-  // Determine industry based on content (simplified version)
-  const industryKeywords = {
-    "IT & Software": ["software", "developer", "programming", "code", "web", "app", "IT", "tech", "computer"],
-    "Finance": ["finance", "accounting", "financial", "budget", "investment", "banking"],
-    "Healthcare": ["healthcare", "medical", "doctor", "nurse", "patient", "hospital"],
-    "Marketing": ["marketing", "brand", "advertising", "market", "campaign", "social media"],
-    "Engineering": ["engineering", "engineer", "mechanical", "electrical", "civil", "design"],
-    "Education": ["education", "teaching", "teacher", "professor", "academic", "school"],
-    "Sales": ["sales", "selling", "business development", "revenue", "client", "customer"],
-    "Human Resources": ["HR", "human resources", "recruiting", "talent", "hiring", "employee"]
-  };
-  
-  // Count industry keywords
-  const industryCounts: Record<string, number> = {};
-  Object.entries(industryKeywords).forEach(([industry, keywords]) => {
-    industryCounts[industry] = 0;
-    keywords.forEach(keyword => {
-      const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
-      const matches = cvText.match(regex);
-      if (matches) {
-        industryCounts[industry] += matches.length;
-      }
-    });
-  });
-  
-  // Find the industry with the most keyword matches
-  let maxCount = 0;
-  let detectedIndustry = "General";
-  
-  Object.entries(industryCounts).forEach(([industry, count]) => {
-    if (count > maxCount) {
-      maxCount = count;
-      detectedIndustry = industry;
-    }
-  });
-  
-  // Create basic format analysis
-  const basicFormatStrengths = [
-    "Basic document structure detected",
-    "Sections appear to be separated appropriately"
-  ];
-  
-  const basicFormatWeaknesses = [
-    "May need better formatting for ATS compatibility",
-    "Could benefit from clearer section headings", 
-    "Visual hierarchy could be improved"
-  ];
-  
-  const basicFormatRecommendations = [
-    "Use clear section headings (e.g., Experience, Education, Skills)",
-    "Organize information in bullet points for better readability",
-    "Ensure consistent formatting throughout the document"
-  ];
-  
-  // Extract top keywords from the CV text
-  const extractKeywordsBasic = (text: string): string[] => {
-    const commonKeywords = [
-      "Project Management", "Leadership", "Communication", "Team Work", 
-      "Problem Solving", "Strategic Planning", "Analysis", "Research",
-      "Development", "Design", "Implementation", "Testing", "Customer Service",
-      "Sales", "Marketing", "Finance", "Operations", "Management"
-    ];
-    
-    const foundKeywords: string[] = [];
-    
-    commonKeywords.forEach(keyword => {
-      const regex = new RegExp(`\\b${keyword}\\b`, 'i');
-      if (regex.test(text)) {
-        foundKeywords.push(keyword);
-      }
-    });
-    
-    // Add skills as keywords too
-    return [...foundKeywords, ...extractedSkills.slice(0, 5)];
-  };
-  
-  // Extract basic key requirements
-  const extractRequirementsBasic = (text: string): string[] => {
-    const requirements = [];
-    
-    if (text.match(/\b(degree|bachelor|master|phd|mba)\b/i)) {
-      requirements.push("Higher education degree");
-    }
-    
-    if (text.match(/\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(year|yr)[s]?\b/i)) {
-      requirements.push("Several years of professional experience");
-    }
-    
-    if (text.match(/\b(lead|manage|direct|supervise)\b/i)) {
-      requirements.push("Leadership experience");
-    }
-    
-    if (text.match(/\b(certification|certified|license|diploma)\b/i)) {
-      requirements.push("Professional certification or license");
-    }
-    
-    // Add default requirements if we didn't find enough
-    if (requirements.length < 3) {
-      requirements.push("Relevant industry experience");
-      requirements.push("Technical proficiency in field-specific tools");
-    }
-    
-    return requirements;
-  };
-  
-  // Extract basic keywords and requirements
-  const keywords = extractKeywordsBasic(cvText);
-  const keyRequirements = extractRequirementsBasic(cvText);
-  
-  // Calculate a basic ATS score (30-70 range for basic analysis)
-  let atsScore = 50; // Base score
-  
-  // Add points for having key sections
-  const keySections = ["education", "experience", "skills", "summary"];
-  let sectionPoints = 0;
-  keySections.forEach(section => {
-    if (sections[section]) {
-      sectionPoints += 3;
-    }
-  });
-  atsScore += sectionPoints;
-  
-  // Add points for skills
-  atsScore += Math.min(extractedSkills.length, 10);
-  
-  // Ensure score is in 30-70 range for basic analysis
-  atsScore = Math.max(30, Math.min(70, atsScore));
-  
-  // Create basic strengths and weaknesses
-  const strengths = ["Basic CV structure detected"];
-  const weaknesses = ["Limited ATS optimization"];
-  
-  if (extractedSkills.length >= 5) {
-    strengths.push("Multiple skills identified");
-  } else {
-    weaknesses.push("Limited skills identified");
-  }
-  
-  if (sections.experience) {
-    strengths.push("Work experience section detected");
-  } else {
-    weaknesses.push("Work experience section may be missing or unclear");
-  }
-  
-  // Create basic recommendations
-  const recommendations = [
-    "Add more industry-specific keywords",
-    "Quantify achievements with measurable results",
-    "Ensure all essential sections are clearly labeled"
-  ];
-  
-  // Create and return the basic analysis result
-  const basicAnalysis: AnalysisResult = {
+  // Create initial analysis result object
+  const analysisResult: AnalysisResult = {
     cvId,
     userId,
-    atsScore, 
-    industry: detectedIndustry,
-    language: detectedLanguage,
-    keywords,
-    keyRequirements,
-    strengths,
-    weaknesses,
-    recommendations,
-    formatStrengths: basicFormatStrengths,
-    formatWeaknesses: basicFormatWeaknesses,
-    formatRecommendations: basicFormatRecommendations,
-    metadata: {
-      sections,
-      skills: extractedSkills,
-      industry: detectedIndustry,
-      keywords,
-      keyRequirements,
-      formatAnalysis: {
-        strengths: basicFormatStrengths,
-        weaknesses: basicFormatWeaknesses,
-        recommendations: basicFormatRecommendations
-      },
-      language: detectedLanguage,
-      atsScore
-    },
-    sections,
-    skills: extractedSkills,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    atsScore: 50, // Default score
+    industry: 'General',
+    language: 'English',
+    keywords: [],
+    keyRequirements: [],
+    strengths: [],
+    weaknesses: [],
+    recommendations: [],
+    formatStrengths: [],
+    formatWeaknesses: [],
+    formatRecommendations: [],
+    metadata: {},
+    sections: [],
+    skills: []
   };
   
-  logger.info(`Completed basic analysis for CV ID: ${cvId} with ATS score: ${basicAnalysis.atsScore}`);
-  return basicAnalysis;
-}
-
-/**
- * Extract skills using basic regex patterns
- */
-function extractSkillsBasic(text: string): string[] {
-  // Common skill keywords
-  const commonSkills = [
-    "JavaScript", "Python", "Java", "C#", "C++", "Ruby", "PHP", "SQL", "HTML", "CSS", 
-    "React", "Angular", "Vue", "Node.js", "Express", "Django", "Flask", "Spring", 
-    "AWS", "Azure", "GCP", "Docker", "Kubernetes", "Git", "CI/CD", "REST", "GraphQL",
-    "Agile", "Scrum", "Project Management", "Team Leadership", "Communication", 
-    "Problem Solving", "Critical Thinking", "Microsoft Office", "Excel", "PowerPoint",
-    "Data Analysis", "Business Intelligence", "Marketing", "Sales", "Customer Service",
-    "Financial Analysis", "Accounting", "HR Management", "Recruiting"
-  ];
+  // Ensure all arrays are populated with defaults
+  ensureArraysArePopulated(analysisResult);
   
-  const skills: string[] = [];
-  
-  // Extract skills from text
-  commonSkills.forEach(skill => {
-    const regex = new RegExp(`\\b${skill}\\b`, 'i');
-    if (regex.test(text)) {
-      skills.push(skill);
-    }
-  });
-  
-  return skills;
-}
-
-/**
- * Detect language of CV text
- */
-function detectLanguage(text: string): string {
-  const englishWords = ["experience", "education", "skills", "summary", "work"];
-  const spanishWords = ["experiencia", "educación", "habilidades", "resumen", "trabajo"];
-  const frenchWords = ["expérience", "éducation", "compétences", "résumé", "travail"];
-  const germanWords = ["erfahrung", "ausbildung", "fähigkeiten", "zusammenfassung", "arbeit"];
-  
-  const countMatches = (words: string[]): number => {
-    let count = 0;
-    words.forEach(word => {
-      const regex = new RegExp(`\\b${word}\\b`, 'i');
-      if (regex.test(text)) {
-        count++;
-      }
-    });
-    return count;
+  // Add metadata
+  analysisResult.metadata = {
+    ...metadata,
+    analysisTimestamp: new Date().toISOString(),
+    analysisMethod: 'basic'
   };
   
-  const enCount = countMatches(englishWords);
-  const esCount = countMatches(spanishWords);
-  const frCount = countMatches(frenchWords);
-  const deCount = countMatches(germanWords);
-  
-  const counts = [
-    { lang: "en", count: enCount },
-    { lang: "es", count: esCount },
-    { lang: "fr", count: frCount },
-    { lang: "de", count: deCount }
-  ];
-  
-  counts.sort((a, b) => b.count - a.count);
-  
-  return counts[0].count > 0 ? counts[0].lang : "en";
-}
-
-/**
- * Extract sections from CV text with proper typing
- */
-function extractSections(text: string): Record<string, string> {
-  const sections: Record<string, string> = {};
-  
-  // Extract sections using regular expressions and handle null results
-  const educationMatch = text.match(/education|university|college|degree|bachelor|master/i);
-  sections.education = educationMatch ? educationMatch[0] : "";
-  
-  const experienceMatch = text.match(/experience|work history|employment|job/i);
-  sections.experience = experienceMatch ? experienceMatch[0] : "";
-  
-  const skillsMatch = text.match(/skills|competencies|abilities|qualifications/i);
-  sections.skills = skillsMatch ? skillsMatch[0] : "";
-  
-  const summaryMatch = text.match(/summary|about me|objective|career objective/i);
-  sections.summary = summaryMatch ? summaryMatch[0] : "";
-  
-  return sections;
+  logger.info(`Basic CV analysis complete for CV ID: ${cvId} with ATS score: ${analysisResult.atsScore}`);
+  return analysisResult;
 }

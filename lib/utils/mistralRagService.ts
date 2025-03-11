@@ -514,6 +514,16 @@ export class MistralRAGService {
     recommendations: string[];
   }> {
     try {
+      // Ensure we have chunks to analyze
+      if (this.chunks.length === 0) {
+        logger.warn('No chunks available for CV format analysis, using defaults');
+        return {
+          strengths: this.getDefaultStrengths(),
+          weaknesses: this.getDefaultWeaknesses(),
+          recommendations: this.getDefaultRecommendations()
+        };
+      }
+
       const query = 'Analyze the format and structure of this CV/resume document in detail. Focus only on formatting, layout, organization, and visual aspects.';
       
       const systemPrompt = `You are a professional CV/resume format analyzer. Your task is to analyze ONLY the format and structure of the CV (not the content).
@@ -541,10 +551,12 @@ Example response format:
 Keep your analysis focused only on the document's format, not its content or qualifications.`;
       
       // Generate format analysis using all CV chunks
-      const context = this.chunks.join('\n\n');
+      // Limit context to avoid token limits
+      const context = this.chunks.slice(0, 10).join('\n\n');
       
       // First try to get a structured JSON response
       try {
+        logger.info('Attempting CV format analysis with JSON response');
         const analysisText = await this.generateDirectResponse(
           `${query}\n\nDocument to analyze:\n${context}`, 
           systemPrompt
@@ -552,7 +564,11 @@ Keep your analysis focused only on the document's format, not its content or qua
         
         // Try to parse as JSON
         try {
-          const jsonResponse = JSON.parse(analysisText);
+          // First, try to extract JSON if it's embedded in other text
+          const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+          const jsonString = jsonMatch ? jsonMatch[0] : analysisText;
+          
+          const jsonResponse = JSON.parse(jsonString);
           
           // Validate the JSON structure
           if (jsonResponse.strengths && 
@@ -617,7 +633,7 @@ Keep your analysis focused only on the document's format, not its content or qua
         logger.warn(`First attempt at format analysis failed: ${analysisError instanceof Error ? analysisError.message : String(analysisError)}`);
         
         // Try a second attempt with a simpler prompt
-        const simpleSystemPrompt = `Analyze the CV format only. Return exactly 3 strengths, 3 weaknesses, and 3 recommendations about the format.`;
+        const simpleSystemPrompt = `Analyze the CV format only. List exactly 3 strengths, 3 weaknesses, and 3 recommendations about the format. Format your response with clear headings: "Strengths:", "Weaknesses:", and "Recommendations:".`;
         
         try {
           const secondAttemptText = await this.generateDirectResponse(
@@ -649,7 +665,11 @@ Keep your analysis focused only on the document's format, not its content or qua
         } catch (secondError) {
           // If both attempts fail, return defaults
           logger.error(`Both format analysis attempts failed: ${secondError instanceof Error ? secondError.message : String(secondError)}`);
-          throw new Error('Format analysis failed');
+          return {
+            strengths: this.getDefaultStrengths(),
+            weaknesses: this.getDefaultWeaknesses(),
+            recommendations: this.getDefaultRecommendations()
+          };
         }
       }
     } catch (error) {
@@ -781,33 +801,60 @@ Keep your analysis focused only on the document's format, not its content or qua
   }
 
   /**
-   * Extract keywords from the CV that are relevant for ATS systems
-   * @returns Array of keywords with importance ratings
+   * Extract keywords or key phrases from the CV
+   * @returns Array of keywords/phrases
    */
   public async extractKeywords(): Promise<string[]> {
     try {
-      const query = 'Extract the most important keywords from this CV document that would be relevant for ATS systems and job applications.';
+      // Ensure we have chunks to analyze
+      if (this.chunks.length === 0) {
+        logger.warn('No chunks available for keyword extraction, using defaults');
+        return this.getDefaultKeywords();
+      }
+
+      const query = 'Extract the most important keywords or key phrases from this CV/resume.';
       
-      const systemPrompt = `You are a CV keyword extraction specialist. Your task is to identify the most important keywords and phrases from the CV that would be relevant for ATS (Applicant Tracking Systems).
+      const systemPrompt = `You are a professional CV/resume keyword analyzer. Your task is to extract the most relevant keywords and key phrases from the CV.
 
-Focus on:
-1. Hard skills and technical competencies
-2. Industry-specific terminology
-3. Software and tools mentioned
-4. Certifications and qualifications
-5. Action verbs and accomplishments
+Focus on extracting:
+1. Hard skills (technical skills, software, tools, methodologies)
+2. Soft skills (communication, leadership, etc.)
+3. Industry-specific terminology
+4. Qualifications and certifications
+5. Job titles and roles
 
-Extract AT LEAST 15 keywords or key phrases. Format your response as a JSON array of strings.
+Provide your analysis as a JSON array with at least 15 keywords/phrases. Each keyword should be a string.
+
 Example response format:
-["Project Management", "JavaScript", "React", "Team Leadership", "Budget Planning", "Data Analysis"]
+{
+  "keywords": [
+    "Project Management",
+    "JavaScript",
+    "Team Leadership",
+    "Agile Methodology",
+    "Budget Planning",
+    "React.js",
+    "Cross-functional Collaboration",
+    "Data Analysis",
+    "Strategic Planning",
+    "Python",
+    "Customer Relationship Management",
+    "SQL",
+    "Public Speaking",
+    "AWS",
+    "Process Optimization"
+  ]
+}
 
-Focus ONLY on extracting keywords, not on analyzing or improving the CV.`;
+Keep your focus on extracting the most relevant and impactful keywords that represent the person's skills and experience.`;
       
-      // Generate keyword analysis using all CV chunks
-      const context = this.chunks.join('\n\n');
+      // Generate keywords using all CV chunks
+      // Limit context to avoid token limits
+      const context = this.chunks.slice(0, 15).join('\n\n');
       
       // First try to get a structured JSON response
       try {
+        logger.info('Attempting keyword extraction with JSON response');
         const keywordsText = await this.generateDirectResponse(
           `${query}\n\nDocument to analyze:\n${context}`, 
           systemPrompt
@@ -815,43 +862,38 @@ Focus ONLY on extracting keywords, not on analyzing or improving the CV.`;
         
         // Try to parse as JSON
         try {
-          const jsonResponse = JSON.parse(keywordsText);
+          // First, try to extract JSON if it's embedded in other text
+          const jsonMatch = keywordsText.match(/\{[\s\S]*\}/);
+          const jsonString = jsonMatch ? jsonMatch[0] : keywordsText;
+          
+          const jsonResponse = JSON.parse(jsonString);
           
           // Validate the JSON structure
-          if (Array.isArray(jsonResponse) && jsonResponse.length > 0) {
-            // Extract just the keywords (without ratings)
-            const keywords = jsonResponse.map(item => {
-              if (typeof item === 'string') {
-                return item.trim();
-              }
-              return '';
-            }).filter(k => k.length > 0);
+          if (jsonResponse.keywords && Array.isArray(jsonResponse.keywords) && jsonResponse.keywords.length > 0) {
+            logger.info(`Successfully extracted ${jsonResponse.keywords.length} keywords as JSON`);
             
-            // Ensure we have at least some keywords
-            if (keywords.length > 0) {
-              logger.info(`Successfully extracted ${keywords.length} keywords as JSON array`);
-              return keywords;
-            } else {
-              logger.warn('JSON response contained an empty array, falling back to text parsing');
-              throw new Error('Empty keywords array');
-            }
+            // Ensure we have at least 10 keywords
+            const keywords = jsonResponse.keywords.length >= 10 ? 
+              jsonResponse.keywords : 
+              [...jsonResponse.keywords, ...this.getDefaultKeywords()].slice(0, 15);
+            
+            return keywords;
           } else {
-            logger.warn('JSON response is not an array, falling back to text parsing');
+            logger.warn('JSON response missing keywords array or empty array, falling back to text parsing');
             throw new Error('Invalid JSON structure');
           }
         } catch (jsonError) {
           // If JSON parsing fails, try to parse the text
           logger.warn(`Failed to parse keywords as JSON: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
           
-          // Try to extract keywords from the text
+          // Parse the keywords from text
           const keywords = this.parseKeywordsFromText(keywordsText);
           
           if (keywords.length > 0) {
-            logger.info(`Extracted ${keywords.length} keywords using text parsing`);
+            logger.info(`Extracted ${keywords.length} keywords via text parsing`);
             return keywords;
           } else {
-            logger.warn('Failed to extract keywords using text parsing, trying second attempt');
-            throw new Error('Failed to extract keywords from text');
+            throw new Error('No keywords found in text parsing');
           }
         }
       } catch (firstAttemptError) {
@@ -859,7 +901,7 @@ Focus ONLY on extracting keywords, not on analyzing or improving the CV.`;
         logger.warn(`First attempt at keyword extraction failed: ${firstAttemptError instanceof Error ? firstAttemptError.message : String(firstAttemptError)}`);
         
         // Try a second attempt with a simpler prompt
-        const simpleSystemPrompt = `Extract exactly 15 important keywords from this CV. Return ONLY a JSON array of strings.`;
+        const simpleSystemPrompt = `Extract exactly 15 important keywords or key phrases from this CV/resume. Format your response as a simple list with one keyword per line. Include both technical skills and soft skills.`;
         
         try {
           const secondAttemptText = await this.generateDirectResponse(
@@ -867,47 +909,28 @@ Focus ONLY on extracting keywords, not on analyzing or improving the CV.`;
             simpleSystemPrompt
           );
           
-          // Try to parse as JSON
-          try {
-            const jsonResponse = JSON.parse(secondAttemptText);
-            
-            if (Array.isArray(jsonResponse) && jsonResponse.length > 0) {
-              const keywords = jsonResponse.map(item => {
-                if (typeof item === 'string') {
-                  return item.trim();
-                }
-                return '';
-              }).filter(k => k.length > 0);
-              
-              if (keywords.length > 0) {
-                logger.info(`Successfully extracted ${keywords.length} keywords from second attempt`);
-                return keywords;
-              }
-            }
-            
-            // If we get here, the JSON parsing didn't yield useful results
-            throw new Error('Invalid or empty JSON response');
-          } catch (jsonError) {
-            // If JSON parsing fails, try to parse the text
-            const keywords = this.parseKeywordsFromText(secondAttemptText);
-            
-            if (keywords.length > 0) {
-              logger.info(`Extracted ${keywords.length} keywords using text parsing from second attempt`);
-              return keywords;
-            } else {
-              throw new Error('Failed to extract keywords from second attempt');
-            }
+          // Parse the keywords from text
+          const keywords = this.parseKeywordsFromText(secondAttemptText);
+          
+          if (keywords.length > 0) {
+            logger.info(`Extracted ${keywords.length} keywords via second attempt`);
+            return keywords;
+          } else {
+            logger.warn('Second attempt failed to extract keywords, using defaults');
+            return this.getDefaultKeywords();
           }
         } catch (secondError) {
-          // If both attempts fail, return default keywords
+          // If both attempts fail, return defaults
           logger.error(`Both keyword extraction attempts failed: ${secondError instanceof Error ? secondError.message : String(secondError)}`);
           return this.getDefaultKeywords();
         }
       }
     } catch (error) {
-      // Handle errors and return default keywords
+      // Handle errors and return defaults
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`Error extracting keywords: ${errorMessage}`);
+      
+      // Return default keywords if extraction fails
       return this.getDefaultKeywords();
     }
   }
@@ -976,48 +999,147 @@ Focus ONLY on extracting keywords, not on analyzing or improving the CV.`;
 
   /**
    * Extract key requirements or qualifications from the CV
-   * @returns Array of key requirements
+   * @returns Array of key requirements/qualifications
    */
   public async extractKeyRequirements(): Promise<string[]> {
     try {
-      const query = 'Extract the key qualifications and requirements that this candidate meets based on their CV.';
+      // Ensure we have chunks to analyze
+      if (this.chunks.length === 0) {
+        logger.warn('No chunks available for key requirements extraction, using defaults');
+        return this.getDefaultKeyRequirements();
+      }
+
+      const query = 'Extract the key qualifications and requirements from this CV/resume.';
       
-      const systemPrompt = `You are a CV analyst specialized in identifying key qualifications and requirements.
-Extract only the most important qualifications from the CV that would make this candidate suitable for roles in their field.
-Focus on concrete achievements, years of experience, education level, certifications, and specialized skills.
-Format your response as a simple list, one qualification per line. Do not include explanations.`;
+      const systemPrompt = `You are a professional CV/resume qualification analyzer. Your task is to extract the most important qualifications and requirements from the CV.
+
+Focus on extracting:
+1. Educational qualifications (degrees, certifications)
+2. Years of experience in specific roles or industries
+3. Technical skills and competencies
+4. Professional achievements and accomplishments
+5. Specialized knowledge areas
+
+Provide your analysis as a JSON array with at least 8 key qualifications/requirements. Each item should be a string.
+
+Example response format:
+{
+  "requirements": [
+    "Bachelor's degree in Computer Science",
+    "5+ years of experience in software development",
+    "Proficient in JavaScript and React.js",
+    "Experience with cloud platforms (AWS, Azure)",
+    "Strong problem-solving and analytical skills",
+    "Agile development methodology expertise",
+    "Experience leading cross-functional teams",
+    "Excellent communication and presentation skills"
+  ]
+}
+
+Focus on extracting the most significant qualifications that would be relevant for job applications.`;
       
-      // Generate requirement analysis using all CV chunks
-      const context = this.chunks.join('\n\n');
-      const requirementsText = await this.generateDirectResponse(
-        `${query}\n\nDocument to analyze:\n${context}`, 
-        systemPrompt
-      );
+      // Generate key requirements using all CV chunks
+      // Limit context to avoid token limits
+      const context = this.chunks.slice(0, 15).join('\n\n');
       
-      // Parse the requirements into an array
-      const requirements = this.parseBulletPoints(requirementsText);
-      
-      // Clean up and filter
-      const result = requirements
-        .map(req => req.trim())
-        .filter(req => req.length > 5)
-        .slice(0, 10); // Limit to top 10 requirements
-      
-      logger.info(`Extracted ${result.length} key requirements from CV`);
-      return result;
+      // First try to get a structured JSON response
+      try {
+        logger.info('Attempting key requirements extraction with JSON response');
+        const requirementsText = await this.generateDirectResponse(
+          `${query}\n\nDocument to analyze:\n${context}`, 
+          systemPrompt
+        );
+        
+        // Try to parse as JSON
+        try {
+          // First, try to extract JSON if it's embedded in other text
+          const jsonMatch = requirementsText.match(/\{[\s\S]*\}/);
+          const jsonString = jsonMatch ? jsonMatch[0] : requirementsText;
+          
+          const jsonResponse = JSON.parse(jsonString);
+          
+          // Validate the JSON structure
+          if (jsonResponse.requirements && Array.isArray(jsonResponse.requirements) && jsonResponse.requirements.length > 0) {
+            logger.info(`Successfully extracted ${jsonResponse.requirements.length} key requirements as JSON`);
+            
+            // Ensure we have at least 5 requirements
+            const requirements = jsonResponse.requirements.length >= 5 ? 
+              jsonResponse.requirements : 
+              [...jsonResponse.requirements, ...this.getDefaultKeyRequirements()].slice(0, 8);
+            
+            return requirements;
+          } else {
+            logger.warn('JSON response missing requirements array or empty array, falling back to text parsing');
+            throw new Error('Invalid JSON structure');
+          }
+        } catch (jsonError) {
+          // If JSON parsing fails, try to parse the text
+          logger.warn(`Failed to parse key requirements as JSON: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
+          
+          // Parse the requirements from text
+          const requirements = this.parseKeywordsFromText(requirementsText);
+          
+          if (requirements.length > 0) {
+            logger.info(`Extracted ${requirements.length} key requirements via text parsing`);
+            return requirements;
+          } else {
+            throw new Error('No key requirements found in text parsing');
+          }
+        }
+      } catch (firstAttemptError) {
+        // If the first attempt fails, try a simpler approach
+        logger.warn(`First attempt at key requirements extraction failed: ${firstAttemptError instanceof Error ? firstAttemptError.message : String(firstAttemptError)}`);
+        
+        // Try a second attempt with a simpler prompt
+        const simpleSystemPrompt = `Extract exactly 8 key qualifications or requirements from this CV/resume. Format your response as a simple list with one qualification per line. Include education, experience, and skills.`;
+        
+        try {
+          const secondAttemptText = await this.generateDirectResponse(
+            `${query}\n\nDocument to analyze:\n${context.substring(0, 3000)}`, 
+            simpleSystemPrompt
+          );
+          
+          // Parse the requirements from text
+          const requirements = this.parseKeywordsFromText(secondAttemptText);
+          
+          if (requirements.length > 0) {
+            logger.info(`Extracted ${requirements.length} key requirements via second attempt`);
+            return requirements;
+          } else {
+            logger.warn('Second attempt failed to extract key requirements, using defaults');
+            return this.getDefaultKeyRequirements();
+          }
+        } catch (secondError) {
+          // If both attempts fail, return defaults
+          logger.error(`Both key requirements extraction attempts failed: ${secondError instanceof Error ? secondError.message : String(secondError)}`);
+          return this.getDefaultKeyRequirements();
+        }
+      }
     } catch (error) {
       // Handle errors and return defaults
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`Error extracting key requirements: ${errorMessage}`);
       
-      // Return default requirements if extraction fails
-      return [
-        "Several years of professional experience",
-        "Bachelor's degree or equivalent",
-        "Strong communication skills",
-        "Project management experience"
-      ];
+      // Return default key requirements if extraction fails
+      return this.getDefaultKeyRequirements();
     }
+  }
+  
+  /**
+   * Get default key requirements when extraction fails
+   * @returns Array of default key requirements
+   */
+  private getDefaultKeyRequirements(): string[] {
+    return [
+      "Bachelor's degree or equivalent experience",
+      "Proficient in relevant technical skills",
+      "Strong communication and interpersonal skills",
+      "Problem-solving and analytical abilities",
+      "Team collaboration experience",
+      "Project management skills",
+      "Industry-specific knowledge",
+      "Adaptability and willingness to learn"
+    ];
   }
 
   /**
@@ -1104,5 +1226,454 @@ Focus on technical and specialized skills, not soft skills.`;
     }
     
     return keywordAnalysis;
+  }
+
+  /**
+   * Analyze the content of the CV for strengths, weaknesses, and recommendations
+   * @returns Object containing content strengths, weaknesses, and recommendations
+   */
+  public async analyzeContent(): Promise<{
+    strengths: string[];
+    weaknesses: string[];
+    recommendations: string[];
+  }> {
+    try {
+      // Ensure we have chunks to analyze
+      if (this.chunks.length === 0) {
+        logger.warn('No chunks available for CV content analysis, using defaults');
+        return {
+          strengths: this.getDefaultContentStrengths(),
+          weaknesses: this.getDefaultContentWeaknesses(),
+          recommendations: this.getDefaultContentRecommendations()
+        };
+      }
+
+      const query = 'Analyze the content of this CV/resume document in detail. Focus on the quality of the content, not the format.';
+      
+      const systemPrompt = `You are a professional CV/resume content analyzer. Your task is to analyze ONLY the content of the CV (not the format).
+
+Review the document for these content aspects:
+1. Quality of experience descriptions
+2. Achievement focus and quantifiable results
+3. Relevance and specificity of skills
+4. Clarity and impact of professional summary
+5. Overall content effectiveness for job applications
+
+Provide your analysis in JSON format with these three arrays:
+1. "strengths": List specific content strengths (minimum 3)
+2. "weaknesses": List specific content issues (minimum 3)
+3. "recommendations": Provide actionable recommendations to improve the content (minimum 3)
+
+Example response format:
+{
+  "strengths": ["Strong achievement focus in experience section", "Clear demonstration of technical skills", "Effective use of action verbs"],
+  "weaknesses": ["Lack of quantifiable results", "Generic skill descriptions", "Missing targeted professional summary"],
+  "recommendations": ["Add metrics and numbers to achievements", "Tailor skills to specific job targets", "Create a compelling professional summary"]
+}
+
+Keep your analysis focused only on the document's content, not its format or layout.`;
+      
+      // Generate content analysis using all CV chunks
+      // Limit context to avoid token limits
+      const context = this.chunks.slice(0, 10).join('\n\n');
+      
+      // First try to get a structured JSON response
+      try {
+        logger.info('Attempting CV content analysis with JSON response');
+        const analysisText = await this.generateDirectResponse(
+          `${query}\n\nDocument to analyze:\n${context}`, 
+          systemPrompt
+        );
+        
+        // Try to parse as JSON
+        try {
+          // First, try to extract JSON if it's embedded in other text
+          const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+          const jsonString = jsonMatch ? jsonMatch[0] : analysisText;
+          
+          const jsonResponse = JSON.parse(jsonString);
+          
+          // Validate the JSON structure
+          if (jsonResponse.strengths && 
+              jsonResponse.weaknesses && 
+              jsonResponse.recommendations &&
+              Array.isArray(jsonResponse.strengths) &&
+              Array.isArray(jsonResponse.weaknesses) &&
+              Array.isArray(jsonResponse.recommendations)) {
+            
+            // Ensure we have at least 3 items in each category
+            const strengths = jsonResponse.strengths.length >= 3 ? 
+              jsonResponse.strengths : 
+              [...jsonResponse.strengths, ...this.getDefaultContentStrengths()].slice(0, 5);
+              
+            const weaknesses = jsonResponse.weaknesses.length >= 3 ? 
+              jsonResponse.weaknesses : 
+              [...jsonResponse.weaknesses, ...this.getDefaultContentWeaknesses()].slice(0, 5);
+              
+            const recommendations = jsonResponse.recommendations.length >= 3 ? 
+              jsonResponse.recommendations : 
+              [...jsonResponse.recommendations, ...this.getDefaultContentRecommendations()].slice(0, 5);
+            
+            logger.info(`Successfully parsed CV content analysis as JSON: ${strengths.length} strengths, ${weaknesses.length} weaknesses, ${recommendations.length} recommendations`);
+            
+            return {
+              strengths,
+              weaknesses,
+              recommendations
+            };
+          } else {
+            logger.warn('JSON response missing required arrays, falling back to text parsing');
+            throw new Error('Invalid JSON structure');
+          }
+        } catch (jsonError) {
+          // If JSON parsing fails, try to parse the text
+          logger.warn(`Failed to parse content analysis as JSON: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
+          
+          // Parse the analysis text to extract strengths, weaknesses, and recommendations
+          const sections = this.parseAnalysisSections(analysisText);
+          
+          // Ensure we have at least some items in each category
+          const strengths = sections.strengths.length > 0 ? 
+            sections.strengths : this.getDefaultContentStrengths();
+          
+          const weaknesses = sections.weaknesses.length > 0 ? 
+            sections.weaknesses : this.getDefaultContentWeaknesses();
+          
+          const recommendations = sections.recommendations.length > 0 ? 
+            sections.recommendations : this.getDefaultContentRecommendations();
+          
+          // Log the results
+          logger.info(`CV content analysis complete (text parsing): ${strengths.length} strengths, ${weaknesses.length} weaknesses, ${recommendations.length} recommendations`);
+          
+          return {
+            strengths,
+            weaknesses,
+            recommendations
+          };
+        }
+      } catch (analysisError) {
+        // If the first attempt fails, try a simpler approach
+        logger.warn(`First attempt at content analysis failed: ${analysisError instanceof Error ? analysisError.message : String(analysisError)}`);
+        
+        // Try a second attempt with a simpler prompt
+        const simpleSystemPrompt = `Analyze the CV content only. List exactly 3 strengths, 3 weaknesses, and 3 recommendations about the content. Format your response with clear headings: "Strengths:", "Weaknesses:", and "Recommendations:".`;
+        
+        try {
+          const secondAttemptText = await this.generateDirectResponse(
+            `${query}\n\nDocument to analyze:\n${context.substring(0, 3000)}`, 
+            simpleSystemPrompt
+          );
+          
+          // Parse the analysis text to extract strengths, weaknesses, and recommendations
+          const sections = this.parseAnalysisSections(secondAttemptText);
+          
+          // Ensure we have at least some items in each category
+          const strengths = sections.strengths.length > 0 ? 
+            sections.strengths : this.getDefaultContentStrengths();
+          
+          const weaknesses = sections.weaknesses.length > 0 ? 
+            sections.weaknesses : this.getDefaultContentWeaknesses();
+          
+          const recommendations = sections.recommendations.length > 0 ? 
+            sections.recommendations : this.getDefaultContentRecommendations();
+          
+          // Log the results
+          logger.info(`CV content analysis complete (second attempt): ${strengths.length} strengths, ${weaknesses.length} weaknesses, ${recommendations.length} recommendations`);
+          
+          return {
+            strengths,
+            weaknesses,
+            recommendations
+          };
+        } catch (secondError) {
+          // If both attempts fail, return defaults
+          logger.error(`Both content analysis attempts failed: ${secondError instanceof Error ? secondError.message : String(secondError)}`);
+          return {
+            strengths: this.getDefaultContentStrengths(),
+            weaknesses: this.getDefaultContentWeaknesses(),
+            recommendations: this.getDefaultContentRecommendations()
+          };
+        }
+      }
+    } catch (error) {
+      // Handle errors and return defaults
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Error analyzing CV content: ${errorMessage}`);
+      
+      // Return default content analysis if analysis fails
+      return {
+        strengths: this.getDefaultContentStrengths(),
+        weaknesses: this.getDefaultContentWeaknesses(),
+        recommendations: this.getDefaultContentRecommendations()
+      };
+    }
+  }
+  
+  /**
+   * Get default content strengths when analysis fails
+   * @returns Array of default content strengths
+   */
+  private getDefaultContentStrengths(): string[] {
+    return [
+      "Clear presentation of professional experience",
+      "Includes relevant skills and qualifications",
+      "Provides educational background",
+      "Lists professional achievements",
+      "Demonstrates career progression"
+    ];
+  }
+  
+  /**
+   * Get default content weaknesses when analysis fails
+   * @returns Array of default content weaknesses
+   */
+  private getDefaultContentWeaknesses(): string[] {
+    return [
+      "Could benefit from more quantifiable achievements",
+      "May need more specific examples of skills application",
+      "Consider adding more industry-specific keywords",
+      "Professional summary could be more compelling",
+      "Experience descriptions could be more achievement-focused"
+    ];
+  }
+  
+  /**
+   * Get default content recommendations when analysis fails
+   * @returns Array of default content recommendations
+   */
+  private getDefaultContentRecommendations(): string[] {
+    return [
+      "Add measurable achievements with numbers and percentages",
+      "Include more industry-specific keywords",
+      "Ensure all experience is relevant to target positions",
+      "Create a compelling professional summary",
+      "Focus on results rather than responsibilities"
+    ];
+  }
+
+  /**
+   * Determine the industry based on CV content
+   * @returns Industry name
+   */
+  public async determineIndustry(): Promise<string> {
+    try {
+      // Ensure we have chunks to analyze
+      if (this.chunks.length === 0) {
+        logger.warn('No chunks available for industry determination, using default');
+        return 'General';
+      }
+
+      const query = 'Determine the industry or sector this CV/resume is most relevant for.';
+      
+      const systemPrompt = `You are a professional CV/resume industry analyzer. Your task is to determine the most relevant industry or sector for this CV.
+
+Based on the skills, experience, and qualifications mentioned, identify the single most appropriate industry from this list:
+- IT & Software
+- Finance & Banking
+- Healthcare & Medical
+- Marketing & Advertising
+- Education & Training
+- Engineering & Manufacturing
+- Sales & Business Development
+- Legal & Compliance
+- Human Resources
+- Creative & Design
+- Science & Research
+- Hospitality & Tourism
+- Retail
+- Construction & Real Estate
+- Media & Communications
+- Transportation & Logistics
+- Energy & Utilities
+- Government & Public Sector
+- Non-profit & NGO
+- General Business
+
+Respond with ONLY the industry name, nothing else.`;
+      
+      // Generate industry analysis using all CV chunks
+      // Limit context to avoid token limits
+      const context = this.chunks.slice(0, 5).join('\n\n');
+      
+      try {
+        logger.info('Attempting to determine industry');
+        const industryText = await this.generateDirectResponse(
+          `${query}\n\nDocument to analyze:\n${context}`, 
+          systemPrompt
+        );
+        
+        // Clean up the response
+        const industry = industryText.trim().split('\n')[0].replace(/["\n\r]/g, '');
+        
+        logger.info(`Determined industry: ${industry}`);
+        return industry || 'General';
+      } catch (error) {
+        logger.error(`Error determining industry: ${error instanceof Error ? error.message : String(error)}`);
+        return 'General';
+      }
+    } catch (error) {
+      // Handle errors and return default
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Error determining industry: ${errorMessage}`);
+      return 'General';
+    }
+  }
+
+  /**
+   * Detect the language of the CV
+   * @returns Language code or name
+   */
+  public async detectLanguage(): Promise<string> {
+    try {
+      // Ensure we have chunks to analyze
+      if (this.chunks.length === 0) {
+        logger.warn('No chunks available for language detection, using default');
+        return 'English';
+      }
+
+      const query = 'Detect the language of this CV/resume document.';
+      
+      const systemPrompt = `You are a language detection specialist. Your task is to identify the primary language used in this CV/resume.
+
+Respond with ONLY the language name in English (e.g., "English", "Spanish", "French", "German", etc.), nothing else.`;
+      
+      // Use just the first chunk for language detection
+      const context = this.chunks[0];
+      
+      try {
+        logger.info('Attempting to detect language');
+        const languageText = await this.generateDirectResponse(
+          `${query}\n\nDocument to analyze:\n${context}`, 
+          systemPrompt
+        );
+        
+        // Clean up the response
+        const language = languageText.trim().split('\n')[0].replace(/["\n\r]/g, '');
+        
+        logger.info(`Detected language: ${language}`);
+        return language || 'English';
+      } catch (error) {
+        logger.error(`Error detecting language: ${error instanceof Error ? error.message : String(error)}`);
+        return 'English';
+      }
+    } catch (error) {
+      // Handle errors and return default
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Error detecting language: ${errorMessage}`);
+      return 'English';
+    }
+  }
+
+  /**
+   * Extract sections from the CV
+   * @returns Array of sections with name and content
+   */
+  public async extractSections(): Promise<Array<{ name: string; content: string }>> {
+    try {
+      // Ensure we have chunks to analyze
+      if (this.chunks.length === 0) {
+        logger.warn('No chunks available for section extraction, using defaults');
+        return this.getDefaultSections();
+      }
+
+      const query = 'Extract the main sections from this CV/resume document.';
+      
+      const systemPrompt = `You are a CV/resume section extraction specialist. Your task is to identify and extract the main sections from this document.
+
+Common CV sections include:
+- Contact Information
+- Professional Summary / Profile
+- Work Experience / Professional Experience
+- Education
+- Skills
+- Certifications
+- Projects
+- Languages
+- Interests / Hobbies
+
+For each section you identify, extract:
+1. The section name/heading
+2. The content of that section
+
+Provide your response as a JSON array of objects, each with "name" and "content" properties.
+
+Example response format:
+[
+  {
+    "name": "Contact Information",
+    "content": "John Doe\\nEmail: john@example.com\\nPhone: (123) 456-7890\\nLinkedIn: linkedin.com/in/johndoe"
+  },
+  {
+    "name": "Professional Experience",
+    "content": "Senior Developer, ABC Company\\nJan 2018 - Present\\n- Led development of company's flagship product\\n- Managed team of 5 junior developers"
+  }
+]`;
+      
+      // Generate sections using all CV chunks
+      const context = this.chunks.join('\n\n');
+      
+      try {
+        logger.info('Attempting to extract CV sections');
+        const sectionsText = await this.generateDirectResponse(
+          `${query}\n\nDocument to analyze:\n${context}`, 
+          systemPrompt
+        );
+        
+        // Try to parse as JSON
+        try {
+          // First, try to extract JSON if it's embedded in other text
+          const jsonMatch = sectionsText.match(/\[[\s\S]*\]/);
+          const jsonString = jsonMatch ? jsonMatch[0] : sectionsText;
+          
+          const jsonResponse = JSON.parse(jsonString);
+          
+          // Validate the JSON structure
+          if (Array.isArray(jsonResponse) && jsonResponse.length > 0) {
+            // Ensure each item has name and content
+            const validSections = jsonResponse.filter(item => 
+              item && typeof item === 'object' && 
+              'name' in item && typeof item.name === 'string' &&
+              'content' in item && typeof item.content === 'string'
+            );
+            
+            if (validSections.length > 0) {
+              logger.info(`Successfully extracted ${validSections.length} sections as JSON`);
+              return validSections;
+            } else {
+              logger.warn('JSON response does not contain valid sections, using defaults');
+              return this.getDefaultSections();
+            }
+          } else {
+            logger.warn('JSON response is not an array or is empty, using defaults');
+            return this.getDefaultSections();
+          }
+        } catch (jsonError) {
+          // If JSON parsing fails, use defaults
+          logger.warn(`Failed to parse sections as JSON: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
+          return this.getDefaultSections();
+        }
+      } catch (error) {
+        logger.error(`Error extracting sections: ${error instanceof Error ? error.message : String(error)}`);
+        return this.getDefaultSections();
+      }
+    } catch (error) {
+      // Handle errors and return defaults
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Error extracting sections: ${errorMessage}`);
+      return this.getDefaultSections();
+    }
+  }
+
+  /**
+   * Get default sections when extraction fails
+   * @returns Array of default sections
+   */
+  private getDefaultSections(): Array<{ name: string; content: string }> {
+    return [
+      { name: "Contact Information", content: "Contact details" },
+      { name: "Professional Experience", content: "Work history" },
+      { name: "Education", content: "Educational background" },
+      { name: "Skills", content: "Professional skills" }
+    ];
   }
 } 
