@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
     if (!cvContent || cvContent.trim() === "") {
       console.error(`CV content is empty for ID: ${cvId}`);
       return new Response(JSON.stringify({ 
-        error: "CV content is empty",
+        error: "Only PDF files are supported. Other file types are for applying to jobs.",
         success: false 
       }), {
         status: 404,

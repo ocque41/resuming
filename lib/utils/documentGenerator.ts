@@ -127,6 +127,19 @@ export class DocumentGenerator {
     
     // Process main content
     if (sections.content) {
+      // Adjust Education vs Experience confusion: if 'education' section exists but lacks clear education keywords, merge it into 'experience'
+      if (sections['education']) {
+        if (!/university|college|degree|bachelor|master|phd/i.test(sections['education'])) {
+          // Merge education content into experience
+          if (sections['experience']) {
+            sections['experience'] += "\n" + sections['education'];
+          } else {
+            sections['experience'] = sections['education'];
+          }
+          delete sections['education'];
+        }
+      }
+      
       const contentSections = this.identifySections(sections.content);
       
       // Add Profile section if it exists
@@ -295,7 +308,7 @@ export class DocumentGenerator {
         });
       }
       
-      // Add Skills section (ensure it's always present)
+      // Add Skills section -- use metadata.skills if available
       children.push(
         new Paragraph({
           text: 'SKILLS',
@@ -306,9 +319,24 @@ export class DocumentGenerator {
           }
         })
       );
-      
-      // Use existing skills content or create default skills
-      if (contentSections['SKILLS']) {
+      if (metadata && metadata.skills && Array.isArray(metadata.skills) && metadata.skills.length > 0) {
+        // Use skills from metadata
+        metadata.skills.forEach((skill: string) => {
+          children.push(
+            new Paragraph({
+              text: skill,
+              bullet: {
+                level: 0
+              },
+              spacing: {
+                before: 100,
+                after: 100
+              }
+            })
+          );
+        });
+      } else if (contentSections['SKILLS']) {
+        // Otherwise, use the content from the SKILLS section
         const skillsLines = contentSections['SKILLS'].split('\n');
         skillsLines.forEach(line => {
           const trimmedLine = line.trim();
@@ -346,29 +374,7 @@ export class DocumentGenerator {
           }
         });
       } else {
-        // Add default skills if none found
-        const defaultSkills = [
-          "Project Management: Planning, execution, and delivery of complex projects",
-          "Communication: Excellent written and verbal communication skills",
-          "Technical: Proficient in relevant industry tools and technologies",
-          "Leadership: Team building, mentoring, and strategic direction",
-          "Problem-solving: Analytical thinking and innovative solutions"
-        ];
-        
-        defaultSkills.forEach(skill => {
-          children.push(
-            new Paragraph({
-              text: skill,
-              bullet: {
-                level: 0
-              },
-              spacing: {
-                before: 100,
-                after: 100
-              }
-            })
-          );
-        });
+        // If no skills found, do not add any default skills
       }
       
       // Add remaining sections (Education, etc.)
@@ -434,44 +440,6 @@ export class DocumentGenerator {
           }
         });
       });
-    }
-    
-    // Add ATS score indicator if available in metadata
-    if (metadata && metadata.improvedAtsScore) {
-      children.push(
-        new Paragraph({
-          text: ' ',
-          spacing: {
-            before: 400
-          }
-        })
-      );
-      
-      children.push(
-        new Paragraph({
-          border: {
-            top: {
-              color: "999999",
-              space: 1,
-              style: BorderStyle.SINGLE,
-              size: 6
-            }
-          },
-          spacing: {
-            before: 200
-          }
-        })
-      );
-      
-      children.push(
-        new Paragraph({
-          text: `ATS Optimization Score: ${metadata.improvedAtsScore}/100`,
-          spacing: {
-            before: 200
-          },
-          alignment: 'right'
-        })
-      );
     }
     
     return children;

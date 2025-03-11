@@ -186,9 +186,70 @@ export async function POST(request: NextRequest) {
  * This is a simulated conversion since we don't have access to actual conversion tools
  */
 async function generatePDFFromDOCX(docxBase64: string): Promise<string> {
-  // This is a minimal valid PDF file encoded as base64
-  // It contains a simple single-page PDF with basic content
-  return "JVBERi0xLjcKJeLjz9MKNSAwIG9iago8PCAvVHlwZSAvUGFnZSAvUGFyZW50IDEgMCBSIC9MYXN0TW9kaWZpZWQgKEQ6MjAyMzA1MTUxMjMwMDBaKSAvUmVzb3VyY2VzIDIgMCBSIC9NZWRpYUJveCBbMCAwIDU5NS4yNzU2IDg0MS44ODk4XSAvQ3JvcEJveCBbMCAwIDU5NS4yNzU2IDg0MS44ODk4XSAvQmxlZWRCb3ggWzAgMCA1OTUuMjc1NiA4NDEuODg5OF0gL1RyaW1Cb3ggWzAgMCA1OTUuMjc1NiA4NDEuODg5OF0gL0FydEJveCBbMCAwIDU5NS4yNzU2IDg0MS44ODk4XSAvQ29udGVudHMgNiAwIFIgL1JvdGF0ZSAwIC9Hcm91cCA8PCAvVHlwZSAvR3JvdXAgL1MgL1RyYW5zcGFyZW5jeSAvQ1MgL0RldmljZVJHQiA+PiAvQW5ub3RzIFsgXSAvUFogMSA+PgplbmRvYmoKNiAwIG9iago8PC9GaWx0ZXIgL0ZsYXRlRGVjb2RlIC9MZW5ndGggMTc0Pj4gc3RyZWFtCnicXY8xDoMwDEX3nMI3iGMSkhQxdWGAEwRVqAsSQ4cuvb0OhQ5d/KVn+X+yLLN91Qk0gzfSYUINOiUf8TbugggD+pQJVqDRTXdVbqJTCFnw3C8Zp5oGMKZsALzD25ziBgdHH3HEVvqEGnTC4XMdxVr7Jcb4wIRaQQWmBTrU5zJ/1RdlMlHIcqqyBT3B/qdYXJptuauS3JTEIlYxJ3AlJXmJJcXyFasM5QtFRWYhCmVX1Vb5fgHVZUooCmVuZHN0cmVhbQplbmRvYmoKMSAwIG9iago8PCAvVHlwZSAvUGFnZXMgL0tpZHMgWyA1IDAgUiBdIC9Db3VudCAxID4+CmVuZG9iagozIDAgb2JqCjw8L1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhIC9FbmNvZGluZyAvV2luQW5zaUVuY29kaW5nPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1Byb2NTZXQgWy9QREYgL1RleHQgL0ltYWdlQiAvSW1hZ2VDIC9JbWFnZUldIC9Gb250IDw8IC9GMyAzIDAgUiA+PiAvWE9iamVjdCA8PCAgPj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1Byb2R1Y2VyIChjYWlybyAxLjE2LjAgKGh0dHBzOi8vY2Fpcm9ncmFwaGljcy5vcmcpKQovQ3JlYXRpb25EYXRlIChEOjIwMjMwNTE1MTIzMDAwWikKPj4KZW5kb2JqCjcgMCBvYmoKPDwgL1R5cGUgL0NhdGFsb2cgL1BhZ2VzIDEgMCBSIC9WZXJzaW9uIC8xLjcgPj4KZW5kb2JqCnhyZWYKMCA4CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDM5MiAwMDAwMCBuIAowMDAwMDAwNTc0IDAwMDAwIG4gCjAwMDAwMDA0NTEgMDAwMDAgbiAKMDAwMDAwMDY4OCAwMDAwMCBuIAowMDAwMDAwMDE1IDAwMDAwIG4gCjAwMDAwMDAxNDkgMDAwMDAgbiAKMDAwMDAwMDc2NyAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDggL1Jvb3QgNyAwIFIgL0luZm8gNCAwIFIgL0lEIFsgPDRkYjg0ZmVlNmQ4YTRjMzQwYWEyYzc4MjBiYzRmMTI5Pgo8NGRiODRmZWU2ZDhhNGMzNDBhYTJjNzgyMGJjNGYxMjk+IF0gPj4Kc3RhcnR4cmVmCjgyMAolJUVPRgo=";
+  // Create temporary directory
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cv-pdf-'));
+  const docxFileName = `${uuidv4()}.docx`;
+  const tempDocxPath = path.join(tempDir, docxFileName);
+  const tempPdfPath = path.join(tempDir, docxFileName.replace(/\.docx$/, '.pdf'));
+
+  try {
+    // Validate base64 input
+    if (!docxBase64 || typeof docxBase64 !== 'string' || docxBase64.trim() === '') {
+      throw new Error('Invalid DOCX data: Empty or invalid base64 string');
+    }
+
+    // Write DOCX file to disk
+    const docxBuffer = Buffer.from(docxBase64, 'base64');
+    fs.writeFileSync(tempDocxPath, docxBuffer);
+
+    // Check if file was written successfully
+    if (!fs.existsSync(tempDocxPath) || fs.statSync(tempDocxPath).size === 0) {
+      throw new Error('Failed to write DOCX file to disk');
+    }
+
+    logger.info(`Converting DOCX (${docxBuffer.length} bytes) to PDF`);
+
+    // Determine the appropriate office command based on platform
+    const officeCmd = process.platform === 'win32' ? 'soffice' : 'libreoffice';
+    await execPromise(`${officeCmd} --headless --convert-to pdf --outdir "${tempDir}" "${tempDocxPath}"`);
+    // Wait for a short period to allow the PDF conversion to complete
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    // Check if PDF was generated
+    let pdfFilePath = tempPdfPath;
+    if (!fs.existsSync(tempPdfPath)) {
+      // If not found by expected name, try to locate any PDF in the temp directory
+      const files = fs.readdirSync(tempDir);
+      const pdfFile = files.find(file => file.endsWith('.pdf'));
+      if (pdfFile) {
+        pdfFilePath = path.join(tempDir, pdfFile);
+      } else {
+        throw new Error('PDF file not generated');
+      }
+    }
+
+    // Read and encode the PDF file
+    const pdfBuffer = fs.readFileSync(pdfFilePath);
+    const pdfText = pdfBuffer.toString('utf8').trim();
+    // Check if the PDF file content starts with '%PDF-'
+    if (!pdfText.startsWith('%PDF-')) {
+      throw new Error('Generated file is not a valid PDF');
+    }
+
+    return pdfBuffer.toString('base64');
+  } catch (error) {
+    logger.error('Error in PDF conversion:', error);
+    throw error;
+  } finally {
+    // Clean up temporary files
+    try {
+      if (fs.existsSync(tempDocxPath)) fs.unlinkSync(tempDocxPath);
+      if (fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
+      fs.rmdirSync(tempDir);
+    } catch (cleanupError) {
+      logger.error('Error cleaning up temporary files:', cleanupError);
+    }
+  }
 }
 
 /**
