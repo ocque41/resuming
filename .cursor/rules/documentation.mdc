@@ -1,0 +1,16 @@
+---
+description: all app used tools documentation
+globs: 
+---
+
+# everytime you have a question on implementation or process or system, etc.. acording to the tools being implemented in the application we are developing cosult this documents.
+
+- @mistral docs 
+- @mistral docs 1 
+- @mistral docs document understanding 
+- @mistral docs output generation 
+- @mistral docs basic rag 
+- @mistral docs use cases 
+- @openai cookbook about rag 
+- @openai cookbook gpt4o visual function calling
+

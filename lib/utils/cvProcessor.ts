@@ -592,7 +592,10 @@ async function performQuickOptimization(rawText: string, analysis: any): Promise
   try {
     // Set a timeout for the optimization process
     const optimizationStartTime = Date.now();
-    const OPTIMIZATION_TIMEOUT = 15000; // 15 seconds timeout
+    const OPTIMIZATION_TIMEOUT = 30000; // Increase to 30 seconds timeout
+    
+    // Log the start of optimization
+    logger.info('Starting CV optimization process');
     
     // Initialize the RAG service with error handling
     logger.info('Initializing RAG service for CV optimization');
@@ -603,6 +606,7 @@ async function performQuickOptimization(rawText: string, analysis: any): Promise
       logger.error('Failed to initialize RAG service:', 
         initError instanceof Error ? initError.message : String(initError));
       // Return enhanced text with local rules as fallback
+      logger.info('Falling back to local enhancement rules due to RAG service initialization failure');
       return enhanceTextWithLocalRules(rawText, analysis);
     }
     
@@ -613,7 +617,7 @@ async function performQuickOptimization(rawText: string, analysis: any): Promise
       // Add timeout for document processing
       const processingPromise = ragService.processCVDocument(rawText);
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('CV document processing timed out')), 10000);
+        setTimeout(() => reject(new Error('CV document processing timed out')), 20000); // Increase to 20 seconds
       });
       
       try {
@@ -736,68 +740,6 @@ Geben Sie NUR den optimierten Text des Lebenslaufs zurück, ohne Erklärungen.`
     
     // Fall back to direct OpenAI call if RAG fails or document wasn't processed
     try {
-      // Define optimization prompt templates per language
-      const optimizationPrompts: Record<string, string> = {
-        en: `Quickly optimize this CV for ATS compatibility. Focus on:
-1. Adding relevant keywords for the ${analysis.industry || 'general'} industry
-2. Using action verbs for achievements
-3. Quantifying accomplishments
-4. Maintaining original structure and information
-5. Optimizing formatting for readability
-
-Return ONLY the optimized CV text, no explanations.
-
-CV text (truncated):
-${rawText.substring(0, 3000)}${rawText.length > 3000 ? '...' : ''}
-
-Key weaknesses to address:
-${analysis.weaknesses?.join(', ') || 'Improve overall ATS compatibility'}`,
-        es: `Optimiza rápidamente este CV para que sea compatible con ATS. Enfócate en:
-1. Agregar palabras clave relevantes para la industria de ${analysis.industry || 'general'}
-2. Usar verbos de acción para describir logros
-3. Cuantificar los logros con métricas
-4. Mantener la estructura e información original
-5. Optimizar el formato para mejorar la legibilidad
-
-Devuelve ÚNICAMENTE el texto optimizado del CV, sin explicaciones.
-
-CV (truncado):
-${rawText.substring(0,3000)}${rawText.length > 3000 ? '...' : ''}
-
-Aspectos a mejorar:
-${analysis.weaknesses?.join(', ') || 'Mejorar la compatibilidad general con ATS'}`,
-        fr: `Optimisez rapidement ce CV pour une compatibilité ATS. Concentrez-vous sur :
-1. Ajouter des mots-clés pertinents pour le secteur de ${analysis.industry || 'general'}
-2. Utiliser des verbes d'action pour décrire les réalisations
-3. Quantifier les accomplissements avec des métriques
-4. Maintenir la structure et les informations originales
-5. Optimiser le format pour une meilleure lisibilité
-
-Renvoie UNIQUEMENT le texte optimisé du CV, sans explications.
-
-CV (tronqué) :
-${rawText.substring(0,3000)}${rawText.length > 3000 ? '...' : ''}
-
-Points faibles à corriger :
-${analysis.weaknesses?.join(', ') || 'Améliorer la compatibilité globale avec les ATS'}`,
-        de: `Optimieren Sie diesen Lebenslauf schnell, um die ATS-Kompatibilität zu verbessern. Konzentrieren Sie sich auf:
-1. Hinzufügen relevanter Schlüsselwörter für die ${analysis.industry || 'general'} Branche
-2. Verwendung von Aktionsverben zur Beschreibung von Erfolgen
-3. Quantifizierung der Leistungen mit Kennzahlen
-4. Beibehaltung der ursprünglichen Struktur und Information
-5. Optimierung des Formats zur Verbesserung der Lesbarkeit
-
-Geben Sie NUR den optimierten Text des Lebenslaufs zurück, ohne Erklärungen.
-
-Lebenslauf (abgeschnitten):
-${rawText.substring(0,3000)}${rawText.length > 3000 ? '...' : ''}
-
-Zu verbessernde Punkte:
-${analysis.weaknesses?.join(', ') || 'Verbessern Sie die allgemeine ATS-Kompatibilität'}`
-      };
-
-      const prompt = optimizationPrompts[language] || optimizationPrompts["en"];
-
       logger.info('Attempting direct API optimization with OpenAI');
       
       // Initialize OpenAI client with error handling
@@ -810,57 +752,129 @@ ${analysis.weaknesses?.join(', ') || 'Verbessern Sie die allgemeine ATS-Kompatib
         logger.error('Failed to initialize OpenAI client:', 
           openaiInitError instanceof Error ? openaiInitError.message : String(openaiInitError));
         // Return enhanced text with local rules as fallback
+        logger.info('Falling back to local enhancement rules due to OpenAI client initialization failure');
         return enhanceTextWithLocalRules(rawText, analysis);
       }
 
-      // Create a promise for the direct API optimization
-      const directOptimizationPromise = openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "system",
-            content: "You are a fast CV optimizer. Return ONLY the optimized CV text, no explanations."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        temperature: 0.4,
-        max_tokens: 2000,
-      });
-      
-      // Create a timeout promise
-      const directTimeoutPromise = new Promise<any>((_, reject) => {
-        setTimeout(() => reject(new Error('Direct API optimization timed out')), 15000);
-      });
-      
-      // Race the direct optimization against the timeout
-      const response = await Promise.race([directOptimizationPromise, directTimeoutPromise]);
-      
-      optimizedText = response.choices[0]?.message?.content || "";
-      
-      if (optimizedText && optimizedText.length > 0) {
-        logger.info('Successfully generated optimized CV content with direct API call');
-        return optimizedText;
-      } else {
-        throw new Error('Empty response from direct API call');
+      // Try GPT-4o-mini first for better quality
+      try {
+        logger.info('Attempting optimization with GPT-4o-mini');
+        
+        // Create a promise for the direct API optimization
+        const directOptimizationPromise = openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content: "You are a fast CV optimizer. Return ONLY the optimized CV text, no explanations."
+            },
+            {
+              role: "user",
+              content: `Quickly optimize this CV for ATS compatibility. Focus on:
+1. Adding relevant keywords for the ${analysis.industry || 'general'} industry
+2. Using action verbs for achievements
+3. Quantifying accomplishments
+4. Maintaining original structure and information
+5. Optimizing formatting for readability
+
+Return ONLY the optimized CV text, no explanations.
+
+CV text:
+${rawText.substring(0, 4000)}${rawText.length > 4000 ? '...' : ''}
+
+Key weaknesses to address:
+${analysis.weaknesses?.join(', ') || 'Improve overall ATS compatibility'}`
+            }
+          ],
+          temperature: 0.4,
+          max_tokens: 4000,
+        });
+        
+        // Create a timeout promise
+        const directTimeoutPromise = new Promise<any>((_, reject) => {
+          setTimeout(() => reject(new Error('Direct API optimization timed out')), 25000); // Increase to 25 seconds
+        });
+        
+        // Race the direct optimization against the timeout
+        const response = await Promise.race([directOptimizationPromise, directTimeoutPromise]);
+        
+        optimizedText = response.choices[0]?.message?.content || "";
+        
+        if (optimizedText && optimizedText.length > rawText.length * 0.5) {
+          logger.info('Successfully generated optimized CV content with GPT-4o-mini');
+          return optimizedText;
+        } else {
+          logger.warn('GPT-4o-mini response too short or empty, falling back to GPT-3.5-turbo');
+          throw new Error('GPT-4o-mini response validation failed');
+        }
+      } catch (gpt4oError) {
+        logger.warn('GPT-4o-mini optimization failed or timed out, falling back to GPT-3.5-turbo', 
+          gpt4oError instanceof Error ? gpt4oError.message : String(gpt4oError));
+        
+        // Fall back to GPT-3.5-turbo
+        logger.info('Attempting optimization with GPT-3.5-turbo');
+        
+        // Create a promise for the direct API optimization with GPT-3.5-turbo
+        const fallbackOptimizationPromise = openai.chat.completions.create({
+          model: "gpt-3.5-turbo",
+          messages: [
+            {
+              role: "system",
+              content: "You are a fast CV optimizer. Return ONLY the optimized CV text, no explanations."
+            },
+            {
+              role: "user",
+              content: `Quickly optimize this CV for ATS compatibility. Focus on:
+1. Adding relevant keywords for the ${analysis.industry || 'general'} industry
+2. Using action verbs for achievements
+3. Quantifying accomplishments
+4. Maintaining original structure and information
+5. Optimizing formatting for readability
+
+Return ONLY the optimized CV text, no explanations.
+
+CV text:
+${rawText.substring(0, 3000)}${rawText.length > 3000 ? '...' : ''}
+
+Key weaknesses to address:
+${analysis.weaknesses?.join(', ') || 'Improve overall ATS compatibility'}`
+            }
+          ],
+          temperature: 0.4,
+          max_tokens: 2000,
+        });
+        
+        // Create a timeout promise
+        const fallbackTimeoutPromise = new Promise<any>((_, reject) => {
+          setTimeout(() => reject(new Error('Fallback API optimization timed out')), 20000);
+        });
+        
+        // Race the fallback optimization against the timeout
+        const fallbackResponse = await Promise.race([fallbackOptimizationPromise, fallbackTimeoutPromise]);
+        
+        optimizedText = fallbackResponse.choices[0]?.message?.content || "";
+        
+        if (optimizedText && optimizedText.length > 0) {
+          logger.info('Successfully generated optimized CV content with GPT-3.5-turbo');
+          return optimizedText;
+        } else {
+          throw new Error('Empty response from GPT-3.5-turbo');
+        }
       }
     } catch (directApiError) {
-      logger.error('Direct API optimization failed or timed out', 
+      logger.error('All optimization attempts failed', 
         directApiError instanceof Error ? directApiError.message : String(directApiError));
       
-      // As a last resort, return the original text with minimal improvements
-      logger.info('All optimization attempts failed, returning text with minimal local enhancements');
+      // Return enhanced text with local rules as final fallback
+      logger.info('Falling back to local enhancement rules as final fallback');
       return enhanceTextWithLocalRules(rawText, analysis);
     }
   } catch (error) {
-    // Log error and return original text if all attempts fail
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error(`Error in CV optimization: ${errorMessage}`);
+    // Handle any unexpected errors
+    logger.error('Unexpected error in performQuickOptimization:', 
+      error instanceof Error ? error.message : String(error));
     
-    // Return original text with minimal enhancements as fallback
-    logger.info('Returning text with minimal local enhancements due to optimization failure');
+    // Return enhanced text with local rules as final fallback
     return enhanceTextWithLocalRules(rawText, analysis);
   }
 }

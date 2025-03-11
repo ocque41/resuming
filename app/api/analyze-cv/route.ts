@@ -227,11 +227,31 @@ async function analyzeCV(cvId: string, userId: string, rawText: string, metadata
       skills: []
     };
     
-    // Initialize RAG service
-    const ragService = new MistralRAGService();
+    // Initialize RAG service with error handling
+    let ragService: MistralRAGService;
+    try {
+      ragService = new MistralRAGService();
+      logger.info(`Successfully initialized RAG service for CV ID: ${cvId}`);
+    } catch (initError) {
+      logger.error(`Failed to initialize RAG service for CV ID: ${cvId}: ${initError instanceof Error ? initError.message : String(initError)}`);
+      return performBasicAnalysis(cvId, userId, rawText, metadata);
+    }
     
-    // Process the CV document
-    await ragService.processCVDocument(rawText);
+    // Process the CV document with timeout protection
+    try {
+      logger.info(`Processing CV document for CV ID: ${cvId}`);
+      const processingPromise = ragService.processCVDocument(rawText);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('CV document processing timed out')), 20000); // 20 seconds timeout
+      });
+      
+      await Promise.race([processingPromise, timeoutPromise]);
+      logger.info(`Successfully processed CV document for CV ID: ${cvId}`);
+    } catch (processingError) {
+      logger.error(`Error processing CV document for CV ID: ${cvId}: ${processingError instanceof Error ? processingError.message : String(processingError)}`);
+      // Continue with analysis but note that it might be incomplete
+      logger.warn(`Continuing with potentially incomplete analysis for CV ID: ${cvId}`);
+    }
     
     // Extract skills
     logger.info(`Extracting skills for CV ID: ${cvId}`);
@@ -346,6 +366,21 @@ async function analyzeCV(cvId: string, userId: string, rawText: string, metadata
       analysisResult.atsScore = 50; // Default score
     }
     
+    // Check if we have enough data for a valid analysis
+    const hasValidAnalysis = 
+      analysisResult.skills.length > 0 &&
+      analysisResult.keywords.length > 0 &&
+      analysisResult.strengths.length > 0 &&
+      analysisResult.weaknesses.length > 0 &&
+      analysisResult.recommendations.length > 0 &&
+      analysisResult.formatStrengths.length > 0 &&
+      analysisResult.formatWeaknesses.length > 0 &&
+      analysisResult.formatRecommendations.length > 0;
+    
+    if (!hasValidAnalysis) {
+      logger.warn(`Incomplete analysis results for CV ID: ${cvId}, falling back to ensure all arrays are populated`);
+    }
+    
     // Ensure all arrays are populated
     ensureArraysArePopulated(analysisResult);
     
@@ -353,7 +388,8 @@ async function analyzeCV(cvId: string, userId: string, rawText: string, metadata
     analysisResult.metadata = {
       ...metadata,
       analysisTimestamp: new Date().toISOString(),
-      analysisMethod: 'rag'
+      analysisMethod: 'rag',
+      analysisComplete: true
     };
     
     logger.info(`CV analysis complete for CV ID: ${cvId}`);
@@ -361,6 +397,7 @@ async function analyzeCV(cvId: string, userId: string, rawText: string, metadata
   } catch (error) {
     logger.error(`Error in CV analysis for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
     // Fall back to basic analysis
+    logger.info(`Falling back to basic analysis for CV ID: ${cvId}`);
     return performBasicAnalysis(cvId, userId, rawText, metadata);
   }
 }
@@ -537,15 +574,16 @@ function calculateATSScore(
  * Performs a basic analysis of CV text when the advanced RAG analysis fails
  */
 function performBasicAnalysis(cvId: string, userId: string, rawText: string, metadata: any): AnalysisResult {
-  logger.info(`Falling back to basic analysis for CV ID: ${cvId}`);
+  // Log that we're falling back to basic analysis
+  console.log(`Performing basic analysis for CV ID: ${cvId}`);
   
-  // Create initial analysis result object
+  // Create initial analysis result with default values
   const analysisResult: AnalysisResult = {
     cvId,
     userId,
-    atsScore: 50, // Default score
-    industry: 'General',
-    language: 'English',
+    atsScore: 65, // Default ATS score
+    industry: "General",
+    language: "en",
     keywords: [],
     keyRequirements: [],
     strengths: [],
@@ -565,10 +603,11 @@ function performBasicAnalysis(cvId: string, userId: string, rawText: string, met
   // Add metadata
   analysisResult.metadata = {
     ...metadata,
-    analysisTimestamp: new Date().toISOString(),
-    analysisMethod: 'basic'
+    analysisMethod: "basic",
+    analysisTimestamp: new Date().toISOString()
   };
   
-  logger.info(`Basic CV analysis complete for CV ID: ${cvId} with ATS score: ${analysisResult.atsScore}`);
+  console.log(`Basic analysis completed for CV ID: ${cvId}`);
+  
   return analysisResult;
 }

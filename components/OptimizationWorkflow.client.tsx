@@ -87,17 +87,58 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
           if (data.processing) {
             // Still processing
             setIsProcessing(true);
-            setProcessingStatus(data.processingStatus || "Processing...");
-            setProcessingProgress(data.processingProgress || 0);
+            setProcessingStatus(data.step || "Processing...");
+            setProcessingProgress(data.progress || 0);
+            
+            // Check if processing is stuck
+            if (data.isStuck) {
+              console.warn(`Processing appears stuck at ${data.progress}% for ${data.stuckMinutes} minutes`);
+              
+              // If stuck for more than 3 minutes, show error and offer retry
+              if (data.stuckMinutes > 3) {
+                setError(`Processing appears stuck at ${data.progress}%. You can wait or try again.`);
+                
+                // If stuck for more than 5 minutes, automatically retry
+                if (data.stuckMinutes > 5) {
+                  console.log("Processing stuck for over 5 minutes, attempting automatic retry");
+                  
+                  try {
+                    // Attempt to restart the process with force refresh
+                    const retryResponse = await fetch(`/api/cv/process`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ cvId: selectedCVId, forceRefresh: true }),
+                    });
+                    
+                    if (retryResponse.ok) {
+                      showToast({
+                        title: "Processing Restarted",
+                        description: "We've automatically restarted the process due to a delay.",
+                        duration: 5000,
+                      });
+                      
+                      // Reset error since we're retrying
+                      setError(null);
+                    }
+                  } catch (retryError) {
+                    console.error("Error during automatic retry:", retryError);
+                  }
+                }
+              }
+            } else {
+              // Clear error if processing is moving again
+              setError(null);
+            }
             
             // Continue polling, but back off if progress is slow
-            const newInterval = data.processingProgress > 80 ? 1000 :
-                               data.processingProgress > 60 ? 2000 :
-                               data.processingProgress > 40 ? 3000 : 5000;
+            // Use more aggressive polling for lower progress to catch issues earlier
+            const newInterval = data.progress > 80 ? 1000 :
+                               data.progress > 60 ? 2000 :
+                               data.progress > 40 ? 3000 : 2000; // Keep polling more frequently at lower progress
             
             setStatusPollingInterval(newInterval);
             timeoutId = setTimeout(checkStatus, newInterval);
-          } else if (data.processingCompleted) {
+          } else if (data.isComplete) {
             // Processing completed
             setIsProcessing(false);
             setProcessingStatus("Processing completed");
@@ -108,6 +149,11 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
             if (activeStep !== "optimize") {
               setActiveStep("optimize");
             }
+          } else if (data.error) {
+            // Processing encountered an error
+            setIsProcessing(false);
+            setError(`Processing error: ${data.error}`);
+            setStatusPollingEnabled(false);
           } else {
             // Not processing or idle
             setIsProcessing(false);
@@ -115,7 +161,7 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
             setProcessingProgress(null);
             
             // Stop polling if nothing is happening
-            if (!data.processing && !data.processingCompleted) {
+            if (!data.processing && !data.isComplete) {
               setStatusPollingEnabled(false);
             }
           }
