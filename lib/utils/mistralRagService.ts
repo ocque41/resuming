@@ -302,33 +302,31 @@ export class MistralRAGService {
   }
 
   /**
-   * Create embedding for a single chunk of text
+   * Create an embedding for a text
    * @param text Text to create embedding for
-   * @returns Embedding as array of numbers
+   * @returns Embedding vector
    */
   private async createEmbedding(text: string): Promise<number[]> {
     try {
-      // Use a hash of the text as the cache key
-      const cacheKey = this.hashString(text);
-      
-      // Check if we have a cached embedding
-      const cachedItem = this.embeddingCache[cacheKey];
+      // Check cache first
+      const cacheKey = `${this.embeddingModel}:${text.substring(0, 100)}`;
       const now = Date.now();
       
-      if (cachedItem && now - cachedItem.timestamp < this.cacheTTL) {
-        // Use cached embedding if it's still valid
-        logger.info('Using cached embedding');
-        return cachedItem.embedding;
+      // Return cached embedding if available and not expired
+      if (this.embeddingCache[cacheKey] && 
+          now - this.embeddingCache[cacheKey].timestamp < this.cacheTTL) {
+        return this.embeddingCache[cacheKey].embedding;
       }
       
-      // Generate new embedding using OpenAI
+      // Create embedding using OpenAI API
       const response = await this.client.embeddings.create({
         model: this.embeddingModel,
         input: text
       });
       
-      if (!response.data[0].embedding) {
-        throw new Error('Failed to generate embedding');
+      // Ensure we have a valid embedding
+      if (!response.data || !response.data[0] || !response.data[0].embedding) {
+        throw new Error('Failed to generate embedding: Invalid response format');
       }
       
       const embedding = response.data[0].embedding;
@@ -346,21 +344,6 @@ export class MistralRAGService {
       logger.error(`Error creating embedding: ${errorMessage}`);
       throw error;
     }
-  }
-
-  /**
-   * Simple hash function for creating cache keys
-   * @param str String to hash
-   * @returns Hash of the string
-   */
-  private hashString(str: string): string {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash |= 0; // Convert to 32bit integer
-    }
-    return hash.toString();
   }
 
   /**
@@ -431,6 +414,10 @@ export class MistralRAGService {
         ]
       });
       
+      if (!response.choices || !response.choices[0] || !response.choices[0].message) {
+        throw new Error('Invalid response format from OpenAI API');
+      }
+      
       return response.choices[0].message.content || '';
     } catch (error) {
       // Fix error type handling for logger
@@ -462,6 +449,10 @@ export class MistralRAGService {
           }
         ]
       });
+      
+      if (!response.choices || !response.choices[0] || !response.choices[0].message) {
+        throw new Error('Invalid response format from OpenAI API');
+      }
       
       return response.choices[0].message.content || '';
     } catch (error) {
@@ -514,8 +505,8 @@ export class MistralRAGService {
   }
 
   /**
-   * Analyze CV format and provide detailed strengths, weaknesses, and recommendations
-   * @returns Object containing format analysis
+   * Analyze the format and structure of a CV document
+   * @returns Object containing format strengths, weaknesses, and recommendations
    */
   public async analyzeCVFormat(): Promise<{
     strengths: string[];
@@ -535,55 +526,132 @@ Review the document for these format aspects:
 5. Font usage, bolding, italics, and other text formatting
 6. Length and overall visual appeal
 
-Provide your analysis in three sections:
-1. FORMAT STRENGTHS - List specific formatting strengths (minimum 3)
-2. FORMAT WEAKNESSES - List specific formatting issues (minimum 3)
-3. FORMAT RECOMMENDATIONS - Provide actionable recommendations to improve the format (minimum 3)
+Provide your analysis in JSON format with these three arrays:
+1. "strengths": List specific formatting strengths (minimum 3)
+2. "weaknesses": List specific formatting issues (minimum 3)
+3. "recommendations": Provide actionable recommendations to improve the format (minimum 3)
+
+Example response format:
+{
+  "strengths": ["Clear section headings", "Consistent date formatting", "Good use of bullet points"],
+  "weaknesses": ["Contact information not prominently displayed", "Inconsistent spacing between sections", "Too dense with text"],
+  "recommendations": ["Add more white space between sections", "Make contact information more prominent", "Use bullet points for all achievements"]
+}
 
 Keep your analysis focused only on the document's format, not its content or qualifications.`;
       
       // Generate format analysis using all CV chunks
       const context = this.chunks.join('\n\n');
-      const analysisText = await this.generateDirectResponse(
-        `${query}\n\nDocument to analyze:\n${context}`, 
-        systemPrompt
-      );
       
-      // Parse the analysis text to extract strengths, weaknesses, and recommendations
-      const sections = this.parseAnalysisSections(analysisText);
-      
-      // Ensure we have at least some items in each category
-      const defaultStrengths = [
-        "Clear section organization",
-        "Consistent formatting throughout the document",
-        "Appropriate use of white space"
-      ];
-      
-      const defaultWeaknesses = [
-        "Could benefit from better visual hierarchy",
-        "Some sections may be too dense with text",
-        "Formatting may not be optimized for ATS scanning"
-      ];
-      
-      const defaultRecommendations = [
-        "Use bullet points for key achievements",
-        "Ensure consistent date formatting",
-        "Add more white space to improve readability"
-      ];
-      
-      // Use defaults if sections are empty
-      const strengths = sections.strengths.length > 0 ? sections.strengths : defaultStrengths;
-      const weaknesses = sections.weaknesses.length > 0 ? sections.weaknesses : defaultWeaknesses;
-      const recommendations = sections.recommendations.length > 0 ? sections.recommendations : defaultRecommendations;
-      
-      // Log the results
-      logger.info(`CV format analysis complete: ${strengths.length} strengths, ${weaknesses.length} weaknesses, ${recommendations.length} recommendations`);
-      
-      return {
-        strengths,
-        weaknesses,
-        recommendations
-      };
+      // First try to get a structured JSON response
+      try {
+        const analysisText = await this.generateDirectResponse(
+          `${query}\n\nDocument to analyze:\n${context}`, 
+          systemPrompt
+        );
+        
+        // Try to parse as JSON
+        try {
+          const jsonResponse = JSON.parse(analysisText);
+          
+          // Validate the JSON structure
+          if (jsonResponse.strengths && 
+              jsonResponse.weaknesses && 
+              jsonResponse.recommendations &&
+              Array.isArray(jsonResponse.strengths) &&
+              Array.isArray(jsonResponse.weaknesses) &&
+              Array.isArray(jsonResponse.recommendations)) {
+            
+            // Ensure we have at least 3 items in each category
+            const strengths = jsonResponse.strengths.length >= 3 ? 
+              jsonResponse.strengths : 
+              [...jsonResponse.strengths, ...this.getDefaultStrengths()].slice(0, 5);
+              
+            const weaknesses = jsonResponse.weaknesses.length >= 3 ? 
+              jsonResponse.weaknesses : 
+              [...jsonResponse.weaknesses, ...this.getDefaultWeaknesses()].slice(0, 5);
+              
+            const recommendations = jsonResponse.recommendations.length >= 3 ? 
+              jsonResponse.recommendations : 
+              [...jsonResponse.recommendations, ...this.getDefaultRecommendations()].slice(0, 5);
+            
+            logger.info(`Successfully parsed CV format analysis as JSON: ${strengths.length} strengths, ${weaknesses.length} weaknesses, ${recommendations.length} recommendations`);
+            
+            return {
+              strengths,
+              weaknesses,
+              recommendations
+            };
+          } else {
+            logger.warn('JSON response missing required arrays, falling back to text parsing');
+            throw new Error('Invalid JSON structure');
+          }
+        } catch (jsonError) {
+          // If JSON parsing fails, try to parse the text
+          logger.warn(`Failed to parse format analysis as JSON: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
+          
+          // Parse the analysis text to extract strengths, weaknesses, and recommendations
+          const sections = this.parseAnalysisSections(analysisText);
+          
+          // Ensure we have at least some items in each category
+          const strengths = sections.strengths.length > 0 ? 
+            sections.strengths : this.getDefaultStrengths();
+          
+          const weaknesses = sections.weaknesses.length > 0 ? 
+            sections.weaknesses : this.getDefaultWeaknesses();
+          
+          const recommendations = sections.recommendations.length > 0 ? 
+            sections.recommendations : this.getDefaultRecommendations();
+          
+          // Log the results
+          logger.info(`CV format analysis complete (text parsing): ${strengths.length} strengths, ${weaknesses.length} weaknesses, ${recommendations.length} recommendations`);
+          
+          return {
+            strengths,
+            weaknesses,
+            recommendations
+          };
+        }
+      } catch (analysisError) {
+        // If the first attempt fails, try a simpler approach
+        logger.warn(`First attempt at format analysis failed: ${analysisError instanceof Error ? analysisError.message : String(analysisError)}`);
+        
+        // Try a second attempt with a simpler prompt
+        const simpleSystemPrompt = `Analyze the CV format only. Return exactly 3 strengths, 3 weaknesses, and 3 recommendations about the format.`;
+        
+        try {
+          const secondAttemptText = await this.generateDirectResponse(
+            `${query}\n\nDocument to analyze:\n${context.substring(0, 3000)}`, 
+            simpleSystemPrompt
+          );
+          
+          // Parse the analysis text to extract strengths, weaknesses, and recommendations
+          const sections = this.parseAnalysisSections(secondAttemptText);
+          
+          // Ensure we have at least some items in each category
+          const strengths = sections.strengths.length > 0 ? 
+            sections.strengths : this.getDefaultStrengths();
+          
+          const weaknesses = sections.weaknesses.length > 0 ? 
+            sections.weaknesses : this.getDefaultWeaknesses();
+          
+          const recommendations = sections.recommendations.length > 0 ? 
+            sections.recommendations : this.getDefaultRecommendations();
+          
+          // Log the results
+          logger.info(`CV format analysis complete (second attempt): ${strengths.length} strengths, ${weaknesses.length} weaknesses, ${recommendations.length} recommendations`);
+          
+          return {
+            strengths,
+            weaknesses,
+            recommendations
+          };
+        } catch (secondError) {
+          // If both attempts fail, return defaults
+          logger.error(`Both format analysis attempts failed: ${secondError instanceof Error ? secondError.message : String(secondError)}`);
+          throw new Error('Format analysis failed');
+        }
+      }
     } catch (error) {
       // Handle errors and return defaults
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -591,11 +659,53 @@ Keep your analysis focused only on the document's format, not its content or qua
       
       // Return default format analysis if analysis fails
       return {
-        strengths: ["Clear section organization", "Consistent formatting throughout the document"],
-        weaknesses: ["Could benefit from better visual hierarchy", "Some formatting may not be ATS optimized"],
-        recommendations: ["Use bullet points for key achievements", "Add more white space between sections"]
+        strengths: this.getDefaultStrengths(),
+        weaknesses: this.getDefaultWeaknesses(),
+        recommendations: this.getDefaultRecommendations()
       };
     }
+  }
+  
+  /**
+   * Get default format strengths
+   * @returns Array of default format strengths
+   */
+  private getDefaultStrengths(): string[] {
+    return [
+      "Clear section organization",
+      "Consistent formatting throughout the document",
+      "Appropriate use of white space",
+      "Contact information clearly presented",
+      "Logical flow of information"
+    ];
+  }
+  
+  /**
+   * Get default format weaknesses
+   * @returns Array of default format weaknesses
+   */
+  private getDefaultWeaknesses(): string[] {
+    return [
+      "Could benefit from better visual hierarchy",
+      "Some sections may be too dense with text",
+      "Formatting may not be optimized for ATS scanning",
+      "Inconsistent use of bullet points",
+      "Lack of emphasis on key achievements"
+    ];
+  }
+  
+  /**
+   * Get default format recommendations
+   * @returns Array of default format recommendations
+   */
+  private getDefaultRecommendations(): string[] {
+    return [
+      "Use bullet points for key achievements",
+      "Ensure consistent date formatting",
+      "Add more white space to improve readability",
+      "Make section headings more prominent",
+      "Organize information in a more scannable format"
+    ];
   }
 
   /**
@@ -687,57 +797,181 @@ Focus on:
 4. Certifications and qualifications
 5. Action verbs and accomplishments
 
-Extract AT LEAST 15 keywords or key phrases. For each keyword, provide a brief relevance rating (High, Medium, Low).
-Format your response as a simple list with the format: "Keyword - Relevance"
-Example: "Project Management - High"
+Extract AT LEAST 15 keywords or key phrases. Format your response as a JSON array of strings.
+Example response format:
+["Project Management", "JavaScript", "React", "Team Leadership", "Budget Planning", "Data Analysis"]
 
 Focus ONLY on extracting keywords, not on analyzing or improving the CV.`;
       
       // Generate keyword analysis using all CV chunks
       const context = this.chunks.join('\n\n');
-      const keywordsText = await this.generateDirectResponse(
-        `${query}\n\nDocument to analyze:\n${context}`, 
-        systemPrompt
-      );
       
-      // Parse the keywords
-      const keywordList = keywordsText.split('\n')
-        .map(line => line.trim())
-        .filter(line => line.length > 0 && line.includes('-'));
-      
-      // Extract just the keywords (without ratings)
-      const keywords = keywordList.map(item => {
-        const parts = item.split('-').map(part => part.trim());
-        return parts[0];
-      }).filter(keyword => keyword.length > 0);
-      
-      // Ensure we have at least some keywords
-      const defaultKeywords = [
-        "Project Management", 
-        "Communication", 
-        "Leadership", 
-        "Problem Solving", 
-        "Team Collaboration"
-      ];
-      
-      const result = keywords.length > 0 ? keywords : defaultKeywords;
-      
-      logger.info(`Extracted ${result.length} keywords from CV`);
-      return result;
+      // First try to get a structured JSON response
+      try {
+        const keywordsText = await this.generateDirectResponse(
+          `${query}\n\nDocument to analyze:\n${context}`, 
+          systemPrompt
+        );
+        
+        // Try to parse as JSON
+        try {
+          const jsonResponse = JSON.parse(keywordsText);
+          
+          // Validate the JSON structure
+          if (Array.isArray(jsonResponse) && jsonResponse.length > 0) {
+            // Extract just the keywords (without ratings)
+            const keywords = jsonResponse.map(item => {
+              if (typeof item === 'string') {
+                return item.trim();
+              }
+              return '';
+            }).filter(k => k.length > 0);
+            
+            // Ensure we have at least some keywords
+            if (keywords.length > 0) {
+              logger.info(`Successfully extracted ${keywords.length} keywords as JSON array`);
+              return keywords;
+            } else {
+              logger.warn('JSON response contained an empty array, falling back to text parsing');
+              throw new Error('Empty keywords array');
+            }
+          } else {
+            logger.warn('JSON response is not an array, falling back to text parsing');
+            throw new Error('Invalid JSON structure');
+          }
+        } catch (jsonError) {
+          // If JSON parsing fails, try to parse the text
+          logger.warn(`Failed to parse keywords as JSON: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
+          
+          // Try to extract keywords from the text
+          const keywords = this.parseKeywordsFromText(keywordsText);
+          
+          if (keywords.length > 0) {
+            logger.info(`Extracted ${keywords.length} keywords using text parsing`);
+            return keywords;
+          } else {
+            logger.warn('Failed to extract keywords using text parsing, trying second attempt');
+            throw new Error('Failed to extract keywords from text');
+          }
+        }
+      } catch (firstAttemptError) {
+        // If the first attempt fails, try a simpler approach
+        logger.warn(`First attempt at keyword extraction failed: ${firstAttemptError instanceof Error ? firstAttemptError.message : String(firstAttemptError)}`);
+        
+        // Try a second attempt with a simpler prompt
+        const simpleSystemPrompt = `Extract exactly 15 important keywords from this CV. Return ONLY a JSON array of strings.`;
+        
+        try {
+          const secondAttemptText = await this.generateDirectResponse(
+            `${query}\n\nDocument to analyze:\n${context.substring(0, 3000)}`, 
+            simpleSystemPrompt
+          );
+          
+          // Try to parse as JSON
+          try {
+            const jsonResponse = JSON.parse(secondAttemptText);
+            
+            if (Array.isArray(jsonResponse) && jsonResponse.length > 0) {
+              const keywords = jsonResponse.map(item => {
+                if (typeof item === 'string') {
+                  return item.trim();
+                }
+                return '';
+              }).filter(k => k.length > 0);
+              
+              if (keywords.length > 0) {
+                logger.info(`Successfully extracted ${keywords.length} keywords from second attempt`);
+                return keywords;
+              }
+            }
+            
+            // If we get here, the JSON parsing didn't yield useful results
+            throw new Error('Invalid or empty JSON response');
+          } catch (jsonError) {
+            // If JSON parsing fails, try to parse the text
+            const keywords = this.parseKeywordsFromText(secondAttemptText);
+            
+            if (keywords.length > 0) {
+              logger.info(`Extracted ${keywords.length} keywords using text parsing from second attempt`);
+              return keywords;
+            } else {
+              throw new Error('Failed to extract keywords from second attempt');
+            }
+          }
+        } catch (secondError) {
+          // If both attempts fail, return default keywords
+          logger.error(`Both keyword extraction attempts failed: ${secondError instanceof Error ? secondError.message : String(secondError)}`);
+          return this.getDefaultKeywords();
+        }
+      }
     } catch (error) {
-      // Handle errors and return defaults
+      // Handle errors and return default keywords
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`Error extracting keywords: ${errorMessage}`);
-      
-      // Return default keywords if extraction fails
-      return [
-        "Project Management", 
-        "Communication", 
-        "Leadership", 
-        "Problem Solving", 
-        "Team Collaboration"
-      ];
+      return this.getDefaultKeywords();
     }
+  }
+  
+  /**
+   * Parse keywords from text response
+   * @param text Text containing keywords
+   * @returns Array of keywords
+   */
+  private parseKeywordsFromText(text: string): string[] {
+    // Try different patterns to extract keywords
+    let keywords: string[] = [];
+    
+    // Try to extract lines with ":" or "-" which often indicate keyword-rating pairs
+    const ratingPattern = /([^:]+)(?::|-)(?:\s*)(?:High|Medium|Low|[\d]+)/gi;
+    const ratingMatches = Array.from(text.matchAll(ratingPattern));
+    
+    if (ratingMatches.length > 0) {
+      keywords = ratingMatches.map(match => match[1].trim());
+    } else {
+      // Try to extract bullet points
+      if (text.includes('•') || text.includes('-') || text.includes('*')) {
+        // Split by bullet points
+        keywords = text.split(/[•\-*]/).map(s => s.trim()).filter(s => s.length > 0);
+      } else if (text.includes(',')) {
+        // Split by commas
+        keywords = text.split(',').map(s => s.trim()).filter(s => s.length > 0);
+      } else {
+        // Split by lines as a fallback
+        keywords = text.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+      }
+    }
+    
+    // Clean up keywords
+    keywords = keywords.map(keyword => {
+      // Remove any numbering, ratings, etc.
+      return keyword.replace(/^\d+\.\s*/, '').replace(/\s*\(.*\)$/, '').trim();
+    }).filter(keyword => keyword.length > 0);
+    
+    return keywords;
+  }
+  
+  /**
+   * Get default keywords for when extraction fails
+   * @returns Array of default keywords
+   */
+  private getDefaultKeywords(): string[] {
+    return [
+      "Project Management",
+      "Communication Skills",
+      "Team Leadership",
+      "Problem Solving",
+      "Critical Thinking",
+      "Microsoft Office",
+      "Data Analysis",
+      "Customer Service",
+      "Strategic Planning",
+      "Research",
+      "Collaboration",
+      "Time Management",
+      "Attention to Detail",
+      "Organization",
+      "Presentation Skills"
+    ];
   }
 
   /**

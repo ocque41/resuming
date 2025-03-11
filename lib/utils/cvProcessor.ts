@@ -550,7 +550,7 @@ async function performQuickOptimization(rawText: string, analysis: any): Promise
   try {
     // Set a timeout for the optimization process
     const optimizationStartTime = Date.now();
-    const OPTIMIZATION_TIMEOUT = 10000; // 10 seconds timeout
+    const OPTIMIZATION_TIMEOUT = 15000; // 15 seconds timeout
     
     // Initialize the RAG service
     logger.info('Initializing RAG service for CV optimization');
@@ -565,11 +565,17 @@ async function performQuickOptimization(rawText: string, analysis: any): Promise
         setTimeout(() => reject(new Error('CV document processing timed out')), 10000);
       });
       
-      await Promise.race([processingPromise, timeoutPromise]);
-      logger.info('Successfully processed CV document with RAG service');
+      try {
+        await Promise.race([processingPromise, timeoutPromise]);
+        logger.info('Successfully processed CV document with RAG service');
+      } catch (processingError) {
+        logger.warn('Error or timeout processing CV document with RAG service, continuing with optimization', 
+          processingError instanceof Error ? processingError.message : String(processingError));
+        // Continue with optimization even if document processing fails
+      }
     } catch (processingError) {
       logger.warn('Error processing CV document with RAG service, falling back to direct optimization', 
-        processingError instanceof Error ? processingError.message : String(processingError));
+                processingError instanceof Error ? processingError.message : String(processingError));
       // Continue with fallback optimization
     }
     
@@ -668,7 +674,7 @@ Geben Sie NUR den optimierten Text des Lebenslaufs zurück, ohne Erklärungen.`
       }
     } catch (error) {
       // Fall back to direct OpenAI call if RAG fails
-      logger.warn('RAG optimization failed, falling back to direct API call', 
+      logger.warn('RAG optimization failed or timed out, falling back to direct API call', 
                 error instanceof Error ? error.message : String(error));
       
       try {
@@ -773,10 +779,11 @@ ${analysis.weaknesses?.join(', ') || 'Verbessern Sie die allgemeine ATS-Kompatib
           throw new Error('Empty response from direct API call');
         }
       } catch (directApiError) {
-        logger.error('Direct API optimization failed', 
+        logger.error('Direct API optimization failed or timed out', 
           directApiError instanceof Error ? directApiError.message : String(directApiError));
         
         // As a last resort, return the original text with minimal improvements
+        logger.info('All optimization attempts failed, returning text with minimal local enhancements');
         return enhanceTextWithLocalRules(rawText, analysis);
       }
     }
@@ -786,6 +793,7 @@ ${analysis.weaknesses?.join(', ') || 'Verbessern Sie die allgemeine ATS-Kompatib
     logger.error(`Error in CV optimization: ${errorMessage}`);
     
     // Return original text with minimal enhancements as fallback
+    logger.info('Returning text with minimal local enhancements due to optimization failure');
     return enhanceTextWithLocalRules(rawText, analysis);
   }
 }
