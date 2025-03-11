@@ -319,16 +319,100 @@ export class DocumentGenerator {
       
       // Prioritize skills from metadata if available
       if (metadata && metadata.skills && Array.isArray(metadata.skills) && metadata.skills.length > 0) {
-        // Use skills from metadata
-        metadata.skills.forEach((skill: string) => {
-          children.push(
-            new Paragraph({
-              text: skill,
-              bullet: { level: 0 },
-              spacing: { before: 100, after: 100 }
-            })
-          );
-        });
+        // Organize skills by category if there are many skills
+        const skills = metadata.skills;
+        
+        // For a large set of skills, try to categorize them
+        if (skills.length > 8) {
+          // Define common skill categories
+          const categories: Record<string, string[]> = {
+            'Technical': ['programming', 'software', 'development', 'coding', 'java', 'python', 'javascript', 'html', 'css', 'sql', 'database', 'aws', 'cloud', 'azure', 'git', 'docker', 'kubernetes', 'api', 'backend', 'frontend', 'fullstack', 'mobile'],
+            'Management': ['management', 'leadership', 'strategy', 'project', 'agile', 'scrum', 'team', 'planning', 'budgeting', 'stakeholder', 'coordination'],
+            'Communication': ['communication', 'presentation', 'writing', 'negotiation', 'public speaking', 'documentation', 'reporting'],
+            'Analysis': ['analysis', 'research', 'data', 'analytics', 'statistics', 'metrics', 'reporting', 'problem-solving', 'critical thinking'],
+            'Design': ['design', 'ui', 'ux', 'user interface', 'user experience', 'photoshop', 'illustrator', 'figma', 'sketch', 'creative', 'visual'],
+            'Industry-specific': []
+          };
+          
+          // If industry is available, add industry-specific keywords
+          if (metadata.industry) {
+            const industrySkills = this.getIndustrySkills(metadata.industry);
+            const lowercaseIndustryKeywords = industrySkills.map(skill => 
+              skill.toLowerCase().replace(/\(.*\)/g, '').trim()
+            );
+            categories['Industry-specific'] = lowercaseIndustryKeywords;
+          }
+          
+          // Categorize skills
+          const categorizedSkills: Record<string, string[]> = {
+            'Technical': [],
+            'Management': [],
+            'Communication': [],
+            'Analysis': [],
+            'Design': [],
+            'Industry-specific': [],
+            'Other': []
+          };
+          
+          // Assign each skill to a category
+          skills.forEach((skill: string) => {
+            const lowercaseSkill = skill.toLowerCase();
+            let assigned = false;
+            
+            for (const [category, keywords] of Object.entries(categories)) {
+              if (keywords.some(keyword => lowercaseSkill.includes(keyword))) {
+                categorizedSkills[category].push(skill);
+                assigned = true;
+                break;
+              }
+            }
+            
+            if (!assigned) {
+              categorizedSkills['Other'].push(skill);
+            }
+          });
+          
+          // Add categorized skills to document
+          for (const [category, categorySkills] of Object.entries(categorizedSkills)) {
+            if (categorySkills.length > 0) {
+              // Add category header
+              children.push(
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: category,
+                      bold: true,
+                      size: 24
+                    })
+                  ],
+                  spacing: { before: 200, after: 100 }
+                })
+              );
+              
+              // Add skills in the category
+              categorySkills.forEach(skill => {
+                children.push(
+                  new Paragraph({
+                    text: skill,
+                    bullet: { level: 0 },
+                    spacing: { before: 100, after: 100 }
+                  })
+                );
+              });
+            }
+          }
+        } else {
+          // For a smaller set of skills, just list them
+          metadata.skills.forEach((skill: string) => {
+            children.push(
+              new Paragraph({
+                text: skill,
+                bullet: { level: 0 },
+                spacing: { before: 100, after: 100 }
+              })
+            );
+          });
+        }
       } 
       // Next try to use skills from content sections
       else if (contentSections['SKILLS']) {

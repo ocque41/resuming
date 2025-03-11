@@ -17,6 +17,7 @@ import {
 } from "@/lib/utils/abTesting";
 import { ensureModelWarmedUp } from './warmupCache';
 import { shouldProcessInParallel, processInParallel } from './parallelProcessor';
+import { MistralRAGService } from './mistralRagService';
 
 // Define industry-specific keywords for local analysis
 const INDUSTRY_KEYWORDS: Record<string, string[]> = {
@@ -542,15 +543,100 @@ async function performQuickAnalysis(rawText: string, localAnalysis: any): Promis
 }
 
 /**
- * Perform quick optimization with minimal OpenAI interaction
+ * Perform quick optimization of CV content
+ * Enhanced with RAG using Mistral AI
  */
 async function performQuickOptimization(rawText: string, analysis: any): Promise<string> {
-  // Determine language from analysis; default to English
-  const language = analysis.language || "en";
+  try {
+    // Initialize the RAG service
+    const ragService = new MistralRAGService();
+    
+    // Process the CV document
+    await ragService.processCVDocument(rawText);
+    
+    // Determine language from analysis; default to English
+    const language = analysis.language || "en";
+    
+    // Define optimization system prompt based on language
+    const systemPrompts: Record<string, string> = {
+      en: `You are a professional CV optimizer. Your task is to optimize the CV text for ATS compatibility.
+Focus on:
+1. Adding relevant keywords for the ${analysis.industry || 'specified'} industry
+2. Using action verbs for achievements
+3. Quantifying accomplishments
+4. Maintaining original structure and information
+5. Optimizing formatting for readability
 
-  // Define optimization prompt templates per language
-  const optimizationPrompts: Record<string, string> = {
-    en: `Quickly optimize this CV for ATS compatibility. Focus on:
+Key weaknesses to address:
+${analysis.weaknesses?.join(', ') || 'Improve overall ATS compatibility'}
+
+Provide ONLY the optimized CV text, no explanations.`,
+      es: `Eres un optimizador profesional de CV. Tu tarea es optimizar el texto del CV para la compatibilidad con ATS.
+Enfócate en:
+1. Agregar palabras clave relevantes para la industria de ${analysis.industry || 'especificada'}
+2. Usar verbos de acción para describir logros
+3. Cuantificar los logros con métricas
+4. Mantener la estructura e información original
+5. Optimizar el formato para mejorar la legibilidad
+
+Aspectos a mejorar:
+${analysis.weaknesses?.join(', ') || 'Mejorar la compatibilidad general con ATS'}
+
+Proporciona ÚNICAMENTE el texto optimizado del CV, sin explicaciones.`,
+      fr: `Vous êtes un optimiseur professionnel de CV. Votre tâche est d'optimiser le texte du CV pour la compatibilité ATS.
+Concentrez-vous sur :
+1. Ajouter des mots-clés pertinents pour le secteur de ${analysis.industry || 'spécifié'}
+2. Utiliser des verbes d'action pour décrire les réalisations
+3. Quantifier les accomplissements avec des métriques
+4. Maintenir la structure et les informations originales
+5. Optimiser le format pour une meilleure lisibilité
+
+Points faibles à corriger :
+${analysis.weaknesses?.join(', ') || 'Améliorer la compatibilité globale avec les ATS'}
+
+Fournissez UNIQUEMENT le texte optimisé du CV, sans explications.`,
+      de: `Sie sind ein professioneller Lebenslauf-Optimierer. Ihre Aufgabe ist es, den Lebenslauf für die ATS-Kompatibilität zu optimieren.
+Konzentrieren Sie sich auf:
+1. Hinzufügen relevanter Schlüsselwörter für die ${analysis.industry || 'angegebene'} Branche
+2. Verwendung von Aktionsverben zur Beschreibung von Erfolgen
+3. Quantifizierung der Leistungen mit Kennzahlen
+4. Beibehaltung der ursprünglichen Struktur und Information
+5. Optimierung des Formats zur Verbesserung der Lesbarkeit
+
+Zu verbessernde Punkte:
+${analysis.weaknesses?.join(', ') || 'Verbessern Sie die allgemeine ATS-Kompatibilität'}
+
+Geben Sie NUR den optimierten Text des Lebenslaufs zurück, ohne Erklärungen.`
+    };
+    
+    // Use the appropriate system prompt based on language
+    const systemPrompt = systemPrompts[language] || systemPrompts["en"];
+    
+    // Craft the optimization query
+    const optimizationQuery = `Optimize the following CV text for ATS compatibility in the ${analysis.industry || 'general'} industry:`;
+    
+    // Generate optimized content using RAG
+    try {
+      // Try with RAG first for better context-aware optimization
+      logger.info('Generating optimized CV content with RAG');
+      const optimizedText = await ragService.generateResponse(optimizationQuery, systemPrompt);
+      
+      // Basic validation to ensure we got reasonable output
+      if (optimizedText && optimizedText.length > rawText.length * 0.5) {
+        logger.info('Successfully generated optimized CV content with RAG');
+        return optimizedText;
+      } else {
+        logger.warn('Generated content too short or empty, falling back to direct optimization');
+        throw new Error('Generated content validation failed');
+      }
+    } catch (error) {
+      // Fall back to direct OpenAI call if RAG fails
+      logger.warn('RAG optimization failed, falling back to direct API call', 
+                error instanceof Error ? error : undefined);
+      
+      // Define optimization prompt templates per language
+      const optimizationPrompts: Record<string, string> = {
+        en: `Quickly optimize this CV for ATS compatibility. Focus on:
 1. Adding relevant keywords for the ${analysis.industry} industry
 2. Using action verbs for achievements
 3. Quantifying accomplishments
@@ -563,8 +649,8 @@ CV text (truncated):
 ${rawText.substring(0, 3000)}${rawText.length > 3000 ? '...' : ''}
 
 Key weaknesses to address:
-${analysis.weaknesses.join(', ')}`,
-    es: `Optimiza rápidamente este CV para que sea compatible con ATS. Enfócate en:
+${analysis.weaknesses?.join(', ') || 'Improve overall ATS compatibility'}`,
+        es: `Optimiza rápidamente este CV para que sea compatible con ATS. Enfócate en:
 1. Agregar palabras clave relevantes para la industria de ${analysis.industry}
 2. Usar verbos de acción para describir logros
 3. Cuantificar los logros con métricas
@@ -577,8 +663,8 @@ CV (truncado):
 ${rawText.substring(0,3000)}${rawText.length > 3000 ? '...' : ''}
 
 Aspectos a mejorar:
-${analysis.weaknesses.join(', ')}`,
-    fr: `Optimisez rapidement ce CV pour une compatibilité ATS. Concentrez-vous sur :
+${analysis.weaknesses?.join(', ') || 'Mejorar la compatibilidad general con ATS'}`,
+        fr: `Optimisez rapidement ce CV pour une compatibilité ATS. Concentrez-vous sur :
 1. Ajouter des mots-clés pertinents pour le secteur de ${analysis.industry}
 2. Utiliser des verbes d'action pour décrire les réalisations
 3. Quantifier les accomplissements avec des métriques
@@ -591,8 +677,8 @@ CV (tronqué) :
 ${rawText.substring(0,3000)}${rawText.length > 3000 ? '...' : ''}
 
 Points faibles à corriger :
-${analysis.weaknesses.join(', ')}`,
-    de: `Optimieren Sie diesen Lebenslauf schnell, um die ATS-Kompatibilität zu verbessern. Konzentrieren Sie sich auf:
+${analysis.weaknesses?.join(', ') || 'Améliorer la compatibilité globale avec les ATS'}`,
+        de: `Optimieren Sie diesen Lebenslauf schnell, um die ATS-Kompatibilität zu verbessern. Konzentrieren Sie sich auf:
 1. Hinzufügen relevanter Schlüsselwörter für die ${analysis.industry} Branche
 2. Verwendung von Aktionsverben zur Beschreibung von Erfolgen
 3. Quantifizierung der Leistungen mit Kennzahlen
@@ -605,32 +691,41 @@ Lebenslauf (abgeschnitten):
 ${rawText.substring(0,3000)}${rawText.length > 3000 ? '...' : ''}
 
 Zu verbessernde Punkte:
-${analysis.weaknesses.join(', ')}`
-  };
+${analysis.weaknesses?.join(', ') || 'Verbessern Sie die allgemeine ATS-Kompatibilität'}`
+      };
 
-  const prompt = optimizationPrompts[language] || optimizationPrompts["en"];
+      const prompt = optimizationPrompts[language] || optimizationPrompts["en"];
 
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+      const openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+      });
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-3.5-turbo", // Use the fastest model
-    messages: [
-      {
-        role: "system",
-        content: "You are a fast CV optimizer. Return ONLY the optimized CV text, no explanations."
-      },
-      {
-        role: "user",
-        content: prompt
-      }
-    ],
-    temperature: 0.4,
-    max_tokens: 2000,
-  });
+      const response = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content: "You are a fast CV optimizer. Return ONLY the optimized CV text, no explanations."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.4,
+        max_tokens: 2000,
+      });
 
-  return response.choices[0]?.message?.content || "";
+      return response.choices[0]?.message?.content || "";
+    }
+  } catch (error) {
+    // Log error and return original text if all attempts fail
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Error in CV optimization: ${errorMessage}`);
+    
+    // Return original text as fallback
+    return rawText;
+  }
 }
 
 /**
