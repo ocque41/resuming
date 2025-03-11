@@ -212,8 +212,8 @@ async function generatePDFFromDOCX(docxBase64: string): Promise<string> {
     // Determine the appropriate office command based on platform
     const officeCmd = process.platform === 'win32' ? 'soffice' : 'libreoffice';
     await execPromise(`${officeCmd} --headless --convert-to pdf --outdir "${tempDir}" "${tempDocxPath}"`);
-    // Wait for 5000ms to allow the PDF conversion to complete
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    // Wait for a short period to allow the PDF conversion to complete
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
     // Check if PDF was generated
     let pdfFilePath = tempPdfPath;
@@ -230,10 +230,10 @@ async function generatePDFFromDOCX(docxBase64: string): Promise<string> {
 
     // Read and encode the PDF file
     const pdfBuffer = fs.readFileSync(pdfFilePath);
-    // Verify that the PDF file starts with '%PDF-'
-    const pdfHeader = pdfBuffer.slice(0, 5).toString('utf8');
-    if (pdfHeader !== '%PDF-') {
-      throw new Error('Generated file is not a valid PDF (invalid header)');
+    const pdfText = pdfBuffer.toString('utf8').trim();
+    // Check if the PDF file content starts with '%PDF-'
+    if (!pdfText.startsWith('%PDF-')) {
+      throw new Error('Generated file is not a valid PDF');
     }
 
     return pdfBuffer.toString('base64');

@@ -82,11 +82,11 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
       }
     }
   }, [cvs, selectedCVId]);
-
+  
   // Handle CV selection
   const handleCVSelect = useCallback((cvId: string, cvName: string) => {
     console.log("CV selected for analysis:", cvName, "ID:", cvId);
-    setSelectedCVId(cvId);
+      setSelectedCVId(cvId);
     setSelectedCVName(cvName);
   }, []);
 
@@ -95,7 +95,7 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
       setError("Please select a CV to analyze");
       return;
     }
-
+    
     setLoading(true);
     setError(null);
     setAnalysis(null);
@@ -136,13 +136,13 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
         targetRoles: Array.isArray(data.analysis.targetRoles) ? data.analysis.targetRoles : undefined,
       };
       
-      // If industry is detected but no industry insight is provided, get one
+        // If industry is detected but no industry insight is provided, get one
       if (safeData.industry && !safeData.industryInsight) {
-        try {
+          try {
           const insight = getIndustrySpecificAtsInsights(safeData.industry);
           safeData.industryInsight = insight;
-        } catch (error) {
-          console.error("Error getting industry insights:", error);
+          } catch (error) {
+            console.error("Error getting industry insights:", error);
           // Continue without insight
         }
       }
@@ -401,8 +401,8 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
       
       // Sort by count (descending) and take top 5
       return keywordEntries
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
         .map(([keyword]) => keyword);
     } catch (error) {
       console.error("Error processing keywords:", error);
@@ -504,9 +504,9 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
                     </span>
                   )}
                 </div>
+                </div>
               </div>
-            </div>
-            
+              
             <div>
               <h3 className="text-lg font-semibold text-white mb-2">CV Format Strengths</h3>
               {(analysis.formattingStrengths && analysis.formattingStrengths.length > 0) ? (
@@ -554,7 +554,7 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
                 )}
               </div>
             )}
-          </div>
+            </div>
         )}
 
         {analysis && (
@@ -568,17 +568,17 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
             <div className="flex flex-wrap gap-2 mt-2">
               {getTopKeywords().length > 0 ? (
                 getTopKeywords().map((keyword, index) => (
-                  <span
+                    <span 
                     key={index}
                     className="px-3 py-1 bg-amber-100/10 border border-amber-200/20 rounded-full text-amber-200 text-sm"
-                  >
+                    >
                     {keyword}
-                  </span>
+                    </span>
                 ))
               ) : (
                 <span className="text-gray-400">No keywords detected</span>
               )}
-            </div>
+              </div>
           </div>
         )}
       </CardContent>

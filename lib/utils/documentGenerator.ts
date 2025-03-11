@@ -320,34 +320,18 @@ export class DocumentGenerator {
         })
       );
       if (metadata && metadata.skills && Array.isArray(metadata.skills) && metadata.skills.length > 0) {
-        // Sort skills based on relevance to the industry if available
-        let sortedSkills = metadata.skills.slice();
-        if (metadata.industry) {
-          const industryKeywordsMapping: Record<string, string[]> = {
-            'Technology': ['javascript', 'python', 'react', 'node', 'frontend', 'backend', 'development', 'software'],
-            'Finance': ['financial', 'accounting', 'forecasting', 'investment', 'budget', 'reporting'],
-            'Healthcare': ['clinical', 'patient', 'medical', 'health'],
-            'Marketing': ['seo', 'marketing', 'branding', 'social media', 'advertising'],
-            'Sales': ['sales', 'prospecting', 'lead generation', 'negotiation']
-          };
-          const keywords = industryKeywordsMapping[metadata.industry] || [];
-          sortedSkills = sortedSkills.sort((a: string, b: string) => {
-            const lowerA = a.toLowerCase();
-            const lowerB = b.toLowerCase();
-            const rankA = keywords.some(keyword => lowerA.includes(keyword)) ? 0 : 1;
-            const rankB = keywords.some(keyword => lowerB.includes(keyword)) ? 0 : 1;
-            if (rankA === rankB) {
-              return lowerA.localeCompare(lowerB);
-            }
-            return rankA - rankB;
-          });
-        }
-        sortedSkills.forEach((skill: string) => {
+        // Use skills from metadata
+        metadata.skills.forEach((skill: string) => {
           children.push(
             new Paragraph({
               text: skill,
-              bullet: { level: 0 },
-              spacing: { before: 100, after: 100 }
+              bullet: {
+                level: 0
+              },
+              spacing: {
+                before: 100,
+                after: 100
+              }
             })
           );
         });
@@ -357,17 +341,40 @@ export class DocumentGenerator {
         skillsLines.forEach(line => {
           const trimmedLine = line.trim();
           if (trimmedLine.length === 0) return;
-          const isBullet = trimmedLine.startsWith('-') || trimmedLine.startsWith('•') || trimmedLine.startsWith('*');
+          
+          // Check if this is a bullet point
+          const isBullet = trimmedLine.startsWith('-') || 
+                           trimmedLine.startsWith('•') || 
+                           trimmedLine.startsWith('*');
+          
+          // Add the paragraph with appropriate formatting
           if (isBullet) {
             children.push(
-              new Paragraph({ text: trimmedLine.substring(1).trim(), bullet: { level: 0 }, spacing: { before: 100, after: 100 } })
+              new Paragraph({
+                text: trimmedLine.substring(1).trim(),
+                bullet: {
+                  level: 0
+                },
+                spacing: {
+                  before: 100,
+                  after: 100
+                }
+              })
             );
           } else {
             children.push(
-              new Paragraph({ text: trimmedLine, spacing: { before: 100, after: 100 } })
+              new Paragraph({
+                text: trimmedLine,
+                spacing: {
+                  before: 100,
+                  after: 100
+                }
+              })
             );
           }
         });
+      } else {
+        // If no skills found, do not add any default skills
       }
       
       // Add remaining sections (Education, etc.)
