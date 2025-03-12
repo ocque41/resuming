@@ -14,18 +14,18 @@ export async function GET(request: NextRequest) {
     
     if (!user) {
       return NextResponse.json(
-        { error: 'Authentication required' },
+        { success: false, error: 'Authentication required' },
         { status: 401 }
       );
     }
     
-    // Get CV ID from query parameter
+    // Get CV ID from query parameter (support both 'id' and 'cvId')
     const { searchParams } = new URL(request.url);
-    const cvIdParam = searchParams.get('id');
+    const cvIdParam = searchParams.get('cvId') || searchParams.get('id');
     
     if (!cvIdParam) {
       return NextResponse.json(
-        { error: 'CV ID is required' },
+        { success: false, error: 'CV ID is required' },
         { status: 400 }
       );
     }
@@ -34,17 +34,19 @@ export async function GET(request: NextRequest) {
     
     if (isNaN(cvId)) {
       return NextResponse.json(
-        { error: 'Invalid CV ID' },
+        { success: false, error: 'Invalid CV ID' },
         { status: 400 }
       );
     }
     
     // Fetch the CV from the database to ensure it belongs to the user
-    const [cv] = await db.select().from(cvs).where(eq(cvs.id, cvId));
+    const cv = await db.query.cvs.findFirst({
+      where: eq(cvs.id, cvId)
+    });
     
     if (!cv || cv.userId !== user.id) {
       return NextResponse.json(
-        { error: 'CV not found' },
+        { success: false, error: 'CV not found' },
         { status: 404 }
       );
     }
@@ -61,15 +63,36 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    // Prepare the response
-    const response: {
+    // Prepare the response with full CV data
+    interface CVResponse {
       id: number;
       fileName: string;
+      createdAt: Date;
+      metadata: any;
+      rawText?: string;
+      hasAnalysis: boolean;
+      hasOptimization: boolean;
+      analysisDate: any;
+      optimizationDate: any;
       pdfBase64?: string;
       docxBase64?: string;
-    } = {
+    }
+    
+    const cvData: CVResponse = {
       id: cv.id,
       fileName: cv.fileName,
+      createdAt: cv.createdAt,
+      metadata: metadata,
+      rawText: cv.rawText?.substring(0, 200) + (cv.rawText && cv.rawText.length > 200 ? '...' : ''), // Send a preview of the text
+      hasAnalysis: !!(metadata?.atsScore),
+      hasOptimization: !!(metadata?.optimizedText),
+      analysisDate: metadata?.analyzedAt || null,
+      optimizationDate: metadata?.optimizedAt || null
+    };
+    
+    const response = {
+      success: true,
+      cv: cvData
     };
     
     // Check cache first
@@ -91,7 +114,7 @@ export async function GET(request: NextRequest) {
         }
         
         if (pdfContent) {
-          response.pdfBase64 = Buffer.from(pdfContent).toString('base64');
+          cvData.pdfBase64 = Buffer.from(pdfContent).toString('base64');
         }
       } catch (err) {
         logger.error('Error reading PDF file');
@@ -112,7 +135,7 @@ export async function GET(request: NextRequest) {
         }
         
         if (docxContent) {
-          response.docxBase64 = Buffer.from(docxContent).toString('base64');
+          cvData.docxBase64 = Buffer.from(docxContent).toString('base64');
         }
       } catch (err) {
         logger.error('Error reading DOCX file');
@@ -121,9 +144,9 @@ export async function GET(request: NextRequest) {
     
     return NextResponse.json(response);
   } catch (err) {
-    logger.error('Error fetching CV data');
+    logger.error('Error fetching CV data:', err instanceof Error ? err.message : String(err));
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { success: false, error: 'Internal server error' },
       { status: 500 }
     );
   }

@@ -390,13 +390,7 @@ function createSkillsSection(skills: StandardCV['skills']): Paragraph[] {
   const paragraphs: Paragraph[] = [
     new Paragraph({
       style: "SectionHeading",
-      children: [
-        new TextRun({
-          text: "SKILLS",
-          bold: true,
-          color: "B4916C",
-        }),
-      ],
+      text: "SKILLS",
       border: {
         bottom: {
           color: "B4916C",
@@ -406,119 +400,80 @@ function createSkillsSection(skills: StandardCV['skills']): Paragraph[] {
       },
     }),
   ];
-  
-  // Create table rows
-  const rows: TableRow[] = [];
-  
-  // Process skills in groups of 3 categories per row
-  for (let i = 0; i < skills.length; i += 3) {
-    const tableCells: TableCell[] = [];
-    
-    // Add up to 3 categories in this row
-    for (let j = 0; j < 3 && i + j < skills.length; j++) {
-      const skill = skills[i + j];
-      const cellParagraphs: Paragraph[] = [
-        new Paragraph({
-          children: [
-            new TextRun({
-              text: skill.category,
-              bold: true,
-              size: 22,
-              color: "B4916C",
-            }),
-          ],
-          spacing: { after: 80 },
-        }),
-      ];
-      
-      // Add skill items as bullet points
-      skill.items.forEach((item) => {
-        cellParagraphs.push(
-          new Paragraph({
-            numbering: {
-              reference: "bullet-points",
-              level: 0,
-            },
-            children: [
-              new TextRun({
-                text: item,
-                size: 20,
-              }),
-            ],
-            spacing: { after: 60 },
-          })
-        );
-      });
-      
-      tableCells.push(
-        new TableCell({
-          children: cellParagraphs,
-          width: {
-            size: 33.33,
-            type: WidthType.PERCENTAGE,
-          },
-          verticalAlign: VerticalAlign.TOP,
-          margins: {
-            top: 80,
-            bottom: 80,
-            left: 160,
-            right: 160,
-          },
-        })
-      );
+
+  // Create a table for skills with 3 columns
+  const tableRows: TableRow[] = [];
+  const skillCells: TableCell[] = [];
+
+  skills.forEach((skill, index) => {
+    const cellContent = [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: skill.category,
+            bold: true,
+            size: 22,
+            color: "B4916C",
+          }),
+        ],
+        spacing: { after: 60 },
+      }),
+      ...skill.items.map(item => new Paragraph({
+        style: "BulletPoint",
+        numbering: {
+          reference: "bullet-points",
+          level: 0,
+        },
+        children: [
+          new TextRun({
+            text: item,
+            size: 20,
+          }),
+        ],
+      })),
+    ];
+
+    skillCells.push(new TableCell({
+      children: cellContent,
+      width: {
+        size: 33.33,
+        type: WidthType.PERCENTAGE,
+      },
+      margins: {
+        top: 80,
+        bottom: 80,
+        left: 160,
+        right: 160,
+      },
+    }));
+
+    // Create a new row every 3 skills
+    if ((index + 1) % 3 === 0 || index === skills.length - 1) {
+      tableRows.push(new TableRow({ children: skillCells }));
+      skillCells.length = 0; // Clear the array for next row
     }
-    
-    // If we have fewer than 3 categories, add empty cells to maintain layout
-    while (tableCells.length < 3) {
-      tableCells.push(
-        new TableCell({
-          children: [new Paragraph("")],
-          width: {
-            size: 33.33,
-            type: WidthType.PERCENTAGE,
-          },
-        })
-      );
-    }
-    
-    rows.push(new TableRow({ children: tableCells }));
-  }
-  
-  // Create the table
-  const skillsTable = new Table({
-    width: {
-      size: 100,
-      type: WidthType.PERCENTAGE,
-    },
-    rows,
-    layout: TableLayoutType.FIXED,
-    borders: {
-      insideHorizontal: {
-        style: BorderStyle.NONE,
-      },
-      insideVertical: {
-        style: BorderStyle.NONE,
-      },
-      top: {
-        style: BorderStyle.NONE,
-      },
-      bottom: {
-        style: BorderStyle.NONE,
-      },
-      left: {
-        style: BorderStyle.NONE,
-      },
-      right: {
-        style: BorderStyle.NONE,
-      },
-    },
   });
-  
-  // Add table to paragraphs as a child of a paragraph
-  paragraphs.push(new Paragraph({ children: [skillsTable] }));
-  
-  // Add extra space after section
-  paragraphs.push(new Paragraph({ spacing: { after: 240 } }));
+
+  paragraphs.push(new Paragraph({
+    children: [
+      new Table({
+        width: {
+          size: 100,
+          type: WidthType.PERCENTAGE,
+        },
+        rows: tableRows,
+        borders: {
+          insideHorizontal: {
+            style: BorderStyle.NONE,
+          },
+          insideVertical: {
+            style: BorderStyle.NONE,
+          },
+        },
+      }),
+    ],
+  }));
+
   return paragraphs;
 }
 
@@ -625,13 +580,7 @@ function createEducationSection(education: StandardCV['education']): Paragraph[]
   const paragraphs: Paragraph[] = [
     new Paragraph({
       style: "SectionHeading",
-      children: [
-        new TextRun({
-          text: "EDUCATION",
-          bold: true,
-          color: "B4916C",
-        }),
-      ],
+      text: "EDUCATION",
       border: {
         bottom: {
           color: "B4916C",
@@ -641,115 +590,32 @@ function createEducationSection(education: StandardCV['education']): Paragraph[]
       },
     }),
   ];
-  
-  // Create a table for education (3 columns)
-  const tableCells: TableCell[] = [];
-  
-  education.forEach((edu) => {
-    tableCells.push(
-      new TableCell({
+
+  education.forEach(edu => {
+    paragraphs.push(
+      new Paragraph({
+        style: "BodyText",
         children: [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: edu.institution,
-                bold: true,
-                size: 22,
-              }),
-            ],
-            spacing: { after: 60 },
+          new TextRun({
+            text: edu.degree,
+            bold: true,
+            size: 22,
           }),
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: edu.degree,
-                size: 22,
-              }),
-            ],
-            spacing: { after: 60 },
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: edu.year,
-                italics: true,
-                size: 22,
-              }),
-            ],
+          new TextRun({
+            text: `\t${edu.year}`,
           }),
         ],
-        width: {
-          size: 33.33,
-          type: WidthType.PERCENTAGE,
-        },
-        verticalAlign: VerticalAlign.TOP,
-        margins: {
-          top: 80,
-          bottom: 80,
-          left: 160,
-          right: 160,
-        },
+        alignment: AlignmentType.RIGHT,
+        spacing: { after: 40 },
+      }),
+      new Paragraph({
+        style: "BodyText",
+        text: edu.institution,
+        spacing: { after: 120 },
       })
     );
   });
-  
-  // Fill remaining cells if needed
-  while (tableCells.length < 3) {
-    tableCells.push(
-      new TableCell({
-        children: [new Paragraph("")],
-        width: {
-          size: 33.33,
-          type: WidthType.PERCENTAGE,
-        },
-      })
-    );
-  }
-  
-  // Only add 3 items per row
-  const rows: TableRow[] = [];
-  for (let i = 0; i < tableCells.length; i += 3) {
-    rows.push(
-      new TableRow({
-        children: tableCells.slice(i, i + 3),
-      })
-    );
-  }
-  
-  const educationTable = new Table({
-    width: {
-      size: 100,
-      type: WidthType.PERCENTAGE,
-    },
-    rows,
-    layout: TableLayoutType.FIXED,
-    borders: {
-      insideHorizontal: {
-        style: BorderStyle.NONE,
-      },
-      insideVertical: {
-        style: BorderStyle.NONE,
-      },
-      top: {
-        style: BorderStyle.NONE,
-      },
-      bottom: {
-        style: BorderStyle.NONE,
-      },
-      left: {
-        style: BorderStyle.NONE,
-      },
-      right: {
-        style: BorderStyle.NONE,
-      },
-    },
-  });
-  
-  // Add table to paragraphs as a child of a paragraph
-  paragraphs.push(new Paragraph({ children: [educationTable] }));
-  
-  // Add extra space after section
-  paragraphs.push(new Paragraph({ spacing: { after: 240 } }));
+
   return paragraphs;
 }
 
@@ -757,13 +623,7 @@ function createLanguagesSection(languages: StandardCV['languages']): Paragraph[]
   const paragraphs: Paragraph[] = [
     new Paragraph({
       style: "SectionHeading",
-      children: [
-        new TextRun({
-          text: "LANGUAGES",
-          bold: true,
-          color: "B4916C",
-        }),
-      ],
+      text: "LANGUAGES",
       border: {
         bottom: {
           color: "B4916C",
@@ -773,96 +633,66 @@ function createLanguagesSection(languages: StandardCV['languages']): Paragraph[]
       },
     }),
   ];
-  
-  // Create a table for languages (3 columns)
-  const tableCells: TableCell[] = [];
-  
-  languages.forEach((lang) => {
-    tableCells.push(
-      new TableCell({
-        children: [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: lang.language,
-                bold: true,
-                size: 22,
-              }),
-            ],
-            spacing: { after: 60 },
-          }),
-          // Create a visual representation of proficiency
-          createProficiencyBar(lang.proficiency),
-        ],
+
+  const tableRows: TableRow[] = [];
+  const languageCells: TableCell[] = [];
+
+  languages.forEach((lang, index) => {
+    languageCells.push(new TableCell({
+      children: [
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: lang.language,
+              bold: true,
+              size: 22,
+              color: "B4916C",
+            }),
+          ],
+        }),
+        new Paragraph({
+          text: lang.proficiency,
+        }),
+      ],
+      width: {
+        size: 50,
+        type: WidthType.PERCENTAGE,
+      },
+      margins: {
+        top: 80,
+        bottom: 80,
+        left: 160,
+        right: 160,
+      },
+    }));
+
+    // Create a new row every 2 languages
+    if ((index + 1) % 2 === 0 || index === languages.length - 1) {
+      tableRows.push(new TableRow({ children: languageCells }));
+      languageCells.length = 0; // Clear the array for next row
+    }
+  });
+
+  paragraphs.push(new Paragraph({
+    children: [
+      new Table({
         width: {
-          size: 33.33,
+          size: 100,
           type: WidthType.PERCENTAGE,
         },
-        margins: {
-          top: 80,
-          bottom: 80,
-          left: 160,
-          right: 160,
+        rows: tableRows,
+        borders: {
+          insideHorizontal: {
+            style: BorderStyle.NONE,
+          },
+          insideVertical: {
+            style: BorderStyle.NONE,
+          },
         },
-      })
-    );
-  });
-  
-  // Fill remaining cells if needed
-  while (tableCells.length < 3) {
-    tableCells.push(
-      new TableCell({
-        children: [new Paragraph("")],
-        width: {
-          size: 33.33,
-          type: WidthType.PERCENTAGE,
-        },
-      })
-    );
-  }
-  
-  // Only add 3 items per row
-  const rows: TableRow[] = [];
-  for (let i = 0; i < tableCells.length; i += 3) {
-    rows.push(
-      new TableRow({
-        children: tableCells.slice(i, i + 3),
-      })
-    );
-  }
-  
-  const languagesTable = new Table({
-    width: {
-      size: 100,
-      type: WidthType.PERCENTAGE,
-    },
-    rows,
-    layout: TableLayoutType.FIXED,
-    borders: {
-      insideHorizontal: {
-        style: BorderStyle.NONE,
-      },
-      insideVertical: {
-        style: BorderStyle.NONE,
-      },
-      top: {
-        style: BorderStyle.NONE,
-      },
-      bottom: {
-        style: BorderStyle.NONE,
-      },
-      left: {
-        style: BorderStyle.NONE,
-      },
-      right: {
-        style: BorderStyle.NONE,
-      },
-    },
-  });
-  
-  // Add table to paragraphs as a child of a paragraph
-  paragraphs.push(new Paragraph({ children: [languagesTable] }));
-  
+      }),
+    ],
+  }));
+
   return paragraphs;
 }
 

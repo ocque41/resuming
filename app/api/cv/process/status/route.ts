@@ -173,6 +173,17 @@ export async function GET(request: Request) {
     // Extract optimized text from metadata
     const optimizedText = metadata.optimizedText || "";
     
+    // Extract analysis data
+    const strengths = metadata.strengths || [];
+    const weaknesses = metadata.weaknesses || [];
+    const recommendations = metadata.recommendations || [];
+    const industry = metadata.industry || "General";
+    const language = metadata.language || "English";
+    const keywordAnalysis = metadata.keywordAnalysis || {};
+    const formattingStrengths = metadata.formattingStrengths || [];
+    const formattingWeaknesses = metadata.formattingWeaknesses || [];
+    const formattingRecommendations = metadata.formattingRecommendations || [];
+    
     // Collect debug info if requested
     const debugInfo = debug ? {
       metadata,
@@ -199,6 +210,17 @@ export async function GET(request: Request) {
       stuckSince: isStuck ? stuckSince : null,
       atsScore: metadata.atsScore || 0,
       improvedAtsScore: metadata.improvedAtsScore || 0,
+      strengths,
+      weaknesses,
+      recommendations,
+      industry,
+      language,
+      keywordAnalysis,
+      formattingStrengths,
+      formattingWeaknesses,
+      formattingRecommendations,
+      analyzedAt: metadata.analyzedAt || null,
+      optimizedAt: metadata.optimizedAt || null,
       debug: debugInfo
     };
     

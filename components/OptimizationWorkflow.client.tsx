@@ -321,7 +321,7 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
     try {
       // Reset processing state
       setProcessingStatus('selecting');
-      setProcessingTooLong(false);
+      setProcessingProgress(0);
       
       // If we have a CV ID, call the API to cancel processing
       if (selectedCVId) {
@@ -333,13 +333,9 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
         });
         
         if (!response.ok) {
-          console.error('Failed to cancel processing');
+          throw new Error('Failed to cancel processing');
         }
       }
-      
-      // Reset progress
-      setProcessingProgress(0);
-      setProcessingStatus('selecting');
       
       // Show toast notification
       showToast({
@@ -347,8 +343,26 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
         description: 'CV processing has been reset. You can try again.',
         duration: 5000
       });
+      
+      // Clear any existing error
+      setError(null);
+      
+      // Restart the process
+      if (selectedCVId) {
+        const retryResponse = await fetch(`/api/cv/process`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cvId: selectedCVId, forceRefresh: true }),
+        });
+        
+        if (retryResponse.ok) {
+          setStatusPollingEnabled(true);
+          setStatusPollingInterval(1000);
+        }
+      }
     } catch (error) {
       console.error('Error resetting processing:', error);
+      setError('Failed to reset processing. Please try again.');
     }
   };
   
