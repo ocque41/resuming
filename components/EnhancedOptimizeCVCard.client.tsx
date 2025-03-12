@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useState, useCallback, useEffect, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, RefreshCw, Clock, Info, Download } from "lucide-react";
+import { AlertCircle, RefreshCw, Clock, Info, Download, FileText } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cacheDocument, getCachedDocument, clearCachedDocument, getCacheAge } from "@/lib/cache/documentCache";
 import { toast } from "@/hooks/use-toast";
@@ -26,7 +26,7 @@ function ModernFileDropdown({
     <div className="relative w-full">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full px-4 py-3 bg-[#0A0A0A] border border-gray-800 hover:border-[#B4916C] text-gray-300 rounded-md flex justify-between items-center transition-colors duration-200"
+        className="w-full px-4 py-3 bg-black border border-gray-700 hover:border-[#B4916C] text-gray-300 rounded-md flex justify-between items-center transition-colors duration-200"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
@@ -42,14 +42,14 @@ function ModernFileDropdown({
       </button>
       
       {open && cvs.length > 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-[#0A0A0A] border border-gray-800 rounded-md shadow-lg max-h-60 overflow-auto">
+        <div className="absolute z-10 w-full mt-1 bg-[#121212] border border-gray-700 rounded-md shadow-lg max-h-60 overflow-auto">
           <ul className="py-1" role="listbox">
             {cvs.map((cv) => {
               const [name, id] = cv.split('|');
               return (
                 <li 
                   key={id}
-                  className="px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white cursor-pointer"
+                  className="px-4 py-2 text-sm text-gray-300 hover:bg-[#1A1A1A] hover:text-white cursor-pointer"
                   role="option"
                   onClick={() => {
                     onSelect(id, name);
@@ -65,7 +65,7 @@ function ModernFileDropdown({
       )}
       
       {open && cvs.length === 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-[#0A0A0A] border border-gray-800 rounded-md shadow-lg">
+        <div className="absolute z-10 w-full mt-1 bg-[#121212] border border-gray-700 rounded-md shadow-lg">
           <div className="px-4 py-2 text-sm text-gray-500">No CVs available</div>
         </div>
       )}
@@ -1101,14 +1101,18 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   };
   
   return (
-    <Card className="w-full shadow-lg border-0 bg-[#1A1A1A]">
-      <CardHeader className="bg-[#121212] text-white rounded-t-lg">
-        <CardTitle className="text-[#B4916C] flex items-center gap-2">
+    <Card className="w-full shadow-lg border border-[#B4916C]/20 bg-[#121212]">
+      <CardHeader>
+        <CardTitle className="text-xl font-bold text-[#B4916C] flex items-center gap-2">
+          <FileText className="w-5 h-5" />
           <span>Optimize CV</span>
         </CardTitle>
+        <CardDescription className="text-gray-400">
+          Enhance your CV for better ATS compatibility and readability
+        </CardDescription>
       </CardHeader>
       
-      <CardContent className="p-6">
+      <CardContent className="p-4 md:p-6">
         {/* CV Selection */}
         <div className="mb-6">
           <div className="mb-2 text-gray-400 text-sm">Select a CV to optimize</div>

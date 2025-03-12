@@ -6,6 +6,7 @@ import { ArrowLeft, Send, FileText, ChevronDown, Paperclip } from "lucide-react"
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import dynamic from "next/dynamic";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 
 // Dynamic imports for client components
 const DocumentCombobox = dynamic(
@@ -67,108 +68,94 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   };
   
   return (
-    <div className="flex flex-col h-screen bg-black text-white">
-      {/* Main content - centered like the screenshot */}
-      <div className="flex-1 flex flex-col items-center justify-center max-w-3xl mx-auto w-full px-4">
-        {/* Logo at the top */}
-        <div className="mb-4 mt-16">
-          <div className="h-16 w-16 bg-gray-800 rounded-full flex items-center justify-center">
-            <div className="flex">
-              <div className="h-2 w-2 bg-white rounded-full mr-1"></div>
-              <div className="h-2 w-2 bg-white rounded-full"></div>
+    <div className="w-full">
+      <Card className="border border-[#B4916C]/20 bg-[#121212] shadow-lg">
+        <CardHeader>
+          <CardTitle className="text-xl font-bold text-[#B4916C]">Document Enhancement</CardTitle>
+          <CardDescription className="text-gray-400">
+            Create or enhance documents with AI assistance
+          </CardDescription>
+        </CardHeader>
+        
+        <CardContent className="p-4 md:p-6">
+          <div className="mb-6">
+            <div className="mb-2 text-gray-400 text-sm">Select a document to enhance or create a new one</div>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0 mb-4">
+              <div className="w-full">
+                <DocumentCombobox 
+                  documents={documents} 
+                  onSelect={(documentId: string) => {
+                    setSelectedDocument(documentId);
+                    // Find the document name from the ID
+                    const doc = documents.find(d => d.id === documentId);
+                    if (doc) {
+                      setSelectedDocumentName(doc.fileName);
+                    }
+                  }}
+                />
+              </div>
             </div>
           </div>
-        </div>
-        
-        {/* Main heading */}
-        <h1 className="text-4xl font-bold text-center mb-16">Which document shall we create?</h1>
-        
-        {/* Input container */}
-        <div className="w-full bg-[#1A1A1A] rounded-2xl p-4">
+          
           {/* Messages area */}
-          {messages.length > 0 && (
-            <div className="max-h-60 overflow-y-auto mb-4 space-y-4">
-              {messages.map((message, index) => (
-                <div 
-                  key={index} 
-                  className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-                >
+          <div className="bg-[#1A1A1A] rounded-lg p-4 mb-4">
+            {messages.length > 0 ? (
+              <div className="max-h-60 overflow-y-auto mb-4 space-y-4">
+                {messages.map((message, index) => (
                   <div 
-                    className={`max-w-[90%] rounded-lg p-3 ${
-                      message.role === "user" 
-                        ? "bg-[#2A2A2A] text-white" 
-                        : "bg-[#2A2A2A] text-white"
-                    }`}
+                    key={index} 
+                    className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
                   >
-                    {message.content}
+                    <div 
+                      className={`max-w-[90%] rounded-lg p-3 ${
+                        message.role === "user" 
+                          ? "bg-[#2A2A2A] text-white" 
+                          : "bg-[#B4916C]/10 text-white border border-[#B4916C]/20"
+                      }`}
+                    >
+                      {message.content}
+                    </div>
                   </div>
-                </div>
-              ))}
-              <div ref={messagesEndRef} />
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-400">
+                <FileText className="h-12 w-12 mx-auto mb-3 text-gray-500" />
+                <p className="mb-1">No messages yet</p>
+                <p className="text-sm">Select a document and start a conversation</p>
+              </div>
+            )}
+            
+            {/* Input area */}
+            <div className="flex items-end space-x-2">
+              <Textarea
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                placeholder="Type your message..."
+                className="flex-1 bg-[#2A2A2A] border-gray-700 focus:border-[#B4916C] text-white"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+              />
+              <Button
+                onClick={handleSendMessage}
+                className="bg-[#B4916C] hover:bg-[#A27D59] text-[#050505] font-medium"
+                disabled={!inputMessage.trim()}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
             </div>
-          )}
-          
-          {/* Input area */}
-          <div className="flex items-center">
-            <Textarea
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              placeholder="Ask a question..."
-              className="resize-none min-h-[40px] bg-transparent border-0 focus:ring-0 text-white placeholder-gray-500 flex-1"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage();
-                }
-              }}
-            />
-          </div>
-        </div>
-        
-        {/* Bottom controls */}
-        <div className="flex items-center justify-between w-full mt-4">
-          {/* Document selector dropdown */}
-          <div className="relative">
-            <button className="flex items-center space-x-2 bg-[#1A1A1A] hover:bg-[#2A2A2A] rounded-full py-2 px-4 text-sm font-medium focus:outline-none">
-              <span>{selectedDocumentName}</span>
-              <ChevronDown className="h-4 w-4" />
-            </button>
-            <select 
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              value={selectedDocument || ""}
-              onChange={(e) => {
-                const docId = e.target.value;
-                setSelectedDocument(docId);
-                const doc = documents.find(d => d.id === docId);
-                if (doc) {
-                  setSelectedDocumentName(doc.fileName);
-                }
-              }}
-            >
-              <option value="" disabled>Select document</option>
-              {documents.map((doc) => (
-                <option key={doc.id} value={doc.id}>
-                  {doc.fileName}
-                </option>
-              ))}
-            </select>
           </div>
           
-          {/* Action buttons */}
-          <div className="flex space-x-2">
-            <button className="bg-[#1A1A1A] hover:bg-[#2A2A2A] rounded-full p-2">
-              <Paperclip className="h-5 w-5" />
-            </button>
-            <button 
-              onClick={handleSendMessage}
-              className="bg-[#1A1A1A] hover:bg-[#2A2A2A] rounded-full p-2"
-              disabled={!inputMessage.trim()}
-            >
-              <Send className="h-5 w-5" />
-            </button>
+          <div className="text-gray-400 text-sm">
+            <p>Our AI assistant can help you create or enhance documents. Select a document to get started or create a new one.</p>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 } 

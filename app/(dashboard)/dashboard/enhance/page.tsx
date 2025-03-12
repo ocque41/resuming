@@ -61,39 +61,67 @@ export default async function DocumentEditorPage() {
     })) || [];
     
     // Pass only serializable data to the client component under the prop name "documentsData"
-    return <EnhancePageClient documentsData={documents} />;
+    return (
+      <div className="min-h-screen bg-[#050505] text-white">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 relative">
+          {/* Header with back button and title */}
+          <header className="flex items-center mb-8">
+            <Link 
+              href="/dashboard" 
+              className="flex items-center justify-center h-10 w-10 rounded-md bg-black hover:bg-[#1D1D1D] text-[#B4916C] mr-4 transition-colors"
+              aria-label="Back to dashboard"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <h1 className="text-2xl font-bold text-white">
+              Document AI Assistant
+            </h1>
+          </header>
+          
+          <div className="mt-6">
+            <EnhancePageClient documentsData={documents} />
+          </div>
+        </div>
+      </div>
+    );
   } catch (error) {
     console.error("Error in DocumentEditorPage:", error);
     
     // Fallback UI – using a Link instead of a button with an onClick handler
     return (
-      <div className="flex flex-col min-h-screen bg-[#121212] p-6">
-        <header className="flex items-center mb-8">
-          <Link 
-            href="/dashboard" 
-            className="flex items-center justify-center h-8 w-8 rounded-md bg-black hover:bg-[#1D1D1D] text-[#B4916C] mr-4 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-          <h1 className="text-lg font-medium text-white">
-            Document AI Assistant
-          </h1>
-        </header>
-        
-        <Alert variant="destructive" className="mb-6">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>
-            We encountered an error loading the Document AI Assistant. Please try refreshing the page or contact support if the issue persists.
-          </AlertDescription>
-        </Alert>
-        
-        <Link 
-          href="/dashboard/enhance"
-          className="px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A3815C] transition-colors inline-block"
-        >
-          Refresh Page
-        </Link>
+      <div className="min-h-screen bg-[#050505] text-white">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 relative">
+          {/* Header with back button and title */}
+          <header className="flex items-center mb-8">
+            <Link 
+              href="/dashboard" 
+              className="flex items-center justify-center h-10 w-10 rounded-md bg-black hover:bg-[#1D1D1D] text-[#B4916C] mr-4 transition-colors"
+              aria-label="Back to dashboard"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <h1 className="text-2xl font-bold text-white">
+              Document AI Assistant
+            </h1>
+          </header>
+          
+          <div className="mt-6">
+            <Alert variant="destructive" className="mb-6">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>
+                We encountered an error loading the Document AI Assistant. Please try refreshing the page or contact support if the issue persists.
+              </AlertDescription>
+            </Alert>
+            
+            <Link 
+              href="/dashboard/enhance"
+              className="px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A3815C] transition-colors inline-block"
+            >
+              Refresh Page
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
