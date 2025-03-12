@@ -25,4 +25,9 @@ Optimize the content and design of the optimized cv result document.
     7. Education  --DONE
 
 
-- fix bugs 
+- fix bugs --DONE
+
+- improve UI to make all pages in the in app pages match the dashboard page --DONE
+
+- Generate optimize/specific system
+    consists of user copying and pasting the desired job description and the optimize cv system use its built in process to adjust the cv for the jobs best matching keywords and fit for the job perfectly.

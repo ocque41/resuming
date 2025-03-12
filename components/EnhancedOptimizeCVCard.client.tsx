@@ -906,8 +906,8 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             setIsProcessing(true);
             setProcessingStatus(data.step || "Processing...");
             setProcessingProgress(data.progress || 0);
-            
-            // Check if processing is stuck
+        
+        // Check if processing is stuck
             if (data.isStuck) {
               console.warn(`Processing appears stuck at ${data.progress}% for ${data.stuckMinutes} minutes`);
               
@@ -929,23 +929,23 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             timeoutId = setTimeout(checkStatus, newInterval);
           } else if (data.isComplete) {
             // Processing completed
-            setIsProcessing(false);
+          setIsProcessing(false);
             setIsProcessed(true);
             setProcessingStatus("Processing completed");
             setProcessingProgress(100);
             setStatusPollingEnabled(false);
             
             // Update state with optimization results
-            if (data.optimizedText) {
-              setOptimizedText(data.optimizedText);
+          if (data.optimizedText) {
+            setOptimizedText(data.optimizedText);
               // Process the optimized text
               setProcessedText(processOptimizedText(data.optimizedText));
-            }
-            
-            if (data.improvements) {
-              setImprovements(data.improvements);
-            }
-            
+          }
+          
+          if (data.improvements) {
+            setImprovements(data.improvements);
+          }
+          
             if (data.atsScore) {
               setOriginalAtsScore(data.atsScore);
             }
@@ -958,7 +958,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             setIsProcessing(false);
             setError(`Processing error: ${data.error}`);
             setStatusPollingEnabled(false);
-          } else {
+      } else {
             // Not processing or idle
             setIsProcessing(false);
             setProcessingStatus("");
@@ -1099,7 +1099,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       setIsDownloadingDocx(false);
     }
   };
-  
+
   return (
     <Card className="w-full shadow-lg border border-[#B4916C]/20 bg-[#121212]">
       <CardHeader>
@@ -1129,14 +1129,14 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             <AlertCircle className="h-4 w-4 mr-2" />
             <AlertDescription>
               {error}
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="mt-2 bg-red-800 hover:bg-red-700 border-red-700 text-white" 
-                onClick={() => processCV(true)}
-              >
-                Retry
-              </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="mt-2 bg-red-800 hover:bg-red-700 border-red-700 text-white" 
+                  onClick={() => processCV(true)}
+                >
+                  Retry
+                </Button>
             </AlertDescription>
           </Alert>
         )}
@@ -1185,7 +1185,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         {/* Results Section */}
         {isProcessed && (
           <div className="mt-6">
-            <div className="space-y-6">
+              <div className="space-y-6">
               <div className="rounded-lg border border-gray-800 overflow-hidden mt-4">
                 <div className="bg-[#050505] p-4">
                   <h4 className="text-white font-medium mb-4">Optimization Results</h4>
@@ -1206,7 +1206,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                         Structured View
                       </button>
                     </div>
-                  </div>
+                    </div>
                   
                   {/* Content Display */}
                   <div className="mb-4">
@@ -1221,9 +1221,9 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                             {structuredCV.header.split('\n').length > 1 && (
                               <div className="text-gray-400 text-sm mt-1">
                                 {structuredCV.header.split('\n').slice(1).join(' | ')}
-                              </div>
+                  </div>
                             )}
-                          </div>
+                </div>
                         )}
                         
                         {/* Profile */}
@@ -1352,7 +1352,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                   </div>
                   
                   {/* Download DOCX Button */}
-                  <Button
+                      <Button
                     onClick={handleDownloadDocx}
                     disabled={isDownloadingDocx || !optimizedText}
                     className="w-full bg-[#121212] hover:bg-gray-800 text-white border border-gray-700 mb-4"
@@ -1361,25 +1361,25 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                       <>
                         <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                         Generating DOCX...
-                      </>
-                    ) : (
-                      <>
+                          </>
+                        ) : (
+                          <>
                         <Download className="h-4 w-4 mr-2" />
                         Download as DOCX
-                      </>
-                    )}
-                  </Button>
-                  
-                  <Button
+                          </>
+                        )}
+                      </Button>
+                    
+                    <Button
                     onClick={handleResetProcessing}
-                    className="bg-transparent hover:bg-gray-800 text-gray-400 border border-gray-700 flex items-center justify-center mt-4 w-full"
-                  >
-                    <RefreshCw className="h-5 w-5 mr-2" />
-                    Start Over
-                  </Button>
+                      className="bg-transparent hover:bg-gray-800 text-gray-400 border border-gray-700 flex items-center justify-center mt-4 w-full"
+                    >
+                      <RefreshCw className="h-5 w-5 mr-2" />
+                      Start Over
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
           </div>
         )}
       </CardContent>

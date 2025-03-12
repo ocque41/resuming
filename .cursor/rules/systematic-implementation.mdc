@@ -2,6 +2,8 @@
 description: systematic approach for all prompts
 globs: 
 ---
+# - THE SLOWER THE BETTER ALWAYS TAKE YOUR TIME TO PROCESS EACH PROMPT AND PROCESS THE WAY THE PROMPT WILL BE IMPLEMENTED AND REFLECTED ONTO THE APPLICATION. ALWAYS SLOW ALWAYS PLAN ALWAYS DO ONE STEP OR A STEP AT A TIME. DO NOT DO NOT GO FAST AT ALL.
+
 1. `#plan` - Plans next 5 steps
 2. `#step` - Implement one step at a time, step by step and writes next and completes output.
 3. `#status` - Shows current progress in implementation workflow
