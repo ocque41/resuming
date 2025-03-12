@@ -1,23 +1,34 @@
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, BorderStyle, convertInchesToTwip, PageOrientation, PageNumber, AlignmentType, Table, TableRow, TableCell, WidthType, ImageRun } from "docx";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, BorderStyle, convertInchesToTwip, PageOrientation, PageNumber, AlignmentType, Table, TableRow, TableCell, WidthType, ImageRun, UnderlineType, ShadingType, TableLayoutType } from "docx";
 import { logger } from "@/lib/logger";
 import * as fs from 'fs';
 import * as path from 'path';
 
 /**
- * Enhanced Document Generator
- * A utility for generating DOCX files from CV text with improved section handling
- * that matches the professional CV template
+ * Professional Document Generator
+ * A utility for generating DOCX files from CV text with premium styling
+ * that matches world-class CV templates
  */
 export class DocumentGenerator {
+  // Define professional color scheme
+  private static readonly colors = {
+    primary: "2D5597", // Professional blue
+    accent: "2D5597",  // Professional blue
+    dark: "333333",    // Dark text
+    medium: "666666",  // Medium gray
+    light: "AAAAAA",   // Light gray
+    ultraLight: "F5F5F5", // Ultra light gray
+    white: "FFFFFF",   // White
+  };
+  
   /**
-   * Generate a DOCX file from CV text with enhanced formatting
+   * Generate a DOCX file from CV text with professional formatting
    * @param cvText The optimized CV text
    * @param metadata Optional metadata for enhanced formatting
    * @param photoPath Optional path to profile photo
    */
   static async generateDocx(cvText: string, metadata?: any, photoPath?: string): Promise<Buffer> {
     try {
-      logger.info("Starting enhanced document generation");
+      logger.info("Starting professional document generation");
       const startTime = Date.now();
       
       // Clean up text for better parsing
@@ -32,17 +43,58 @@ export class DocumentGenerator {
       // Split the CV text into sections based on common headers
       const sections = this.splitIntoSections(filteredText);
       
-      // Create document with proper margins and formatting
+      // Create document with optimal margins and modern formatting
       const doc = new Document({
+        styles: {
+          paragraphStyles: [
+            {
+              id: "SectionHeading",
+              name: "Section Heading",
+              basedOn: "Normal",
+              next: "Normal",
+              quickFormat: true,
+              run: {
+                font: "Calibri",
+                size: 28,
+                bold: true,
+                color: this.colors.primary,
+              },
+              paragraph: {
+                spacing: {
+                  after: 120,
+                  before: 240,
+                },
+              },
+            },
+            {
+              id: "BodyText",
+              name: "Body Text",
+              basedOn: "Normal",
+              next: "Normal",
+              quickFormat: true,
+              run: {
+                font: "Calibri",
+                size: 22,
+                color: this.colors.dark,
+              },
+              paragraph: {
+                spacing: {
+                  after: 80,
+                  line: 360, // 1.5 line spacing
+                },
+              },
+            },
+          ],
+        },
         sections: [
           {
             properties: {
               page: {
                 margin: {
-                  top: convertInchesToTwip(0.75),
-                  right: convertInchesToTwip(0.75),
-                  bottom: convertInchesToTwip(0.75),
-                  left: convertInchesToTwip(0.75),
+                  top: convertInchesToTwip(0.5),
+                  right: convertInchesToTwip(0.5),
+                  bottom: convertInchesToTwip(0.5),
+                  left: convertInchesToTwip(0.5),
                 },
                 size: {
                   orientation: PageOrientation.PORTRAIT,
@@ -105,12 +157,12 @@ export class DocumentGenerator {
   }
   
   /**
-   * Create document content with appropriate formatting
+   * Create document content with professional formatting
    */
   private static createDocumentContent(sections: Record<string, string>, metadata?: any, photoPath?: string): any[] {
     const children: any[] = [];
     
-    // Add header with name and contact info in a table layout
+    // Add header with name and contact info in a modern table layout
     if (sections.header) {
       const headerLines = sections.header.split('\n');
       
@@ -122,6 +174,7 @@ export class DocumentGenerator {
           size: 100,
           type: WidthType.PERCENTAGE,
         },
+        layout: TableLayoutType.FIXED,
         borders: {
           top: { style: BorderStyle.NONE },
           bottom: { style: BorderStyle.NONE },
@@ -146,19 +199,20 @@ export class DocumentGenerator {
                   right: { style: BorderStyle.NONE },
                 },
                 children: [
-                  // Name in bold, large font
+                  // Name in bold, large font with accent color
                   new Paragraph({
                     alignment: AlignmentType.LEFT,
                     children: [
                       new TextRun({
                         text: headerLines[0].trim().toUpperCase(),
                         bold: true,
-                        size: 28, // ~14pt font
-                        color: "000000", // Black
+                        size: 36, // ~18pt font
+                        color: this.colors.primary,
+                        font: "Calibri",
                       }),
                     ],
                     spacing: {
-                      after: 100
+                      after: 120
                     }
                   }),
                   // Job title if available
@@ -168,12 +222,14 @@ export class DocumentGenerator {
                       children: [
                         new TextRun({
                           text: headerLines[1].trim(),
-                          size: 24, // ~12pt font
-                          color: "666666", // Gray
+                          size: 28, // ~14pt font
+                          color: this.colors.medium,
+                          font: "Calibri",
+                          bold: true,
                         }),
                       ],
                       spacing: {
-                        after: 100
+                        after: 120
                       }
                     })
                   ] : []),
@@ -193,18 +249,20 @@ export class DocumentGenerator {
                   right: { style: BorderStyle.NONE },
                 },
                 children: [
-                  // Contact info
+                  // Contact info with icons for modern look
                   ...(headerLines.length > 2 ? headerLines.slice(2).map(line => 
                     new Paragraph({
                       alignment: AlignmentType.RIGHT,
                       children: [
                         new TextRun({
                           text: line.trim(),
-                          size: 20, // ~10pt font
+                          size: 22, // ~11pt font
+                          font: "Calibri",
+                          color: this.colors.dark,
                         }),
                       ],
                       spacing: {
-                        after: 60
+                        after: 80
                       }
                     })
                   ) : [])
@@ -217,20 +275,20 @@ export class DocumentGenerator {
       
       children.push(headerTable);
       
-      // Add a separator line after the header
+      // Add a professional separator line after the header
       children.push(
         new Paragraph({
           border: {
             bottom: {
-              color: "#CCCCCC",
+              color: this.colors.primary,
               space: 1,
               style: BorderStyle.SINGLE,
-              size: 1,
+              size: 3,
             },
           },
           spacing: {
             before: 120,
-            after: 200
+            after: 240
           }
         })
       );
@@ -257,17 +315,26 @@ export class DocumentGenerator {
               new TextRun({
                 text: 'PROFILE',
                 bold: true,
-                size: 24, // ~12pt font
-                color: "000000", // Black
+                size: 28, // ~14pt font
+                color: this.colors.primary,
+                font: "Calibri",
               }),
             ],
             spacing: {
               after: 120
-            }
+            },
+            border: {
+              bottom: {
+                color: this.colors.light,
+                space: 1,
+                style: BorderStyle.SINGLE,
+                size: 1,
+              },
+            },
           })
         );
         
-        // Add profile content
+        // Add profile content with enhanced formatting
         const profileLines = profileContent.split('\n');
         profileLines.forEach(line => {
           const trimmedLine = line.trim();
@@ -278,30 +345,41 @@ export class DocumentGenerator {
               children: [
                 new TextRun({
                   text: trimmedLine,
-                  size: 20, // ~10pt font
+                  size: 22, // ~11pt font
+                  font: "Calibri",
+                  color: this.colors.dark,
                 }),
               ],
               spacing: {
-                before: 60,
-                after: 60
+                before: 80,
+                after: 80
               }
             })
           );
         });
       }
       
-      // Add Skills/Competences section
+      // Add Skills/Competences section with modern styling
       children.push(
         new Paragraph({
           children: [
             new TextRun({
               text: 'SKILLS',
               bold: true,
-              size: 24, // ~12pt font
-              color: "000000", // Black
+              size: 28, // ~14pt font
+              color: this.colors.primary,
+              font: "Calibri",
             }),
           ],
-          spacing: { before: 200, after: 120 }
+          spacing: { before: 240, after: 120 },
+          border: {
+            bottom: {
+              color: this.colors.light,
+              space: 1,
+              style: BorderStyle.SINGLE,
+              size: 1,
+            },
+          },
         })
       );
       
@@ -329,14 +407,14 @@ export class DocumentGenerator {
         skillsList = this.getIndustrySkills(metadata.industry);
       }
       
-      // Create a table for skills with 3 columns
+      // Create a table for skills with 3 columns - enhanced with modern styling
       const SKILLS_PER_ROW = 3;
       const tableRows: TableRow[] = [];
       
       for (let i = 0; i < skillsList.length; i += SKILLS_PER_ROW) {
         const rowSkills = skillsList.slice(i, i + SKILLS_PER_ROW);
         
-        // Create cells for this row
+        // Create cells for this row with enhanced styling
         const cells = rowSkills.map(skill => 
           new TableCell({
             borders: {
@@ -349,8 +427,17 @@ export class DocumentGenerator {
               new Paragraph({
                 children: [
                   new TextRun({
-                    text: "• " + skill,
-                    size: 20, // ~10pt font
+                    text: "• ",
+                    size: 22,
+                    bold: true,
+                    color: this.colors.primary,
+                    font: "Calibri",
+                  }),
+                  new TextRun({
+                    text: skill,
+                    size: 22,
+                    color: this.colors.dark,
+                    font: "Calibri",
                   }),
                 ],
                 spacing: { before: 60, after: 60 }
@@ -384,6 +471,7 @@ export class DocumentGenerator {
           size: 100,
           type: WidthType.PERCENTAGE,
         },
+        layout: TableLayoutType.FIXED,
         borders: {
           top: { style: BorderStyle.NONE },
           bottom: { style: BorderStyle.NONE },
@@ -398,28 +486,188 @@ export class DocumentGenerator {
       // Add the skills table to the document
       children.push(skillsTableWithRows);
       
-      // Add Experience section
+      // Check for languages section and add it before work experience if available
+      const languagesSection = contentSections['LANGUAGES'] || contentSections['LANGUAGE SKILLS'];
+      if (languagesSection) {
+        // Add Languages header
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: 'LANGUAGES',
+                bold: true,
+                size: 28,
+                color: this.colors.primary,
+                font: "Calibri",
+              }),
+            ],
+            spacing: {
+              before: 240,
+              after: 120
+            },
+            border: {
+              bottom: {
+                color: this.colors.light,
+                space: 1,
+                style: BorderStyle.SINGLE,
+                size: 1,
+              },
+            },
+          })
+        );
+        
+        // Process languages
+        const languageLines = languagesSection.split('\n');
+        const languagesList: {language: string, level: string}[] = [];
+        
+        languageLines.forEach(line => {
+          const trimmed = line.trim();
+          if (!trimmed) return;
+          
+          // Try to extract language and level
+          const parts = trimmed.split(':').map(p => p.trim());
+          if (parts.length >= 2) {
+            languagesList.push({
+              language: parts[0],
+              level: parts[1]
+            });
+          } else if (trimmed.includes('-')) {
+            const dashParts = trimmed.split('-').map(p => p.trim());
+            if (dashParts.length >= 2) {
+              languagesList.push({
+                language: dashParts[0],
+                level: dashParts[1]
+              });
+            } else {
+              languagesList.push({
+                language: trimmed,
+                level: 'Proficient'
+              });
+            }
+          } else {
+            languagesList.push({
+              language: trimmed,
+              level: 'Proficient'
+            });
+          }
+        });
+        
+        // Create a table for languages with modern visualization
+        const LANGUAGES_PER_ROW = 3;
+        const languageRows: TableRow[] = [];
+        
+        for (let i = 0; i < languagesList.length; i += LANGUAGES_PER_ROW) {
+          const rowLanguages = languagesList.slice(i, i + LANGUAGES_PER_ROW);
+          
+          // Create cells for this row
+          const cells = rowLanguages.map(lang => 
+            new TableCell({
+              borders: {
+                top: { style: BorderStyle.NONE },
+                bottom: { style: BorderStyle.NONE },
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.NONE },
+              },
+              children: [
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: lang.language,
+                      size: 22,
+                      bold: true,
+                      color: this.colors.dark,
+                      font: "Calibri",
+                    }),
+                  ],
+                  spacing: { after: 40 }
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: this.getLanguageLevelBar(lang.level),
+                      size: 20,
+                      color: this.colors.primary,
+                      font: "Calibri",
+                    }),
+                  ],
+                  spacing: { before: 0, after: 80 }
+                })
+              ],
+            })
+          );
+          
+          // If we don't have enough languages to fill the row, add empty cells
+          while (cells.length < LANGUAGES_PER_ROW) {
+            cells.push(
+              new TableCell({
+                borders: {
+                  top: { style: BorderStyle.NONE },
+                  bottom: { style: BorderStyle.NONE },
+                  left: { style: BorderStyle.NONE },
+                  right: { style: BorderStyle.NONE },
+                },
+                children: [new Paragraph({})],
+              })
+            );
+          }
+          
+          // Add the row to the table
+          languageRows.push(new TableRow({ children: cells }));
+        }
+        
+        // Create the languages table
+        const languagesTable = new Table({
+          width: {
+            size: 100,
+            type: WidthType.PERCENTAGE,
+          },
+          layout: TableLayoutType.FIXED,
+          borders: {
+            top: { style: BorderStyle.NONE },
+            bottom: { style: BorderStyle.NONE },
+            left: { style: BorderStyle.NONE },
+            right: { style: BorderStyle.NONE },
+            insideHorizontal: { style: BorderStyle.NONE },
+            insideVertical: { style: BorderStyle.NONE },
+          },
+          rows: languageRows,
+        });
+        
+        // Add the languages table
+        children.push(languagesTable);
+      }
+      
+      // Add Experience section with enhanced formatting
       const experienceSection = contentSections['EXPERIENCE'] || 
                                contentSections['WORK EXPERIENCE'] || 
                                contentSections['PROFESSIONAL EXPERIENCE'] ||
                                contentSections['EMPLOYMENT HISTORY'];
       
       if (experienceSection) {
-        // Add Experience header
+        // Add Experience header with modern styling
         children.push(
           new Paragraph({
             children: [
               new TextRun({
                 text: 'EXPERIENCE',
                 bold: true,
-                size: 24, // ~12pt font
-                color: "000000", // Black
+                size: 28,
+                color: this.colors.primary,
+                font: "Calibri",
               }),
             ],
             spacing: {
-              before: 200,
+              before: 240,
               after: 120
-            }
+            },
+            border: {
+              bottom: {
+                color: this.colors.light,
+                space: 1,
+                style: BorderStyle.SINGLE,
+                size: 1,
+              },
+            },
           })
         );
         
@@ -445,12 +693,12 @@ export class DocumentGenerator {
               currentBullets = [];
               isProcessingJob = false;
               
-              // Add a separator between jobs
+              // Add a subtle separator between jobs
               children.push(
                 new Paragraph({
                   border: {
                     bottom: {
-                      color: "#EEEEEE",
+                      color: this.colors.ultraLight,
                       space: 1,
                       style: BorderStyle.SINGLE,
                       size: 1,
@@ -503,7 +751,7 @@ export class DocumentGenerator {
         }
       }
       
-      // Add Education section if it exists
+      // Add Education section with enhanced styling
       if (educationSection) {
         // Add Education header
         children.push(
@@ -512,14 +760,23 @@ export class DocumentGenerator {
               new TextRun({
                 text: 'EDUCATION',
                 bold: true,
-                size: 24, // ~12pt font
-                color: "000000", // Black
+                size: 28,
+                color: this.colors.primary,
+                font: "Calibri",
               }),
             ],
             spacing: {
-              before: 200,
+              before: 240,
               after: 120
-            }
+            },
+            border: {
+              bottom: {
+                color: this.colors.light,
+                space: 1,
+                style: BorderStyle.SINGLE,
+                size: 1,
+              },
+            },
           })
         );
         
@@ -602,156 +859,6 @@ export class DocumentGenerator {
         if (isProcessingEducation && (currentDegree || currentInstitution)) {
           this.addEducationToDocument(children, currentDegree, currentInstitution, currentYear, currentDetails);
         }
-      }
-      
-      // Add Languages section if it exists
-      if (contentSections['LANGUAGES']) {
-        // Add Languages header
-        children.push(
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: 'LANGUAGES',
-                bold: true,
-                size: 24, // ~12pt font
-                color: "000000", // Black
-              }),
-            ],
-            spacing: {
-              before: 200,
-              after: 120
-            }
-          })
-        );
-        
-        // Process languages content
-        const languagesLines = contentSections['LANGUAGES'].split('\n');
-        const languageEntries: {language: string, level?: string}[] = [];
-        
-        // Parse language entries
-        languagesLines.forEach(line => {
-          const trimmedLine = line.trim();
-          if (trimmedLine.length === 0) return;
-          
-          // Try to extract language and level
-          const parts = trimmedLine.split(/[-–:]/);
-          if (parts.length > 1) {
-            languageEntries.push({
-              language: parts[0].trim(),
-              level: parts[1].trim()
-            });
-          } else {
-            languageEntries.push({
-              language: trimmedLine
-            });
-          }
-        });
-        
-        // Create a table for languages with 3 columns
-        const languageRows: TableRow[] = [];
-        const LANGUAGES_PER_ROW = 3;
-        
-        for (let i = 0; i < languageEntries.length; i += LANGUAGES_PER_ROW) {
-          const rowLanguages = languageEntries.slice(i, i + LANGUAGES_PER_ROW);
-          
-          // Create cells for this row
-          const cells = rowLanguages.map(entry => {
-            // Determine proficiency level (1-5)
-            let proficiencyLevel = 3; // Default to intermediate
-            
-            if (entry.level) {
-              const level = entry.level.toLowerCase();
-              if (level.includes('native') || level.includes('fluent') || level.includes('c2')) {
-                proficiencyLevel = 5;
-              } else if (level.includes('advanced') || level.includes('c1')) {
-                proficiencyLevel = 4;
-              } else if (level.includes('intermediate') || level.includes('b2') || level.includes('b1')) {
-                proficiencyLevel = 3;
-              } else if (level.includes('basic') || level.includes('beginner') || level.includes('a2')) {
-                proficiencyLevel = 2;
-              } else if (level.includes('elementary') || level.includes('a1')) {
-                proficiencyLevel = 1;
-              }
-            }
-            
-            // Create proficiency bar
-            const proficiencyBar = new Paragraph({
-              children: [
-                new TextRun({
-                  text: '█'.repeat(proficiencyLevel) + '░'.repeat(5 - proficiencyLevel),
-                  size: 16,
-                  color: proficiencyLevel >= 4 ? "000000" : "666666"
-                })
-              ],
-              spacing: {
-                before: 40,
-                after: 0
-              }
-            });
-            
-            return new TableCell({
-              borders: {
-                top: { style: BorderStyle.NONE },
-                bottom: { style: BorderStyle.NONE },
-                left: { style: BorderStyle.NONE },
-                right: { style: BorderStyle.NONE },
-              },
-              children: [
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: entry.language,
-                      size: 20, // ~10pt font
-                    }),
-                  ],
-                  spacing: {
-                    before: 60,
-                    after: 20
-                  }
-                }),
-                proficiencyBar
-              ],
-            });
-          });
-          
-          // If we don't have enough languages to fill the row, add empty cells
-          while (cells.length < LANGUAGES_PER_ROW) {
-            cells.push(
-              new TableCell({
-                borders: {
-                  top: { style: BorderStyle.NONE },
-                  bottom: { style: BorderStyle.NONE },
-                  left: { style: BorderStyle.NONE },
-                  right: { style: BorderStyle.NONE },
-                },
-                children: [new Paragraph({})],
-              })
-            );
-          }
-          
-          // Add the row to the table
-          languageRows.push(new TableRow({ children: cells }));
-        }
-        
-        // Create the languages table with the rows
-        const languagesTable = new Table({
-          width: {
-            size: 100,
-            type: WidthType.PERCENTAGE,
-          },
-          borders: {
-            top: { style: BorderStyle.NONE },
-            bottom: { style: BorderStyle.NONE },
-            left: { style: BorderStyle.NONE },
-            right: { style: BorderStyle.NONE },
-            insideHorizontal: { style: BorderStyle.NONE },
-            insideVertical: { style: BorderStyle.NONE },
-          },
-          rows: languageRows,
-        });
-        
-        // Add the languages table to the document
-        children.push(languagesTable);
       }
     }
     
@@ -979,137 +1086,281 @@ export class DocumentGenerator {
   }
   
   /**
-   * Get industry-specific skills for the given industry
-   * @param industry The industry to get skills for
-   * @returns Array of industry-specific skills
+   * Get a list of relevant skills for a specific industry
+   * Used when no explicit skills are provided in the CV
+   * @param industry The industry name
+   * @returns Array of relevant skills for the industry
    */
   private static getIndustrySkills(industry: string): string[] {
+    const normalizedIndustry = industry.toLowerCase().trim();
+    
     const industrySkills: Record<string, string[]> = {
-      'Technology': [
-        'Programming (e.g., Python, JavaScript, Java)',
-        'Cloud Services (AWS, Azure, GCP)',
-        'Version Control Systems (Git)',
-        'Database Management',
+      'technology': [
+        'Programming & Software Development',
+        'Cloud Architecture (AWS/Azure/GCP)',
+        'DevOps & CI/CD Pipelines',
+        'Artificial Intelligence & Machine Learning',
+        'Database Management & SQL',
+        'API Design & Integration',
         'Agile/Scrum Methodologies',
-        'Software Development Lifecycle',
-        'API Development & Integration',
-        'DevOps Practices'
+        'Systems Architecture',
+        'Cybersecurity & Identity Management',
+        'Microservices & Containerization'
       ],
-      'Finance': [
-        'Financial Analysis',
-        'Risk Management',
-        'Financial Reporting',
-        'Budgeting & Forecasting',
-        'Regulatory Compliance',
-        'Investment Analysis',
-        'Banking Operations',
-        'Financial Modeling'
+      'finance': [
+        'Financial Analysis & Reporting',
+        'Risk Management & Compliance',
+        'Investment Portfolio Management',
+        'Financial Modeling & Forecasting',
+        'Banking Regulations & Policies',
+        'Corporate Finance',
+        'Capital Markets & Securities',
+        'Financial Control Systems',
+        'Mergers & Acquisitions',
+        'Tax Planning & Strategy'
       ],
-      'Healthcare': [
-        'Electronic Health Records (EHR)',
-        'Healthcare Regulation Compliance',
-        'Medical Terminology',
-        'Patient Care',
-        'Clinical Documentation',
-        'Healthcare Informatics',
-        'Care Coordination',
-        'Medical Coding'
+      'healthcare': [
+        'Electronic Health Records (EHR) Systems',
+        'Healthcare Compliance (HIPAA/GDPR)',
+        'Clinical Workflow Optimization',
+        'Medical Coding & Billing',
+        'Healthcare Analytics',
+        'Patient Care Management',
+        'Healthcare Information Technology',
+        'Medical Research & Clinical Trials',
+        'Telehealth & Remote Care Solutions',
+        'Healthcare Policy & Regulation'
       ],
-      'Marketing': [
-        'Digital Marketing',
+      'marketing': [
+        'Digital Marketing Strategy',
+        'Content Creation & Marketing',
+        'Search Engine Optimization (SEO)',
         'Social Media Management',
-        'Content Creation',
-        'SEO/SEM',
-        'Brand Development',
-        'Market Research',
-        'Campaign Management',
-        'Analytics & Performance Tracking'
+        'Marketing Analytics & Reporting',
+        'Brand Development & Management',
+        'Customer Journey Mapping',
+        'Marketing Automation',
+        'Market Research & Competitive Analysis',
+        'Email Marketing Campaigns'
       ],
-      'Education': [
-        'Curriculum Development',
-        'Student Assessment',
-        'Learning Management Systems',
+      'retail': [
+        'Merchandising & Product Management',
+        'E-commerce Platform Management',
+        'Supply Chain Optimization',
+        'Retail Analytics & KPIs',
+        'Customer Experience Design',
+        'Inventory Management Systems',
+        'Point of Sale (POS) Systems',
+        'Omnichannel Retail Strategy',
+        'Visual Merchandising',
+        'Customer Relationship Management'
+      ],
+      'legal': [
+        'Contract Drafting & Negotiation',
+        'Legal Research & Analysis',
+        'Regulatory Compliance',
+        'Intellectual Property Management',
+        'Corporate Governance',
+        'Litigation Management',
+        'Legal Risk Assessment',
+        'Data Privacy Law',
+        'Employment Law',
+        'Mergers & Acquisitions'
+      ],
+      'human resources': [
+        'Talent Acquisition & Retention',
+        'Performance Management Systems',
+        'Compensation & Benefits Planning',
+        'Employee Relations & Engagement',
+        'HR Analytics & Reporting',
+        'Training & Development Programs',
+        'HRIS & Workforce Management Systems',
+        'Organizational Development',
+        'Labor Relations & Compliance',
+        'Succession Planning'
+      ],
+      'education': [
+        'Curriculum Development & Assessment',
+        'Educational Technology Integration',
         'Instructional Design',
-        'Educational Technology',
-        'Classroom Management',
+        'Learning Management Systems',
         'Student Engagement Strategies',
-        'Differentiated Instruction'
+        'Educational Research & Analysis',
+        'Classroom Management',
+        'Special Education Programs',
+        'Educational Leadership',
+        'Student Assessment & Evaluation'
       ],
-      'Manufacturing': [
+      'manufacturing': [
+        'Production Planning & Scheduling',
+        'Quality Control Systems',
+        'Lean Manufacturing Principles',
         'Supply Chain Management',
-        'Quality Control',
-        'Lean Manufacturing',
-        'Production Planning',
+        'Manufacturing Execution Systems',
+        'Industrial Automation',
+        'Process Improvement & Six Sigma',
         'Inventory Management',
-        'Process Improvement',
-        'ERP Systems',
-        'Six Sigma Methodologies'
+        'Equipment Maintenance & Reliability',
+        'Health & Safety Compliance'
+      ],
+      'construction': [
+        'Project Planning & Management',
+        'Building Information Modeling (BIM)',
+        'Construction Safety Protocols',
+        'Cost Estimation & Budgeting',
+        'Contract Administration',
+        'Building Codes & Regulatory Compliance',
+        'Construction Documentation',
+        'Quality Assurance & Control',
+        'Sustainable Building Practices',
+        'Construction Technology Applications'
       ]
     };
     
-    // Return industry-specific skills if available, or general professional skills
-    return industrySkills[industry] || [
+    // Find the matching industry or use default skills
+    for (const [key, skills] of Object.entries(industrySkills)) {
+      if (normalizedIndustry.includes(key)) {
+        return skills;
+      }
+    }
+    
+    // Default skills if no industry match found
+    return [
       'Project Management',
-      'Communication Skills',
-      'Problem Solving',
-      'Team Collaboration',
-      'Time Management',
-      'Analytical Thinking',
-      'Adaptability',
-      'Leadership'
+      'Communication & Presentation',
+      'Problem Solving & Analysis',
+      'Team Leadership & Collaboration',
+      'Strategic Planning',
+      'Data Analysis & Reporting',
+      'Research & Documentation',
+      'Client Relationship Management',
+      'Time Management & Organization',
+      'Critical Thinking & Innovation'
     ];
   }
 
+  /**
+   * Add a job entry to the document with premium styling
+   */
   private static addJobToDocument(children: any[], jobTitle: string, company: string, dateRange: string, bullets: string[]): void {
-    // Add job title
-    children.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: jobTitle,
-            size: 20, // ~10pt font
-            bold: true,
-          }),
-        ],
-        spacing: {
-          before: 80,
-          after: 40
-        }
-      })
-    );
+    // Create a table for job title and date - modern side-by-side layout
+    const jobHeaderTable = new Table({
+      width: {
+        size: 100,
+        type: WidthType.PERCENTAGE,
+      },
+      layout: TableLayoutType.FIXED,
+      borders: {
+        top: { style: BorderStyle.NONE },
+        bottom: { style: BorderStyle.NONE },
+        left: { style: BorderStyle.NONE },
+        right: { style: BorderStyle.NONE },
+        insideHorizontal: { style: BorderStyle.NONE },
+        insideVertical: { style: BorderStyle.NONE },
+      },
+      rows: [
+        new TableRow({
+          children: [
+            // Left column for job title and company
+            new TableCell({
+              width: {
+                size: 70,
+                type: WidthType.PERCENTAGE,
+              },
+              borders: {
+                top: { style: BorderStyle.NONE },
+                bottom: { style: BorderStyle.NONE },
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.NONE },
+              },
+              children: [
+                // Job title
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: jobTitle,
+                      size: 24, // ~12pt font
+                      bold: true,
+                      color: this.colors.dark,
+                      font: "Calibri",
+                    }),
+                  ],
+                  spacing: {
+                    after: 40
+                  }
+                }),
+                // Company
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: company,
+                      size: 22, // ~11pt font
+                      italics: true,
+                      color: this.colors.medium,
+                      font: "Calibri",
+                    }),
+                  ],
+                  spacing: {
+                    after: 40
+                  }
+                })
+              ],
+            }),
+            
+            // Right column for date range
+            new TableCell({
+              width: {
+                size: 30,
+                type: WidthType.PERCENTAGE,
+              },
+              borders: {
+                top: { style: BorderStyle.NONE },
+                bottom: { style: BorderStyle.NONE },
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.NONE },
+              },
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.RIGHT,
+                  children: [
+                    new TextRun({
+                      text: dateRange,
+                      size: 22, // ~11pt font
+                      color: this.colors.medium,
+                      font: "Calibri",
+                    }),
+                  ],
+                })
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    
+    children.push(jobHeaderTable);
 
-    // Add company and date in the same line
-    children.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: company,
-            size: 20, // ~10pt font
-          }),
-          new TextRun({
-            text: " - " + dateRange,
-            size: 20, // ~10pt font
-          }),
-        ],
-        spacing: {
-          before: 0,
-          after: 80
-        }
-      })
-    );
-
-    // Add bullets with proper bullet formatting
+    // Add bullets with enhanced formatting and proper bullet points
     bullets.forEach(bullet => {
       children.push(
         new Paragraph({
           children: [
             new TextRun({
+              text: "• ",
+              size: 22, // ~11pt font
+              color: this.colors.primary,
+              bold: true,
+              font: "Calibri",
+            }),
+            new TextRun({
               text: bullet,
-              size: 20, // ~10pt font
+              size: 22, // ~11pt font
+              color: this.colors.dark,
+              font: "Calibri",
             }),
           ],
-          bullet: {
-            level: 0
+          indent: {
+            left: convertInchesToTwip(0.25)
           },
           spacing: {
             before: 40,
@@ -1120,58 +1371,128 @@ export class DocumentGenerator {
     });
   }
   
+  /**
+   * Add an education entry to the document with premium styling
+   */
   private static addEducationToDocument(children: any[], degree: string, institution: string, year: string, details: string[]): void {
-    // Add university or school
-    children.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: institution,
-            size: 20, // ~10pt font
-            bold: true,
-          }),
-        ],
-        spacing: {
-          before: 80,
-          after: 40
-        }
-      })
-    );
+    // Create a table for education - modern side-by-side layout
+    const educationHeaderTable = new Table({
+      width: {
+        size: 100,
+        type: WidthType.PERCENTAGE,
+      },
+      layout: TableLayoutType.FIXED,
+      borders: {
+        top: { style: BorderStyle.NONE },
+        bottom: { style: BorderStyle.NONE },
+        left: { style: BorderStyle.NONE },
+        right: { style: BorderStyle.NONE },
+        insideHorizontal: { style: BorderStyle.NONE },
+        insideVertical: { style: BorderStyle.NONE },
+      },
+      rows: [
+        new TableRow({
+          children: [
+            // Left column for institution and degree
+            new TableCell({
+              width: {
+                size: 70,
+                type: WidthType.PERCENTAGE,
+              },
+              borders: {
+                top: { style: BorderStyle.NONE },
+                bottom: { style: BorderStyle.NONE },
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.NONE },
+              },
+              children: [
+                // Institution
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: institution,
+                      size: 24, // ~12pt font
+                      bold: true,
+                      color: this.colors.dark,
+                      font: "Calibri",
+                    }),
+                  ],
+                  spacing: {
+                    after: 40
+                  }
+                }),
+                // Degree
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: degree,
+                      size: 22, // ~11pt font
+                      italics: true,
+                      color: this.colors.medium,
+                      font: "Calibri",
+                    }),
+                  ],
+                  spacing: {
+                    after: 40
+                  }
+                })
+              ],
+            }),
+            
+            // Right column for year
+            new TableCell({
+              width: {
+                size: 30,
+                type: WidthType.PERCENTAGE,
+              },
+              borders: {
+                top: { style: BorderStyle.NONE },
+                bottom: { style: BorderStyle.NONE },
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.NONE },
+              },
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.RIGHT,
+                  children: [
+                    new TextRun({
+                      text: year,
+                      size: 22, // ~11pt font
+                      color: this.colors.medium,
+                      font: "Calibri",
+                    }),
+                  ],
+                })
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    
+    children.push(educationHeaderTable);
 
-    // Add degree and year
-    children.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: degree,
-            size: 20, // ~10pt font
-          }),
-          ...(year ? [
-            new TextRun({
-              text: " - " + year,
-              size: 20, // ~10pt font
-            })
-          ] : []),
-        ],
-        spacing: {
-          before: 0,
-          after: 80
-        }
-      })
-    );
-
-    // Add details with proper bullet formatting
+    // Add details if any
     details.forEach(detail => {
       children.push(
         new Paragraph({
           children: [
             new TextRun({
+              text: "• ",
+              size: 22, // ~11pt font
+              color: this.colors.primary,
+              bold: true,
+              font: "Calibri",
+            }),
+            new TextRun({
               text: detail,
-              size: 20, // ~10pt font
+              size: 22, // ~11pt font
+              color: this.colors.dark,
+              font: "Calibri",
             }),
           ],
-          bullet: {
-            level: 0
+          indent: {
+            left: convertInchesToTwip(0.25)
           },
           spacing: {
             before: 40,
@@ -1180,5 +1501,52 @@ export class DocumentGenerator {
         })
       );
     });
+  }
+
+  /**
+   * Creates a visual representation of language proficiency
+   * @param level The language proficiency level description
+   * @returns A string with visual bars representing the proficiency level
+   */
+  private static getLanguageLevelBar(level: string): string {
+    // Normalize the level to handle variations in wording
+    const normalizedLevel = level.toLowerCase().trim();
+    
+    // Map proficiency levels to visualization bars (5 levels)
+    if (normalizedLevel.includes('native') || 
+        normalizedLevel.includes('fluent') || 
+        normalizedLevel.includes('c2') ||
+        normalizedLevel.includes('proficient') ||
+        normalizedLevel.includes('full') ||
+        normalizedLevel.includes('professional') ||
+        normalizedLevel === '5/5') {
+      return '■■■■■'; // 5/5 - Native/Fluent
+    } else if (normalizedLevel.includes('advanced') || 
+              normalizedLevel.includes('c1') ||
+              normalizedLevel.includes('very good') ||
+              normalizedLevel.includes('high') ||
+              normalizedLevel === '4/5') {
+      return '■■■■□'; // 4/5 - Advanced
+    } else if (normalizedLevel.includes('intermediate') || 
+              normalizedLevel.includes('b2') ||
+              normalizedLevel.includes('good') ||
+              normalizedLevel.includes('moderate') ||
+              normalizedLevel === '3/5') {
+      return '■■■□□'; // 3/5 - Intermediate
+    } else if (normalizedLevel.includes('limited') || 
+              normalizedLevel.includes('basic') || 
+              normalizedLevel.includes('b1') ||
+              normalizedLevel === '2/5') {
+      return '■■□□□'; // 2/5 - Basic
+    } else if (normalizedLevel.includes('elementary') || 
+              normalizedLevel.includes('beginner') || 
+              normalizedLevel.includes('a1') ||
+              normalizedLevel.includes('a2') ||
+              normalizedLevel === '1/5') {
+      return '■□□□□'; // 1/5 - Elementary
+    }
+    
+    // Default to middle level if we can't determine
+    return '■■■□□';
   }
 } 
