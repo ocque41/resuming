@@ -9,6 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
+// Instruct Next.js that this page must render dynamically (to allow cookies usage)
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 // Define the Document type locally
 interface Document {
   id: string;
@@ -49,21 +53,19 @@ export default async function DocumentEditorPage() {
       // Continue with empty data rather than crashing
     }
     
-    // Map the documents to match the Document interface
+    // Map the documents to match the Document interface and convert dates to ISO strings for serialization
     const documents = rawDocuments?.map(doc => ({
       id: doc.id.toString(),
-      fileName: doc.fileName || 'Untitled Document',
-      // Convert Date to string for serialization
+      fileName: doc.fileName || "Untitled Document",
       createdAt: doc.createdAt ? doc.createdAt.toISOString() : new Date().toISOString()
     })) || [];
     
-    // Pass only serializable data to the client component
-    // Change 'documents' to 'documentsData' to match the prop name in the client component
+    // Pass only serializable data to the client component under the prop name "documentsData"
     return <EnhancePageClient documentsData={documents} />;
   } catch (error) {
     console.error("Error in DocumentEditorPage:", error);
     
-    // Return a fallback UI instead of crashing
+    // Fallback UI – using a Link instead of a button with an onClick handler
     return (
       <div className="flex flex-col min-h-screen bg-[#121212] p-6">
         <header className="flex items-center mb-8">
@@ -86,13 +88,12 @@ export default async function DocumentEditorPage() {
           </AlertDescription>
         </Alert>
         
-        {/* Use a simple button instead of the client component */}
-        <button 
-          onClick={() => window.location.reload()}
-          className="px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A3815C] transition-colors"
+        <Link 
+          href="/dashboard/enhance"
+          className="px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A3815C] transition-colors inline-block"
         >
           Refresh Page
-        </button>
+        </Link>
       </div>
     );
   }
