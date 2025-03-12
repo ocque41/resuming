@@ -30,7 +30,7 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
     // Create paragraphs for each section
     const paragraphs: Paragraph[] = [];
     
-    // Preferred section order
+    // Preferred section order - strictly follow this order
     const sectionOrder = ["header", "profile", "achievements", "goals", "skills", "languages", "education"] as const;
     
     // Process sections in the preferred order
@@ -53,6 +53,17 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
               text: headerLines[0],
               heading: HeadingLevel.HEADING_1,
               alignment: AlignmentType.CENTER,
+              spacing: {
+                after: 120,
+              },
+              border: {
+                bottom: {
+                  color: "#B4916C",
+                  space: 1,
+                  style: BorderStyle.SINGLE,
+                  size: 8,
+                },
+              },
             })
           );
           
@@ -66,28 +77,21 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
                   new TextRun({
                     text: contactInfo,
                     size: 20,
+                    color: "666666",
                   }),
                 ],
                 spacing: {
-                  after: 200,
+                  after: 240,
                 },
               })
             );
           }
           
-          // Add a separator line
+          // Add extra spacing after header
           paragraphs.push(
             new Paragraph({
-              border: {
-                bottom: {
-                  color: "999999",
-                  space: 1,
-                  style: BorderStyle.SINGLE,
-                  size: 6,
-                },
-              },
               spacing: {
-                after: 200,
+                after: 240,
               },
             })
           );
@@ -99,12 +103,25 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
       const sectionTitle = getSectionTitle(sectionKey);
       paragraphs.push(
         new Paragraph({
-          text: sectionTitle,
-          heading: HeadingLevel.HEADING_2,
-          thematicBreak: true,
+          children: [
+            new TextRun({
+              text: sectionTitle,
+              bold: true,
+              size: 24,
+              color: "#B4916C",
+            }),
+          ],
           spacing: {
             before: 240,
             after: 120,
+          },
+          border: {
+            bottom: {
+              color: "#DDDDDD",
+              space: 1,
+              style: BorderStyle.SINGLE,
+              size: 4,
+            },
           },
         })
       );
@@ -114,6 +131,40 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
         // These are arrays of bullet points
         const items = sectionContent as string[];
         
+        // Add a brief introduction for these sections
+        if (sectionKey === "achievements") {
+          paragraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "Key professional accomplishments with measurable results:",
+                  italics: true,
+                  size: 22,
+                }),
+              ],
+              spacing: {
+                after: 120,
+              },
+            })
+          );
+        } else if (sectionKey === "goals") {
+          paragraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "Professional objectives and career aspirations:",
+                  italics: true,
+                  size: 22,
+                }),
+              ],
+              spacing: {
+                after: 120,
+              },
+            })
+          );
+        }
+        
+        // Add each item as a bullet point
         items.forEach((item: string) => {
           paragraphs.push(
             new Paragraph({
@@ -127,58 +178,93 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
                 }),
               ],
               spacing: {
-                after: 80,
+                after: 100,
+                line: 360,
+                lineRule: "auto",
               },
             })
           );
         });
+        
+        // Add extra spacing after these important sections
+        paragraphs.push(
+          new Paragraph({
+            spacing: {
+              after: 240,
+            },
+          })
+        );
       } else {
         // Regular text sections
         const contentText = sectionContent as string;
         const contentLines = contentText.split('\n').filter((line: string) => line.trim());
         
-        contentLines.forEach((line: string) => {
-          // Check if this line looks like a bullet point
-          if (line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*')) {
-            paragraphs.push(
-              new Paragraph({
-                bullet: {
-                  level: 0,
-                },
-                children: [
-                  new TextRun({
-                    text: line.replace(/^[•\-*]\s*/, ''),
-                    size: 22,
-                  }),
-                ],
-                spacing: {
-                  after: 80,
-                },
-              })
-            );
-          } else {
-            paragraphs.push(
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: line,
-                    size: 22,
-                  }),
-                ],
-                spacing: {
-                  after: 80,
-                },
-              })
-            );
-          }
-        });
+        // For profile section, format as a paragraph
+        if (sectionKey === "profile") {
+          paragraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: contentLines.join(' '),
+                  size: 22,
+                }),
+              ],
+              spacing: {
+                after: 240,
+                line: 360,
+                lineRule: "auto",
+              },
+            })
+          );
+        } else {
+          // For other sections, process line by line
+          contentLines.forEach((line: string) => {
+            // Check if this line looks like a bullet point
+            if (line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*')) {
+              paragraphs.push(
+                new Paragraph({
+                  bullet: {
+                    level: 0,
+                  },
+                  children: [
+                    new TextRun({
+                      text: line.replace(/^[•\-*]\s*/, ''),
+                      size: 22,
+                    }),
+                  ],
+                  spacing: {
+                    after: 80,
+                    line: 360,
+                    lineRule: "auto",
+                  },
+                })
+              );
+            } else {
+              paragraphs.push(
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: line,
+                      size: 22,
+                    }),
+                  ],
+                  spacing: {
+                    after: 80,
+                    line: 360,
+                    lineRule: "auto",
+                  },
+                })
+              );
+            }
+          });
+        }
       }
       
       // Add extra spacing after each section
       paragraphs.push(
         new Paragraph({
           spacing: {
-            after: 200,
+            after: 240,
           },
         })
       );
@@ -189,8 +275,38 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
       creator: authorName,
       title: fileName,
       description: "Optimized CV generated by CV Optimizer",
+      styles: {
+        paragraphStyles: [
+          {
+            id: "Heading1",
+            name: "Heading 1",
+            basedOn: "Normal",
+            next: "Normal",
+            quickFormat: true,
+            run: {
+              size: 32,
+              bold: true,
+              color: "000000",
+            },
+            paragraph: {
+              spacing: {
+                after: 120,
+              },
+            },
+          },
+        ],
+      },
       sections: [{
-        properties: {},
+        properties: {
+          page: {
+            margin: {
+              top: 1000,
+              right: 1000,
+              bottom: 1000,
+              left: 1000,
+            },
+          },
+        },
         children: paragraphs,
       }],
     });
@@ -226,8 +342,18 @@ function parseOptimizedText(text: string): {
     education: ""
   };
   
-  // Check if the text is already in a structured format
-  if (text.includes("PROFILE") || text.includes("ACHIEVEMENTS") || text.includes("GOALS")) {
+  // Check if the text is already in a structured format with section headers
+  if (text.includes("PROFILE") || text.includes("ACHIEVEMENTS") || text.includes("GOALS") || 
+      text.includes("Profile") || text.includes("Achievements") || text.includes("Goals")) {
+    
+    // Define regex patterns for section identification
+    const profilePatterns = [/^(PROFILE|SUMMARY|ABOUT ME|PROFESSIONAL SUMMARY|CAREER OBJECTIVE|Profile|Summary)/i];
+    const achievementsPatterns = [/^(ACHIEVEMENTS|ACCOMPLISHMENTS|KEY ACCOMPLISHMENTS|MAJOR ACHIEVEMENTS|Achievements)/i];
+    const goalsPatterns = [/^(GOALS|OBJECTIVES|CAREER GOALS|PROFESSIONAL GOALS|ASPIRATIONS|Goals)/i];
+    const skillsPatterns = [/^(SKILLS|TECHNICAL SKILLS|COMPETENCIES|CORE COMPETENCIES|KEY SKILLS|EXPERTISE|Skills)/i];
+    const languagesPatterns = [/^(LANGUAGES|LANGUAGE PROFICIENCY|LANGUAGE SKILLS|Languages)/i];
+    const educationPatterns = [/^(EDUCATION|ACADEMIC BACKGROUND|EDUCATIONAL QUALIFICATIONS|ACADEMIC QUALIFICATIONS|Education)/i];
+    
     // Split text into lines
     const lines = text.split('\n').filter(line => line.trim() !== "");
     
@@ -243,13 +369,13 @@ function parseOptimizedText(text: string): {
     for (let i = 3; i < lines.length; i++) {
       const line = lines[i].trim();
       
-      // Check for section headers
-      const isProfileSection = /^(PROFILE|SUMMARY|ABOUT ME)/i.test(line);
-      const isAchievementsSection = /^(ACHIEVEMENTS|ACCOMPLISHMENTS)/i.test(line);
-      const isGoalsSection = /^(GOALS|OBJECTIVES)/i.test(line);
-      const isSkillsSection = /^(SKILLS|TECHNICAL SKILLS|COMPETENCIES)/i.test(line);
-      const isLanguagesSection = /^(LANGUAGES|LANGUAGE PROFICIENCY)/i.test(line);
-      const isEducationSection = /^(EDUCATION|ACADEMIC BACKGROUND)/i.test(line);
+      // Check for section headers using the defined patterns
+      const isProfileSection = profilePatterns.some(pattern => pattern.test(line));
+      const isAchievementsSection = achievementsPatterns.some(pattern => pattern.test(line));
+      const isGoalsSection = goalsPatterns.some(pattern => pattern.test(line));
+      const isSkillsSection = skillsPatterns.some(pattern => pattern.test(line));
+      const isLanguagesSection = languagesPatterns.some(pattern => pattern.test(line));
+      const isEducationSection = educationPatterns.some(pattern => pattern.test(line));
       
       if (isProfileSection) {
         currentSection = "profile";
