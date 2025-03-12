@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, RefreshCw, Clock, Info, Download } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cacheDocument, getCachedDocument, clearCachedDocument, getCacheAge } from "@/lib/cache/documentCache";
+import { toast } from "@/hooks/use-toast";
 
 // Modern SimpleFileDropdown component
 function ModernFileDropdown({ 
@@ -98,6 +99,25 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   // State for UI views
   const [originalText, setOriginalText] = useState<string>("");
   const [optimizedText, setOptimizedText] = useState<string>("");
+  const [processedText, setProcessedText] = useState<string>("");
+  const [structuredCV, setStructuredCV] = useState<{
+    header: string;
+    profile: string;
+    achievements: string[];
+    goals: string[];
+    skills: string;
+    languages: string;
+    education: string;
+  }>({
+    header: "",
+    profile: "",
+    achievements: [],
+    goals: [],
+    skills: "",
+    languages: "",
+    education: ""
+  });
+  const [showStructuredView, setShowStructuredView] = useState<boolean>(true);
   const [improvements, setImprovements] = useState<string[]>([]);
   
   // State for DOCX download
@@ -255,6 +275,233 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     }
   }, [selectedCVId]);
   
+  // Process optimized text to remove edit words and asterisks
+  const processOptimizedText = (text: string) => {
+    if (!text) return "";
+    
+    // Remove edit words and asterisks
+    const editWords = ["Developed", "Achieved", "Implemented", "Created", "Managed", "Led", "Designed", "Built", "Executed", "Improved"];
+    let processed = text;
+    
+    // Remove asterisks
+    processed = processed.replace(/\*/g, "");
+    
+    // Remove edit words
+    editWords.forEach(word => {
+      const regex = new RegExp(`\\b${word}\\b`, "gi");
+      processed = processed.replace(regex, "");
+    });
+    
+    return processed;
+  };
+  
+  // Structure the CV into sections
+  const structureCV = (text: string) => {
+    if (!text) {
+      const emptyStructure = {
+        header: "",
+        profile: "",
+        achievements: [] as string[],
+        goals: [] as string[],
+        skills: "",
+        languages: "",
+        education: ""
+      };
+      setStructuredCV(emptyStructure);
+      return emptyStructure;
+    }
+    
+    const sections = {
+      header: "",
+      profile: "",
+      achievements: [] as string[],
+      goals: [] as string[],
+      skills: "",
+      languages: "",
+      education: ""
+    };
+    
+    const improvements: string[] = [];
+    
+    // Split text into lines
+    const lines = text.split('\n').filter(line => line.trim() !== "");
+    
+    // Extract header (first 2-3 lines typically contain name and contact info)
+    if (lines.length > 0) {
+      sections.header = lines.slice(0, Math.min(3, lines.length)).join('\n');
+    }
+    
+    // Process remaining lines to identify sections
+    let currentSection = "";
+    let sectionContent: string[] = [];
+    
+    for (let i = 3; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      // Check for section headers
+      const isProfileSection = /^(PROFILE|SUMMARY|ABOUT ME)/i.test(line);
+      const isAchievementsSection = /^(ACHIEVEMENTS|ACCOMPLISHMENTS)/i.test(line);
+      const isGoalsSection = /^(GOALS|OBJECTIVES)/i.test(line);
+      const isSkillsSection = /^(SKILLS|TECHNICAL SKILLS|COMPETENCIES)/i.test(line);
+      const isLanguagesSection = /^(LANGUAGES|LANGUAGE PROFICIENCY)/i.test(line);
+      const isEducationSection = /^(EDUCATION|ACADEMIC BACKGROUND)/i.test(line);
+      
+      if (isProfileSection) {
+        currentSection = "profile";
+        sectionContent = [];
+        continue;
+      } else if (isAchievementsSection) {
+        currentSection = "achievements";
+        sectionContent = [];
+        continue;
+      } else if (isGoalsSection) {
+        currentSection = "goals";
+        sectionContent = [];
+        continue;
+      } else if (isSkillsSection) {
+        currentSection = "skills";
+        sectionContent = [];
+        continue;
+      } else if (isLanguagesSection) {
+        currentSection = "languages";
+        sectionContent = [];
+        continue;
+      } else if (isEducationSection) {
+        currentSection = "education";
+        sectionContent = [];
+        continue;
+      } else if (/^[A-Z\s]{2,}:?$/i.test(line) || /^[A-Z\s]{2,}$/i.test(line)) {
+        // This looks like a new section header we don't explicitly handle
+        currentSection = "";
+        continue;
+      }
+      
+      // Add content to current section
+      if (currentSection) {
+        if (currentSection === "achievements" || currentSection === "goals") {
+          // For achievements and goals, each line is a separate item
+          if (line.trim()) {
+            // Check if line starts with a bullet point, if not add one
+            const cleanLine = line.replace(/^[-•*]\s*/, "").trim();
+            if (cleanLine) {
+              if (currentSection === "achievements") {
+                sections.achievements.push(cleanLine);
+              } else {
+                sections.goals.push(cleanLine);
+              }
+            }
+          }
+        } else {
+          // For other sections, accumulate text
+          sectionContent.push(line);
+          
+          if (currentSection === "profile") {
+            sections.profile = sectionContent.join(' ');
+          } else if (currentSection === "skills") {
+            sections.skills = sectionContent.join('\n');
+          } else if (currentSection === "languages") {
+            sections.languages = sectionContent.join('\n');
+          } else if (currentSection === "education") {
+            sections.education = sectionContent.join('\n');
+          }
+        }
+      } else if (!currentSection && i >= 3) {
+        // If we haven't identified a section yet but we're past the header,
+        // assume it's part of the profile
+        if (!sections.profile) {
+          sections.profile = line;
+        } else {
+          sections.profile += ' ' + line;
+        }
+      }
+    }
+    
+    // Generate default sections if missing
+    if (!sections.profile) {
+      sections.profile = "Professional profile information not provided.";
+      improvements.push("Add a professional profile summary");
+    }
+    
+    if (sections.achievements.length === 0) {
+      improvements.push("Add quantifiable achievements with metrics");
+    }
+    
+    if (sections.goals.length === 0) {
+      improvements.push("Add clear career goals and objectives");
+    }
+    
+    if (!sections.skills) {
+      sections.skills = "Skills information not provided.";
+      improvements.push("Add relevant skills for your target position");
+    }
+    
+    setStructuredCV(sections);
+    setImprovements(improvements);
+    
+    return sections;
+  };
+  
+  // Format structured CV as text
+  const formatStructuredCV = () => {
+    if (!structuredCV) return "";
+    
+    let formattedText = "";
+    
+    // Header
+    if (structuredCV.header) {
+      formattedText += structuredCV.header + "\n\n";
+    }
+    
+    // Profile
+    if (structuredCV.profile) {
+      formattedText += "PROFILE\n" + structuredCV.profile + "\n\n";
+    }
+    
+    // Achievements
+    if (structuredCV.achievements.length > 0) {
+      formattedText += "ACHIEVEMENTS\n";
+      structuredCV.achievements.forEach(achievement => {
+        formattedText += "• " + achievement + "\n";
+      });
+      formattedText += "\n";
+    }
+    
+    // Goals
+    if (structuredCV.goals.length > 0) {
+      formattedText += "GOALS\n";
+      structuredCV.goals.forEach(goal => {
+        formattedText += "• " + goal + "\n";
+      });
+      formattedText += "\n";
+    }
+    
+    // Skills
+    if (structuredCV.skills) {
+      formattedText += "SKILLS\n" + structuredCV.skills + "\n\n";
+    }
+    
+    // Languages
+    if (structuredCV.languages) {
+      formattedText += "LANGUAGES\n" + structuredCV.languages + "\n\n";
+    }
+    
+    // Education
+    if (structuredCV.education) {
+      formattedText += "EDUCATION\n" + structuredCV.education + "\n";
+    }
+    
+    return formattedText;
+  };
+  
+  // Process optimized text when it changes
+  useEffect(() => {
+    if (optimizedText) {
+      const processed = processOptimizedText(optimizedText);
+      setProcessedText(processed);
+      structureCV(processed);
+    }
+  }, [optimizedText]);
+  
   // Polling mechanism for process status
   useEffect(() => {
     let timeoutId: NodeJS.Timeout | null = null;
@@ -305,6 +552,8 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             // Update state with optimization results
             if (data.optimizedText) {
               setOptimizedText(data.optimizedText);
+              // Process the optimized text
+              setProcessedText(processOptimizedText(data.optimizedText));
             }
             
             if (data.improvements) {
@@ -352,7 +601,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     return () => {
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [statusPollingEnabled, statusPollingInterval, selectedCVId]);
+  }, [statusPollingEnabled, statusPollingInterval, selectedCVId, processOptimizedText]);
   
   // Add a useEffect to detect when processing is taking too long
   useEffect(() => {
@@ -374,35 +623,48 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     };
   }, [isProcessing, processingStatus]);
   
+  // Update structured CV whenever processed text changes
+  useEffect(() => {
+    if (processedText) {
+      const structured = structureCV(processedText);
+      setStructuredCV(structured);
+    }
+  }, [processedText, structureCV]);
+  
   // Handle DOCX download
   const handleDownloadDocx = useCallback(async () => {
     if (!selectedCVId) {
-      setError("Please select a CV first");
+      toast({
+        title: "No CV selected",
+        description: "Please select a CV to download",
+        variant: "destructive",
+      });
       return;
     }
-    
+
+    if (!processedText && !optimizedText) {
+      toast({
+        title: "No optimized content",
+        description: "Please optimize your CV first",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsDownloadingDocx(true);
-    
+
     try {
-      // First, try to get the optimized text
-      let optimizedTextToUse = optimizedText;
+      // Use the formatted structured CV for the DOCX
+      const textToUse = formatStructuredCV() || processedText || optimizedText;
       
-      // If we don't have optimized text yet, we need to optimize the CV first
-      if (!optimizedTextToUse) {
-        setError("Please optimize the CV first before downloading");
-        setIsDownloadingDocx(false);
-        return;
-      }
-      
-      // Call the API to generate the DOCX file
-      const response = await fetch('/api/cv/generate-docx', {
-        method: 'POST',
+      const response = await fetch("/api/cv/generate-docx", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           cvId: selectedCVId,
-          optimizedText: optimizedTextToUse,
+          optimizedText: textToUse,
         }),
       });
       
@@ -433,13 +695,13 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     } finally {
       setIsDownloadingDocx(false);
     }
-  }, [selectedCVId, selectedCVName, optimizedText]);
+  }, [selectedCVId, selectedCVName, optimizedText, processedText, formatStructuredCV]);
   
   return (
     <Card className="w-full shadow-lg border-0 bg-[#1A1A1A]">
       <CardHeader className="bg-[#121212] text-white rounded-t-lg">
         <CardTitle className="text-[#B4916C] flex items-center gap-2">
-          <span>Enhanced CV Optimizer</span>
+          <span>Optimize CV</span>
         </CardTitle>
       </CardHeader>
       
@@ -518,23 +780,120 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
           <div className="mt-6">
             <div className="space-y-6">
               <div className="rounded-lg border border-gray-800 overflow-hidden mt-4">
-                <div className="bg-gray-900/50 p-4">
+                <div className="bg-[#050505] p-4">
                   <h4 className="text-white font-medium mb-4">Optimization Results</h4>
                   
-                  <div className="mb-4">
-                    <div className="bg-gray-800 p-4 rounded-md">
-                      <h5 className="text-white font-medium mb-2">Optimized Content</h5>
-                      <div className="text-gray-300 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto p-2 bg-gray-900 rounded">
-                        {optimizedText || "No optimized content available yet."}
-                      </div>
+                  {/* View Toggle */}
+                  <div className="flex items-center justify-end mb-4">
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => setShowStructuredView(false)}
+                        className={`px-3 py-1 text-sm rounded-md ${!showStructuredView ? 'bg-[#B4916C] text-[#050505] font-medium' : 'bg-[#121212] text-gray-400'}`}
+                      >
+                        Raw Text
+                      </button>
+                      <button
+                        onClick={() => setShowStructuredView(true)}
+                        className={`px-3 py-1 text-sm rounded-md ${showStructuredView ? 'bg-[#B4916C] text-[#050505] font-medium' : 'bg-[#121212] text-gray-400'}`}
+                      >
+                        Structured View
+                      </button>
                     </div>
+                  </div>
+                  
+                  {/* Content Display */}
+                  <div className="mb-4">
+                    {showStructuredView ? (
+                      <div className="bg-[#121212] p-4 rounded-md">
+                        <h5 className="text-white font-medium mb-2">Structured CV</h5>
+                        
+                        {/* Header */}
+                        {structuredCV.header && (
+                          <div className="mb-4 text-center border-b border-[#B4916C] pb-2">
+                            <div className="text-white font-bold text-lg">{structuredCV.header.split('\n')[0]}</div>
+                            <div className="text-gray-400 text-sm">
+                              {structuredCV.header.split('\n').slice(1).join(' | ')}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Profile */}
+                        {structuredCV.profile && (
+                          <div className="mb-4">
+                            <h6 className="text-[#B4916C] font-medium mb-2">PROFILE</h6>
+                            <p className="text-gray-300 text-sm">{structuredCV.profile}</p>
+                          </div>
+                        )}
+                        
+                        {/* Achievements */}
+                        {structuredCV.achievements.length > 0 && (
+                          <div className="mb-4 bg-[#0A0A0A] p-3 rounded-md border-l-2 border-[#B4916C]">
+                            <h6 className="text-[#B4916C] font-medium mb-2">ACHIEVEMENTS</h6>
+                            <ul className="list-disc pl-5 space-y-1 text-gray-300 text-sm">
+                              {structuredCV.achievements.map((achievement, index) => (
+                                <li key={index}>{achievement}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        
+                        {/* Goals */}
+                        {structuredCV.goals.length > 0 && (
+                          <div className="mb-4 bg-[#0A0A0A] p-3 rounded-md border-l-2 border-[#B4916C]">
+                            <h6 className="text-[#B4916C] font-medium mb-2">GOALS</h6>
+                            <ul className="list-disc pl-5 space-y-1 text-gray-300 text-sm">
+                              {structuredCV.goals.map((goal, index) => (
+                                <li key={index}>{goal}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        
+                        {/* Skills */}
+                        {structuredCV.skills && (
+                          <div className="mb-4">
+                            <h6 className="text-[#B4916C] font-medium mb-2">SKILLS</h6>
+                            <div className="text-gray-300 text-sm whitespace-pre-wrap">
+                              {structuredCV.skills}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Languages */}
+                        {structuredCV.languages && (
+                          <div className="mb-4">
+                            <h6 className="text-[#B4916C] font-medium mb-2">LANGUAGES</h6>
+                            <div className="text-gray-300 text-sm whitespace-pre-wrap">
+                              {structuredCV.languages}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Education */}
+                        {structuredCV.education && (
+                          <div className="mb-4">
+                            <h6 className="text-[#B4916C] font-medium mb-2">EDUCATION</h6>
+                            <div className="text-gray-300 text-sm whitespace-pre-wrap">
+                              {structuredCV.education}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="bg-[#121212] p-4 rounded-md">
+                        <h5 className="text-white font-medium mb-2">Optimized Content</h5>
+                        <div className="text-gray-300 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto p-2 bg-gray-900 rounded">
+                          {formatStructuredCV() || processedText || optimizedText || "No optimized content available yet."}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   {/* Download DOCX Button */}
                   <Button
                     onClick={handleDownloadDocx}
                     disabled={isDownloadingDocx || !optimizedText}
-                    className="w-full bg-[#050505] hover:bg-gray-800 text-white border border-gray-700 mb-4"
+                    className="w-full bg-[#121212] hover:bg-gray-800 text-white border border-gray-700 mb-4"
                   >
                     {isDownloadingDocx ? (
                       <>

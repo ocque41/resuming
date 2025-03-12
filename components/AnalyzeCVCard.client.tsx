@@ -264,12 +264,39 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
     return languages[langCode] || langCode;
   };
 
+  // Add a function to generate a CV summary
+  const getCVSummary = () => {
+    if (!analysis) {
+      return "No analysis available yet.";
+    }
+    
+    try {
+      // Create a summary based on strengths and industry
+      let summary = `This CV appears to be for a ${analysis.industry || "general"} professional. `;
+      
+      // Add strengths if available
+      if (analysis.strengths && analysis.strengths.length > 0) {
+        summary += `Key strengths include: ${analysis.strengths.slice(0, 3).join(", ")}. `;
+      }
+      
+      // Add recommendations if available
+      if (analysis.recommendations && analysis.recommendations.length > 0) {
+        summary += `Consider improving: ${analysis.recommendations.slice(0, 2).join(", ")}.`;
+      }
+      
+      return summary;
+    } catch (error) {
+      console.error("Error generating CV summary:", error);
+      return "Unable to generate summary. Please try analyzing again.";
+    }
+  };
+
   return (
     <Card className="w-full shadow-lg border-0 bg-[#1A1A1A]">
       <CardHeader className="bg-[#121212] text-white rounded-t-lg">
         <CardTitle className="text-[#B4916C] flex items-center gap-2">
           <BarChart2 className="w-5 h-5" />
-          <span>CV Analysis</span>
+          <span>Analyze CV</span>
         </CardTitle>
       </CardHeader>
       
@@ -343,26 +370,15 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
             </div>
             
             <div className="rounded-lg border border-gray-800 overflow-hidden mt-4">
-              <div className="bg-gray-900/50 p-4">
+              <div className="bg-[#050505] p-4">
                 <h3 className="text-xl font-semibold mb-4 flex items-center text-white">
                   <span className="text-[#B4916C] mr-2">
                     <FileText size={20} />
                   </span>
-                  Top Keywords
+                  CV Summary
                 </h3>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {getTopKeywords().length > 0 ? (
-                    getTopKeywords().map((keyword, index) => (
-                      <span 
-                        key={index}
-                        className="px-3 py-1 bg-[#050505] border border-gray-700 rounded-full text-gray-300 text-sm"
-                      >
-                        {keyword}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-gray-400">No keywords detected</span>
-                  )}
+                <div className="text-gray-300 text-sm">
+                  {getCVSummary()}
                 </div>
               </div>
             </div>

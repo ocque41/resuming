@@ -1,0 +1,23 @@
+---
+description: current top priority
+globs: 
+---
+Optimize the content and design of the optimized cv result document.
+
+- Delete edit words like "Developed" "Achieved" "Incresead" "Coordinated"
+
+- Delete all *
+
+- implement the sections Goals or Achievements
+    this sections will be backed up by actual data
+        the consist of 3 bullet point highlithing the user best career achievements and their top priority goals right now
+            the formating of this section shall be quatified, showing numbers of an estimated acomplished in this goals and achievements
+
+- order of the optimized cv
+    1. header (currently perfect)
+    2. Profile quick summary of the user
+    3. Achievements
+    4. Goals
+    5. Skills
+    6. Languages
+    7. Education
