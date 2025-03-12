@@ -134,11 +134,25 @@ async function extractKeywordsFromJobDescription(jobDescription: string): Promis
       messages: [
         {
           role: "system",
-          content: "You are a helpful assistant that extracts important keywords from job descriptions. Focus on skills, technologies, qualifications, and responsibilities. Return only a JSON array of strings with no additional text."
+          content: `You are an expert CV and resume keyword analyzer specializing in ATS (Applicant Tracking Systems).
+          
+Your task is to extract the most important keywords from job descriptions that would help a CV pass through ATS filters and impress hiring managers.
+
+Focus on extracting these types of keywords:
+1. Hard skills (technical skills, software, tools, methodologies)
+2. Soft skills (communication, leadership, problem-solving)
+3. Industry-specific terminology and buzzwords
+4. Required qualifications and certifications
+5. Experience levels and job titles
+6. Key responsibilities and deliverables
+
+Return ONLY a JSON object with a single "keywords" property containing an array of strings.
+Each keyword should be specific, relevant, and likely to be used in ATS filtering.
+Aim for 15-25 keywords depending on the job description length and complexity.`
         },
         {
           role: "user",
-          content: `Extract the most important keywords from this job description that a candidate should highlight in their CV:\n\n${jobDescription}`
+          content: `Extract the most important keywords from this job description that a candidate should include in their CV to pass ATS filters and impress hiring managers:\n\n${jobDescription}`
         }
       ],
       response_format: { type: "json_object" },
@@ -149,11 +163,16 @@ async function extractKeywordsFromJobDescription(jobDescription: string): Promis
     const content = response.choices[0]?.message?.content || "{}";
     const parsedContent = JSON.parse(content);
     
-    if (Array.isArray(parsedContent.keywords)) {
-      return parsedContent.keywords;
+    if (Array.isArray(parsedContent.keywords) && parsedContent.keywords.length > 0) {
+      // Filter out any non-string values and limit to 30 keywords max
+      return parsedContent.keywords
+        .filter((keyword: any) => typeof keyword === 'string')
+        .map((keyword: string) => keyword.trim())
+        .filter((keyword: string) => keyword.length > 0)
+        .slice(0, 30);
     }
     
-    // Fallback to simple keyword extraction if AI fails
+    // Fallback to simple keyword extraction if AI fails or returns empty array
     return extractKeywordsManually(jobDescription);
     
   } catch (error) {
@@ -164,47 +183,106 @@ async function extractKeywordsFromJobDescription(jobDescription: string): Promis
 }
 
 /**
- * Simple manual keyword extraction as fallback
+ * Enhanced manual keyword extraction as fallback
  */
 function extractKeywordsManually(text: string): string[] {
-  // Common job-related keywords to look for
-  const commonKeywords = [
-    'management', 'leadership', 'development', 'marketing', 'sales', 'finance',
-    'accounting', 'human resources', 'hr', 'operations', 'project management',
-    'research', 'analysis', 'data', 'software', 'engineering', 'design',
-    'customer service', 'communication', 'healthcare', 'education', 'technology',
-    'it', 'programming', 'web development', 'mobile', 'cloud', 'ai', 'machine learning',
-    'blockchain', 'cybersecurity', 'networking', 'database', 'sql', 'python', 'java',
-    'javascript', 'react', 'angular', 'vue', 'node', 'aws', 'azure', 'gcp'
-  ];
+  // Common job-related keywords by category
+  const commonKeywords = {
+    technical: [
+      'software', 'development', 'programming', 'engineering', 'data', 'analysis',
+      'python', 'java', 'javascript', 'typescript', 'react', 'angular', 'vue', 'node',
+      'aws', 'azure', 'gcp', 'cloud', 'devops', 'ci/cd', 'docker', 'kubernetes',
+      'sql', 'nosql', 'database', 'api', 'rest', 'graphql', 'microservices',
+      'machine learning', 'ai', 'artificial intelligence', 'deep learning', 'nlp',
+      'blockchain', 'cybersecurity', 'networking', 'infrastructure', 'architecture'
+    ],
+    business: [
+      'management', 'leadership', 'strategy', 'operations', 'project management',
+      'product management', 'agile', 'scrum', 'kanban', 'lean', 'six sigma',
+      'marketing', 'sales', 'business development', 'customer success',
+      'finance', 'accounting', 'budget', 'forecasting', 'analysis',
+      'human resources', 'hr', 'recruitment', 'talent acquisition'
+    ],
+    soft_skills: [
+      'communication', 'teamwork', 'collaboration', 'problem-solving',
+      'critical thinking', 'analytical', 'creativity', 'innovation',
+      'adaptability', 'flexibility', 'time management', 'organization',
+      'leadership', 'mentoring', 'coaching', 'conflict resolution'
+    ],
+    industry: [
+      'healthcare', 'finance', 'banking', 'insurance', 'retail', 'e-commerce',
+      'manufacturing', 'logistics', 'supply chain', 'transportation',
+      'education', 'government', 'non-profit', 'consulting',
+      'media', 'entertainment', 'advertising', 'marketing',
+      'technology', 'telecommunications', 'aerospace', 'automotive'
+    ],
+    qualifications: [
+      'bachelor', 'master', 'phd', 'mba', 'certification', 'license',
+      'pmp', 'cpa', 'cfa', 'aws certified', 'azure certified', 'google certified',
+      'scrum master', 'product owner', 'six sigma', 'itil', 'prince2'
+    ]
+  };
+  
+  // Flatten the categories into a single array
+  const allCommonKeywords = Object.values(commonKeywords).flat();
   
   // Convert text to lowercase for case-insensitive matching
   const lowerText = text.toLowerCase();
   
-  // Find matches
-  const matches = commonKeywords.filter(keyword => 
+  // Find matches from common keywords
+  const matches = allCommonKeywords.filter(keyword => 
     lowerText.includes(keyword.toLowerCase())
   );
   
-  // Extract additional potential keywords (words that appear multiple times)
-  const words = lowerText.split(/\s+/);
-  const wordCounts: Record<string, number> = {};
+  // Extract n-grams (1-3 words) from the text
+  const words = lowerText
+    .replace(/[^\w\s]/g, ' ') // Replace punctuation with spaces
+    .split(/\s+/)
+    .filter(word => word.length > 2); // Only consider words with more than 2 characters
   
+  // Generate word counts for single words
+  const wordCounts: Record<string, number> = {};
   words.forEach(word => {
-    // Only consider words of reasonable length
-    if (word.length > 4 && word.length < 20) {
+    if (word.length > 3 && word.length < 20) {
       wordCounts[word] = (wordCounts[word] || 0) + 1;
     }
   });
   
-  // Get words that appear multiple times
-  const frequentWords = Object.entries(wordCounts)
-    .filter(([word, count]) => count > 2 && !commonKeywords.includes(word))
-    .map(([word]) => word)
-    .slice(0, 10); // Limit to top 10
+  // Generate bigrams and trigrams (2-word and 3-word phrases)
+  const phrases: Record<string, number> = {};
+  for (let i = 0; i < words.length - 1; i++) {
+    // Bigrams
+    if (words[i].length > 2 && words[i+1].length > 2) {
+      const bigram = `${words[i]} ${words[i+1]}`;
+      phrases[bigram] = (phrases[bigram] || 0) + 1;
+    }
+    
+    // Trigrams
+    if (i < words.length - 2 && words[i].length > 2 && words[i+1].length > 2 && words[i+2].length > 2) {
+      const trigram = `${words[i]} ${words[i+1]} ${words[i+2]}`;
+      phrases[trigram] = (phrases[trigram] || 0) + 1;
+    }
+  }
   
-  // Combine common keywords and frequent words
-  return [...new Set([...matches, ...frequentWords])].slice(0, 20); // Limit to top 20 unique keywords
+  // Get frequent single words (appearing more than once)
+  const frequentWords = Object.entries(wordCounts)
+    .filter(([word, count]) => count > 1 && !matches.includes(word))
+    .sort((a, b) => b[1] - a[1])
+    .map(([word]) => word)
+    .slice(0, 15);
+  
+  // Get frequent phrases (appearing more than once)
+  const frequentPhrases = Object.entries(phrases)
+    .filter(([phrase, count]) => count > 1 && !matches.includes(phrase))
+    .sort((a, b) => b[1] - a[1])
+    .map(([phrase]) => phrase)
+    .slice(0, 10);
+  
+  // Combine all keywords and remove duplicates
+  const combinedKeywords = [...new Set([...matches, ...frequentWords, ...frequentPhrases])];
+  
+  // Limit to 25 keywords maximum
+  return combinedKeywords.slice(0, 25);
 }
 
 /**
@@ -245,23 +323,31 @@ async function optimizeCVForJob(
       messages: [
         {
           role: "system",
-          content: `You are a professional CV optimizer. Your task is to optimize a CV for a specific job description.
+          content: `You are a professional CV optimizer specializing in ATS optimization and job-specific tailoring. Your task is to optimize a CV for a specific job description.
           
           Follow these guidelines:
-          1. Maintain the original structure and sections of the CV
+          1. Maintain the original structure and sections of the CV (Header, Profile, Achievements, Goals, Skills, Languages, Education)
           2. Highlight relevant skills and experiences that match the job description
-          3. Use industry-standard terminology from the job description
-          4. Ensure the CV remains factual and truthful - do not invent experiences or skills
+          3. Use industry-standard terminology and exact keywords from the job description
+          4. Ensure the CV remains factual and truthful - enhance existing content but do not invent experiences or skills
           5. Keep the same formatting style (bullet points, paragraphs, etc.)
-          6. Identify keywords from the job description that are already present in the CV
-          7. Suggest improvements to better match the job requirements
-          8. Calculate a match score between the CV and job description
+          6. For each achievement, ensure it includes quantifiable metrics (numbers, percentages, etc.)
+          7. Tailor the Profile section to emphasize experience and skills relevant to the job
+          8. Reorder Skills to prioritize those most relevant to the job description
+          9. Ensure all sections have proper content - no "Not specified" or empty sections
+          
+          For ATS optimization:
+          - Use exact keyword matches from the job description
+          - Include industry-specific terminology
+          - Use standard section headings
+          - Incorporate keywords naturally throughout the CV
+          - Use simple formatting that ATS systems can parse easily
           
           Return your response as a JSON object with the following properties:
-          - optimizedText: the optimized CV text
+          - optimizedText: the complete optimized CV text with all sections properly formatted
           - matchScore: a number between 0-100 representing how well the optimized CV matches the job
-          - keywordsMatched: an array of keywords from the job description found in the CV
-          - suggestedImprovements: an array of specific suggestions to further improve the CV`
+          - keywordsMatched: an array of keywords from the job description found in the CV, with context about where and how they're used
+          - suggestedImprovements: an array of specific, actionable suggestions to further improve the CV for this job`
         },
         {
           role: "user",
@@ -276,29 +362,74 @@ async function optimizeCVForJob(
           Here are some key keywords identified from the job description:
           ${keywords.join(", ")}
           
-          Please optimize this CV for the job description, highlight relevant skills, and provide a match score, keywords matched, and suggested improvements.`
+          Please optimize this CV for the job description, highlight relevant skills, and provide a detailed match score, keywords matched with context, and specific actionable improvements.`
         }
       ],
       response_format: { type: "json_object" },
-      temperature: 0.7,
+      temperature: 0.5,
     });
     
     const result = JSON.parse(response.choices[0].message.content || "{}");
     
+    // Ensure we have valid data for each field
+    const optimizedText = result.optimizedText || cvText;
+    const matchScore = typeof result.matchScore === 'number' ? result.matchScore : initialMatchScore;
+    
+    // Process keywords matched to ensure they're in the right format
+    let processedKeywordsMatched = keywordsMatched;
+    if (Array.isArray(result.keywordsMatched)) {
+      processedKeywordsMatched = result.keywordsMatched.map((item: any) => {
+        if (typeof item === 'string') return item;
+        if (typeof item === 'object' && item !== null && 'keyword' in item) return item.keyword;
+        return String(item);
+      });
+    }
+    
+    // Ensure suggestions are strings
+    let processedSuggestions: string[] = [];
+    if (Array.isArray(result.suggestedImprovements)) {
+      processedSuggestions = result.suggestedImprovements.map((item: any) => String(item));
+    }
+    
+    // If we don't have enough suggestions, generate some basic ones
+    if (processedSuggestions.length < 3) {
+      const basicSuggestions = [
+        "Add more quantifiable achievements with specific metrics",
+        "Include more keywords from the job description in your Profile section",
+        "Highlight specific technical skills that match the job requirements",
+        "Tailor your Goals section to align with the company's mission",
+        "Reorganize your Skills section to prioritize those most relevant to this position"
+      ];
+      
+      // Add basic suggestions until we have at least 3
+      while (processedSuggestions.length < 3) {
+        const suggestion = basicSuggestions[processedSuggestions.length % basicSuggestions.length];
+        if (!processedSuggestions.includes(suggestion)) {
+          processedSuggestions.push(suggestion);
+        }
+      }
+    }
+    
     return {
-      optimizedText: result.optimizedText || cvText,
-      matchScore: result.matchScore || initialMatchScore,
-      keywordsMatched: result.keywordsMatched || keywordsMatched,
-      suggestedImprovements: result.suggestedImprovements || []
+      optimizedText,
+      matchScore,
+      keywordsMatched: processedKeywordsMatched,
+      suggestedImprovements: processedSuggestions
     };
   } catch (error) {
-    console.error("Error optimizing CV for job:", error);
+    logger.error("Error optimizing CV for job:", error instanceof Error ? error.message : String(error));
+    
     // Return original text with basic match data if optimization fails
     return {
       optimizedText: cvText,
       matchScore: 0,
       keywordsMatched: [],
-      suggestedImprovements: ["Failed to generate optimization suggestions."]
+      suggestedImprovements: [
+        "Failed to generate optimization suggestions due to an error.",
+        "Try to include more keywords from the job description in your CV.",
+        "Ensure your achievements include quantifiable metrics (numbers, percentages).",
+        "Tailor your profile section to highlight experience relevant to this job."
+      ]
     };
   }
 } 

@@ -134,7 +134,7 @@ export default function SpecificOptimizeCVCard({ selectedCVId, selectedCVName }:
           <span>Job-Specific Optimization</span>
         </CardTitle>
         <CardDescription className="text-gray-400">
-          Optimize your CV for a specific job. Please paste the job description below.
+          Optimize your CV for a specific job by pasting the job description. Our AI will tailor your CV to match the job requirements and help you pass ATS filters.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4 md:p-6 space-y-4">
@@ -166,12 +166,20 @@ export default function SpecificOptimizeCVCard({ selectedCVId, selectedCVName }:
           {isLoading ? "Optimizing..." : "Optimize CV for This Job"}
         </Button>
         
+        {isLoading && (
+          <div className="flex flex-col items-center justify-center py-6">
+            <div className="w-12 h-12 border-4 border-[#B4916C] border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p className="text-gray-300 text-center">Tailoring your CV to the job description...</p>
+            <p className="text-gray-500 text-sm text-center mt-2">This may take a minute.</p>
+          </div>
+        )}
+        
         {optimizationResult && (
           <div className="mt-6 space-y-4">
             {/* Match Score */}
             <div className="bg-[#0A0A0A] p-4 rounded-md border border-gray-800">
               <div className="flex justify-between items-center mb-2">
-                <h3 className="text-white font-medium">Match Score</h3>
+                <h3 className="text-white font-medium">ATS Match Score</h3>
                 <span className={`text-xl font-bold ${getMatchScoreColor(optimizationResult.matchScore)}`}>
                   {optimizationResult.matchScore}%
                 </span>
@@ -185,12 +193,22 @@ export default function SpecificOptimizeCVCard({ selectedCVId, selectedCVName }:
                   "rgb(239, 68, 68)"
                 } as React.CSSProperties}
               />
+              <p className="text-gray-400 text-xs mt-2">
+                {optimizationResult.matchScore >= 80 
+                  ? "Excellent match! Your CV is well-tailored for this job."
+                  : optimizationResult.matchScore >= 60
+                  ? "Good match. With a few improvements, your CV could be even better for this job."
+                  : "Your CV needs significant improvements to match this job description."}
+              </p>
             </div>
             
             {/* Keywords Matched */}
             {optimizationResult.keywordsMatched.length > 0 && (
               <div className="bg-[#0A0A0A] p-4 rounded-md border border-gray-800">
-                <h3 className="text-white font-medium mb-2">Keywords Matched</h3>
+                <h3 className="text-white font-medium mb-2">ATS Keywords Matched</h3>
+                <p className="text-gray-400 text-xs mb-3">
+                  These keywords from the job description were found in your CV. ATS systems typically look for exact keyword matches.
+                </p>
                 <div className="flex flex-wrap gap-2">
                   {optimizationResult.keywordsMatched.map((keyword, index) => (
                     <Badge key={index} className="bg-[#B4916C]/20 text-[#B4916C] hover:bg-[#B4916C]/30">
@@ -205,10 +223,13 @@ export default function SpecificOptimizeCVCard({ selectedCVId, selectedCVName }:
             {optimizationResult.suggestedImprovements.length > 0 && (
               <div className="bg-[#0A0A0A] p-4 rounded-md border border-gray-800">
                 <h3 className="text-white font-medium mb-2">Suggested Improvements</h3>
-                <ul className="space-y-1 text-gray-300 text-sm">
+                <p className="text-gray-400 text-xs mb-3">
+                  Consider these improvements to better tailor your CV for this specific job.
+                </p>
+                <ul className="space-y-2 text-gray-300 text-sm">
                   {optimizationResult.suggestedImprovements.map((improvement, index) => (
                     <li key={index} className="flex items-start">
-                      <span className="text-[#B4916C] mr-2">•</span>
+                      <span className="text-[#B4916C] mr-2 mt-0.5">•</span>
                       <span>{improvement}</span>
                     </li>
                   ))}
@@ -218,7 +239,10 @@ export default function SpecificOptimizeCVCard({ selectedCVId, selectedCVName }:
             
             {/* Optimized CV */}
             <div className="bg-[#0A0A0A] p-4 rounded-md border border-gray-800">
-              <h3 className="text-white font-medium mb-2">Optimized CV</h3>
+              <h3 className="text-white font-medium mb-2">Job-Optimized CV</h3>
+              <p className="text-gray-400 text-xs mb-3">
+                This version of your CV has been tailored to highlight relevant skills and experience for this specific job.
+              </p>
               <div className="whitespace-pre-wrap text-sm text-gray-300 bg-[#050505] p-4 rounded-md max-h-96 overflow-y-auto">
                 {optimizationResult.optimizedText}
               </div>
