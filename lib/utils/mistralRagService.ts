@@ -782,131 +782,33 @@ export class MistralRAGService {
    */
   public async extractKeywords(): Promise<string[]> {
     try {
-      logger.info('Extracting keywords from CV with RAG service');
-      
-      // Default keywords to ensure we always have something to return
-      const defaultKeywords = [
-        'Professional Experience',
-        'Skills',
-        'Education',
-        'Communication',
-        'Problem Solving',
-        'Teamwork',
-        'Leadership',
-        'Project Management',
-        'Time Management',
-        'Analytical Skills'
-      ];
-      
-      // If no chunks are available, return default keywords
-      if (!this.chunks || this.chunks.length === 0) {
-        logger.warn('No chunks available for keyword extraction, returning default keywords');
-        return defaultKeywords;
-      }
-      
-      // Get relevant chunks for keyword extraction
-      const query = 'important keywords skills experience qualifications';
-      const relevantChunks = await this.retrieveRelevantChunks(query, 3);
-      
-      if (relevantChunks.length === 0) {
-        logger.warn('No relevant chunks found for keyword extraction, returning default keywords');
-        return defaultKeywords;
-      }
-      
-      // Prepare the prompt for keyword extraction
-      const prompt = `
-        Extract the most important keywords from this CV/resume that would be relevant for ATS (Applicant Tracking Systems).
-        Focus on skills, qualifications, technologies, and industry-specific terms.
-        
-        CV content:
-        ${relevantChunks.join('\n\n')}
-        
-        Return ONLY a JSON array of 10-15 keywords, with each keyword being a string.
-        Example: ["JavaScript", "Project Management", "Data Analysis"]
-      `;
-      
-      // Generate the response
-      const response = await this.generateResponse(prompt, true);
-      
-      // Parse the response
-      try {
-        // Try to parse as JSON first
-        let keywords = JSON.parse(response);
-        
-        // Ensure it's an array
-        if (!Array.isArray(keywords)) {
-          throw new Error('Response is not an array');
-        }
-        
-        // Filter out non-string items and empty strings
-        keywords = keywords.filter(keyword => typeof keyword === 'string' && keyword.trim() !== '');
-        
-        // Format keywords (capitalize first letter of each word)
-        keywords = keywords.map((keyword: string) => 
-          keyword.split(' ')
-            .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-            .join(' ')
-        );
-        
-        // Combine with default keywords if we don't have enough
-        if (keywords.length < 5) {
-          keywords = [...keywords, ...defaultKeywords];
-        }
-        
-        // Remove duplicates
-        keywords = [...new Set(keywords)];
-        
-        // Limit to 15 keywords
-        return keywords.slice(0, 15);
-      } catch (parseError) {
-        logger.error(`Error parsing keyword extraction response: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-        
-        // Try to extract keywords using regex if JSON parsing fails
-        const keywordMatches = response.match(/"([^"]+)"/g);
-        if (keywordMatches && keywordMatches.length > 0) {
-          // Remove quotes and filter empty strings
-          let extractedKeywords = keywordMatches
-            .map(match => match.replace(/"/g, '').trim())
-            .filter(keyword => keyword !== '');
-          
-          // Format keywords
-          extractedKeywords = extractedKeywords.map((keyword: string) => 
-            keyword.split(' ')
-              .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-              .join(' ')
-          );
-          
-          // Combine with default keywords if we don't have enough
-          if (extractedKeywords.length < 5) {
-            extractedKeywords = [...extractedKeywords, ...defaultKeywords];
+      const response = await this.openaiClient.chat.completions.create({
+        model: this.openaiGenerationModel,
+        messages: [
+          {
+            role: "system",
+            content: "You are a CV keyword extractor. Extract important keywords from the CV text based on relevance and frequency."
+          },
+          {
+            role: "user",
+            content: this.originalCVText
           }
-          
-          // Remove duplicates
-          extractedKeywords = [...new Set(extractedKeywords)];
-          
-          // Limit to 15 keywords
-          return extractedKeywords.slice(0, 15);
-        }
-        
-        // Return default keywords if extraction failed
-        return defaultKeywords;
+        ],
+        max_tokens: 150,
+        temperature: 0.3
+      });
+
+      const keywordsContent = response.choices[0]?.message?.content;
+      if (!keywordsContent) {
+        logger.warn("No keywords extracted from the response.");
+        return [];
       }
+
+      const keywords = keywordsContent.split(',').map(keyword => keyword.trim());
+      return keywords;
     } catch (error) {
-      logger.error(`Error extracting keywords: ${error instanceof Error ? error.message : String(error)}`);
-      
-      // Return default keywords on error
-      return [
-        'Professional Experience',
-        'Skills',
-        'Education',
-        'Communication',
-        'Problem Solving',
-        'Teamwork',
-        'Leadership',
-        'Project Management',
-        'Time Management',
-        'Analytical Skills'
-      ];
+      logger.error("Error extracting keywords:", error instanceof Error ? error.message : String(error));
+      return [];
     }
   }
 

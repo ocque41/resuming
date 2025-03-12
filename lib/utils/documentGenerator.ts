@@ -16,8 +16,11 @@ export class DocumentGenerator {
       logger.info("Starting enhanced document generation");
       const startTime = Date.now();
       
+      // Remove occurrences of 'Developed'
+      const filteredText = cvText.replace(/\bDeveloped\b/g, '');
+      
       // Split the CV text into sections based on common headers
-      const sections = this.splitIntoSections(cvText);
+      const sections = this.splitIntoSections(filteredText);
       
       // Create document
       const doc = new Document({

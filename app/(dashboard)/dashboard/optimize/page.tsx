@@ -23,7 +23,7 @@ export default async function OptimizePage() {
   const formattedCvs = cvs.map((cv: any) => `${cv.fileName}|${cv.id}`);
   
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-[#050505] text-white">
       <div className="max-w-3xl mx-auto px-6 sm:px-8 py-8 relative">
         {/* Back button - simple arrow */}
         <div className="absolute top-6 left-4">
