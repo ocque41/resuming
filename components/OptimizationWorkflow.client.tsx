@@ -155,8 +155,8 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
           } else {
             // Not processing or idle
             setIsProcessing(false);
-            setProcessingStatus(null);
-            setProcessingProgress(null);
+            setProcessingStatus("");
+            setProcessingProgress(0);
             
             // Stop polling if nothing is happening
             if (!data.processing && !data.isComplete) {
@@ -371,7 +371,7 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
         <div className="mb-4 p-4 border rounded-md bg-[#050505]">
           <h3 className="text-lg font-semibold">Processing CV</h3>
           <p className="text-sm text-muted-foreground">
-            {processingStatus}. Might take a couple minutes, please wait for an accurate optimization.
+            {processingStatus || "Processing..."}. Might take a couple minutes, please wait for an accurate optimization.
           </p>
           <div className="w-full h-2 bg-secondary mt-2 rounded-full overflow-hidden">
             <div 

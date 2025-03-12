@@ -88,7 +88,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isProcessed, setIsProcessed] = useState<boolean>(false);
   const [processingProgress, setProcessingProgress] = useState<number>(0);
-  const [processingStatus, setProcessingStatus] = useState<string>("");
+  const [processingStatus, setProcessingStatus] = useState<string | null>("");
   const [error, setError] = useState<string | null>(null);
   
   // State for ATS scores
@@ -326,8 +326,8 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
           } else {
             // Not processing or idle
             setIsProcessing(false);
-            setProcessingStatus(null);
-            setProcessingProgress(null);
+            setProcessingStatus("");
+            setProcessingProgress(0);
             
             // Stop polling if nothing is happening
             if (!data.processing && !data.isComplete) {
@@ -488,7 +488,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
           <div className="mb-4 p-4 border rounded-md bg-[#050505]">
             <h3 className="text-lg font-semibold">Processing CV</h3>
             <p className="text-sm text-muted-foreground">
-              {processingStatus}. Might take a couple minutes, please wait for an accurate optimization.
+              {processingStatus || "Processing..."}. Might take a couple minutes, please wait for an accurate optimization.
             </p>
             <div className="w-full h-2 bg-secondary mt-2 rounded-full overflow-hidden">
               <div 
