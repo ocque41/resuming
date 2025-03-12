@@ -36,6 +36,9 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
   const [statusPollingInterval, setStatusPollingInterval] = useState<number>(1000);
   const [statusPollingEnabled, setStatusPollingEnabled] = useState<boolean>(false);
   
+  // In the component state, add a new state variable to track if processing is taking too long
+  const [processingTooLong, setProcessingTooLong] = useState<boolean>(false);
+  
   // Check for pre-analyzed CV
   useEffect(() => {
     const checkForPreAnalyzedCV = async () => {
@@ -185,6 +188,26 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
     };
   }, [statusPollingEnabled, statusPollingInterval, selectedCVId, activeStep]);
   
+  // Add a useEffect to detect when processing is taking too long
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
+    if (isProcessing && processingStatus) {
+      // Set a timeout to show the reset button after 30 seconds
+      timeoutId = setTimeout(() => {
+        setProcessingTooLong(true);
+      }, 30000); // 30 seconds
+    } else {
+      // Clear processing too long flag when not processing
+      setProcessingTooLong(false);
+    }
+    
+    // Clean up the timeout when the component unmounts or status changes
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [isProcessing, processingStatus]);
+  
   // Handle when analysis is complete with defensive coding 
   const handleAnalysisComplete = async (cvId: string) => {
     try {
@@ -293,6 +316,42 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
     setError(null);
   };
   
+  // Add a function to handle reset
+  const handleResetProcessing = async () => {
+    try {
+      // Reset processing state
+      setProcessingStatus('selecting');
+      setProcessingTooLong(false);
+      
+      // If we have a CV ID, call the API to cancel processing
+      if (selectedCVId) {
+        const response = await fetch(`/api/cv/process/cancel?cvId=${selectedCVId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          console.error('Failed to cancel processing');
+        }
+      }
+      
+      // Reset progress
+      setProcessingProgress(0);
+      setProcessingStatus('selecting');
+      
+      // Show toast notification
+      showToast({
+        title: 'Processing Reset',
+        description: 'CV processing has been reset. You can try again.',
+        duration: 5000
+      });
+    } catch (error) {
+      console.error('Error resetting processing:', error);
+    }
+  };
+  
   return (
     <div className="w-full max-w-6xl mx-auto">
       {error && (
@@ -313,7 +372,20 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
               style={{ width: `${processingProgress || 0}%` }}
             />
           </div>
-          <p className="text-sm text-right mt-1">{processingProgress || 0}%</p>
+          <div className="flex justify-between items-center mt-1">
+            <p className="text-sm">{processingProgress || 0}%</p>
+            {processingTooLong && (
+              <button
+                onClick={handleResetProcessing}
+                className="px-3 py-1 bg-red-900/30 hover:bg-red-800/50 text-red-300 border border-red-800 rounded-md flex items-center text-xs"
+              >
+                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Taking too long? Reset
+              </button>
+            )}
+          </div>
           {error && (
             <Button
               variant="outline"

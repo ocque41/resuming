@@ -20,7 +20,7 @@ export class DocumentGenerator {
       logger.info("Starting enhanced document generation");
       const startTime = Date.now();
       
-      // Remove occurrences of 'Developed' and 'Delivered'
+      // Clean up text for better parsing
       let filteredText = cvText
         .replace(/\bDeveloped\b/g, '')
         .replace(/\bDelivered\b/g, '')
@@ -39,10 +39,10 @@ export class DocumentGenerator {
             properties: {
               page: {
                 margin: {
-                  top: convertInchesToTwip(0.5),
-                  right: convertInchesToTwip(0.5),
-                  bottom: convertInchesToTwip(0.5),
-                  left: convertInchesToTwip(0.5),
+                  top: convertInchesToTwip(0.75),
+                  right: convertInchesToTwip(0.75),
+                  bottom: convertInchesToTwip(0.75),
+                  left: convertInchesToTwip(0.75),
                 },
                 size: {
                   orientation: PageOrientation.PORTRAIT,
@@ -116,7 +116,7 @@ export class DocumentGenerator {
       
       // Create a table for the header section with two columns
       // Left column: Name and job title
-      // Right column: Photo (if available)
+      // Right column: Contact info
       const headerTable = new Table({
         width: {
           size: 100,
@@ -136,7 +136,7 @@ export class DocumentGenerator {
               // Left column for name and job title
               new TableCell({
                 width: {
-                  size: photoPath ? 75 : 100,
+                  size: 70,
                   type: WidthType.PERCENTAGE,
                 },
                 borders: {
@@ -146,41 +146,57 @@ export class DocumentGenerator {
                   right: { style: BorderStyle.NONE },
                 },
                 children: [
-                  // Name in bold, uppercase, large font
+                  // Name in bold, large font
                   new Paragraph({
                     alignment: AlignmentType.LEFT,
                     children: [
                       new TextRun({
                         text: headerLines[0].trim().toUpperCase(),
                         bold: true,
-                        size: 36, // ~18pt font
+                        size: 28, // ~14pt font
                         color: "000000", // Black
                       }),
                     ],
                     spacing: {
-                      after: 120
+                      after: 100
                     }
                   }),
-                  // Job title
+                  // Job title if available
                   ...(headerLines.length > 1 ? [
                     new Paragraph({
                       alignment: AlignmentType.LEFT,
                       children: [
                         new TextRun({
-                          text: headerLines[1].trim().toUpperCase(),
+                          text: headerLines[1].trim(),
                           size: 24, // ~12pt font
                           color: "666666", // Gray
                         }),
                       ],
                       spacing: {
-                        after: 120
+                        after: 100
                       }
                     })
                   ] : []),
+                ],
+              }),
+              
+              // Right column for contact info
+              new TableCell({
+                width: {
+                  size: 30,
+                  type: WidthType.PERCENTAGE,
+                },
+                borders: {
+                  top: { style: BorderStyle.NONE },
+                  bottom: { style: BorderStyle.NONE },
+                  left: { style: BorderStyle.NONE },
+                  right: { style: BorderStyle.NONE },
+                },
+                children: [
                   // Contact info
                   ...(headerLines.length > 2 ? headerLines.slice(2).map(line => 
                     new Paragraph({
-                      alignment: AlignmentType.LEFT,
+                      alignment: AlignmentType.RIGHT,
                       children: [
                         new TextRun({
                           text: line.trim(),
@@ -188,49 +204,36 @@ export class DocumentGenerator {
                         }),
                       ],
                       spacing: {
-                        after: 80
+                        after: 60
                       }
                     })
                   ) : [])
                 ],
               }),
-              
-              // Right column for photo (if available)
-              ...(photoPath ? [
-                new TableCell({
-                  width: {
-                    size: 25,
-                    type: WidthType.PERCENTAGE,
-                  },
-                  borders: {
-                    top: { style: BorderStyle.NONE },
-                    bottom: { style: BorderStyle.NONE },
-                    left: { style: BorderStyle.NONE },
-                    right: { style: BorderStyle.NONE },
-                  },
-                  children: [
-                    new Paragraph({
-                      alignment: AlignmentType.RIGHT,
-                      children: [
-                        new ImageRun({
-                          data: fs.readFileSync(photoPath),
-                          transformation: {
-                            width: 100,
-                            height: 120,
-                          },
-                          type: 'png',
-                        }),
-                      ],
-                    }),
-                  ],
-                }),
-              ] : []),
             ],
           }),
         ],
       });
       
       children.push(headerTable);
+      
+      // Add a separator line after the header
+      children.push(
+        new Paragraph({
+          border: {
+            bottom: {
+              color: "#CCCCCC",
+              space: 1,
+              style: BorderStyle.SINGLE,
+              size: 1,
+            },
+          },
+          spacing: {
+            before: 120,
+            after: 200
+          }
+        })
+      );
     }
     
     // Process main content
@@ -252,14 +255,13 @@ export class DocumentGenerator {
           new Paragraph({
             children: [
               new TextRun({
-                text: 'ABOUT ME',
+                text: 'PROFILE',
                 bold: true,
                 size: 24, // ~12pt font
                 color: "000000", // Black
               }),
             ],
             spacing: {
-              before: 200,
               after: 120
             }
           })
@@ -280,175 +282,8 @@ export class DocumentGenerator {
                 }),
               ],
               spacing: {
-                before: 80,
-                after: 80
-              }
-            })
-          );
-        });
-      }
-      
-      // Check for Experience section
-      const experienceSection = contentSections['EXPERIENCE'] || 
-                               contentSections['WORK EXPERIENCE'] || 
-                               contentSections['PROFESSIONAL EXPERIENCE'] ||
-                               contentSections['EMPLOYMENT HISTORY'];
-      
-      if (experienceSection) {
-        const experienceContent = experienceSection;
-        
-        // Parse the experience content to find achievement-like statements
-        const achievements = this.extractAchievements(experienceContent);
-        
-        if (achievements.length > 0) {
-          // Add Achievements section
-          children.push(
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: 'ACHIEVEMENTS',
-                  bold: true,
-                  size: 24, // ~12pt font
-                }),
-              ],
-              spacing: {
-                before: 200,
-                after: 120
-              }
-            })
-          );
-          
-          // Add achievement bullet points (limit to top 3)
-          achievements.slice(0, 3).forEach(achievement => {
-            children.push(
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: achievement,
-                    size: 20, // ~10pt font
-                  }),
-                ],
-                bullet: {
-                  level: 0
-                },
-                spacing: {
-                  before: 80,
-                  after: 80
-                }
-              })
-            );
-          });
-        }
-        
-        // Add Experience section
-        children.push(
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: 'EXPERIENCE',
-                bold: true,
-                size: 24, // ~12pt font
-              }),
-            ],
-            spacing: {
-              before: 200,
-              after: 120
-            }
-          })
-        );
-        
-        // Add experience content
-        const experienceLines = experienceContent.split('\n');
-        experienceLines.forEach(line => {
-          const trimmedLine = line.trim();
-          if (trimmedLine.length === 0) return;
-          
-          // Check if this is a bullet point
-          const isBullet = trimmedLine.startsWith('-') || 
-                           trimmedLine.startsWith('•') || 
-                           trimmedLine.startsWith('*');
-          
-          // Add the paragraph with appropriate formatting
-          if (isBullet) {
-            children.push(
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: trimmedLine.substring(1).trim(),
-                    size: 20, // ~10pt font
-                  }),
-                ],
-                bullet: {
-                  level: 0
-                },
-                spacing: {
-                  before: 80,
-                  after: 80
-                }
-              })
-            );
-          } else {
-            // Check if this might be a job title or company (often in bold)
-            const isJobTitle = /\b(19|20)\d{2}\b/.test(trimmedLine) || // Contains a year
-                              trimmedLine.length < 60; // Short line, likely a title
-            
-            children.push(
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: trimmedLine,
-                    size: 20, // ~10pt font
-                    bold: isJobTitle,
-                  }),
-                ],
-                spacing: {
-                  before: isJobTitle ? 120 : 80,
-                  after: 80
-                }
-              })
-            );
-          }
-        });
-      } else {
-        // If no experience section, add Goals section instead
-        children.push(
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: 'GOALS',
-                bold: true,
-                size: 24, // ~12pt font
-              }),
-            ],
-            spacing: {
-              before: 200,
-              after: 120
-            }
-          })
-        );
-        
-        // Add goals bullet points based on skills
-        const goals = [
-          "Secure a challenging position that leverages my skills in problem-solving and innovation",
-          "Contribute to a forward-thinking organization where I can apply my expertise to drive meaningful results",
-          "Develop professionally through continuous learning and collaboration with industry experts"
-        ];
-        
-        goals.forEach(goal => {
-          children.push(
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: goal,
-                  size: 20, // ~10pt font
-                }),
-              ],
-              bullet: {
-                level: 0
-              },
-              spacing: {
-                before: 80,
-                after: 80
+                before: 60,
+                after: 60
               }
             })
           );
@@ -460,7 +295,7 @@ export class DocumentGenerator {
         new Paragraph({
           children: [
             new TextRun({
-              text: 'COMPETENCES',
+              text: 'SKILLS',
               bold: true,
               size: 24, // ~12pt font
               color: "000000", // Black
@@ -470,29 +305,10 @@ export class DocumentGenerator {
         })
       );
       
-      // Create a table for skills with 3 columns
-      const skillsTable = new Table({
-        width: {
-          size: 100,
-          type: WidthType.PERCENTAGE,
-        },
-        borders: {
-          top: { style: BorderStyle.NONE },
-          bottom: { style: BorderStyle.NONE },
-          left: { style: BorderStyle.NONE },
-          right: { style: BorderStyle.NONE },
-          insideHorizontal: { style: BorderStyle.NONE },
-          insideVertical: { style: BorderStyle.NONE },
-        },
-        rows: [],
-      });
-      
-      // Prioritize skills from metadata if available
+      // Prioritize skills from content or metadata
       let skillsList: string[] = [];
       
-      if (metadata && metadata.skills && Array.isArray(metadata.skills) && metadata.skills.length > 0) {
-        skillsList = metadata.skills;
-      } else if (contentSections['SKILLS']) {
+      if (contentSections['SKILLS']) {
         // Extract skills from content
         const skillsLines = contentSections['SKILLS'].split('\n');
         skillsList = skillsLines
@@ -507,11 +323,13 @@ export class DocumentGenerator {
             return trimmedLine;
           })
           .filter(Boolean) as string[];
+      } else if (metadata && metadata.skills && Array.isArray(metadata.skills) && metadata.skills.length > 0) {
+        skillsList = metadata.skills;
       } else if (metadata && metadata.industry) {
         skillsList = this.getIndustrySkills(metadata.industry);
       }
       
-      // Create rows with 3 skills per row
+      // Create a table for skills with 3 columns
       const SKILLS_PER_ROW = 3;
       const tableRows: TableRow[] = [];
       
@@ -580,20 +398,19 @@ export class DocumentGenerator {
       // Add the skills table to the document
       children.push(skillsTableWithRows);
       
-      // Add Work Experience section
-      // Check for Experience section
-      const workExperienceSection = contentSections['EXPERIENCE'] || 
+      // Add Experience section
+      const experienceSection = contentSections['EXPERIENCE'] || 
                                contentSections['WORK EXPERIENCE'] || 
                                contentSections['PROFESSIONAL EXPERIENCE'] ||
                                contentSections['EMPLOYMENT HISTORY'];
       
-      if (workExperienceSection) {
-        // Add Work Experience header
+      if (experienceSection) {
+        // Add Experience header
         children.push(
           new Paragraph({
             children: [
               new TextRun({
-                text: 'WORK EXPERIENCE',
+                text: 'EXPERIENCE',
                 bold: true,
                 size: 24, // ~12pt font
                 color: "000000", // Black
@@ -607,29 +424,12 @@ export class DocumentGenerator {
         );
         
         // Process experience content
-        const experienceLines = workExperienceSection.split('\n');
+        const experienceLines = experienceSection.split('\n');
         let currentJobTitle = '';
         let currentCompany = '';
         let currentDateRange = '';
         let currentBullets: string[] = [];
         let isProcessingJob = false;
-        
-        // Add a horizontal separator
-        children.push(
-          new Paragraph({
-            border: {
-              bottom: {
-                color: "#CCCCCC",
-                space: 1,
-                style: BorderStyle.SINGLE,
-                size: 1,
-              },
-            },
-            spacing: {
-              after: 120
-            }
-          })
-        );
         
         for (let i = 0; i < experienceLines.length; i++) {
           const line = experienceLines[i].trim();
@@ -650,7 +450,7 @@ export class DocumentGenerator {
                 new Paragraph({
                   border: {
                     bottom: {
-                      color: "#CCCCCC",
+                      color: "#EEEEEE",
                       space: 1,
                       style: BorderStyle.SINGLE,
                       size: 1,
@@ -703,7 +503,7 @@ export class DocumentGenerator {
         }
       }
       
-      // Now add Education section at the end if it exists
+      // Add Education section if it exists
       if (educationSection) {
         // Add Education header
         children.push(
@@ -718,23 +518,6 @@ export class DocumentGenerator {
             ],
             spacing: {
               before: 200,
-              after: 120
-            }
-          })
-        );
-        
-        // Add a horizontal separator
-        children.push(
-          new Paragraph({
-            border: {
-              bottom: {
-                color: "#CCCCCC",
-                space: 1,
-                style: BorderStyle.SINGLE,
-                size: 1,
-              },
-            },
-            spacing: {
               after: 120
             }
           })
@@ -767,7 +550,7 @@ export class DocumentGenerator {
                 new Paragraph({
                   border: {
                     bottom: {
-                      color: "#CCCCCC",
+                      color: "#EEEEEE",
                       space: 1,
                       style: BorderStyle.SINGLE,
                       size: 1,
