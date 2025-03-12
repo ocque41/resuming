@@ -15,17 +15,24 @@ const DocumentCombobox = dynamic(
   { ssr: false }
 );
 
-// Define props interface
+// Define props interface with serializable types
 interface EnhancePageClientProps {
-  documents: {
+  documentsData: {
     id: string;
     fileName: string;
-    createdAt: Date;
+    createdAt: string; // ISO string format
   }[];
 }
 
-export default function EnhancePageClient({ documents }: EnhancePageClientProps) {
+export default function EnhancePageClient({ documentsData }: EnhancePageClientProps) {
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
+  
+  // Convert string dates back to Date objects for the DocumentCombobox
+  const documents = documentsData.map(doc => ({
+    id: doc.id,
+    fileName: doc.fileName,
+    createdAt: new Date(doc.createdAt)
+  }));
   
   return (
     <div className="flex flex-col h-screen bg-[#121212]">

@@ -50,14 +50,16 @@ export default async function DocumentEditorPage() {
     }
     
     // Map the documents to match the Document interface
-    const documents: Document[] = rawDocuments?.map(doc => ({
+    const documents = rawDocuments?.map(doc => ({
       id: doc.id.toString(),
       fileName: doc.fileName || 'Untitled Document',
-      createdAt: doc.createdAt || new Date()
+      // Convert Date to string for serialization
+      createdAt: doc.createdAt ? doc.createdAt.toISOString() : new Date().toISOString()
     })) || [];
     
-    // Pass the data to the client component
-    return <EnhancePageClient documents={documents} />;
+    // Pass only serializable data to the client component
+    // Change 'documents' to 'documentsData' to match the prop name in the client component
+    return <EnhancePageClient documentsData={documents} />;
   } catch (error) {
     console.error("Error in DocumentEditorPage:", error);
     
