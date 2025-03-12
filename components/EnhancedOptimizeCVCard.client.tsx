@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, RefreshCw, Clock, Info } from "lucide-react";
+import { AlertCircle, RefreshCw, Clock, Info, Download } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cacheDocument, getCachedDocument, clearCachedDocument, getCacheAge } from "@/lib/cache/documentCache";
 
@@ -120,6 +120,9 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   // Debug state
   const [debugMode, setDebugMode] = useState<boolean>(false);
   const [debugInfo, setDebugInfo] = useState<any>(null);
+  
+  // Add state for DOCX download
+  const [isDownloadingDocx, setIsDownloadingDocx] = useState<boolean>(false);
   
   // Auto-select first CV if available
   useEffect(() => {
@@ -353,6 +356,70 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     };
   }, [isProcessing, progress, optimizedText]);
   
+  // Handle DOCX download
+  const handleDownloadDocx = useCallback(async () => {
+    if (!selectedCVId) {
+      setError("Please select a CV first");
+      setErrorType('process');
+      return;
+    }
+    
+    setIsDownloadingDocx(true);
+    
+    try {
+      // First, try to get the optimized text
+      let optimizedTextToUse = optimizedText;
+      
+      // If we don't have optimized text yet, we need to optimize the CV first
+      if (!optimizedTextToUse) {
+        setError("Please optimize the CV first before downloading");
+        setErrorType('process');
+        setIsDownloadingDocx(false);
+        return;
+      }
+      
+      // Call the API to generate the DOCX file
+      const response = await fetch('/api/cv/generate-docx', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cvId: selectedCVId,
+          optimizedText: optimizedTextToUse,
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate DOCX file');
+      }
+      
+      const data = await response.json();
+      
+      if (!data.success || !data.docxBase64) {
+        throw new Error('Failed to generate DOCX file');
+      }
+      
+      // Create a download link for the DOCX file
+      const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${data.docxBase64}`;
+      const downloadLink = document.createElement('a');
+      downloadLink.href = linkSource;
+      downloadLink.download = `${selectedCVName?.replace(/\.[^/.]+$/, '') || 'optimized'}-cv.docx`;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      
+      console.log('DOCX file downloaded successfully');
+    } catch (error) {
+      console.error('Error downloading DOCX:', error);
+      setError(error instanceof Error ? error.message : 'An unknown error occurred');
+      setErrorType('process');
+    } finally {
+      setIsDownloadingDocx(false);
+    }
+  }, [selectedCVId, selectedCVName, optimizedText]);
+  
   return (
     <Card className="w-full shadow-lg border-0 bg-[#1A1A1A]">
       <CardHeader className="bg-[#121212] text-white rounded-t-lg">
@@ -471,6 +538,25 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                       </div>
                     </div>
                   </div>
+                  
+                  {/* Download DOCX Button */}
+                  <Button
+                    onClick={handleDownloadDocx}
+                    disabled={isDownloadingDocx || !optimizedText}
+                    className="w-full bg-[#050505] hover:bg-gray-800 text-white border border-gray-700 mb-4"
+                  >
+                    {isDownloadingDocx ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        Generating DOCX...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-4 w-4 mr-2" />
+                        Download as DOCX
+                      </>
+                    )}
+                  </Button>
                   
                   {improvements && improvements.length > 0 && (
                     <div className="mb-4">

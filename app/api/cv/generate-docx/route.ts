@@ -1,103 +1,135 @@
-import { NextRequest, NextResponse } from "next/server";
-// Import from our mock implementations
-import { auth, currentUser } from "@/lib/mock-auth";
-import { db } from "@/lib/mock-db";
-import { cv } from "@/lib/mock-schema";
-import { eq } from "drizzle-orm";
-import { formatError } from "@/lib/utils";
-import { generateDocx } from "@/lib/docx";
-import { standardizeCV } from "@/lib/cv-formatter";
-
-export const dynamic = "force-dynamic";
+import { NextRequest, NextResponse } from 'next/server';
+import { generateDocx } from '@/lib/docx/docxGenerator';
+import { getUser, getCVsForUser } from '@/lib/db/queries.server';
 
 export async function POST(request: NextRequest) {
   try {
-    // Authentication check
-    const { userId } = auth();
-    if (!userId) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-    
-    const user = await currentUser();
+    // Check authentication
+    const user = await getUser();
     if (!user) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-    
+
     // Parse request body
     const body = await request.json();
-    const { cvId, rawText } = body;
-    
-    let cvText = '';
-    let cvRecord = null;
-    
-    if (cvId) {
-      // Fetch CV from database
-      cvRecord = await db.query.cv.findFirst({
-        where: eq(cv.id, cvId),
-      });
-      
-      if (!cvRecord) {
-        return NextResponse.json(
-          { error: "CV not found" },
-          { status: 404 }
-        );
-      }
-      
-      if (cvRecord.userId !== userId) {
-        return NextResponse.json(
-          { error: "Unauthorized: CV does not belong to this user" },
-          { status: 403 }
-        );
-      }
-      
-      // Use optimized text if available (for accepted optimizations),
-      // otherwise use original text
-      if (cvRecord.optimizedText && cvRecord.isOptimizationAccepted) {
-        cvText = cvRecord.optimizedText;
-      } else if (cvRecord.rawText) {
+    const { cvId, optimizedText } = body;
+
+    if (!cvId) {
+      return NextResponse.json({ success: false, error: 'CV ID is required' }, { status: 400 });
+    }
+
+    let cvText = optimizedText;
+
+    // If optimized text wasn't provided, fetch it from the database
+    if (!cvText) {
+      try {
+        // Get all CVs for the user
+        const cvs = await getCVsForUser(user.id);
+        
+        // Find the specific CV by ID
+        const cvRecord = cvs.find(cv => cv.id === parseInt(cvId));
+
+        if (!cvRecord) {
+          return NextResponse.json({ success: false, error: 'CV not found' }, { status: 404 });
+        }
+
+        // Use rawText since optimizedText doesn't exist in the schema
+        if (!cvRecord.rawText) {
+          return NextResponse.json(
+            { success: false, error: 'No text available for this CV' },
+            { status: 400 }
+          );
+        }
+
         cvText = cvRecord.rawText;
-      } else {
+      } catch (dbError) {
+        console.error('Database error:', dbError);
         return NextResponse.json(
-          { error: "No CV text available for DOCX generation" },
-          { status: 400 }
+          { success: false, error: 'Failed to retrieve CV data' },
+          { status: 500 }
         );
       }
-    } else if (rawText) {
-      // Use provided raw text
-      cvText = rawText;
-    } else {
+    }
+
+    // Generate the DOCX file
+    const docxBuffer = await generateDocx(cvText);
+
+    // Convert buffer to base64 for response
+    const base64Data = docxBuffer.toString('base64');
+
+    // Return the base64 data
+    return NextResponse.json({
+      success: true,
+      docxBase64: base64Data,
+    });
+  } catch (error) {
+    console.error('Error generating DOCX:', error);
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'An unknown error occurred' 
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    // Check authentication
+    const user = await getUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Get the CV ID from the query parameters
+    const { searchParams } = new URL(request.url);
+    const cvId = searchParams.get('cvId');
+
+    if (!cvId) {
+      return NextResponse.json({ success: false, error: 'CV ID is required' }, { status: 400 });
+    }
+
+    // Get all CVs for the user
+    const cvs = await getCVsForUser(user.id);
+    
+    // Find the specific CV by ID
+    const cvRecord = cvs.find(cv => cv.id === parseInt(cvId));
+
+    if (!cvRecord) {
+      return NextResponse.json({ success: false, error: 'CV not found' }, { status: 404 });
+    }
+
+    // Use rawText since optimizedText doesn't exist in the schema
+    if (!cvRecord.rawText) {
       return NextResponse.json(
-        { error: "Either cvId or rawText must be provided" },
+        { success: false, error: 'No text available for this CV' },
         { status: 400 }
       );
     }
-    
-    // Standardize the CV structure if needed (for raw text)
-    let standardizedText = cvText;
-    if (!cvRecord?.optimizedText || !cvRecord?.isOptimizationAccepted) {
-      standardizedText = standardizeCV(cvText);
-    }
-    
-    // Generate DOCX from the standardized CV
-    const docxBuffer = await generateDocx(standardizedText);
-    
-    // Encode as base64 for the response
-    const docxBase64 = docxBuffer.toString('base64');
-    
-    return NextResponse.json({
-      success: true,
-      docxBase64
+
+    // Generate the DOCX file
+    const docxBuffer = await generateDocx(cvRecord.rawText);
+
+    // Create a filename for the download
+    const filename = cvRecord.fileName 
+      ? `${cvRecord.fileName.replace(/\.[^/.]+$/, '')}-optimized.docx` 
+      : 'optimized-cv.docx';
+
+    // Return the DOCX file as a downloadable attachment
+    return new NextResponse(docxBuffer, {
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+      },
     });
   } catch (error) {
-    console.error("Error generating CV DOCX:", error);
+    console.error('Error generating DOCX:', error);
     return NextResponse.json(
-      { error: formatError(error) },
+      { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'An unknown error occurred' 
+      },
       { status: 500 }
     );
   }

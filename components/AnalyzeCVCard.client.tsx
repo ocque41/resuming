@@ -30,35 +30,55 @@ interface AnalyzeCVCardProps {
   children?: React.ReactNode;
 }
 
-// New SimpleFileDropdown component to replace the problematic dropdown
+// Updated SimpleFileDropdown component to match ModernFileDropdown
 function SimpleFileDropdown({ cvs, onSelect, selectedCVName }: { cvs: string[]; onSelect: (cvId: string, cvName: string) => void; selectedCVName?: string; }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="relative w-full">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full px-3 py-2 bg-[#121212] border border-gray-700 text-gray-300 rounded"
+        className="w-full px-4 py-3 bg-[#0A0A0A] border border-gray-800 hover:border-[#B4916C] text-gray-300 rounded-md flex justify-between items-center transition-colors duration-200"
+        aria-haspopup="listbox"
+        aria-expanded={open}
       >
-        {selectedCVName || "Select a CV"}
+        <span className="truncate">{selectedCVName || "Select a CV"}</span>
+        <svg 
+          className={`h-5 w-5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} 
+          xmlns="http://www.w3.org/2000/svg" 
+          viewBox="0 0 20 20" 
+          fill="currentColor"
+        >
+          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
       </button>
-      {open && (
-        <ul className="absolute z-10 bg-[#121212] border border-gray-700 w-full rounded mt-1 max-h-60 overflow-auto">
-          {(cvs || []).map(cv => {
-            const parts = cv.split('|');
-            if (parts.length >= 2) {
-              return (
-                <li
-                  key={parts[1]}
-                  className="px-3 py-2 hover:bg-gray-600 cursor-pointer"
-                  onClick={() => { setOpen(false); onSelect(parts[1].trim(), parts[0].trim()); }}
-                >
-                  {parts[0].trim()}
-                </li>
-              );
-            }
-            return null;
-          })}
-        </ul>
+      
+      {open && cvs.length > 0 && (
+        <div className="absolute z-10 w-full mt-1 bg-[#0A0A0A] border border-gray-800 rounded-md shadow-lg max-h-60 overflow-auto">
+          <ul className="py-1" role="listbox">
+            {(cvs || []).map(cv => {
+              const parts = cv.split('|');
+              if (parts.length >= 2) {
+                return (
+                  <li
+                    key={parts[1]}
+                    className="px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white cursor-pointer"
+                    role="option"
+                    onClick={() => { setOpen(false); onSelect(parts[1].trim(), parts[0].trim()); }}
+                  >
+                    {parts[0].trim()}
+                  </li>
+                );
+              }
+              return null;
+            })}
+          </ul>
+        </div>
+      )}
+      
+      {open && cvs.length === 0 && (
+        <div className="absolute z-10 w-full mt-1 bg-[#0A0A0A] border border-gray-800 rounded-md shadow-lg">
+          <div className="px-4 py-2 text-sm text-gray-500">No CVs available</div>
+        </div>
       )}
     </div>
   );
@@ -245,17 +265,18 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
   };
 
   return (
-    <Card className="w-full bg-[#050505] border-gray-800 shadow-xl overflow-hidden">
-      <CardHeader className="bg-[#0A0A0A] border-b border-gray-800 pb-3">
-        <CardTitle className="flex items-center text-white">
-          <BarChart2 className="w-5 h-5 mr-2 text-[#B4916C]" />
-          CV Analysis
+    <Card className="w-full shadow-lg border-0 bg-[#1A1A1A]">
+      <CardHeader className="bg-[#121212] text-white rounded-t-lg">
+        <CardTitle className="text-[#B4916C] flex items-center gap-2">
+          <BarChart2 className="w-5 h-5" />
+          <span>CV Analysis</span>
         </CardTitle>
       </CardHeader>
       
-      <CardContent className="p-4 sm:p-6">
+      <CardContent className="p-6">
         {!analysis && !loading && (
           <div className="mb-6">
+            <div className="mb-2 text-gray-400 text-sm">Select a CV to analyze</div>
             <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0 mb-4">
               <div className="w-full">
                 <SimpleFileDropdown cvs={cvs} selectedCVName={selectedCVName || ""} onSelect={handleCVSelect} />
@@ -263,7 +284,7 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
               <Button
                 onClick={handleAnalyze}
                 disabled={!selectedCVId || loading}
-                className="bg-[#B4916C] hover:bg-[#A3815C] text-white whitespace-nowrap w-full sm:w-auto"
+                className="bg-[#B4916C] hover:bg-[#A27D59] text-[#050505] font-medium whitespace-nowrap w-full sm:w-auto"
               >
                 {loading ? "Analyzing..." : "Analyze CV"}
               </Button>
@@ -284,8 +305,8 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
         )}
         
         {error && (
-          <Alert className="mb-4 bg-red-900/20 text-red-400 border border-red-900">
-            <AlertCircle className="h-4 w-4" />
+          <Alert className="mb-4 bg-red-950 border-red-900 text-red-200">
+            <AlertCircle className="h-4 w-4 mr-2" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
@@ -313,38 +334,38 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
                     {analysis.industry || "General"}
                   </span>
                   {analysis.language && (
-                    <span className="px-2 py-1 bg-blue-500/10 text-blue-400 rounded-md text-xs uppercase">
+                    <span className="px-2 py-1 bg-[#050505] text-gray-400 border border-gray-700 rounded-md text-xs uppercase">
                       {getLanguageName(analysis.language)}
                     </span>
                   )}
                 </div>
+              </div>
+            </div>
+            
+            <div className="rounded-lg border border-gray-800 overflow-hidden mt-4">
+              <div className="bg-gray-900/50 p-4">
+                <h3 className="text-xl font-semibold mb-4 flex items-center text-white">
+                  <span className="text-[#B4916C] mr-2">
+                    <FileText size={20} />
+                  </span>
+                  Top Keywords
+                </h3>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {getTopKeywords().length > 0 ? (
+                    getTopKeywords().map((keyword, index) => (
+                      <span 
+                        key={index}
+                        className="px-3 py-1 bg-[#050505] border border-gray-700 rounded-full text-gray-300 text-sm"
+                      >
+                        {keyword}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-gray-400">No keywords detected</span>
+                  )}
                 </div>
               </div>
             </div>
-        )}
-
-        {analysis && (
-          <div className="mt-6">
-            <h3 className="text-xl font-semibold mb-2 flex items-center">
-              <span className="text-amber-500 mr-2">
-                <FileText size={20} />
-              </span>
-              Top Keywords
-            </h3>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {getTopKeywords().length > 0 ? (
-                getTopKeywords().map((keyword, index) => (
-                    <span 
-                    key={index}
-                    className="px-3 py-1 bg-amber-100/10 border border-amber-200/20 rounded-full text-amber-200 text-sm"
-                    >
-                    {keyword}
-                    </span>
-                ))
-              ) : (
-                <span className="text-gray-400">No keywords detected</span>
-              )}
-              </div>
           </div>
         )}
       </CardContent>
