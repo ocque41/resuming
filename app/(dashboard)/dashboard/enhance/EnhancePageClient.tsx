@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Send, FileText, ChevronDown, Paperclip, ArrowUp } from "lucide-react";
+import { ArrowLeft, Send, FileText, ChevronDown, Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import dynamic from "next/dynamic";
@@ -164,7 +164,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
               className="bg-[#1A1A1A] hover:bg-[#2A2A2A] rounded-full p-2"
               disabled={!inputMessage.trim()}
             >
-              <ArrowUp className="h-5 w-5" />
+              <Send className="h-5 w-5" />
             </button>
           </div>
         </div>
