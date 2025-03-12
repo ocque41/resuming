@@ -87,8 +87,8 @@ export async function GET(request: NextRequest) {
         return new NextResponse(buffer, {
           headers: {
             'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'Content-Disposition': `attachment; filename="${optimizedFileName}"`,
-            'Cache-Control': 'no-cache',
+            'Content-Disposition': `attachment; filename="${optimizedFileName}"; filename*=UTF-8''${encodeURIComponent(optimizedFileName)}`,
+            'Cache-Control': 'no-cache'
           },
         });
       }
@@ -145,6 +145,14 @@ export async function GET(request: NextRequest) {
       
       docxBuffer = Buffer.from(response.data);
       console.log(`Successfully downloaded ${docxBuffer.length} bytes from Dropbox`);
+      
+      // Check if the buffer looks like a DOCX file (should start with PK)
+      const isPkFile = docxBuffer.length > 2 && docxBuffer[0] === 0x50 && docxBuffer[1] === 0x4B;
+      console.log(`File appears to be a valid DOCX/ZIP file: ${isPkFile}`);
+      
+      if (!isPkFile) {
+        console.warn("Warning: Downloaded file does not appear to be a valid DOCX file");
+      }
     } catch (fetchError) {
       console.error("Error fetching DOCX from Dropbox:", fetchError);
       return NextResponse.json({ 

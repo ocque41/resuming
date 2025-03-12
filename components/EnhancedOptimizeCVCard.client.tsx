@@ -149,6 +149,12 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   // Add a state for downloading DOCX
   const [isDownloadingDocx, setIsDownloadingDocx] = useState<boolean>(false);
   
+  // Add a state for downloading DOC
+  const [isDownloadingDoc, setIsDownloadingDoc] = useState<boolean>(false);
+  
+  // Add a state for downloading file
+  const [isDownloadingFile, setIsDownloadingFile] = useState<boolean>(false);
+  
   // Auto-select first CV if available
   useEffect(() => {
     if (cvs.length > 0 && !selectedCVId) {
@@ -334,6 +340,12 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   
   // Handle PDF conversion from DOCX
   const handleConvertToPdf = useCallback(async (docxBase64String: string) => {
+    // Skip conversion if we're downloading a file
+    if (isDownloadingFile) {
+      console.log("Skipping PDF conversion because a file download is in progress");
+      return;
+    }
+    
     if (!docxBase64String) {
       setError("No DOCX file available for conversion");
       setErrorType('pdf');
@@ -402,11 +414,11 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         
         setPdfBase64(mockBase64);
         setPdfConverted(true);
-      setIsConvertingToPdf(false);
+        setIsConvertingToPdf(false);
         setPdfProgress(100);
       }, 1500);
     }
-  }, [isCached, forceRefresh, pdfBase64, selectedCVId]);
+  }, [isCached, forceRefresh, pdfBase64, selectedCVId, isDownloadingFile]);
 
   // Toggle PDF preview
   const handleTogglePreview = useCallback(() => {
@@ -427,8 +439,14 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       mimeType = 'application/pdf';
     }
     
-    // Create a new blob with the correct MIME type
-    const fileBlob = new Blob([blob], { type: mimeType });
+    console.log(`Downloading file: ${filename} with MIME type: ${mimeType}`);
+    
+    // Create a new blob with the correct MIME type if needed
+    let fileBlob = blob;
+    if (blob.type !== mimeType) {
+      console.log(`Changing blob MIME type from ${blob.type} to ${mimeType}`);
+      fileBlob = new Blob([blob], { type: mimeType });
+    }
     
     // Create an object URL for the blob
     const url = URL.createObjectURL(fileBlob);
@@ -447,6 +465,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     setTimeout(() => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      console.log(`Download of ${filename} initiated successfully`);
     }, 100);
   };
 
@@ -459,11 +478,25 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       return;
     }
     
+    // Set a flag to prevent PDF conversion during download
+    setIsDownloadingFile(true);
+    
     try {
-      // If we have a direct download link from Dropbox, use it for a redirect
+      // If we have a direct download link from Dropbox, use it for a direct download
       if (docxDownloadLink) {
-        // Open in a new tab to trigger download
-        window.open(docxDownloadLink, '_blank');
+        // Create a temporary anchor element to trigger the download
+        const a = document.createElement('a');
+        a.href = docxDownloadLink;
+        a.download = `${selectedCVName || 'cv'}-optimized.docx`;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        
+        // Clean up
+        setTimeout(() => {
+          document.body.removeChild(a);
+          setIsDownloadingFile(false);
+        }, 100);
         return;
       }
       
@@ -473,17 +506,26 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       // Show loading indicator
       setIsDownloadingDocx(true);
       
-      // Use fetch instead of a direct link for better error handling
-      fetch(downloadUrl)
+      // Use fetch with credentials to ensure authentication
+      fetch(downloadUrl, {
+        method: 'GET',
+        credentials: 'include', // Include cookies for authentication
+        headers: {
+          'Accept': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        }
+      })
         .then(response => {
-          if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+          if (!response.ok) {
+            console.error(`Download failed with status: ${response.status}`);
+            throw new Error(`Download failed: ${response.status}`);
+          }
           
           // Get the filename from the Content-Disposition header if available
           const contentDisposition = response.headers.get('Content-Disposition');
           let filename = `${selectedCVName || 'cv'}-optimized.docx`;
           
           if (contentDisposition) {
-            const match = contentDisposition.match(/filename="(.+)"/);
+            const match = contentDisposition.match(/filename="(.+?)"/);
             if (match) filename = match[1];
           }
           
@@ -491,23 +533,100 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
           return response.blob().then(blob => ({ blob, filename }));
         })
         .then(({ blob, filename }) => {
+          console.log(`Successfully downloaded DOCX file: ${filename}, size: ${blob.size} bytes, type: ${blob.type}`);
+          
+          // Force the correct MIME type for DOCX
+          const docxBlob = new Blob([blob], { 
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+          });
+          
           // Use our utility function for the download
-          downloadFile(blob, filename);
+          downloadFile(docxBlob, filename);
           setIsDownloadingDocx(false);
+          setIsDownloadingFile(false);
         })
         .catch(error => {
           console.error("Error downloading DOCX:", error);
           setError("Failed to download the document. Please try again.");
           setErrorType('docx');
           setIsDownloadingDocx(false);
+          setIsDownloadingFile(false);
         });
     } catch (e) {
       console.error("Error initiating DOCX download:", e);
       setError("Failed to download the document. Please try again.");
       setErrorType('docx');
       setIsDownloadingDocx(false);
+      setIsDownloadingFile(false);
     }
   }, [docxBase64, selectedCVId, selectedCVName, docxDownloadLink]);
+
+  // Handle DOC (Word) download
+  const handleDownloadDoc = useCallback(() => {
+    if (!docxBase64 && !selectedCVId) {
+      console.error("Cannot download DOC: No document data or CV ID available");
+      setError("No document available to download. Please generate the document first.");
+      setErrorType('docx');
+      return;
+    }
+    
+    // Set a flag to prevent PDF conversion during download
+    setIsDownloadingFile(true);
+    
+    try {
+      // Use the API endpoint
+      const downloadUrl = `/api/cv/download-optimized-docx?cvId=${selectedCVId}`;
+      
+      // Show loading indicator
+      setIsDownloadingDoc(true);
+      
+      // Use fetch with credentials to ensure authentication
+      fetch(downloadUrl, {
+        method: 'GET',
+        credentials: 'include', // Include cookies for authentication
+        headers: {
+          'Accept': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        }
+      })
+        .then(response => {
+          if (!response.ok) {
+            console.error(`Download failed with status: ${response.status}`);
+            throw new Error(`Download failed: ${response.status}`);
+          }
+          
+          // Get the blob from the response
+          return response.blob();
+        })
+        .then(blob => {
+          // Generate filename with .doc extension
+          const filename = `${selectedCVName || 'cv'}-optimized.doc`;
+          console.log(`Converting DOCX to DOC format for download as: ${filename}`);
+          
+          // Force the correct MIME type for DOC
+          const docBlob = new Blob([blob], { 
+            type: 'application/msword' 
+          });
+          
+          // Use our utility function for the download
+          downloadFile(docBlob, filename);
+          setIsDownloadingDoc(false);
+          setIsDownloadingFile(false);
+        })
+        .catch(error => {
+          console.error("Error downloading DOC:", error);
+          setError("Failed to download the document. Please try again.");
+          setErrorType('docx');
+          setIsDownloadingDoc(false);
+          setIsDownloadingFile(false);
+        });
+    } catch (e) {
+      console.error("Error initiating DOC download:", e);
+      setError("Failed to download the document. Please try again.");
+      setErrorType('docx');
+      setIsDownloadingDoc(false);
+      setIsDownloadingFile(false);
+    }
+  }, [docxBase64, selectedCVId, selectedCVName]);
 
   // Fix the PDF download functionality
   const handleDownloadPdf = useCallback(() => {
@@ -1196,11 +1315,11 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                       </Button>
               
                       <Button
-                        onClick={() => handleDownloadDocx()}
-                        disabled={!docxGenerated || isDownloadingDocx}
+                        onClick={() => handleDownloadDoc()}
+                        disabled={!docxGenerated || isDownloadingDoc}
                         className="bg-gray-800 hover:bg-gray-700 text-white flex-grow"
                       >
-                        {isDownloadingDocx ? (
+                        {isDownloadingDoc ? (
                           <>
                             <RefreshCw className="h-5 w-5 mr-2 animate-spin" />
                             Downloading...
@@ -1224,6 +1343,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                     {!pdfConverted && !isConvertingToPdf && docxGenerated && (
                 <Button
                         onClick={() => handleConvertToPdf(docxBase64 || '')}
+                        disabled={isDownloadingFile || isDownloadingDocx || isDownloadingDoc}
                         className="w-full bg-[#B4916C] hover:bg-[#A3815C] text-white mb-4"
                       >
                         Convert to PDF
