@@ -507,7 +507,10 @@ export class MistralRAGService {
         ]
       });
       
-      return response.choices[0]?.message?.content || 'No response generated';
+      const generatedResponse = response.choices[0]?.message?.content || 'No response generated';
+      // Remove any '*Developed *' prefix from the response
+      const cleanedResponse = generatedResponse.replace(/^\*Developed\s*\*?/, '').trim();
+      return cleanedResponse;
     } catch (error) {
       logger.error(`Error generating response: ${error instanceof Error ? error.message : String(error)}`);
       return 'Error generating response. Please try again.';
@@ -593,7 +596,10 @@ export class MistralRAGService {
         throw new Error('Invalid response format from OpenAI API');
       }
       
-      return response.choices[0].message.content || '';
+      const generatedResponse = response.choices[0].message.content || '';
+      // Remove any '*Developed *' prefix from the response
+      const cleanedResponse = generatedResponse.replace(/^\*Developed\s*\*?/, '').trim();
+      return cleanedResponse;
     } catch (error) {
       // Fix error type handling for logger
       const errorMessage = error instanceof Error ? error.message : String(error);

@@ -304,7 +304,9 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
       {isProcessing && (
         <div className="mb-4 p-4 border rounded-md bg-background">
           <h3 className="text-lg font-semibold">Processing CV</h3>
-          <p className="text-sm text-muted-foreground">{processingStatus}</p>
+          <p className="text-sm text-muted-foreground">
+            {processingStatus}. Might take a couple minutes, please wait for an accurate optimization.
+          </p>
           <div className="w-full h-2 bg-secondary mt-2 rounded-full overflow-hidden">
             <div 
               className="h-full bg-primary transition-all duration-300 ease-in-out" 

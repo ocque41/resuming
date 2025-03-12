@@ -293,7 +293,7 @@ export async function processCVWithAI(
             ...updatedMetadata,
             ...analysis,
             processingStatus: 'analysis_complete',
-            processingProgress: 40,
+      processingProgress: 40,
             lastUpdated: new Date().toISOString()
           };
           await updateCVMetadata(cvId, updatedMetadata);

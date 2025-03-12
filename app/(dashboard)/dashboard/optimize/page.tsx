@@ -23,20 +23,20 @@ export default async function OptimizePage() {
   const formattedCvs = cvs.map((cv: any) => `${cv.fileName}|${cv.id}`);
   
   return (
-    <div className="min-h-screen bg-black text-white">
-      <div className="max-w-md mx-auto px-4 sm:px-6 py-6 relative">
+    <div className="min-h-screen bg-gray-900 text-white">
+      <div className="max-w-3xl mx-auto px-6 sm:px-8 py-8 relative">
         {/* Back button - simple arrow */}
         <div className="absolute top-6 left-4">
           <Link 
             href="/dashboard" 
-            className="inline-flex items-center justify-center h-8 w-8 rounded-full hover:bg-gray-800 text-gray-400 hover:text-[#B4916C] transition-colors"
+            className="inline-flex items-center justify-center h-10 w-10 rounded-full hover:bg-gray-800 text-gray-400 hover:text-[#B4916C] transition-colors"
             aria-label="Back to dashboard"
           >
             <ArrowLeft className="h-5 w-5" />
           </Link>
         </div>
         
-        <h1 className="text-xl md:text-2xl font-bold mb-8 text-center mt-2">
+        <h1 className="text-2xl md:text-3xl font-extrabold mb-10 text-center mt-4">
           Optimize Your CV
         </h1>
         
