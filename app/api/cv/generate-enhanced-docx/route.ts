@@ -4,6 +4,7 @@ import { db } from "@/lib/db/drizzle";
 import { cvs } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { DocumentGenerator } from "@/lib/utils/documentGenerator";
+import { uploadBufferToDropbox } from "@/lib/dropboxStorage";
 
 /**
  * POST /api/cv/generate-enhanced-docx
@@ -122,7 +123,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Check if we already have a DOCX and aren't forcing a refresh
-    if (!forceRefresh && metadata.docxBase64) {
+    if (!forceRefresh && metadata.docxBase64 && cv.optimizedDocxPath) {
       console.log(`Using existing DOCX for CV ${cvId}`);
       
       // Get ATS scores from metadata
@@ -133,6 +134,7 @@ export async function POST(request: NextRequest) {
       return new Response(JSON.stringify({ 
         success: true, 
         docxBase64: metadata.docxBase64,
+        optimizedDocxPath: cv.optimizedDocxPath,
         originalAtsScore,
         improvedAtsScore,
         improvements,
@@ -172,6 +174,20 @@ export async function POST(request: NextRequest) {
       });
     }
     
+    // Upload the DOCX to Dropbox
+    let optimizedDocxPath = '';
+    let docxDownloadLink = '';
+    try {
+      const fileName = cv.fileName || `cv-${cvId}.docx`;
+      const uploadResult = await uploadBufferToDropbox(docxBuffer, fileName);
+      optimizedDocxPath = uploadResult.path;
+      docxDownloadLink = uploadResult.link;
+      console.log(`Uploaded DOCX to Dropbox: ${optimizedDocxPath}`);
+    } catch (uploadError) {
+      console.error(`Error uploading DOCX to Dropbox:`, uploadError);
+      // Continue with base64 only approach if upload fails
+    }
+    
     // Convert buffer to base64
     const docxBase64 = Buffer.from(docxBuffer).toString('base64');
     
@@ -197,7 +213,10 @@ export async function POST(request: NextRequest) {
     // Update CV record with safety
     try {
       await db.update(cvs)
-        .set({ metadata: JSON.stringify(updatedMetadata) })
+        .set({ 
+          metadata: JSON.stringify(updatedMetadata),
+          optimizedDocxPath: optimizedDocxPath || null
+        })
         .where(eq(cvs.id, cvIdNumber));
       
       console.log(`Enhanced DOCX metadata updated for CV ID: ${cvId}`);
@@ -210,6 +229,8 @@ export async function POST(request: NextRequest) {
     return new Response(JSON.stringify({ 
       success: true, 
       docxBase64,
+      optimizedDocxPath,
+      docxDownloadLink,
       originalAtsScore,
       improvedAtsScore,
       improvements,

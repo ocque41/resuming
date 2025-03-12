@@ -182,7 +182,11 @@ export async function generateEnhancedCVDocx(
   try {
     // Parse the optimized CV content
     console.log("Parsing optimized CV content into formatted structure");
-    const formattedCV = parseOptimizedCVContent(optimizedContent);
+    const formattedCV = parseOptimizedCVContent(optimizedContent) || {
+      education: [],
+      languages: [],
+      experience: []
+    };
     
     // Validate the parsed content to ensure we have required sections
     if (!formattedCV.profile || formattedCV.profile.trim().length === 0) {
@@ -408,14 +412,14 @@ export async function generateEnhancedCVDocx(
             }),
             ...formattedCV.education.flatMap(edu => [
               new Paragraph({
-                text: edu.degree,
+                text: edu.degree || '',
                 heading: HeadingLevel.HEADING_2,
                 spacing: {
                   after: 80,
                 },
               }),
               new Paragraph({
-                text: `${edu.institution}${edu.year ? `, ${edu.year}` : ''}`,
+                text: [edu.institution, edu.year].filter(Boolean).join(', '),
                 spacing: {
                   after: 160,
                 },

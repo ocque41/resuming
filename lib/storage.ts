@@ -197,3 +197,38 @@ export async function uploadBufferToStorage(buffer: Buffer, dropboxPath: string)
     throw error;
   }
 }
+
+/**
+ * Saves a file buffer to Dropbox
+ * @param dbx - The Dropbox client instance
+ * @param dropboxPath - The path where the file should be stored in Dropbox
+ * @param buffer - The file buffer to upload
+ * @returns A Promise that resolves when the file is saved
+ */
+export async function saveFileToDropbox(
+  dbx: any,
+  dropboxPath: string, 
+  buffer: Buffer
+): Promise<void> {
+  try {
+    await dbx.filesUpload({
+      path: dropboxPath,
+      contents: buffer,
+      mode: { ".tag": "overwrite" }
+    });
+    
+    console.log(`File saved to Dropbox at: ${dropboxPath}`);
+  } catch (error: any) {
+    if (error.status === 401) {
+      console.error("Access token expired, refreshing token...");
+      await updateDropboxAccessToken();
+      const refreshedDbx = getDropboxClient();
+      return await saveFileToDropbox(refreshedDbx, dropboxPath, buffer);
+    }
+    console.error(`Error saving file to Dropbox: ${error.message || error}`);
+    throw new Error(`Failed to save file to Dropbox: ${error.message || error}`);
+  }
+}
+
+// Re-export the Dropbox client getter to make it accessible
+export { getDropboxClient } from "./dropboxAdmin";

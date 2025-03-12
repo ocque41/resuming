@@ -78,6 +78,7 @@ export const cvs = pgTable("cvs", {
   rawText: text("rawText"), // New column for extracted PDF text
   createdAt: timestamp("createdat").notNull().defaultNow(),
   metadata: text("metadata").default(""),
+  optimizedDocxPath: text("optimized_docx_path"), // New column for optimized DOCX path
 });
 
 export const documents = pgTable('documents', {

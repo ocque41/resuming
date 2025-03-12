@@ -10,9 +10,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import dynamic from "next/dynamic";
 
+// Define the Document type locally instead of importing it
+interface Document {
+  id: string;
+  fileName: string;
+  createdAt: Date;
+}
+
 // Dynamically import client components
-const DocumentCombobox = dynamic(() => import("@/components/DocumentCombobox.client"));
-const ErrorRefreshButton = dynamic(() => import("@/components/ErrorRefreshButton.client"));
+const DocumentCombobox = dynamic(
+  () => import("@/components/DocumentCombobox.client"),
+  { ssr: false }
+);
+
+const ErrorRefreshButton = dynamic(
+  () => import("@/components/ErrorRefreshButton.client"), 
+  { ssr: false }
+);
 
 export default async function DocumentEditorPage() {
   try {
@@ -45,11 +59,12 @@ export default async function DocumentEditorPage() {
     }
     
     // Map the documents to match the Document interface in DocumentCombobox
-    const documents = rawDocuments.map(doc => ({
+    // Convert to the expected DocumentType with Date objects
+    const documents: Document[] = rawDocuments?.map(doc => ({
       id: doc.id.toString(),
-      fileName: doc.fileName,
-      createdAt: doc.createdAt
-    }));
+      fileName: doc.fileName || 'Untitled Document',
+      createdAt: doc.createdAt || new Date() // Keep as Date object
+    })) || [];
     
     return (
       <div className="flex flex-col h-screen bg-[#121212]">

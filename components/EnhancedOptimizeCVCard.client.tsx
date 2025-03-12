@@ -101,6 +101,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   const [docxGenerated, setDocxGenerated] = useState<boolean>(false);
   const [docxBase64, setDocxBase64] = useState<string | null>(null);
   const [docxProgress, setDocxProgress] = useState<number>(0);
+  const [docxDownloadLink, setDocxDownloadLink] = useState<string | null>(null);
   
   // State for PDF conversion
   const [isConvertingToPdf, setIsConvertingToPdf] = useState<boolean>(false);
@@ -409,42 +410,42 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     setShowPdfPreview(!showPdfPreview);
   }, [showPdfPreview]);
 
-  // Improved DOCX and DOC download with validation
-  const handleDownloadDocx = useCallback((format: 'docx' | 'doc') => {
-    if (!docxBase64) {
-      console.error(`Cannot download ${format.toUpperCase()}: No document data available`);
-      setError(`${format.toUpperCase()} data is not available. Please try generating again.`);
+  // Handle DOCX download
+  const handleDownloadDocx = useCallback(() => {
+    if (!docxBase64 && !selectedCVId) {
+      console.error("Cannot download DOCX: No DOCX data or CV ID available");
+      setError("No document available to download. Please generate the document first.");
       setErrorType('docx');
       return;
     }
     
     try {
-      // Validate the base64 data
-      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(docxBase64)) {
-        throw new Error("Invalid base64 data");
+      // If we have a direct download link from Dropbox, use it
+      if (docxDownloadLink) {
+        window.open(docxDownloadLink, '_blank');
+        return;
       }
       
-      const linkSource = `data:application/${format === 'doc' ? 'msword' : 'vnd.openxmlformats-officedocument.wordprocessingml.document'};base64,${docxBase64}`;
-      const downloadLink = document.createElement('a');
-      downloadLink.href = linkSource;
-      downloadLink.download = `${selectedCVName?.replace(/\.[^/.]+$/, '') || 'optimized'}_enhanced.${format}`;
+      // Otherwise, use the API endpoint
+      const downloadUrl = `/api/cv/download-optimized-docx?cvId=${selectedCVId}`;
       
-      // Append to body, click, and remove - this is crucial for the download to work
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
+      // Open download in a new tab or trigger direct download
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `${selectedCVName || 'cv'}-optimized.docx`;
+      document.body.appendChild(link);
+      link.click();
       
-      // Small delay before removing to ensure download starts
+      // Clean up
       setTimeout(() => {
-        document.body.removeChild(downloadLink);
+        document.body.removeChild(link);
       }, 100);
-      
-      console.log(`${format.toUpperCase()} download initiated successfully`);
-    } catch (error) {
-      console.error(`Error downloading ${format.toUpperCase()}:`, error);
-      setError(`Failed to download ${format.toUpperCase()}. The file may be corrupted. Please try again.`);
+    } catch (e) {
+      console.error("Error downloading DOCX:", e);
+      setError("Failed to download the document. Please try again.");
       setErrorType('docx');
     }
-  }, [docxBase64, selectedCVName]);
+  }, [docxBase64, selectedCVId, selectedCVName, docxDownloadLink]);
 
   // Fix the PDF download functionality
   const handleDownloadPdf = useCallback(() => {
@@ -553,6 +554,11 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       setDocxGenerated(true);
       setIsGeneratingDocx(false);
       setDocxProgress(100);
+      
+      // Store the download link if available
+      if (data.docxDownloadLink) {
+        setDocxDownloadLink(data.docxDownloadLink);
+      }
       
       // Get ATS scores from the response
       if (data.originalAtsScore !== undefined) {
@@ -1100,7 +1106,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <Button
-                        onClick={() => handleDownloadDocx('docx')}
+                        onClick={() => handleDownloadDocx()}
                         disabled={!docxGenerated}
                         className="bg-gray-800 hover:bg-gray-700 text-white flex-grow"
                       >
@@ -1109,12 +1115,12 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
               </Button>
               
                 <Button
-                        onClick={() => handleDownloadDocx('doc')}
+                        onClick={() => handleDownloadDocx()}
                         disabled={!docxGenerated}
                         className="bg-gray-800 hover:bg-gray-700 text-white flex-grow"
                 >
                   <Download className="h-5 w-5 mr-2" />
-                        Download DOC
+                        Download as Word
                 </Button>
                     </div>
                     

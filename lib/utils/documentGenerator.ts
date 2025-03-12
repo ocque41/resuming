@@ -2456,4 +2456,488 @@ export class DocumentGenerator {
       'Organization', 'Attention to Detail', 'Microsoft Office', 'Customer Service'
     ];
   }
+
+  /**
+   * Generate an ATS-optimized DOCX CV with structured sections
+   * @param optimizedText The optimized CV text from GPT-4o
+   * @param atsAnalysis The ATS analysis metadata with scores and recommendations
+   * @param options Optional formatting options for the document
+   * @returns Buffer containing the generated DOCX file
+   */
+  static async generateATSOptimizedCV(
+    optimizedText: string,
+    atsAnalysis: {
+      atsScore: number;
+      originalAtsScore?: number;
+      sectionRecommendations?: Record<string, string[]>;
+      keywordRecommendations?: string[];
+      missingSections?: string[];
+      improvementSuggestions?: string[];
+    },
+    options?: {
+      templateStyle?: string;
+      photoOptions?: {
+        path?: string;
+        placement?: string;
+        size?: { width: number; height: number };
+        border?: boolean;
+        borderColor?: string;
+      },
+      fontOptions?: {
+        headingFont?: string;
+        bodyFont?: string;
+        nameFont?: string;
+        preset?: string;
+      },
+      colorOptions?: {
+        primary?: string;
+        accent?: string;
+      }
+    }
+  ): Promise<Buffer> {
+    try {
+      const startTime = Date.now();
+      
+      // Parse the optimized text into structured sections
+      // This should handle both raw text and pre-structured sections
+      const sections = this.parseATSOptimizedSections(optimizedText);
+      
+      // Process template style
+      const templateStyle = options?.templateStyle || this.TemplateStyles.MODERN;
+      
+      // Process font options
+      let fonts = {
+        headingFont: this.FontPresets.MODERN.headingFont,
+        bodyFont: this.FontPresets.MODERN.bodyFont,
+        nameFont: this.FontPresets.MODERN.nameFont
+      };
+
+      // Handle custom font presets
+      if (options?.fontOptions?.preset) {
+        const presetKey = options.fontOptions.preset.toUpperCase();
+        if (presetKey in DocumentGenerator.FontPresets) {
+          fonts = { ...DocumentGenerator.FontPresets[presetKey as keyof typeof DocumentGenerator.FontPresets] };
+        }
+      }
+
+      // Override individual font options if specified
+      if (options?.fontOptions?.headingFont) fonts.headingFont = options.fontOptions.headingFont;
+      if (options?.fontOptions?.bodyFont) fonts.bodyFont = options.fontOptions.bodyFont;
+      if (options?.fontOptions?.nameFont) fonts.nameFont = options.fontOptions.nameFont;
+
+      // Process color options
+      const colors = { ...this.colors };
+      if (options?.colorOptions?.primary) colors.primary = options.colorOptions.primary;
+      if (options?.colorOptions?.accent) colors.accent = options.colorOptions.accent;
+      
+      // Create document with ATS-optimized formatting - using a slightly more conservative approach
+      // for ATS compatibility while maintaining great visual design
+      const doc = new Document({
+        styles: {
+          paragraphStyles: [
+            {
+              id: "SectionHeading",
+              name: "Section Heading",
+              basedOn: "Normal",
+              next: "Normal",
+              quickFormat: true,
+              run: {
+                font: fonts.headingFont,
+                size: 28,
+                bold: true,
+                color: colors.primary,
+              },
+              paragraph: {
+                spacing: {
+                  after: 120,
+                  before: 240,
+                },
+              },
+            },
+            {
+              id: "BodyText",
+              name: "Body Text",
+              basedOn: "Normal",
+              next: "Normal",
+              quickFormat: true,
+              run: {
+                font: fonts.bodyFont,
+                size: 22,
+                color: colors.dark,
+              },
+              paragraph: {
+                spacing: {
+                  after: 80,
+                  line: 360, // 1.5 line spacing
+                },
+              },
+            },
+          ],
+        },
+        sections: [
+          {
+            properties: {
+              page: {
+                margin: {
+                  top: convertInchesToTwip(0.5),
+                  right: convertInchesToTwip(0.5),
+                  bottom: convertInchesToTwip(0.5),
+                  left: convertInchesToTwip(0.5),
+                },
+                size: {
+                  orientation: PageOrientation.PORTRAIT,
+                },
+              },
+            },
+            children: this.createATSOptimizedContent(
+              sections, 
+              atsAnalysis,
+              templateStyle,
+              options?.photoOptions,
+              fonts,
+              colors
+            )
+          }
+        ]
+      });
+      
+      // Generate buffer
+      const buffer = await Packer.toBuffer(doc);
+      
+      console.log(`ATS-optimized document generation completed in ${Date.now() - startTime}ms with score ${atsAnalysis.atsScore}%`);
+      return buffer;
+    } catch (error) {
+      console.error(`Error generating ATS-optimized document: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(`ATS-optimized document generation failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  
+  /**
+   * Parse optimized text into structured sections specifically for ATS optimization
+   * @param optimizedText The optimized CV text
+   * @returns Structured sections for document generation
+   */
+  private static parseATSOptimizedSections(optimizedText: string): Record<string, string> {
+    try {
+      // First, check if the text is already in JSON format (pre-structured)
+      try {
+        const parsedJSON = JSON.parse(optimizedText);
+        if (typeof parsedJSON === 'object' && parsedJSON !== null) {
+          return parsedJSON;
+        }
+      } catch {
+        // Not JSON, continue with text parsing
+      }
+      
+      // Initialize sections
+      const sections: Record<string, string> = {
+        header: "",
+        profile: "",
+        achievements: "",
+        experience: "",
+        skills: "",
+        education: "",
+        languages: ""
+      };
+      
+      // Try to extract sections based on common headers in the text
+      const sectionPatterns = {
+        profile: /\b(PROFILE|SUMMARY|ABOUT ME|PROFESSIONAL SUMMARY)\b/i,
+        achievements: /\b(ACHIEVEMENTS|KEY ACHIEVEMENTS|ACCOMPLISHMENTS)\b/i,
+        experience: /\b(EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY|PROFESSIONAL EXPERIENCE)\b/i,
+        skills: /\b(SKILLS|COMPETENCIES|TECHNICAL SKILLS|CORE COMPETENCIES)\b/i,
+        education: /\b(EDUCATION|EDUCATIONAL BACKGROUND|ACADEMIC QUALIFICATIONS)\b/i,
+        languages: /\b(LANGUAGES|LANGUAGE PROFICIENCY|LANGUAGE SKILLS)\b/i
+      };
+      
+      // Extract the header (assume first few lines before any section)
+      const headerEndMatch = optimizedText.match(new RegExp(`\\b(${Object.values(sectionPatterns).map(p => p.source.replace(/\\b/g, '')).join('|')})\\b`, 'i'));
+      if (headerEndMatch && headerEndMatch.index) {
+        sections.header = optimizedText.substring(0, headerEndMatch.index).trim();
+      } else {
+        // If no section headers found, extract first 5 lines as header
+        const lines = optimizedText.split('\n');
+        sections.header = lines.slice(0, Math.min(5, lines.length)).join('\n').trim();
+      }
+      
+      // Extract each section
+      for (const [sectionName, pattern] of Object.entries(sectionPatterns)) {
+        const sectionMatch = optimizedText.match(new RegExp(`\\b${pattern.source.replace(/\\b/g, '')}\\b.*?\\n(.*?)(?=\\n\\s*\\b(${Object.values(sectionPatterns).map(p => p.source.replace(/\\b/g, '')).join('|')})\\b|$)`, 'is'));
+        
+        if (sectionMatch && sectionMatch[1]) {
+          sections[sectionName] = sectionMatch[1].trim();
+        }
+      }
+      
+      return sections;
+    } catch (error) {
+      console.error(`Error parsing optimized sections: ${error instanceof Error ? error.message : String(error)}`);
+      // Fallback to basic section extraction
+      return this.splitIntoSections(optimizedText);
+    }
+  }
+  
+  /**
+   * Create ATS-optimized document content with professional formatting
+   * This specialized method ensures proper ATS compatibility while maintaining excellent design
+   */
+  private static createATSOptimizedContent(
+    sections: Record<string, string>,
+    atsAnalysis: any,
+    templateStyle: string,
+    photoOptions?: {
+      path?: string;
+      placement?: string;
+      size?: { width: number; height: number };
+      border?: boolean;
+      borderColor?: string;
+    },
+    fonts?: {
+      headingFont: string;
+      bodyFont: string;
+      nameFont: string;
+    },
+    colors?: {
+      primary: string;
+      accent: string;
+      dark: string;
+      medium: string;
+      light: string;
+      ultraLight: string;
+      white: string;
+    }
+  ): any[] {
+    // Default fonts and colors if not provided
+    const activeColors = colors || this.colors;
+    const activeFonts = fonts || {
+      headingFont: this.FontPresets.MODERN.headingFont,
+      bodyFont: this.FontPresets.MODERN.bodyFont,
+      nameFont: this.FontPresets.MODERN.nameFont
+    };
+    
+    // Use modern template as default
+    const activeTemplate = templateStyle || this.TemplateStyles.MODERN;
+    
+    const children: any[] = [];
+    
+    // Setup default photo options if not provided
+    const photo = {
+      path: photoOptions?.path || '',
+      placement: photoOptions?.placement || this.PhotoPlacement.TOP_RIGHT,
+      size: photoOptions?.size || this.PhotoSize.MEDIUM,
+      border: photoOptions?.border !== undefined ? photoOptions.border : true,
+      borderColor: photoOptions?.borderColor || activeColors.primary
+    };
+    
+    // Add header based on selected template
+    if (sections.header) {
+      switch (activeTemplate) {
+        case this.TemplateStyles.MODERN:
+          this.createModernHeader(children, sections.header, photo, activeFonts, activeColors);
+          break;
+        case this.TemplateStyles.CLASSIC:
+          this.createClassicHeader(children, sections.header, photo, activeFonts, activeColors);
+          break;
+        case this.TemplateStyles.MINIMAL:
+          this.createMinimalHeader(children, sections.header, photo, activeFonts, activeColors);
+          break;
+        case this.TemplateStyles.EXECUTIVE:
+          this.createExecutiveHeader(children, sections.header, photo, activeFonts, activeColors);
+          break;
+        case this.TemplateStyles.CREATIVE:
+          this.createCreativeHeader(children, sections.header, photo, activeFonts, activeColors);
+          break;
+        default:
+          this.createModernHeader(children, sections.header, photo, activeFonts, activeColors);
+          break;
+      }
+    }
+    
+    // Add profile section (About Me)
+    if (sections.profile) {
+      this.createATSSection(children, "PROFILE", sections.profile, activeFonts, activeColors);
+    }
+    
+    // Add achievements section (3 bullet points summarizing top accomplishments)
+    if (sections.achievements) {
+      this.createATSSection(children, "ACHIEVEMENTS", sections.achievements, activeFonts, activeColors);
+    }
+    
+    // Add experience section with enhanced formatting
+    if (sections.experience) {
+      this.createATSSection(children, "EXPERIENCE", sections.experience, activeFonts, activeColors);
+    }
+    
+    // Add skills section with modern formatting
+    if (sections.skills) {
+      this.createATSSection(children, "SKILLS", sections.skills, activeFonts, activeColors);
+    }
+    
+    // Add education section with enhanced formatting
+    if (sections.education) {
+      this.createATSSection(children, "EDUCATION", sections.education, activeFonts, activeColors);
+    }
+    
+    // Add languages section if available
+    if (sections.languages) {
+      this.createATSSection(children, "LANGUAGES", sections.languages, activeFonts, activeColors);
+    }
+    
+    // Add any remaining sections
+    for (const [sectionName, content] of Object.entries(sections)) {
+      if (!['header', 'profile', 'achievements', 'experience', 'skills', 'education', 'languages'].includes(sectionName)) {
+        this.createATSSection(children, sectionName.toUpperCase(), content, activeFonts, activeColors);
+      }
+    }
+    
+    return children;
+  }
+  
+  /**
+   * Creates an ATS-optimized section with clear heading and content
+   * Ensures proper formatting for ATS parsing while maintaining visual appeal
+   */
+  private static createATSSection(
+    children: any[], 
+    title: string, 
+    content: string,
+    fonts: any,
+    colors: any
+  ): void {
+    // Add section header with appropriate styling
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: title,
+            bold: true,
+            size: 28, // ~14pt font
+            color: colors.primary,
+            font: fonts.nameFont,
+          }),
+        ],
+        spacing: { before: 200, after: 120 },
+        border: {
+          bottom: {
+            color: colors.light,
+            space: 1,
+            style: BorderStyle.SINGLE,
+            size: 6,
+          },
+        },
+      })
+    );
+    
+    // Process content
+    const lines = content.split('\n');
+    let isInBulletList = false;
+    
+    lines.forEach((line, index) => {
+      const trimmedLine = line.trim();
+      if (trimmedLine.length === 0) {
+        // Add some spacing for empty lines to improve readability
+        if (isInBulletList) {
+          isInBulletList = false;
+          children.push(
+            new Paragraph({
+              spacing: { before: 80, after: 80 }
+            })
+          );
+        }
+        return;
+      }
+      
+      // Check if line starts with a bullet point
+      const isBullet = trimmedLine.startsWith('-') || 
+                      trimmedLine.startsWith('•') || 
+                      trimmedLine.startsWith('*') ||
+                      /^\d+\.\s/.test(trimmedLine);
+      
+      if (isBullet) {
+        isInBulletList = true;
+        
+        // Extract the content without the bullet character
+        let bulletContent = trimmedLine;
+        if (trimmedLine.startsWith('-') || trimmedLine.startsWith('•') || trimmedLine.startsWith('*')) {
+          bulletContent = trimmedLine.substring(1).trim();
+        } else if (/^\d+\.\s/.test(trimmedLine)) {
+          bulletContent = trimmedLine.replace(/^\d+\.\s/, '').trim();
+        }
+        
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "• ",
+                size: 22,
+                bold: true,
+                color: colors.primary,
+                font: fonts.nameFont,
+              }),
+              new TextRun({
+                text: bulletContent,
+                size: 22,
+                color: colors.dark,
+                font: fonts.bodyFont,
+              }),
+            ],
+            spacing: {
+              before: 40,
+              after: 40
+            },
+            indent: {
+              left: convertInchesToTwip(0.25)
+            }
+          })
+        );
+      } else {
+        // Check if this might be a subheading
+        const isSubheading = (
+          trimmedLine.length < 50 && 
+          index > 0 && 
+          lines[index - 1].trim().length === 0 &&
+          ((index < lines.length - 1 && lines[index + 1].trim().length === 0) || 
+          /\b(at|with|for)\b/i.test(trimmedLine))
+        ) || /\d{4}\s*-\s*(present|\d{4})/i.test(trimmedLine);
+        
+        if (isSubheading) {
+          // This is likely a job title, company name, or date range
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: trimmedLine,
+                  size: 24,
+                  bold: true,
+                  color: colors.dark,
+                  font: fonts.bodyFont,
+                }),
+              ],
+              spacing: { before: 100, after: 40 }
+            })
+          );
+          isInBulletList = false;
+        } else {
+          // Regular paragraph
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: trimmedLine,
+                  size: 22,
+                  color: colors.dark,
+                  font: fonts.bodyFont,
+                }),
+              ],
+              spacing: {
+                before: 40,
+                after: 40
+              }
+            })
+          );
+          isInBulletList = false;
+        }
+      }
+    });
+  }
 } 
