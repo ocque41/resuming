@@ -1,0 +1,23 @@
+---
+description: step by step of the enhance page backend
+globs: 
+---
+1. AI Integration with Agent Architecture
+This is a great approach. Instead of a rigid workflow, an agent can dynamically decide which tools to use based on user requests.
+2. Document Generation and Editing
+Your approach to support multiple document types is comprehensive. I recommend:
+Using a unified document manipulation interface that abstracts the specific libraries
+Implementing specialized handlers for each document type
+3. File Type Conversion
+CloudConvert or a similar service is still the best option here, as it handles a wide range of formats without requiring multiple specialized libraries.
+4. Storage Integration
+Using your existing Dropbox for file storage and Neon for metadata is perfect. We'll just need to:
+Create adapters to interface with these systems
+Implement proper error handling for storage operations
+Add caching mechanisms for frequently accessed documents
+Recommended Adjustments
+Tool Registration System: Create a flexible tool registry that allows the agent to discover and use tools dynamically
+Unified Document Interface: Build an abstraction layer over the document libraries to provide consistent methods regardless of document type
+Streaming Responses: Implement streaming for the agent responses to improve user experience
+Context Management: Store conversation context in the database to maintain continuity between sessions
+Error Recovery: Add robust error handling that allows the agent to recover from failed operations

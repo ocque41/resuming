@@ -24,7 +24,7 @@ interface OptimizationWorkflowProps {
  */
 export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps) {
   // Core states for workflow
-  const [activeStep, setActiveStep] = useState<"analyze" | "optimize">("analyze");
+  const [activeStep, setActiveStep] = useState<"general" | "specific">("general");
   const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
   const [selectedCVName, setSelectedCVName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,8 +42,8 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
   // Check for pre-analyzed CV
   useEffect(() => {
     const checkForPreAnalyzedCV = async () => {
-      // Only check when on analyze step with no selection yet
-      if (activeStep === "analyze" && !selectedCVId && cvs.length > 0) {
+      // Only check when on general step with no selection yet
+      if (activeStep === "general" && !selectedCVId && cvs.length > 0) {
         try {
           // Check if any CV has been analyzed but not optimized - lightweight check
           const response = await fetch(`/api/cv/get-analyzed-cvs`);
@@ -147,11 +147,6 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
             setProcessingStatus("Processing completed");
             setProcessingProgress(100);
             setStatusPollingEnabled(false);
-            
-            // Auto-transition to optimize step if not already there
-            if (activeStep !== "optimize") {
-              setActiveStep("optimize");
-            }
           } else if (data.error) {
             // Processing encountered an error
             setIsProcessing(false);
@@ -268,9 +263,6 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
             description: "Your CV has been analyzed. Review results and click the Optimize tab when ready.",
             duration: 5000,
           });
-          
-          // Do NOT switch tabs automatically - let the user review the analysis
-          // setActiveStep("optimize");
         } else {
           const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
           console.error("Error response from optimization process:", errorData);
@@ -307,12 +299,12 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
   
   // Handle tab changes
   const handleTabChange = (value: string) => {
-    if (value === "optimize" && !selectedCVId) {
-      setError("Please analyze a CV first before proceeding to optimization");
+    if (value === "specific") {
+      // Specific tab is coming soon, don't allow switching to it
       return;
     }
     
-    setActiveStep(value as "analyze" | "optimize");
+    setActiveStep(value as "general" | "specific");
     setError(null);
   };
   
@@ -416,45 +408,36 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
         </div>
       )}
       
-      <Tabs defaultValue="analyze" onValueChange={handleTabChange} value={activeStep}>
+      <Tabs defaultValue="general" onValueChange={handleTabChange} value={activeStep}>
         <TabsList className="w-full grid grid-cols-2">
-          <TabsTrigger value="analyze">Analyze</TabsTrigger>
-          <TabsTrigger value="optimize" disabled={!selectedCVId}>
-            Optimize
+          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="specific" disabled={true}>
+            Specific (Coming Soon)
           </TabsTrigger>
         </TabsList>
         
-        <TabsContent value="analyze" className="space-y-4 mt-4">
-          <h2 className="text-2xl font-bold">Analyze Your CV</h2>
+        <TabsContent value="general" className="space-y-4 mt-4">
+          <h2 className="text-2xl font-bold">Optimize Your CV</h2>
           <p className="text-muted-foreground">
-            Upload your CV to analyze its ATS compatibility and get recommendations.
+            Upload your CV to analyze and optimize it for better ATS compatibility.
           </p>
           
           <AnalyzeCVCard onAnalysisComplete={handleAnalysisComplete} cvs={cvs} />
+          
+          {selectedCVId && (
+            <EnhancedOptimizeCVCard cvs={getOptimizeCVs()} />
+          )}
         </TabsContent>
         
-        <TabsContent value="optimize" className="space-y-4 mt-4">
+        <TabsContent value="specific" className="space-y-4 mt-4">
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-2xl font-bold">Optimize Your CV</h2>
+              <h2 className="text-2xl font-bold">Specific Optimization</h2>
               <p className="text-muted-foreground">
-                {selectedCVName ? `Optimizing: ${selectedCVName}` : 'Enhance your CV with AI-powered optimization.'}
+                This feature is coming soon. Stay tuned for targeted CV optimization for specific job roles.
               </p>
             </div>
-            
-            <Button
-              variant="secondary"
-              className="bg-[#050505] hover:bg-gray-800 text-white"
-              onClick={() => {
-                setActiveStep("analyze");
-                setError(null);
-              }}
-            >
-              Back to Analyze
-            </Button>
           </div>
-          
-          <EnhancedOptimizeCVCard cvs={getOptimizeCVs()} />
         </TabsContent>
       </Tabs>
     </div>

@@ -5,12 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Download, RefreshCw, FileText, Check, Eye, Clock, Info } from "lucide-react";
+import { AlertCircle, RefreshCw, Clock, Info } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
-import ComparisonView from './ComparisonView.client';
-import OptimizationHistory from './OptimizationHistory.client';
-import { cacheDocument, getCachedDocument, clearCachedDocument, getCacheAge, getHistoryVersion } from "@/lib/cache/documentCache";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cacheDocument, getCachedDocument, clearCachedDocument, getCacheAge } from "@/lib/cache/documentCache";
 
 // Modern SimpleFileDropdown component
 function ModernFileDropdown({ 
@@ -93,14 +90,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   const [progress, setProgress] = useState<number>(0);
   const [processingStep, setProcessingStep] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
-  const [errorType, setErrorType] = useState<'process' | 'docx' | null>(null);
-  
-  // State for DOCX generation
-  const [isGeneratingDocx, setIsGeneratingDocx] = useState<boolean>(false);
-  const [docxGenerated, setDocxGenerated] = useState<boolean>(false);
-  const [docxBase64, setDocxBase64] = useState<string | null>(null);
-  const [docxProgress, setDocxProgress] = useState<number>(0);
-  const [docxDownloadLink, setDocxDownloadLink] = useState<string | null>(null);
+  const [errorType, setErrorType] = useState<'process' | null>(null);
   
   // State for ATS scores
   const [originalAtsScore, setOriginalAtsScore] = useState<number>(0);
@@ -118,11 +108,9 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   const [forceRefresh, setForceRefresh] = useState<boolean>(false);
   
   // Add state for UI views
-  const [activeTab, setActiveTab] = useState<string>("results");
   const [originalText, setOriginalText] = useState<string>("");
   const [optimizedText, setOptimizedText] = useState<string>("");
   const [improvements, setImprovements] = useState<string[]>([]);
-  const [historyVersion, setHistoryVersion] = useState<number>(0);
   
   // State for stuck processing detection
   const [isStuck, setIsStuck] = useState<boolean>(false);
@@ -132,15 +120,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   // Debug state
   const [debugMode, setDebugMode] = useState<boolean>(false);
   const [debugInfo, setDebugInfo] = useState<any>(null);
-  
-  // Add a state for downloading DOCX
-  const [isDownloadingDocx, setIsDownloadingDocx] = useState<boolean>(false);
-  
-  // Add a state for downloading DOC
-  const [isDownloadingDoc, setIsDownloadingDoc] = useState<boolean>(false);
-  
-  // Add a state for downloading file
-  const [isDownloadingFile, setIsDownloadingFile] = useState<boolean>(false);
   
   // Auto-select first CV if available
   useEffect(() => {
@@ -183,10 +162,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     setProcessingStep("");
     setError(null);
     setErrorType(null);
-    setDocxGenerated(false);
-    setDocxBase64(null);
     setForceRefresh(false);
-    setActiveTab("results");
     
     // Fetch original text
     const text = await fetchOriginalText(cvId);
@@ -200,10 +176,8 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       setCacheTimestamp(cachedData.timestamp);
       
       // Pre-populate data from cache
-      setDocxBase64(cachedData.docxBase64);
       setOriginalAtsScore(cachedData.originalAtsScore);
       setImprovedAtsScore(cachedData.improvedAtsScore);
-      setDocxGenerated(true);
       setIsProcessed(true);
       
       // Set optimized text if available
@@ -223,599 +197,162 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     }
   }, [fetchOriginalText]);
   
-  // Handle history version selection
-  const handleSelectVersion = useCallback((version: number) => {
-    if (!selectedCVId) return;
-    
-    setHistoryVersion(version);
-    const versionData = getHistoryVersion(selectedCVId, version);
-    
-    if (versionData) {
-      // Update state with this version's data
-      setDocxBase64(versionData.docxBase64);
-      setOriginalAtsScore(versionData.originalAtsScore);
-      setImprovedAtsScore(versionData.improvedAtsScore);
-      
-      if (versionData.optimizedText) {
-        setOptimizedText(versionData.optimizedText);
-      }
-      
-      if (versionData.improvements) {
-        setImprovements(versionData.improvements);
-      }
-    }
-  }, [selectedCVId]);
-  
-  // Handle downloading a specific version
-  const handleDownloadVersion = useCallback((version: number, format: 'docx' | 'doc') => {
-    if (!selectedCVId) return;
-    
-    const versionData = getHistoryVersion(selectedCVId, version);
-    if (!versionData) {
-      setError(`Version ${version} data not found`);
-      return;
-    }
-    
-    // DOCX/DOC download
-    if (!versionData.docxBase64) {
-      setError(`${format.toUpperCase()} data not available for this version`);
-      return;
-    }
-    
-    try {
-      const linkSource = `data:application/${format === 'doc' ? 'msword' : 'vnd.openxmlformats-officedocument.wordprocessingml.document'};base64,${versionData.docxBase64}`;
-      const downloadLink = document.createElement('a');
-      downloadLink.href = linkSource;
-      downloadLink.download = `${selectedCVName?.replace(/\.[^/.]+$/, '') || 'optimized'}_v${version}.${format}`;
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-      document.body.removeChild(downloadLink);
-    } catch (error) {
-      console.error(`Error downloading ${format.toUpperCase()}:`, error);
-      setError(`Failed to download ${format.toUpperCase()}. The file may be corrupted.`);
-    }
-  }, [selectedCVId, selectedCVName]);
-  
-  // Handle DOCX download
-  const handleDownloadDocx = useCallback(() => {
-    if (!docxBase64 && !selectedCVId) {
-      console.error("Cannot download DOCX: No DOCX data or CV ID available");
-      setError("No document available to download. Please generate the document first.");
-      setErrorType('docx');
-      return;
-    }
-    
-    setIsDownloadingDocx(true);
-    setIsDownloadingFile(true);
-    
-    try {
-      // If we have a direct download link from Dropbox, use it for a direct download
-      if (docxDownloadLink) {
-        // Create a temporary anchor element to trigger the download
-        const a = document.createElement('a');
-        a.href = docxDownloadLink;
-        a.download = `${selectedCVName || 'cv'}-optimized.docx`;
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        
-        // Clean up
-        setTimeout(() => {
-          document.body.removeChild(a);
-          setIsDownloadingDocx(false);
-          setIsDownloadingFile(false);
-        }, 100);
-        return;
-      }
-      
-      // Otherwise, use the API endpoint
-      const downloadUrl = `/api/cv/download-optimized-docx?cvId=${selectedCVId}`;
-      
-      // Use fetch with credentials to ensure authentication
-      fetch(downloadUrl, {
-        method: 'GET',
-        credentials: 'include', // Include cookies for authentication
-        headers: {
-          'Accept': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        }
-      })
-        .then(response => {
-          if (!response.ok) {
-            console.error(`Download failed with status: ${response.status}`);
-            throw new Error(`Download failed: ${response.status}`);
-          }
-          
-          // Get the filename from the Content-Disposition header if available
-          const contentDisposition = response.headers.get('Content-Disposition');
-          let filename = `${selectedCVName || 'cv'}-optimized.docx`;
-          
-          if (contentDisposition) {
-            const match = contentDisposition.match(/filename="(.+?)"/);
-            if (match) filename = match[1];
-          }
-          
-          // Get the blob from the response
-          return response.blob().then(blob => ({ blob, filename }));
-        })
-        .then(({ blob, filename }) => {
-          console.log(`Successfully downloaded DOCX file: ${filename}, size: ${blob.size} bytes, type: ${blob.type}`);
-          
-          // Force the correct MIME type for DOCX
-          const docxBlob = new Blob([blob], { 
-            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
-          });
-          
-          // Use our utility function for the download
-          downloadFile(docxBlob, filename);
-          setIsDownloadingDocx(false);
-          setIsDownloadingFile(false);
-        })
-        .catch(error => {
-          console.error("Error downloading DOCX:", error);
-          setError("Failed to download the document. Please try again.");
-          setErrorType('docx');
-          setIsDownloadingDocx(false);
-          setIsDownloadingFile(false);
-        });
-    } catch (e) {
-      console.error("Error initiating DOCX download:", e);
-      setError("Failed to download the document. Please try again.");
-      setErrorType('docx');
-      setIsDownloadingDocx(false);
-      setIsDownloadingFile(false);
-    }
-  }, [docxBase64, selectedCVId, selectedCVName, docxDownloadLink]);
-
-  // Handle DOC (Word) download
-  const handleDownloadDoc = useCallback(() => {
-    if (!docxBase64 && !selectedCVId) {
-      console.error("Cannot download DOC: No document data or CV ID available");
-      setError("No document available to download. Please generate the document first.");
-      setErrorType('docx');
-      return;
-    }
-    
-    setIsDownloadingDoc(true);
-    setIsDownloadingFile(true);
-    
-    try {
-      // Use the dedicated DOC API endpoint
-      const downloadUrl = `/api/cv/download-optimized-doc?cvId=${selectedCVId}`;
-      
-      // Use fetch with credentials to ensure authentication
-      fetch(downloadUrl, {
-        method: 'GET',
-        credentials: 'include', // Include cookies for authentication
-        headers: {
-          'Accept': 'application/msword'
-        }
-      })
-        .then(response => {
-          if (!response.ok) {
-            console.error(`Download failed with status: ${response.status}`);
-            throw new Error(`Download failed: ${response.status}`);
-          }
-          
-          // Get the blob from the response
-          return response.blob();
-        })
-        .then(blob => {
-          // Generate filename with .doc extension
-          const filename = `${selectedCVName || 'cv'}-optimized.doc`;
-          console.log(`Downloaded DOC file: ${filename}, size: ${blob.size} bytes, type: ${blob.type}`);
-          
-          // Force the correct MIME type for DOC
-          const docBlob = new Blob([blob], { 
-            type: 'application/msword' 
-          });
-          
-          // Use our utility function for the download
-          downloadFile(docBlob, filename);
-          setIsDownloadingDoc(false);
-          setIsDownloadingFile(false);
-        })
-        .catch(error => {
-          console.error("Error downloading DOC:", error);
-          setError("Failed to download the document. Please try again.");
-          setErrorType('docx');
-          setIsDownloadingDoc(false);
-          setIsDownloadingFile(false);
-        });
-    } catch (e) {
-      console.error("Error initiating DOC download:", e);
-      setError("Failed to download the document. Please try again.");
-      setErrorType('docx');
-      setIsDownloadingDoc(false);
-      setIsDownloadingFile(false);
-    }
-  }, [docxBase64, selectedCVId, selectedCVName]);
-
-  // Update the handleGenerateDocx function to properly handle document generation
-  const handleGenerateDocx = useCallback(async () => {
+  // Process the CV
+  const processCV = useCallback(async (forceRefreshParam: boolean = false) => {
     if (!selectedCVId) {
-      setError("CV ID not found. Please try selecting your CV again.");
-      setErrorType('docx');
+      setError("Please select a CV first");
+      setErrorType('process');
       return;
     }
     
-    // Check if we have a cached version and aren't forcing a refresh
-    if (isCached && !forceRefresh && docxBase64) {
-      console.log("Using cached DOCX data");
-      setDocxGenerated(true);
-      return;
-    }
-    
+    // Set processing state
+    setIsProcessing(true);
+    setIsProcessed(false);
+    setProgress(0);
+    setProcessingStep("Starting optimization...");
     setError(null);
     setErrorType(null);
-    setIsGeneratingDocx(true);
-    setDocxProgress(0);
+    setForceRefresh(forceRefreshParam);
+    setOptimizationStalled(false);
+    
+    // Reset stuck detection
+    setIsStuck(false);
+    setStuckMinutes(0);
+    setStuckSince(null);
     
     try {
-      console.log("Starting DOCX generation for CV ID:", selectedCVId);
+      console.log(`Processing CV: ${selectedCVName} (ID: ${selectedCVId}), force refresh: ${forceRefreshParam}`);
       
-      // Simulate progress
-      const progressInterval = setInterval(() => {
-        setDocxProgress(prev => Math.min(prev + 10, 90));
-      }, 500);
-      
-      // Pass forceRefresh and text data to the API
-      const generateResponse = await fetch('/api/cv/generate-enhanced-docx', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          cvId: selectedCVId,
-          forceRefresh: forceRefresh,
-          optimizedText: optimizedText || undefined
-        }),
-      });
-      
-      clearInterval(progressInterval);
-      
-      // Enhanced error handling
-      if (!generateResponse.ok) {
-        let errorMessage = `DOCX generation failed: ${generateResponse.status}`;
-        
-        // Provide more helpful context based on the status code
-        switch(generateResponse.status) {
-          case 400:
-            errorMessage = "Invalid request. Please ensure the CV data is correct.";
-            break;
-          case 500:
-            errorMessage = "Server encountered an error during document generation. Our team has been notified.";
-            break;
-          default:
-            // Try to get error message from response
-            try {
-              const errorData = await generateResponse.json();
-              if (errorData.message) {
-                errorMessage = errorData.message;
-              }
-            } catch (e) {
-              // Use default message if we can't parse the response
-            }
-        }
-        
-        throw new Error(errorMessage);
-      }
-      
-      const data = await generateResponse.json();
-      
-      if (!data.success || !data.docxBase64) {
-        throw new Error(data.message || "Failed to generate DOCX document");
-      }
-      
-      // Store DOCX data
-      setDocxBase64(data.docxBase64);
-      setDocxGenerated(true);
-      setIsGeneratingDocx(false);
-      setDocxProgress(100);
-      
-      // Store the download link if available
-      if (data.docxDownloadLink) {
-        setDocxDownloadLink(data.docxDownloadLink);
-      }
-      
-      // Get ATS scores from the response
-      if (data.originalAtsScore !== undefined) {
-        setOriginalAtsScore(data.originalAtsScore);
-      }
-      
-      if (data.improvedAtsScore !== undefined) {
-        setImprovedAtsScore(data.improvedAtsScore);
-      }
-      
-      // Get optimized text if available
-      if (data.optimizedText) {
-        setOptimizedText(data.optimizedText);
-      }
-      
-      // Get improvements if available
-      if (data.improvements) {
-        setImprovements(data.improvements);
-      }
-      
-      // Cache the document data
-      if (selectedCVId) {
-        cacheDocument(selectedCVId, {
-          docxBase64: data.docxBase64,
-          originalAtsScore: data.originalAtsScore || originalAtsScore,
-          improvedAtsScore: data.improvedAtsScore || improvedAtsScore,
-          expiryTime: 24 * 60 * 60 * 1000, // 24 hours
-          originalText: originalText,
-          optimizedText: data.optimizedText || optimizedText,
-          improvements: data.improvements || improvements
-        });
-      }
-      
-      console.log("DOCX generation completed successfully");
-    } catch (error) {
-      console.error("DOCX generation error:", error);
-      setError(error instanceof Error ? error.message : "Failed to generate DOCX document");
-      setErrorType('docx');
-      setIsGeneratingDocx(false);
-      setDocxProgress(0);
-    }
-  }, [selectedCVId, isCached, forceRefresh, docxBase64, optimizedText, originalAtsScore, improvedAtsScore, originalText, improvements]);
-
-  // Update the pollForStatus function to properly handle ATS scores and document generation
-  const pollForStatus = useCallback(async () => {
-    if (!selectedCVId) return;
-
-    try {
-      // Add debug parameter if debug mode is enabled
-      const debugParam = debugMode ? '&debug=true' : '';
-      const response = await fetch(`/api/cv/process/status?cvId=${selectedCVId}${debugParam}`);
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch processing status');
-      }
-
-      const data = await response.json();
-      
-      if (data.success) {
-        setProgress(data.progress || 0);
-        setProcessingStep(data.step || 'Processing...');
-        setIsProcessing(data.processing);
-        
-        // Save debug info if available
-        if (data.debugInfo) {
-          setDebugInfo(data.debugInfo);
-        }
-        
-        // Check if processing is stuck
-        setIsStuck(!!data.isStuck);
-        setStuckMinutes(data.stuckMinutes || 0);
-        setStuckSince(data.stuckSince || null);
-        
-        // Update ATS scores if available
-        if (data.atsScore !== undefined) {
-          setOriginalAtsScore(data.atsScore);
-        }
-        
-        if (data.improvedAtsScore !== undefined) {
-          setImprovedAtsScore(data.improvedAtsScore);
-        }
-        
-        // Handle process completion
-        if (data.isComplete) {
-            setIsProcessed(true);
-          setIsProcessing(false);
-            setProgress(100);
-            
-          // Update optimized text if available
-          if (data.optimizedText) {
-            setOptimizedText(data.optimizedText);
-          }
-          
-          // Update improvements if available
-          if (data.improvements) {
-            setImprovements(data.improvements);
-          }
-          
-          // Start document generation
-              handleGenerateDocx();
-        } 
-        // Continue polling if still processing and not complete
-        else if (data.processing) {
-          setTimeout(pollForStatus, 3000);
-        }
-      } else {
-        throw new Error(data.error || 'Error checking process status');
-      }
-    } catch (err: any) {
-      setError(err.message || 'An error occurred while checking the optimization status.');
-            setErrorType('process');
-            setIsProcessing(false);
-      console.error('Error polling for status:', err);
-    }
-  }, [selectedCVId, debugMode, handleGenerateDocx]);
-
-  // Function to handle CV processing
-  const processCV = useCallback(async (forceRefresh = false) => {
-    if (!selectedCVId) {
-      setError("Please select a CV to optimize.");
-      return;
-    }
-
-    try {
-      setError(null);
-      setErrorType(null);
-      setIsProcessing(true);
-      setIsProcessed(false);
-      setProgress(5);
-      setIsStuck(false);
-      setStuckMinutes(0);
-      setStuckSince(null);
-      
-      setProcessingStep(forceRefresh ? "Restarting optimization..." : "Starting optimization...");
-
-      // Call the API to begin processing
-      const response = await fetch('/api/cv/process', {
+      // Start the optimization process
+      const response = await fetch('/api/cv/optimize', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          cvId: parseInt(selectedCVId),
-          forceRefresh: forceRefresh
+          cvId: selectedCVId,
+          forceRefresh: forceRefreshParam
         }),
       });
-
+      
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to start processing the CV');
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errorData.error || `Failed to optimize CV: ${response.status}`);
       }
-
-      // Start polling for status
-      pollForStatus();
-    } catch (err: any) {
-      setError(err.message || 'An error occurred while starting the optimization.');
+      
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || "Optimization failed");
+      }
+      
+      // Update state with optimization results
+      setOptimizedText(data.optimizedText || "");
+      setImprovements(data.improvements || []);
+      setOriginalAtsScore(data.originalAtsScore || 0);
+      setImprovedAtsScore(data.improvedAtsScore || 0);
+      
+      // Cache the document data
+      cacheDocument(selectedCVId, {
+        docxBase64: "dummy", // Adding a dummy value since we're removing PDF functionality
+        optimizedText: data.optimizedText,
+        improvements: data.improvements,
+        originalAtsScore: data.originalAtsScore,
+        improvedAtsScore: data.improvedAtsScore,
+        expiryTime: 24 * 60 * 60 * 1000, // 24 hours
+        originalText: originalText
+      });
+      
+      // Set processing complete
+      setIsProcessing(false);
+      setIsProcessed(true);
+      setProgress(100);
+      setOptimizationCompleted(true);
+      
+      console.log("CV optimization completed successfully");
+    } catch (error) {
+      console.error("Error optimizing CV:", error);
+      setError(error instanceof Error ? error.message : "An unknown error occurred during optimization");
       setErrorType('process');
       setIsProcessing(false);
-      console.error('Error processing CV:', err);
+      setProgress(0);
     }
-  }, [selectedCVId]);
-
-  // Function to handle a stuck process
-  const handleStuckProcess = useCallback(() => {
-    processCV(true); // Force refresh
-  }, [processCV]);
+  }, [selectedCVId, selectedCVName]);
   
-  // Memoize the processing button state
-  const processingButtonDisabled = useMemo(() => {
-    return !selectedCVId || isProcessing;
-  }, [selectedCVId, isProcessing]);
-  
-  // Memoize the DOCX generation button state
-  const docxButtonDisabled = useMemo(() => {
-    return isGeneratingDocx || docxGenerated;
-  }, [isGeneratingDocx, docxGenerated]);
-  
-  // Restart the processing if it failed
-  const handleRestartProcessing = useCallback(() => {
-    if (errorType === 'process') {
-      // Reset processing state and try again
-      setError(null);
-      setErrorType(null);
-      processCV();
-    } else if (errorType === 'docx') {
-      // Reset DOCX generation state and try again
-      setError(null);
-      setErrorType(null);
-      handleGenerateDocx();
-    }
-  }, [errorType, processCV, handleGenerateDocx]);
-  
-  // Reset the form to try again
+  // Handle reset
   const handleReset = useCallback(() => {
-    setSelectedCV(null);
-    setSelectedCVId(null);
-    setSelectedCVName(null);
-    setIsProcessing(false);
+    // Clear states
     setIsProcessed(false);
+    setIsProcessing(false);
     setProgress(0);
     setProcessingStep("");
     setError(null);
     setErrorType(null);
-    setIsGeneratingDocx(false);
-    setDocxGenerated(false);
-    setDocxBase64(null);
+    setOptimizedText("");
+    setImprovements([]);
     setOptimizationCompleted(false);
     setOptimizationStalled(false);
-    setForceRefresh(false);
-  }, []);
-  
-  // Update the effect to remove PDF-related logic
-  useEffect(() => {
-    // If processing is complete but we don't have DOCX, try to generate it
-    if (isProcessed && !isProcessing && !docxGenerated && !isGeneratingDocx && !error) {
-      console.log('Processing complete but no DOCX generated, starting DOCX generation');
-      handleGenerateDocx();
-    }
     
-    // Log the current state for debugging
-    if (isProcessed) {
-      console.log('CV Processing State:', {
-        isProcessed,
-        docxGenerated,
-        hasDocxData: !!docxBase64,
-        optimizationCompleted,
-        optimizationStalled
-      });
-    }
-  }, [isProcessed, isProcessing, docxGenerated, isGeneratingDocx, error, handleGenerateDocx, docxBase64, optimizationCompleted, optimizationStalled]);
-
-  // Toggle force refresh option
-  const handleToggleForceRefresh = useCallback(() => {
-    setForceRefresh((prevState) => !prevState);
-  }, []);
-  
-  // Clear cache for current CV
-  const handleClearCache = useCallback(() => {
+    // Clear cache for this CV
     if (selectedCVId) {
       clearCachedDocument(selectedCVId);
       setIsCached(false);
       setCacheTimestamp(null);
-      
-      // Reset states
-      setDocxGenerated(false);
-      setDocxBase64(null);
-      setIsProcessed(false);
     }
+    
+    console.log("Reset optimization state");
   }, [selectedCVId]);
-
-  // Toggle debug mode
-  const toggleDebugMode = useCallback(() => {
-    setDebugMode(!debugMode);
+  
+  // Check for stalled processing
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
     
-    // If turning on debug mode and we're processing, re-poll with debug flag
-    if (!debugMode && isProcessing && selectedCVId) {
-      pollForStatus();
+    if (isProcessing) {
+      // Set up an interval to check if processing is stuck
+      let lastProgress = progress;
+      let stuckCounter = 0;
+      
+      intervalId = setInterval(() => {
+        if (progress === lastProgress) {
+          stuckCounter++;
+          
+          // If stuck for more than 1 minute (12 * 5 seconds)
+          if (stuckCounter >= 12) {
+            setIsStuck(true);
+            setStuckMinutes(Math.floor(stuckCounter / 12));
+            
+            if (!stuckSince) {
+              setStuckSince(new Date().toISOString());
+            }
+            
+            // If stuck for more than 3 minutes, mark as stalled
+            if (stuckCounter >= 36) {
+              setOptimizationStalled(true);
+              
+              // Auto-complete with what we have
+              if (optimizedText) {
+                setIsProcessing(false);
+                setIsProcessed(true);
+                setProgress(100);
+              }
+            }
+          }
+        } else {
+          // Reset stuck detection if progress changes
+          lastProgress = progress;
+          stuckCounter = 0;
+          setIsStuck(false);
+          setStuckMinutes(0);
+          setStuckSince(null);
+        }
+      }, 5000); // Check every 5 seconds
     }
-  }, [debugMode, isProcessing, selectedCVId, pollForStatus]);
-
-  // Add a utility function for file downloads with proper MIME type handling
-  const downloadFile = (blob: Blob, filename: string) => {
-    // Ensure we set the correct MIME type based on file extension
-    let mimeType = 'application/octet-stream'; // default
-    const extension = filename.split('.').pop()?.toLowerCase();
     
-    if (extension === 'docx') {
-      mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-    } else if (extension === 'doc') {
-      mimeType = 'application/msword';
-    }
-    
-    console.log(`Downloading file: ${filename} with MIME type: ${mimeType}`);
-    
-    // Create a new blob with the correct MIME type if needed
-    let fileBlob = blob;
-    if (blob.type !== mimeType) {
-      console.log(`Changing blob MIME type from ${blob.type} to ${mimeType}`);
-      fileBlob = new Blob([blob], { type: mimeType });
-    }
-    
-    // Create an object URL for the blob
-    const url = URL.createObjectURL(fileBlob);
-    
-    // Create a download link
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    
-    // Click the link to start the download
-    a.click();
-    
-    // Clean up
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      console.log(`Download of ${filename} initiated successfully`);
-    }, 100);
-  };
-
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isProcessing, progress, optimizedText]);
+  
   return (
     <Card className="w-full shadow-lg border-0 bg-[#1A1A1A]">
       <CardHeader className="bg-[#121212] text-white rounded-t-lg">
@@ -920,125 +457,43 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         
         {/* Results Section */}
         {isProcessed && (
-          <Tabs defaultValue={activeTab} onValueChange={setActiveTab} className="mt-6">
-            <TabsList className="grid grid-cols-3 bg-gray-900">
-              <TabsTrigger value="results" className="data-[state=active]:bg-gray-800">Results</TabsTrigger>
-              <TabsTrigger value="comparison" className="data-[state=active]:bg-gray-800">Comparison</TabsTrigger>
-              <TabsTrigger value="history" className="data-[state=active]:bg-gray-800">History</TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="results" className="mt-4">
-              <div className="space-y-6">
-                <div className="flex justify-between items-center flex-wrap gap-2">
-                  <h3 className="text-lg font-semibold text-white">ATS Score Improvement</h3>
-                  <div className="flex items-center space-x-4">
-                    <div className="text-gray-400">
-                      <span className="block text-center">{originalAtsScore}%</span>
-                      <span className="text-xs">Original</span>
-                    </div>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M5 12H19M19 12L13 6M19 12L13 18" stroke="#B4916C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                    <div className="text-[#B4916C]">
-                      <span className="block text-center">{improvedAtsScore}%</span>
-                      <span className="text-xs">Improved</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="rounded-lg border border-gray-800 overflow-hidden mt-4">
-                  <div className="bg-gray-900/50 p-4">
-                    <h4 className="text-white font-medium mb-4">Optimized Document</h4>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                      <Button
-                        onClick={() => handleDownloadDocx()}
-                        disabled={!docxGenerated || isDownloadingDocx}
-                        className="bg-gray-800 hover:bg-gray-700 text-white flex-grow"
-                      >
-                        {isDownloadingDocx ? (
-                          <>
-                            <RefreshCw className="h-5 w-5 mr-2 animate-spin" />
-                            Downloading...
-                          </>
-                        ) : (
-                          <>
-                            <Download className="h-5 w-5 mr-2" />
-                            Download DOCX
-                          </>
-                        )}
-                      </Button>
-              
-                      <Button
-                        onClick={() => handleDownloadDoc()}
-                        disabled={!docxGenerated || isDownloadingDoc}
-                        className="bg-gray-800 hover:bg-gray-700 text-white flex-grow"
-                      >
-                        {isDownloadingDoc ? (
-                          <>
-                            <RefreshCw className="h-5 w-5 mr-2 animate-spin" />
-                            Downloading...
-                          </>
-                        ) : (
-                          <>
-                            <Download className="h-5 w-5 mr-2" />
-                            Download as Word
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                    
-                    {isGeneratingDocx && !docxGenerated && (
-                      <div className="mb-4 space-y-2">
-                        <Progress value={docxProgress} className="h-2 bg-gray-800" />
-                        <p className="text-xs text-gray-400">Generating enhanced document...</p>
+          <div className="mt-6">
+            <div className="space-y-6">
+              <div className="rounded-lg border border-gray-800 overflow-hidden mt-4">
+                <div className="bg-gray-900/50 p-4">
+                  <h4 className="text-white font-medium mb-4">Optimization Results</h4>
+                  
+                  <div className="mb-4">
+                    <div className="bg-gray-800 p-4 rounded-md">
+                      <h5 className="text-white font-medium mb-2">Optimized Content</h5>
+                      <div className="text-gray-300 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto p-2 bg-gray-900 rounded">
+                        {optimizedText || "No optimized content available yet."}
                       </div>
-                    )}
-                    
-                    <Button
-                      onClick={handleReset}
-                      className="bg-transparent hover:bg-gray-800 text-gray-400 border border-gray-700 flex items-center justify-center mt-4 w-full"
-                    >
-                      <RefreshCw className="h-5 w-5 mr-2" />
-                      Start Over
-                    </Button>
+                    </div>
                   </div>
+                  
+                  {improvements && improvements.length > 0 && (
+                    <div className="mb-4">
+                      <h5 className="text-white font-medium mb-2">Improvements Made</h5>
+                      <ul className="list-disc pl-5 space-y-1 text-gray-300">
+                        {improvements.map((improvement, index) => (
+                          <li key={index}>{improvement}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  
+                  <Button
+                    onClick={handleReset}
+                    className="bg-transparent hover:bg-gray-800 text-gray-400 border border-gray-700 flex items-center justify-center mt-4 w-full"
+                  >
+                    <RefreshCw className="h-5 w-5 mr-2" />
+                    Start Over
+                  </Button>
                 </div>
               </div>
-            </TabsContent>
-            
-            <TabsContent value="comparison" className="mt-4">
-              <ComparisonView
-                originalContent={{
-                  text: originalText,
-                  atsScore: originalAtsScore
-                }}
-                optimizedContent={{
-                  text: optimizedText,
-                  atsScore: improvedAtsScore,
-                  optimizationDate: cacheTimestamp ? new Date(cacheTimestamp).toISOString() : undefined
-                }}
-                improvements={improvements}
-                onDownloadOriginal={() => {/* original download functionality */}}
-                onDownloadOptimized={() => handleDownloadDocx()}
-                displayMode="vertical"
-              />
-            </TabsContent>
-            
-            <TabsContent value="history" className="mt-4">
-              <OptimizationHistory
-                cvId={selectedCVId || ''}
-                currentVersion={historyVersion}
-                onSelectVersion={handleSelectVersion}
-                onDownloadVersion={(version, format) => {
-                  // Only allow DOCX and DOC formats
-                  if (format === 'docx' || format === 'doc') {
-                    handleDownloadVersion(version, format);
-                  }
-                }}
-              />
-            </TabsContent>
-          </Tabs>
+            </div>
+          </div>
         )}
         
         {/* Message for stalled optimization */}
