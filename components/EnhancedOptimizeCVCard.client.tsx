@@ -295,285 +295,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     return processed;
   };
   
-  // Structure the CV into sections
-  const structureCV = (text: string) => {
-    if (!text) {
-      const emptyStructure = {
-        header: "",
-        profile: "",
-        achievements: [] as string[],
-        goals: [] as string[],
-        skills: "",
-        languages: "",
-        education: ""
-      };
-      setStructuredCV(emptyStructure);
-      return emptyStructure;
-    }
-    
-    const sections = {
-      header: "",
-      profile: "",
-      achievements: [] as string[],
-      goals: [] as string[],
-      skills: "",
-      languages: "",
-      education: ""
-    };
-    
-    const improvements: string[] = [];
-    
-    // Split text into lines and paragraphs
-    const lines = text.split('\n').filter(line => line.trim() !== "");
-    const paragraphs = text.split('\n\n').filter(para => para.trim() !== "");
-    
-    // Extract header (first 2-3 lines typically contain name and contact info)
-    if (lines.length > 0) {
-      sections.header = lines.slice(0, Math.min(3, lines.length)).join('\n');
-    }
-    
-    // First, try to identify explicit section headers in the text
-    let currentSection = "";
-    let sectionContent: string[] = [];
-    let experienceContent: string[] = []; // To store experience/work history content
-    let educationContent: string[] = []; // To store education content
-    
-    // Define regex patterns for section identification
-    const profilePatterns = [/^(PROFILE|SUMMARY|ABOUT ME|PROFESSIONAL SUMMARY|CAREER OBJECTIVE)/i];
-    const achievementsPatterns = [/^(ACHIEVEMENTS|ACCOMPLISHMENTS|KEY ACCOMPLISHMENTS|MAJOR ACHIEVEMENTS)/i];
-    const goalsPatterns = [/^(GOALS|OBJECTIVES|CAREER GOALS|PROFESSIONAL GOALS|ASPIRATIONS)/i];
-    const skillsPatterns = [/^(SKILLS|TECHNICAL SKILLS|COMPETENCIES|CORE COMPETENCIES|KEY SKILLS|EXPERTISE)/i];
-    const languagesPatterns = [/^(LANGUAGES|LANGUAGE PROFICIENCY|LANGUAGE SKILLS)/i];
-    const educationPatterns = [/^(EDUCATION|ACADEMIC BACKGROUND|EDUCATIONAL QUALIFICATIONS|ACADEMIC QUALIFICATIONS)/i];
-    const experiencePatterns = [/^(EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY|PROFESSIONAL EXPERIENCE|WORK HISTORY)/i];
-    
-    // Process each line to identify sections
-    for (let i = 3; i < lines.length; i++) {
-      const line = lines[i].trim();
-      
-      // Check for section headers using the defined patterns
-      const isProfileSection = profilePatterns.some(pattern => pattern.test(line));
-      const isAchievementsSection = achievementsPatterns.some(pattern => pattern.test(line));
-      const isGoalsSection = goalsPatterns.some(pattern => pattern.test(line));
-      const isSkillsSection = skillsPatterns.some(pattern => pattern.test(line));
-      const isLanguagesSection = languagesPatterns.some(pattern => pattern.test(line));
-      const isEducationSection = educationPatterns.some(pattern => pattern.test(line));
-      const isExperienceSection = experiencePatterns.some(pattern => pattern.test(line));
-      
-      // Determine the current section based on the line content
-      if (isProfileSection) {
-        currentSection = "profile";
-        sectionContent = [];
-        continue;
-      } else if (isAchievementsSection) {
-        currentSection = "achievements";
-        sectionContent = [];
-        continue;
-      } else if (isGoalsSection) {
-        currentSection = "goals";
-        sectionContent = [];
-        continue;
-      } else if (isSkillsSection) {
-        currentSection = "skills";
-        sectionContent = [];
-        continue;
-      } else if (isLanguagesSection) {
-        currentSection = "languages";
-        sectionContent = [];
-        continue;
-      } else if (isEducationSection) {
-        currentSection = "education";
-        sectionContent = [];
-        continue;
-      } else if (isExperienceSection) {
-        currentSection = "experience";
-        sectionContent = [];
-        continue;
-      } else if (/^[A-Z\s]{2,}:?$/i.test(line) || /^[A-Z\s]{2,}$/i.test(line)) {
-        // This looks like a new section header we don't explicitly handle
-        currentSection = "";
-        continue;
-      }
-      
-      // Add content to the current section
-      if (currentSection) {
-        if (currentSection === "achievements" || currentSection === "goals") {
-          // For achievements and goals, each line is a separate item
-          if (line.trim()) {
-            // Check if line starts with a bullet point, if not add one
-            const cleanLine = line.replace(/^[-•*]\s*/, "").trim();
-            if (cleanLine) {
-              if (currentSection === "achievements") {
-                sections.achievements.push(cleanLine);
-              } else {
-                sections.goals.push(cleanLine);
-              }
-            }
-          }
-        } else if (currentSection === "experience") {
-          // Store experience content for later processing
-          experienceContent.push(line);
-        } else if (currentSection === "education") {
-          // Store education content
-          educationContent.push(line);
-        } else {
-          // For other sections, accumulate text
-          sectionContent.push(line);
-          
-          if (currentSection === "profile") {
-            sections.profile = sectionContent.join(' ');
-          } else if (currentSection === "skills") {
-            sections.skills = sectionContent.join('\n');
-          } else if (currentSection === "languages") {
-            sections.languages = sectionContent.join('\n');
-          }
-        }
-      } else if (!currentSection && i >= 3) {
-        // If we haven't identified a section yet but we're past the header,
-        // try to infer the section based on content
-        
-        // Check if this line looks like a bullet point (might be an achievement or skill)
-        if (line.startsWith('•') || line.startsWith('-') || line.startsWith('*')) {
-          // Look for achievement indicators (numbers, percentages, results)
-          if (/\d+%|\bincreased\b|\bimproved\b|\breduced\b|\bgenerated\b|\bsaved\b|\bdelivered\b/i.test(line)) {
-            const cleanLine = line.replace(/^[-•*]\s*/, "").trim();
-            sections.achievements.push(cleanLine);
-          } else {
-            // Assume it's a skill if not clearly an achievement
-            if (!sections.skills) {
-              sections.skills = line;
-            } else {
-              sections.skills += '\n' + line;
-            }
-          }
-        } else if (/education|university|college|degree|diploma|bachelor|master|phd|certification/i.test(line)) {
-          // This line seems related to education
-          if (!sections.education) {
-            sections.education = line;
-          } else {
-            sections.education += '\n' + line;
-          }
-        } else if (/language|fluent|proficient|native|beginner|intermediate|advanced/i.test(line)) {
-          // This line seems related to languages
-          if (!sections.languages) {
-            sections.languages = line;
-          } else {
-            sections.languages += '\n' + line;
-          }
-        } else {
-          // Default to profile for unclassified content
-          if (!sections.profile) {
-            sections.profile = line;
-          } else {
-            sections.profile += ' ' + line;
-          }
-        }
-      }
-    }
-    
-    // Process experience content to extract achievements and goals if those sections are empty
-    if (experienceContent.length > 0 && (sections.achievements.length === 0 || sections.goals.length === 0)) {
-      const experienceText = experienceContent.join('\n');
-      
-      // Extract achievements from experience section
-      if (sections.achievements.length === 0) {
-        // Look for bullet points with achievement indicators
-        const achievementLines = experienceContent.filter(line => {
-          const trimmed = line.trim();
-          return (trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*')) && 
-                 /\d+%|\bincreased\b|\bimproved\b|\breduced\b|\bgenerated\b|\bsaved\b|\bdelivered\b|\bmanaged\b|\bled\b|\bsuccessfully\b/i.test(trimmed);
-        });
-        
-        // Extract clean achievement text
-        achievementLines.forEach(line => {
-          const cleanLine = line.replace(/^[-•*]\s*/, "").trim();
-          if (cleanLine && !sections.achievements.includes(cleanLine)) {
-            sections.achievements.push(cleanLine);
-          }
-        });
-        
-        // If we still don't have enough achievements, generate some with metrics
-        if (sections.achievements.length < 3) {
-          const keywords = extractKeywords(experienceText);
-          const generatedAchievements = generateQuantifiedAchievements(keywords);
-          
-          // Add generated achievements until we have at least 3
-          for (let i = 0; i < generatedAchievements.length && sections.achievements.length < 3; i++) {
-            sections.achievements.push(generatedAchievements[i]);
-          }
-        }
-        
-        // Ensure all achievements have quantifiable metrics
-        sections.achievements = sections.achievements.map(achievement => 
-          ensureQuantifiedMetrics(achievement)
-        );
-        
-        // Limit to top 3-5 achievements
-        sections.achievements = sections.achievements.slice(0, 5);
-      }
-      
-      // Generate goals based on experience if none exist
-      if (sections.goals.length === 0) {
-        // Extract potential keywords from experience for goal generation
-        const experienceKeywords = extractKeywords(experienceText);
-        
-        // Generate goals based on experience keywords
-        if (experienceKeywords.length > 0) {
-          const generatedGoals = generateQuantifiedGoals(experienceKeywords);
-          sections.goals = generatedGoals;
-        } else {
-          // Generic goals if no keywords found
-          sections.goals = [
-            "Seeking to leverage my professional experience to contribute to organizational success with a target of 15% improvement in team performance",
-            "Aiming to increase team productivity by approximately 25% through implementation of streamlined processes and best practices",
-            "Planning to expand professional network by connecting with 50+ industry leaders and participating in at least 5 industry conferences annually"
-          ];
-        }
-      } else {
-        // Ensure existing goals have quantified metrics
-        sections.goals = sections.goals.map(goal => 
-          ensureQuantifiedMetrics(goal)
-        );
-      }
-    }
-    
-    // If education section is empty but we have education content, use it
-    if (!sections.education && educationContent.length > 0) {
-      sections.education = educationContent.join('\n');
-    }
-    
-    // Ensure all sections have content or provide improvement suggestions
-    if (!sections.profile || sections.profile.length < 50) {
-      if (!sections.profile) {
-        sections.profile = "Professional profile information not provided.";
-      }
-      improvements.push("Add a comprehensive professional profile summary (100-150 words)");
-    }
-    
-    if (sections.achievements.length === 0) {
-      improvements.push("Add 3-5 quantifiable achievements with specific metrics (e.g., 'Increased sales by 20%')");
-    } else if (sections.achievements.length < 3) {
-      improvements.push(`Add ${3 - sections.achievements.length} more quantifiable achievements with metrics`);
-    }
-    
-    if (sections.goals.length === 0) {
-      improvements.push("Add 2-3 clear career goals with specific objectives");
-    } else if (sections.goals.length < 2) {
-      improvements.push(`Add ${2 - sections.goals.length} more career goals with specific objectives`);
-    }
-    
-    if (!sections.skills) {
-      sections.skills = "Skills information not provided.";
-      improvements.push("Add relevant technical and soft skills for your target position");
-    }
-    
-    // Update state with the structured CV and improvements
-    setStructuredCV(sections);
-    setImprovements(improvements);
-    
-    return sections;
-  };
-  
   // Helper function to extract keywords from text
   const extractKeywords = (text: string): string[] => {
     // Common skill/industry keywords to look for
@@ -596,9 +317,30 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     ).slice(0, 5); // Return top 5 matches
   };
   
+  // Simple deterministic hash function for strings
+  const hashString = (str: string): number => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash);
+  };
+  
+  // Deterministic random number generator based on a seed
+  const seededRandom = (seed: number, max: number, min: number = 0): number => {
+    const x = Math.sin(seed) * 10000;
+    const result = x - Math.floor(x); // Value between 0 and 1
+    return Math.floor(result * (max - min + 1)) + min;
+  };
+  
   // Helper function to generate quantified achievements based on keywords
   const generateQuantifiedAchievements = (keywords: string[]): string[] => {
     const achievements: string[] = [];
+    
+    // Create a seed from the keywords for deterministic generation
+    const keywordSeed = hashString(keywords.join(''));
     
     // Templates for achievements with placeholders for keywords and metrics
     const templates = [
@@ -620,22 +362,32 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     // Generate 5 unique achievements
     const usedTemplates = new Set<number>();
     
-    while (achievements.length < 5 && usedTemplates.size < templates.length) {
-      // Select a random template that hasn't been used yet
-      let templateIndex: number;
-      do {
-        templateIndex = Math.floor(Math.random() * templates.length);
-      } while (usedTemplates.has(templateIndex));
+    for (let i = 0; i < 5 && usedTemplates.size < templates.length; i++) {
+      // Select a template deterministically based on the seed and current index
+      const templateSeed = keywordSeed + (i * 1000);
+      let templateIndex = seededRandom(templateSeed, templates.length - 1);
+      
+      // If we've already used this template, try to find another one
+      let attempts = 0;
+      while (usedTemplates.has(templateIndex) && attempts < templates.length) {
+        templateIndex = (templateIndex + 1) % templates.length;
+        attempts++;
+      }
+      
+      if (usedTemplates.has(templateIndex)) {
+        continue; // Skip if we can't find an unused template
+      }
       
       usedTemplates.add(templateIndex);
       
-      // Select a random keyword
-      const keyword = terms[Math.floor(Math.random() * terms.length)];
+      // Select a keyword deterministically
+      const keywordIndex = seededRandom(templateSeed + 1, terms.length - 1);
+      const keyword = terms[keywordIndex];
       
-      // Generate random metrics
-      const percent = Math.floor(Math.random() * 30) + 10; // 10-40%
-      const amount = Math.floor(Math.random() * 500) + 100; // 100-600k
-      const number = Math.floor(Math.random() * 15) + 5; // 5-20
+      // Generate deterministic metrics
+      const percent = seededRandom(templateSeed + 2, 30, 10); // 10-40%
+      const amount = seededRandom(templateSeed + 3, 500, 100); // 100-600k
+      const number = seededRandom(templateSeed + 4, 15, 5); // 5-20
       
       // Fill in the template
       let achievement = templates[templateIndex]
@@ -652,6 +404,9 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   
   // Helper function to generate quantified goals based on keywords
   const generateQuantifiedGoals = (keywords: string[]): string[] => {
+    // Create a seed from the keywords for deterministic generation
+    const keywordSeed = hashString(keywords.join(''));
+    
     // Templates for goals with placeholders for keywords and metrics
     const templates = [
       "Seeking to leverage expertise in {keyword1} and {keyword2} to drive business growth of {percent}% within the next fiscal year",
@@ -667,30 +422,46 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     const usedTemplates = new Set<number>();
     
     // Ensure we have at least 3 keywords to work with
-    while (keywords.length < 3) {
-      keywords.push(['management', 'leadership', 'innovation', 'technology', 'communication'][Math.floor(Math.random() * 5)]);
+    const workingKeywords = [...keywords];
+    while (workingKeywords.length < 3) {
+      const defaultKeywords = ['management', 'leadership', 'innovation', 'technology', 'communication'];
+      const index = seededRandom(keywordSeed + workingKeywords.length, defaultKeywords.length - 1);
+      workingKeywords.push(defaultKeywords[index]);
     }
     
     // Generate 3 unique goals
-    while (goals.length < 3 && usedTemplates.size < templates.length) {
-      // Select a random template that hasn't been used yet
-      let templateIndex: number;
-      do {
-        templateIndex = Math.floor(Math.random() * templates.length);
-      } while (usedTemplates.has(templateIndex));
+    for (let i = 0; i < 3 && usedTemplates.size < templates.length; i++) {
+      // Select a template deterministically
+      const templateSeed = keywordSeed + (i * 1000);
+      let templateIndex = seededRandom(templateSeed, templates.length - 1);
+      
+      // If we've already used this template, try to find another one
+      let attempts = 0;
+      while (usedTemplates.has(templateIndex) && attempts < templates.length) {
+        templateIndex = (templateIndex + 1) % templates.length;
+        attempts++;
+      }
+      
+      if (usedTemplates.has(templateIndex)) {
+        continue; // Skip if we can't find an unused template
+      }
       
       usedTemplates.add(templateIndex);
       
-      // Select random keywords
-      const keyword1 = keywords[Math.floor(Math.random() * keywords.length)];
-      let keyword2 = keywords[Math.floor(Math.random() * keywords.length)];
-      while (keyword2 === keyword1 && keywords.length > 1) {
-        keyword2 = keywords[Math.floor(Math.random() * keywords.length)];
-      }
+      // Select keywords deterministically
+      const keyword1Index = seededRandom(templateSeed + 1, workingKeywords.length - 1);
+      const keyword1 = workingKeywords[keyword1Index];
       
-      // Generate random metrics
-      const percent = Math.floor(Math.random() * 25) + 15; // 15-40%
-      const number = Math.floor(Math.random() * 10) + 5; // 5-15
+      let keyword2Index = seededRandom(templateSeed + 2, workingKeywords.length - 1);
+      // Ensure we don't use the same keyword twice if possible
+      if (keyword2Index === keyword1Index && workingKeywords.length > 1) {
+        keyword2Index = (keyword2Index + 1) % workingKeywords.length;
+      }
+      const keyword2 = workingKeywords[keyword2Index];
+      
+      // Generate deterministic metrics
+      const percent = seededRandom(templateSeed + 3, 25, 15); // 15-40%
+      const number = seededRandom(templateSeed + 4, 10, 5); // 5-15
       
       // Fill in the template
       let goal = templates[templateIndex]
@@ -712,28 +483,327 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       return text; // Already has metrics
     }
     
+    // Create a deterministic seed from the text
+    const textSeed = hashString(text);
+    
     // Add metrics based on the content
     if (/increase|improve|enhance|grow|boost/i.test(text)) {
-      const percent = Math.floor(Math.random() * 30) + 15; // 15-45%
+      const percent = seededRandom(textSeed, 30, 15); // 15-45%
       return text + ` by approximately ${percent}%`;
     } else if (/reduce|decrease|lower|minimize|cut/i.test(text)) {
-      const percent = Math.floor(Math.random() * 20) + 10; // 10-30%
+      const percent = seededRandom(textSeed, 20, 10); // 10-30%
       return text + ` by approximately ${percent}%`;
     } else if (/manage|lead|direct|supervise/i.test(text)) {
-      const number = Math.floor(Math.random() * 15) + 5; // 5-20
+      const number = seededRandom(textSeed, 15, 5); // 5-20
       return text + ` a team of ${number} professionals`;
     } else if (/deliver|complete|finish|accomplish/i.test(text)) {
-      const number = Math.floor(Math.random() * 10) + 3; // 3-13
+      const number = seededRandom(textSeed, 10, 3); // 3-13
       return text + ` ${number} major projects`;
     } else if (/save|cost|budget|expense/i.test(text)) {
-      const amount = Math.floor(Math.random() * 200) + 50; // $50-250k
+      const amount = seededRandom(textSeed, 200, 50); // $50-250k
       return text + ` approximately $${amount}k`;
     } else {
       // Generic metric for other types of content
-      const percent = Math.floor(Math.random() * 25) + 15; // 15-40%
+      const percent = seededRandom(textSeed, 25, 15); // 15-40%
       return text + `, resulting in approximately ${percent}% improvement`;
     }
   };
+  
+  // Structure the CV into sections with memoization
+  const structureCV = useMemo(() => {
+    return (text: string) => {
+      if (!text) {
+        const emptyStructure = {
+          header: "",
+          profile: "",
+          achievements: [] as string[],
+          goals: [] as string[],
+          skills: "",
+          languages: "",
+          education: ""
+        };
+        return emptyStructure;
+      }
+      
+      const sections = {
+        header: "",
+        profile: "",
+        achievements: [] as string[],
+        goals: [] as string[],
+        skills: "",
+        languages: "",
+        education: ""
+      };
+      
+      const improvements: string[] = [];
+      
+      // Split text into lines and paragraphs
+      const lines = text.split('\n').filter(line => line.trim() !== "");
+      const paragraphs = text.split('\n\n').filter(para => para.trim() !== "");
+      
+      // Extract header (first 2-3 lines typically contain name and contact info)
+      if (lines.length > 0) {
+        sections.header = lines.slice(0, Math.min(3, lines.length)).join('\n');
+      }
+      
+      // First, try to identify explicit section headers in the text
+      let currentSection = "";
+      let sectionContent: string[] = [];
+      let experienceContent: string[] = []; // To store experience/work history content
+      let educationContent: string[] = []; // To store education content
+      
+      // Define regex patterns for section identification
+      const profilePatterns = [/^(PROFILE|SUMMARY|ABOUT ME|PROFESSIONAL SUMMARY|CAREER OBJECTIVE)/i];
+      const achievementsPatterns = [/^(ACHIEVEMENTS|ACCOMPLISHMENTS|KEY ACCOMPLISHMENTS|MAJOR ACHIEVEMENTS)/i];
+      const goalsPatterns = [/^(GOALS|OBJECTIVES|CAREER GOALS|PROFESSIONAL GOALS|ASPIRATIONS)/i];
+      const skillsPatterns = [/^(SKILLS|TECHNICAL SKILLS|COMPETENCIES|CORE COMPETENCIES|KEY SKILLS|EXPERTISE)/i];
+      const languagesPatterns = [/^(LANGUAGES|LANGUAGE PROFICIENCY|LANGUAGE SKILLS)/i];
+      const educationPatterns = [/^(EDUCATION|ACADEMIC BACKGROUND|EDUCATIONAL QUALIFICATIONS|ACADEMIC QUALIFICATIONS)/i];
+      const experiencePatterns = [/^(EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY|PROFESSIONAL EXPERIENCE|WORK HISTORY)/i];
+      
+      // Process each line to identify sections
+      for (let i = 3; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        // Check for section headers using the defined patterns
+        const isProfileSection = profilePatterns.some(pattern => pattern.test(line));
+        const isAchievementsSection = achievementsPatterns.some(pattern => pattern.test(line));
+        const isGoalsSection = goalsPatterns.some(pattern => pattern.test(line));
+        const isSkillsSection = skillsPatterns.some(pattern => pattern.test(line));
+        const isLanguagesSection = languagesPatterns.some(pattern => pattern.test(line));
+        const isEducationSection = educationPatterns.some(pattern => pattern.test(line));
+        const isExperienceSection = experiencePatterns.some(pattern => pattern.test(line));
+        
+        // Determine the current section based on the line content
+        if (isProfileSection) {
+          currentSection = "profile";
+          sectionContent = [];
+          continue;
+        } else if (isAchievementsSection) {
+          currentSection = "achievements";
+          sectionContent = [];
+          continue;
+        } else if (isGoalsSection) {
+          currentSection = "goals";
+          sectionContent = [];
+          continue;
+        } else if (isSkillsSection) {
+          currentSection = "skills";
+          sectionContent = [];
+          continue;
+        } else if (isLanguagesSection) {
+          currentSection = "languages";
+          sectionContent = [];
+          continue;
+        } else if (isEducationSection) {
+          currentSection = "education";
+          sectionContent = [];
+          continue;
+        } else if (isExperienceSection) {
+          currentSection = "experience";
+          sectionContent = [];
+          continue;
+        } else if (/^[A-Z\s]{2,}:?$/i.test(line) || /^[A-Z\s]{2,}$/i.test(line)) {
+          // This looks like a new section header we don't explicitly handle
+          currentSection = "";
+          continue;
+        }
+        
+        // Add content to the current section
+        if (currentSection) {
+          if (currentSection === "achievements" || currentSection === "goals") {
+            // For achievements and goals, each line is a separate item
+            if (line.trim()) {
+              // Check if line starts with a bullet point, if not add one
+              const cleanLine = line.replace(/^[-•*]\s*/, "").trim();
+              if (cleanLine) {
+                if (currentSection === "achievements") {
+                  sections.achievements.push(cleanLine);
+                } else {
+                  sections.goals.push(cleanLine);
+                }
+              }
+            }
+          } else if (currentSection === "experience") {
+            // Store experience content for later processing
+            experienceContent.push(line);
+          } else if (currentSection === "education") {
+            // Store education content
+            educationContent.push(line);
+          } else {
+            // For other sections, accumulate text
+            sectionContent.push(line);
+            
+            if (currentSection === "profile") {
+              sections.profile = sectionContent.join(' ');
+            } else if (currentSection === "skills") {
+              sections.skills = sectionContent.join('\n');
+            } else if (currentSection === "languages") {
+              sections.languages = sectionContent.join('\n');
+            }
+          }
+        } else if (!currentSection && i >= 3) {
+          // If we haven't identified a section yet but we're past the header,
+          // try to infer the section based on content
+          
+          // Check if this line looks like a bullet point (might be an achievement or skill)
+          if (line.startsWith('•') || line.startsWith('-') || line.startsWith('*')) {
+            // Look for achievement indicators (numbers, percentages, results)
+            if (/\d+%|\bincreased\b|\bimproved\b|\breduced\b|\bgenerated\b|\bsaved\b|\bdelivered\b/i.test(line)) {
+              const cleanLine = line.replace(/^[-•*]\s*/, "").trim();
+              sections.achievements.push(cleanLine);
+            } else {
+              // Assume it's a skill if not clearly an achievement
+              if (!sections.skills) {
+                sections.skills = line;
+              } else {
+                sections.skills += '\n' + line;
+              }
+            }
+          } else if (/education|university|college|degree|diploma|bachelor|master|phd|certification/i.test(line)) {
+            // This line seems related to education
+            if (!sections.education) {
+              sections.education = line;
+            } else {
+              sections.education += '\n' + line;
+            }
+          } else if (/language|fluent|proficient|native|beginner|intermediate|advanced/i.test(line)) {
+            // This line seems related to languages
+            if (!sections.languages) {
+              sections.languages = line;
+            } else {
+              sections.languages += '\n' + line;
+            }
+          } else {
+            // Default to profile for unclassified content
+            if (!sections.profile) {
+              sections.profile = line;
+            } else {
+              sections.profile += ' ' + line;
+            }
+          }
+        }
+      }
+      
+      // Process experience content to extract achievements and goals if those sections are empty
+      if (experienceContent.length > 0 && (sections.achievements.length === 0 || sections.goals.length === 0)) {
+        const experienceText = experienceContent.join('\n');
+        
+        // Extract achievements from experience section
+        if (sections.achievements.length === 0) {
+          // Look for bullet points with achievement indicators
+          const achievementLines = experienceContent.filter(line => {
+            const trimmed = line.trim();
+            return (trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*')) && 
+                   /\d+%|\bincreased\b|\bimproved\b|\breduced\b|\bgenerated\b|\bsaved\b|\bdelivered\b|\bmanaged\b|\bled\b|\bsuccessfully\b/i.test(trimmed);
+          });
+          
+          // Extract clean achievement text
+          achievementLines.forEach(line => {
+            const cleanLine = line.replace(/^[-•*]\s*/, "").trim();
+            if (cleanLine && !sections.achievements.includes(cleanLine)) {
+              sections.achievements.push(cleanLine);
+            }
+          });
+          
+          // If we still don't have enough achievements, generate some with metrics
+          if (sections.achievements.length < 3) {
+            const keywords = extractKeywords(experienceText);
+            const generatedAchievements = generateQuantifiedAchievements(keywords);
+            
+            // Add generated achievements until we have at least 3
+            for (let i = 0; i < generatedAchievements.length && sections.achievements.length < 3; i++) {
+              sections.achievements.push(generatedAchievements[i]);
+            }
+          }
+          
+          // Ensure all achievements have quantifiable metrics
+          sections.achievements = sections.achievements.map(achievement => 
+            ensureQuantifiedMetrics(achievement)
+          );
+          
+          // Limit to top 3-5 achievements
+          sections.achievements = sections.achievements.slice(0, 5);
+        }
+        
+        // Generate goals based on experience if none exist
+        if (sections.goals.length === 0) {
+          // Extract potential keywords from experience for goal generation
+          const experienceKeywords = extractKeywords(experienceText);
+          
+          // Generate goals based on experience keywords
+          if (experienceKeywords.length > 0) {
+            const generatedGoals = generateQuantifiedGoals(experienceKeywords);
+            sections.goals = generatedGoals;
+          } else {
+            // Generic goals if no keywords found
+            sections.goals = [
+              "Seeking to leverage my professional experience to contribute to organizational success with a target of 15% improvement in team performance",
+              "Aiming to increase team productivity by approximately 25% through implementation of streamlined processes and best practices",
+              "Planning to expand professional network by connecting with 50+ industry leaders and participating in at least 5 industry conferences annually"
+            ];
+          }
+        } else {
+          // Ensure existing goals have quantified metrics
+          sections.goals = sections.goals.map(goal => 
+            ensureQuantifiedMetrics(goal)
+          );
+        }
+      }
+      
+      // If education section is empty but we have education content, use it
+      if (!sections.education && educationContent.length > 0) {
+        sections.education = educationContent.join('\n');
+      }
+      
+      // Ensure all sections have content or provide improvement suggestions
+      if (!sections.profile || sections.profile.length < 50) {
+        if (!sections.profile) {
+          sections.profile = "Professional profile information not provided.";
+        }
+        improvements.push("Add a comprehensive professional profile summary (100-150 words)");
+      }
+      
+      if (sections.achievements.length === 0) {
+        improvements.push("Add 3-5 quantifiable achievements with specific metrics (e.g., 'Increased sales by 20%')");
+      } else if (sections.achievements.length < 3) {
+        improvements.push(`Add ${3 - sections.achievements.length} more quantifiable achievements with metrics`);
+      }
+      
+      if (sections.goals.length === 0) {
+        improvements.push("Add 2-3 clear career goals with specific objectives");
+      } else if (sections.goals.length < 2) {
+        improvements.push(`Add ${2 - sections.goals.length} more career goals with specific objectives`);
+      }
+      
+      if (!sections.skills) {
+        sections.skills = "Skills information not provided.";
+        improvements.push("Add relevant technical and soft skills for your target position");
+      }
+      
+      // Update state with the structured CV and improvements
+      setImprovements(improvements);
+      
+      return sections;
+    };
+  }, []); // Empty dependency array ensures this is only created once
+  
+  // Process optimized text when it changes
+  useEffect(() => {
+    if (optimizedText) {
+      const processed = processOptimizedText(optimizedText);
+      setProcessedText(processed);
+      
+      // Use a small timeout to debounce the structuring operation
+      // This prevents multiple rapid updates that could cause UI flickering
+      const timeoutId = setTimeout(() => {
+        const structured = structureCV(processed);
+        setStructuredCV(structured);
+      }, 100);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [optimizedText, structureCV]);
   
   // Format structured CV as text
   const formatStructuredCV = () => {
@@ -817,15 +887,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     
     return formattedText;
   };
-  
-  // Process optimized text when it changes
-  useEffect(() => {
-    if (optimizedText) {
-      const processed = processOptimizedText(optimizedText);
-      setProcessedText(processed);
-      structureCV(processed);
-    }
-  }, [optimizedText]);
   
   // Polling mechanism for process status
   useEffect(() => {
@@ -947,14 +1008,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       if (timeoutId) clearTimeout(timeoutId);
     };
   }, [isProcessing, processingStatus]);
-  
-  // Update structured CV whenever processed text changes
-  useEffect(() => {
-    if (processedText) {
-      const structured = structureCV(processedText);
-      setStructuredCV(structured);
-    }
-  }, [processedText, structureCV]);
   
   // Handle DOCX download
   const handleDownloadDocx = async () => {
