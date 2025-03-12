@@ -16,8 +16,14 @@ export class DocumentGenerator {
       logger.info("Starting enhanced document generation");
       const startTime = Date.now();
       
-      // Remove occurrences of 'Developed'
-      const filteredText = cvText.replace(/\bDeveloped\b/g, '');
+      // Remove occurrences of 'Developed' and 'Delivered'
+      let filteredText = cvText
+        .replace(/\bDeveloped\b/g, '')
+        .replace(/\bDelivered\b/g, '')
+        .replace(/\bImplemented\b/g, '');
+      
+      // Clean up any double spaces that might have been created
+      filteredText = filteredText.replace(/\s{2,}/g, ' ');
       
       // Split the CV text into sections based on common headers
       const sections = this.splitIntoSections(filteredText);
@@ -130,20 +136,19 @@ export class DocumentGenerator {
     
     // Process main content
     if (sections.content) {
-      // Adjust Education vs Experience confusion: if 'education' section exists but lacks clear education keywords, merge it into 'experience'
-      if (sections['education']) {
-        if (!/university|college|degree|bachelor|master|phd/i.test(sections['education'])) {
-          // Merge education content into experience
-          if (sections['experience']) {
-            sections['experience'] += "\n" + sections['education'];
-          } else {
-            sections['experience'] = sections['education'];
-          }
-          delete sections['education'];
-        }
-      }
-      
+      // Extract education section to move it to the end
       const contentSections = this.identifySections(sections.content);
+      let educationSection: { name: string, content: string } | null = null;
+      
+      // Check if Education section exists and extract it
+      if (contentSections['EDUCATION']) {
+        educationSection = { 
+          name: 'EDUCATION', 
+          content: contentSections['EDUCATION'] 
+        };
+        // Remove it from contentSections to prevent processing it now
+        delete contentSections['EDUCATION'];
+      }
       
       // Add Profile section if it exists
       if (contentSections['PROFILE'] || contentSections['SUMMARY']) {
@@ -463,7 +468,7 @@ export class DocumentGenerator {
         );
       }
       
-      // Add remaining sections (Education, etc.)
+      // Add remaining sections (except Education which we'll add at the end)
       Object.entries(contentSections).forEach(([sectionName, sectionContent]) => {
         // Skip sections we've already handled
         if (sectionName === 'PROFILE' || 
@@ -472,7 +477,8 @@ export class DocumentGenerator {
             sectionName === 'EXPERIENCE' || 
             sectionName === 'WORK EXPERIENCE' || 
             sectionName === 'PROFESSIONAL EXPERIENCE' ||
-            sectionName === 'EMPLOYMENT HISTORY') {
+            sectionName === 'EMPLOYMENT HISTORY' ||
+            sectionName === 'EDUCATION') {
           return;
         }
         
@@ -526,6 +532,59 @@ export class DocumentGenerator {
           }
         });
       });
+      
+      // Now add Education section at the end if it exists
+      if (educationSection) {
+        // Add section heading
+        children.push(
+          new Paragraph({
+            text: educationSection.name.toUpperCase(),
+            heading: HeadingLevel.HEADING_1,
+            spacing: {
+              before: 400,
+              after: 200
+            }
+          })
+        );
+        
+        // Add section content - split by lines or bullet points
+        const contentLines = educationSection.content.split('\n');
+        contentLines.forEach(line => {
+          const trimmedLine = line.trim();
+          if (trimmedLine.length === 0) return;
+          
+          // Check if this is a bullet point
+          const isBullet = trimmedLine.startsWith('-') || 
+                           trimmedLine.startsWith('•') || 
+                           trimmedLine.startsWith('*');
+          
+          // Add the paragraph with appropriate formatting
+          if (isBullet) {
+            children.push(
+              new Paragraph({
+                text: trimmedLine.substring(1).trim(),
+                bullet: {
+                  level: 0
+                },
+                spacing: {
+                  before: 100,
+                  after: 100
+                }
+              })
+            );
+          } else {
+            children.push(
+              new Paragraph({
+                text: trimmedLine,
+                spacing: {
+                  before: 100,
+                  after: 100
+                }
+              })
+            );
+          }
+        });
+      }
     }
     
     return children;
