@@ -154,12 +154,12 @@ export async function GET(request: NextRequest) {
 
     console.log(`Returning optimized DOCX for CV ${cvId} as ${optimizedFileName}`);
 
-    // Return the DOCX file with correct content type
+    // Return the DOCX file with correct content type and proper Content-Disposition header
     return new NextResponse(docxBuffer, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'Content-Disposition': `attachment; filename="${optimizedFileName}"`,
-        'Cache-Control': 'no-cache',
+        'Content-Disposition': `attachment; filename="${optimizedFileName}"; filename*=UTF-8''${encodeURIComponent(optimizedFileName)}`,
+        'Cache-Control': 'no-cache'
       },
     });
   } catch (error) {
