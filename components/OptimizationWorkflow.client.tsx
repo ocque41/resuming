@@ -366,7 +366,8 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
         </Alert>
       )}
       
-      {isProcessing && (
+      {/* Only show the processing indicator when no CV is selected or when we're in the analyze step */}
+      {isProcessing && (!selectedCVId || activeStep !== "general") && (
         <div className="mb-4 p-4 border rounded-md bg-[#050505]">
           <h3 className="text-lg font-semibold">Processing CV</h3>
           <p className="text-sm text-muted-foreground">

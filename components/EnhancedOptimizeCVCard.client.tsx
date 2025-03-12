@@ -87,42 +87,28 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   // State for processing
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isProcessed, setIsProcessed] = useState<boolean>(false);
-  const [progress, setProgress] = useState<number>(0);
-  const [processingStep, setProcessingStep] = useState<string>("");
+  const [processingProgress, setProcessingProgress] = useState<number>(0);
+  const [processingStatus, setProcessingStatus] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
-  const [errorType, setErrorType] = useState<'process' | null>(null);
   
   // State for ATS scores
   const [originalAtsScore, setOriginalAtsScore] = useState<number>(0);
   const [improvedAtsScore, setImprovedAtsScore] = useState<number>(0);
   
-  // Add a state to track optimization completion
-  const [optimizationCompleted, setOptimizationCompleted] = useState<boolean>(false);
-  
-  // Add a state to track stalled optimization
-  const [optimizationStalled, setOptimizationStalled] = useState<boolean>(false);
-  
-  // Add state for cache information
-  const [isCached, setIsCached] = useState<boolean>(false);
-  const [cacheTimestamp, setCacheTimestamp] = useState<number | null>(null);
-  const [forceRefresh, setForceRefresh] = useState<boolean>(false);
-  
-  // Add state for UI views
+  // State for UI views
   const [originalText, setOriginalText] = useState<string>("");
   const [optimizedText, setOptimizedText] = useState<string>("");
   const [improvements, setImprovements] = useState<string[]>([]);
   
-  // State for stuck processing detection
-  const [isStuck, setIsStuck] = useState<boolean>(false);
-  const [stuckMinutes, setStuckMinutes] = useState<number>(0);
-  const [stuckSince, setStuckSince] = useState<string | null>(null);
-  
-  // Debug state
-  const [debugMode, setDebugMode] = useState<boolean>(false);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
-  
-  // Add state for DOCX download
+  // State for DOCX download
   const [isDownloadingDocx, setIsDownloadingDocx] = useState<boolean>(false);
+  
+  // State for status polling
+  const [statusPollingEnabled, setStatusPollingEnabled] = useState<boolean>(false);
+  const [statusPollingInterval, setStatusPollingInterval] = useState<number>(1000);
+  
+  // State for processing too long detection
+  const [processingTooLong, setProcessingTooLong] = useState<boolean>(false);
   
   // Auto-select first CV if available
   useEffect(() => {
@@ -161,80 +147,44 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     // Reset states when a new CV is selected
     setIsProcessed(false);
     setIsProcessing(false);
-    setProgress(0);
-    setProcessingStep("");
+    setProcessingProgress(0);
+    setProcessingStatus("");
     setError(null);
-    setErrorType(null);
-    setForceRefresh(false);
     
     // Fetch original text
-    const text = await fetchOriginalText(cvId);
-    setOriginalText(text);
+    await fetchOriginalText(cvId);
     
-    // Check if we have a cached version of this document
-    const cachedData = getCachedDocument(cvId);
-    if (cachedData) {
-      console.log("Found cached document data", cachedData);
-      setIsCached(true);
-      setCacheTimestamp(cachedData.timestamp);
-      
-      // Pre-populate data from cache
-      setOriginalAtsScore(cachedData.originalAtsScore);
-      setImprovedAtsScore(cachedData.improvedAtsScore);
-      setIsProcessed(true);
-      
-      // Set optimized text if available
-      if (cachedData.optimizedText) {
-        setOptimizedText(cachedData.optimizedText);
-      }
-      
-      // Set improvements if available
-      if (cachedData.improvements) {
-        setImprovements(cachedData.improvements);
-      }
-    } else {
-      setIsCached(false);
-      setCacheTimestamp(null);
-      setOptimizedText("");
-      setImprovements([]);
-    }
+    // Start polling for status
+    setStatusPollingEnabled(true);
+    setStatusPollingInterval(1000);
   }, [fetchOriginalText]);
   
   // Process the CV
-  const processCV = useCallback(async (forceRefreshParam: boolean = false) => {
+  const processCV = useCallback(async (forceRefresh: boolean = false) => {
     if (!selectedCVId) {
       setError("Please select a CV first");
-      setErrorType('process');
       return;
     }
     
     // Set processing state
     setIsProcessing(true);
     setIsProcessed(false);
-    setProgress(0);
-    setProcessingStep("Starting optimization...");
+    setProcessingProgress(0);
+    setProcessingStatus("Starting optimization...");
     setError(null);
-    setErrorType(null);
-    setForceRefresh(forceRefreshParam);
-    setOptimizationStalled(false);
-    
-    // Reset stuck detection
-    setIsStuck(false);
-    setStuckMinutes(0);
-    setStuckSince(null);
     
     try {
-      console.log(`Processing CV: ${selectedCVName} (ID: ${selectedCVId}), force refresh: ${forceRefreshParam}`);
+      console.log(`Processing CV: ${selectedCVName} (ID: ${selectedCVId}), force refresh: ${forceRefresh}`);
       
       // Start the optimization process
-      const response = await fetch('/api/cv/optimize', {
+      const response = await fetch('/api/cv/process', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           cvId: selectedCVId,
-          forceRefresh: forceRefreshParam
+          forceRefresh: forceRefresh
         }),
       });
       
@@ -249,118 +199,185 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         throw new Error(data.error || "Optimization failed");
       }
       
-      // Update state with optimization results
-      setOptimizedText(data.optimizedText || "");
-      setImprovements(data.improvements || []);
-      setOriginalAtsScore(data.originalAtsScore || 0);
-      setImprovedAtsScore(data.improvedAtsScore || 0);
+      // Start polling for status
+      setStatusPollingEnabled(true);
+      setStatusPollingInterval(1000);
       
-      // Cache the document data
-      cacheDocument(selectedCVId, {
-        docxBase64: "dummy", // Adding a dummy value since we're removing PDF functionality
-        optimizedText: data.optimizedText,
-        improvements: data.improvements,
-        originalAtsScore: data.originalAtsScore,
-        improvedAtsScore: data.improvedAtsScore,
-        expiryTime: 24 * 60 * 60 * 1000, // 24 hours
-        originalText: originalText
-      });
-      
-      // Set processing complete
-      setIsProcessing(false);
-      setIsProcessed(true);
-      setProgress(100);
-      setOptimizationCompleted(true);
-      
-      console.log("CV optimization completed successfully");
     } catch (error) {
       console.error("Error optimizing CV:", error);
       setError(error instanceof Error ? error.message : "An unknown error occurred during optimization");
-      setErrorType('process');
       setIsProcessing(false);
-      setProgress(0);
+      setProcessingProgress(0);
+      setStatusPollingEnabled(false);
     }
   }, [selectedCVId, selectedCVName]);
   
   // Handle reset
-  const handleReset = useCallback(() => {
-    // Clear states
-    setIsProcessed(false);
-    setIsProcessing(false);
-    setProgress(0);
-    setProcessingStep("");
-    setError(null);
-    setErrorType(null);
-    setOptimizedText("");
-    setImprovements([]);
-    setOptimizationCompleted(false);
-    setOptimizationStalled(false);
-    
-    // Clear cache for this CV
-    if (selectedCVId) {
-      clearCachedDocument(selectedCVId);
-      setIsCached(false);
-      setCacheTimestamp(null);
+  const handleResetProcessing = useCallback(async () => {
+    try {
+      // Reset processing state
+      setProcessingStatus('selecting');
+      setProcessingProgress(0);
+      
+      // If we have a CV ID, call the API to cancel processing
+      if (selectedCVId) {
+        const response = await fetch(`/api/cv/process/cancel?cvId=${selectedCVId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to cancel processing');
+        }
+      }
+      
+      // Clear any existing error
+      setError(null);
+      
+      // Restart the process
+      if (selectedCVId) {
+        const retryResponse = await fetch(`/api/cv/process`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cvId: selectedCVId, forceRefresh: true }),
+        });
+        
+        if (retryResponse.ok) {
+          setStatusPollingEnabled(true);
+          setStatusPollingInterval(1000);
+        }
+      }
+    } catch (error) {
+      console.error('Error resetting processing:', error);
+      setError('Failed to reset processing. Please try again.');
     }
-    
-    console.log("Reset optimization state");
   }, [selectedCVId]);
   
-  // Check for stalled processing
+  // Polling mechanism for process status
   useEffect(() => {
-    let intervalId: NodeJS.Timeout;
+    let timeoutId: NodeJS.Timeout | null = null;
     
-    if (isProcessing) {
-      // Set up an interval to check if processing is stuck
-      let lastProgress = progress;
-      let stuckCounter = 0;
+    const checkStatus = async () => {
+      if (!statusPollingEnabled || !selectedCVId) return;
       
-      intervalId = setInterval(() => {
-        if (progress === lastProgress) {
-          stuckCounter++;
+      try {
+        const response = await fetch(`/api/cv/process/status?cvId=${selectedCVId}`);
+        
+        if (response.ok) {
+          const data = await response.json();
           
-          // If stuck for more than 1 minute (12 * 5 seconds)
-          if (stuckCounter >= 12) {
-            setIsStuck(true);
-            setStuckMinutes(Math.floor(stuckCounter / 12));
+          if (data.processing) {
+            // Still processing
+            setIsProcessing(true);
+            setProcessingStatus(data.step || "Processing...");
+            setProcessingProgress(data.progress || 0);
             
-            if (!stuckSince) {
-              setStuckSince(new Date().toISOString());
+            // Check if processing is stuck
+            if (data.isStuck) {
+              console.warn(`Processing appears stuck at ${data.progress}% for ${data.stuckMinutes} minutes`);
+              
+              // If stuck for more than 3 minutes, show error and offer retry
+              if (data.stuckMinutes > 3) {
+                setError(`Processing appears stuck at ${data.progress}%. You can wait or try again.`);
+              }
+            } else {
+              // Clear error if processing is moving again
+              setError(null);
             }
             
-            // If stuck for more than 3 minutes, mark as stalled
-            if (stuckCounter >= 36) {
-              setOptimizationStalled(true);
-              
-              // Auto-complete with what we have
-              if (optimizedText) {
-                setIsProcessing(false);
-                setIsProcessed(true);
-                setProgress(100);
-              }
+            // Continue polling, but back off if progress is slow
+            const newInterval = data.progress > 80 ? 1000 :
+                               data.progress > 60 ? 2000 :
+                               data.progress > 40 ? 3000 : 2000;
+            
+            setStatusPollingInterval(newInterval);
+            timeoutId = setTimeout(checkStatus, newInterval);
+          } else if (data.isComplete) {
+            // Processing completed
+            setIsProcessing(false);
+            setIsProcessed(true);
+            setProcessingStatus("Processing completed");
+            setProcessingProgress(100);
+            setStatusPollingEnabled(false);
+            
+            // Update state with optimization results
+            if (data.optimizedText) {
+              setOptimizedText(data.optimizedText);
+            }
+            
+            if (data.improvements) {
+              setImprovements(data.improvements);
+            }
+            
+            if (data.atsScore) {
+              setOriginalAtsScore(data.atsScore);
+            }
+            
+            if (data.improvedAtsScore) {
+              setImprovedAtsScore(data.improvedAtsScore);
+            }
+          } else if (data.error) {
+            // Processing encountered an error
+            setIsProcessing(false);
+            setError(`Processing error: ${data.error}`);
+            setStatusPollingEnabled(false);
+          } else {
+            // Not processing or idle
+            setIsProcessing(false);
+            setProcessingStatus(null);
+            setProcessingProgress(null);
+            
+            // Stop polling if nothing is happening
+            if (!data.processing && !data.isComplete) {
+              setStatusPollingEnabled(false);
             }
           }
         } else {
-          // Reset stuck detection if progress changes
-          lastProgress = progress;
-          stuckCounter = 0;
-          setIsStuck(false);
-          setStuckMinutes(0);
-          setStuckSince(null);
+          // Stop polling on error
+          setStatusPollingEnabled(false);
+          setError("Error checking processing status");
         }
-      }, 5000); // Check every 5 seconds
+      } catch (err) {
+        console.error("Error checking CV processing status:", err);
+        setStatusPollingEnabled(false);
+      }
+    };
+    
+    if (statusPollingEnabled) {
+      timeoutId = setTimeout(checkStatus, statusPollingInterval);
     }
     
     return () => {
-      if (intervalId) clearInterval(intervalId);
+      if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [isProcessing, progress, optimizedText]);
+  }, [statusPollingEnabled, statusPollingInterval, selectedCVId]);
+  
+  // Add a useEffect to detect when processing is taking too long
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
+    if (isProcessing && processingStatus) {
+      // Set a timeout to show the reset button after 30 seconds
+      timeoutId = setTimeout(() => {
+        setProcessingTooLong(true);
+      }, 30000); // 30 seconds
+    } else {
+      // Clear processing too long flag when not processing
+      setProcessingTooLong(false);
+    }
+    
+    // Clean up the timeout when the component unmounts or status changes
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [isProcessing, processingStatus]);
   
   // Handle DOCX download
   const handleDownloadDocx = useCallback(async () => {
     if (!selectedCVId) {
       setError("Please select a CV first");
-      setErrorType('process');
       return;
     }
     
@@ -373,7 +390,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       // If we don't have optimized text yet, we need to optimize the CV first
       if (!optimizedTextToUse) {
         setError("Please optimize the CV first before downloading");
-        setErrorType('process');
         setIsDownloadingDocx(false);
         return;
       }
@@ -414,7 +430,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     } catch (error) {
       console.error('Error downloading DOCX:', error);
       setError(error instanceof Error ? error.message : 'An unknown error occurred');
-      setErrorType('process');
     } finally {
       setIsDownloadingDocx(false);
     }
@@ -429,38 +444,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       </CardHeader>
       
       <CardContent className="p-6">
-        {/* Debug Information */}
-        {debugMode && debugInfo && (
-          <div className="mb-4 p-3 bg-gray-900 rounded-md text-xs font-mono overflow-x-auto">
-            <div className="text-gray-400 mb-2">Debug Information:</div>
-            <div className="text-gray-300">
-              <div>Status: {debugInfo.status || 'Unknown'}</div>
-              <div>Progress: {debugInfo.progress !== undefined 
-                ? `${debugInfo.progress}%` 
-                : 'Not available'}
-              </div>
-            </div>
-                  
-            {/* Advanced Debug Toggle */}
-            <div className="mt-2">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setDebugInfo((prev: any) => ({ ...prev, showAdvanced: !prev.showAdvanced }))}
-                className="text-xs h-6 px-2 py-0 border-gray-700"
-              >
-                {debugInfo.showAdvanced ? 'Hide Details' : 'Show Details'}
-              </Button>
-              
-              {debugInfo.showAdvanced && (
-                <pre className="mt-2 p-2 bg-black rounded text-gray-400 text-[10px] overflow-x-auto">
-                  {JSON.stringify(debugInfo.raw || {}, null, 2)}
-                </pre>
-              )}
-            </div>
-          </div>
-        )}
-        
         {/* CV Selection */}
         <div className="mb-6">
           <div className="mb-2 text-gray-400 text-sm">Select a CV to optimize</div>
@@ -473,20 +456,18 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         
         {/* Error Display */}
         {error && (
-          <Alert variant="destructive" className="mb-6 bg-red-950 border-red-900 text-red-200">
+          <Alert className="mb-6 bg-red-950 border-red-900 text-red-200">
             <AlertCircle className="h-4 w-4 mr-2" />
             <AlertDescription>
               {error}
-              {errorType === 'process' && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="mt-2 bg-red-800 hover:bg-red-700 border-red-700 text-white" 
-                  onClick={() => processCV(true)}
-                >
-                  Retry
-                </Button>
-              )}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="mt-2 bg-red-800 hover:bg-red-700 border-red-700 text-white" 
+                onClick={() => processCV(true)}
+              >
+                Retry
+              </Button>
             </AlertDescription>
           </Alert>
         )}
@@ -504,21 +485,31 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         
         {/* Processing Indicator */}
         {isProcessing && (
-          <div className="space-y-4 mb-6">
-            <div className="flex justify-between items-center">
-              <div className="text-white font-medium">{processingStep}</div>
-              <div className="text-gray-400 text-sm">{progress}%</div>
+          <div className="mb-4 p-4 border rounded-md bg-[#050505]">
+            <h3 className="text-lg font-semibold">Processing CV</h3>
+            <p className="text-sm text-muted-foreground">
+              {processingStatus}. Might take a couple minutes, please wait for an accurate optimization.
+            </p>
+            <div className="w-full h-2 bg-secondary mt-2 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-primary transition-all duration-300 ease-in-out" 
+                style={{ width: `${processingProgress || 0}%` }}
+              />
             </div>
-            <Progress value={progress} className="h-2 bg-gray-800" />
-            
-            {isStuck && (
-              <Alert className="bg-yellow-900/20 text-yellow-400 border border-yellow-900">
-                <Clock className="h-4 w-4 mr-2" />
-                <AlertDescription>
-                  Processing is taking longer than expected. This has been stuck at {progress}% for {stuckMinutes} minutes.
-                </AlertDescription>
-              </Alert>
-            )}
+            <div className="flex justify-between items-center mt-1">
+              <p className="text-sm">{processingProgress || 0}%</p>
+              {processingTooLong && (
+                <button
+                  onClick={handleResetProcessing}
+                  className="px-3 py-1 bg-red-900/30 hover:bg-red-800/50 text-red-300 border border-red-800 rounded-md flex items-center text-xs"
+                >
+                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Taking too long? Reset
+                </button>
+              )}
+            </div>
           </div>
         )}
         
@@ -570,7 +561,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                   )}
                   
                   <Button
-                    onClick={handleReset}
+                    onClick={handleResetProcessing}
                     className="bg-transparent hover:bg-gray-800 text-gray-400 border border-gray-700 flex items-center justify-center mt-4 w-full"
                   >
                     <RefreshCw className="h-5 w-5 mr-2" />
@@ -580,16 +571,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
               </div>
             </div>
           </div>
-        )}
-        
-        {/* Message for stalled optimization */}
-        {optimizationStalled && (
-          <Alert className="mt-4 bg-yellow-900/20 text-yellow-400 border border-yellow-900">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              The optimization process took longer than expected to complete. We've proceeded with the available results. If you encounter any issues, please try the process again.
-            </AlertDescription>
-          </Alert>
         )}
       </CardContent>
     </Card>
