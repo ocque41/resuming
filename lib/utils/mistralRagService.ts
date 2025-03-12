@@ -120,7 +120,9 @@ class SimpleVectorStore {
  * Note: Currently using OpenAI for stability but maintains interface compatibility.
  */
 export class MistralRAGService {
-  private openaiClient: OpenAI;
+  private openaiClient: OpenAI = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY || '',
+  });
   private mistralClient: Mistral | null = null;
   private vectorStore: SimpleVectorStore = new SimpleVectorStore();
   private chunks: string[] = [];
@@ -140,11 +142,6 @@ export class MistralRAGService {
    */
   constructor() {
     try {
-      // Initialize OpenAI client
-      this.openaiClient = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY || '',
-      });
-      
       // Try to initialize Mistral client if API key is available
       const mistralApiKey = process.env.MISTRAL_API_KEY;
       if (mistralApiKey) {
@@ -179,13 +176,6 @@ export class MistralRAGService {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`Error initializing MistralRAG service: ${errorMessage}`);
-      
-      // Ensure OpenAI client is initialized even if there's an error
-      if (!this.openaiClient) {
-        this.openaiClient = new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY || '',
-        });
-      }
       
       // Disable Mistral if there was an error
       this.useMistral = false;
@@ -478,22 +468,29 @@ export class MistralRAGService {
 
   /**
    * Generate a response to a query using RAG
-   * @param query Query to generate response for
-   * @param systemPrompt Optional system prompt
-   * @returns Generated response
+   * @param query The query to answer
+   * @param useSystemPrompt Whether to use a system prompt or not
+   * @returns The generated response
    */
-  public async generateResponse(query: string, systemPrompt?: string): Promise<string> {
+  public async generateResponse(query: string, useSystemPrompt?: boolean | string): Promise<string> {
     try {
-      // Retrieve relevant chunks
-      const chunks = await this.retrieveRelevantChunks(query, 3);
+      // Get relevant chunks for the query
+      const chunks = await this.retrieveRelevantChunks(query);
       
+      // If no chunks are found, fall back to direct response
       if (chunks.length === 0) {
         logger.warn('No relevant chunks found for query, falling back to direct response');
-        return this.generateDirectResponse(query, systemPrompt);
+        return this.generateDirectResponse(query, typeof useSystemPrompt === 'string' ? useSystemPrompt : undefined);
       }
       
       // Combine chunks into context
       const context = chunks.join('\n\n');
+      
+      // Determine the system prompt
+      let systemPromptText = 'You are a helpful assistant that answers questions based on the provided CV information.';
+      if (typeof useSystemPrompt === 'string') {
+        systemPromptText = useSystemPrompt;
+      }
       
       // Generate response with context using OpenAI
       const response = await this.openaiClient.chat.completions.create({
@@ -501,7 +498,7 @@ export class MistralRAGService {
         messages: [
           {
             role: 'system',
-            content: systemPrompt || 'You are a helpful assistant that answers questions based on the provided CV information.'
+            content: systemPromptText
           },
           {
             role: 'user',
@@ -510,17 +507,10 @@ export class MistralRAGService {
         ]
       });
       
-      if (!response.choices || !response.choices[0] || !response.choices[0].message) {
-        throw new Error('Invalid response format from OpenAI API');
-      }
-      
-      return response.choices[0].message.content || '';
+      return response.choices[0]?.message?.content || 'No response generated';
     } catch (error) {
-      // Fix error type handling for logger
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error generating response with RAG: ${errorMessage}`);
-      // Fall back to direct query
-      return this.generateDirectResponse(query, systemPrompt);
+      logger.error(`Error generating response: ${error instanceof Error ? error.message : String(error)}`);
+      return 'Error generating response. Please try again.';
     }
   }
 
@@ -846,9 +836,9 @@ export class MistralRAGService {
         keywords = keywords.filter(keyword => typeof keyword === 'string' && keyword.trim() !== '');
         
         // Format keywords (capitalize first letter of each word)
-        keywords = keywords.map(keyword => 
+        keywords = keywords.map((keyword: string) => 
           keyword.split(' ')
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
             .join(' ')
         );
         
@@ -874,9 +864,9 @@ export class MistralRAGService {
             .filter(keyword => keyword !== '');
           
           // Format keywords
-          extractedKeywords = extractedKeywords.map(keyword => 
+          extractedKeywords = extractedKeywords.map((keyword: string) => 
             keyword.split(' ')
-              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+              .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
               .join(' ')
           );
           
@@ -1184,7 +1174,7 @@ Keep your analysis focused only on the document's content, not its format or lay
         // Try to parse as JSON
         try {
           // First, try to extract JSON if it's embedded in other text
-          const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+          const jsonMatch = analysisText.match(/\{[\s\S]*?\}/);
           const jsonString = jsonMatch ? jsonMatch[0] : analysisText;
           
           const jsonResponse = JSON.parse(jsonString);
@@ -1571,5 +1561,69 @@ Example response format:
       { name: "Education", content: "Educational background" },
       { name: "Skills", content: "Professional skills" }
     ];
+  }
+
+  /**
+   * Parse bullet points from text
+   * @param text Text containing bullet points
+   * @returns Array of bullet points
+   */
+  private parseBulletPoints(text: string): string[] {
+    // Split by common bullet point markers
+    const bulletPointRegex = /(?:^|\n)(?:\s*[-•*]\s*|\s*\d+\.\s*|\s*[a-z]\)\s*|\s*[A-Z]\)\s*)(.+?)(?=(?:\n\s*[-•*]\s*|\n\s*\d+\.\s*|\n\s*[a-z]\)\s*|\n\s*[A-Z]\)\s*|$))/g;
+    
+    const bulletPoints: string[] = [];
+    let match;
+    
+    while ((match = bulletPointRegex.exec(text)) !== null) {
+      if (match[1] && match[1].trim()) {
+        bulletPoints.push(match[1].trim());
+      }
+    }
+    
+    // If no bullet points found, try splitting by newlines
+    if (bulletPoints.length === 0) {
+      return text.split(/\n+/)
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+    }
+    
+    return bulletPoints;
+  }
+
+  /**
+   * Parse analysis sections from text
+   * @param text Analysis text
+   * @returns Object with strengths, weaknesses, and recommendations
+   */
+  private parseAnalysisSections(text: string): { strengths: string[], weaknesses: string[], recommendations: string[] } {
+    // Default empty arrays
+    const result: { strengths: string[], weaknesses: string[], recommendations: string[] } = {
+      strengths: [] as string[],
+      weaknesses: [] as string[],
+      recommendations: [] as string[]
+    };
+    
+    // Try to extract sections using regex
+    const strengthsMatch = text.match(/(?:strengths|pros|positives|advantages)(?:\s*:|\s*\n)([\s\S]*?)(?=(?:weaknesses|cons|negatives|disadvantages|recommendations|suggestions|improvements|$))/i);
+    const weaknessesMatch = text.match(/(?:weaknesses|cons|negatives|disadvantages)(?:\s*:|\s*\n)([\s\S]*?)(?=(?:recommendations|suggestions|improvements|strengths|pros|positives|advantages|$))/i);
+    const recommendationsMatch = text.match(/(?:recommendations|suggestions|improvements)(?:\s*:|\s*\n)([\s\S]*?)(?=(?:strengths|pros|positives|advantages|weaknesses|cons|negatives|disadvantages|$))/i);
+    
+    // Extract strengths
+    if (strengthsMatch && strengthsMatch[1]) {
+      result.strengths = this.parseBulletPoints(strengthsMatch[1]);
+    }
+    
+    // Extract weaknesses
+    if (weaknessesMatch && weaknessesMatch[1]) {
+      result.weaknesses = this.parseBulletPoints(weaknessesMatch[1]);
+    }
+    
+    // Extract recommendations
+    if (recommendationsMatch && recommendationsMatch[1]) {
+      result.recommendations = this.parseBulletPoints(recommendationsMatch[1]);
+    }
+    
+    return result;
   }
 } 

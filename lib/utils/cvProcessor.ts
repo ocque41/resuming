@@ -118,7 +118,7 @@ export async function processCVWithAI(
     };
     
     // Determine starting phase based on metadata and force refresh flag
-    const determineStartingPhase = (metadata: any, forceRefresh: boolean) => {
+    const determineStartingPhase = (metadata: any, forceRefresh: boolean): 'initial' | 'analysis' | 'optimization' | 'complete' => {
       if (forceRefresh) {
         return 'initial';
       }
@@ -203,7 +203,7 @@ export async function processCVWithAI(
         const systemReference = await getSystemReferenceContent();
         
         // Use the existing analysis if available, or perform a new analysis
-        if (existingAnalysis && startingPhase !== 'initial') {
+        if (existingAnalysis && startingPhase !== 'initial' && startingPhase !== 'analysis') {
           logger.info(`Using existing analysis data for CV ID: ${cvId}`);
           analysis = existingAnalysis;
           await updateProgress('analysis_loaded', 40);
