@@ -4,6 +4,7 @@ import { db } from "@/lib/db/drizzle";
 import { cvs } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import axios from "axios";
+import { getDropboxClient } from "@/lib/dropboxAdmin";
 
 // Define metadata interface
 interface CVMetadata {
@@ -59,6 +60,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized access to CV" }, { status: 403 });
     }
 
+    // Create a new filename for the optimized version
+    const fileName = cvRecord.fileName || `cv-${cvId}.docx`;
+    const fileNameParts = fileName.split('.');
+    fileNameParts.pop(); // Remove extension
+    const baseName = fileNameParts.join('.');
+    const optimizedFileName = `${baseName}-optimized.docx`;
+
     // Check if the optimized DOCX path exists
     if (!cvRecord.optimizedDocxPath) {
       // Parse the metadata to see if we have a base64 version as fallback
@@ -74,12 +82,7 @@ export async function GET(request: NextRequest) {
         console.log(`Using base64 DOCX data for CV ${cvId}`);
         const buffer = Buffer.from(metadata.docxBase64, 'base64');
         
-        // Create a new filename for the optimized version
-        const fileName = cvRecord.fileName || `cv-${cvId}.docx`;
-        const fileNameParts = fileName.split('.');
-        fileNameParts.pop(); // Remove extension
-        const baseName = fileNameParts.join('.');
-        const optimizedFileName = `${baseName}-optimized.docx`;
+        console.log(`Returning DOCX from base64 for CV ${cvId} as ${optimizedFileName}`);
         
         return new NextResponse(buffer, {
           headers: {
@@ -109,28 +112,39 @@ export async function GET(request: NextRequest) {
       console.error("Error parsing metadata:", parseError);
     }
     
-    // If we don't have a direct link, we need to fetch the file from Dropbox
-    // and stream it to the client
+    // Get a fresh link from Dropbox using the stored path
     let docxBuffer;
     try {
       console.log(`Fetching optimized DOCX from Dropbox for CV ${cvId}`);
       
-      if (!dropboxLink) {
-        // We need to get a new link from Dropbox using the path
-        // This would require using the Dropbox API to get a temporary link
-        // For simplicity, we're assuming the link is in the metadata
-        console.error(`No Dropbox link available for CV ${cvId}`);
-        return NextResponse.json({ 
-          error: "Unable to retrieve file from storage" 
-        }, { status: 500 });
+      if (!dropboxLink || true) { // Always get a fresh link to avoid expiration issues
+        try {
+          // Use Dropbox API to get a fresh temporary link
+          const dbx = getDropboxClient();
+          const tempLinkResult = await dbx.filesGetTemporaryLink({ path: cvRecord.optimizedDocxPath });
+          dropboxLink = tempLinkResult.result.link;
+          console.log(`Generated fresh Dropbox link for ${cvRecord.optimizedDocxPath}`);
+        } catch (err) {
+          console.error("Failed to get fresh Dropbox link:", err);
+          return NextResponse.json({ 
+            error: "Failed to retrieve file from storage" 
+          }, { status: 500 });
+        }
       }
       
       // Fetch the file from Dropbox
-      const response = await axios.get(dropboxLink, {
-        responseType: 'arraybuffer'
+      console.log(`Downloading file from Dropbox link: ${dropboxLink}`);
+      const response = await axios({
+        method: 'get',
+        url: dropboxLink,
+        responseType: 'arraybuffer',
+        headers: {
+          'Accept': 'application/octet-stream'
+        }
       });
       
       docxBuffer = Buffer.from(response.data);
+      console.log(`Successfully downloaded ${docxBuffer.length} bytes from Dropbox`);
     } catch (fetchError) {
       console.error("Error fetching DOCX from Dropbox:", fetchError);
       return NextResponse.json({ 
@@ -138,16 +152,9 @@ export async function GET(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // Create a new filename for the optimized version
-    const fileName = cvRecord.fileName || `cv-${cvId}.docx`;
-    const fileNameParts = fileName.split('.');
-    fileNameParts.pop(); // Remove extension
-    const baseName = fileNameParts.join('.');
-    const optimizedFileName = `${baseName}-optimized.docx`;
-
     console.log(`Returning optimized DOCX for CV ${cvId} as ${optimizedFileName}`);
 
-    // Return the DOCX file
+    // Return the DOCX file with correct content type
     return new NextResponse(docxBuffer, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',

@@ -146,6 +146,9 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   const [debugMode, setDebugMode] = useState<boolean>(false);
   const [debugInfo, setDebugInfo] = useState<any>(null);
   
+  // Add a state for downloading DOCX
+  const [isDownloadingDocx, setIsDownloadingDocx] = useState<boolean>(false);
+  
   // Auto-select first CV if available
   useEffect(() => {
     if (cvs.length > 0 && !selectedCVId) {
@@ -410,6 +413,43 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     setShowPdfPreview(!showPdfPreview);
   }, [showPdfPreview]);
 
+  // Add a utility function for file downloads with proper MIME type handling
+  const downloadFile = (blob: Blob, filename: string) => {
+    // Ensure we set the correct MIME type based on file extension
+    let mimeType = 'application/octet-stream'; // default
+    const extension = filename.split('.').pop()?.toLowerCase();
+    
+    if (extension === 'docx') {
+      mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    } else if (extension === 'doc') {
+      mimeType = 'application/msword';
+    } else if (extension === 'pdf') {
+      mimeType = 'application/pdf';
+    }
+    
+    // Create a new blob with the correct MIME type
+    const fileBlob = new Blob([blob], { type: mimeType });
+    
+    // Create an object URL for the blob
+    const url = URL.createObjectURL(fileBlob);
+    
+    // Create a download link
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    
+    // Click the link to start the download
+    a.click();
+    
+    // Clean up
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+  };
+
   // Handle DOCX download
   const handleDownloadDocx = useCallback(() => {
     if (!docxBase64 && !selectedCVId) {
@@ -420,8 +460,9 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     }
     
     try {
-      // If we have a direct download link from Dropbox, use it
+      // If we have a direct download link from Dropbox, use it for a redirect
       if (docxDownloadLink) {
+        // Open in a new tab to trigger download
         window.open(docxDownloadLink, '_blank');
         return;
       }
@@ -429,21 +470,42 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       // Otherwise, use the API endpoint
       const downloadUrl = `/api/cv/download-optimized-docx?cvId=${selectedCVId}`;
       
-      // Open download in a new tab or trigger direct download
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = `${selectedCVName || 'cv'}-optimized.docx`;
-      document.body.appendChild(link);
-      link.click();
+      // Show loading indicator
+      setIsDownloadingDocx(true);
       
-      // Clean up
-      setTimeout(() => {
-        document.body.removeChild(link);
-      }, 100);
+      // Use fetch instead of a direct link for better error handling
+      fetch(downloadUrl)
+        .then(response => {
+          if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+          
+          // Get the filename from the Content-Disposition header if available
+          const contentDisposition = response.headers.get('Content-Disposition');
+          let filename = `${selectedCVName || 'cv'}-optimized.docx`;
+          
+          if (contentDisposition) {
+            const match = contentDisposition.match(/filename="(.+)"/);
+            if (match) filename = match[1];
+          }
+          
+          // Get the blob from the response
+          return response.blob().then(blob => ({ blob, filename }));
+        })
+        .then(({ blob, filename }) => {
+          // Use our utility function for the download
+          downloadFile(blob, filename);
+          setIsDownloadingDocx(false);
+        })
+        .catch(error => {
+          console.error("Error downloading DOCX:", error);
+          setError("Failed to download the document. Please try again.");
+          setErrorType('docx');
+          setIsDownloadingDocx(false);
+        });
     } catch (e) {
-      console.error("Error downloading DOCX:", e);
+      console.error("Error initiating DOCX download:", e);
       setError("Failed to download the document. Please try again.");
       setErrorType('docx');
+      setIsDownloadingDocx(false);
     }
   }, [docxBase64, selectedCVId, selectedCVName, docxDownloadLink]);
 
@@ -456,19 +518,29 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     }
     
     try {
-      const blob = new Blob([pdfBase64], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${selectedCVName?.replace(/\.[^/.]+$/, '') || 'optimized'}_v${historyVersion}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // Convert base64 to blob
+      const byteCharacters = atob(pdfBase64);
+      const byteNumbers = new Array(byteCharacters.length);
+      
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], {type: 'application/pdf'});
+      
+      // Generate filename
+      const filename = `${selectedCVName?.replace(/\.[^/.]+$/, '') || 'optimized'}-enhanced.pdf`;
+      
+      // Use our utility function for consistent download handling
+      downloadFile(blob, filename);
+      
+      console.log(`PDF download initiated successfully for ${filename}`);
     } catch (error) {
       console.error("Error downloading PDF:", error);
       setError("Failed to download PDF. The file may be corrupted. Please try again.");
     }
-  }, [pdfBase64, selectedCVName, historyVersion]);
+  }, [pdfBase64, selectedCVName]);
 
   // Update the handleGenerateDocx function to properly handle document generation
   const handleGenerateDocx = useCallback(async () => {
@@ -1105,23 +1177,41 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                     <h4 className="text-white font-medium mb-4">Optimized Document</h4>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-              <Button
+                      <Button
                         onClick={() => handleDownloadDocx()}
-                        disabled={!docxGenerated}
+                        disabled={!docxGenerated || isDownloadingDocx}
                         className="bg-gray-800 hover:bg-gray-700 text-white flex-grow"
                       >
-                        <Download className="h-5 w-5 mr-2" />
-                        Download DOCX
-              </Button>
+                        {isDownloadingDocx ? (
+                          <>
+                            <RefreshCw className="h-5 w-5 mr-2 animate-spin" />
+                            Downloading...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="h-5 w-5 mr-2" />
+                            Download DOCX
+                          </>
+                        )}
+                      </Button>
               
-                <Button
+                      <Button
                         onClick={() => handleDownloadDocx()}
-                        disabled={!docxGenerated}
+                        disabled={!docxGenerated || isDownloadingDocx}
                         className="bg-gray-800 hover:bg-gray-700 text-white flex-grow"
-                >
-                  <Download className="h-5 w-5 mr-2" />
-                        Download as Word
-                </Button>
+                      >
+                        {isDownloadingDocx ? (
+                          <>
+                            <RefreshCw className="h-5 w-5 mr-2 animate-spin" />
+                            Downloading...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="h-5 w-5 mr-2" />
+                            Download as Word
+                          </>
+                        )}
+                      </Button>
                     </div>
                     
                     {isGeneratingDocx && !docxGenerated && (
