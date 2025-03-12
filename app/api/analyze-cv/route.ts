@@ -575,7 +575,7 @@ function calculateATSScore(
  */
 function performBasicAnalysis(cvId: string, userId: string, rawText: string, metadata: any): AnalysisResult {
   // Log that we're falling back to basic analysis
-  console.log(`Performing basic analysis for CV ID: ${cvId}`);
+  logger.info(`Performing basic analysis for CV ID: ${cvId}`);
   
   // Create initial analysis result with default values
   const analysisResult: AnalysisResult = {
@@ -583,7 +583,7 @@ function performBasicAnalysis(cvId: string, userId: string, rawText: string, met
     userId,
     atsScore: 65, // Default ATS score
     industry: "General",
-    language: "en",
+    language: "English", // Default to English
     keywords: [],
     keyRequirements: [],
     strengths: [],
@@ -597,17 +597,272 @@ function performBasicAnalysis(cvId: string, userId: string, rawText: string, met
     skills: []
   };
   
-  // Ensure all arrays are populated with defaults
-  ensureArraysArePopulated(analysisResult);
-  
-  // Add metadata
-  analysisResult.metadata = {
-    ...metadata,
-    analysisMethod: "basic",
-    analysisTimestamp: new Date().toISOString()
-  };
-  
-  console.log(`Basic analysis completed for CV ID: ${cvId}`);
-  
-  return analysisResult;
+  try {
+    // Detect language using simple regex patterns
+    if (/\b(the|and|is|in|to|for|with|that|this|from|by|on|are|have|has|was|were|will|would|could|should|can)\b/gi.test(rawText)) {
+      analysisResult.language = "English";
+    } else if (/\b(el|la|los|las|un|una|unos|unas|y|en|de|con|por|para|que|este|esta|estos|estas|ese|esa|esos|esas)\b/gi.test(rawText)) {
+      analysisResult.language = "Spanish";
+    } else if (/\b(le|la|les|des|un|une|et|en|de|avec|pour|que|qui|ce|cette|ces|il|elle|ils|elles|nous|vous)\b/gi.test(rawText)) {
+      analysisResult.language = "French";
+    } else if (/\b(der|die|das|den|dem|ein|eine|einer|eines|und|in|mit|für|von|zu|auf|bei|aus|nach|vor)\b/gi.test(rawText)) {
+      analysisResult.language = "German";
+    }
+    
+    // Extract sections based on common section headers
+    const sectionHeaders = [
+      'summary', 'profile', 'objective', 'experience', 'work experience', 'employment history',
+      'education', 'skills', 'technical skills', 'certifications', 'achievements',
+      'projects', 'publications', 'languages', 'interests', 'references'
+    ];
+    
+    const sections: Array<{ name: string; content: string }> = [];
+    const normalizedText = rawText.toLowerCase();
+    
+    sectionHeaders.forEach(header => {
+      const regex = new RegExp(`(?:^|\\n)\\s*${header}\\s*(?:\\:|\\n)`, 'i');
+      const match = normalizedText.match(regex);
+      
+      if (match && match.index !== undefined) {
+        const startIndex = match.index;
+        
+        // Find the next section header
+        let endIndex = normalizedText.length;
+        for (const nextHeader of sectionHeaders) {
+          if (nextHeader === header) continue;
+          
+          const nextRegex = new RegExp(`(?:^|\\n)\\s*${nextHeader}\\s*(?:\\:|\\n)`, 'i');
+          const nextMatch = normalizedText.substring(startIndex + match[0].length).match(nextRegex);
+          
+          if (nextMatch && nextMatch.index !== undefined) {
+            const nextStartIndex = startIndex + match[0].length + nextMatch.index;
+            if (nextStartIndex < endIndex) {
+              endIndex = nextStartIndex;
+            }
+          }
+        }
+        
+        // Extract the section content
+        const content = rawText.substring(startIndex, endIndex).trim();
+        if (content) {
+          sections.push({
+            name: header.charAt(0).toUpperCase() + header.slice(1),
+            content
+          });
+        }
+      }
+    });
+    
+    analysisResult.sections = sections;
+    
+    // Extract skills from a predefined list of common skills
+    const commonSkills = [
+      'communication', 'teamwork', 'leadership', 'problem solving', 'critical thinking',
+      'time management', 'organization', 'adaptability', 'creativity', 'attention to detail',
+      'project management', 'customer service', 'research', 'analytical skills', 'negotiation',
+      'javascript', 'python', 'java', 'c++', 'c#', 'react', 'angular', 'vue', 'node.js',
+      'html', 'css', 'sql', 'nosql', 'aws', 'azure', 'gcp', 'docker', 'kubernetes',
+      'excel', 'word', 'powerpoint', 'photoshop', 'illustrator', 'marketing', 'sales',
+      'accounting', 'finance', 'hr', 'operations', 'strategy', 'consulting', 'data analysis'
+    ];
+    
+    const skills: string[] = [];
+    commonSkills.forEach(skill => {
+      const regex = new RegExp(`\\b${skill}\\b`, 'i');
+      if (regex.test(rawText)) {
+        skills.push(skill.charAt(0).toUpperCase() + skill.slice(1));
+      }
+    });
+    
+    // Ensure we have at least some skills
+    if (skills.length === 0) {
+      skills.push('Communication', 'Problem Solving', 'Teamwork', 'Time Management');
+    }
+    
+    analysisResult.skills = skills;
+    
+    // Determine industry based on keyword matches
+    const industryKeywords: Record<string, string[]> = {
+      'Technology': [
+        'software', 'development', 'programming', 'javascript', 'python', 'java', 'react', 'angular', 'node',
+        'aws', 'azure', 'cloud', 'devops', 'agile', 'scrum', 'git', 'api', 'microservices', 'docker',
+        'kubernetes', 'machine learning', 'ai', 'data science', 'full stack', 'frontend', 'backend'
+      ],
+      'Finance': [
+        'financial analysis', 'accounting', 'budgeting', 'forecasting', 'investment', 'portfolio', 'risk management',
+        'financial reporting', 'audit', 'compliance', 'banking', 'securities', 'trading', 'equity', 'financial modeling'
+      ],
+      'Healthcare': [
+        'patient care', 'clinical', 'medical', 'healthcare', 'hospital', 'physician', 'nursing', 'treatment',
+        'diagnosis', 'therapy', 'pharmaceutical', 'health records', 'hipaa', 'electronic medical records',
+        'patient management', 'medical coding', 'medical billing', 'healthcare compliance'
+      ],
+      'Marketing': [
+        'marketing strategy', 'digital marketing', 'social media', 'content marketing', 'seo', 'sem', 'ppc',
+        'google analytics', 'facebook ads', 'instagram', 'brand management', 'market research',
+        'customer acquisition', 'customer retention', 'email marketing', 'marketing automation'
+      ],
+      'Sales': [
+        'sales strategy', 'business development', 'account management', 'client relationship', 'negotiation',
+        'closing deals', 'sales pipeline', 'lead generation', 'prospecting', 'sales targets', 'revenue growth'
+      ]
+    };
+    
+    let topIndustry = 'General';
+    let topCount = 0;
+    
+    Object.entries(industryKeywords).forEach(([industry, keywords]) => {
+      let count = 0;
+      keywords.forEach(keyword => {
+        const regex = new RegExp(`\\b${keyword}\\b`, 'i');
+        if (regex.test(rawText)) {
+          count++;
+        }
+      });
+      
+      if (count > topCount) {
+        topCount = count;
+        topIndustry = industry;
+      }
+    });
+    
+    analysisResult.industry = topIndustry;
+    
+    // Extract keywords
+    const extractedKeywords: string[] = [];
+    const potentialKeywords = [
+      ...industryKeywords[topIndustry] || [],
+      'experience', 'skills', 'education', 'project', 'achievement', 'certification',
+      'leadership', 'management', 'communication', 'teamwork', 'problem solving'
+    ];
+    
+    potentialKeywords.forEach(keyword => {
+      const regex = new RegExp(`\\b${keyword}\\b`, 'i');
+      if (regex.test(rawText) && !extractedKeywords.includes(keyword)) {
+        extractedKeywords.push(keyword.charAt(0).toUpperCase() + keyword.slice(1));
+      }
+    });
+    
+    // Ensure we have at least some keywords
+    if (extractedKeywords.length < 5) {
+      const defaultKeywords = ['Professional Experience', 'Skills', 'Education', 'Communication', 'Problem Solving'];
+      defaultKeywords.forEach(keyword => {
+        if (!extractedKeywords.includes(keyword)) {
+          extractedKeywords.push(keyword);
+        }
+      });
+    }
+    
+    analysisResult.keywords = extractedKeywords.slice(0, 15); // Limit to 15 keywords
+    
+    // Extract key requirements
+    const keyRequirements = [
+      'Professional experience',
+      'Relevant education',
+      'Technical skills',
+      'Communication skills',
+      'Problem-solving abilities'
+    ];
+    
+    analysisResult.keyRequirements = keyRequirements;
+    
+    // Basic format analysis
+    const formatStrengths = [
+      'Organized structure',
+      'Clear section headings',
+      'Consistent formatting'
+    ];
+    
+    const formatWeaknesses = [
+      'Could improve visual hierarchy',
+      'Consider adding more white space',
+      'Ensure consistent alignment'
+    ];
+    
+    const formatRecommendations = [
+      'Use bullet points for achievements',
+      'Add more white space between sections',
+      'Ensure consistent date formatting'
+    ];
+    
+    analysisResult.formatStrengths = formatStrengths;
+    analysisResult.formatWeaknesses = formatWeaknesses;
+    analysisResult.formatRecommendations = formatRecommendations;
+    
+    // Basic content analysis
+    const strengths = [
+      'Includes relevant professional information',
+      'Presents qualifications clearly',
+      'Demonstrates professional background'
+    ];
+    
+    const weaknesses = [
+      'Could benefit from more quantifiable achievements',
+      'May need more specific examples of skills application',
+      'Consider adding more industry-specific keywords'
+    ];
+    
+    const recommendations = [
+      'Add measurable achievements with numbers and percentages',
+      'Include more industry-specific keywords',
+      'Ensure all experience is relevant to target positions'
+    ];
+    
+    analysisResult.strengths = strengths;
+    analysisResult.weaknesses = weaknesses;
+    analysisResult.recommendations = recommendations;
+    
+    // Calculate ATS score
+    const hasContact = /(?:email|phone|address|linkedin)/i.test(rawText);
+    const hasEducation = /(?:education|degree|university|college|bachelor|master|phd|diploma)/i.test(rawText);
+    const hasExperience = /(?:experience|work|employment|job|position|role)/i.test(rawText);
+    const hasSkills = /(?:skills|proficient|proficiency|familiar|expertise|expert|knowledge)/i.test(rawText);
+    
+    let atsScore = 65; // Start with a default score
+    
+    // Add points for key sections
+    if (hasContact) atsScore += 5;
+    if (hasEducation) atsScore += 5;
+    if (hasExperience) atsScore += 10;
+    if (hasSkills) atsScore += 5;
+    
+    // Add points for extracted data
+    atsScore += Math.min(skills.length, 5);
+    atsScore += Math.min(extractedKeywords.length / 2, 5);
+    
+    // Ensure score is between 30 and 95
+    atsScore = Math.max(30, Math.min(atsScore, 95));
+    analysisResult.atsScore = Math.round(atsScore);
+    
+    // Ensure all arrays are populated
+    ensureArraysArePopulated(analysisResult);
+    
+    // Add metadata
+    analysisResult.metadata = {
+      ...metadata,
+      analysisMethod: "basic",
+      analysisTimestamp: new Date().toISOString()
+    };
+    
+    logger.info(`Basic analysis completed for CV ID: ${cvId}`);
+    
+    return analysisResult;
+  } catch (error) {
+    logger.error(`Error in basic analysis for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
+    
+    // Ensure all arrays are populated with defaults
+    ensureArraysArePopulated(analysisResult);
+    
+    // Add metadata
+    analysisResult.metadata = {
+      ...metadata,
+      analysisMethod: "basic_fallback",
+      analysisTimestamp: new Date().toISOString(),
+      error: error instanceof Error ? error.message : String(error)
+    };
+    
+    logger.info(`Basic fallback analysis completed for CV ID: ${cvId}`);
+    
+    return analysisResult;
+  }
 }

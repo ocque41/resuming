@@ -103,38 +103,334 @@ export async function processCVWithAI(
       timestamp: new Date().toISOString()
     });
     
-    // Set a maximum processing time (5 minutes instead of 10 to avoid long waits)
-    const PROCESSING_TIMEOUT = 5 * 60 * 1000; // 5 minutes
-    
-    // Create a promise that resolves when processing is complete or rejects on timeout
-    const processingPromise = processWithTimeout();
-    
-    // Create a timeout promise
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => {
-        reject(new Error('CV processing timed out after 5 minutes'));
-      }, PROCESSING_TIMEOUT);
-    });
-    
-    // Race the processing against the timeout
-    try {
-      const result = await Promise.race([processingPromise, timeoutPromise]);
-      return result;
-    } catch (timeoutError) {
-      // If a timeout occurred, update metadata to reflect the error
-      logger.error(`Processing timed out for CV ID: ${cvId}`);
+    // Helper function to update progress
+    const updateProgress = async (status: string, progress: number) => {
+      logger.info(`Updating progress: ${status} (${progress}%)`);
       
-      // Update CV metadata to reflect timeout
       updatedMetadata = {
         ...updatedMetadata,
-        processing: false,
-        processingStatus: 'error',
-        processingError: 'Processing timed out after 5 minutes. Please try again.',
-        processingProgress: 0,
+        processingStatus: status,
+        processingProgress: progress,
         lastUpdated: new Date().toISOString()
       };
       
       await updateCVMetadata(cvId, updatedMetadata);
+    };
+    
+    // Determine starting phase based on metadata and force refresh flag
+    const determineStartingPhase = (metadata: any, forceRefresh: boolean) => {
+      if (forceRefresh) {
+        return 'initial';
+      }
+      
+      if (metadata.processingCompleted || metadata.optimized) {
+        return 'complete';
+      }
+      
+      if (metadata.analysis && metadata.atsScore) {
+        return 'optimization';
+      }
+      
+      return 'initial';
+    };
+    
+    // Get existing analysis if available
+    const getExistingAnalysis = async (cvId: number) => {
+      try {
+        const cv = await db.query.cvs.findFirst({
+          where: eq(cvs.id, cvId)
+        });
+        
+        if (cv && cv.metadata) {
+          const metadata = JSON.parse(cv.metadata);
+          if (metadata.atsScore && metadata.strengths && metadata.weaknesses) {
+            return {
+              atsScore: metadata.atsScore,
+              industry: metadata.industry || 'General',
+              strengths: metadata.strengths || [],
+              weaknesses: metadata.weaknesses || [],
+              recommendations: metadata.recommendations || [],
+              formatStrengths: metadata.formattingStrengths || [],
+              formatWeaknesses: metadata.formattingWeaknesses || [],
+              formatRecommendations: metadata.formattingRecommendations || []
+            };
+          }
+        }
+        return null;
+      } catch (error) {
+        logger.error(`Error getting existing analysis: ${error instanceof Error ? error.message : String(error)}`);
+        return null;
+      }
+    };
+    
+    try {
+      // Determine starting phase
+      const startingPhase = determineStartingPhase(currentMetadata, forceRefresh);
+      logger.info(`Starting CV processing at phase: ${startingPhase} for CV ID: ${cvId}`);
+
+      // Check if we have existing analysis data to use
+      let existingAnalysis = null;
+      if (startingPhase !== 'initial') {
+        logger.info(`Looking for existing analysis data for CV ID: ${cvId}`);
+        existingAnalysis = await getExistingAnalysis(cvId);
+        
+        if (existingAnalysis) {
+          logger.info(`Found existing analysis data for CV ID ${cvId}`);
+        } else {
+          logger.info(`No existing analysis data found for CV ID: ${cvId}, starting from initial phase`);
+        }
+      }
+
+      // Phase 1: Local analysis to get basic information
+      await updateProgress('local_analysis_starting', 5);
+      const localAnalysis = performLocalAnalysis(rawText);
+      await updateProgress('local_analysis_complete', 10);
+
+      trackEvent({
+        eventType: 'checkpoint_reached',
+        cvId,
+        timestamp: new Date().toISOString(),
+        phase: 'local_analysis'
+      });
+
+      // Phase 2: AI analysis of the CV
+      let analysis;
+      let enhancedText;
+      
+      if (startingPhase === 'initial' || startingPhase === 'analysis' || !existingAnalysis) {
+        await updateProgress('analysis_starting', 15);
+        // Get the system reference content (guidelines for analysis)
+        const systemReference = await getSystemReferenceContent();
+        
+        // Use the existing analysis if available, or perform a new analysis
+        if (existingAnalysis && startingPhase !== 'initial') {
+          logger.info(`Using existing analysis data for CV ID: ${cvId}`);
+          analysis = existingAnalysis;
+          await updateProgress('analysis_loaded', 40);
+        } else {
+          logger.info(`Performing AI analysis for CV ID: ${cvId}`);
+          
+          // Update status
+          await updateProgress('ai_analysis_in_progress', 20);
+          
+          // Set a timeout for the analysis
+          let analysisPromise;
+          
+          // Try with Mistral first, then fallback to OpenAI if it fails
+          try {
+            // First try with RAG-based analysis
+            logger.info(`Attempting RAG-based analysis for CV ID: ${cvId}`);
+            await updateProgress('rag_analysis_in_progress', 25);
+            
+            // Create a promise for the analyze-cv API call
+            const apiAnalysisPromise = fetch(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/analyze-cv?fileName=cv.pdf&cvId=${cvId}`)
+              .then(response => {
+                if (!response.ok) {
+                  throw new Error(`API returned status ${response.status}`);
+                }
+                return response.json();
+              })
+              .then(data => {
+                if (!data.success || !data.analysis) {
+                  throw new Error('API returned unsuccessful response');
+                }
+                return data.analysis;
+              });
+            
+            // Set a timeout for the API call
+            const apiTimeoutPromise = new Promise((_, reject) => {
+              setTimeout(() => reject(new Error('API analysis timed out')), 15000); // 15 seconds timeout
+            });
+            
+            // Race the API call against the timeout
+            analysis = await Promise.race([apiAnalysisPromise, apiTimeoutPromise]);
+            logger.info(`Successfully completed RAG-based analysis for CV ID: ${cvId}`);
+          } catch (ragError) {
+            // Log the RAG error
+            logger.error(`RAG-based analysis failed for CV ID: ${cvId}: ${ragError instanceof Error ? ragError.message : String(ragError)}`);
+            
+            // Fallback to quick analysis
+            logger.info(`Falling back to quick analysis for CV ID: ${cvId}`);
+            await updateProgress('quick_analysis_fallback', 30);
+            
+            // Try with GPT-4o-mini first, then fallback to GPT-3.5-turbo if it fails
+            try {
+              logger.info(`Attempting analysis with GPT-4o-mini for CV ID: ${cvId}`);
+              analysisPromise = performQuickAnalysisWithModel(rawText, localAnalysis, "gpt-4o-mini");
+            } catch (gpt4Error) {
+              logger.error(`GPT-4o-mini analysis failed for CV ID: ${cvId}: ${gpt4Error instanceof Error ? gpt4Error.message : String(gpt4Error)}`);
+              logger.info(`Falling back to GPT-3.5-turbo for CV ID: ${cvId}`);
+              analysisPromise = performQuickAnalysis(rawText, localAnalysis);
+            }
+            
+            const analysisTimeoutPromise = new Promise((_, reject) => {
+              setTimeout(() => reject(new Error('Analysis timed out')), MAX_ANALYSIS_TIME);
+            });
+            
+            // Perform AI analysis with timeout
+            analysis = await Promise.race([analysisPromise, analysisTimeoutPromise]);
+          }
+          
+          // Validate analysis results
+          if (!analysis || !analysis.strengths || !analysis.weaknesses || !analysis.recommendations) {
+            logger.warn(`Analysis results incomplete for CV ID: ${cvId}, using fallback values`);
+            
+            // Create fallback analysis with default values
+            analysis = {
+              atsScore: localAnalysis.localAtsScore || 65,
+              industry: localAnalysis.topIndustry || 'General',
+              strengths: ["Clear presentation of professional experience", "Includes contact information", "Lists relevant skills"],
+              weaknesses: ["Could benefit from more quantifiable achievements", "May need more specific examples of skills application", "Consider adding more industry-specific keywords"],
+              recommendations: ["Add measurable achievements with numbers and percentages", "Include more industry-specific keywords", "Ensure all experience is relevant to target positions"],
+              formatStrengths: ["Organized structure", "Consistent formatting", "Clear section headings"],
+              formatWeaknesses: ["Could improve visual hierarchy", "Consider adding more white space", "Ensure consistent alignment"],
+              formatRecommendations: ["Use bullet points for achievements", "Add more white space between sections", "Ensure consistent date formatting"]
+            };
+          }
+          
+          // Update the metadata with analysis results
+          updatedMetadata = {
+            ...updatedMetadata,
+            ...analysis,
+            processingStatus: 'analysis_complete',
+            processingProgress: 40,
+            lastUpdated: new Date().toISOString()
+          };
+          await updateCVMetadata(cvId, updatedMetadata);
+          
+          await updateProgress('analysis_complete', 40);
+          trackEvent({
+            eventType: 'checkpoint_reached',
+            cvId,
+            timestamp: new Date().toISOString(),
+            phase: 'analysis'
+          });
+        }
+      } else {
+        // Use the existing analysis from cache or previous processing
+        analysis = existingAnalysis;
+        logger.info(`Using existing analysis for CV ID: ${cvId}`);
+        await updateProgress('analysis_loaded', 40);
+      }
+
+      // Phase 3: Optimization with AI
+      if (startingPhase === 'initial' || startingPhase === 'analysis' || startingPhase === 'optimization') {
+        logger.info(`Starting optimization for CV ID: ${cvId}`);
+        
+        // Update status
+        await updateProgress('optimization_starting', 50);
+        await updateProgress('optimization_in_progress', 60);
+        
+        // Set a timeout for the optimization
+        const optimizationPromise = performQuickOptimization(rawText, analysis);
+        const optimizationTimeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Optimization timed out')), MAX_OPTIMIZATION_TIME);
+        });
+        
+        try {
+          // Optimize the text with timeout
+          enhancedText = await Promise.race([optimizationPromise, optimizationTimeoutPromise]);
+          
+          // Apply any local enhancement rules
+          enhancedText = enhanceTextWithLocalRules(enhancedText as string, localAnalysis);
+          
+          // Update status
+          updatedMetadata = {
+            ...updatedMetadata,
+            processingStatus: 'optimization_complete',
+            processingProgress: 80,
+            optimizedText: enhancedText,
+            lastUpdated: new Date().toISOString()
+          };
+          await updateCVMetadata(cvId, updatedMetadata);
+          await updateProgress('optimization_complete', 80);
+          
+          trackEvent({
+            eventType: 'checkpoint_reached',
+            cvId,
+            timestamp: new Date().toISOString(),
+            phase: 'optimization'
+          });
+        } catch (optimizationError) {
+          logger.error(`Optimization timed out or failed for CV ID: ${cvId}`, 
+            optimizationError instanceof Error ? optimizationError.message : String(optimizationError));
+          
+          // Use enhanced text with local rules as fallback
+          enhancedText = enhanceTextWithLocalRules(rawText, localAnalysis);
+          
+          updatedMetadata = {
+            ...updatedMetadata,
+            processingStatus: 'optimization_fallback',
+            processingProgress: 75,
+            optimizedText: enhancedText,
+            lastUpdated: new Date().toISOString()
+          };
+          await updateCVMetadata(cvId, updatedMetadata);
+          await updateProgress('optimization_fallback', 75);
+        }
+      } else {
+        enhancedText = currentMetadata.optimizedText || rawText;
+        logger.info(`Using existing optimization for CV ID: ${cvId}`);
+        await updateProgress('optimization_loaded', 80);
+      }
+
+      // Phase 4: Finalize
+      logger.info(`Finalizing processing for CV ID: ${cvId}`);
+      
+      await updateProgress('finalizing', 90);
+      
+      updatedMetadata = {
+        ...updatedMetadata,
+        processing: false,
+        processingCompleted: true,
+        processingStatus: 'complete',
+        processingProgress: 100,
+        optimized: true,
+        lastUpdated: new Date().toISOString()
+      };
+      await updateCVMetadata(cvId, updatedMetadata);
+      await updateProgress('complete', 100);
+      
+      const totalDuration = Date.now() - processingStartTime;
+      
+      trackEvent({
+        eventType: 'process_complete',
+        cvId,
+        userId,
+        timestamp: new Date().toISOString(),
+        duration: totalDuration
+      });
+      
+      logger.info(`CV processing completed in ${totalDuration}ms for CV ID: ${cvId}`);
+      
+      return {
+        success: true,
+        message: 'CV processed successfully',
+        metadata: updatedMetadata
+      };
+    } catch (error) {
+      // Ensure error is properly typed for the logger
+      const errorForLog = error instanceof Error 
+        ? error 
+        : new Error(typeof error === 'string' ? error : 'Unknown error during CV processing');
+      
+      logger.error(`Error processing CV ID: ${cvId}`, errorForLog);
+      
+      // Check if it's a timeout error
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('timed out');
+      
+      // Update metadata with error information
+      const updatedErrorMetadata = {
+        ...currentMetadata,
+        processing: false,
+        processingStatus: 'error',
+        processingError: errorMessage,
+        processingProgress: 0,
+        lastUpdated: new Date().toISOString()
+      };
+      
+      await updateCVMetadata(cvId, updatedErrorMetadata);
       
       // Track the error event
       trackEvent({
@@ -142,274 +438,15 @@ export async function processCVWithAI(
         cvId,
         userId,
         timestamp: new Date().toISOString(),
-        error: 'Processing timeout',
+        error: errorMessage || 'Unknown error',
         duration: Date.now() - processingStartTime
       });
       
-      // Try to complete with fallback processing
-      return await handleFallbackCompletion(cvId, rawText, currentMetadata);
-    }
-
-    /**
-     * Main processing function with built-in timeout handling
-     */
-    async function processWithTimeout() {
-      try {
-        // Track progress with more frequent updates
-        let lastProgressUpdate = Date.now();
-        const updateProgress = async (phase: string, progress: number) => {
-          // Update more frequently - every 2 seconds or 2% progress change
-          const currentTime = Date.now();
-          if (currentTime - lastProgressUpdate > 2000 || 
-              progress - (updatedMetadata.processingProgress || 0) > 2) {
-            lastProgressUpdate = currentTime;
-            updatedMetadata = {
-              ...updatedMetadata,
-              processingStatus: phase,
-              processingProgress: progress,
-              lastUpdated: new Date().toISOString()
-            };
-            await updateCVMetadata(cvId, updatedMetadata);
-            
-            // Log progress updates for debugging
-            logger.info(`Progress update for CV ID ${cvId}: ${phase} - ${progress}%`);
-          }
-        };
-        
-        // Determine the starting phase based on existing data and forceRefresh flag
-        const startingPhase = determineStartingPhase(currentMetadata, forceRefresh);
-        logger.info(`Starting CV processing at phase: ${startingPhase} for CV ID: ${cvId}`);
-
-        // Check if we have existing analysis data to use
-        let existingAnalysis = null;
-        if (startingPhase !== 'initial') {
-          logger.info(`Looking for existing analysis data for CV ID: ${cvId}`);
-          existingAnalysis = await getExistingAnalysis(cvId);
-          
-          if (existingAnalysis) {
-            logger.info(`Found existing analysis data for CV ID ${cvId}`);
-          } else {
-            logger.info(`No existing analysis data found for CV ID: ${cvId}, starting from initial phase`);
-          }
-        }
-
-        // Phase 1: Local analysis to get basic information
-        await updateProgress('local_analysis_starting', 5);
-        const localAnalysis = performLocalAnalysis(rawText);
-        await updateProgress('local_analysis_complete', 10);
-
-        trackEvent({
-          eventType: 'checkpoint_reached',
-          cvId,
-          timestamp: new Date().toISOString(),
-          phase: 'local_analysis'
-        });
-
-        // Phase 2: AI analysis of the CV
-        let analysis;
-        let enhancedText;
-        
-        if (startingPhase === 'initial' || startingPhase === 'analysis' || !existingAnalysis) {
-          await updateProgress('analysis_starting', 15);
-          // Get the system reference content (guidelines for analysis)
-          const systemReference = await getSystemReferenceContent();
-          
-          // Use the existing analysis if available, or perform a new analysis
-          if (existingAnalysis && startingPhase !== 'initial') {
-            logger.info(`Using existing analysis data for CV ID: ${cvId}`);
-            analysis = existingAnalysis;
-            await updateProgress('analysis_loaded', 40);
-          } else {
-            logger.info(`Performing AI analysis for CV ID: ${cvId}`);
-            
-            // Update status
-            await updateProgress('ai_analysis_in_progress', 20);
-            
-            // Set a timeout for the analysis
-            const analysisPromise = performQuickAnalysis(rawText, localAnalysis);
-            const analysisTimeoutPromise = new Promise((_, reject) => {
-              setTimeout(() => reject(new Error('Analysis timed out')), MAX_ANALYSIS_TIME);
-            });
-            
-            try {
-              // Perform AI analysis with timeout
-              analysis = await Promise.race([analysisPromise, analysisTimeoutPromise]);
-              
-              // Update the metadata with analysis results
-              updatedMetadata = {
-                ...updatedMetadata,
-                ...analysis,
-                processingStatus: 'analysis_complete',
-                processingProgress: 40,
-                lastUpdated: new Date().toISOString()
-              };
-              await updateCVMetadata(cvId, updatedMetadata);
-              
-              await updateProgress('analysis_complete', 40);
-              trackEvent({
-                eventType: 'checkpoint_reached',
-                cvId,
-                timestamp: new Date().toISOString(),
-                phase: 'analysis'
-              });
-            } catch (analysisError) {
-              logger.error(`Analysis timed out or failed for CV ID: ${cvId}`, 
-                analysisError instanceof Error ? analysisError.message : String(analysisError));
-              
-              // Use local analysis as fallback
-              analysis = {
-                atsScore: localAnalysis.localAtsScore,
-                industry: localAnalysis.topIndustry,
-                strengths: ["CV structure detected", "Content available for review"],
-                weaknesses: ["Consider adding more industry-specific keywords"],
-                recommendations: ["Add more action verbs to highlight achievements"]
-              };
-              
-              await updateProgress('analysis_fallback', 35);
-            }
-          }
-        } else {
-          // Use the existing analysis from cache or previous processing
-          analysis = existingAnalysis;
-          logger.info(`Using existing analysis for CV ID: ${cvId}`);
-          await updateProgress('analysis_loaded', 40);
-        }
-
-        // Phase 3: Optimization with AI
-        if (startingPhase === 'initial' || startingPhase === 'analysis' || startingPhase === 'optimization') {
-          logger.info(`Starting optimization for CV ID: ${cvId}`);
-          
-          // Update status
-          await updateProgress('optimization_starting', 50);
-          await updateProgress('optimization_in_progress', 60);
-          
-          // Set a timeout for the optimization
-          const optimizationPromise = performQuickOptimization(rawText, analysis);
-          const optimizationTimeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Optimization timed out')), MAX_OPTIMIZATION_TIME);
-          });
-          
-          try {
-            // Optimize the text with timeout
-            enhancedText = await Promise.race([optimizationPromise, optimizationTimeoutPromise]);
-            
-            // Apply any local enhancement rules
-            enhancedText = enhanceTextWithLocalRules(enhancedText as string, localAnalysis);
-            
-            // Update status
-            updatedMetadata = {
-              ...updatedMetadata,
-              processingStatus: 'optimization_complete',
-              processingProgress: 80,
-              optimizedText: enhancedText,
-              lastUpdated: new Date().toISOString()
-            };
-            await updateCVMetadata(cvId, updatedMetadata);
-            await updateProgress('optimization_complete', 80);
-            
-            trackEvent({
-              eventType: 'checkpoint_reached',
-              cvId,
-              timestamp: new Date().toISOString(),
-              phase: 'optimization'
-            });
-          } catch (optimizationError) {
-            logger.error(`Optimization timed out or failed for CV ID: ${cvId}`, 
-              optimizationError instanceof Error ? optimizationError.message : String(optimizationError));
-            
-            // Use enhanced text with local rules as fallback
-            enhancedText = enhanceTextWithLocalRules(rawText, localAnalysis);
-            
-            updatedMetadata = {
-              ...updatedMetadata,
-              processingStatus: 'optimization_fallback',
-              processingProgress: 75,
-              optimizedText: enhancedText,
-              lastUpdated: new Date().toISOString()
-            };
-            await updateCVMetadata(cvId, updatedMetadata);
-            await updateProgress('optimization_fallback', 75);
-          }
-        } else {
-          enhancedText = currentMetadata.optimizedText || rawText;
-          logger.info(`Using existing optimization for CV ID: ${cvId}`);
-          await updateProgress('optimization_loaded', 80);
-        }
-
-        // Phase 4: Finalize
-        logger.info(`Finalizing processing for CV ID: ${cvId}`);
-        
-        await updateProgress('finalizing', 90);
-        
-        updatedMetadata = {
-          ...updatedMetadata,
-          processing: false,
-          processingCompleted: true,
-          processingStatus: 'complete',
-          processingProgress: 100,
-          optimized: true,
-          lastUpdated: new Date().toISOString()
-        };
-        await updateCVMetadata(cvId, updatedMetadata);
-        await updateProgress('complete', 100);
-        
-        const totalDuration = Date.now() - processingStartTime;
-        
-        trackEvent({
-          eventType: 'process_complete',
-          cvId,
-          userId,
-          timestamp: new Date().toISOString(),
-          duration: totalDuration
-        });
-        
-        logger.info(`CV processing completed in ${totalDuration}ms for CV ID: ${cvId}`);
-        
-        return {
-          success: true,
-          message: 'CV processed successfully',
-          metadata: updatedMetadata
-        };
-      } catch (error) {
-        // Ensure error is properly typed for the logger
-        const errorForLog = error instanceof Error 
-          ? error 
-          : new Error(typeof error === 'string' ? error : 'Unknown error during CV processing');
-        
-        logger.error(`Error processing CV ID: ${cvId}`, errorForLog);
-        
-        // Check if it's a timeout error
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('timed out');
-        
-        // Update metadata with error information
-        const updatedErrorMetadata = {
-          ...currentMetadata,
-          processing: false,
-          processingStatus: 'error',
-          processingError: errorMessage,
-          processingProgress: 0,
-          lastUpdated: new Date().toISOString()
-        };
-        
-        await updateCVMetadata(cvId, updatedErrorMetadata);
-        
-        // Track the error event
-        trackEvent({
-          eventType: 'process_error',
-          cvId,
-          userId,
-          timestamp: new Date().toISOString(),
-          error: errorMessage || 'Unknown error',
-          duration: Date.now() - processingStartTime
-        });
-        
-        if (isTimeout) {
-          return await handleFallbackCompletion(cvId, rawText, currentMetadata);
-        }
-        
-        throw error;
+      if (isTimeout) {
+        return await handleFallbackCompletion(cvId, rawText, currentMetadata);
       }
+      
+      throw error;
     }
   } catch (error) {
     // Ensure error is properly typed for the logger
@@ -519,6 +556,75 @@ async function handleFallbackCompletion(cvId: number, rawText: string, currentMe
       lastUpdated: new Date().toISOString(),
     });
   }
+}
+
+/**
+ * Perform quick analysis with a specific model
+ */
+async function performQuickAnalysisWithModel(rawText: string, localAnalysis: any, model: string): Promise<any> {
+  // Prepare a very simplified prompt for quick analysis
+  const prompt = `
+    Analyze this CV quickly. Return ONLY a JSON object with:
+    - atsScore (0-100)
+    - industry (primary industry)
+    - strengths (array of 3 strengths)
+    - weaknesses (array of 3 weaknesses)
+    - recommendations (array of 3 recommendations)
+    - formatStrengths (array of 3 format strengths)
+    - formatWeaknesses (array of 3 format weaknesses)
+    - formatRecommendations (array of 3 format recommendations)
+    
+    CV text (truncated):
+    ${rawText.substring(0, 3000)}${rawText.length > 3000 ? '...' : ''}
+    
+    Local analysis suggests:
+    - Industry: ${localAnalysis.topIndustry}
+    - Local ATS score: ${localAnalysis.localAtsScore}
+  `;
+  
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+  
+  const response = await openai.chat.completions.create({
+    model: model,
+    messages: [
+      {
+        role: "system",
+        content: "You are a fast CV analyzer. Return ONLY valid JSON with the requested fields."
+      },
+      {
+        role: "user",
+        content: prompt
+      }
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0.3,
+    max_tokens: 800, // Increased to accommodate more fields
+  });
+  
+  const responseText = response.choices[0]?.message?.content || "{}";
+  let analysis;
+  
+  try {
+    analysis = JSON.parse(responseText);
+  } catch (e) {
+    logger.error(`Failed to parse analysis JSON: ${e instanceof Error ? e.message : String(e)}`);
+    
+    // Fallback to local analysis
+    analysis = {
+      atsScore: localAnalysis.localAtsScore,
+      industry: localAnalysis.topIndustry,
+      strengths: ["CV structure detected", "Content available for review"],
+      weaknesses: ["Consider adding more industry-specific keywords"],
+      recommendations: ["Add more action verbs to highlight achievements"],
+      formatStrengths: ["Organized structure", "Consistent formatting"],
+      formatWeaknesses: ["Could improve visual hierarchy", "Consider adding more white space"],
+      formatRecommendations: ["Use bullet points for achievements", "Add more white space between sections"]
+    };
+  }
+  
+  return analysis;
 }
 
 /**
@@ -983,51 +1089,6 @@ function performLocalAnalysis(text: string) {
     topIndustry,
     localAtsScore
   };
-}
-
-// New function to check for existing analysis data
-async function getExistingAnalysis(cvId: number): Promise<any | null> {
-  try {
-    const cvRecord = await db.query.cvs.findFirst({
-      where: eq(cvs.id, cvId),
-    });
-
-    if (!cvRecord || !cvRecord.metadata) {
-      return null;
-    }
-
-    try {
-      const metadata = JSON.parse(cvRecord.metadata);
-      
-      // Check if we have sufficient analysis data to proceed
-      if (metadata.atsScore && 
-          metadata.industry && 
-          (metadata.strengths || metadata.formattingStrengths) && 
-          (metadata.weaknesses || metadata.formattingWeaknesses) && 
-          (metadata.recommendations || metadata.formattingRecommendations)) {
-        
-        logger.info(`Found existing analysis data for CV ID ${cvId}`);
-        return {
-          atsScore: metadata.atsScore,
-          industry: metadata.industry,
-          strengths: metadata.strengths || metadata.formattingStrengths || [],
-          weaknesses: metadata.weaknesses || metadata.formattingWeaknesses || [],
-          recommendations: metadata.recommendations || metadata.formattingRecommendations || [],
-          keywordAnalysis: metadata.keywordAnalysis || {},
-          sectionBreakdown: metadata.sectionBreakdown || {}
-        };
-      }
-    } catch (error) {
-      logger.error(`Error parsing metadata for existing analysis check for CV ID ${cvId}:`, 
-        error instanceof Error ? error.message : String(error));
-    }
-
-    return null;
-  } catch (error) {
-    logger.error(`Error retrieving CV record for existing analysis check for CV ID ${cvId}:`, 
-      error instanceof Error ? error.message : String(error));
-    return null;
-  }
 }
 
 /**

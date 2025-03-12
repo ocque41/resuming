@@ -124,50 +124,74 @@ export class MistralRAGService {
   private mistralClient: Mistral | null = null;
   private vectorStore: SimpleVectorStore = new SimpleVectorStore();
   private chunks: string[] = [];
-  private chunkSize: number = 1024;
+  private chunkSize: number = 1000;
+  private chunkOverlap: number = 200;
   private embeddingModel: string = 'text-embedding-ada-002'; // OpenAI embedding model
   private mistralEmbeddingModel: string = 'mistral-embed'; // Mistral embedding model
-  private openaiGenerationModel: string = 'gpt-4o-mini'; // OpenAI chat model
+  private openaiGenerationModel: string = 'gpt-3.5-turbo'; // OpenAI chat model
   private mistralGenerationModel: string = 'mistral-large-latest'; // Mistral chat model
   private embeddingCache: EmbeddingCache = {};
   private cacheTTL: number = 3600000; // Cache TTL: 1 hour in milliseconds
-  private useMistral: boolean = true; // Flag to control which API to use
+  private useMistral: boolean = false; // Flag to control which API to use
+  private originalCVText: string = '';
 
   /**
-   * Create a new MistralRAGService
+   * Initialize the MistralRAG service
    */
   constructor() {
-    // Initialize the OpenAI client with API key from environment variables
-    const openaiApiKey = process.env.OPENAI_API_KEY;
-    if (!openaiApiKey) {
-      throw new Error('OPENAI_API_KEY environment variable not set');
-    }
-    
-    // Initialize OpenAI client
-    this.openaiClient = new OpenAI({ apiKey: openaiApiKey });
-    
-    // Initialize the Mistral client with API key from environment variables
-    const mistralApiKey = process.env.MISTRAL_API_KEY;
-    if (!mistralApiKey) {
-      logger.warn('MISTRAL_API_KEY environment variable not set, falling back to OpenAI');
-      this.useMistral = false;
-    } else {
-      try {
-        // Initialize Mistral client
-        this.mistralClient = new Mistral({
-          apiKey: mistralApiKey
-        });
-        logger.info('Successfully initialized Mistral client');
-      } catch (error) {
-        logger.error(`Failed to initialize Mistral client: ${error instanceof Error ? error.message : String(error)}`);
+    try {
+      // Initialize OpenAI client
+      this.openaiClient = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY || '',
+      });
+      
+      // Try to initialize Mistral client if API key is available
+      const mistralApiKey = process.env.MISTRAL_API_KEY;
+      if (mistralApiKey) {
+        try {
+          this.mistralClient = new Mistral({
+            apiKey: mistralApiKey,
+          });
+          this.useMistral = true;
+          logger.info('Successfully initialized Mistral client');
+        } catch (mistralError) {
+          logger.error(`Failed to initialize Mistral client: ${mistralError instanceof Error ? mistralError.message : String(mistralError)}`);
+          logger.info('Falling back to OpenAI for all operations');
+          this.useMistral = false;
+        }
+      } else {
+        logger.info('No Mistral API key found, using OpenAI for all operations');
         this.useMistral = false;
       }
+      
+      // Validate OpenAI API key
+      if (!process.env.OPENAI_API_KEY) {
+        logger.warn('No OpenAI API key found, some operations may fail');
+      }
+      
+      // Initialize vector store
+      this.vectorStore = new SimpleVectorStore();
+      
+      // Initialize embedding cache
+      this.embeddingCache = {};
+      
+      logger.info('MistralRAG service initialized successfully');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Error initializing MistralRAG service: ${errorMessage}`);
+      
+      // Ensure OpenAI client is initialized even if there's an error
+      if (!this.openaiClient) {
+        this.openaiClient = new OpenAI({
+          apiKey: process.env.OPENAI_API_KEY || '',
+        });
+      }
+      
+      // Disable Mistral if there was an error
+      this.useMistral = false;
+      
+      throw new Error(`Failed to initialize MistralRAG service: ${errorMessage}`);
     }
-
-    // Initialize vector store
-    this.resetIndex();
-    
-    logger.info(`MistralRAGService initialized with ${this.useMistral ? 'Mistral' : 'OpenAI'} as primary LLM`);
   }
 
   /**
@@ -179,8 +203,8 @@ export class MistralRAGService {
   }
 
   /**
-   * Process a CV document by splitting it into chunks and creating embeddings
-   * @param cvText Full text content of the CV
+   * Process a CV document and prepare it for analysis
+   * @param cvText The CV text to process
    */
   public async processCVDocument(cvText: string): Promise<void> {
     try {
@@ -188,6 +212,9 @@ export class MistralRAGService {
       
       // Reset the index for a new document
       this.resetIndex();
+      
+      // Store the original CV text for fallback
+      this.originalCVText = cvText;
       
       // Optimize chunk size based on document length
       this.optimizeChunkSize(cvText);
@@ -248,6 +275,11 @@ export class MistralRAGService {
       // Fix error type handling for logger
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`Error processing CV document with RAG service: ${errorMessage}`);
+      
+      // Initialize with empty chunks if processing fails
+      this.chunks = [cvText];
+      this.originalCVText = cvText;
+      
       throw error;
     }
   }
@@ -622,795 +654,388 @@ export class MistralRAGService {
   }
 
   /**
-   * Analyze the format and structure of a CV document
-   * @returns Object containing format strengths, weaknesses, and recommendations
+   * Analyze CV format and provide strengths, weaknesses, and recommendations
+   * @returns Format analysis results
    */
-  public async analyzeCVFormat(): Promise<{
-    strengths: string[];
-    weaknesses: string[];
-    recommendations: string[];
-  }> {
+  public async analyzeCVFormat(): Promise<{ strengths: string[], weaknesses: string[], recommendations: string[] }> {
     try {
-      // Ensure we have chunks to analyze
-      if (this.chunks.length === 0) {
-        logger.warn('No chunks available for CV format analysis, using defaults');
-        return {
-          strengths: this.getDefaultStrengths(),
-          weaknesses: this.getDefaultWeaknesses(),
-          recommendations: this.getDefaultRecommendations()
-        };
-      }
-
-      // Combine chunks into a single document for analysis
-      // Limit to first 10 chunks to avoid token limits
-      const context = this.chunks.slice(0, 10).join('\n\n');
-      
-      // Create a more structured prompt for better results
-      const query = 'Analyze the format and structure of this CV/resume document in detail. Focus only on formatting, layout, organization, and visual aspects.';
-      
-      const systemPrompt = `You are a professional CV/resume format analyzer. Your task is to analyze ONLY the format and structure of the CV (not the content).
-
-Review the document for these format aspects:
-1. Section organization and clarity
-2. Header formatting and contact information placement
-3. Use of bullet points, paragraphs, and white space
-4. Consistency in formatting (dates, headings, etc.)
-5. Font usage, bolding, italics, and other text formatting
-6. Length and overall visual appeal
-
-Provide your analysis in JSON format with these three arrays:
-1. "strengths": List specific formatting strengths (minimum 3)
-2. "weaknesses": List specific formatting issues (minimum 3)
-3. "recommendations": Provide actionable recommendations to improve the format (minimum 3)
-
-Example response format:
-{
-  "strengths": ["Clear section headings", "Consistent date formatting", "Good use of bullet points"],
-  "weaknesses": ["Contact information not prominently displayed", "Inconsistent spacing between sections", "Too dense with text"],
-  "recommendations": ["Add more white space between sections", "Make contact information more prominent", "Use bullet points for all achievements"]
-}
-
-Keep your analysis focused only on the document's format, not its content or qualifications.`;
+      logger.info('Analyzing CV format with RAG service');
       
       // Initialize with default values to ensure we always have something to return
-      let analysisResult: { strengths: string[], weaknesses: string[], recommendations: string[] } = {
-        strengths: this.getDefaultStrengths(),
-        weaknesses: this.getDefaultWeaknesses(),
-        recommendations: this.getDefaultRecommendations()
+      const defaultResult = {
+        strengths: ['Clear section organization', 'Consistent formatting', 'Professional layout'],
+        weaknesses: ['Could improve visual hierarchy', 'Consider adding more white space', 'Ensure consistent alignment'],
+        recommendations: ['Use bullet points for achievements', 'Add more white space between sections', 'Ensure consistent date formatting']
       };
       
-      // Try multiple approaches to ensure we get a result
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          logger.info(`CV format analysis attempt ${attempt}`);
-          
-          let analysisText: string;
-          
-          // Use different models for different attempts
-          if (attempt === 1 && this.useMistral && this.mistralClient) {
-            // First try Mistral if available
-            try {
-              analysisText = await this.generateDirectResponse(
-                `${query}\n\nDocument to analyze:\n${context}`, 
-                systemPrompt
-              );
-            } catch (mistralError) {
-              logger.warn(`Mistral format analysis failed: ${mistralError instanceof Error ? mistralError.message : String(mistralError)}`);
-              // Fall back to OpenAI for this attempt
-              analysisText = await this.openaiClient.chat.completions.create({
-                model: 'gpt-4o-mini',
-                messages: [
-                  {
-                    role: 'system',
-                    content: systemPrompt
-                  },
-                  {
-                    role: 'user',
-                    content: `${query}\n\nDocument to analyze:\n${context}`
-                  }
-                ]
-              }).then(response => response.choices[0]?.message?.content || '');
-            }
-          } else if (attempt === 2) {
-            // Second attempt with a simpler prompt
-            const simpleSystemPrompt = `Analyze the CV format only. List exactly 3 strengths, 3 weaknesses, and 3 recommendations about the format. Format your response as JSON with three arrays: "strengths", "weaknesses", and "recommendations".`;
-            
-            analysisText = await this.openaiClient.chat.completions.create({
-              model: 'gpt-4o-mini',
-              messages: [
-                {
-                  role: 'system',
-                  content: simpleSystemPrompt
-                },
-                {
-                  role: 'user',
-                  content: `${query}\n\nDocument to analyze:\n${context.substring(0, 3000)}`
-                }
-              ]
-            }).then(response => response.choices[0]?.message?.content || '');
-          } else {
-            // Third attempt with an even simpler prompt and explicit instructions
-            const verySimplePrompt = `Analyze this CV format and provide exactly:
-- 3 format strengths
-- 3 format weaknesses
-- 3 format recommendations
-
-Format your response as JSON like this:
-{
-  "strengths": ["strength1", "strength2", "strength3"],
-  "weaknesses": ["weakness1", "weakness2", "weakness3"],
-  "recommendations": ["recommendation1", "recommendation2", "recommendation3"]
-}`;
-            
-            analysisText = await this.openaiClient.chat.completions.create({
-              model: 'gpt-4o-mini',
-              messages: [
-                {
-                  role: 'system',
-                  content: 'You are a CV format analyzer. Respond only with valid JSON.'
-                },
-                {
-                  role: 'user',
-                  content: `${verySimplePrompt}\n\nDocument to analyze:\n${context.substring(0, 2000)}`
-                }
-              ]
-            }).then(response => response.choices[0]?.message?.content || '');
-          }
-          
-          // Try to parse as JSON
-          try {
-            // Extract JSON if it's embedded in other text
-            const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
-            const jsonString = jsonMatch ? jsonMatch[0] : analysisText;
-            
-            const jsonResponse = JSON.parse(jsonString);
-            
-            // Validate the JSON structure
-            if (jsonResponse.strengths && 
-                jsonResponse.weaknesses && 
-                jsonResponse.recommendations &&
-                Array.isArray(jsonResponse.strengths) &&
-                Array.isArray(jsonResponse.weaknesses) &&
-                Array.isArray(jsonResponse.recommendations)) {
-              
-              // Merge with existing results, prioritizing new results
-              analysisResult = {
-                strengths: [...jsonResponse.strengths, ...analysisResult.strengths],
-                weaknesses: [...jsonResponse.weaknesses, ...analysisResult.weaknesses],
-                recommendations: [...jsonResponse.recommendations, ...analysisResult.recommendations]
-              };
-              
-              // If we have at least one item in each array, we're done
-              if (analysisResult.strengths.length > 0 && 
-                  analysisResult.weaknesses.length > 0 && 
-                  analysisResult.recommendations.length > 0) {
-                logger.info(`Successfully parsed CV format analysis as JSON on attempt ${attempt}`);
-                break;
-              }
-            }
-          } catch (jsonError) {
-            // If JSON parsing fails, try to parse the text
-            logger.warn(`Failed to parse format analysis as JSON on attempt ${attempt}: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
-            
-            // Parse the analysis text to extract strengths, weaknesses, and recommendations
-            const sections = this.parseAnalysisSections(analysisText);
-            
-            // Merge with existing results, prioritizing new results
-            analysisResult = {
-              strengths: [...sections.strengths, ...analysisResult.strengths],
-              weaknesses: [...sections.weaknesses, ...analysisResult.weaknesses],
-              recommendations: [...sections.recommendations, ...analysisResult.recommendations]
-            };
-            
-            // If we have at least one item in each array, we're done
-            if (sections.strengths.length > 0 && 
-                sections.weaknesses.length > 0 && 
-                sections.recommendations.length > 0) {
-              logger.info(`Successfully parsed CV format analysis as text on attempt ${attempt}`);
-              break;
-            }
-          }
-        } catch (attemptError) {
-          logger.warn(`Format analysis attempt ${attempt} failed: ${attemptError instanceof Error ? attemptError.message : String(attemptError)}`);
-          // Continue to next attempt
-        }
+      // If no chunks are available, return default values
+      if (!this.chunks || this.chunks.length === 0) {
+        logger.warn('No chunks available for CV format analysis, returning default values');
+        return defaultResult;
       }
       
-      // Remove duplicates from arrays
-      analysisResult.strengths = [...new Set(analysisResult.strengths)];
-      analysisResult.weaknesses = [...new Set(analysisResult.weaknesses)];
-      analysisResult.recommendations = [...new Set(analysisResult.recommendations)];
+      // Get relevant chunks for format analysis
+      const query = 'CV format, layout, structure, organization, visual presentation';
+      const relevantChunks = await this.retrieveRelevantChunks(query, 3);
       
-      // Ensure we have at least 3 items in each category
-      const strengths = analysisResult.strengths.length >= 3 ? 
-        analysisResult.strengths.slice(0, 5) : 
-        [...analysisResult.strengths, ...this.getDefaultStrengths()].slice(0, 5);
+      if (relevantChunks.length === 0) {
+        logger.warn('No relevant chunks found for CV format analysis, returning default values');
+        return defaultResult;
+      }
+      
+      // Prepare the prompt for format analysis
+      const prompt = `
+        Analyze the format and layout of this CV/resume. Focus on the visual structure, organization, and presentation.
         
-      const weaknesses = analysisResult.weaknesses.length >= 3 ? 
-        analysisResult.weaknesses.slice(0, 5) : 
-        [...analysisResult.weaknesses, ...this.getDefaultWeaknesses()].slice(0, 5);
+        CV content:
+        ${relevantChunks.join('\n\n')}
         
-      const recommendations = analysisResult.recommendations.length >= 3 ? 
-        analysisResult.recommendations.slice(0, 5) : 
-        [...analysisResult.recommendations, ...this.getDefaultRecommendations()].slice(0, 5);
+        Provide a detailed analysis with:
+        1. Three specific format strengths
+        2. Three specific format weaknesses
+        3. Three specific recommendations for improving the format
+        
+        Return your analysis as a JSON object with these keys:
+        - strengths: array of 3 format strengths
+        - weaknesses: array of 3 format weaknesses
+        - recommendations: array of 3 format recommendations
+      `;
       
-      // Log the results
-      logger.info(`CV format analysis complete: ${strengths.length} strengths, ${weaknesses.length} weaknesses, ${recommendations.length} recommendations`);
+      // Generate the analysis
+      const response = await this.generateResponse(prompt, true);
       
-      // Always ensure we have non-empty arrays
-      return {
-        strengths: strengths.length > 0 ? strengths : this.getDefaultStrengths(),
-        weaknesses: weaknesses.length > 0 ? weaknesses : this.getDefaultWeaknesses(),
-        recommendations: recommendations.length > 0 ? recommendations : this.getDefaultRecommendations()
-      };
+      // Parse the response
+      let result;
+      try {
+        // Try to parse as JSON first
+        result = JSON.parse(response);
+        
+        // Validate the result structure
+        if (!result.strengths || !result.weaknesses || !result.recommendations) {
+          throw new Error('Invalid response format');
+        }
+        
+        // Ensure arrays have at least 3 items
+        if (result.strengths.length < 3 || result.weaknesses.length < 3 || result.recommendations.length < 3) {
+          logger.warn('Format analysis results have fewer than 3 items in some categories, adding default values');
+          
+          // Merge with default values, prioritizing the new results
+          result.strengths = [...result.strengths, ...defaultResult.strengths].slice(0, 3);
+          result.weaknesses = [...result.weaknesses, ...defaultResult.weaknesses].slice(0, 3);
+          result.recommendations = [...result.recommendations, ...defaultResult.recommendations].slice(0, 3);
+        }
+        
+        // Remove duplicates
+        result.strengths = [...new Set(result.strengths)];
+        result.weaknesses = [...new Set(result.weaknesses)];
+        result.recommendations = [...new Set(result.recommendations)];
+        
+        return result;
+      } catch (parseError) {
+        logger.error(`Error parsing CV format analysis response: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+        
+        // Try to extract information using regex if JSON parsing fails
+        const strengthsMatch = response.match(/strengths:?\s*\[(.*?)\]/s);
+        const weaknessesMatch = response.match(/weaknesses:?\s*\[(.*?)\]/s);
+        const recommendationsMatch = response.match(/recommendations:?\s*\[(.*?)\]/s);
+        
+        const extractedResult = {
+          strengths: strengthsMatch ? this.parseArrayItems(strengthsMatch[1]) : [],
+          weaknesses: weaknessesMatch ? this.parseArrayItems(weaknessesMatch[1]) : [],
+          recommendations: recommendationsMatch ? this.parseArrayItems(recommendationsMatch[1]) : []
+        };
+        
+        // Merge with default values if extraction failed or is incomplete
+        if (extractedResult.strengths.length === 0) extractedResult.strengths = defaultResult.strengths;
+        if (extractedResult.weaknesses.length === 0) extractedResult.weaknesses = defaultResult.weaknesses;
+        if (extractedResult.recommendations.length === 0) extractedResult.recommendations = defaultResult.recommendations;
+        
+        // Ensure arrays have at least 3 items
+        if (extractedResult.strengths.length < 3) {
+          extractedResult.strengths = [...extractedResult.strengths, ...defaultResult.strengths].slice(0, 3);
+        }
+        if (extractedResult.weaknesses.length < 3) {
+          extractedResult.weaknesses = [...extractedResult.weaknesses, ...defaultResult.weaknesses].slice(0, 3);
+        }
+        if (extractedResult.recommendations.length < 3) {
+          extractedResult.recommendations = [...extractedResult.recommendations, ...defaultResult.recommendations].slice(0, 3);
+        }
+        
+        // Remove duplicates
+        extractedResult.strengths = [...new Set(extractedResult.strengths)];
+        extractedResult.weaknesses = [...new Set(extractedResult.weaknesses)];
+        extractedResult.recommendations = [...new Set(extractedResult.recommendations)];
+        
+        return extractedResult;
+      }
     } catch (error) {
-      // Handle errors and return defaults
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error analyzing CV format: ${errorMessage}`);
+      logger.error(`Error analyzing CV format: ${error instanceof Error ? error.message : String(error)}`);
       
-      // Return default format analysis if analysis fails
+      // Return default values on error
       return {
-        strengths: this.getDefaultStrengths(),
-        weaknesses: this.getDefaultWeaknesses(),
-        recommendations: this.getDefaultRecommendations()
+        strengths: ['Clear section organization', 'Consistent formatting', 'Professional layout'],
+        weaknesses: ['Could improve visual hierarchy', 'Consider adding more white space', 'Ensure consistent alignment'],
+        recommendations: ['Use bullet points for achievements', 'Add more white space between sections', 'Ensure consistent date formatting']
       };
     }
   }
-  
-  /**
-   * Get default format strengths
-   * @returns Array of default format strengths
-   */
-  private getDefaultStrengths(): string[] {
-    return [
-      "Clear section organization",
-      "Consistent formatting throughout the document",
-      "Appropriate use of white space",
-      "Contact information clearly presented",
-      "Logical flow of information"
-    ];
-  }
-  
-  /**
-   * Get default format weaknesses
-   * @returns Array of default format weaknesses
-   */
-  private getDefaultWeaknesses(): string[] {
-    return [
-      "Could benefit from better visual hierarchy",
-      "Some sections may be too dense with text",
-      "Formatting may not be optimized for ATS scanning",
-      "Inconsistent use of bullet points",
-      "Lack of emphasis on key achievements"
-    ];
-  }
-  
-  /**
-   * Get default format recommendations
-   * @returns Array of default format recommendations
-   */
-  private getDefaultRecommendations(): string[] {
-    return [
-      "Use bullet points for key achievements",
-      "Ensure consistent date formatting",
-      "Add more white space to improve readability",
-      "Make section headings more prominent",
-      "Organize information in a more scannable format"
-    ];
-  }
 
   /**
-   * Parse the analysis text into sections
-   * @param analysisText Text containing analysis sections
-   * @returns Parsed sections object
-   */
-  private parseAnalysisSections(analysisText: string): {
-    strengths: string[];
-    weaknesses: string[];
-    recommendations: string[];
-  } {
-    const sections: {
-      strengths: string[];
-      weaknesses: string[];
-      recommendations: string[];
-    } = {
-      strengths: [],
-      weaknesses: [],
-      recommendations: []
-    };
-    
-    // Extract sections using regex
-    const strengthsMatch = analysisText.match(/(?:Strengths|STRENGTHS|Format Strengths)(?::|-)?\s*([\s\S]*?)(?:Weaknesses|WEAKNESSES|Format Weaknesses|Recommendations|RECOMMENDATIONS|$)/i);
-    const weaknessesMatch = analysisText.match(/(?:Weaknesses|WEAKNESSES|Format Weaknesses)(?::|-)?\s*([\s\S]*?)(?:Recommendations|RECOMMENDATIONS|Strengths|STRENGTHS|$)/i);
-    const recommendationsMatch = analysisText.match(/(?:Recommendations|RECOMMENDATIONS)(?::|-)?\s*([\s\S]*?)(?:Strengths|STRENGTHS|Weaknesses|WEAKNESSES|$)/i);
-    
-    // Process strengths
-    if (strengthsMatch && strengthsMatch[1]) {
-      sections.strengths = this.parseBulletPoints(strengthsMatch[1]);
-    }
-    
-    // Process weaknesses
-    if (weaknessesMatch && weaknessesMatch[1]) {
-      sections.weaknesses = this.parseBulletPoints(weaknessesMatch[1]);
-    }
-    
-    // Process recommendations
-    if (recommendationsMatch && recommendationsMatch[1]) {
-      sections.recommendations = this.parseBulletPoints(recommendationsMatch[1]);
-    }
-    
-    return sections;
-  }
-
-  /**
-   * Parse bullet points from text
-   * @param text Text containing bullet points
-   * @returns Array of bullet points
-   */
-  private parseBulletPoints(text: string): string[] {
-    // Split by bullets, numbers, or new lines
-    let points: string[] = [];
-    
-    if (text.includes('•') || text.includes('-') || text.includes('*')) {
-      // Split by bullet points
-      points = text.split(/[•\-*]/).map(s => s.trim()).filter(s => s.length > 0);
-    } else if (/\d+\./.test(text)) {
-      // Split by numbered points
-      points = text.split(/\d+\./).map(s => s.trim()).filter(s => s.length > 0);
-    } else {
-      // Split by lines as a fallback
-      points = text.split('\n').map(s => s.trim()).filter(s => s.length > 0);
-    }
-    
-    // Clean up points
-    points = points.map(point => {
-      // Remove any leading numbers or bullets
-      return point.replace(/^[\d\.\-\*•]+\s*/, '').trim();
-    }).filter(point => point.length > 0);
-    
-    return points;
-  }
-
-  /**
-   * Extract keywords or key phrases from the CV
-   * @returns Array of keywords/phrases
+   * Extract keywords from the CV
+   * @returns Array of keywords
    */
   public async extractKeywords(): Promise<string[]> {
     try {
-      // Ensure we have chunks to analyze
-      if (this.chunks.length === 0) {
-        logger.warn('No chunks available for keyword extraction, using defaults');
-        return this.getDefaultKeywords();
+      logger.info('Extracting keywords from CV with RAG service');
+      
+      // Default keywords to ensure we always have something to return
+      const defaultKeywords = [
+        'Professional Experience',
+        'Skills',
+        'Education',
+        'Communication',
+        'Problem Solving',
+        'Teamwork',
+        'Leadership',
+        'Project Management',
+        'Time Management',
+        'Analytical Skills'
+      ];
+      
+      // If no chunks are available, return default keywords
+      if (!this.chunks || this.chunks.length === 0) {
+        logger.warn('No chunks available for keyword extraction, returning default keywords');
+        return defaultKeywords;
       }
-
-      // Combine chunks into a single document for analysis
-      // Limit to first 15 chunks to avoid token limits
-      const context = this.chunks.slice(0, 15).join('\n\n');
       
-      // Create a more structured prompt for better results
-      const query = 'Extract the most important keywords or key phrases from this CV/resume.';
+      // Get relevant chunks for keyword extraction
+      const query = 'important keywords skills experience qualifications';
+      const relevantChunks = await this.retrieveRelevantChunks(query, 3);
       
-      const systemPrompt = `You are a professional CV/resume keyword analyzer. Your task is to extract the most relevant keywords and key phrases from the CV.
-
-Focus on extracting:
-1. Hard skills (technical skills, software, tools, methodologies)
-2. Soft skills (communication, leadership, etc.)
-3. Industry-specific terminology
-4. Qualifications and certifications
-5. Job titles and roles
-
-Provide your analysis as a JSON array with at least 15 keywords/phrases. Each keyword should be a string.
-
-Example response format:
-{
-  "keywords": [
-    "Project Management",
-    "JavaScript",
-    "Team Leadership",
-    "Agile Methodology",
-    "Budget Planning",
-    "React.js",
-    "Cross-functional Collaboration",
-    "Data Analysis",
-    "Strategic Planning",
-    "Python",
-    "Customer Relationship Management",
-    "SQL",
-    "Public Speaking",
-    "AWS",
-    "Process Optimization"
-  ]
-}`;
+      if (relevantChunks.length === 0) {
+        logger.warn('No relevant chunks found for keyword extraction, returning default keywords');
+        return defaultKeywords;
+      }
       
-      // Initialize with default keywords to ensure we always have something to return
-      let keywords: string[] = this.getDefaultKeywords();
+      // Prepare the prompt for keyword extraction
+      const prompt = `
+        Extract the most important keywords from this CV/resume that would be relevant for ATS (Applicant Tracking Systems).
+        Focus on skills, qualifications, technologies, and industry-specific terms.
+        
+        CV content:
+        ${relevantChunks.join('\n\n')}
+        
+        Return ONLY a JSON array of 10-15 keywords, with each keyword being a string.
+        Example: ["JavaScript", "Project Management", "Data Analysis"]
+      `;
       
-      // Try multiple approaches to ensure we get a result
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          logger.info(`Keyword extraction attempt ${attempt}`);
-          
-          let keywordsText: string;
-          
-          // Use different models for different attempts
-          if (attempt === 1 && this.useMistral && this.mistralClient) {
-            // First try Mistral if available
-            try {
-              keywordsText = await this.generateDirectResponse(
-                `${query}\n\nDocument to analyze:\n${context}`, 
-                systemPrompt
-              );
-            } catch (mistralError) {
-              logger.warn(`Mistral keyword extraction failed: ${mistralError instanceof Error ? mistralError.message : String(mistralError)}`);
-              // Fall back to OpenAI for this attempt
-              keywordsText = await this.openaiClient.chat.completions.create({
-                model: 'gpt-4o-mini',
-                messages: [
-                  {
-                    role: 'system',
-                    content: systemPrompt
-                  },
-                  {
-                    role: 'user',
-                    content: `${query}\n\nDocument to analyze:\n${context}`
-                  }
-                ]
-              }).then(response => response.choices[0]?.message?.content || '');
-            }
-          } else if (attempt === 2) {
-            // Second attempt with a simpler prompt
-            const simpleSystemPrompt = `Extract exactly 15 important keywords or key phrases from this CV/resume. Format your response as a JSON array with the key "keywords".`;
-            
-            keywordsText = await this.openaiClient.chat.completions.create({
-              model: 'gpt-4o-mini',
-              messages: [
-                {
-                  role: 'system',
-                  content: simpleSystemPrompt
-                },
-                {
-                  role: 'user',
-                  content: `${query}\n\nDocument to analyze:\n${context.substring(0, 3000)}`
-                }
-              ]
-            }).then(response => response.choices[0]?.message?.content || '');
-          } else {
-            // Third attempt with an even simpler prompt and explicit instructions
-            const verySimplePrompt = `Extract 15 important keywords from this CV. Format your response as a JSON array like this:
-{
-  "keywords": ["keyword1", "keyword2", "keyword3", ...]
-}`;
-            
-            keywordsText = await this.openaiClient.chat.completions.create({
-              model: 'gpt-4o-mini',
-              messages: [
-                {
-                  role: 'system',
-                  content: 'You are a CV keyword extractor. Respond only with valid JSON.'
-                },
-                {
-                  role: 'user',
-                  content: `${verySimplePrompt}\n\nDocument to analyze:\n${context.substring(0, 2000)}`
-                }
-              ]
-            }).then(response => response.choices[0]?.message?.content || '');
-          }
-          
-          // Try to parse as JSON
-          try {
-            // Extract JSON if it's embedded in other text
-            const jsonMatch = keywordsText.match(/\{[\s\S]*\}/);
-            const jsonString = jsonMatch ? jsonMatch[0] : keywordsText;
-            
-            const jsonResponse = JSON.parse(jsonString);
-            
-            // Validate the JSON structure
-            if (jsonResponse.keywords && Array.isArray(jsonResponse.keywords) && jsonResponse.keywords.length > 0) {
-              // Combine with existing keywords, prioritizing new ones
-              keywords = [...jsonResponse.keywords, ...keywords];
-              logger.info(`Successfully extracted ${jsonResponse.keywords.length} keywords as JSON on attempt ${attempt}`);
-              break;
-            }
-          } catch (jsonError) {
-            // If JSON parsing fails, try to parse the text
-            logger.warn(`Failed to parse keywords as JSON on attempt ${attempt}: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
-            
-            // Parse the keywords from text
-            const extractedKeywords = this.parseKeywordsFromText(keywordsText);
-            
-            if (extractedKeywords.length > 0) {
-              // Combine with existing keywords, prioritizing new ones
-              keywords = [...extractedKeywords, ...keywords];
-              logger.info(`Extracted ${extractedKeywords.length} keywords via text parsing on attempt ${attempt}`);
-              break;
-            }
-          }
-        } catch (attemptError) {
-          logger.warn(`Keyword extraction attempt ${attempt} failed: ${attemptError instanceof Error ? attemptError.message : String(attemptError)}`);
-          // Continue to next attempt
+      // Generate the response
+      const response = await this.generateResponse(prompt, true);
+      
+      // Parse the response
+      try {
+        // Try to parse as JSON first
+        let keywords = JSON.parse(response);
+        
+        // Ensure it's an array
+        if (!Array.isArray(keywords)) {
+          throw new Error('Response is not an array');
         }
-      }
-      
-      // If we still don't have keywords, try a direct extraction from the text
-      if (keywords.length === 0) {
-        logger.warn('All keyword extraction attempts failed, trying direct text extraction');
         
-        // Extract potential keywords directly from the text
-        const words = context.match(/\b[A-Za-z][A-Za-z0-9\s]*[A-Za-z0-9]\b/g) || [];
+        // Filter out non-string items and empty strings
+        keywords = keywords.filter(keyword => typeof keyword === 'string' && keyword.trim() !== '');
         
-        // Filter to likely keywords (longer than 3 letters, not common words)
-        const commonWords = new Set(['the', 'and', 'that', 'have', 'for', 'not', 'with', 'you', 'this', 'but', 'from', 'they', 'will', 'would', 'there', 'their', 'what', 'about', 'which', 'when', 'make', 'like', 'time', 'just', 'know', 'take', 'people', 'year', 'your', 'good', 'some', 'could', 'them', 'than', 'then', 'look', 'only', 'come', 'over', 'think', 'also', 'back', 'after', 'work', 'first', 'well', 'even', 'want', 'because', 'these', 'give', 'most']);
+        // Format keywords (capitalize first letter of each word)
+        keywords = keywords.map(keyword => 
+          keyword.split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join(' ')
+        );
         
-        // Count word frequencies
-        const wordCounts: Record<string, number> = {};
-        words.forEach(word => {
-          const cleanWord = word.trim().toLowerCase();
-          if (cleanWord.length > 3 && !commonWords.has(cleanWord)) {
-            wordCounts[cleanWord] = (wordCounts[cleanWord] || 0) + 1;
+        // Combine with default keywords if we don't have enough
+        if (keywords.length < 5) {
+          keywords = [...keywords, ...defaultKeywords];
+        }
+        
+        // Remove duplicates
+        keywords = [...new Set(keywords)];
+        
+        // Limit to 15 keywords
+        return keywords.slice(0, 15);
+      } catch (parseError) {
+        logger.error(`Error parsing keyword extraction response: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+        
+        // Try to extract keywords using regex if JSON parsing fails
+        const keywordMatches = response.match(/"([^"]+)"/g);
+        if (keywordMatches && keywordMatches.length > 0) {
+          // Remove quotes and filter empty strings
+          let extractedKeywords = keywordMatches
+            .map(match => match.replace(/"/g, '').trim())
+            .filter(keyword => keyword !== '');
+          
+          // Format keywords
+          extractedKeywords = extractedKeywords.map(keyword => 
+            keyword.split(' ')
+              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+              .join(' ')
+          );
+          
+          // Combine with default keywords if we don't have enough
+          if (extractedKeywords.length < 5) {
+            extractedKeywords = [...extractedKeywords, ...defaultKeywords];
           }
-        });
+          
+          // Remove duplicates
+          extractedKeywords = [...new Set(extractedKeywords)];
+          
+          // Limit to 15 keywords
+          return extractedKeywords.slice(0, 15);
+        }
         
-        // Sort by frequency
-        const sortedWords = Object.entries(wordCounts)
-          .sort((a, b) => b[1] - a[1])
-          .map(entry => entry[0]);
-        
-        // Take top 15 words
-        const extractedWords = sortedWords.slice(0, 15);
-        
-        // Capitalize first letter of each word
-        const formattedWords = extractedWords.map(word => word.charAt(0).toUpperCase() + word.slice(1));
-        
-        // Combine with existing keywords, prioritizing new ones
-        keywords = [...formattedWords, ...keywords];
-        
-        logger.info(`Extracted ${formattedWords.length} keywords via direct text extraction`);
+        // Return default keywords if extraction failed
+        return defaultKeywords;
       }
-      
-      // Remove duplicates and ensure proper formatting
-      keywords = [...new Set(keywords)].map(keyword => 
-        keyword.trim().replace(/\s+/g, ' ')
-      );
-      
-      // Ensure we have at least 10 keywords
-      if (keywords.length < 10) {
-        keywords = [...keywords, ...this.getDefaultKeywords()].slice(0, 15);
-        logger.info(`Added default keywords to reach ${keywords.length} total keywords`);
-      }
-      
-      // Limit to 15 keywords
-      keywords = keywords.slice(0, 15);
-      
-      logger.info(`Final keyword list contains ${keywords.length} keywords`);
-      
-      // Always ensure we return a non-empty array
-      return keywords.length > 0 ? keywords : this.getDefaultKeywords();
     } catch (error) {
-      // Handle errors and return defaults
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error extracting keywords: ${errorMessage}`);
+      logger.error(`Error extracting keywords: ${error instanceof Error ? error.message : String(error)}`);
       
-      // Return default keywords if extraction fails
-      return this.getDefaultKeywords();
+      // Return default keywords on error
+      return [
+        'Professional Experience',
+        'Skills',
+        'Education',
+        'Communication',
+        'Problem Solving',
+        'Teamwork',
+        'Leadership',
+        'Project Management',
+        'Time Management',
+        'Analytical Skills'
+      ];
     }
-  }
-  
-  /**
-   * Parse keywords from text response
-   * @param text Text containing keywords
-   * @returns Array of keywords
-   */
-  private parseKeywordsFromText(text: string): string[] {
-    // Try different patterns to extract keywords
-    let keywords: string[] = [];
-    
-    // Try to extract lines with ":" or "-" which often indicate keyword-rating pairs
-    const ratingPattern = /([^:]+)(?::|-)(?:\s*)(?:High|Medium|Low|[\d]+)/gi;
-    const ratingMatches = Array.from(text.matchAll(ratingPattern));
-    
-    if (ratingMatches.length > 0) {
-      keywords = ratingMatches.map(match => match[1].trim());
-    } else {
-      // Try to extract bullet points
-      if (text.includes('•') || text.includes('-') || text.includes('*')) {
-        // Split by bullet points
-        keywords = text.split(/[•\-*]/).map(s => s.trim()).filter(s => s.length > 0);
-      } else if (text.includes(',')) {
-        // Split by commas
-        keywords = text.split(',').map(s => s.trim()).filter(s => s.length > 0);
-      } else {
-        // Split by lines as a fallback
-        keywords = text.split('\n').map(s => s.trim()).filter(s => s.length > 0);
-      }
-    }
-    
-    // Clean up keywords
-    keywords = keywords.map(keyword => {
-      // Remove any numbering, ratings, etc.
-      return keyword.replace(/^\d+\.\s*/, '').replace(/\s*\(.*\)$/, '').trim();
-    }).filter(keyword => keyword.length > 0);
-    
-    return keywords;
-  }
-  
-  /**
-   * Get default keywords for when extraction fails
-   * @returns Array of default keywords
-   */
-  private getDefaultKeywords(): string[] {
-    return [
-      "Project Management",
-      "Communication Skills",
-      "Team Leadership",
-      "Problem Solving",
-      "Critical Thinking",
-      "Microsoft Office",
-      "Data Analysis",
-      "Customer Service",
-      "Strategic Planning",
-      "Research",
-      "Collaboration",
-      "Time Management",
-      "Attention to Detail",
-      "Organization",
-      "Presentation Skills"
-    ];
   }
 
   /**
-   * Extract key requirements or qualifications from the CV
-   * @returns Array of key requirements/qualifications
+   * Extract key requirements from the CV
+   * @returns Array of key requirements
    */
   public async extractKeyRequirements(): Promise<string[]> {
     try {
-      // Ensure we have chunks to analyze
-      if (this.chunks.length === 0) {
-        logger.warn('No chunks available for key requirements extraction, using defaults');
-        return this.getDefaultKeyRequirements();
+      logger.info('Extracting key requirements from CV with RAG service');
+      
+      // Default key requirements to ensure we always have something to return
+      const defaultRequirements = [
+        'Professional experience',
+        'Relevant education',
+        'Technical skills',
+        'Communication skills',
+        'Problem-solving abilities'
+      ];
+      
+      // If no chunks are available, return default requirements
+      if (!this.chunks || this.chunks.length === 0) {
+        logger.warn('No chunks available for key requirements extraction, returning default requirements');
+        return defaultRequirements;
       }
-
-      const query = 'Extract the key qualifications and requirements from this CV/resume.';
       
-      const systemPrompt = `You are a professional CV/resume qualification analyzer. Your task is to extract the most important qualifications and requirements from the CV.
-
-Focus on extracting:
-1. Educational qualifications (degrees, certifications)
-2. Years of experience in specific roles or industries
-3. Technical skills and competencies
-4. Professional achievements and accomplishments
-5. Specialized knowledge areas
-
-Provide your analysis as a JSON array with at least 8 key qualifications/requirements. Each item should be a string.
-
-Example response format:
-{
-  "requirements": [
-    "Bachelor's degree in Computer Science",
-    "5+ years of experience in software development",
-    "Proficient in JavaScript and React.js",
-    "Experience with cloud platforms (AWS, Azure)",
-    "Strong problem-solving and analytical skills",
-    "Agile development methodology expertise",
-    "Experience leading cross-functional teams",
-    "Excellent communication and presentation skills"
-  ]
-}
-
-Focus on extracting the most significant qualifications that would be relevant for job applications.`;
+      // Get relevant chunks for requirements extraction
+      const query = 'key requirements qualifications experience skills';
+      const relevantChunks = await this.retrieveRelevantChunks(query, 3);
       
-      // Generate key requirements using all CV chunks
-      // Limit context to avoid token limits
-      const context = this.chunks.slice(0, 15).join('\n\n');
+      if (relevantChunks.length === 0) {
+        logger.warn('No relevant chunks found for key requirements extraction, returning default requirements');
+        return defaultRequirements;
+      }
       
-      // Initialize with default requirements to ensure we always have something to return
-      let requirements: string[] = this.getDefaultKeyRequirements();
+      // Prepare the prompt for requirements extraction
+      const prompt = `
+        Extract the key requirements or qualifications from this CV/resume.
+        Focus on the most important skills, experiences, and qualifications that the person has.
+        
+        CV content:
+        ${relevantChunks.join('\n\n')}
+        
+        Return ONLY a JSON array of 5-7 key requirements, with each requirement being a string.
+        Example: ["5+ years of software development experience", "Bachelor's degree in Computer Science", "Strong communication skills"]
+      `;
       
-      // First try to get a structured JSON response
+      // Generate the response
+      const response = await this.generateResponse(prompt, true);
+      
+      // Parse the response
       try {
-        logger.info('Attempting key requirements extraction with JSON response');
-        const requirementsText = await this.generateDirectResponse(
-          `${query}\n\nDocument to analyze:\n${context}`, 
-          systemPrompt
-        );
+        // Try to parse as JSON first
+        let requirements = JSON.parse(response);
         
-        // Try to parse as JSON
-        try {
-          // First, try to extract JSON if it's embedded in other text
-          const jsonMatch = requirementsText.match(/\{[\s\S]*\}/);
-          const jsonString = jsonMatch ? jsonMatch[0] : requirementsText;
-          
-          const jsonResponse = JSON.parse(jsonString);
-          
-          // Validate the JSON structure
-          if (jsonResponse.requirements && Array.isArray(jsonResponse.requirements) && jsonResponse.requirements.length > 0) {
-            logger.info(`Successfully extracted ${jsonResponse.requirements.length} key requirements as JSON`);
-            
-            // Combine with existing requirements, prioritizing new ones
-            requirements = [...jsonResponse.requirements, ...requirements];
-          } else {
-            logger.warn('JSON response missing requirements array or empty array, falling back to text parsing');
-            throw new Error('Invalid JSON structure');
-          }
-        } catch (jsonError) {
-          // If JSON parsing fails, try to parse the text
-          logger.warn(`Failed to parse key requirements as JSON: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
-          
-          // Parse the requirements from text
-          const extractedRequirements = this.parseKeywordsFromText(requirementsText);
-          
-          if (extractedRequirements.length > 0) {
-            logger.info(`Extracted ${extractedRequirements.length} key requirements via text parsing`);
-            // Combine with existing requirements, prioritizing new ones
-            requirements = [...extractedRequirements, ...requirements];
-          } else {
-            throw new Error('No key requirements found in text parsing');
-          }
+        // Ensure it's an array
+        if (!Array.isArray(requirements)) {
+          throw new Error('Response is not an array');
         }
-      } catch (firstAttemptError) {
-        // If the first attempt fails, try a simpler approach
-        logger.warn(`First attempt at key requirements extraction failed: ${firstAttemptError instanceof Error ? firstAttemptError.message : String(firstAttemptError)}`);
         
-        // Try a second attempt with a simpler prompt
-        const simpleSystemPrompt = `Extract exactly 8 key qualifications or requirements from this CV/resume. Format your response as a simple list with one qualification per line. Include education, experience, and skills.`;
+        // Filter out non-string items and empty strings
+        requirements = requirements.filter(req => typeof req === 'string' && req.trim() !== '');
         
-        try {
-          const secondAttemptText = await this.generateDirectResponse(
-            `${query}\n\nDocument to analyze:\n${context.substring(0, 3000)}`, 
-            simpleSystemPrompt
-          );
-          
-          // Parse the requirements from text
-          const extractedRequirements = this.parseKeywordsFromText(secondAttemptText);
-          
-          if (extractedRequirements.length > 0) {
-            logger.info(`Extracted ${extractedRequirements.length} key requirements via second attempt`);
-            // Combine with existing requirements, prioritizing new ones
-            requirements = [...extractedRequirements, ...requirements];
-          }
-        } catch (secondError) {
-          // If both attempts fail, log the error
-          logger.error(`Both key requirements extraction attempts failed: ${secondError instanceof Error ? secondError.message : String(secondError)}`);
-          // We'll still return the default requirements initialized at the beginning
+        // Combine with default requirements if we don't have enough
+        if (requirements.length < 3) {
+          requirements = [...requirements, ...defaultRequirements];
         }
+        
+        // Remove duplicates
+        requirements = [...new Set(requirements)];
+        
+        // Limit to 7 requirements
+        return requirements.slice(0, 7);
+      } catch (parseError) {
+        logger.error(`Error parsing key requirements extraction response: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+        
+        // Try to extract requirements using regex if JSON parsing fails
+        const reqMatches = response.match(/"([^"]+)"/g);
+        if (reqMatches && reqMatches.length > 0) {
+          // Remove quotes and filter empty strings
+          let extractedRequirements = reqMatches
+            .map(match => match.replace(/"/g, '').trim())
+            .filter(req => req !== '');
+          
+          // Combine with default requirements if we don't have enough
+          if (extractedRequirements.length < 3) {
+            extractedRequirements = [...extractedRequirements, ...defaultRequirements];
+          }
+          
+          // Remove duplicates
+          extractedRequirements = [...new Set(extractedRequirements)];
+          
+          // Limit to 7 requirements
+          return extractedRequirements.slice(0, 7);
+        }
+        
+        // Return default requirements if extraction failed
+        return defaultRequirements;
       }
-      
-      // Remove duplicates and ensure proper formatting
-      requirements = [...new Set(requirements)].map(requirement => 
-        requirement.trim().replace(/\s+/g, ' ')
-      );
-      
-      // Limit to 8 requirements
-      requirements = requirements.slice(0, 8);
-      
-      logger.info(`Final requirements list contains ${requirements.length} items`);
-      
-      // Always ensure we return a non-empty array
-      return requirements.length > 0 ? requirements : this.getDefaultKeyRequirements();
     } catch (error) {
-      // Handle errors and return defaults
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error extracting key requirements: ${errorMessage}`);
+      logger.error(`Error extracting key requirements: ${error instanceof Error ? error.message : String(error)}`);
       
-      // Return default key requirements if extraction fails
-      return this.getDefaultKeyRequirements();
+      // Return default requirements on error
+      return [
+        'Professional experience',
+        'Relevant education',
+        'Technical skills',
+        'Communication skills',
+        'Problem-solving abilities'
+      ];
     }
   }
-  
+
   /**
-   * Get default key requirements when extraction fails
-   * @returns Array of default key requirements
+   * Helper method to parse array items from a string
+   * @param arrayString String containing array items
+   * @returns Array of strings
    */
-  private getDefaultKeyRequirements(): string[] {
-    return [
-      "Bachelor's degree or equivalent experience",
-      "Proficient in relevant technical skills",
-      "Strong communication and interpersonal skills",
-      "Problem-solving and analytical abilities",
-      "Team collaboration experience",
-      "Project management skills",
-      "Industry-specific knowledge",
-      "Adaptability and willingness to learn"
-    ];
+  private parseArrayItems(arrayString: string): string[] {
+    // Remove quotes and split by comma
+    const items = arrayString.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
+      .map(item => item.trim().replace(/^["']|["']$/g, ''))
+      .filter(item => item !== '');
+    
+    return items;
   }
 
   /**

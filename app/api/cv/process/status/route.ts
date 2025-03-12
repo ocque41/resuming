@@ -63,30 +63,107 @@ export async function GET(request: Request) {
     }
     
     // Check if processing is completed
-    const completed = !metadata.processing && (metadata.processingCompleted || metadata.optimized);
+    let isCompleted = !metadata.processing && (metadata.processingCompleted || metadata.optimized || metadata.ready_for_optimization);
     
     // Check if processing is stuck
     let isStuck = false;
     let stuckMinutes = 0;
     let stuckSince = null;
     
-    if (metadata.processing && !completed && metadata.lastUpdated) {
-      const lastUpdated = new Date(metadata.lastUpdated);
+    // More aggressive stuck detection - consider processing stuck if:
+    // 1. It's been more than 2 minutes since the last update
+    // 2. OR it's been more than 5 minutes since processing started and progress is less than 20%
+    // 3. OR it's been more than 3 minutes and the progress has been at the same value for that time
+    if (metadata.processing && !isCompleted) {
       const now = new Date();
-      const minutesSinceUpdate = Math.floor((now.getTime() - lastUpdated.getTime()) / (1000 * 60));
       
-      if (minutesSinceUpdate >= STUCK_THRESHOLD_MINUTES) {
-        isStuck = true;
-        stuckMinutes = minutesSinceUpdate;
-        stuckSince = lastUpdated.toISOString();
+      // Check for last update time
+      if (metadata.lastUpdated) {
+        const lastUpdated = new Date(metadata.lastUpdated);
+        const minutesSinceUpdate = Math.floor((now.getTime() - lastUpdated.getTime()) / (1000 * 60));
         
-        // Log warning for stuck processes
-        logger.warn(`CV ID ${cvId} processing appears stuck at ${metadata.processingProgress}% for ${stuckMinutes} minutes`);
-        
-        // If stuck for over 10 minutes, log an error to make it more visible
-        if (stuckMinutes >= 10) {
-          logger.error(`CV ID ${cvId} processing is CRITICALLY STUCK at ${metadata.processingProgress}% for ${stuckMinutes} minutes. Current step: ${metadata.processingStatus}`);
+        if (minutesSinceUpdate >= 2) {
+          isStuck = true;
+          stuckMinutes = minutesSinceUpdate;
+          stuckSince = lastUpdated.toISOString();
+          
+          logger.warn(`CV ID ${cvId} processing appears stuck at ${metadata.processingProgress}% for ${stuckMinutes} minutes (no updates)`);
         }
+      }
+      
+      // Check for processing start time
+      if (!isStuck && metadata.processingStartTime) {
+        const startTime = new Date(metadata.processingStartTime);
+        const minutesSinceStart = Math.floor((now.getTime() - startTime.getTime()) / (1000 * 60));
+        
+        // If it's been more than 5 minutes and progress is less than 20%, consider it stuck
+        if (minutesSinceStart >= 5 && (metadata.processingProgress || 0) < 20) {
+          isStuck = true;
+          stuckMinutes = minutesSinceStart;
+          stuckSince = startTime.toISOString();
+          
+          logger.warn(`CV ID ${cvId} processing appears stuck at ${metadata.processingProgress}% for ${stuckMinutes} minutes (slow progress)`);
+        }
+      }
+      
+      // Check for progress history if available
+      if (!isStuck && metadata.progressHistory && Array.isArray(metadata.progressHistory)) {
+        const recentHistory = metadata.progressHistory.slice(-5); // Get last 5 progress entries
+        
+        if (recentHistory.length >= 3) {
+          // Check if the last 3 progress values are the same
+          const lastProgress = recentHistory[recentHistory.length - 1]?.progress;
+          const allSame = recentHistory.slice(-3).every(entry => entry.progress === lastProgress);
+          
+          if (allSame) {
+            const lastProgressTime = new Date(recentHistory[recentHistory.length - 3]?.timestamp || now);
+            const minutesSinceProgressChange = Math.floor((now.getTime() - lastProgressTime.getTime()) / (1000 * 60));
+            
+            if (minutesSinceProgressChange >= 3) {
+              isStuck = true;
+              stuckMinutes = minutesSinceProgressChange;
+              stuckSince = lastProgressTime.toISOString();
+              
+              logger.warn(`CV ID ${cvId} processing appears stuck at ${lastProgress}% for ${stuckMinutes} minutes (no progress change)`);
+            }
+          }
+        }
+      }
+      
+      // If stuck for over 10 minutes, log an error to make it more visible
+      if (isStuck && stuckMinutes >= 10) {
+        logger.error(`CV ID ${cvId} processing is CRITICALLY STUCK at ${metadata.processingProgress}% for ${stuckMinutes} minutes. Current step: ${metadata.processingStatus}`);
+      }
+    }
+    
+    // Check if analysis is available but processing is stuck at local_analysis_complete
+    if (metadata.processing && metadata.processingStatus === 'local_analysis_complete' && 
+        metadata.atsScore && metadata.strengths && metadata.weaknesses && metadata.recommendations) {
+      // We have analysis results but the process is stuck at local_analysis_complete
+      // This means the RAG analysis completed but the process didn't continue
+      logger.info(`CV ID ${cvId} has analysis results but is stuck at local_analysis_complete, marking as complete`);
+      
+      // Update the metadata to mark processing as complete
+      try {
+        const updatedMetadata = {
+          ...metadata,
+          processing: false,
+          processingCompleted: true,
+          ready_for_optimization: true,
+          processingStatus: 'analysis_complete',
+          processingProgress: 100,
+          lastUpdated: new Date().toISOString()
+        };
+        
+        await db.update(cvs)
+          .set({ metadata: JSON.stringify(updatedMetadata) })
+          .where(eq(cvs.id, parseInt(cvId)));
+        
+        // Update the completed flag for the response
+        isCompleted = true;
+        isStuck = false;
+      } catch (updateError) {
+        logger.error(`Error updating metadata for stuck CV ID ${cvId}:`, updateError instanceof Error ? updateError.message : String(updateError));
       }
     }
     
@@ -98,38 +175,42 @@ export async function GET(request: Request) {
     
     // Collect debug info if requested
     const debugInfo = debug ? {
-      metadataSize: cvRecord.metadata ? cvRecord.metadata.length : 0,
-      createdAt: cvRecord.createdAt,
-      lastModified: cvRecord.createdAt, // Use createdAt as a fallback since updatedAt is not available
-      rawMetadata: metadata,
-    } : undefined;
+      metadata,
+      cvRecord: {
+        id: cvRecord.id,
+        userId: cvRecord.userId,
+        filename: cvRecord.fileName,
+        createdAt: cvRecord.createdAt
+      }
+    } : null;
     
-    // Return the processing status with enhanced data
-    return NextResponse.json({
+    // Prepare response data
+    const responseData = {
       success: true,
-      cvId: cvRecord.id,
-      fileName: cvRecord.fileName,
       processing: metadata.processing || false,
+      isComplete: isCompleted,
+      step: metadata.processingStatus || null,
       progress: metadata.processingProgress || 0,
-      step: metadata.processingStatus || "Waiting to start",
-      isComplete: completed,
-      originalAtsScore: metadata.atsScore || 0,
-      improvedAtsScore: metadata.improvedAtsScore || 0,
-      error: metadata.processingError || null,
       improvements,
       optimizedText,
-      lastUpdated: metadata.lastUpdated || new Date().toISOString(),
+      error: metadata.processingError || null,
       isStuck,
-      stuckMinutes,
-      stuckSince,
-      timedOut: metadata.timedOut || false,
-      debugInfo
-    });
+      stuckMinutes: isStuck ? stuckMinutes : 0,
+      stuckSince: isStuck ? stuckSince : null,
+      atsScore: metadata.atsScore || 0,
+      improvedAtsScore: metadata.improvedAtsScore || 0,
+      debug: debugInfo
+    };
     
+    return NextResponse.json(responseData);
   } catch (error) {
-    logger.error("Error in CV process status API:", error instanceof Error ? error.message : String(error));
+    logger.error("Error checking CV processing status:", error instanceof Error ? error.message : String(error));
+    
     return NextResponse.json(
-      { success: false, error: "Failed to get CV processing status." },
+      { 
+        success: false, 
+        error: "Error checking CV processing status." 
+      },
       { status: 500 }
     );
   }
