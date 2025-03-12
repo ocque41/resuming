@@ -9,7 +9,7 @@ import { AlertCircle, Download, RefreshCw, FileText, Check, Eye, Clock, Info } f
 import { Checkbox } from "@/components/ui/checkbox";
 import ComparisonView from './ComparisonView.client';
 import OptimizationHistory from './OptimizationHistory.client';
-import { cacheDocument, getCachedDocument, updateCachedPDF, clearCachedDocument, getCacheAge, getHistoryVersion } from "@/lib/cache/documentCache";
+import { cacheDocument, getCachedDocument, clearCachedDocument, getCacheAge, getHistoryVersion } from "@/lib/cache/documentCache";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // Modern SimpleFileDropdown component
@@ -285,7 +285,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       return;
     }
     
-    // Set a flag to prevent PDF conversion during download
+    setIsDownloadingDocx(true);
     setIsDownloadingFile(true);
     
     try {
@@ -302,6 +302,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         // Clean up
         setTimeout(() => {
           document.body.removeChild(a);
+          setIsDownloadingDocx(false);
           setIsDownloadingFile(false);
         }, 100);
         return;
@@ -309,9 +310,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       
       // Otherwise, use the API endpoint
       const downloadUrl = `/api/cv/download-optimized-docx?cvId=${selectedCVId}`;
-      
-      // Show loading indicator
-      setIsDownloadingDocx(true);
       
       // Use fetch with credentials to ensure authentication
       fetch(downloadUrl, {
@@ -377,22 +375,19 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       return;
     }
     
-    // Set a flag to prevent PDF conversion during download
+    setIsDownloadingDoc(true);
     setIsDownloadingFile(true);
     
     try {
-      // Use the API endpoint
-      const downloadUrl = `/api/cv/download-optimized-docx?cvId=${selectedCVId}`;
-      
-      // Show loading indicator
-      setIsDownloadingDoc(true);
+      // Use the dedicated DOC API endpoint
+      const downloadUrl = `/api/cv/download-optimized-doc?cvId=${selectedCVId}`;
       
       // Use fetch with credentials to ensure authentication
       fetch(downloadUrl, {
         method: 'GET',
         credentials: 'include', // Include cookies for authentication
         headers: {
-          'Accept': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          'Accept': 'application/msword'
         }
       })
         .then(response => {
@@ -407,7 +402,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         .then(blob => {
           // Generate filename with .doc extension
           const filename = `${selectedCVName || 'cv'}-optimized.doc`;
-          console.log(`Converting DOCX to DOC format for download as: ${filename}`);
+          console.log(`Downloaded DOC file: ${filename}, size: ${blob.size} bytes, type: ${blob.type}`);
           
           // Force the correct MIME type for DOC
           const docBlob = new Blob([blob], { 
