@@ -20,13 +20,116 @@ export class DocumentGenerator {
     white: "FFFFFF",   // White
   };
   
+  // Define photo placement options
+  public static readonly PhotoPlacement = {
+    TOP_RIGHT: 'top-right',
+    HEADER: 'header',
+    NONE: 'none'
+  };
+
+  // Define photo size options
+  public static readonly PhotoSize = {
+    SMALL: { width: 100, height: 100 },
+    MEDIUM: { width: 150, height: 150 },
+    LARGE: { width: 200, height: 200 }
+  };
+
+  // Define template styles
+  public static readonly TemplateStyles = {
+    MODERN: 'modern',
+    CLASSIC: 'classic',
+    MINIMAL: 'minimal',
+    EXECUTIVE: 'executive',
+    CREATIVE: 'creative'
+  };
+
+  // Define font options for different templates
+  public static readonly FontOptions = {
+    // Professional serif fonts
+    SERIF: {
+      GEORGIA: 'Georgia',
+      TIMES: 'Times New Roman',
+      GARAMOND: 'Garamond',
+      PALATINO: 'Palatino Linotype',
+      CAMBRIA: 'Cambria',
+    },
+    // Professional sans-serif fonts
+    SANS_SERIF: {
+      ARIAL: 'Arial',
+      CALIBRI: 'Calibri',
+      HELVETICA: 'Helvetica',
+      SEGOE: 'Segoe UI',
+      VERDANA: 'Verdana',
+      TAHOMA: 'Tahoma',
+    },
+    // Modern fonts for special sections
+    MODERN: {
+      CENTURY: 'Century Gothic',
+      FUTURA: 'Futura',
+      GILL_SANS: 'Gill Sans',
+      TREBUCHET: 'Trebuchet MS',
+    }
+  };
+
+  // Static font presets with direct string references to avoid 'this' issues
+  public static readonly FontPresets = {
+    MODERN: {
+      headingFont: 'Segoe UI',
+      bodyFont: 'Calibri',
+      nameFont: 'Segoe UI',
+    },
+    CLASSIC: {
+      headingFont: 'Georgia',
+      bodyFont: 'Times New Roman',
+      nameFont: 'Georgia',
+    },
+    CORPORATE: {
+      headingFont: 'Arial',
+      bodyFont: 'Calibri',
+      nameFont: 'Arial',
+    },
+    CREATIVE: {
+      headingFont: 'Century Gothic',
+      bodyFont: 'Calibri',
+      nameFont: 'Century Gothic',
+    },
+    TECH: {
+      headingFont: 'Segoe UI',
+      bodyFont: 'Calibri',
+      nameFont: 'Segoe UI',
+    },
+  };
+  
   /**
    * Generate a DOCX file from CV text with professional formatting
    * @param cvText The optimized CV text
    * @param metadata Optional metadata for enhanced formatting
-   * @param photoPath Optional path to profile photo
+   * @param options Optional formatting options for the document
    */
-  static async generateDocx(cvText: string, metadata?: any, photoPath?: string): Promise<Buffer> {
+  static async generateDocx(
+    cvText: string, 
+    metadata?: any, 
+    options?: {
+      templateStyle?: string;
+      photoOptions?: {
+        path?: string;
+        placement?: string;
+        size?: { width: number; height: number };
+        border?: boolean;
+        borderColor?: string;
+      },
+      fontOptions?: {
+        headingFont?: string;
+        bodyFont?: string;
+        nameFont?: string;
+        preset?: string;
+      },
+      colorOptions?: {
+        primary?: string;
+        accent?: string;
+      }
+    }
+  ): Promise<Buffer> {
     try {
       logger.info("Starting professional document generation");
       const startTime = Date.now();
@@ -43,6 +146,34 @@ export class DocumentGenerator {
       // Split the CV text into sections based on common headers
       const sections = this.splitIntoSections(filteredText);
       
+      // Process template style
+      const templateStyle = options?.templateStyle || this.TemplateStyles.MODERN;
+      
+      // Process font options
+      let fonts = {
+        headingFont: this.FontPresets.MODERN.headingFont,
+        bodyFont: this.FontPresets.MODERN.bodyFont,
+        nameFont: this.FontPresets.MODERN.nameFont
+      };
+
+      // Handle custom font presets
+      if (options?.fontOptions?.preset) {
+        const presetKey = options.fontOptions.preset.toUpperCase();
+        if (presetKey in DocumentGenerator.FontPresets) {
+          fonts = { ...DocumentGenerator.FontPresets[presetKey as keyof typeof DocumentGenerator.FontPresets] };
+        }
+      }
+
+      // Override individual font options if specified
+      if (options?.fontOptions?.headingFont) fonts.headingFont = options.fontOptions.headingFont;
+      if (options?.fontOptions?.bodyFont) fonts.bodyFont = options.fontOptions.bodyFont;
+      if (options?.fontOptions?.nameFont) fonts.nameFont = options.fontOptions.nameFont;
+
+      // Process color options
+      const colors = { ...this.colors };
+      if (options?.colorOptions?.primary) colors.primary = options.colorOptions.primary;
+      if (options?.colorOptions?.accent) colors.accent = options.colorOptions.accent;
+      
       // Create document with optimal margins and modern formatting
       const doc = new Document({
         styles: {
@@ -54,10 +185,10 @@ export class DocumentGenerator {
               next: "Normal",
               quickFormat: true,
               run: {
-                font: "Calibri",
+                font: fonts.headingFont,
                 size: 28,
                 bold: true,
-                color: this.colors.primary,
+                color: colors.primary,
               },
               paragraph: {
                 spacing: {
@@ -73,9 +204,9 @@ export class DocumentGenerator {
               next: "Normal",
               quickFormat: true,
               run: {
-                font: "Calibri",
+                font: fonts.bodyFont,
                 size: 22,
-                color: this.colors.dark,
+                color: colors.dark,
               },
               paragraph: {
                 spacing: {
@@ -101,7 +232,14 @@ export class DocumentGenerator {
                 },
               },
             },
-            children: this.createDocumentContent(sections, metadata, photoPath)
+            children: this.createDocumentContent(
+              sections, 
+              metadata, 
+              templateStyle,
+              options?.photoOptions,
+              fonts,
+              colors
+            )
           }
         ]
       });
@@ -159,84 +297,217 @@ export class DocumentGenerator {
   /**
    * Create document content with professional formatting
    */
-  private static createDocumentContent(sections: Record<string, string>, metadata?: any, photoPath?: string): any[] {
+  private static createDocumentContent(
+    sections: Record<string, string>, 
+    metadata?: any,
+    templateStyle?: string,
+    photoOptions?: {
+      path?: string;
+      placement?: string;
+      size?: { width: number; height: number };
+      border?: boolean;
+      borderColor?: string;
+    },
+    fonts?: {
+      headingFont: string;
+      bodyFont: string;
+      nameFont: string;
+    },
+    colors?: {
+      primary: string;
+      accent: string;
+      dark: string;
+      medium: string;
+      light: string;
+      ultraLight: string;
+      white: string;
+    }
+  ): any[] {
+    // Default fonts and colors if not provided
+    const activeColors = colors || this.colors;
+    const activeFonts = fonts || {
+      headingFont: this.FontPresets.MODERN.headingFont,
+      bodyFont: this.FontPresets.MODERN.bodyFont,
+      nameFont: this.FontPresets.MODERN.nameFont
+    };
+    
+    // Use modern template as default
+    const activeTemplate = templateStyle || this.TemplateStyles.MODERN;
+    
     const children: any[] = [];
     
-    // Add header with name and contact info in a modern table layout
+    // Setup default photo options if not provided
+    const photo = {
+      path: photoOptions?.path || '',
+      placement: photoOptions?.placement || this.PhotoPlacement.TOP_RIGHT,
+      size: photoOptions?.size || this.PhotoSize.MEDIUM,
+      border: photoOptions?.border !== undefined ? photoOptions.border : true,
+      borderColor: photoOptions?.borderColor || activeColors.primary
+    };
+    
+    // Add header based on selected template
     if (sections.header) {
-      const headerLines = sections.header.split('\n');
-      
-      // Create a table for the header section with two columns
-      // Left column: Name and job title
-      // Right column: Contact info
-      const headerTable = new Table({
-        width: {
-          size: 100,
-          type: WidthType.PERCENTAGE,
-        },
-        layout: TableLayoutType.FIXED,
-        borders: {
-          top: { style: BorderStyle.NONE },
-          bottom: { style: BorderStyle.NONE },
-          left: { style: BorderStyle.NONE },
-          right: { style: BorderStyle.NONE },
-          insideHorizontal: { style: BorderStyle.NONE },
-          insideVertical: { style: BorderStyle.NONE },
-        },
-        rows: [
-          new TableRow({
-            children: [
-              // Left column for name and job title
-              new TableCell({
-                width: {
-                  size: 70,
-                  type: WidthType.PERCENTAGE,
-                },
-                borders: {
-                  top: { style: BorderStyle.NONE },
-                  bottom: { style: BorderStyle.NONE },
-                  left: { style: BorderStyle.NONE },
-                  right: { style: BorderStyle.NONE },
-                },
-                children: [
-                  // Name in bold, large font with accent color
+      switch (activeTemplate) {
+        case this.TemplateStyles.MODERN:
+          this.createModernHeader(children, sections.header, photo, activeFonts, activeColors);
+          break;
+        case this.TemplateStyles.CLASSIC:
+          this.createClassicHeader(children, sections.header, photo, activeFonts, activeColors);
+          break;
+        case this.TemplateStyles.MINIMAL:
+          this.createMinimalHeader(children, sections.header, photo, activeFonts, activeColors);
+          break;
+        case this.TemplateStyles.EXECUTIVE:
+          this.createExecutiveHeader(children, sections.header, photo, activeFonts, activeColors);
+          break;
+        case this.TemplateStyles.CREATIVE:
+          this.createCreativeHeader(children, sections.header, photo, activeFonts, activeColors);
+          break;
+        default:
+          this.createModernHeader(children, sections.header, photo, activeFonts, activeColors);
+          break;
+      }
+    }
+    
+    // Add summary section if available
+    if (sections.summary) {
+      this.createSummarySection(children, sections.summary, activeTemplate, activeFonts, activeColors);
+    }
+    
+    // Add skills section with modern formatting
+    if (sections.skills) {
+      this.createSkillsSection(children, sections.skills, metadata, activeTemplate, activeFonts, activeColors);
+    }
+    
+    // Add experience section with enhanced formatting
+    if (sections.experience) {
+      this.createExperienceSection(children, sections.experience, activeTemplate, activeFonts, activeColors);
+    }
+    
+    // Add education section with enhanced formatting
+    if (sections.education) {
+      this.createEducationSection(children, sections.education, activeTemplate, activeFonts, activeColors);
+    }
+    
+    // Add languages section if available
+    if (sections.languages) {
+      this.createLanguagesSection(children, sections.languages, activeTemplate, activeFonts, activeColors);
+    }
+    
+    // Add any remaining sections
+    for (const [sectionName, content] of Object.entries(sections)) {
+      if (!['header', 'summary', 'skills', 'experience', 'education', 'languages'].includes(sectionName)) {
+        this.createGenericSection(children, sectionName, content, activeTemplate, activeFonts, activeColors);
+      }
+    }
+    
+    return children;
+  }
+
+  /**
+   * Creates a modern header with clean layout and optional photo
+   */
+  private static createModernHeader(
+    children: any[],
+    headerContent: string,
+    photoOptions: any,
+    fonts: any,
+    colors: any
+  ): void {
+    const headerLines = headerContent.split('\n');
+    
+    // Only include photo if a valid path is provided
+    const hasPhoto = photoOptions.path && 
+                    photoOptions.placement !== this.PhotoPlacement.NONE && 
+                    fs.existsSync(photoOptions.path);
+                    
+    // Create a modern table layout for the header
+    const table = new Table({
+      width: {
+        size: 100,
+        type: WidthType.PERCENTAGE,
+      },
+      layout: TableLayoutType.FIXED,
+      borders: {
+        top: { style: BorderStyle.NONE },
+        bottom: { style: BorderStyle.NONE },
+        left: { style: BorderStyle.NONE },
+        right: { style: BorderStyle.NONE },
+        insideHorizontal: { style: BorderStyle.NONE },
+        insideVertical: { style: BorderStyle.NONE },
+      },
+      rows: [
+        new TableRow({
+          children: [
+            // Left column for name and job title
+            new TableCell({
+              width: {
+                size: hasPhoto ? 70 : 100,
+                type: WidthType.PERCENTAGE,
+              },
+              borders: {
+                top: { style: BorderStyle.NONE },
+                bottom: { style: BorderStyle.NONE },
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.NONE },
+              },
+              children: [
+                // Name in bold, large font with accent color
+                new Paragraph({
+                  alignment: AlignmentType.LEFT,
+                  children: [
+                    new TextRun({
+                      text: headerLines[0]?.trim().toUpperCase() || "NAME",
+                      bold: true,
+                      size: 36, // ~18pt font
+                      color: colors.primary,
+                      font: fonts.nameFont,
+                    }),
+                  ],
+                  spacing: {
+                    after: 120
+                  }
+                }),
+                // Job title if available
+                ...(headerLines.length > 1 ? [
                   new Paragraph({
                     alignment: AlignmentType.LEFT,
                     children: [
                       new TextRun({
-                        text: headerLines[0].trim().toUpperCase(),
+                        text: headerLines[1].trim(),
+                        size: 28, // ~14pt font
+                        color: colors.medium,
+                        font: fonts.headingFont,
                         bold: true,
-                        size: 36, // ~18pt font
-                        color: this.colors.primary,
-                        font: "Calibri",
                       }),
                     ],
                     spacing: {
                       after: 120
                     }
-                  }),
-                  // Job title if available
-                  ...(headerLines.length > 1 ? [
-                    new Paragraph({
-                      alignment: AlignmentType.LEFT,
-                      children: [
-                        new TextRun({
-                          text: headerLines[1].trim(),
-                          size: 28, // ~14pt font
-                          color: this.colors.medium,
-                          font: "Calibri",
-                          bold: true,
-                        }),
-                      ],
-                      spacing: {
-                        after: 120
-                      }
-                    })
-                  ] : []),
-                ],
-              }),
-              
-              // Right column for contact info
+                  })
+                ] : []),
+                // Contact info
+                ...(headerLines.length > 2 ? headerLines.slice(2).map(line => 
+                  new Paragraph({
+                    alignment: AlignmentType.LEFT,
+                    children: [
+                      new TextRun({
+                        text: line.trim(),
+                        size: 22, // ~11pt font
+                        font: fonts.bodyFont,
+                        color: colors.dark,
+                      }),
+                    ],
+                    spacing: {
+                      after: 60
+                    }
+                  })
+                ) : [])
+              ],
+            }),
+            
+            // Right column for photo (only if photo is provided)
+            ...(hasPhoto ? [
               new TableCell({
                 width: {
                   size: 30,
@@ -249,374 +520,107 @@ export class DocumentGenerator {
                   right: { style: BorderStyle.NONE },
                 },
                 children: [
-                  // Contact info with icons for modern look
-                  ...(headerLines.length > 2 ? headerLines.slice(2).map(line => 
-                    new Paragraph({
-                      alignment: AlignmentType.RIGHT,
-                      children: [
-                        new TextRun({
-                          text: line.trim(),
-                          size: 22, // ~11pt font
-                          font: "Calibri",
-                          color: this.colors.dark,
-                        }),
-                      ],
-                      spacing: {
-                        after: 80
-                      }
-                    })
-                  ) : [])
+                  // Photo in a centered paragraph
+                  new Paragraph({
+                    alignment: AlignmentType.RIGHT,
+                    children: [
+                      this.createPhotoElement(photoOptions.path, photoOptions.size)
+                    ],
+                    spacing: {
+                      after: 120
+                    }
+                  }),
                 ],
-              }),
-            ],
+              })
+            ] : []),
+          ],
+        }),
+      ],
+    });
+    
+    children.push(table);
+    
+    // Add a professional separator line after the header
+    children.push(
+      new Paragraph({
+        border: {
+          bottom: {
+            color: colors.primary,
+            space: 1,
+            style: BorderStyle.SINGLE,
+            size: 20, // Thicker line for better visual separation
+          },
+        },
+        spacing: {
+          before: 120,
+          after: 240
+        }
+      })
+    );
+  }
+
+  /**
+   * Create an elegant classic header with traditional styling
+   */
+  private static createClassicHeader(
+    children: any[],
+    headerContent: string,
+    photoOptions: any,
+    fonts: any,
+    colors: any
+  ): void {
+    const headerLines = headerContent.split('\n');
+    
+    // Add name centered and large
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [
+          new TextRun({
+            text: headerLines[0]?.trim().toUpperCase() || "NAME",
+            bold: true,
+            size: 36, // ~18pt font
+            color: colors.primary,
+            font: fonts.nameFont,
           }),
         ],
-      });
-      
-      children.push(headerTable);
-      
-      // Add a professional separator line after the header
+        spacing: {
+          after: 100
+        }
+      })
+    );
+    
+    // Add job title if available
+    if (headerLines.length > 1) {
       children.push(
         new Paragraph({
-          border: {
-            bottom: {
-              color: this.colors.primary,
-              space: 1,
-              style: BorderStyle.SINGLE,
-              size: 3,
-            },
-          },
+          alignment: AlignmentType.CENTER,
+          children: [
+            new TextRun({
+              text: headerLines[1].trim(),
+              italics: true,
+              size: 26, // ~13pt font
+              color: colors.medium,
+              font: fonts.headingFont,
+            }),
+          ],
           spacing: {
-            before: 120,
-            after: 240
+            after: 160
           }
         })
       );
     }
     
-    // Process main content
-    if (sections.content) {
-      // Identify sections in the content
-      const contentSections = this.identifySections(sections.content);
+    // Add contact info in a centered row
+    if (headerLines.length > 2) {
+      const contactInfo = headerLines.slice(2).filter(line => line.trim().length > 0);
       
-      // Extract education section to move it to the end
-      let educationSection = null;
-      if (contentSections['EDUCATION']) {
-        educationSection = { name: 'EDUCATION', content: contentSections['EDUCATION'] };
-      }
-      
-      // Add About Me / Profile section if it exists
-      if (contentSections['PROFILE'] || contentSections['SUMMARY'] || contentSections['ABOUT ME']) {
-        const profileContent = contentSections['PROFILE'] || contentSections['SUMMARY'] || contentSections['ABOUT ME'];
+      // Split contact info into chunks of 3 for multi-column layout
+      for (let i = 0; i < contactInfo.length; i += 3) {
+        const chunk = contactInfo.slice(i, i + 3);
         
-        children.push(
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: 'PROFILE',
-                bold: true,
-                size: 28, // ~14pt font
-                color: this.colors.primary,
-                font: "Calibri",
-              }),
-            ],
-            spacing: {
-              after: 120
-            },
-            border: {
-              bottom: {
-                color: this.colors.light,
-                space: 1,
-                style: BorderStyle.SINGLE,
-                size: 1,
-              },
-            },
-          })
-        );
-        
-        // Add profile content with enhanced formatting
-        const profileLines = profileContent.split('\n');
-        profileLines.forEach(line => {
-          const trimmedLine = line.trim();
-          if (trimmedLine.length === 0) return;
-          
-          children.push(
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: trimmedLine,
-                  size: 22, // ~11pt font
-                  font: "Calibri",
-                  color: this.colors.dark,
-                }),
-              ],
-              spacing: {
-                before: 80,
-                after: 80
-              }
-            })
-          );
-        });
-      }
-      
-      // Add Skills/Competences section with modern styling
-      children.push(
-        new Paragraph({
-          children: [
-            new TextRun({
-              text: 'SKILLS',
-              bold: true,
-              size: 28, // ~14pt font
-              color: this.colors.primary,
-              font: "Calibri",
-            }),
-          ],
-          spacing: { before: 240, after: 120 },
-          border: {
-            bottom: {
-              color: this.colors.light,
-              space: 1,
-              style: BorderStyle.SINGLE,
-              size: 1,
-            },
-          },
-        })
-      );
-      
-      // Prioritize skills from content or metadata
-      let skillsList: string[] = [];
-      
-      if (contentSections['SKILLS']) {
-        // Extract skills from content
-        const skillsLines = contentSections['SKILLS'].split('\n');
-        skillsList = skillsLines
-          .map(line => {
-            const trimmedLine = line.trim();
-            if (trimmedLine.length === 0) return null;
-            
-            // Remove bullet points if present
-            if (trimmedLine.startsWith('-') || trimmedLine.startsWith('•') || trimmedLine.startsWith('*')) {
-              return trimmedLine.substring(1).trim();
-            }
-            return trimmedLine;
-          })
-          .filter(Boolean) as string[];
-      } else if (metadata && metadata.skills && Array.isArray(metadata.skills) && metadata.skills.length > 0) {
-        skillsList = metadata.skills;
-      } else if (metadata && metadata.industry) {
-        skillsList = this.getIndustrySkills(metadata.industry);
-      }
-      
-      // Create a table for skills with 3 columns - enhanced with modern styling
-      const SKILLS_PER_ROW = 3;
-      const tableRows: TableRow[] = [];
-      
-      for (let i = 0; i < skillsList.length; i += SKILLS_PER_ROW) {
-        const rowSkills = skillsList.slice(i, i + SKILLS_PER_ROW);
-        
-        // Create cells for this row with enhanced styling
-        const cells = rowSkills.map(skill => 
-          new TableCell({
-            borders: {
-              top: { style: BorderStyle.NONE },
-              bottom: { style: BorderStyle.NONE },
-              left: { style: BorderStyle.NONE },
-              right: { style: BorderStyle.NONE },
-            },
-            children: [
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: "• ",
-                    size: 22,
-                    bold: true,
-                    color: this.colors.primary,
-                    font: "Calibri",
-                  }),
-                  new TextRun({
-                    text: skill,
-                    size: 22,
-                    color: this.colors.dark,
-                    font: "Calibri",
-                  }),
-                ],
-                spacing: { before: 60, after: 60 }
-              })
-            ],
-          })
-        );
-        
-        // If we don't have enough skills to fill the row, add empty cells
-        while (cells.length < SKILLS_PER_ROW) {
-          cells.push(
-            new TableCell({
-              borders: {
-                top: { style: BorderStyle.NONE },
-                bottom: { style: BorderStyle.NONE },
-                left: { style: BorderStyle.NONE },
-                right: { style: BorderStyle.NONE },
-              },
-              children: [new Paragraph({})],
-            })
-          );
-        }
-        
-        // Add the row to the table
-        tableRows.push(new TableRow({ children: cells }));
-      }
-      
-      // Create the skills table with the rows
-      const skillsTableWithRows = new Table({
-        width: {
-          size: 100,
-          type: WidthType.PERCENTAGE,
-        },
-        layout: TableLayoutType.FIXED,
-        borders: {
-          top: { style: BorderStyle.NONE },
-          bottom: { style: BorderStyle.NONE },
-          left: { style: BorderStyle.NONE },
-          right: { style: BorderStyle.NONE },
-          insideHorizontal: { style: BorderStyle.NONE },
-          insideVertical: { style: BorderStyle.NONE },
-        },
-        rows: tableRows,
-      });
-      
-      // Add the skills table to the document
-      children.push(skillsTableWithRows);
-      
-      // Check for languages section and add it before work experience if available
-      const languagesSection = contentSections['LANGUAGES'] || contentSections['LANGUAGE SKILLS'];
-      if (languagesSection) {
-        // Add Languages header
-        children.push(
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: 'LANGUAGES',
-                bold: true,
-                size: 28,
-                color: this.colors.primary,
-                font: "Calibri",
-              }),
-            ],
-            spacing: {
-              before: 240,
-              after: 120
-            },
-            border: {
-              bottom: {
-                color: this.colors.light,
-                space: 1,
-                style: BorderStyle.SINGLE,
-                size: 1,
-              },
-            },
-          })
-        );
-        
-        // Process languages
-        const languageLines = languagesSection.split('\n');
-        const languagesList: {language: string, level: string}[] = [];
-        
-        languageLines.forEach(line => {
-          const trimmed = line.trim();
-          if (!trimmed) return;
-          
-          // Try to extract language and level
-          const parts = trimmed.split(':').map(p => p.trim());
-          if (parts.length >= 2) {
-            languagesList.push({
-              language: parts[0],
-              level: parts[1]
-            });
-          } else if (trimmed.includes('-')) {
-            const dashParts = trimmed.split('-').map(p => p.trim());
-            if (dashParts.length >= 2) {
-              languagesList.push({
-                language: dashParts[0],
-                level: dashParts[1]
-              });
-            } else {
-              languagesList.push({
-                language: trimmed,
-                level: 'Proficient'
-              });
-            }
-          } else {
-            languagesList.push({
-              language: trimmed,
-              level: 'Proficient'
-            });
-          }
-        });
-        
-        // Create a table for languages with modern visualization
-        const LANGUAGES_PER_ROW = 3;
-        const languageRows: TableRow[] = [];
-        
-        for (let i = 0; i < languagesList.length; i += LANGUAGES_PER_ROW) {
-          const rowLanguages = languagesList.slice(i, i + LANGUAGES_PER_ROW);
-          
-          // Create cells for this row
-          const cells = rowLanguages.map(lang => 
-            new TableCell({
-              borders: {
-                top: { style: BorderStyle.NONE },
-                bottom: { style: BorderStyle.NONE },
-                left: { style: BorderStyle.NONE },
-                right: { style: BorderStyle.NONE },
-              },
-              children: [
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: lang.language,
-                      size: 22,
-                      bold: true,
-                      color: this.colors.dark,
-                      font: "Calibri",
-                    }),
-                  ],
-                  spacing: { after: 40 }
-                }),
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: this.getLanguageLevelBar(lang.level),
-                      size: 20,
-                      color: this.colors.primary,
-                      font: "Calibri",
-                    }),
-                  ],
-                  spacing: { before: 0, after: 80 }
-                })
-              ],
-            })
-          );
-          
-          // If we don't have enough languages to fill the row, add empty cells
-          while (cells.length < LANGUAGES_PER_ROW) {
-            cells.push(
-              new TableCell({
-                borders: {
-                  top: { style: BorderStyle.NONE },
-                  bottom: { style: BorderStyle.NONE },
-                  left: { style: BorderStyle.NONE },
-                  right: { style: BorderStyle.NONE },
-                },
-                children: [new Paragraph({})],
-              })
-            );
-          }
-          
-          // Add the row to the table
-          languageRows.push(new TableRow({ children: cells }));
-        }
-        
-        // Create the languages table
-        const languagesTable = new Table({
+        // Create a table row for contact info
+        const contactTable = new Table({
           width: {
             size: 100,
             type: WidthType.PERCENTAGE,
@@ -630,619 +634,1416 @@ export class DocumentGenerator {
             insideHorizontal: { style: BorderStyle.NONE },
             insideVertical: { style: BorderStyle.NONE },
           },
-          rows: languageRows,
+          rows: [
+            new TableRow({
+              children: chunk.map(item => 
+                new TableCell({
+                  borders: {
+                    top: { style: BorderStyle.NONE },
+                    bottom: { style: BorderStyle.NONE },
+                    left: { style: BorderStyle.NONE },
+                    right: { style: BorderStyle.NONE },
+                  },
+                  children: [
+                    new Paragraph({
+                      alignment: AlignmentType.CENTER,
+                      children: [
+                        new TextRun({
+                          text: item.trim(),
+                          size: 22, // ~11pt font
+                          font: fonts.bodyFont,
+                          color: colors.dark,
+                        }),
+                      ],
+                    })
+                  ],
+                })
+              ),
+            }),
+          ],
         });
         
-        // Add the languages table
-        children.push(languagesTable);
-      }
-      
-      // Add Experience section with enhanced formatting
-      const experienceSection = contentSections['EXPERIENCE'] || 
-                               contentSections['WORK EXPERIENCE'] || 
-                               contentSections['PROFESSIONAL EXPERIENCE'] ||
-                               contentSections['EMPLOYMENT HISTORY'];
-      
-      if (experienceSection) {
-        // Add Experience header with modern styling
-        children.push(
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: 'EXPERIENCE',
-                bold: true,
-                size: 28,
-                color: this.colors.primary,
-                font: "Calibri",
-              }),
-            ],
-            spacing: {
-              before: 240,
-              after: 120
-            },
-            border: {
-              bottom: {
-                color: this.colors.light,
-                space: 1,
-                style: BorderStyle.SINGLE,
-                size: 1,
-              },
-            },
-          })
-        );
-        
-        // Process experience content
-        const experienceLines = experienceSection.split('\n');
-        let currentJobTitle = '';
-        let currentCompany = '';
-        let currentDateRange = '';
-        let currentBullets: string[] = [];
-        let isProcessingJob = false;
-        
-        for (let i = 0; i < experienceLines.length; i++) {
-          const line = experienceLines[i].trim();
-          if (line.length === 0) {
-            // Empty line - if we were processing a job, add it to the document
-            if (isProcessingJob && (currentJobTitle || currentCompany)) {
-              this.addJobToDocument(children, currentJobTitle, currentCompany, currentDateRange, currentBullets);
-              
-              // Reset for next job
-              currentJobTitle = '';
-              currentCompany = '';
-              currentDateRange = '';
-              currentBullets = [];
-              isProcessingJob = false;
-              
-              // Add a subtle separator between jobs
-              children.push(
-                new Paragraph({
-                  border: {
-                    bottom: {
-                      color: this.colors.ultraLight,
-                      space: 1,
-                      style: BorderStyle.SINGLE,
-                      size: 1,
-                    },
-                  },
-                  spacing: {
-                    after: 120
-                  }
-                })
-              );
-            }
-            continue;
-          }
-          
-          // Check if this is a bullet point
-          const isBullet = line.startsWith('-') || line.startsWith('•') || line.startsWith('*');
-          
-          if (isBullet) {
-            // Add to current bullets
-            currentBullets.push(line.substring(1).trim());
-            isProcessingJob = true;
-          } else {
-            // Check if this might be a job title, company, or date
-            const containsYear = /\b(19|20)\d{2}\b/.test(line);
-            const isShortLine = line.length < 60;
-            
-            if (containsYear && isShortLine) {
-              // This is likely a date range
-              currentDateRange = line;
-              isProcessingJob = true;
-            } else if (isShortLine) {
-              // This is likely a job title or company
-              if (!currentJobTitle) {
-                currentJobTitle = line;
-              } else if (!currentCompany) {
-                currentCompany = line;
-              }
-              isProcessingJob = true;
-            } else {
-              // This is likely a description - add it as a bullet
-              currentBullets.push(line);
-              isProcessingJob = true;
-            }
-          }
-        }
-        
-        // Add the last job if there is one
-        if (isProcessingJob && (currentJobTitle || currentCompany)) {
-          this.addJobToDocument(children, currentJobTitle, currentCompany, currentDateRange, currentBullets);
-        }
-      }
-      
-      // Add Education section with enhanced styling
-      if (educationSection) {
-        // Add Education header
-        children.push(
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: 'EDUCATION',
-                bold: true,
-                size: 28,
-                color: this.colors.primary,
-                font: "Calibri",
-              }),
-            ],
-            spacing: {
-              before: 240,
-              after: 120
-            },
-            border: {
-              bottom: {
-                color: this.colors.light,
-                space: 1,
-                style: BorderStyle.SINGLE,
-                size: 1,
-              },
-            },
-          })
-        );
-        
-        // Process education content
-        const educationLines = educationSection.content.split('\n');
-        let currentDegree = '';
-        let currentInstitution = '';
-        let currentYear = '';
-        let currentDetails: string[] = [];
-        let isProcessingEducation = false;
-        
-        for (let i = 0; i < educationLines.length; i++) {
-          const line = educationLines[i].trim();
-          if (line.length === 0) {
-            // Empty line - if we were processing an education entry, add it to the document
-            if (isProcessingEducation && (currentDegree || currentInstitution)) {
-              this.addEducationToDocument(children, currentDegree, currentInstitution, currentYear, currentDetails);
-              
-              // Reset for next education entry
-              currentDegree = '';
-              currentInstitution = '';
-              currentYear = '';
-              currentDetails = [];
-              isProcessingEducation = false;
-              
-              // Add a separator between education entries
-              children.push(
-                new Paragraph({
-                  border: {
-                    bottom: {
-                      color: "#EEEEEE",
-                      space: 1,
-                      style: BorderStyle.SINGLE,
-                      size: 1,
-                    },
-                  },
-                  spacing: {
-                    after: 120
-                  }
-                })
-              );
-            }
-            continue;
-          }
-          
-          // Check if this is a bullet point
-          const isBullet = line.startsWith('-') || line.startsWith('•') || line.startsWith('*');
-          
-          if (isBullet) {
-            // Add to current details
-            currentDetails.push(line.substring(1).trim());
-            isProcessingEducation = true;
-          } else {
-            // Check if this might be a degree, institution, or year
-            const containsYear = /\b(19|20)\d{2}\b/.test(line);
-            const isShortLine = line.length < 60;
-            const isDegreeKeyword = /\b(degree|diploma|bachelor|master|phd|certificate)\b/i.test(line);
-            
-            if (containsYear && isShortLine) {
-              // This is likely a year
-              currentYear = line;
-              isProcessingEducation = true;
-            } else if (isDegreeKeyword || (isShortLine && !currentDegree)) {
-              // This is likely a degree
-              currentDegree = line;
-              isProcessingEducation = true;
-            } else if (isShortLine) {
-              // This is likely an institution
-              currentInstitution = line;
-              isProcessingEducation = true;
-            } else {
-              // This is likely a description - add it as a detail
-              currentDetails.push(line);
-              isProcessingEducation = true;
-            }
-          }
-        }
-        
-        // Add the last education entry if there is one
-        if (isProcessingEducation && (currentDegree || currentInstitution)) {
-          this.addEducationToDocument(children, currentDegree, currentInstitution, currentYear, currentDetails);
-        }
+        children.push(contactTable);
       }
     }
     
-    return children;
+    // Add a decorative separator
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        border: {
+          bottom: {
+            color: colors.light,
+            space: 1,
+            style: BorderStyle.SINGLE,
+            size: 10,
+          },
+        },
+        spacing: {
+          before: 160,
+          after: 240
+        }
+      })
+    );
+    
+    // Add photo if provided in a centered position
+    if (photoOptions.path && photoOptions.placement !== this.PhotoPlacement.NONE && fs.existsSync(photoOptions.path)) {
+      children.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [
+            this.createPhotoElement(photoOptions.path, photoOptions.size)
+          ],
+          spacing: {
+            after: 160
+          }
+        })
+      );
+    }
   }
   
   /**
-   * Identify sections in the CV content
+   * Create a minimal header with clean, unobtrusive styling
    */
-  private static identifySections(content: string): Record<string, string> {
-    const sections: Record<string, string> = {};
+  private static createMinimalHeader(
+    children: any[],
+    headerContent: string,
+    photoOptions: any,
+    fonts: any,
+    colors: any
+  ): void {
+    const headerLines = headerContent.split('\n');
     
-    // Define section headers regex patterns for improved detection
-    const sectionPatterns = [
-      { name: 'PROFILE', pattern: /(?:^|\n)(?:profile|summary|about me|objective)(?:\s*:|\s*\n|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|skills|languages|interests|references|profile|summary|\Z)|\Z)/is },
-      { name: 'EXPERIENCE', pattern: /(?:^|\n)(?:experience|work history|employment|professional background|career|work)(?:\s*:|\s*\n|\s{2,})(.*?)(?=\n\s*(?:education|skills|languages|interests|references|profile|summary|\Z)|\Z)/is },
-      { name: 'EDUCATION', pattern: /(?:^|\n)(?:education|academic|qualifications|degrees|university|college)(?:\s*:|\s*\n|\s{2,})(.*?)(?=\n\s*(?:experience|work|employment|skills|languages|interests|references|profile|summary|\Z)|\Z)/is },
-      { name: 'SKILLS', pattern: /(?:^|\n)(?:skills|proficiencies|competencies|expertise|technical skills|core competencies)(?:\s*:|\s*\n|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|languages|interests|references|profile|summary|\Z)|\Z)/is },
-      { name: 'LANGUAGES', pattern: /(?:^|\n)(?:languages|linguistic skills|language proficiency)(?:\s*:|\s*\n|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|skills|interests|references|profile|summary|\Z)|\Z)/is },
-      { name: 'INTERESTS', pattern: /(?:^|\n)(?:interests|hobbies|activities|extracurricular)(?:\s*:|\s*\n|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|skills|languages|references|profile|summary|\Z)|\Z)/is },
-      { name: 'REFERENCES', pattern: /(?:^|\n)(?:references|referees)(?:\s*:|\s*\n|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|skills|languages|interests|profile|summary|\Z)|\Z)/is }
-    ];
-    
-    // Additional keywords for better education section identification
-    const educationKeywords = [
-      'university', 'college', 'school', 'degree', 'bachelor', 'master', 'phd', 'doctorate', 
-      'diploma', 'certificate', 'thesis', 'gpa', 'grade', 'graduated', 'graduation', 
-      'major', 'minor', 'academic', 'study', 'studies', 'mba', 'bsc', 'ba', 'bs', 'ma', 'ms', 'msc'
-    ];
-    
-    // Additional keywords for better work experience section identification
-    const experienceKeywords = [
-      'managed', 'led', 'created', 'implemented', 'responsible', 'achievements',
-      'improved', 'increased', 'reduced', 'supervised', 'team', 'project',
-      'client', 'customer', 'report', 'business', 'strategy', 'market', 'sales', 'revenue',
-      'manager', 'director', 'supervisor', 'position', 'role', 'company', 'organization', 'firm'
-    ];
-    
-    // Try to find sections based on patterns
-    sectionPatterns.forEach(({ name, pattern }) => {
-      const match = content.match(pattern);
-      if (match && match[1]) {
-        sections[name] = match[1].trim();
-      }
+    // Create a simple two-column layout
+    const table = new Table({
+      width: {
+        size: 100,
+        type: WidthType.PERCENTAGE,
+      },
+      layout: TableLayoutType.FIXED,
+      borders: {
+        top: { style: BorderStyle.NONE },
+        bottom: { style: BorderStyle.NONE },
+        left: { style: BorderStyle.NONE },
+        right: { style: BorderStyle.NONE },
+        insideHorizontal: { style: BorderStyle.NONE },
+        insideVertical: { style: BorderStyle.NONE },
+      },
+      rows: [
+        new TableRow({
+          children: [
+            // Left column for name and job title
+            new TableCell({
+              width: {
+                size: 50,
+                type: WidthType.PERCENTAGE,
+              },
+              borders: {
+                top: { style: BorderStyle.NONE },
+                bottom: { style: BorderStyle.NONE },
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.NONE },
+              },
+              children: [
+                // Name 
+                new Paragraph({
+                  alignment: AlignmentType.LEFT,
+                  children: [
+                    new TextRun({
+                      text: headerLines[0]?.trim() || "NAME",
+                      bold: true,
+                      size: 32, // ~16pt font
+                      color: colors.dark,
+                      font: fonts.nameFont,
+                    }),
+                  ],
+                  spacing: {
+                    after: 80
+                  }
+                }),
+                // Job title if available
+                ...(headerLines.length > 1 ? [
+                  new Paragraph({
+                    alignment: AlignmentType.LEFT,
+                    children: [
+                      new TextRun({
+                        text: headerLines[1].trim(),
+                        size: 24, // ~12pt font
+                        color: colors.medium,
+                        font: fonts.headingFont,
+                      }),
+                    ],
+                    spacing: {
+                      after: 80
+                    }
+                  })
+                ] : []),
+              ],
+            }),
+            
+            // Right column for contact info
+            new TableCell({
+              width: {
+                size: 50,
+                type: WidthType.PERCENTAGE,
+              },
+              borders: {
+                top: { style: BorderStyle.NONE },
+                bottom: { style: BorderStyle.NONE },
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.NONE },
+              },
+              children: [
+                // Contact info
+                ...(headerLines.length > 2 ? headerLines.slice(2).map(line => 
+                  new Paragraph({
+                    alignment: AlignmentType.RIGHT,
+                    children: [
+                      new TextRun({
+                        text: line.trim(),
+                        size: 20, // ~10pt font
+                        font: fonts.bodyFont,
+                        color: colors.medium,
+                      }),
+                    ],
+                    spacing: {
+                      after: 40
+                    }
+                  })
+                ) : [])
+              ],
+            }),
+          ],
+        }),
+      ],
     });
     
-    // If no sections were found using regex, try a simpler approach
-    if (Object.keys(sections).length === 0) {
-      // Split by lines and look for section headers
-      const lines = content.split('\n');
-      let currentSection = '';
-      let currentContent = '';
-      
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        
-        // Skip empty lines
-        if (line === '') continue;
-        
-        // Check if this line looks like a section header
-        const isHeader = line.toUpperCase() === line && line.length < 30;
-        
-        if (isHeader) {
-          // Save previous section if it exists
-          if (currentSection && currentContent) {
-            sections[currentSection] = currentContent.trim();
-          }
-          
-          // Start new section
-          currentSection = line;
-          currentContent = '';
-        } else {
-          // Add to current section content
-          currentContent += line + '\n';
+    children.push(table);
+    
+    // Add a subtle separator line
+    children.push(
+      new Paragraph({
+        border: {
+          bottom: {
+            color: colors.ultraLight,
+            space: 1,
+            style: BorderStyle.SINGLE,
+            size: 10,
+          },
+        },
+        spacing: {
+          before: 80,
+          after: 160
         }
-      }
-      
-      // Save the last section
-      if (currentSection && currentContent) {
-        sections[currentSection] = currentContent.trim();
-      }
-    }
+      })
+    );
     
-    // Post-processing validation for education vs experience to reduce confusion
-    if (sections['EDUCATION'] && sections['EXPERIENCE']) {
-      // Check if education section contains more experience keywords than education keywords
-      const educationText = sections['EDUCATION'].toLowerCase();
-      const experienceText = sections['EXPERIENCE'].toLowerCase();
-      
-      let educationKeywordCount = 0;
-      let experienceKeywordCount = 0;
-      
-      educationKeywords.forEach(keyword => {
-        if (educationText.includes(keyword.toLowerCase())) {
-          educationKeywordCount++;
-        }
-      });
-      
-      experienceKeywords.forEach(keyword => {
-        if (educationText.includes(keyword.toLowerCase())) {
-          experienceKeywordCount++;
-        }
-      });
-      
-      // If the education section has more experience keywords than education keywords,
-      // it's likely mislabeled. Either merge with experience or keep separate depending on the difference.
-      if (experienceKeywordCount > educationKeywordCount * 2) {
-        // Very clear mismatch - merge with experience
-        sections['EXPERIENCE'] += '\n' + sections['EDUCATION'];
-        delete sections['EDUCATION'];
-      }
-    }
-    
-    return sections;
-  }
-  
-  /**
-   * Extract achievements from work experience content
-   * Looks for sentences that appear to be achievements based on certain patterns
-   */
-  private static extractAchievements(experienceContent: string): string[] {
-    const lines = experienceContent.split('\n');
-    const achievements: string[] = [];
-    
-    // Action verbs that often indicate achievements
-    const achievementVerbs = [
-      "increased", "decreased", "improved", "reduced", "saved", "grew", 
-      "created", "established", "implemented", "launched", 
-      "generated", "achieved", "won", "awarded", "recognized"
-    ];
-    
-    // Patterns that might indicate metrics or quantifiable results
-    const metricPatterns = [
-      /\d+\s*%/, // Percentage (e.g., 25%)
-      /\$\s*\d+/, // Dollar amount (e.g., $500K)
-      /\d+\s*k/i, // Thousands (e.g., 500K)
-      /\d+\s*m/i, // Millions (e.g., 2M)
-      /\d+\s*million/i, // Written millions (e.g., 2 million)
-      /\d+\s*billion/i, // Written billions (e.g., 1 billion)
-    ];
-    
-    // Search through each line for achievement-like content
-    lines.forEach((line) => {
-      // Skip empty lines
-      if (line.trim().length === 0) return;
-      
-      // Clean the line (remove bullet points)
-      let cleanLine = line.trim();
-      if (cleanLine.startsWith('-') || cleanLine.startsWith('•') || cleanLine.startsWith('*')) {
-        cleanLine = cleanLine.substring(1).trim();
-      }
-      
-      // Skip if line is too short
-      if (cleanLine.length < 20) return;
-      
-      // Check if line contains achievement verbs
-      const containsAchievementVerb = achievementVerbs.some(verb => 
-        cleanLine.toLowerCase().includes(verb)
-      );
-      
-      // Check if line contains metrics
-      const containsMetrics = metricPatterns.some(pattern => 
-        pattern.test(cleanLine)
-      );
-      
-      // If line has either achievement verbs or metrics, consider it an achievement
-      if (containsAchievementVerb || containsMetrics) {
-        // Ensure first letter is capitalized
-        const firstChar = cleanLine.charAt(0).toUpperCase();
-        const restOfLine = cleanLine.slice(1);
-        
-        // Add to achievements
-        achievements.push(firstChar + restOfLine);
-      }
-    });
-    
-    // If no achievements found using patterns, look for longest bullet points
-    if (achievements.length === 0) {
-      const bulletPoints = lines
-        .filter(line => {
-          const trimmed = line.trim();
-          return (trimmed.startsWith('-') || trimmed.startsWith('•') || trimmed.startsWith('*')) && 
-                 trimmed.length > 30; // Only consider substantial bullet points
-        })
-        .map(line => {
-          let cleaned = line.trim();
-          if (cleaned.startsWith('-') || cleaned.startsWith('•') || cleaned.startsWith('*')) {
-            cleaned = cleaned.substring(1).trim();
-          }
-          // Ensure first letter is capitalized
-          const firstChar = cleaned.charAt(0).toUpperCase();
-          const restOfLine = cleaned.slice(1);
-          return firstChar + restOfLine;
-        })
-        .sort((a, b) => b.length - a.length); // Sort by length (longest first)
-      
-      // Take up to 3 longest bullet points
-      achievements.push(...bulletPoints.slice(0, 3));
-    }
-    
-    // If still no achievements, create generic achievements based on job titles
-    if (achievements.length === 0) {
-      // Try to extract job titles
-      const jobTitlePattern = /(?:^|\n)([A-Z][A-Za-z\s]+(?:Manager|Director|Engineer|Developer|Specialist|Analyst|Consultant|Designer|Coordinator|Assistant|Representative|Officer|Lead|Head|Chief))/g;
-      const jobTitleMatches = [...experienceContent.matchAll(jobTitlePattern)];
-      
-      if (jobTitleMatches.length > 0) {
-        // Use job titles to create achievements
-        jobTitleMatches.slice(0, 2).forEach(match => {
-          const jobTitle = match[1].trim();
-          achievements.push(`Successfully performed key responsibilities as ${jobTitle}, exceeding expectations`);
-          achievements.push(`Demonstrated excellence in problem-solving and teamwork as ${jobTitle}`);
-        });
-      } else {
-        // Fallback to generic achievements
-        achievements.push(
-          "Successfully implemented process improvements resulting in increased efficiency",
-          "Collaborated effectively with cross-functional teams to achieve organizational goals",
-          "Recognized for exceptional performance and contribution to team success"
+    // Add photo if provided
+    if (photoOptions.path && photoOptions.placement !== this.PhotoPlacement.NONE && fs.existsSync(photoOptions.path)) {
+      // Only add photo in specific positions based on the minimal style
+      if (photoOptions.placement === this.PhotoPlacement.HEADER) {
+        children.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [
+              this.createPhotoElement(photoOptions.path, this.PhotoSize.SMALL)
+            ],
+            spacing: {
+              after: 120
+            }
+          })
         );
       }
     }
-    
-    return achievements;
   }
   
   /**
-   * Get a list of relevant skills for a specific industry
-   * Used when no explicit skills are provided in the CV
-   * @param industry The industry name
-   * @returns Array of relevant skills for the industry
+   * Create an executive-style header with sophisticated styling
    */
-  private static getIndustrySkills(industry: string): string[] {
-    const normalizedIndustry = industry.toLowerCase().trim();
+  private static createExecutiveHeader(
+    children: any[],
+    headerContent: string,
+    photoOptions: any,
+    fonts: any,
+    colors: any
+  ): void {
+    const headerLines = headerContent.split('\n');
     
-    const industrySkills: Record<string, string[]> = {
-      'technology': [
-        'Programming & Software Development',
-        'Cloud Architecture (AWS/Azure/GCP)',
-        'DevOps & CI/CD Pipelines',
-        'Artificial Intelligence & Machine Learning',
-        'Database Management & SQL',
-        'API Design & Integration',
-        'Agile/Scrum Methodologies',
-        'Systems Architecture',
-        'Cybersecurity & Identity Management',
-        'Microservices & Containerization'
-      ],
-      'finance': [
-        'Financial Analysis & Reporting',
-        'Risk Management & Compliance',
-        'Investment Portfolio Management',
-        'Financial Modeling & Forecasting',
-        'Banking Regulations & Policies',
-        'Corporate Finance',
-        'Capital Markets & Securities',
-        'Financial Control Systems',
-        'Mergers & Acquisitions',
-        'Tax Planning & Strategy'
-      ],
-      'healthcare': [
-        'Electronic Health Records (EHR) Systems',
-        'Healthcare Compliance (HIPAA/GDPR)',
-        'Clinical Workflow Optimization',
-        'Medical Coding & Billing',
-        'Healthcare Analytics',
-        'Patient Care Management',
-        'Healthcare Information Technology',
-        'Medical Research & Clinical Trials',
-        'Telehealth & Remote Care Solutions',
-        'Healthcare Policy & Regulation'
-      ],
-      'marketing': [
-        'Digital Marketing Strategy',
-        'Content Creation & Marketing',
-        'Search Engine Optimization (SEO)',
-        'Social Media Management',
-        'Marketing Analytics & Reporting',
-        'Brand Development & Management',
-        'Customer Journey Mapping',
-        'Marketing Automation',
-        'Market Research & Competitive Analysis',
-        'Email Marketing Campaigns'
-      ],
-      'retail': [
-        'Merchandising & Product Management',
-        'E-commerce Platform Management',
-        'Supply Chain Optimization',
-        'Retail Analytics & KPIs',
-        'Customer Experience Design',
-        'Inventory Management Systems',
-        'Point of Sale (POS) Systems',
-        'Omnichannel Retail Strategy',
-        'Visual Merchandising',
-        'Customer Relationship Management'
-      ],
-      'legal': [
-        'Contract Drafting & Negotiation',
-        'Legal Research & Analysis',
-        'Regulatory Compliance',
-        'Intellectual Property Management',
-        'Corporate Governance',
-        'Litigation Management',
-        'Legal Risk Assessment',
-        'Data Privacy Law',
-        'Employment Law',
-        'Mergers & Acquisitions'
-      ],
-      'human resources': [
-        'Talent Acquisition & Retention',
-        'Performance Management Systems',
-        'Compensation & Benefits Planning',
-        'Employee Relations & Engagement',
-        'HR Analytics & Reporting',
-        'Training & Development Programs',
-        'HRIS & Workforce Management Systems',
-        'Organizational Development',
-        'Labor Relations & Compliance',
-        'Succession Planning'
-      ],
-      'education': [
-        'Curriculum Development & Assessment',
-        'Educational Technology Integration',
-        'Instructional Design',
-        'Learning Management Systems',
-        'Student Engagement Strategies',
-        'Educational Research & Analysis',
-        'Classroom Management',
-        'Special Education Programs',
-        'Educational Leadership',
-        'Student Assessment & Evaluation'
-      ],
-      'manufacturing': [
-        'Production Planning & Scheduling',
-        'Quality Control Systems',
-        'Lean Manufacturing Principles',
-        'Supply Chain Management',
-        'Manufacturing Execution Systems',
-        'Industrial Automation',
-        'Process Improvement & Six Sigma',
-        'Inventory Management',
-        'Equipment Maintenance & Reliability',
-        'Health & Safety Compliance'
-      ],
-      'construction': [
-        'Project Planning & Management',
-        'Building Information Modeling (BIM)',
-        'Construction Safety Protocols',
-        'Cost Estimation & Budgeting',
-        'Contract Administration',
-        'Building Codes & Regulatory Compliance',
-        'Construction Documentation',
-        'Quality Assurance & Control',
-        'Sustainable Building Practices',
-        'Construction Technology Applications'
-      ]
-    };
+    // Create a sophisticated header layout
+    const hasPhoto = photoOptions.path && 
+                    photoOptions.placement !== this.PhotoPlacement.NONE && 
+                    fs.existsSync(photoOptions.path);
     
-    // Find the matching industry or use default skills
-    for (const [key, skills] of Object.entries(industrySkills)) {
-      if (normalizedIndustry.includes(key)) {
-        return skills;
-      }
+    // Name with decorative underline
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        children: [
+          new TextRun({
+            text: headerLines[0]?.trim().toUpperCase() || "NAME",
+            bold: true,
+            size: 40, // ~20pt font
+            color: colors.primary,
+            font: fonts.nameFont,
+          }),
+        ],
+        spacing: {
+          after: 60
+        }
+      })
+    );
+    
+    // Custom underline for name
+    children.push(
+      new Paragraph({
+        border: {
+          bottom: {
+            color: colors.primary,
+            space: 1,
+            style: BorderStyle.SINGLE,
+            size: 8,
+          },
+        },
+        spacing: {
+          after: 120
+        },
+        children: [
+          new TextRun({
+            text: " ",
+            size: 1,
+          }),
+        ],
+      })
+    );
+    
+    // Create a table for job title and optional photo
+    const contentTable = new Table({
+      width: {
+        size: 100,
+        type: WidthType.PERCENTAGE,
+      },
+      layout: TableLayoutType.FIXED,
+      borders: {
+        top: { style: BorderStyle.NONE },
+        bottom: { style: BorderStyle.NONE },
+        left: { style: BorderStyle.NONE },
+        right: { style: BorderStyle.NONE },
+        insideHorizontal: { style: BorderStyle.NONE },
+        insideVertical: { style: BorderStyle.NONE },
+      },
+      rows: [
+        new TableRow({
+          children: [
+            // Left column for job title and contact
+            new TableCell({
+              width: {
+                size: hasPhoto ? 70 : 100,
+                type: WidthType.PERCENTAGE,
+              },
+              borders: {
+                top: { style: BorderStyle.NONE },
+                bottom: { style: BorderStyle.NONE },
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.NONE },
+              },
+              children: [
+                // Job title if available
+                ...(headerLines.length > 1 ? [
+                  new Paragraph({
+                    alignment: AlignmentType.LEFT,
+                    children: [
+                      new TextRun({
+                        text: headerLines[1].trim(),
+                        size: 26, // ~13pt font
+                        color: colors.dark,
+                        font: fonts.headingFont,
+                        bold: true,
+                      }),
+                    ],
+                    spacing: {
+                      after: 120
+                    }
+                  })
+                ] : []),
+                // Contact info in a clean layout
+                ...(headerLines.length > 2 ? headerLines.slice(2).map(line => 
+                  new Paragraph({
+                    alignment: AlignmentType.LEFT,
+                    children: [
+                      new TextRun({
+                        text: line.trim(),
+                        size: 22, // ~11pt font
+                        font: fonts.bodyFont,
+                        color: colors.medium,
+                      }),
+                    ],
+                    spacing: {
+                      after: 40
+                    }
+                  })
+                ) : [])
+              ],
+            }),
+            
+            // Right column for photo if provided
+            ...(hasPhoto ? [
+              new TableCell({
+                width: {
+                  size: 30,
+                  type: WidthType.PERCENTAGE,
+                },
+                borders: {
+                  top: { style: BorderStyle.NONE },
+                  bottom: { style: BorderStyle.NONE },
+                  left: { style: BorderStyle.NONE },
+                  right: { style: BorderStyle.NONE },
+                },
+                children: [
+                  // Photo aligned to the right
+                  new Paragraph({
+                    alignment: AlignmentType.RIGHT,
+                    children: [
+                      this.createPhotoElement(photoOptions.path, photoOptions.size)
+                    ],
+                  }),
+                ],
+              })
+            ] : []),
+          ],
+        }),
+      ],
+    });
+    
+    children.push(contentTable);
+    
+    // Add an elegant separator
+    children.push(
+      new Paragraph({
+        border: {
+          bottom: {
+            color: colors.light,
+            space: 1,
+            style: BorderStyle.DOUBLE,
+            size: 4,
+          },
+        },
+        spacing: {
+          before: 120,
+          after: 240
+        }
+      })
+    );
+  }
+  
+  /**
+   * Create a creative header with distinctive styling
+   */
+  private static createCreativeHeader(
+    children: any[],
+    headerContent: string,
+    photoOptions: any,
+    fonts: any,
+    colors: any
+  ): void {
+    const headerLines = headerContent.split('\n');
+    
+    // Only include photo if a valid path is provided
+    const hasPhoto = photoOptions.path && 
+                    photoOptions.placement !== this.PhotoPlacement.NONE && 
+                    fs.existsSync(photoOptions.path);
+    
+    // Create a distinctive layout for creative fields
+    // Name with distinctive styling
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        children: [
+          new TextRun({
+            text: (headerLines[0]?.trim() || "NAME").toUpperCase(),
+            bold: true,
+            size: 38, // ~19pt font
+            color: colors.primary,
+            font: fonts.nameFont,
+          }),
+        ],
+        spacing: {
+          after: 40
+        }
+      })
+    );
+    
+    // Job title with creative styling
+    if (headerLines.length > 1) {
+      children.push(
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          children: [
+            new TextRun({
+              text: "// ",
+              size: 24,
+              color: colors.accent,
+              font: fonts.headingFont,
+            }),
+            new TextRun({
+              text: headerLines[1].trim(),
+              size: 24, // ~12pt font
+              color: colors.medium,
+              font: fonts.headingFont,
+              italics: true,
+            }),
+          ],
+          spacing: {
+            after: 120
+          }
+        })
+      );
     }
     
-    // Default skills if no industry match found
-    return [
-      'Project Management',
-      'Communication & Presentation',
-      'Problem Solving & Analysis',
-      'Team Leadership & Collaboration',
-      'Strategic Planning',
-      'Data Analysis & Reporting',
-      'Research & Documentation',
-      'Client Relationship Management',
-      'Time Management & Organization',
-      'Critical Thinking & Innovation'
-    ];
+    // Create a table for contact info and photo
+    const contentTable = new Table({
+      width: {
+        size: 100,
+        type: WidthType.PERCENTAGE,
+      },
+      layout: TableLayoutType.FIXED,
+      borders: {
+        top: { style: BorderStyle.NONE },
+        bottom: { style: BorderStyle.NONE },
+        left: { style: BorderStyle.NONE },
+        right: { style: BorderStyle.NONE },
+        insideHorizontal: { style: BorderStyle.NONE },
+        insideVertical: { style: BorderStyle.NONE },
+      },
+      rows: [
+        new TableRow({
+          children: [
+            // Left column for contact info
+            new TableCell({
+              width: {
+                size: hasPhoto ? 70 : 100,
+                type: WidthType.PERCENTAGE,
+              },
+              borders: {
+                top: { style: BorderStyle.NONE },
+                bottom: { style: BorderStyle.NONE },
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.NONE },
+              },
+              children: [
+                // Contact info with icon-like prefixes
+                ...(headerLines.length > 2 ? headerLines.slice(2).map(line => 
+                  new Paragraph({
+                    alignment: AlignmentType.LEFT,
+                    children: [
+                      new TextRun({
+                        text: "• ",
+                        size: 22,
+                        color: colors.accent,
+                        font: fonts.bodyFont,
+                        bold: true,
+                      }),
+                      new TextRun({
+                        text: line.trim(),
+                        size: 22, // ~11pt font
+                        font: fonts.bodyFont,
+                        color: colors.dark,
+                      }),
+                    ],
+                    spacing: {
+                      after: 40
+                    }
+                  })
+                ) : [])
+              ],
+            }),
+            
+            // Right column for photo
+            ...(hasPhoto ? [
+              new TableCell({
+                width: {
+                  size: 30,
+                  type: WidthType.PERCENTAGE,
+                },
+                borders: {
+                  top: { style: BorderStyle.NONE },
+                  bottom: { style: BorderStyle.NONE },
+                  left: { style: BorderStyle.NONE },
+                  right: { style: BorderStyle.NONE },
+                },
+                children: [
+                  // Photo with creative styling
+                  new Paragraph({
+                    alignment: AlignmentType.RIGHT,
+                    children: [
+                      this.createPhotoElement(photoOptions.path, photoOptions.size)
+                    ],
+                  }),
+                ],
+              })
+            ] : []),
+          ],
+        }),
+      ],
+    });
+    
+    children.push(contentTable);
+    
+    // Add a creative separator (dashed line)
+    children.push(
+      new Paragraph({
+        border: {
+          bottom: {
+            color: colors.accent,
+            space: 1,
+            style: BorderStyle.DASHED,
+            size: 8,
+          },
+        },
+        spacing: {
+          before: 80,
+          after: 200
+        }
+      })
+    );
   }
 
   /**
+   * Creates a simple photo element for the CV
+   */
+  private static createPhotoElement(
+    photoPath: string,
+    size: { width: number; height: number }
+  ): ImageRun {
+    try {
+      // Check if file exists
+      if (!fs.existsSync(photoPath)) {
+        logger.warn(`Photo not found at ${photoPath}`);
+        throw new Error('Photo not found');
+      }
+      
+      // Read the image file
+      const imageData = fs.readFileSync(photoPath);
+      
+      // Create a simple image run
+      // Note: If we encounter type issues, we'll need to use any to bypass
+      // the strict typing of the docx library
+      return new ImageRun({
+        data: imageData,
+        transformation: {
+          width: size.width,
+          height: size.height,
+        },
+      } as any); // Use type assertion to bypass strict typing
+    } catch (error) {
+      logger.error(`Error creating photo element: ${error instanceof Error ? error.message : String(error)}`);
+      // Return a minimal 1x1 transparent image as fallback
+      return new ImageRun({
+        data: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+          'base64'
+        ),
+        transformation: {
+          width: 1,
+          height: 1,
+        },
+      } as any); // Use type assertion to bypass strict typing
+    }
+  }
+
+  /**
+   * Creates a summary/profile section with professional formatting
+   */
+  private static createSummarySection(
+    children: any[],
+    summaryText: string,
+    templateStyle: string,
+    fonts: any,
+    colors: any
+  ): void {
+    // Add section header with appropriate styling based on template
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'PROFESSIONAL SUMMARY',
+            bold: true,
+            size: 28, // ~14pt font
+            color: colors.primary,
+            font: fonts.nameFont,
+          }),
+        ],
+        spacing: { before: 200, after: 120 },
+        border: {
+          bottom: {
+            color: colors.light,
+            space: 1,
+            style: BorderStyle.SINGLE,
+            size: 6,
+          },
+        },
+      })
+    );
+    
+    // Process and add summary content
+    const summaryLines = summaryText.split('\n');
+    summaryLines.forEach(line => {
+      const trimmedLine = line.trim();
+      if (trimmedLine.length === 0) return;
+      
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: trimmedLine,
+              size: 24, // ~12pt font
+              font: fonts.bodyFont,
+              color: colors.dark,
+            }),
+          ],
+          spacing: {
+            before: 80,
+            after: 80
+          }
+        })
+      );
+    });
+  }
+  
+  /**
+   * Creates a skills section with modern visualization
+   */
+  private static createSkillsSection(
+    children: any[],
+    skillsText: string,
+    metadata: any,
+    templateStyle: string,
+    fonts: any,
+    colors: any
+  ): void {
+    // Add section header
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'SKILLS',
+            bold: true,
+            size: 28, // ~14pt font
+            color: colors.primary,
+            font: fonts.nameFont,
+          }),
+        ],
+        spacing: { before: 200, after: 120 },
+        border: {
+          bottom: {
+            color: colors.light,
+            space: 1,
+            style: BorderStyle.SINGLE,
+            size: 6,
+          },
+        },
+      })
+    );
+    
+    // Extract skills from provided text or metadata
+    let skillsList: string[] = [];
+    
+    // Extract skills from the text
+    const skillsLines = skillsText.split('\n');
+    skillsList = skillsLines
+      .map(line => {
+        const trimmedLine = line.trim();
+        if (trimmedLine.length === 0) return null;
+        
+        // Remove bullet points if present
+        if (trimmedLine.startsWith('-') || trimmedLine.startsWith('•') || trimmedLine.startsWith('*')) {
+          return trimmedLine.substring(1).trim();
+        }
+        return trimmedLine;
+      })
+      .filter(Boolean) as string[];
+    
+    // If no skills extracted from text, use metadata or industry-based skills
+    if (skillsList.length === 0) {
+      if (metadata && metadata.skills && Array.isArray(metadata.skills) && metadata.skills.length > 0) {
+        skillsList = metadata.skills;
+      } else if (metadata && metadata.industry) {
+        skillsList = DocumentGenerator.getIndustrySkills(metadata.industry);
+      }
+    }
+    
+    // Use different skill presentations based on template style
+    if (templateStyle === DocumentGenerator.TemplateStyles.MODERN || 
+        templateStyle === DocumentGenerator.TemplateStyles.CREATIVE) {
+      // Create a modern table with 3 columns for skills
+      DocumentGenerator.createSkillsTable(children, skillsList, 3, fonts, colors);
+    } else if (templateStyle === DocumentGenerator.TemplateStyles.MINIMAL) {
+      // Create a simple comma-separated list of skills
+      DocumentGenerator.createSkillsList(children, skillsList, fonts, colors);
+    } else {
+      // For classic and executive styles, use a 2-column formal table
+      DocumentGenerator.createSkillsTable(children, skillsList, 2, fonts, colors);
+    }
+  }
+  
+  /**
+   * Creates a 3-column table for skills with modern styling
+   */
+  private static createSkillsTable(
+    children: any[],
+    skillsList: string[],
+    columnsPerRow: number,
+    fonts: any,
+    colors: any
+  ): void {
+    const tableRows: TableRow[] = [];
+    
+    for (let i = 0; i < skillsList.length; i += columnsPerRow) {
+      const rowSkills = skillsList.slice(i, i + columnsPerRow);
+      
+      // Create cells for this row with enhanced styling
+      const cells = rowSkills.map(skill => 
+        new TableCell({
+          borders: {
+            top: { style: BorderStyle.NONE },
+            bottom: { style: BorderStyle.NONE },
+            left: { style: BorderStyle.NONE },
+            right: { style: BorderStyle.NONE },
+          },
+          children: [
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "• ",
+                  size: 22,
+                  bold: true,
+                  color: colors.primary,
+                  font: fonts.nameFont,
+                }),
+                new TextRun({
+                  text: skill,
+                  size: 22,
+                  color: colors.dark,
+                  font: fonts.bodyFont,
+                }),
+              ],
+              spacing: { before: 60, after: 60 }
+            })
+          ],
+        })
+      );
+      
+      // If we don't have enough skills to fill the row, add empty cells
+      while (cells.length < columnsPerRow) {
+        cells.push(
+          new TableCell({
+            borders: {
+              top: { style: BorderStyle.NONE },
+              bottom: { style: BorderStyle.NONE },
+              left: { style: BorderStyle.NONE },
+              right: { style: BorderStyle.NONE },
+            },
+            children: [new Paragraph({})],
+          })
+        );
+      }
+      
+      // Add the row to the table
+      tableRows.push(new TableRow({ children: cells }));
+    }
+    
+    // Create the skills table with the rows
+    const skillsTable = new Table({
+      width: {
+        size: 100,
+        type: WidthType.PERCENTAGE,
+      },
+      layout: TableLayoutType.FIXED,
+      borders: {
+        top: { style: BorderStyle.NONE },
+        bottom: { style: BorderStyle.NONE },
+        left: { style: BorderStyle.NONE },
+        right: { style: BorderStyle.NONE },
+        insideHorizontal: { style: BorderStyle.NONE },
+        insideVertical: { style: BorderStyle.NONE },
+      },
+      rows: tableRows,
+    });
+    
+    // Add the skills table to the document
+    children.push(skillsTable);
+  }
+  
+  /**
+   * Creates a simple comma-separated list of skills for minimal style
+   */
+  private static createSkillsList(
+    children: any[],
+    skillsList: string[],
+    fonts: any,
+    colors: any
+  ): void {
+    // Group skills into chunks of ~5 for readability
+    const SKILLS_PER_LINE = 5;
+    for (let i = 0; i < skillsList.length; i += SKILLS_PER_LINE) {
+      const skillsChunk = skillsList.slice(i, i + SKILLS_PER_LINE);
+      
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: skillsChunk.join(' • '),
+              size: 22,
+              color: colors.dark,
+              font: fonts.bodyFont,
+            }),
+          ],
+          spacing: {
+            before: 60,
+            after: 60
+          },
+          alignment: AlignmentType.LEFT
+        })
+      );
+    }
+  }
+  
+  /**
+   * Creates a professional experience section with enhanced formatting
+   */
+  private static createExperienceSection(
+    children: any[],
+    experienceText: string,
+    templateStyle: string,
+    fonts: any,
+    colors: any
+  ): void {
+    // Add section header
+    const sectionTitle = templateStyle === this.TemplateStyles.EXECUTIVE ? 
+      'PROFESSIONAL EXPERIENCE' : 'EXPERIENCE';
+      
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: sectionTitle,
+            bold: true,
+            size: 28, // ~14pt font
+            color: colors.primary,
+            font: fonts.nameFont,
+          }),
+        ],
+        spacing: { before: 200, after: 120 },
+        border: {
+          bottom: {
+            color: colors.light,
+            space: 1,
+            style: BorderStyle.SINGLE,
+            size: 6,
+          },
+        },
+      })
+    );
+    
+    // Process experience content
+    const experienceLines = experienceText.split('\n');
+    let currentJobTitle = '';
+    let currentCompany = '';
+    let currentDateRange = '';
+    let currentBullets: string[] = [];
+    let isProcessingJob = false;
+    
+    for (let i = 0; i < experienceLines.length; i++) {
+      const line = experienceLines[i].trim();
+      if (line.length === 0) {
+        // Empty line - if we were processing a job, add it to the document
+        if (isProcessingJob && (currentJobTitle || currentCompany)) {
+          this.addJobToDocument(children, currentJobTitle, currentCompany, currentDateRange, currentBullets, fonts, colors);
+          
+          // Reset for next job
+          currentJobTitle = '';
+          currentCompany = '';
+          currentDateRange = '';
+          currentBullets = [];
+          isProcessingJob = false;
+        }
+        continue;
+      }
+      
+      // Check if this is a bullet point
+      const isBullet = line.startsWith('-') || line.startsWith('•') || line.startsWith('*');
+      
+      if (isBullet) {
+        // Add to current bullets
+        currentBullets.push(line.substring(1).trim());
+        isProcessingJob = true;
+      } else {
+        // Check if this might be a job title, company, or date
+        const containsYear = /\b(19|20)\d{2}\b/.test(line);
+        const isShortLine = line.length < 60;
+        
+        if (containsYear && isShortLine) {
+          // This is likely a date range
+          currentDateRange = line;
+          isProcessingJob = true;
+        } else if (isShortLine) {
+          // This is likely a job title or company
+          if (!currentJobTitle) {
+            currentJobTitle = line;
+          } else if (!currentCompany) {
+            currentCompany = line;
+          }
+          isProcessingJob = true;
+        } else {
+          // This is likely a description - add it as a bullet
+          currentBullets.push(line);
+          isProcessingJob = true;
+        }
+      }
+    }
+    
+    // Add the last job if there is one
+    if (isProcessingJob && (currentJobTitle || currentCompany)) {
+      this.addJobToDocument(children, currentJobTitle, currentCompany, currentDateRange, currentBullets, fonts, colors);
+    }
+  }
+  
+  /**
+   * Creates an education section with enhanced formatting
+   */
+  private static createEducationSection(
+    children: any[],
+    educationText: string,
+    templateStyle: string,
+    fonts: any,
+    colors: any
+  ): void {
+    // Add section header
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'EDUCATION',
+            bold: true,
+            size: 28, // ~14pt font
+            color: colors.primary,
+            font: fonts.nameFont,
+          }),
+        ],
+        spacing: { before: 200, after: 120 },
+        border: {
+          bottom: {
+            color: colors.light,
+            space: 1,
+            style: BorderStyle.SINGLE,
+            size: 6,
+          },
+        },
+      })
+    );
+    
+    // Process education content
+    const educationLines = educationText.split('\n');
+    let currentDegree = '';
+    let currentInstitution = '';
+    let currentYear = '';
+    let currentDetails: string[] = [];
+    let isProcessingEducation = false;
+    
+    for (let i = 0; i < educationLines.length; i++) {
+      const line = educationLines[i].trim();
+      if (line.length === 0) {
+        // Empty line - if we were processing an education entry, add it to the document
+        if (isProcessingEducation && (currentDegree || currentInstitution)) {
+          this.addEducationToDocument(children, currentDegree, currentInstitution, currentYear, currentDetails, fonts, colors);
+          
+          // Reset for next education entry
+          currentDegree = '';
+          currentInstitution = '';
+          currentYear = '';
+          currentDetails = [];
+          isProcessingEducation = false;
+          
+          // Add a separator between education entries
+          children.push(
+            new Paragraph({
+              border: {
+                bottom: {
+                  color: "#EEEEEE",
+                  space: 1,
+                  style: BorderStyle.SINGLE,
+                  size: 1,
+                },
+              },
+              spacing: {
+                after: 120
+              }
+            })
+          );
+        }
+        continue;
+      }
+      
+      // Check if this is a bullet point
+      const isBullet = line.startsWith('-') || line.startsWith('•') || line.startsWith('*');
+      
+      if (isBullet) {
+        // Add to current details
+        currentDetails.push(line.substring(1).trim());
+        isProcessingEducation = true;
+      } else {
+        // Check if this might be a degree, institution, or year
+        const containsYear = /\b(19|20)\d{2}\b/.test(line);
+        const isShortLine = line.length < 60;
+        const isDegreeKeyword = /\b(degree|diploma|bachelor|master|phd|certificate)\b/i.test(line);
+        
+        if (containsYear && isShortLine) {
+          // This is likely a year
+          currentYear = line;
+          isProcessingEducation = true;
+        } else if (isDegreeKeyword || (isShortLine && !currentDegree)) {
+          // This is likely a degree
+          currentDegree = line;
+          isProcessingEducation = true;
+        } else if (isShortLine) {
+          // This is likely an institution
+          currentInstitution = line;
+          isProcessingEducation = true;
+        } else {
+          // This is likely a description - add it as a detail
+          currentDetails.push(line);
+          isProcessingEducation = true;
+        }
+      }
+    }
+    
+    // Add the last education entry if there is one
+    if (isProcessingEducation && (currentDegree || currentInstitution)) {
+      this.addEducationToDocument(children, currentDegree, currentInstitution, currentYear, currentDetails, fonts, colors);
+    }
+  }
+  
+  /**
+   * Creates a languages section with visual level indicators
+   */
+  private static createLanguagesSection(
+    children: any[],
+    languagesText: string,
+    templateStyle: string,
+    fonts: any,
+    colors: any
+  ): void {
+    // Add Languages header
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'LANGUAGES',
+            bold: true,
+            size: 28,
+            color: colors.primary,
+            font: fonts.nameFont,
+          }),
+        ],
+        spacing: {
+          before: 200,
+          after: 120
+        },
+        border: {
+          bottom: {
+            color: colors.light,
+            space: 1,
+            style: BorderStyle.SINGLE,
+            size: 6,
+          },
+        },
+      })
+    );
+    
+    // Process languages
+    const languageLines = languagesText.split('\n');
+    const languagesList: {language: string, level: string}[] = [];
+    
+    languageLines.forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      
+      // Try to extract language and level
+      const parts = trimmed.split(':').map(p => p.trim());
+      if (parts.length >= 2) {
+        languagesList.push({
+          language: parts[0],
+          level: parts[1]
+        });
+      } else if (trimmed.includes('-')) {
+        const dashParts = trimmed.split('-').map(p => p.trim());
+        if (dashParts.length >= 2) {
+          languagesList.push({
+            language: dashParts[0],
+            level: dashParts[1]
+          });
+        } else {
+          languagesList.push({
+            language: trimmed,
+            level: 'Proficient'
+          });
+        }
+      } else {
+        languagesList.push({
+          language: trimmed,
+          level: 'Proficient'
+        });
+      }
+    });
+    
+    // Create language visualization based on template style
+    if (templateStyle === this.TemplateStyles.MODERN || 
+        templateStyle === this.TemplateStyles.CREATIVE) {
+      // Modern visualization with horizontal bars
+      this.createLanguageBars(children, languagesList, 3, fonts, colors);
+    } else if (templateStyle === this.TemplateStyles.MINIMAL) {
+      // Simple list for minimal style
+      this.createSimpleLanguageList(children, languagesList, fonts, colors);
+    } else {
+      // Classic visualization
+      this.createLanguageBars(children, languagesList, 2, fonts, colors);
+    }
+  }
+  
+  /**
+   * Creates language proficiency bars
+   */
+  private static createLanguageBars(
+    children: any[],
+    languagesList: {language: string, level: string}[],
+    columnsPerRow: number,
+    fonts: any,
+    colors: any
+  ): void {
+    // Create a table for languages with modern visualization
+    const languageRows: TableRow[] = [];
+    
+    for (let i = 0; i < languagesList.length; i += columnsPerRow) {
+      const rowLanguages = languagesList.slice(i, i + columnsPerRow);
+      
+      // Create cells for this row
+      const cells = rowLanguages.map(lang => 
+        new TableCell({
+          borders: {
+            top: { style: BorderStyle.NONE },
+            bottom: { style: BorderStyle.NONE },
+            left: { style: BorderStyle.NONE },
+            right: { style: BorderStyle.NONE },
+          },
+          children: [
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: lang.language,
+                  size: 22,
+                  bold: true,
+                  color: colors.dark,
+                  font: fonts.bodyFont,
+                }),
+              ],
+              spacing: { after: 40 }
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: this.getLanguageLevelBar(lang.level),
+                  size: 20,
+                  color: colors.primary,
+                  font: fonts.nameFont,
+                }),
+              ],
+              spacing: { before: 0, after: 80 }
+            })
+          ],
+        })
+      );
+      
+      // If we don't have enough languages to fill the row, add empty cells
+      while (cells.length < columnsPerRow) {
+        cells.push(
+          new TableCell({
+            borders: {
+              top: { style: BorderStyle.NONE },
+              bottom: { style: BorderStyle.NONE },
+              left: { style: BorderStyle.NONE },
+              right: { style: BorderStyle.NONE },
+            },
+            children: [new Paragraph({})],
+          })
+        );
+      }
+      
+      // Add the row to the table
+      languageRows.push(new TableRow({ children: cells }));
+    }
+    
+    // Create the languages table
+    const languagesTable = new Table({
+      width: {
+        size: 100,
+        type: WidthType.PERCENTAGE,
+      },
+      layout: TableLayoutType.FIXED,
+      borders: {
+        top: { style: BorderStyle.NONE },
+        bottom: { style: BorderStyle.NONE },
+        left: { style: BorderStyle.NONE },
+        right: { style: BorderStyle.NONE },
+        insideHorizontal: { style: BorderStyle.NONE },
+        insideVertical: { style: BorderStyle.NONE },
+      },
+      rows: languageRows,
+    });
+    
+    // Add the languages table
+    children.push(languagesTable);
+  }
+  
+  /**
+   * Creates a simple language list for minimal style
+   */
+  private static createSimpleLanguageList(
+    children: any[],
+    languagesList: {language: string, level: string}[],
+    fonts: any,
+    colors: any
+  ): void {
+    languagesList.forEach(lang => {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `${lang.language}: `,
+              size: 22,
+              bold: true,
+              color: colors.dark,
+              font: fonts.bodyFont,
+            }),
+            new TextRun({
+              text: lang.level,
+              size: 22,
+              color: colors.medium,
+              font: fonts.bodyFont,
+            }),
+          ],
+          spacing: {
+            before: 40,
+            after: 40
+          }
+        })
+      );
+    });
+  }
+  
+  /**
+   * Creates a generic section for any additional content
+   */
+  private static createGenericSection(
+    children: any[],
+    sectionName: string,
+    content: string,
+    templateStyle: string,
+    fonts: any,
+    colors: any
+  ): void {
+    // Format section name
+    const formattedName = sectionName.charAt(0).toUpperCase() + sectionName.slice(1).toLowerCase();
+    
+    // Add section header
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: formattedName,
+            bold: true,
+            size: 28, // ~14pt font
+            color: colors.primary,
+            font: fonts.nameFont,
+          }),
+        ],
+        spacing: { before: 200, after: 120 },
+        border: {
+          bottom: {
+            color: colors.light,
+            space: 1,
+            style: BorderStyle.SINGLE,
+            size: 6,
+          },
+        },
+      })
+    );
+    
+    // Process content
+    const contentLines = content.split('\n');
+    contentLines.forEach(line => {
+      const trimmedLine = line.trim();
+      if (trimmedLine.length === 0) return;
+      
+      // Check if line is a bullet point
+      if (trimmedLine.startsWith('-') || trimmedLine.startsWith('•') || trimmedLine.startsWith('*')) {
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "• ",
+                size: 22,
+                bold: true,
+                color: colors.primary,
+                font: fonts.nameFont,
+              }),
+              new TextRun({
+                text: trimmedLine.substring(1).trim(),
+                size: 22,
+                color: colors.dark,
+                font: fonts.bodyFont,
+              }),
+            ],
+            spacing: {
+              before: 40,
+              after: 40
+            },
+            indent: {
+              left: convertInchesToTwip(0.25)
+            }
+          })
+        );
+      } else {
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: trimmedLine,
+                size: 22,
+                color: colors.dark,
+                font: fonts.bodyFont,
+              }),
+            ],
+            spacing: {
+              before: 40,
+              after: 40
+            }
+          })
+        );
+      }
+    });
+  }
+  
+  /**
    * Add a job entry to the document with premium styling
    */
-  private static addJobToDocument(children: any[], jobTitle: string, company: string, dateRange: string, bullets: string[]): void {
+  private static addJobToDocument(
+    children: any[], 
+    jobTitle: string, 
+    company: string, 
+    dateRange: string, 
+    bullets: string[],
+    fonts: any,
+    colors: any
+  ): void {
     // Create a table for job title and date - modern side-by-side layout
     const jobHeaderTable = new Table({
       width: {
@@ -1281,8 +2082,8 @@ export class DocumentGenerator {
                       text: jobTitle,
                       size: 24, // ~12pt font
                       bold: true,
-                      color: this.colors.dark,
-                      font: "Calibri",
+                      color: colors.dark,
+                      font: fonts.bodyFont,
                     }),
                   ],
                   spacing: {
@@ -1296,14 +2097,14 @@ export class DocumentGenerator {
                       text: company,
                       size: 22, // ~11pt font
                       italics: true,
-                      color: this.colors.medium,
-                      font: "Calibri",
+                      color: colors.medium,
+                      font: fonts.bodyFont,
                     }),
                   ],
                   spacing: {
                     after: 40
                   }
-                })
+                }),
               ],
             }),
             
@@ -1326,11 +2127,11 @@ export class DocumentGenerator {
                     new TextRun({
                       text: dateRange,
                       size: 22, // ~11pt font
-                      color: this.colors.medium,
-                      font: "Calibri",
+                      color: colors.medium,
+                      font: fonts.bodyFont,
                     }),
                   ],
-                })
+                }),
               ],
             }),
           ],
@@ -1339,7 +2140,7 @@ export class DocumentGenerator {
     });
     
     children.push(jobHeaderTable);
-
+    
     // Add bullets with enhanced formatting and proper bullet points
     bullets.forEach(bullet => {
       children.push(
@@ -1348,15 +2149,15 @@ export class DocumentGenerator {
             new TextRun({
               text: "• ",
               size: 22, // ~11pt font
-              color: this.colors.primary,
+              color: colors.primary,
               bold: true,
-              font: "Calibri",
+              font: fonts.bodyFont,
             }),
             new TextRun({
               text: bullet,
               size: 22, // ~11pt font
-              color: this.colors.dark,
-              font: "Calibri",
+              color: colors.dark,
+              font: fonts.bodyFont,
             }),
           ],
           indent: {
@@ -1374,7 +2175,15 @@ export class DocumentGenerator {
   /**
    * Add an education entry to the document with premium styling
    */
-  private static addEducationToDocument(children: any[], degree: string, institution: string, year: string, details: string[]): void {
+  private static addEducationToDocument(
+    children: any[], 
+    degree: string, 
+    institution: string, 
+    year: string, 
+    details: string[],
+    fonts: any,
+    colors: any
+  ): void {
     // Create a table for education - modern side-by-side layout
     const educationHeaderTable = new Table({
       width: {
@@ -1413,8 +2222,8 @@ export class DocumentGenerator {
                       text: institution,
                       size: 24, // ~12pt font
                       bold: true,
-                      color: this.colors.dark,
-                      font: "Calibri",
+                      color: colors.dark,
+                      font: fonts.bodyFont,
                     }),
                   ],
                   spacing: {
@@ -1428,14 +2237,14 @@ export class DocumentGenerator {
                       text: degree,
                       size: 22, // ~11pt font
                       italics: true,
-                      color: this.colors.medium,
-                      font: "Calibri",
+                      color: colors.medium,
+                      font: fonts.bodyFont,
                     }),
                   ],
                   spacing: {
                     after: 40
                   }
-                })
+                }),
               ],
             }),
             
@@ -1458,11 +2267,11 @@ export class DocumentGenerator {
                     new TextRun({
                       text: year,
                       size: 22, // ~11pt font
-                      color: this.colors.medium,
-                      font: "Calibri",
+                      color: colors.medium,
+                      font: fonts.bodyFont,
                     }),
                   ],
-                })
+                }),
               ],
             }),
           ],
@@ -1471,7 +2280,7 @@ export class DocumentGenerator {
     });
     
     children.push(educationHeaderTable);
-
+    
     // Add details if any
     details.forEach(detail => {
       children.push(
@@ -1480,15 +2289,15 @@ export class DocumentGenerator {
             new TextRun({
               text: "• ",
               size: 22, // ~11pt font
-              color: this.colors.primary,
+              color: colors.primary,
               bold: true,
-              font: "Calibri",
+              font: fonts.bodyFont,
             }),
             new TextRun({
               text: detail,
               size: 22, // ~11pt font
-              color: this.colors.dark,
-              font: "Calibri",
+              color: colors.dark,
+              font: fonts.bodyFont,
             }),
           ],
           indent: {
@@ -1502,7 +2311,7 @@ export class DocumentGenerator {
       );
     });
   }
-
+  
   /**
    * Creates a visual representation of language proficiency
    * @param level The language proficiency level description
@@ -1548,5 +2357,103 @@ export class DocumentGenerator {
     
     // Default to middle level if we can't determine
     return '■■■□□';
+  }
+
+  /**
+   * Gets a list of skills commonly associated with a specific industry
+   * @param industry The industry to get skills for
+   * @returns Array of industry-specific skills
+   */
+  public static getIndustrySkills(industry: string): string[] {
+    // Normalize industry name
+    const normalizedIndustry = industry.toLowerCase().trim();
+
+    // Define skills for each industry
+    const industrySkills: {[key: string]: string[]} = {
+      technology: [
+        'JavaScript', 'React', 'Node.js', 'Python', 'SQL', 'AWS', 'DevOps',
+        'Cloud Computing', 'Microservices', 'Docker', 'CI/CD', 'REST APIs',
+        'TypeScript', 'Data Structures', 'Algorithms', 'System Design', 
+        'Agile Development', 'Machine Learning', 'AI', 'Infrastructure as Code'
+      ],
+      finance: [
+        'Financial Analysis', 'Risk Management', 'Financial Modeling', 'Investment Analysis',
+        'Portfolio Management', 'Valuation', 'Financial Reporting', 'Regulatory Compliance',
+        'Budgeting', 'Forecasting', 'Excel', 'Bloomberg Terminal', 'Financial Statements',
+        'Banking Regulations', 'Credit Analysis', 'Asset Management', 'Derivatives'
+      ],
+      healthcare: [
+        'Patient Care', 'Clinical Documentation', 'Medical Terminology', 'HIPAA Compliance',
+        'Healthcare Informatics', 'Electronic Health Records (EHR)', 'Patient Assessment',
+        'Care Coordination', 'Quality Improvement', 'Clinical Research', 'Patient Education',
+        'Healthcare Regulations', 'Medical Billing', 'CPT Coding', 'Treatment Planning'
+      ],
+      marketing: [
+        'Digital Marketing', 'Social Media Marketing', 'Content Creation', 'SEO/SEM',
+        'Campaign Management', 'Analytics', 'Brand Development', 'Market Research',
+        'CRM Tools', 'Email Marketing', 'Growth Strategies', 'Competitive Analysis',
+        'A/B Testing', 'Conversion Optimization', 'Advertising', 'Google Analytics',
+        'Marketing Automation', 'Customer Journey Mapping', 'Copywriting'
+      ],
+      retail: [
+        'Merchandising', 'Inventory Management', 'POS Systems', 'Customer Service',
+        'Sales', 'Visual Merchandising', 'Supply Chain', 'Retail Operations',
+        'E-commerce', 'Forecasting', 'Loss Prevention', 'Vendor Management',
+        'Category Management', 'Pricing Strategies', 'Brand Management',
+        'Retail Analytics', 'Customer Experience'
+      ],
+      legal: [
+        'Legal Research', 'Case Management', 'Litigation', 'Legal Writing',
+        'Contract Drafting', 'Legal Analysis', 'Regulatory Compliance', 'Due Diligence',
+        'Client Communication', 'Legal Documentation', 'Negotiation', 'Alternative Dispute Resolution',
+        'Legal Ethics', 'E-Discovery', 'Legal Project Management', 'Risk Assessment'
+      ],
+      'human resources': [
+        'Recruitment', 'Employee Relations', 'Performance Management', 'HRIS',
+        'Benefits Administration', 'Compensation Analysis', 'Employee Onboarding',
+        'HR Policies', 'Talent Development', 'Workforce Planning', 'Compliance',
+        'Labor Relations', 'DEIB Initiatives', 'Employment Law', 'Succession Planning',
+        'HR Analytics', 'Training & Development'
+      ],
+      education: [
+        'Curriculum Development', 'Instructional Design', 'Assessment Methods',
+        'Classroom Management', 'Educational Technology', 'Differentiated Instruction',
+        'Lesson Planning', 'Student Engagement', 'Educational Psychology',
+        'Learning Management Systems', 'Special Education', 'Student Advising',
+        'Research Methods', 'Program Evaluation', 'Grant Writing'
+      ],
+      manufacturing: [
+        'Quality Control', 'Lean Manufacturing', 'Six Sigma', 'Process Improvement',
+        'Supply Chain Management', 'Inventory Control', 'Production Planning',
+        'Equipment Maintenance', 'Safety Protocols', 'ISO Standards',
+        'Material Requirements Planning', 'CAD/CAM', 'Automation',
+        'Cost Reduction', 'Production Scheduling', 'ERP Systems'
+      ],
+      construction: [
+        'Project Management', 'Blueprint Reading', 'Building Codes',
+        'Cost Estimation', 'Construction Methods', 'Safety Compliance',
+        'Contract Administration', 'Quality Assurance', 'Scheduling',
+        'Subcontractor Management', 'Building Information Modeling (BIM)',
+        'Permitting', 'OSHA Regulations', 'Construction Documentation',
+        'Site Supervision', 'Materials Knowledge'
+      ]
+    };
+
+    // Search for matching industry
+    const matchingIndustry = Object.keys(industrySkills).find(key => 
+      normalizedIndustry.includes(key) || key.includes(normalizedIndustry)
+    );
+
+    // Return skills for matching industry or default skills if not found
+    if (matchingIndustry) {
+      return industrySkills[matchingIndustry];
+    }
+
+    // Default skills for any industry
+    return [
+      'Communication', 'Problem-Solving', 'Teamwork', 'Project Management',
+      'Leadership', 'Time Management', 'Critical Thinking', 'Adaptability',
+      'Organization', 'Attention to Detail', 'Microsoft Office', 'Customer Service'
+    ];
   }
 } 
