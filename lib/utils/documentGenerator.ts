@@ -1,4 +1,4 @@
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, BorderStyle } from "docx";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, BorderStyle, convertInchesToTwip, PageOrientation, PageNumber, AlignmentType } from "docx";
 import { logger } from "@/lib/logger";
 
 /**
@@ -28,11 +28,23 @@ export class DocumentGenerator {
       // Split the CV text into sections based on common headers
       const sections = this.splitIntoSections(filteredText);
       
-      // Create document
+      // Create document with proper margins and formatting
       const doc = new Document({
         sections: [
           {
-            properties: {},
+            properties: {
+              page: {
+                margin: {
+                  top: convertInchesToTwip(0.8),
+                  right: convertInchesToTwip(0.8),
+                  bottom: convertInchesToTwip(0.8),
+                  left: convertInchesToTwip(0.8),
+                },
+                size: {
+                  orientation: PageOrientation.PORTRAIT,
+                },
+              },
+            },
             children: this.createDocumentContent(sections, metadata)
           }
         ]
@@ -66,9 +78,23 @@ export class DocumentGenerator {
     } else {
       // If no clear header found, use first few lines as header
       const lines = text.split('\n');
-      const headerLines = lines.slice(0, Math.min(5, Math.ceil(lines.length * 0.1))); 
-      sections.header = headerLines.join('\n').trim();
-      sections.content = lines.slice(headerLines.length).join('\n').trim();
+      
+      // Look for a natural break in the text (empty line) within the first 10 lines
+      let headerEndIndex = -1;
+      for (let i = 0; i < Math.min(10, lines.length); i++) {
+        if (lines[i].trim() === '' && i > 0) {
+          headerEndIndex = i;
+          break;
+        }
+      }
+      
+      // If no natural break found, use first 3 lines or 10% of the document
+      if (headerEndIndex === -1) {
+        headerEndIndex = Math.min(3, Math.ceil(lines.length * 0.1));
+      }
+      
+      sections.header = lines.slice(0, headerEndIndex).join('\n').trim();
+      sections.content = lines.slice(headerEndIndex).join('\n').trim();
     }
     
     return sections;
@@ -88,8 +114,14 @@ export class DocumentGenerator {
       if (headerLines.length > 0) {
         children.push(
           new Paragraph({
-            text: headerLines[0].trim(),
-            heading: HeadingLevel.TITLE,
+            alignment: AlignmentType.CENTER,
+            children: [
+              new TextRun({
+                text: headerLines[0].trim(),
+                bold: true,
+                size: 28, // ~14pt font
+              }),
+            ],
             spacing: {
               after: 200
             }
@@ -101,67 +133,66 @@ export class DocumentGenerator {
         if (contactInfoLines.length > 0) {
           children.push(
             new Paragraph({
+              alignment: AlignmentType.CENTER,
               children: [
                 new TextRun({
                   text: contactInfoLines.join(' | '),
-                  size: 22
-                })
+                  size: 20, // ~10pt font
+                }),
               ],
               spacing: {
-                after: 400
-              },
-              alignment: 'center'
+                after: 200
+              }
             })
           );
         }
       }
-    }
-    
-    // Add horizontal separator
-    children.push(
-      new Paragraph({
-        border: {
-          bottom: {
-            color: "999999",
-            space: 1,
-            style: BorderStyle.SINGLE,
-            size: 6
+      
+      // Add a separator line
+      children.push(
+        new Paragraph({
+          border: {
+            bottom: {
+              color: "#000000",
+              space: 1,
+              style: BorderStyle.SINGLE,
+              size: 1,
+            },
+          },
+          spacing: {
+            after: 300
           }
-        },
-        spacing: {
-          after: 300
-        }
-      })
-    );
+        })
+      );
+    }
     
     // Process main content
     if (sections.content) {
-      // Extract education section to move it to the end
+      // Identify sections in the content
       const contentSections = this.identifySections(sections.content);
-      let educationSection: { name: string, content: string } | null = null;
       
-      // Check if Education section exists and extract it
+      // Extract education section to move it to the end
+      let educationSection = null;
       if (contentSections['EDUCATION']) {
-        educationSection = { 
-          name: 'EDUCATION', 
-          content: contentSections['EDUCATION'] 
-        };
-        // Remove it from contentSections to prevent processing it now
-        delete contentSections['EDUCATION'];
+        educationSection = { name: 'EDUCATION', content: contentSections['EDUCATION'] };
       }
       
-      // Add Profile section if it exists
+      // Add Profile/Summary section if it exists
       if (contentSections['PROFILE'] || contentSections['SUMMARY']) {
         const profileContent = contentSections['PROFILE'] || contentSections['SUMMARY'];
         
-        // Add section heading
         children.push(
           new Paragraph({
-            text: 'PROFILE',
-            heading: HeadingLevel.HEADING_1,
+            children: [
+              new TextRun({
+                text: 'PROFILE',
+                bold: true,
+                size: 24, // ~12pt font
+              }),
+            ],
             spacing: {
-              before: 400,
-              after: 200
+              before: 200,
+              after: 120
             }
           })
         );
@@ -174,29 +205,29 @@ export class DocumentGenerator {
           
           children.push(
             new Paragraph({
-              text: trimmedLine,
+              children: [
+                new TextRun({
+                  text: trimmedLine,
+                  size: 20, // ~10pt font
+                }),
+              ],
               spacing: {
-                before: 100,
-                after: 100
+                before: 80,
+                after: 80
               }
             })
           );
         });
       }
       
-      // Check if Experience section exists
-      const hasExperience = contentSections['EXPERIENCE'] || 
-                           contentSections['WORK EXPERIENCE'] || 
-                           contentSections['PROFESSIONAL EXPERIENCE'] ||
-                           contentSections['EMPLOYMENT HISTORY'];
+      // Check for Experience section
+      const experienceSection = contentSections['EXPERIENCE'] || 
+                               contentSections['WORK EXPERIENCE'] || 
+                               contentSections['PROFESSIONAL EXPERIENCE'] ||
+                               contentSections['EMPLOYMENT HISTORY'];
       
-      // Only add Achievements section if there's work experience
-      if (hasExperience) {
-        // Extract achievements from work experience
-        const experienceContent = contentSections['EXPERIENCE'] || 
-                                 contentSections['WORK EXPERIENCE'] || 
-                                 contentSections['PROFESSIONAL EXPERIENCE'] ||
-                                 contentSections['EMPLOYMENT HISTORY'];
+      if (experienceSection) {
+        const experienceContent = experienceSection;
         
         // Parse the experience content to find achievement-like statements
         const achievements = this.extractAchievements(experienceContent);
@@ -205,11 +236,16 @@ export class DocumentGenerator {
           // Add Achievements section
           children.push(
             new Paragraph({
-              text: 'ACHIEVEMENTS',
-              heading: HeadingLevel.HEADING_1,
+              children: [
+                new TextRun({
+                  text: 'ACHIEVEMENTS',
+                  bold: true,
+                  size: 24, // ~12pt font
+                }),
+              ],
               spacing: {
-                before: 400,
-                after: 200
+                before: 200,
+                after: 120
               }
             })
           );
@@ -218,13 +254,18 @@ export class DocumentGenerator {
           achievements.slice(0, 3).forEach(achievement => {
             children.push(
               new Paragraph({
-                text: achievement,
+                children: [
+                  new TextRun({
+                    text: achievement,
+                    size: 20, // ~10pt font
+                  }),
+                ],
                 bullet: {
                   level: 0
                 },
                 spacing: {
-                  before: 100,
-                  after: 100
+                  before: 80,
+                  after: 80
                 }
               })
             );
@@ -234,11 +275,16 @@ export class DocumentGenerator {
         // Add Experience section
         children.push(
           new Paragraph({
-            text: 'EXPERIENCE',
-            heading: HeadingLevel.HEADING_1,
+            children: [
+              new TextRun({
+                text: 'EXPERIENCE',
+                bold: true,
+                size: 24, // ~12pt font
+              }),
+            ],
             spacing: {
-              before: 400,
-              after: 200
+              before: 200,
+              after: 120
             }
           })
         );
@@ -258,23 +304,38 @@ export class DocumentGenerator {
           if (isBullet) {
             children.push(
               new Paragraph({
-                text: trimmedLine.substring(1).trim(),
+                children: [
+                  new TextRun({
+                    text: trimmedLine.substring(1).trim(),
+                    size: 20, // ~10pt font
+                  }),
+                ],
                 bullet: {
                   level: 0
                 },
                 spacing: {
-                  before: 100,
-                  after: 100
+                  before: 80,
+                  after: 80
                 }
               })
             );
           } else {
+            // Check if this might be a job title or company (often in bold)
+            const isJobTitle = /\b(19|20)\d{2}\b/.test(trimmedLine) || // Contains a year
+                              trimmedLine.length < 60; // Short line, likely a title
+            
             children.push(
               new Paragraph({
-                text: trimmedLine,
+                children: [
+                  new TextRun({
+                    text: trimmedLine,
+                    size: 20, // ~10pt font
+                    bold: isJobTitle,
+                  }),
+                ],
                 spacing: {
-                  before: 100,
-                  after: 100
+                  before: isJobTitle ? 120 : 80,
+                  after: 80
                 }
               })
             );
@@ -284,11 +345,16 @@ export class DocumentGenerator {
         // If no experience section, add Goals section instead
         children.push(
           new Paragraph({
-            text: 'GOALS',
-            heading: HeadingLevel.HEADING_1,
+            children: [
+              new TextRun({
+                text: 'GOALS',
+                bold: true,
+                size: 24, // ~12pt font
+              }),
+            ],
             spacing: {
-              before: 400,
-              after: 200
+              before: 200,
+              after: 120
             }
           })
         );
@@ -303,13 +369,18 @@ export class DocumentGenerator {
         goals.forEach(goal => {
           children.push(
             new Paragraph({
-              text: goal,
+              children: [
+                new TextRun({
+                  text: goal,
+                  size: 20, // ~10pt font
+                }),
+              ],
               bullet: {
                 level: 0
               },
               spacing: {
-                before: 100,
-                after: 100
+                before: 80,
+                after: 80
               }
             })
           );
@@ -319,9 +390,14 @@ export class DocumentGenerator {
       // Add Skills section -- use metadata.skills if available
       children.push(
         new Paragraph({
-          text: 'SKILLS',
-          heading: HeadingLevel.HEADING_1,
-          spacing: { before: 400, after: 200 }
+          children: [
+            new TextRun({
+              text: 'SKILLS',
+              bold: true,
+              size: 24, // ~12pt font
+            }),
+          ],
+          spacing: { before: 200, after: 120 }
         })
       );
       
@@ -390,10 +466,10 @@ export class DocumentGenerator {
                     new TextRun({ 
                       text: category,
                       bold: true,
-                      size: 24
+                      size: 22, // ~11pt font
                     })
                   ],
-                  spacing: { before: 200, after: 100 }
+                  spacing: { before: 160, after: 80 }
                 })
               );
               
@@ -401,9 +477,14 @@ export class DocumentGenerator {
               categorySkills.forEach(skill => {
                 children.push(
                   new Paragraph({
-                    text: skill,
+                    children: [
+                      new TextRun({
+                        text: skill,
+                        size: 20, // ~10pt font
+                      }),
+                    ],
                     bullet: { level: 0 },
-                    spacing: { before: 100, after: 100 }
+                    spacing: { before: 60, after: 60 }
                   })
                 );
               });
@@ -414,9 +495,14 @@ export class DocumentGenerator {
           metadata.skills.forEach((skill: string) => {
             children.push(
               new Paragraph({
-                text: skill,
+                children: [
+                  new TextRun({
+                    text: skill,
+                    size: 20, // ~10pt font
+                  }),
+                ],
                 bullet: { level: 0 },
-                spacing: { before: 100, after: 100 }
+                spacing: { before: 80, after: 80 }
               })
             );
           });
@@ -432,11 +518,28 @@ export class DocumentGenerator {
           const isBullet = trimmedLine.startsWith('-') || trimmedLine.startsWith('•') || trimmedLine.startsWith('*');
           if (isBullet) {
             children.push(
-              new Paragraph({ text: trimmedLine.substring(1).trim(), bullet: { level: 0 }, spacing: { before: 100, after: 100 } })
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: trimmedLine.substring(1).trim(),
+                    size: 20, // ~10pt font
+                  }),
+                ],
+                bullet: { level: 0 }, 
+                spacing: { before: 80, after: 80 }
+              })
             );
           } else {
             children.push(
-              new Paragraph({ text: trimmedLine, spacing: { before: 100, after: 100 } })
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: trimmedLine,
+                    size: 20, // ~10pt font
+                  }),
+                ],
+                spacing: { before: 80, after: 80 }
+              })
             );
           }
         });
@@ -447,9 +550,14 @@ export class DocumentGenerator {
         industrySkills.forEach(skill => {
           children.push(
             new Paragraph({
-              text: skill,
+              children: [
+                new TextRun({
+                  text: skill,
+                  size: 20, // ~10pt font
+                }),
+              ],
               bullet: { level: 0 },
-              spacing: { before: 100, after: 100 }
+              spacing: { before: 80, after: 80 }
             })
           );
         });
@@ -460,10 +568,11 @@ export class DocumentGenerator {
             children: [
               new TextRun({ 
                 text: "No specific skills found. Please add relevant skills in your CV.",
-                italics: true 
+                italics: true,
+                size: 20, // ~10pt font
               })
             ],
-            spacing: { before: 100, after: 100 },
+            spacing: { before: 80, after: 80 },
           })
         );
       }
@@ -485,11 +594,16 @@ export class DocumentGenerator {
         // Add section heading
         children.push(
           new Paragraph({
-            text: sectionName.toUpperCase(),
-            heading: HeadingLevel.HEADING_1,
+            children: [
+              new TextRun({
+                text: sectionName.toUpperCase(),
+                bold: true,
+                size: 24, // ~12pt font
+              }),
+            ],
             spacing: {
-              before: 400,
-              after: 200
+              before: 200,
+              after: 120
             }
           })
         );
@@ -509,23 +623,33 @@ export class DocumentGenerator {
           if (isBullet) {
             children.push(
               new Paragraph({
-                text: trimmedLine.substring(1).trim(),
+                children: [
+                  new TextRun({
+                    text: trimmedLine.substring(1).trim(),
+                    size: 20, // ~10pt font
+                  }),
+                ],
                 bullet: {
                   level: 0
                 },
                 spacing: {
-                  before: 100,
-                  after: 100
+                  before: 80,
+                  after: 80
                 }
               })
             );
           } else {
             children.push(
               new Paragraph({
-                text: trimmedLine,
+                children: [
+                  new TextRun({
+                    text: trimmedLine,
+                    size: 20, // ~10pt font
+                  }),
+                ],
                 spacing: {
-                  before: 100,
-                  after: 100
+                  before: 80,
+                  after: 80
                 }
               })
             );
@@ -538,11 +662,16 @@ export class DocumentGenerator {
         // Add section heading
         children.push(
           new Paragraph({
-            text: educationSection.name.toUpperCase(),
-            heading: HeadingLevel.HEADING_1,
+            children: [
+              new TextRun({
+                text: educationSection.name.toUpperCase(),
+                bold: true,
+                size: 24, // ~12pt font
+              }),
+            ],
             spacing: {
-              before: 400,
-              after: 200
+              before: 200,
+              after: 120
             }
           })
         );
@@ -562,23 +691,38 @@ export class DocumentGenerator {
           if (isBullet) {
             children.push(
               new Paragraph({
-                text: trimmedLine.substring(1).trim(),
+                children: [
+                  new TextRun({
+                    text: trimmedLine.substring(1).trim(),
+                    size: 20, // ~10pt font
+                  }),
+                ],
                 bullet: {
                   level: 0
                 },
                 spacing: {
-                  before: 100,
-                  after: 100
+                  before: 80,
+                  after: 80
                 }
               })
             );
           } else {
+            // Check if this might be a degree or institution (often in bold)
+            const isDegree = /\b(19|20)\d{2}\b/.test(trimmedLine) || // Contains a year
+                            /\b(university|college|school|degree|bachelor|master|phd)\b/i.test(trimmedLine);
+            
             children.push(
               new Paragraph({
-                text: trimmedLine,
+                children: [
+                  new TextRun({
+                    text: trimmedLine,
+                    size: 20, // ~10pt font
+                    bold: isDegree,
+                  }),
+                ],
                 spacing: {
-                  before: 100,
-                  after: 100
+                  before: isDegree ? 120 : 80,
+                  after: 80
                 }
               })
             );
@@ -598,13 +742,13 @@ export class DocumentGenerator {
     
     // Define section headers regex patterns for improved detection
     const sectionPatterns = [
-      { name: 'PROFILE', pattern: /(?:profile|summary|about me|objective)(?:\n|:|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|skills|languages|interests|references|profile|summary|\Z)|\Z)/is },
-      { name: 'EXPERIENCE', pattern: /(?:experience|work history|employment|professional background|career|work)(?:\n|:|\s{2,})(.*?)(?=\n\s*(?:education|skills|languages|interests|references|profile|summary|\Z)|\Z)/is },
-      { name: 'EDUCATION', pattern: /(?:education|academic|qualifications|degrees|university|college)(?:\n|:|\s{2,})(.*?)(?=\n\s*(?:experience|work|employment|skills|languages|interests|references|profile|summary|\Z)|\Z)/is },
-      { name: 'SKILLS', pattern: /(?:skills|proficiencies|competencies|expertise|technical skills|core competencies)(?:\n|:|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|languages|interests|references|profile|summary|\Z)|\Z)/is },
-      { name: 'LANGUAGES', pattern: /(?:languages|linguistic skills|language proficiency)(?:\n|:|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|skills|interests|references|profile|summary|\Z)|\Z)/is },
-      { name: 'INTERESTS', pattern: /(?:interests|hobbies|activities|extracurricular)(?:\n|:|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|skills|languages|references|profile|summary|\Z)|\Z)/is },
-      { name: 'REFERENCES', pattern: /(?:references|referees)(?:\n|:|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|skills|languages|interests|profile|summary|\Z)|\Z)/is }
+      { name: 'PROFILE', pattern: /(?:^|\n)(?:profile|summary|about me|objective)(?:\s*:|\s*\n|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|skills|languages|interests|references|profile|summary|\Z)|\Z)/is },
+      { name: 'EXPERIENCE', pattern: /(?:^|\n)(?:experience|work history|employment|professional background|career|work)(?:\s*:|\s*\n|\s{2,})(.*?)(?=\n\s*(?:education|skills|languages|interests|references|profile|summary|\Z)|\Z)/is },
+      { name: 'EDUCATION', pattern: /(?:^|\n)(?:education|academic|qualifications|degrees|university|college)(?:\s*:|\s*\n|\s{2,})(.*?)(?=\n\s*(?:experience|work|employment|skills|languages|interests|references|profile|summary|\Z)|\Z)/is },
+      { name: 'SKILLS', pattern: /(?:^|\n)(?:skills|proficiencies|competencies|expertise|technical skills|core competencies)(?:\s*:|\s*\n|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|languages|interests|references|profile|summary|\Z)|\Z)/is },
+      { name: 'LANGUAGES', pattern: /(?:^|\n)(?:languages|linguistic skills|language proficiency)(?:\s*:|\s*\n|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|skills|interests|references|profile|summary|\Z)|\Z)/is },
+      { name: 'INTERESTS', pattern: /(?:^|\n)(?:interests|hobbies|activities|extracurricular)(?:\s*:|\s*\n|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|skills|languages|references|profile|summary|\Z)|\Z)/is },
+      { name: 'REFERENCES', pattern: /(?:^|\n)(?:references|referees)(?:\s*:|\s*\n|\s{2,})(.*?)(?=\n\s*(?:education|experience|work|employment|skills|languages|interests|profile|summary|\Z)|\Z)/is }
     ];
     
     // Additional keywords for better education section identification
@@ -616,8 +760,8 @@ export class DocumentGenerator {
     
     // Additional keywords for better work experience section identification
     const experienceKeywords = [
-      'managed', 'led', 'developed', 'created', 'implemented', 'responsible', 'achievements',
-      'delivered', 'improved', 'increased', 'reduced', 'supervised', 'team', 'project',
+      'managed', 'led', 'created', 'implemented', 'responsible', 'achievements',
+      'improved', 'increased', 'reduced', 'supervised', 'team', 'project',
       'client', 'customer', 'report', 'business', 'strategy', 'market', 'sales', 'revenue',
       'manager', 'director', 'supervisor', 'position', 'role', 'company', 'organization', 'firm'
     ];
@@ -629,6 +773,43 @@ export class DocumentGenerator {
         sections[name] = match[1].trim();
       }
     });
+    
+    // If no sections were found using regex, try a simpler approach
+    if (Object.keys(sections).length === 0) {
+      // Split by lines and look for section headers
+      const lines = content.split('\n');
+      let currentSection = '';
+      let currentContent = '';
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        // Skip empty lines
+        if (line === '') continue;
+        
+        // Check if this line looks like a section header
+        const isHeader = line.toUpperCase() === line && line.length < 30;
+        
+        if (isHeader) {
+          // Save previous section if it exists
+          if (currentSection && currentContent) {
+            sections[currentSection] = currentContent.trim();
+          }
+          
+          // Start new section
+          currentSection = line;
+          currentContent = '';
+        } else {
+          // Add to current section content
+          currentContent += line + '\n';
+        }
+      }
+      
+      // Save the last section
+      if (currentSection && currentContent) {
+        sections[currentSection] = currentContent.trim();
+      }
+    }
     
     // Post-processing validation for education vs experience to reduce confusion
     if (sections['EDUCATION'] && sections['EXPERIENCE']) {
@@ -674,8 +855,8 @@ export class DocumentGenerator {
     // Action verbs that often indicate achievements
     const achievementVerbs = [
       "increased", "decreased", "improved", "reduced", "saved", "grew", 
-      "developed", "created", "established", "implemented", "launched", 
-      "generated", "delivered", "achieved", "won", "awarded", "recognized"
+      "created", "established", "implemented", "launched", 
+      "generated", "achieved", "won", "awarded", "recognized"
     ];
     
     // Patterns that might indicate metrics or quantifiable results
@@ -736,7 +917,10 @@ export class DocumentGenerator {
           if (cleaned.startsWith('-') || cleaned.startsWith('•') || cleaned.startsWith('*')) {
             cleaned = cleaned.substring(1).trim();
           }
-          return cleaned;
+          // Ensure first letter is capitalized
+          const firstChar = cleaned.charAt(0).toUpperCase();
+          const restOfLine = cleaned.slice(1);
+          return firstChar + restOfLine;
         })
         .sort((a, b) => b.length - a.length); // Sort by length (longest first)
       
