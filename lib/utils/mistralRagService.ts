@@ -508,8 +508,8 @@ export class MistralRAGService {
       });
       
       const generatedResponse = response.choices[0]?.message?.content || 'No response generated';
-      // Remove any '*Developed *' prefix from the response
-      const cleanedResponse = generatedResponse.replace(/^\*Developed\s*\*?/, '').trim();
+      // Remove any '*Developed *' or '*Implemented *' prefixes from the response
+      const cleanedResponse = generatedResponse.replace(/^\*(?:Developed|Implemented)\s*\*?/, '').trim();
       return cleanedResponse;
     } catch (error) {
       logger.error(`Error generating response: ${error instanceof Error ? error.message : String(error)}`);
@@ -597,8 +597,8 @@ export class MistralRAGService {
       }
       
       const generatedResponse = response.choices[0].message.content || '';
-      // Remove any '*Developed *' prefix from the response
-      const cleanedResponse = generatedResponse.replace(/^\*Developed\s*\*?/, '').trim();
+      // Remove any '*Developed *' or '*Implemented *' prefixes from the response
+      const cleanedResponse = generatedResponse.replace(/^\*(?:Developed|Implemented)\s*\*?/, '').trim();
       return cleanedResponse;
     } catch (error) {
       // Fix error type handling for logger
@@ -1075,7 +1075,7 @@ Focus on technical and specialized skills, not soft skills.`;
       query = `Analyze the CV for important keywords related to the ${industry} industry and their frequency or importance.`;
     }
     
-    const systemPrompt = 'You are a CV keyword analyzer. Extract important keywords and assign them a relevance score from 1-10 based on their importance and frequency in the CV.';
+    const systemPrompt = `You are a CV keyword analyzer. Extract important keywords from the CV and assign each a relevance score from 1 to 10 based on frequency and importance. Then, confirm these top keywords with GPT4o and provide a recommendation on how to enhance each keyword's effectiveness, considering the identified industry.`;
     
     const analysisText = await this.generateResponse(query, systemPrompt);
     

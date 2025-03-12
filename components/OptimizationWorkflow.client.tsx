@@ -302,7 +302,7 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
       )}
       
       {isProcessing && (
-        <div className="mb-4 p-4 border rounded-md bg-background">
+        <div className="mb-4 p-4 border rounded-md bg-[#050505]">
           <h3 className="text-lg font-semibold">Processing CV</h3>
           <p className="text-sm text-muted-foreground">
             {processingStatus}. Might take a couple minutes, please wait for an accurate optimization.
@@ -314,6 +314,19 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
             />
           </div>
           <p className="text-sm text-right mt-1">{processingProgress || 0}%</p>
+          {error && (
+            <Button
+              variant="outline"
+              className="mt-2 bg-[#050505] border-gray-700 text-white hover:bg-gray-800"
+              onClick={() => {
+                if (selectedCVId) {
+                  handleAnalysisComplete(selectedCVId);
+                }
+              }}
+            >
+              Retry
+            </Button>
+          )}
         </div>
       )}
       
@@ -345,6 +358,7 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
             
             <Button
               variant="secondary"
+              className="bg-[#050505] hover:bg-gray-800 text-white"
               onClick={() => {
                 setActiveStep("analyze");
                 setError(null);

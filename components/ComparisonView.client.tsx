@@ -52,7 +52,7 @@ export default function ComparisonView({
   
   // Calculate score improvement
   const scoreImprovement = optimizedContent && originalContent 
-    ? optimizedContent.atsScore - originalContent.atsScore 
+    ? Math.max(0, optimizedContent.atsScore - originalContent.atsScore) 
     : 0;
   
   return (

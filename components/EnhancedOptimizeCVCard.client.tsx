@@ -450,57 +450,24 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   const handleDownloadPdf = useCallback(() => {
     if (!pdfBase64) {
       console.error("Cannot download PDF: No PDF data available");
-      setError("PDF data is not available. Please try converting again.");
-      setErrorType('pdf');
+      setError("No PDF data available. Please try again.");
       return;
     }
     
     try {
-      // Validate the base64 data
-      if (!pdfBase64 || typeof pdfBase64 !== 'string' || pdfBase64.trim() === '') {
-        throw new Error("Invalid PDF data");
-      }
-      
-      // Create a blob from the base64 data
-      const byteCharacters = atob(pdfBase64);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], {type: 'application/pdf'});
-      
-      // Create a URL for the blob
-      const blobUrl = URL.createObjectURL(blob);
-      
-      // Create and trigger download using a hidden iframe approach
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      document.body.appendChild(iframe);
-      
-      iframe.onload = () => {
-        // Once iframe is loaded, navigate to PDF
-        if (iframe.contentWindow) {
-          iframe.contentWindow.location.href = blobUrl;
-          
-          // Set up cleanup to run after the download starts
-          setTimeout(() => {
-            URL.revokeObjectURL(blobUrl);
-            document.body.removeChild(iframe);
-          }, 1000);
-        }
-      };
-      
-      // Using about:blank to avoid cross-origin issues
-      iframe.src = 'about:blank';
-      
-      console.log("PDF download initiated successfully");
+      const blob = new Blob([pdfBase64], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${selectedCVName?.replace(/\.[^/.]+$/, '') || 'optimized'}_v${historyVersion}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } catch (error) {
       console.error("Error downloading PDF:", error);
       setError("Failed to download PDF. The file may be corrupted. Please try again.");
-      setErrorType('pdf');
     }
-  }, [pdfBase64]);
+  }, [pdfBase64, selectedCVName, historyVersion]);
 
   // Update the handleGenerateDocx function to properly handle document generation
   const handleGenerateDocx = useCallback(async () => {
