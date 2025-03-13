@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Paperclip, ChevronDown, FileText } from "lucide-react";
+import { Send, Paperclip, ChevronDown, FileText, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -31,6 +31,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   const [inputMessage, setInputMessage] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const logoRef = useRef<HTMLDivElement>(null);
   const [eyePosition, setEyePosition] = useState({ x: 0, y: 0 });
@@ -120,8 +121,9 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
     setTimeout(() => setEyeState('normal'), 500);
   };
   
-  const handleSelectDocument = (fileName: string) => {
+  const handleSelectDocument = (fileName: string, id: string) => {
     setSelectedDocument(fileName);
+    setSelectedDocumentId(id);
     
     // Add a message about the selected document
     setMessages(prev => [
@@ -135,6 +137,25 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
     // Show happy eyes briefly when selecting a document
     setEyeState('happy');
     setTimeout(() => setEyeState('normal'), 800);
+  };
+  
+  const handleDeselectDocument = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent dropdown from opening
+    setSelectedDocument(null);
+    setSelectedDocumentId(null);
+    
+    // Add a message about deselecting the document
+    setMessages(prev => [
+      ...prev, 
+      { 
+        role: "assistant", 
+        content: "I've removed the reference document. What would you like to create now?" 
+      }
+    ]);
+    
+    // Show surprised eyes briefly when deselecting a document
+    setEyeState('surprised');
+    setTimeout(() => setEyeState('normal'), 600);
   };
   
   const handleFileUpload = () => {
@@ -197,45 +218,47 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
       
       const data = await response.json();
       
-      // Add new document to the list
+      // Add the new document to the list
       const newDocument = {
         id: data.id,
-        fileName: file.name,
-        createdAt: new Date()
+        fileName: data.fileName,
+        createdAt: new Date(data.createdAt)
       };
       
       setDocuments(prev => [newDocument, ...prev]);
-      setSelectedDocument(file.name);
+      
+      // Select the newly uploaded document
+      setSelectedDocument(data.fileName);
+      setSelectedDocumentId(data.id);
       
       // Show success message
       toast({
         title: "Document uploaded",
-        description: `${file.name} has been uploaded successfully.`,
+        description: `${data.fileName} has been uploaded successfully.`,
       });
-      
-      // Show happy eyes briefly
-      setEyeState('happy');
-      setTimeout(() => setEyeState('normal'), 1000);
       
       // Add a message about the uploaded document
       setMessages(prev => [
         ...prev, 
         { 
           role: "assistant", 
-          content: `I've uploaded "${file.name}" for you. How would you like to enhance it?` 
+          content: `I've uploaded "${data.fileName}" for you. How would you like to enhance it?` 
         }
       ]);
-    } catch (error) {
-      console.error('Error uploading document:', error);
       
-      // Show error message
+      // Show happy eyes when upload is successful
+      setEyeState('happy');
+      setTimeout(() => setEyeState('normal'), 1000);
+      
+    } catch (error) {
+      console.error('Error uploading file:', error);
       toast({
         title: "Upload failed",
-        description: error instanceof Error ? error.message : "Failed to upload document.",
+        description: error instanceof Error ? error.message : "Failed to upload document",
         variant: "destructive"
       });
       
-      // Show stressed eyes briefly
+      // Show stressed eyes when upload fails
       setEyeState('stressed');
       setTimeout(() => setEyeState('normal'), 800);
     } finally {
@@ -247,120 +270,116 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   };
   
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen py-8 px-4">
-      <div className="w-full max-w-2xl">
-        <h1 className="text-2xl md:text-3xl font-bold text-white text-center mb-6">Let's make a document</h1>
-        
-        <div className="bg-[#111111] rounded-xl shadow-lg overflow-hidden w-full max-w-2xl">
-          {/* Logo with animated eyes */}
-          <div className="flex justify-center my-4">
-            <div 
-              ref={logoRef}
-              className="relative h-14 w-14 bg-[#B4916C] rounded-full flex items-center justify-center"
-            >
-              {/* Eyes */}
-              {eyeState === 'normal' && (
-                <>
-                  <div className="absolute h-2.5 w-2.5 bg-black rounded-full" 
+    <div className="flex flex-col items-center justify-center min-h-screen py-10 px-4">
+      <div className="w-full max-w-md mx-auto">
+        {/* Character above title */}
+        <div className="flex justify-center mb-4">
+          <div 
+            ref={logoRef}
+            className="relative w-16 h-16 bg-[#B4916C] rounded-full flex items-center justify-center"
+          >
+            {/* Eyes */}
+            <div className="absolute" style={{ 
+              top: '35%', 
+              left: '50%', 
+              transform: 'translate(-50%, -50%)',
+              width: '70%',
+              height: '30%',
+              display: 'flex',
+              justifyContent: 'space-between'
+            }}>
+              {/* Left Eye */}
+              <div className="relative w-4 h-4 bg-white rounded-full overflow-hidden">
+                {eyeState === 'normal' && (
+                  <div 
+                    className="absolute w-2 h-2 bg-black rounded-full"
                     style={{ 
-                      left: `calc(35% + ${eyePosition.x}px)`, 
-                      top: `calc(40% + ${eyePosition.y}px)` 
+                      top: `calc(50% + ${eyePosition.y}px)`, 
+                      left: `calc(50% + ${eyePosition.x}px)`, 
+                      transform: 'translate(-50%, -50%)'
                     }}
                   />
-                  <div className="absolute h-2.5 w-2.5 bg-black rounded-full" 
-                    style={{ 
-                      right: `calc(35% - ${eyePosition.x}px)`, 
-                      top: `calc(40% + ${eyePosition.y}px)` 
-                    }}
-                  />
-                </>
-              )}
+                )}
+                {eyeState === 'yawning' && (
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-2 h-1 bg-black rounded-full" />
+                )}
+                {eyeState === 'stressed' && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-black text-xs font-bold">×</div>
+                  </div>
+                )}
+                {eyeState === 'happy' && (
+                  <div className="absolute bottom-0 w-full h-2 bg-white rounded-t-full" />
+                )}
+                {eyeState === 'wink' && (
+                  <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-black" />
+                )}
+                {eyeState === 'surprised' && (
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-black rounded-full" />
+                )}
+              </div>
               
-              {/* Yawning eyes */}
+              {/* Right Eye */}
+              <div className="relative w-4 h-4 bg-white rounded-full overflow-hidden">
+                {eyeState === 'normal' && (
+                  <div 
+                    className="absolute w-2 h-2 bg-black rounded-full"
+                    style={{ 
+                      top: `calc(50% + ${eyePosition.y}px)`, 
+                      left: `calc(50% + ${eyePosition.x}px)`, 
+                      transform: 'translate(-50%, -50%)'
+                    }}
+                  />
+                )}
+                {eyeState === 'yawning' && (
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-2 h-1 bg-black rounded-full" />
+                )}
+                {eyeState === 'stressed' && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-black text-xs font-bold">×</div>
+                  </div>
+                )}
+                {eyeState === 'happy' && (
+                  <div className="absolute bottom-0 w-full h-2 bg-white rounded-t-full" />
+                )}
+                {eyeState === 'wink' && (
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-black rounded-full" />
+                )}
+                {eyeState === 'surprised' && (
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-black rounded-full" />
+                )}
+              </div>
+            </div>
+            
+            {/* Mouth */}
+            <div className="absolute" style={{ top: '65%', left: '50%', transform: 'translateX(-50%)' }}>
               {eyeState === 'yawning' && (
-                <>
-                  <div className="absolute h-0.5 w-2.5 bg-black rounded-full" 
-                    style={{ left: '35%', top: '40%' }}
-                  />
-                  <div className="absolute h-0.5 w-2.5 bg-black rounded-full" 
-                    style={{ right: '35%', top: '40%' }}
-                  />
-                  <div className="absolute h-2 w-4 bg-black rounded-full"
-                    style={{ bottom: '30%', left: '50%', transform: 'translateX(-50%)' }}
-                  />
-                </>
+                <div className="w-4 h-4 bg-black rounded-full" />
               )}
-              
-              {/* Stressed eyes */}
-              {eyeState === 'stressed' && (
-                <>
-                  <div className="absolute h-2.5 w-2.5 flex items-center justify-center"
-                    style={{ left: '35%', top: '40%' }}
-                  >
-                    <div className="h-3 w-0.5 bg-black absolute rotate-45" />
-                    <div className="h-3 w-0.5 bg-black absolute -rotate-45" />
-                  </div>
-                  <div className="absolute h-2.5 w-2.5 flex items-center justify-center"
-                    style={{ right: '35%', top: '40%' }}
-                  >
-                    <div className="h-3 w-0.5 bg-black absolute rotate-45" />
-                    <div className="h-3 w-0.5 bg-black absolute -rotate-45" />
-                  </div>
-                </>
-              )}
-              
-              {/* Happy eyes */}
               {eyeState === 'happy' && (
-                <>
-                  <div className="absolute h-2.5 w-2.5 border-b-2 border-black rounded-full" 
-                    style={{ left: '35%', top: '40%' }}
-                  />
-                  <div className="absolute h-2.5 w-2.5 border-b-2 border-black rounded-full" 
-                    style={{ right: '35%', top: '40%' }}
-                  />
-                  <div className="absolute h-1 w-4 bg-black rounded-full"
-                    style={{ bottom: '35%', left: '50%', transform: 'translateX(-50%) rotate(10deg)' }}
-                  />
-                </>
+                <div className="w-6 h-3 border-b-2 border-black rounded-b-full" />
               )}
-              
-              {/* Winking eye */}
-              {eyeState === 'wink' && (
-                <>
-                  <div className="absolute h-0.5 w-2.5 bg-black rounded-full" 
-                    style={{ left: '35%', top: '40%' }}
-                  />
-                  <div className="absolute h-2.5 w-2.5 bg-black rounded-full" 
-                    style={{ right: '35%', top: '40%' }}
-                  />
-                </>
-              )}
-              
-              {/* Surprised eyes */}
               {eyeState === 'surprised' && (
-                <>
-                  <div className="absolute h-3 w-3 bg-black rounded-full" 
-                    style={{ left: '35%', top: '40%', transform: 'translate(-15%, -15%)' }}
-                  />
-                  <div className="absolute h-3 w-3 bg-black rounded-full" 
-                    style={{ right: '35%', top: '40%', transform: 'translate(15%, -15%)' }}
-                  />
-                  <div className="absolute h-2 w-2 bg-black rounded-full"
-                    style={{ bottom: '30%', left: '50%', transform: 'translateX(-50%)' }}
-                  />
-                </>
+                <div className="w-3 h-3 bg-black rounded-full" />
               )}
             </div>
           </div>
-          
-          {/* Input area */}
-          <div className="p-3 md:p-4">
-            <input 
+        </div>
+        
+        {/* Title */}
+        <h1 className="text-xl md:text-2xl font-bold text-center text-white mb-4">
+          Let's make a document
+        </h1>
+        
+        <div className="bg-[#111111] rounded-lg shadow-lg p-4 md:p-5">
+          <div className="space-y-3">
+            {/* Hidden file input */}
+            <input
               type="file"
               ref={fileInputRef}
               className="hidden"
-              onChange={handleFileChange}
               accept=".pdf,.doc,.docx,.txt,.md"
+              onChange={handleFileChange}
             />
             
             <Textarea
@@ -389,8 +408,18 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
                       aria-label="Select document"
                     >
                       <FileText className="h-3 w-3 md:h-4 md:w-4 mr-1" />
-                      <span className="truncate max-w-[100px] md:max-w-[150px]">{selectedDocument || "Documents"}</span>
-                      <ChevronDown className="h-3 w-3 ml-1" />
+                      <span className="truncate max-w-[100px] md:max-w-[150px]">
+                        {selectedDocument || "Documents"}
+                      </span>
+                      {selectedDocument ? (
+                        <X 
+                          className="h-3 w-3 ml-1 hover:text-gray-300" 
+                          onClick={handleDeselectDocument}
+                          aria-label="Deselect document"
+                        />
+                      ) : (
+                        <ChevronDown className="h-3 w-3 ml-1" />
+                      )}
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="bg-[#2A2A2A] border-[#444444] text-white">
@@ -398,7 +427,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
                       documents.map((doc) => (
                         <DropdownMenuItem 
                           key={doc.id}
-                          onClick={() => handleSelectDocument(doc.fileName)}
+                          onClick={() => handleSelectDocument(doc.fileName, doc.id)}
                           className="hover:bg-[#3A3A3A] cursor-pointer"
                         >
                           <div className="flex flex-col">
