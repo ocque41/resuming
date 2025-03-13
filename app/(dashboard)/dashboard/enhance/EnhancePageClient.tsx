@@ -374,7 +374,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
         </h1>
         
         {/* Search container - exactly matching image layout */}
-        <div className="w-full max-w-2xl bg-[#0A0A0A] rounded-3xl p-6">
+        <div className="w-full max-w-2xl">
           {/* Input field - styled exactly like image */}
           <div className="relative mb-6">
             <input
@@ -384,58 +384,32 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
               placeholder={placeholders[placeholderIndex]}
               className="w-full bg-[#1A1A1A] rounded-2xl px-6 py-5 
                 focus:outline-none focus:ring-1 focus:ring-[#2D2D2D]
-                transition-all duration-300
-                placeholder-gray-500 text-lg"
-              style={{ 
-                opacity: placeholderOpacity, 
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)' 
-              }}
+                text-white placeholder-gray-500"
             />
           </div>
           
-          {/* Controls - positioned exactly as in image */}
+          {/* Controls below input */}
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              {/* Speed button with dropdown */}
-              <Button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isUploading}
-                className="bg-[#050505] hover:bg-[#1A1A1A] rounded-xl px-4 py-2 
-                  flex items-center justify-center border border-[#2D2D2D]
-                  transition-all duration-300"
-              >
-                <svg className="h-5 w-5 text-[#B4916C] mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M13 5L21 12L13 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                <span>Speed</span>
-                <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
-              </Button>
-              
-              <input
-                ref={fileInputRef}
-                type="file"
-                onChange={handleFileChange}
-                className="hidden"
-                accept=".pdf,.doc,.docx,.txt"
-              />
-              
-              {/* Search button */}
-              <Button
-                onClick={() => setIsDropdownOpen(true)}
-                className="bg-[#1D1D1D] hover:bg-[#2D2D2D] rounded-xl px-4 py-2
-                  flex items-center justify-center
-                  transition-all duration-300"
-              >
-                <svg className="h-5 w-5 text-[#B4916C] mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/>
-                  <path d="M21 21L16.65 16.65" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-                <span>Search</span>
-              </Button>
-              
-              {/* Document selection popover */}
+              {/* Documents dropdown button */}
               <Popover open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={isDropdownOpen}
+                    className="bg-[#050505] hover:bg-[#1A1A1A] rounded-xl px-4 py-2 
+                      flex items-center justify-center border border-[#2D2D2D]
+                      transition-all duration-300"
+                  >
+                    <svg className="h-5 w-5 text-[#B4916C] mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M13 5L21 12L13 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span>Documents</span>
+                    <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
                 <PopoverContent className="w-[250px] p-0 rounded-xl border-[#2D2D2D] bg-[#050505]">
                   <div className="max-h-[300px] overflow-y-auto">
                     {documents.map((doc) => (
@@ -458,27 +432,26 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
                   </div>
                 </PopoverContent>
               </Popover>
+              
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={handleFileChange}
+                className="hidden"
+                accept=".pdf,.doc,.docx,.txt"
+              />
             </div>
             
-            {/* Action buttons on the right - exactly as in image */}
-            <div className="flex items-center space-x-2">
+            {/* Only paperclip button on the right */}
+            <div className="flex items-center">
               <Button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
                 className="bg-transparent hover:bg-[#1A1A1A] rounded-full w-10 h-10
                   flex items-center justify-center
                   transition-all duration-300"
               >
                 <Paperclip className="h-5 w-5 text-[#B4916C]" />
-              </Button>
-              
-              <Button
-                className="bg-transparent hover:bg-[#1A1A1A] rounded-full w-10 h-10
-                  flex items-center justify-center
-                  transition-all duration-300"
-              >
-                <svg className="h-5 w-5 text-[#B4916C]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 5L12 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  <path d="M5 12L19 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
               </Button>
             </div>
           </div>

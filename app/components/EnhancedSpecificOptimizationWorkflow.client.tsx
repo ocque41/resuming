@@ -33,6 +33,12 @@ interface ExperienceEntry {
 
 interface EducationEntry {
   degree: string;
+  institution?: string;
+  location?: string;
+  year?: string;
+  gpa?: string;
+  achievements?: string[];
+  relevantCourses?: string[];
 }
 
 interface SkillsData {
@@ -51,6 +57,15 @@ interface StructuredCV {
     professional: string[];
   };
   achievements: string[];
+  goals: string[];
+  languages: string[];
+  contactInfo: {
+    email?: string;
+    phone?: string;
+    location?: string;
+    linkedin?: string;
+    website?: string;
+  };
 }
 
 interface JobMatchAnalysis {
@@ -158,22 +173,103 @@ const extractExperienceData = (text: string): ExperienceEntry[] => {
 };
 
 const extractEducationData = (text: string): EducationEntry[] => {
-  const educationPattern = /(?:education|qualifications|academic)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+  const educationPattern = /(?:education|qualifications|academic|educational background)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
   const match = text.match(educationPattern);
   
   if (!match || !match[1]) return [];
   
   const educationSection = match[1];
-  const entries = educationSection.split(/\n(?=\d{4}|\d{2}\/\d{2}|\w+\s+\d{4})/);
   
-  return entries.map(entry => {
-    const degreePattern = /(?:degree|diploma|certificate):\s*([^.,\n]+)/i;
-    const degreeMatch = entry.match(degreePattern);
+  // Check if education is in a list format with bullet points
+  const hasBulletPoints = /^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s+/m.test(educationSection);
+  
+  if (hasBulletPoints) {
+    // Parse bullet point format
+    const entries = educationSection.split(/\n(?=[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s+)/);
     
-    return {
-      degree: degreeMatch ? degreeMatch[1].trim() : ''
-    };
-  });
+    return entries.map(entry => {
+      // Clean up bullet point
+      const cleanEntry = entry.replace(/^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s*/, '').trim();
+      
+      // Extract degree
+      const degreeMatch = cleanEntry.match(/([^,]+?)(?:,|$)/);
+      const degree = degreeMatch ? degreeMatch[1].trim() : '';
+      
+      // Extract institution
+      const institutionMatch = cleanEntry.match(/(?:from|at)\s+([^,]+)/i) || 
+                              cleanEntry.match(/,\s*([^,]+?)(?:,|$)/);
+      const institution = institutionMatch ? institutionMatch[1].trim() : '';
+      
+      // Extract year
+      const yearMatch = cleanEntry.match(/(?:19|20)\d{2}(?:\s*[-–—]\s*(?:(?:19|20)\d{2}|present))?/);
+      const year = yearMatch ? yearMatch[0] : '';
+      
+      // Extract GPA if available
+      const gpaMatch = cleanEntry.match(/GPA\s*(?:of|:)?\s*([\d.]+)/i);
+      const gpa = gpaMatch ? gpaMatch[1] : '';
+      
+      return {
+        degree,
+        institution,
+        year,
+        gpa
+      };
+    }).filter(entry => entry.degree.length > 0);
+  } else {
+    // Parse paragraph or line format
+    const entries = educationSection.split(/\n(?=\d{4}|\d{2}\/\d{2}|\w+\s+\d{4}|[A-Z][a-z]+\s+University|[A-Z][a-z]+\s+College)/);
+    
+    return entries.map(entry => {
+      // Extract degree
+      const degreePattern = /(?:degree|diploma|certificate|bachelor|master|phd|doctorate|mba|bsc|ba|ma|ms)(?:'s)?(?:\s+(?:of|in))?\s+([^.,\n]+)/i;
+      const degreeMatch = entry.match(degreePattern);
+      const degree = degreeMatch ? degreeMatch[0] : '';
+      
+      // Extract institution
+      const institutionPattern = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:University|College|Institute|School))/;
+      const institutionMatch = entry.match(institutionPattern);
+      const institution = institutionMatch ? institutionMatch[1] : '';
+      
+      // Extract location
+      const locationPattern = /(?:located in|in)\s+([A-Z][a-z]+(?:[\s,]+[A-Z][a-z]+)*)/i;
+      const locationMatch = entry.match(locationPattern);
+      const location = locationMatch ? locationMatch[1] : '';
+      
+      // Extract year
+      const yearPattern = /(?:19|20)\d{2}(?:\s*[-–—]\s*(?:(?:19|20)\d{2}|present))?/;
+      const yearMatch = entry.match(yearPattern);
+      const year = yearMatch ? yearMatch[0] : '';
+      
+      // Extract GPA if available
+      const gpaPattern = /GPA\s*(?:of|:)?\s*([\d.]+)/i;
+      const gpaMatch = entry.match(gpaPattern);
+      const gpa = gpaMatch ? gpaMatch[1] : '';
+      
+      // Extract relevant courses if available
+      const coursesPattern = /(?:relevant|key|major)\s+courses?(?:\s+include)?[:\s]+([^.]+)/i;
+      const coursesMatch = entry.match(coursesPattern);
+      const relevantCourses = coursesMatch ? 
+        coursesMatch[1].split(/[,;]/).map(course => course.trim()).filter(course => course.length > 0) : 
+        [];
+      
+      // Extract achievements if available
+      const achievementsPattern = /(?:achievements|accomplishments|honors)[:\s]+([^.]+)/i;
+      const achievementsMatch = entry.match(achievementsPattern);
+      const achievements = achievementsMatch ? 
+        achievementsMatch[1].split(/[,;]/).map(achievement => achievement.trim()).filter(achievement => achievement.length > 0) : 
+        [];
+      
+      return {
+        degree,
+        institution,
+        location,
+        year,
+        gpa,
+        achievements,
+        relevantCourses
+      };
+    }).filter(entry => entry.degree.length > 0 || entry.institution.length > 0);
+  }
 };
 
 const calculateYearsOfExperience = (experience: ExperienceEntry[]): number => {
@@ -877,6 +973,62 @@ const calculateIndustryFit = (cvText: string, jobDescription: string): number =>
   return Math.max(Math.min(bestMatch.score, 100), 0);
 };
 
+const extractName = (text: string): string => {
+  // Try to find a name at the beginning of the document
+  const namePattern = /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/m;
+  const match = text.match(namePattern);
+  
+  // If no match found at the beginning, try to find any capitalized name-like pattern
+  if (!match) {
+    const fallbackPattern = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/;
+    const fallbackMatch = text.match(fallbackPattern);
+    return fallbackMatch ? fallbackMatch[1] : 'Professional Resume';
+  }
+  
+  return match[1];
+};
+
+const extractContactInfo = (text: string): StructuredCV['contactInfo'] => {
+  const contactInfo: StructuredCV['contactInfo'] = {};
+  
+  // Extract email
+  const emailPattern = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
+  const emailMatch = text.match(emailPattern);
+  if (emailMatch) {
+    contactInfo.email = emailMatch[0];
+  }
+  
+  // Extract phone number
+  const phonePattern = /(?:\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/;
+  const phoneMatch = text.match(phonePattern);
+  if (phoneMatch) {
+    contactInfo.phone = phoneMatch[0];
+  }
+  
+  // Extract location (city, state/province, country)
+  const locationPattern = /(?:^|\n)([A-Za-z\s]+,\s*[A-Za-z\s]+(?:,\s*[A-Za-z\s]+)?)/m;
+  const locationMatch = text.match(locationPattern);
+  if (locationMatch) {
+    contactInfo.location = locationMatch[1].trim();
+  }
+  
+  // Extract LinkedIn
+  const linkedinPattern = /(?:linkedin\.com\/in\/|LinkedIn:?\s*)([A-Za-z0-9_-]+)/i;
+  const linkedinMatch = text.match(linkedinPattern);
+  if (linkedinMatch) {
+    contactInfo.linkedin = linkedinMatch[1];
+  }
+  
+  // Extract website
+  const websitePattern = /(?:https?:\/\/)?(?:www\.)?([A-Za-z0-9][-A-Za-z0-9.]*\.[A-Za-z]{2,}(?:\/\S*)?)/i;
+  const websiteMatch = text.match(websitePattern);
+  if (websiteMatch && !websiteMatch[0].includes('linkedin.com')) {
+    contactInfo.website = websiteMatch[0];
+  }
+  
+  return contactInfo;
+};
+
 const generateStructuredCV = (cvText: string, jobDescription: string): StructuredCV => {
   const name = extractName(cvText);
   const subheader = extractSubheader(cvText);
@@ -886,6 +1038,9 @@ const generateStructuredCV = (cvText: string, jobDescription: string): Structure
   const technicalSkills = extractTechnicalSkills(cvText);
   const professionalSkills = extractProfessionalSkills(cvText);
   const achievements = extractAchievements(cvText);
+  const goals = extractGoals(cvText);
+  const languages = extractLanguages(cvText);
+  const contactInfo = extractContactInfo(cvText);
 
   return {
     name,
@@ -897,14 +1052,11 @@ const generateStructuredCV = (cvText: string, jobDescription: string): Structure
       technical: technicalSkills,
       professional: professionalSkills
     },
-    achievements
+    achievements,
+    goals,
+    languages,
+    contactInfo
   };
-};
-
-const extractName = (text: string): string => {
-  const namePattern = /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/m;
-  const match = text.match(namePattern);
-  return match ? match[1] : '';
 };
 
 const extractSubheader = (text: string): string => {
@@ -918,42 +1070,528 @@ const extractSubheader = (text: string): string => {
 };
 
 const extractProfile = (text: string): string => {
-  const profilePattern = /(?:profile|summary|objective)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+  // Try to find profile/summary/objective section
+  const profilePattern = /(?:profile|summary|objective|about me)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
   const match = text.match(profilePattern);
-  return match ? match[1].trim() : '';
+  
+  if (!match || !match[1]) {
+    // If no profile section found, try to extract the first paragraph as a profile
+    const firstParagraphPattern = /^(?:[^\n]+\n){1,3}([^\n]+(?:\n[^\n]+){1,5})/;
+    const firstParagraphMatch = text.match(firstParagraphPattern);
+    return firstParagraphMatch ? firstParagraphMatch[1].trim() : '';
+  }
+  
+  return match[1].trim();
+};
+
+const optimizeProfile = (profile: string, jobDescription: string, jobKeywords: string[]): string => {
+  // If profile is empty, generate a new one
+  if (!profile) {
+    return `Experienced professional with expertise in ${jobKeywords.slice(0, 3).join(', ')}, seeking to leverage my skills in ${jobKeywords.slice(3, 5).join(' and ')} to excel in this role.`;
+  }
+  
+  // Extract important job requirements
+  const requirementPatterns = [
+    /(?:required|must have|essential)[:\s]+([^.]+)/gi,
+    /(?:seeking|looking for)[:\s]+([^.]+)/gi,
+    /(?:responsibilities include|will be responsible for)[:\s]+([^.]+)/gi
+  ];
+  
+  let keyRequirements: string[] = [];
+  requirementPatterns.forEach(pattern => {
+    const matches = [...jobDescription.matchAll(pattern)];
+    matches.forEach(match => {
+      if (match[1]) {
+        keyRequirements.push(match[1].trim());
+      }
+    });
+  });
+  
+  // If no key requirements found, use top keywords
+  if (keyRequirements.length === 0) {
+    keyRequirements = jobKeywords.slice(0, 3);
+  }
+  
+  // Check if profile already contains key requirements
+  const profileLower = profile.toLowerCase();
+  const missingRequirements = keyRequirements.filter(req => 
+    !profileLower.includes(req.toLowerCase())
+  );
+  
+  // If profile already contains all key requirements, return it as is
+  if (missingRequirements.length === 0) {
+    return profile;
+  }
+  
+  // Otherwise, enhance the profile with missing requirements
+  let enhancedProfile = profile;
+  
+  // Add a sentence highlighting missing requirements if needed
+  if (missingRequirements.length > 0) {
+    enhancedProfile += ` Particularly skilled in ${missingRequirements.join(', ')}.`;
+  }
+  
+  return enhancedProfile;
 };
 
 const extractTechnicalSkills = (text: string): string[] => {
-  const technicalPattern = /(?:technical|programming|software|development)\s+skills[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
-  const match = text.match(technicalPattern);
-  if (!match) return [];
+  // Try multiple patterns to find technical skills section
+  const technicalPatterns = [
+    /(?:technical|programming|software|development|hard|computer)\s+skills[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is,
+    /(?:skills|expertise|competencies)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is
+  ];
   
-  return match[1]
-    .split(/[,;]|\band\b/)
-    .map(skill => skill.trim())
-    .filter(skill => skill.length > 0);
+  let match = null;
+  for (const pattern of technicalPatterns) {
+    match = text.match(pattern);
+    if (match && match[1]) break;
+  }
+  
+  if (!match || !match[1]) return [];
+  
+  // Extract skills from the matched section
+  const skillsText = match[1];
+  
+  // Try to detect if skills are in a list format
+  const hasBulletPoints = /^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s+/m.test(skillsText);
+  
+  if (hasBulletPoints) {
+    // Extract skills from bullet points
+    return skillsText
+      .split(/\n/)
+      .map(skill => skill.replace(/^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s*/, '').trim())
+      .filter(skill => skill.length > 0);
+  } else {
+    // Extract skills from comma/semicolon separated list
+    return skillsText
+      .split(/[,;]|\band\b/)
+      .map(skill => skill.trim())
+      .filter(skill => skill.length > 0);
+  }
 };
 
 const extractProfessionalSkills = (text: string): string[] => {
-  const professionalPattern = /(?:professional|soft|interpersonal)\s+skills[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
-  const match = text.match(professionalPattern);
-  if (!match) return [];
+  // Try multiple patterns to find professional skills section
+  const professionalPatterns = [
+    /(?:professional|soft|interpersonal|communication|people)\s+skills[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is
+  ];
   
-  return match[1]
-    .split(/[,;]|\band\b/)
-    .map(skill => skill.trim())
-    .filter(skill => skill.length > 0);
+  let match = null;
+  for (const pattern of professionalPatterns) {
+    match = text.match(pattern);
+    if (match && match[1]) break;
+  }
+  
+  if (!match || !match[1]) {
+    // If no dedicated professional skills section, try to extract from general skills
+    const technicalSkills = extractTechnicalSkills(text);
+    const professionalSkillKeywords = [
+      'communication', 'leadership', 'teamwork', 'collaboration', 'problem-solving',
+      'time management', 'adaptability', 'creativity', 'critical thinking', 'emotional intelligence',
+      'negotiation', 'conflict resolution', 'presentation', 'customer service', 'decision making'
+    ];
+    
+    return technicalSkills.filter(skill => 
+      professionalSkillKeywords.some(keyword => 
+        skill.toLowerCase().includes(keyword.toLowerCase())
+      )
+    );
+  }
+  
+  // Extract skills from the matched section
+  const skillsText = match[1];
+  
+  // Try to detect if skills are in a list format
+  const hasBulletPoints = /^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s+/m.test(skillsText);
+  
+  if (hasBulletPoints) {
+    // Extract skills from bullet points
+    return skillsText
+      .split(/\n/)
+      .map(skill => skill.replace(/^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s*/, '').trim())
+      .filter(skill => skill.length > 0);
+  } else {
+    // Extract skills from comma/semicolon separated list
+    return skillsText
+      .split(/[,;]|\band\b/)
+      .map(skill => skill.trim())
+      .filter(skill => skill.length > 0);
+  }
 };
 
 const extractAchievements = (text: string): string[] => {
-  const achievementsPattern = /(?:achievements|accomplishments)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+  // Try to find achievements/accomplishments section
+  const achievementsPattern = /(?:achievements|accomplishments|key accomplishments|notable achievements)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
   const match = text.match(achievementsPattern);
-  if (!match) return [];
+  
+  if (!match || !match[1]) {
+    // If no achievements section found, try to extract bullet points from experience section
+    const experiencePattern = /(?:experience|work history|employment)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+    const expMatch = text.match(experiencePattern);
+    
+    if (expMatch && expMatch[1]) {
+      // Extract bullet points that look like achievements (contain action verbs and metrics)
+      const bulletPoints = expMatch[1].split(/\n/).filter(line => 
+        /^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s*/.test(line) && 
+        (/increased|improved|achieved|delivered|led|managed|created|developed|implemented/i.test(line) ||
+         /\d+%|\$\d+|\d+ million|\d+ thousand/i.test(line))
+      );
+      
+      return bulletPoints.map(point => 
+        point.replace(/^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s*/, '').trim()
+      ).filter(achievement => achievement.length > 0);
+    }
+    
+    return [];
+  }
   
   return match[1]
     .split(/\n/)
     .map(achievement => achievement.replace(/^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s*/, '').trim())
     .filter(achievement => achievement.length > 0);
+};
+
+const optimizeAchievements = (achievements: string[], jobDescription: string, jobKeywords: string[]): string[] => {
+  if (achievements.length === 0) {
+    return [];
+  }
+  
+  // Extract important metrics and results from job description
+  const metricPatterns = [
+    /(?:track record of|history of|demonstrated|proven)\s+([^.]+)/gi,
+    /(?:results|outcomes|success|impact)\s+([^.]+)/gi,
+    /(?:metrics|kpis|targets|goals)\s+([^.]+)/gi
+  ];
+  
+  let keyMetrics: string[] = [];
+  metricPatterns.forEach(pattern => {
+    const matches = [...jobDescription.matchAll(pattern)];
+    matches.forEach(match => {
+      if (match[1]) {
+        keyMetrics.push(match[1].trim());
+      }
+    });
+  });
+  
+  // Score achievements based on relevance to job description
+  const scoredAchievements = achievements.map(achievement => {
+    let score = 0;
+    
+    // Score based on keyword matches
+    jobKeywords.forEach(keyword => {
+      if (achievement.toLowerCase().includes(keyword.toLowerCase())) {
+        score += 10;
+      }
+    });
+    
+    // Score based on metrics matches
+    keyMetrics.forEach(metric => {
+      if (achievement.toLowerCase().includes(metric.toLowerCase())) {
+        score += 15;
+      }
+    });
+    
+    // Score based on containing numbers/percentages (quantifiable results)
+    if (/\d+%|\$\d+|\d+ million|\d+ thousand/i.test(achievement)) {
+      score += 20;
+    }
+    
+    // Score based on action verbs
+    const actionVerbs = ['led', 'managed', 'created', 'developed', 'implemented', 'increased', 'improved', 'reduced', 'achieved', 'delivered'];
+    actionVerbs.forEach(verb => {
+      if (achievement.toLowerCase().includes(verb)) {
+        score += 5;
+      }
+    });
+    
+    return { achievement, score };
+  });
+  
+  // Sort achievements by relevance score
+  scoredAchievements.sort((a, b) => b.score - a.score);
+  
+  // Return top achievements (max 5)
+  return scoredAchievements.slice(0, 5).map(item => item.achievement);
+};
+
+const extractGoals = (text: string): string[] => {
+  const goalsPattern = /(?:goals|objectives|targets|career goals|professional goals)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+  const match = text.match(goalsPattern);
+  if (!match || !match[1]) return [];
+  
+  return match[1]
+    .split(/\n/)
+    .map(goal => goal.replace(/^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s*/, '').trim())
+    .filter(goal => goal.length > 0);
+};
+
+const optimizeGoals = (goals: string[], jobDescription: string, jobKeywords: string[]): string[] => {
+  // If no goals provided, generate some based on job description
+  if (goals.length === 0) {
+    // Extract career path or growth opportunities from job description
+    const careerPatterns = [
+      /(?:career path|growth opportunities|advancement|progression)[:\s]+([^.]+)/gi,
+      /(?:opportunity to|chance to|ability to)[:\s]+([^.]+)/gi,
+      /(?:looking for candidates who|seeking individuals who)[:\s]+([^.]+)/gi
+    ];
+    
+    let careerOpportunities: string[] = [];
+    careerPatterns.forEach(pattern => {
+      const matches = [...jobDescription.matchAll(pattern)];
+      matches.forEach(match => {
+        if (match[1]) {
+          careerOpportunities.push(match[1].trim());
+        }
+      });
+    });
+    
+    // Generate goals based on career opportunities or job keywords
+    if (careerOpportunities.length > 0) {
+      return [
+        `To leverage my expertise in ${jobKeywords.slice(0, 2).join(' and ')} to excel in this role`,
+        `To contribute to ${careerOpportunities[0]}`,
+        `To continuously develop skills in ${jobKeywords.slice(2, 4).join(' and ')}`
+      ];
+    } else {
+      return [
+        `To leverage my expertise in ${jobKeywords.slice(0, 2).join(' and ')} to excel in this role`,
+        `To contribute to organizational success through applying my skills in ${jobKeywords.slice(2, 4).join(' and ')}`,
+        `To continuously develop professional capabilities aligned with industry best practices`
+      ];
+    }
+  }
+  
+  // If goals exist, optimize them to align with job description
+  const optimizedGoals = goals.map(goal => {
+    // Check if goal already aligns with job keywords
+    const goalLower = goal.toLowerCase();
+    const alignedWithKeywords = jobKeywords.some(keyword => 
+      goalLower.includes(keyword.toLowerCase())
+    );
+    
+    // If already aligned, return as is
+    if (alignedWithKeywords) {
+      return goal;
+    }
+    
+    // Otherwise, enhance the goal with relevant keywords
+    const relevantKeywords = jobKeywords.filter(keyword => 
+      !goalLower.includes(keyword.toLowerCase())
+    ).slice(0, 2);
+    
+    if (relevantKeywords.length > 0) {
+      return `${goal} with focus on ${relevantKeywords.join(' and ')}`;
+    }
+    
+    return goal;
+  });
+  
+  return optimizedGoals.slice(0, 3); // Return at most 3 goals
+};
+
+const extractLanguages = (text: string): string[] => {
+  const languagesPattern = /(?:languages|language skills|fluent in|proficient in|spoken languages)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+  const match = text.match(languagesPattern);
+  if (!match || !match[1]) return [];
+  
+  // Split by common separators and clean up
+  return match[1]
+    .split(/[,;]|\n|(?:and\s+)/)
+    .map(language => {
+      // Extract language and proficiency level if available
+      const langMatch = language.match(/([A-Za-z]+(?:\s+[A-Za-z]+)*)(?:\s*[-:]\s*|\s+\()(native|fluent|proficient|intermediate|beginner|basic|advanced|business|conversational)/i);
+      
+      if (langMatch) {
+        return `${langMatch[1].trim()} - ${langMatch[2].trim()}`;
+      }
+      
+      return language.trim();
+    })
+    .filter(language => language.length > 0);
+};
+
+const optimizeLanguages = (languages: string[], jobDescription: string): string[] => {
+  if (languages.length === 0) {
+    return [];
+  }
+  
+  // Extract language requirements from job description
+  const languageRequirements: string[] = [];
+  const languagePatterns = [
+    /(?:language|languages|fluent|proficient|speak|written|oral)\s+(?:in\s+)?([A-Za-z]+(?:\s+[A-Za-z]+)*)/gi,
+    /([A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(?:language|speaking)/gi
+  ];
+  
+  languagePatterns.forEach(pattern => {
+    const matches = [...jobDescription.matchAll(pattern)];
+    matches.forEach(match => {
+      if (match[1] && !['skills', 'requirements', 'qualifications', 'proficiency'].includes(match[1].toLowerCase())) {
+        languageRequirements.push(match[1].trim());
+      }
+    });
+  });
+  
+  // If no language requirements found, return original languages
+  if (languageRequirements.length === 0) {
+    return languages;
+  }
+  
+  // Reorder languages to prioritize required languages
+  const prioritizedLanguages = [...languages];
+  prioritizedLanguages.sort((a, b) => {
+    const aIsRequired = languageRequirements.some(req => 
+      a.toLowerCase().includes(req.toLowerCase())
+    );
+    const bIsRequired = languageRequirements.some(req => 
+      b.toLowerCase().includes(req.toLowerCase())
+    );
+    
+    if (aIsRequired && !bIsRequired) return -1;
+    if (!aIsRequired && bIsRequired) return 1;
+    return 0;
+  });
+  
+  // Enhance language proficiency for required languages if needed
+  return prioritizedLanguages.map(language => {
+    const isRequired = languageRequirements.some(req => 
+      language.toLowerCase().includes(req.toLowerCase())
+    );
+    
+    if (isRequired) {
+      // Check if proficiency level is already specified
+      const hasLevel = /[-:]\s*(native|fluent|proficient|intermediate|beginner|basic|advanced|business|conversational)/i.test(language);
+      
+      if (!hasLevel) {
+        // Add a high proficiency level for required languages
+        return `${language} - Proficient`;
+      }
+      
+      // Upgrade intermediate/basic to proficient for required languages
+      return language.replace(/(intermediate|beginner|basic)/i, 'Proficient');
+    }
+    
+    return language;
+  });
+};
+
+const optimizeSkills = (
+  technicalSkills: string[], 
+  professionalSkills: string[], 
+  jobDescription: string, 
+  jobKeywords: string[]
+): { technical: string[]; professional: string[] } => {
+  // Extract technical skill requirements from job description
+  const technicalRequirements: string[] = [];
+  const technicalPatterns = [
+    /(?:technical skills|technical requirements|technical qualifications)[:\s]+([^.]+)/gi,
+    /(?:proficient in|experience with|knowledge of|familiarity with)[:\s]+([^.]+)/gi,
+    /(?:technologies|tools|platforms|software|programming languages)[:\s]+([^.]+)/gi
+  ];
+  
+  technicalPatterns.forEach(pattern => {
+    const matches = [...jobDescription.matchAll(pattern)];
+    matches.forEach(match => {
+      if (match[1]) {
+        // Split by common separators and add to requirements
+        match[1].split(/[,;]|\band\b/).forEach(skill => {
+          const trimmedSkill = skill.trim();
+          if (trimmedSkill && !technicalRequirements.includes(trimmedSkill)) {
+            technicalRequirements.push(trimmedSkill);
+          }
+        });
+      }
+    });
+  });
+  
+  // Extract professional skill requirements from job description
+  const professionalRequirements: string[] = [];
+  const professionalPatterns = [
+    /(?:soft skills|interpersonal skills|communication skills)[:\s]+([^.]+)/gi,
+    /(?:ability to|capable of|skilled in)[:\s]+([^.]+)/gi,
+    /(?:team player|team work|collaborate|communicate)[:\s]+([^.]+)/gi
+  ];
+  
+  professionalPatterns.forEach(pattern => {
+    const matches = [...jobDescription.matchAll(pattern)];
+    matches.forEach(match => {
+      if (match[1]) {
+        // Split by common separators and add to requirements
+        match[1].split(/[,;]|\band\b/).forEach(skill => {
+          const trimmedSkill = skill.trim();
+          if (trimmedSkill && !professionalRequirements.includes(trimmedSkill)) {
+            professionalRequirements.push(trimmedSkill);
+          }
+        });
+      }
+    });
+  });
+  
+  // If no specific requirements found, use job keywords
+  if (technicalRequirements.length === 0) {
+    technicalRequirements.push(...jobKeywords.filter(keyword => 
+      !professionalRequirements.some(req => req.includes(keyword))
+    ));
+  }
+  
+  // Optimize technical skills
+  let optimizedTechnical = [...technicalSkills];
+  
+  // Add missing technical skills from requirements (if any)
+  technicalRequirements.forEach(req => {
+    const hasMatchingSkill = optimizedTechnical.some(skill => 
+      skill.toLowerCase().includes(req.toLowerCase()) || 
+      req.toLowerCase().includes(skill.toLowerCase())
+    );
+    
+    if (!hasMatchingSkill) {
+      optimizedTechnical.push(req);
+    }
+  });
+  
+  // Optimize professional skills
+  let optimizedProfessional = [...professionalSkills];
+  
+  // Add missing professional skills from requirements (if any)
+  professionalRequirements.forEach(req => {
+    const hasMatchingSkill = optimizedProfessional.some(skill => 
+      skill.toLowerCase().includes(req.toLowerCase()) || 
+      req.toLowerCase().includes(skill.toLowerCase())
+    );
+    
+    if (!hasMatchingSkill) {
+      optimizedProfessional.push(req);
+    }
+  });
+  
+  // Sort skills by relevance to job description
+  optimizedTechnical.sort((a, b) => {
+    const aRelevance = jobKeywords.filter(keyword => 
+      a.toLowerCase().includes(keyword.toLowerCase())
+    ).length;
+    
+    const bRelevance = jobKeywords.filter(keyword => 
+      b.toLowerCase().includes(keyword.toLowerCase())
+    ).length;
+    
+    return bRelevance - aRelevance;
+  });
+  
+  optimizedProfessional.sort((a, b) => {
+    const aRelevance = jobKeywords.filter(keyword => 
+      a.toLowerCase().includes(keyword.toLowerCase())
+    ).length;
+    
+    const bRelevance = jobKeywords.filter(keyword => 
+      b.toLowerCase().includes(keyword.toLowerCase())
+    ).length;
+    
+    return bRelevance - aRelevance;
+  });
+  
+  return {
+    technical: optimizedTechnical,
+    professional: optimizedProfessional
+  };
 };
 
 // Add generateOptimizedDocument function
@@ -1042,6 +1680,112 @@ const generateOptimizedDocument = async (content: string, name: string = 'Optimi
   return doc;
 };
 
+const optimizeEducation = (education: EducationEntry[], jobDescription: string, jobKeywords: string[]): EducationEntry[] => {
+  if (education.length === 0) {
+    return [];
+  }
+  
+  // Extract education requirements from job description
+  const educationRequirements: string[] = [];
+  const educationPatterns = [
+    /(?:degree|diploma|certificate)\s+(?:in|of)\s+([^.]+)/gi,
+    /(?:bachelor|master|phd|doctorate|mba|bsc|ba|ma|ms)(?:'s)?\s+(?:degree\s+)?(?:in|of)?\s+([^.]+)/gi,
+    /(?:education|qualification)(?:\s+requirements?)?[:\s]+([^.]+)/gi
+  ];
+  
+  educationPatterns.forEach(pattern => {
+    const matches = [...jobDescription.matchAll(pattern)];
+    matches.forEach(match => {
+      if (match[1]) {
+        educationRequirements.push(match[1].trim());
+      }
+    });
+  });
+  
+  // Score education entries based on relevance to job requirements
+  const scoredEducation = education.map(entry => {
+    let score = 0;
+    
+    // Score based on degree relevance to job requirements
+    educationRequirements.forEach(req => {
+      if (entry.degree.toLowerCase().includes(req.toLowerCase())) {
+        score += 30;
+      }
+    });
+    
+    // Score based on degree relevance to job keywords
+    jobKeywords.forEach(keyword => {
+      if (entry.degree.toLowerCase().includes(keyword.toLowerCase())) {
+        score += 20;
+      }
+      
+      // Also check relevant courses if available
+      if (entry.relevantCourses) {
+        entry.relevantCourses.forEach(course => {
+          if (course.toLowerCase().includes(keyword.toLowerCase())) {
+            score += 10;
+          }
+        });
+      }
+    });
+    
+    // Bonus for recent education
+    if (entry.year) {
+      const yearMatch = entry.year.match(/(\d{4})/g);
+      if (yearMatch && yearMatch.length > 0) {
+        const mostRecentYear = Math.max(...yearMatch.map(y => parseInt(y)));
+        const currentYear = new Date().getFullYear();
+        const yearDiff = currentYear - mostRecentYear;
+        
+        if (yearDiff < 5) {
+          score += 15;
+        } else if (yearDiff < 10) {
+          score += 10;
+        } else {
+          score += 5;
+        }
+      }
+    }
+    
+    // Bonus for high GPA
+    if (entry.gpa) {
+      const gpaValue = parseFloat(entry.gpa);
+      if (gpaValue >= 3.5) {
+        score += 15;
+      } else if (gpaValue >= 3.0) {
+        score += 10;
+      } else if (gpaValue >= 2.5) {
+        score += 5;
+      }
+    }
+    
+    return { entry, score };
+  });
+  
+  // Sort by relevance score
+  scoredEducation.sort((a, b) => b.score - a.score);
+  
+  // Enhance education entries with relevant courses if missing
+  return scoredEducation.map(({ entry }) => {
+    // If no relevant courses and we have job keywords, add some based on job requirements
+    if ((!entry.relevantCourses || entry.relevantCourses.length === 0) && jobKeywords.length > 0) {
+      const fieldOfStudy = entry.degree.replace(/(?:bachelor|master|phd|doctorate|mba|bsc|ba|ma|ms)(?:'s)?\s+(?:degree\s+)?(?:in|of)?\s+/i, '');
+      
+      // Generate relevant courses based on job keywords and field of study
+      const suggestedCourses = jobKeywords
+        .filter(keyword => keyword.length > 3)
+        .slice(0, 3)
+        .map(keyword => `Advanced ${keyword.charAt(0).toUpperCase() + keyword.slice(1)} in ${fieldOfStudy}`);
+      
+      if (suggestedCourses.length > 0) {
+        entry.relevantCourses = suggestedCourses;
+      }
+    }
+    
+    return entry;
+  });
+};
+
 export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: EnhancedSpecificOptimizationWorkflowProps): JSX.Element {
   // State for CV selection
   const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
@@ -1105,7 +1849,10 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       technical: [],
       professional: []
     },
-    achievements: []
+    achievements: [],
+    goals: [],
+    languages: [],
+    contactInfo: {}
   });
   
   // Add new state variables
@@ -1252,25 +1999,194 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       });
     });
     
-    // Create a modified version of the original text that emphasizes these keywords
+    // Extract structured data from CV
+    const structuredCV = generateStructuredCV(originalText, jobDescription);
+    
+    // Optimize profile
+    const optimizedProfile = optimizeProfile(structuredCV.profile, jobDescription, jobKeywords);
+    
+    // Optimize achievements
+    const optimizedAchievements = optimizeAchievements(structuredCV.achievements, jobDescription, jobKeywords);
+    
+    // Optimize goals
+    const optimizedGoals = optimizeGoals(structuredCV.goals, jobDescription, jobKeywords);
+    
+    // Optimize languages
+    const optimizedLanguages = optimizeLanguages(structuredCV.languages, jobDescription);
+    
+    // Optimize skills
+    const optimizedSkills = optimizeSkills(
+      structuredCV.skills.technical,
+      structuredCV.skills.professional,
+      jobDescription,
+      jobKeywords
+    );
+    
+    // Optimize education
+    const optimizedEducation = optimizeEducation(structuredCV.education, jobDescription, jobKeywords);
+    
+    // Create a modified version of the original text
     let optimized = originalText;
     
-    // Add a tailored professional summary that includes missing keywords
-    const summaryKeywords = [...jobKeywords.slice(0, 3)];
-    // Add some missing keywords to the summary if available
-    if (missingKeywords.length > 0) {
-      summaryKeywords.push(...missingKeywords.slice(0, 2));
+    // Replace or enhance the profile section
+    const profilePattern = /(?:profile|summary|objective|about me)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+    const profileMatch = optimized.match(profilePattern);
+    
+    if (profileMatch && profileMatch.index !== undefined) {
+      // Replace existing profile
+      optimized = optimized.substring(0, profileMatch.index) + 
+                  `Profile: ${optimizedProfile}` + 
+                  optimized.substring(profileMatch.index + profileMatch[0].length);
+    } else {
+      // Add profile at the beginning if it doesn't exist
+      optimized = `Profile: ${optimizedProfile}\n\n` + optimized;
     }
     
-    const summary = `Experienced professional with expertise in ${summaryKeywords.join(', ')}, seeking to leverage my background in ${jobKeywords.slice(3, 5).join(' and ')} to excel in this role.`;
+    // Replace or enhance the skills section
+    if (optimizedSkills.technical.length > 0 || optimizedSkills.professional.length > 0) {
+      const technicalSkillsPattern = /(?:technical|programming|software|development|hard|computer)\s+skills[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+      const professionalSkillsPattern = /(?:professional|soft|interpersonal|communication|people)\s+skills[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+      const generalSkillsPattern = /(?:skills|expertise|competencies)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+      
+      // Format skills sections
+      const formattedTechnicalSkills = optimizedSkills.technical.length > 0 ? 
+        `Technical Skills:\n${optimizedSkills.technical.map(s => `• ${s}`).join('\n')}` : '';
+      
+      const formattedProfessionalSkills = optimizedSkills.professional.length > 0 ? 
+        `Professional Skills:\n${optimizedSkills.professional.map(s => `• ${s}`).join('\n')}` : '';
+      
+      // Check for existing skills sections
+      const technicalMatch = optimized.match(technicalSkillsPattern);
+      const professionalMatch = optimized.match(professionalSkillsPattern);
+      const generalMatch = optimized.match(generalSkillsPattern);
+      
+      if (technicalMatch && technicalMatch.index !== undefined) {
+        // Replace existing technical skills
+        optimized = optimized.substring(0, technicalMatch.index) + 
+                    formattedTechnicalSkills + 
+                    optimized.substring(technicalMatch.index + technicalMatch[0].length);
+      } else if (generalMatch && generalMatch.index !== undefined && optimizedSkills.technical.length > 0) {
+        // Replace general skills with technical and professional
+        let replacement = formattedTechnicalSkills;
+        if (optimizedSkills.professional.length > 0) {
+          replacement += '\n\n' + formattedProfessionalSkills;
+        }
+        
+        optimized = optimized.substring(0, generalMatch.index) + 
+                    replacement + 
+                    optimized.substring(generalMatch.index + generalMatch[0].length);
+      } else if (optimizedSkills.technical.length > 0) {
+        // Add technical skills if they don't exist
+        optimized = optimized + '\n\n' + formattedTechnicalSkills;
+      }
+      
+      // Handle professional skills separately if not already handled
+      if (professionalMatch && professionalMatch.index !== undefined) {
+        // Replace existing professional skills
+        optimized = optimized.substring(0, professionalMatch.index) + 
+                    formattedProfessionalSkills + 
+                    optimized.substring(professionalMatch.index + professionalMatch[0].length);
+      } else if (!generalMatch && optimizedSkills.professional.length > 0 && !optimized.includes(formattedProfessionalSkills)) {
+        // Add professional skills if they don't exist and weren't added with technical skills
+        optimized = optimized + '\n\n' + formattedProfessionalSkills;
+      }
+    }
     
-    // Replace or enhance the first paragraph (assuming it's the summary)
-    const paragraphs = optimized.split('\n\n');
-    if (paragraphs.length > 0) {
-      paragraphs[0] = summary;
-      optimized = paragraphs.join('\n\n');
-    } else {
-      optimized = summary + '\n\n' + optimized;
+    // Replace or enhance the education section
+    if (optimizedEducation.length > 0) {
+      const educationPattern = /(?:education|qualifications|academic|educational background)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+      const educationMatch = optimized.match(educationPattern);
+      
+      // Format education entries
+      const formattedEducation = `Education:\n${optimizedEducation.map(edu => {
+        let entry = `• ${edu.degree}`;
+        if (edu.institution) entry += `, ${edu.institution}`;
+        if (edu.location) entry += `, ${edu.location}`;
+        if (edu.year) entry += ` (${edu.year})`;
+        if (edu.gpa) entry += `, GPA: ${edu.gpa}`;
+        
+        // Add relevant courses if available
+        if (edu.relevantCourses && edu.relevantCourses.length > 0) {
+          entry += `\n  Relevant Courses: ${edu.relevantCourses.join(', ')}`;
+        }
+        
+        // Add achievements if available
+        if (edu.achievements && edu.achievements.length > 0) {
+          entry += `\n  Achievements: ${edu.achievements.join(', ')}`;
+        }
+        
+        return entry;
+      }).join('\n\n')}`;
+      
+      if (educationMatch && educationMatch.index !== undefined) {
+        // Replace existing education section
+        optimized = optimized.substring(0, educationMatch.index) + 
+                    formattedEducation + 
+                    optimized.substring(educationMatch.index + educationMatch[0].length);
+      } else {
+        // Add education section if it doesn't exist
+        optimized = optimized + '\n\n' + formattedEducation;
+      }
+    }
+    
+    // Replace or enhance the achievements section
+    if (optimizedAchievements.length > 0) {
+      const achievementsPattern = /(?:achievements|accomplishments|key accomplishments|notable achievements)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+      const achievementsMatch = optimized.match(achievementsPattern);
+      
+      const formattedAchievements = `Achievements:\n${optimizedAchievements.map(a => `• ${a}`).join('\n')}`;
+      
+      if (achievementsMatch && achievementsMatch.index !== undefined) {
+        // Replace existing achievements
+        optimized = optimized.substring(0, achievementsMatch.index) + 
+                    formattedAchievements + 
+                    optimized.substring(achievementsMatch.index + achievementsMatch[0].length);
+      } else {
+        // Add achievements after profile if they don't exist
+        const sections = optimized.split(/\n\s*\n/);
+        if (sections.length > 1) {
+          sections.splice(1, 0, formattedAchievements);
+          optimized = sections.join('\n\n');
+        } else {
+          optimized = optimized + '\n\n' + formattedAchievements;
+        }
+      }
+    }
+    
+    // Replace or enhance the goals section
+    if (optimizedGoals.length > 0) {
+      const goalsPattern = /(?:goals|objectives|targets|career goals|professional goals)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+      const goalsMatch = optimized.match(goalsPattern);
+      
+      const formattedGoals = `Career Goals:\n${optimizedGoals.map(g => `• ${g}`).join('\n')}`;
+      
+      if (goalsMatch && goalsMatch.index !== undefined) {
+        // Replace existing goals
+        optimized = optimized.substring(0, goalsMatch.index) + 
+                    formattedGoals + 
+                    optimized.substring(goalsMatch.index + goalsMatch[0].length);
+      } else {
+        // Add goals after achievements or profile
+        optimized = optimized + '\n\n' + formattedGoals;
+      }
+    }
+    
+    // Replace or enhance the languages section
+    if (optimizedLanguages.length > 0) {
+      const languagesPattern = /(?:languages|language skills|fluent in|proficient in|spoken languages)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+      const languagesMatch = optimized.match(languagesPattern);
+      
+      const formattedLanguages = `Languages:\n${optimizedLanguages.map(l => `• ${l}`).join('\n')}`;
+      
+      if (languagesMatch && languagesMatch.index !== undefined) {
+        // Replace existing languages
+        optimized = optimized.substring(0, languagesMatch.index) + 
+                    formattedLanguages + 
+                    optimized.substring(languagesMatch.index + languagesMatch[0].length);
+      } else {
+        // Add languages after goals, achievements or profile
+        optimized = optimized + '\n\n' + formattedLanguages;
+      }
     }
     
     return optimized;
