@@ -2384,41 +2384,19 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     setDocumentError(null);
     
     try {
-      // Method 1: Try client-side document generation first
-      try {
-        // Generate structured CV data
-        const structuredData = generateStructuredCV(originalText || '', jobDescription || '');
-        
-        // Get CV name without file extension
-        const cvName = selectedCVName 
-          ? selectedCVName.replace(/\.\w+$/, '') 
-          : 'CV';
-        
-        // Generate document with structured data
-        const doc = await generateOptimizedDocument(
-          optimizedText, 
-          cvName, 
-          structuredData.contactInfo,
-          structuredData
-        );
-        
-        // Use Packer.toBlob for browser environments
-        const blob = await Packer.toBlob(doc);
-        
-        // Use file-saver to save the blob
-        saveAs(blob, `${cvName}-optimized.docx`);
-        
-        setIsGeneratingDocument(false);
-        return; // Exit if successful
-      } catch (clientError) {
-        console.warn('Client-side document generation failed, falling back to API:', clientError);
-        // Continue to Method 2 (API fallback)
+      console.log("Starting document generation...");
+      
+      // Get CV name without file extension
+      const cvName = selectedCVName 
+        ? selectedCVName.replace(/\.\w+$/, '') 
+        : 'CV';
+      
+      // Method 2: Use API-based document generation (more reliable)
+      if (!selectedCVId) {
+        throw new Error('No CV selected for document generation');
       }
       
-      // Method 2: Fall back to API-based document generation
-      if (!selectedCVId) {
-        throw new Error('No CV selected for API-based document generation');
-      }
+      console.log(`Generating document for CV ID: ${selectedCVId}`);
       
       const response = await fetch('/api/cv/generate-docx', {
         method: 'POST',
@@ -2432,15 +2410,19 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
         throw new Error(errorData.error || 'Failed to generate DOCX file via API');
       }
       
       const data = await response.json();
+      console.log("Document generation API response received");
       
       if (!data.success || !data.docxBase64) {
+        console.error("API response missing docxBase64 data:", data);
         throw new Error('Failed to generate DOCX file: No data received from server');
       }
+      
+      console.log(`Received base64 data of length: ${data.docxBase64.length}`);
       
       // Create a download link for the DOCX file
       const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${data.docxBase64}`;
@@ -2448,17 +2430,32 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       downloadLink.href = linkSource;
       
       // Use a professional filename format
-      const cvName = selectedCVName 
-        ? selectedCVName.replace(/\.\w+$/, '') 
-        : 'CV';
       downloadLink.download = `${cvName}-optimized.docx`;
+      console.log(`Setting download filename to: ${downloadLink.download}`);
       
       // Append to the document, click, and remove
       document.body.appendChild(downloadLink);
-      downloadLink.click();
-      document.body.removeChild(downloadLink);
+      console.log("Download link appended to document");
       
-      setIsGeneratingDocument(false);
+      // Add a small delay before clicking to ensure the browser has time to process
+      setTimeout(() => {
+        try {
+          console.log("Triggering download...");
+          downloadLink.click();
+          console.log("Download triggered");
+          
+          // Remove the link after a short delay
+          setTimeout(() => {
+            document.body.removeChild(downloadLink);
+            console.log("Download link removed");
+            setIsGeneratingDocument(false);
+          }, 100);
+        } catch (clickError) {
+          console.error("Error during download click:", clickError);
+          setDocumentError(`Download error: ${clickError instanceof Error ? clickError.message : 'Unknown error'}`);
+          setIsGeneratingDocument(false);
+        }
+      }, 100);
     } catch (error) {
       console.error('Error generating document:', error);
       setDocumentError(`Failed to generate document: ${error instanceof Error ? error.message : 'Unknown error'}`);
