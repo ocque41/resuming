@@ -557,7 +557,6 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       .map(([word]) => word.charAt(0).toUpperCase() + word.slice(1));
   };
   
-  // Update the generateStructuredCV function to create a more sophisticated header
   // Update the generateStructuredCV function to create a cleaner header
   const generateStructuredCV = (text: string) => {
     const keywords = extractKeywords(text, true);
