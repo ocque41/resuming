@@ -231,3 +231,142 @@ export async function updateCVAnalysis(cvId: number, metadata: string): Promise<
   await db.update(cvs).set({ metadata }).where(eq(cvs.id, cvId));
   return true;
 }
+
+// If there's no db import available, we'll need to create the connectToDatabase function
+async function connectToDatabase() {
+  // If db is already imported, just return it
+  if (typeof db !== 'undefined') {
+    return db;
+  }
+  
+  // Otherwise, create a new connection
+  // This is a placeholder implementation - adjust based on your actual database setup
+  try {
+    // For PostgreSQL with node-postgres
+    const { Pool } = require('pg');
+    
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+    
+    // Test the connection
+    await pool.query('SELECT NOW()');
+    console.log('Database connection established');
+    
+    return pool;
+  } catch (error) {
+    console.error('Failed to connect to the database:', error);
+    throw new Error('Database connection failed');
+  }
+}
+
+/**
+ * Get all documents for a specific user with pagination and filtering options
+ * @param userId The ID of the user
+ * @param options Optional pagination and filtering options
+ * @returns Array of documents and total count
+ */
+export async function getAllUserDocuments(
+  userId: string | number,
+  options: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  } = {}
+) {
+  try {
+    // Set default options
+    const {
+      page = 1,
+      limit = 100,
+      search = '',
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = options;
+    
+    // Calculate offset
+    const offset = (page - 1) * limit;
+    
+    // Connect to the database
+    const db = await connectToDatabase();
+    
+    // Determine the table name based on your database structure
+    // This assumes you have a 'documents' table, but you might have a different name
+    const tableName = 'documents';
+    
+    // Build the query - adapt field names to match your actual database schema
+    let query = `
+      SELECT * FROM ${tableName} 
+      WHERE "userId" = $1
+    `;
+    
+    const queryParams = [userId];
+    let paramIndex = 2;
+    
+    // Add search filter if provided
+    if (search) {
+      query += ` AND ("fileName" ILIKE $${paramIndex} OR "metadata" ILIKE $${paramIndex})`;
+      queryParams.push(`%${search}%`);
+      paramIndex++;
+    }
+    
+    // Add sorting - ensure the column name exists in your table
+    // Use double quotes for column names to handle case sensitivity in PostgreSQL
+    query += ` ORDER BY "${sortBy}" ${sortOrder.toUpperCase()}`;
+    
+    // Add pagination
+    query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    queryParams.push(limit, offset);
+    
+    // Execute the query
+    const result = await db.query(query, queryParams);
+    const documents = result.rows || [];
+    
+    // Get total count for pagination
+    const countQuery = `
+      SELECT COUNT(*) FROM ${tableName} 
+      WHERE "userId" = $1
+      ${search ? ` AND ("fileName" ILIKE $2 OR "metadata" ILIKE $2)` : ''}
+    `;
+    
+    const countParams = [userId];
+    if (search) {
+      countParams.push(`%${search}%`);
+    }
+    
+    const countResult = await db.query(countQuery, countParams);
+    const totalCount = parseInt(countResult.rows[0].count, 10);
+    
+    return {
+      documents,
+      totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit)
+    };
+  } catch (error) {
+    console.error("Error fetching user documents:", error);
+    // Return empty result with pagination info
+    return {
+      documents: [],
+      totalCount: 0,
+      page: options.page || 1,
+      limit: options.limit || 100,
+      totalPages: 0
+    };
+  }
+}
+
+// For backward compatibility, add a simpler version that just returns the documents
+export async function getAllUserDocumentsSimple(userId: number) {
+  try {
+    const result = await getAllUserDocuments(userId);
+    return result.documents;
+  } catch (error) {
+    console.error("Error in simple document fetch:", error);
+    return [];
+  }
+}

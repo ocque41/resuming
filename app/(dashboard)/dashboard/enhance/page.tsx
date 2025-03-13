@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getUser, getTeamForUser, getCVsForUser } from "@/lib/db/queries.server";
+import { getUser, getTeamForUser, getCVsForUser, getAllUserDocuments } from "@/lib/db/queries.server";
 import Link from "next/link";
 import { ArrowLeft, AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -42,7 +42,31 @@ export default async function DocumentEditorPage() {
         console.error("Team not found for user:", user.id);
       }
       
-      rawDocuments = await getCVsForUser(user.id);
+      // Try to fetch all user documents
+      try {
+        console.log("Fetching documents for user:", user.id);
+        
+        // Call getAllUserDocuments with both required parameters
+        const result = await getAllUserDocuments(user.id, {
+          limit: 100,
+          sortBy: 'createdAt',
+          sortOrder: 'desc'
+        });
+        
+        console.log("Documents fetched successfully:", result.documents.length);
+        
+        // Extract the documents array from the result
+        rawDocuments = result.documents;
+      } catch (error) {
+        console.error("Error fetching all documents, falling back to CVs:", error);
+      }
+      
+      // If no documents were found, fall back to CVs
+      if (!rawDocuments || rawDocuments.length === 0) {
+        console.log("No documents found, falling back to CVs");
+        rawDocuments = await getCVsForUser(user.id);
+        console.log("CVs fetched:", rawDocuments.length);
+      }
     } catch (error) {
       console.error("Error fetching team or documents:", error);
       // Continue with empty data rather than crashing
