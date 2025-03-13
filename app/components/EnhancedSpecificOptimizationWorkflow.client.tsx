@@ -11,9 +11,114 @@ import { Button } from "@/components/ui/button";
 import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle } from "lucide-react";
 import { analyzeCVContent, optimizeCVForJob } from '@/app/lib/services/mistral.service';
 
+// Type definitions
+type KeywordMatch = {
+  keyword: string;
+  relevance: number;
+  frequency: number;
+  placement: string;
+};
+
+interface MissingKeyword {
+  keyword: string;
+  importance: number;
+  suggestedPlacement?: string;
+}
+
+interface ExperienceEntry {
+  dates: string;
+  title: string | null;
+  company: string | null;
+  responsibilities: string[];
+}
+
+interface EducationEntry {
+  degree: string;
+  field: string | null;
+  institution: string | null;
+  year: string | null;
+}
+
+interface SkillsData {
+  technical: string[];
+  professional: string[];
+}
+
+interface StructuredCV {
+  name: string;
+  subheader: string;
+  profile: string;
+  experience: Array<{
+    title: string;
+    company: string;
+    dates: string;
+    responsibilities: string[];
+  }>;
+  education: Array<{
+    degree: string;
+    field: string;
+    institution: string;
+    year: string;
+  }>;
+  skills: {
+    technical: string[];
+    professional: string[];
+  };
+  achievements: string[];
+}
+
+interface JobMatchAnalysis {
+  score: number;
+  matchedKeywords: KeywordMatch[];
+  missingKeywords: MissingKeyword[];
+  recommendations: string[];
+  skillGap: string;
+  dimensionalScores: {
+    skillsMatch: number;
+    experienceMatch: number;
+    educationMatch: number;
+    industryFit: number;
+    overallCompatibility: number;
+    keywordDensity: number;
+    formatCompatibility: number;
+    contentRelevance: number;
+  };
+  detailedAnalysis: string;
+  improvementPotential: number;
+  sectionAnalysis: {
+    profile: { score: number; feedback: string };
+    skills: { score: number; feedback: string };
+    experience: { score: number; feedback: string };
+    education: { score: number; feedback: string };
+    achievements: { score: number; feedback: string };
+  };
+}
+
 interface EnhancedSpecificOptimizationWorkflowProps {
   cvs?: string[];
 }
+
+// Utility functions
+const extractKeywords = (text: string, isJobDescription: boolean = false): string[] => {
+  // Remove special characters and convert to lowercase
+  const cleanText = text.toLowerCase().replace(/[^\w\s]/g, ' ');
+  
+  // Split into words and filter out common words
+  const commonWords = new Set(['the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i', 'it', 'for', 'not', 'on', 'with', 'he', 'as', 'you', 'do', 'at']);
+  const words = cleanText.split(/\s+/).filter(word => word.length > 2 && !commonWords.has(word));
+  
+  // Count word frequency
+  const wordCount = words.reduce((acc: Record<string, number>, word: string) => {
+    acc[word] = (acc[word] || 0) + 1;
+    return acc;
+  }, {});
+  
+  // Sort by frequency and get top keywords
+  return Object.entries(wordCount)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, isJobDescription ? 20 : 15)
+    .map(([word]) => word);
+};
 
 // Modern file dropdown component
 function ModernFileDropdown({ 
@@ -81,179 +186,150 @@ function ModernFileDropdown({
   );
 }
 
-// Update the JobMatchAnalysis interface to include more detailed scoring dimensions
-interface JobMatchAnalysis {
-  score: number;
-  matchedKeywords: { 
-    keyword: string; 
-    relevance: number;
-    context?: string;
-    frequency?: number; // How many times the keyword appears
-    placement?: string; // Where in the CV the keyword appears (e.g., "profile", "skills", "achievements")
-  }[];
-  missingKeywords: { 
-    keyword: string; 
-    importance: number;
-    suggestedPlacement?: string; // Where to add this keyword
-  }[];
-  recommendations: string[];
-  skillGap: string;
-  // Add new scoring dimensions
-  dimensionalScores: {
-    skillsMatch: number;
-    experienceMatch: number;
-    educationMatch: number;
-    industryFit: number;
-    overallCompatibility: number;
-    keywordDensity: number; // New metric for keyword density
-    formatCompatibility: number; // New metric for format compatibility
-    contentRelevance: number; // New metric for content relevance
-  };
-  // Add detailed analysis text
-  detailedAnalysis: string;
-  // Add improvement potential
-  improvementPotential: number;
-  // Add section-specific analysis
-  sectionAnalysis: {
-    profile: { score: number; feedback: string };
-    skills: { score: number; feedback: string };
-    experience: { score: number; feedback: string };
-    education: { score: number; feedback: string };
-    achievements: { score: number; feedback: string };
-  };
-}
+// Add missing functions before the component
+const analyzeJobMatch = (cvText: string, jobDescription: string): JobMatchAnalysis => {
+  const cvKeywords = extractKeywords(cvText);
+  const jobKeywords = extractKeywords(jobDescription);
+  
+  const matchedKeywords: KeywordMatch[] = cvKeywords
+    .filter((keyword: string) => jobKeywords.includes(keyword))
+    .map((keyword: string) => ({
+      keyword,
+      relevance: 1,
+      frequency: (cvText.match(new RegExp(keyword, 'gi')) || []).length,
+      placement: 'various'
+    }));
 
-// Add a function to generate diverse achievements based on keywords
-const generateAchievements = (keywords: string[]): string[] => {
-  // Achievement templates with placeholders for keywords
-  const achievementTemplates = [
-    "Led initiatives to improve {keyword} processes, resulting in 30% increased efficiency and positive stakeholder feedback.",
-    "Developed and implemented {keyword} strategies that reduced costs by 25% while maintaining quality standards.",
-    "Spearheaded the adoption of new {keyword} methodologies, increasing team productivity by 40% over 6 months.",
-    "Created comprehensive {keyword} documentation and training materials that improved onboarding time by 50%.",
-    "Optimized {keyword} workflows through innovative approaches, leading to 35% reduction in turnaround time.",
-    "Managed cross-functional {keyword} projects with budgets exceeding $500K, delivering all milestones on time and under budget.",
-    "Recognized for excellence in {keyword}, receiving departmental award for outstanding contributions.",
-    "Redesigned {keyword} systems that improved data accuracy by 45% and reduced manual processing time.",
-    "Collaborated with stakeholders to enhance {keyword} capabilities, resulting in 28% improvement in customer satisfaction scores.",
-    "Pioneered new {keyword} techniques that became standard practice across the organization."
-  ];
-  
-  // Industry-specific achievement templates
-  const industryAchievements = {
-    // Technology-related keywords
-    tech: [
-      "Architected and implemented {keyword} solutions that scaled to support 200% business growth.",
-      "Reduced system downtime by 75% through improved {keyword} monitoring and maintenance protocols.",
-      "Migrated legacy systems to modern {keyword} platforms, improving performance by 60%."
-    ],
-    // Business/management keywords
-    business: [
-      "Exceeded {keyword} targets by 40% through strategic planning and team leadership.",
-      "Negotiated {keyword} contracts resulting in $1.2M annual savings while improving service levels.",
-      "Streamlined {keyword} operations by eliminating redundancies and optimizing resource allocation."
-    ],
-    // Creative/design keywords
-    creative: [
-      "Designed award-winning {keyword} materials that increased brand recognition by 45%.",
-      "Created innovative {keyword} campaigns that generated 300% ROI and expanded market reach.",
-      "Revitalized the {keyword} strategy, resulting in 65% increase in engagement metrics."
-    ]
+  const missingKeywords: MissingKeyword[] = jobKeywords
+    .filter((keyword: string) => !cvKeywords.includes(keyword))
+    .map((keyword: string) => ({
+      keyword,
+      importance: 1,
+      suggestedPlacement: 'skills'
+    }));
+
+  const matchScore = calculateJobMatchScore(cvKeywords, jobKeywords);
+  const recommendations = generateRecommendations(cvKeywords, jobKeywords, matchScore);
+
+  return {
+    score: matchScore,
+    matchedKeywords,
+    missingKeywords,
+    recommendations,
+    skillGap: missingKeywords.map((k: MissingKeyword) => k.keyword).join(', '),
+    dimensionalScores: {
+      skillsMatch: matchScore,
+      experienceMatch: 0,
+      educationMatch: 0,
+      industryFit: 0,
+      overallCompatibility: matchScore,
+      keywordDensity: 0,
+      formatCompatibility: 0,
+      contentRelevance: 0
+    },
+    detailedAnalysis: '',
+    improvementPotential: 0,
+    sectionAnalysis: {
+      profile: { score: 0, feedback: '' },
+      skills: { score: 0, feedback: '' },
+      experience: { score: 0, feedback: '' },
+      education: { score: 0, feedback: '' },
+      achievements: { score: 0, feedback: '' }
+    }
   };
-  
-  // Categorize keywords into industry groups
-  const techKeywords = ['software', 'development', 'programming', 'code', 'technical', 'engineering', 'system', 'data', 'analysis', 'technology', 'infrastructure', 'network', 'security', 'cloud', 'database'];
-  const businessKeywords = ['management', 'leadership', 'strategy', 'business', 'operations', 'project', 'financial', 'marketing', 'sales', 'client', 'customer', 'service', 'planning', 'budget', 'compliance'];
-  const creativeKeywords = ['design', 'creative', 'content', 'writing', 'visual', 'brand', 'media', 'communication', 'presentation', 'graphic', 'video', 'production', 'storytelling', 'campaign'];
-  
-  // Select achievements based on keyword categories and ensure diversity
-  const achievements: string[] = [];
-  const usedTemplates = new Set<string>();
-  
-  // Process up to 5 keywords or all keywords if less than 5
-  const keywordsToProcess = keywords.slice(0, Math.min(5, keywords.length));
-  
-  keywordsToProcess.forEach(keyword => {
-    // Determine if this keyword fits into a specific industry category
-    let categoryTemplates: string[] = [];
-    
-    if (techKeywords.some(tech => keyword.toLowerCase().includes(tech))) {
-      categoryTemplates = industryAchievements.tech;
-    } else if (businessKeywords.some(business => keyword.toLowerCase().includes(business))) {
-      categoryTemplates = industryAchievements.business;
-    } else if (creativeKeywords.some(creative => keyword.toLowerCase().includes(creative))) {
-      categoryTemplates = industryAchievements.creative;
-    }
-    
-    // Combine general templates with any category-specific ones
-    const allTemplates = [...achievementTemplates, ...categoryTemplates];
-    
-    // Find a template we haven't used yet
-    let template = '';
-    for (let i = 0; i < allTemplates.length; i++) {
-      const candidateTemplate = allTemplates[Math.floor(Math.random() * allTemplates.length)];
-      if (!usedTemplates.has(candidateTemplate)) {
-        template = candidateTemplate;
-        usedTemplates.add(candidateTemplate);
-        break;
-      }
-    }
-    
-    // If all templates have been used, just pick a random one
-    if (!template) {
-      template = allTemplates[Math.floor(Math.random() * allTemplates.length)];
-    }
-    
-    // Replace the placeholder with the keyword
-    const achievement = template.replace('{keyword}', keyword.toLowerCase());
-    achievements.push(achievement);
-  });
-  
-  return achievements;
 };
 
-interface StructuredCV {
-  name: string;
-  subheader: string;
-  profile: string;
-  experience: Array<{
-    title: string;
-    company: string;
-    dates: string;
-    responsibilities: string[];
-  }>;
-  education: Array<{
-    degree: string;
-    field: string;
-    institution: string;
-    year: string;
-  }>;
-  skills: {
-    technical: string[];
-    professional: string[];
-  };
-  achievements: string[];
-}
+const calculateYearsOfExperience = (experience: ExperienceEntry[] | null): number => {
+  if (!experience || experience.length === 0) return 0;
+  
+  return experience.reduce((total, exp) => {
+    const dates = exp.dates.split('-').map(d => d.trim());
+    if (dates.length !== 2) return total;
+    
+    const startDate = new Date(dates[0]);
+    const endDate = dates[1].toLowerCase() === 'present' ? new Date() : new Date(dates[1]);
+    
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return total;
+    
+    const years = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 365);
+    return total + Math.max(0, years);
+  }, 0);
+};
 
-// Add type definitions at the top of the file
-interface ExperienceEntry {
-  dates: string;
-  title: string | null;
-  company: string | null;
-  responsibilities: string[];
-}
+const calculateJobMatchScore = (cvKeywords: string[], jobKeywords: string[]): number => {
+  const matchedCount = cvKeywords.filter(keyword => jobKeywords.includes(keyword)).length;
+  return Math.round((matchedCount / jobKeywords.length) * 100);
+};
 
-interface EducationEntry {
-  degree: string;
-  field: string | null;
-  institution: string | null;
-  year: string | null;
-}
+const generateRecommendations = (cvKeywords: string[], jobKeywords: string[], matchScore: number): string[] => {
+  const recommendations: string[] = [];
+  
+  if (matchScore < 50) {
+    recommendations.push('Add more relevant keywords from the job description');
+    recommendations.push('Include specific achievements related to required skills');
+  }
+  
+  const missingKeywords = jobKeywords.filter(keyword => !cvKeywords.includes(keyword));
+  if (missingKeywords.length > 0) {
+    recommendations.push(`Consider adding experience with: ${missingKeywords.slice(0, 3).join(', ')}`);
+  }
+  
+  return recommendations;
+};
 
-interface SkillsData {
-  technical: string[];
-  professional: string[];
-}
+// Add this near other constants in the component
+type IndustryTemplates = {
+  technology: string[];
+  manufacturing: string[];
+  education: string[];
+  healthcare: string[];
+  [key: string]: string[]; // Index signature for type safety
+};
+
+const industryTemplates: IndustryTemplates = {
+  technology: [
+    "• Implemented {keyword} system that improved API response times by 40%",
+    "• Developed {keyword} architecture supporting 1M+ daily users"
+  ],
+  manufacturing: [
+    "• Optimized {keyword} production line reducing downtime by 25%",
+    "• Implemented {keyword} quality control system cutting defects by 30%"
+  ],
+  education: [
+    "• Developed {keyword} curriculum improving test scores by 15%",
+    "• Implemented {keyword} learning platform increasing engagement by 40%"
+  ],
+  healthcare: [
+    "• Streamlined {keyword} patient intake process reducing wait times by 35%",
+    "• Implemented {keyword} record system improving data accuracy by 50%"
+  ]
+};
+
+const defaultTemplates = [
+  "• Optimized {keyword} processes resulting in 30% efficiency gains",
+  "• Spearheaded {keyword} initiative that reduced costs by 25%"
+];
+
+// Update generateAchievements parameter type
+const generateAchievements = (keywords: string[], industry?: string): string[] => {
+  const validIndustry = industry as keyof IndustryTemplates;
+  const templates = industry && industryTemplates[validIndustry] 
+    ? industryTemplates[validIndustry] 
+    : defaultTemplates;
+
+  return templates.map((template: string) => {
+    // Replace up to 2 {keyword} placeholders with actual keywords
+    let achievement = template;
+    const keywordSlots = achievement.match(/{keyword}/g)?.length || 0;
+    
+    for (let i = 0; i < Math.min(keywordSlots, keywords.length); i++) {
+      achievement = achievement.replace(/{keyword}/, keywords[i]);
+    }
+    
+    // Remove any remaining {keyword} placeholders
+    return achievement.replace(/{keyword}/g, '');
+  }).slice(0, 5); // Return top 5 achievements
+};
 
 export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: EnhancedSpecificOptimizationWorkflowProps) {
   // State for CV selection
@@ -324,6 +400,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   // Add new state variables
   const [jobMatchScore, setJobMatchScore] = useState<number>(0);
   const [recommendations, setRecommendations] = useState<string[]>([]);
+  const [keywordMatches, setKeywordMatches] = useState<KeywordMatch[]>([]);
   
   // Fetch original CV text
   const fetchOriginalText = useCallback(async (cvId: string) => {
@@ -452,8 +529,8 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     const cvKeywords = extractKeywords(originalText);
     
     // Find missing keywords (keywords in job description but not in CV)
-    const missingKeywords = jobKeywords.filter(jobKeyword => {
-      return !cvKeywords.some(cvKeyword => {
+    const missingKeywords = jobKeywords.filter((jobKeyword: string) => {
+      return !cvKeywords.some((cvKeyword: string) => {
         const jobKeywordLower = jobKeyword.toLowerCase();
         const cvKeywordLower = cvKeyword.toLowerCase();
         
@@ -485,8 +562,8 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     }
     
     // Add achievements that incorporate missing keywords
-    const achievementsSection = generateKeywordAchievements(missingKeywords);
-    optimized += `\n\nKey Achievements:\n${achievementsSection}`;
+    const generatedAchievements = generateAchievements(missingKeywords, jobDescription.toLowerCase().includes('technology') ? 'technology' : undefined);
+    optimized += `\n\nKey Achievements:\n${generatedAchievements.join('\n')}`;
     
     // Enhance skills section with job-specific keywords (including missing ones)
     const skillsSection = `\n\nKey Skills:\n• ${jobKeywords.join('\n• ')}`;
@@ -524,322 +601,6 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     }
     
     return optimized;
-  };
-  
-  // Add a helper function to generate achievements that incorporate missing keywords
-  const generateKeywordAchievements = (keywords: string[]): string => {
-    // Take up to 5 keywords to create achievements
-    const keywordsToUse = keywords.slice(0, 5);
-    
-    // Detect industry to use industry-specific templates
-    const industryTerms = {
-      tech: ['software', 'development', 'programming', 'code', 'technical', 'engineering', 'system', 'data', 'analysis', 'technology'],
-      finance: ['finance', 'accounting', 'budget', 'financial', 'investment', 'banking', 'audit', 'tax', 'revenue', 'profit'],
-      healthcare: ['health', 'medical', 'patient', 'clinical', 'hospital', 'care', 'treatment', 'doctor', 'nurse', 'therapy'],
-      marketing: ['marketing', 'brand', 'campaign', 'market', 'customer', 'social media', 'digital', 'content', 'advertising', 'promotion'],
-      manufacturing: ['manufacturing', 'production', 'quality', 'assembly', 'operations', 'supply chain', 'lean', 'process', 'efficiency'],
-      education: ['education', 'teaching', 'curriculum', 'learning', 'student', 'academic', 'training', 'instruction', 'assessment']
-    };
-    
-    // Detect the most likely industry from the job description
-    let detectedIndustry = '';
-    let highestIndustryScore = 0;
-    
-    for (const [industry, terms] of Object.entries(industryTerms)) {
-      const score = terms.reduce((sum, term) => {
-        const regex = new RegExp(term, 'gi');
-        const matches = (jobDescription.match(regex) || []).length;
-        return sum + matches;
-      }, 0);
-      
-      if (score > highestIndustryScore) {
-        highestIndustryScore = score;
-        detectedIndustry = industry;
-      }
-    }
-    
-    // Industry-specific achievement templates
-    const industryTemplates: Record<string, string[]> = {
-      tech: [
-        "• Developed {keyword} solutions that improved system performance by 40%, resulting in enhanced user experience.",
-        "• Led the implementation of {keyword} architecture that scaled to support 200% business growth.",
-        "• Optimized {keyword} processes, reducing development time by 35% and improving code quality.",
-        "• Created {keyword} documentation and training materials that reduced onboarding time by 50%.",
-        "• Implemented {keyword} best practices that reduced system downtime by 75%."
-      ],
-      finance: [
-        "• Developed {keyword} analysis that identified $1.2M in cost-saving opportunities.",
-        "• Led {keyword} initiatives that improved financial reporting accuracy by 45%.",
-        "• Implemented {keyword} controls that ensured 100% compliance with regulatory requirements.",
-        "• Optimized {keyword} processes, reducing month-end close time by 30%.",
-        "• Created {keyword} dashboards that improved executive decision-making capabilities."
-      ],
-      healthcare: [
-        "• Implemented {keyword} protocols that improved patient satisfaction scores by 35%.",
-        "• Developed {keyword} training programs that reduced error rates by 40%.",
-        "• Led {keyword} initiatives that improved care coordination and reduced readmissions by 25%.",
-        "• Optimized {keyword} workflows, increasing provider efficiency by 30%.",
-        "• Created {keyword} documentation that ensured 100% compliance with healthcare regulations."
-      ],
-      marketing: [
-        "• Developed {keyword} campaigns that increased customer engagement by 45%.",
-        "• Led {keyword} initiatives that generated 30% increase in qualified leads.",
-        "• Implemented {keyword} strategies that improved conversion rates by 25%.",
-        "• Created {keyword} content that increased organic traffic by 60%.",
-        "• Optimized {keyword} channels, resulting in 35% reduction in customer acquisition costs."
-      ],
-      manufacturing: [
-        "• Implemented {keyword} processes that improved production efficiency by 35%.",
-        "• Led {keyword} initiatives that reduced defect rates by 40%.",
-        "• Developed {keyword} training programs that improved worker productivity by 25%.",
-        "• Optimized {keyword} workflows, reducing production cycle time by 30%.",
-        "• Created {keyword} documentation that ensured 100% compliance with safety regulations."
-      ],
-      education: [
-        "• Developed {keyword} curriculum that improved student performance metrics by 30%.",
-        "• Led {keyword} initiatives that increased student engagement and participation by 45%.",
-        "• Implemented {keyword} methodologies that improved learning outcomes by 25%.",
-        "• Created {keyword} assessment tools that provided more accurate measurement of student progress.",
-        "• Optimized {keyword} resources, resulting in more efficient use of instructional time."
-      ]
-    };
-    
-    // Default templates for when no specific industry is detected
-    const defaultTemplates = [
-      "• Led initiatives to improve {keyword} processes, resulting in 30% increased efficiency.",
-      "• Developed and implemented {keyword} strategies that reduced costs by 25%.",
-      "• Spearheaded the adoption of new {keyword} methodologies, increasing productivity by 40%.",
-      "• Created comprehensive {keyword} documentation that improved team performance.",
-      "• Optimized {keyword} workflows through innovative approaches."
-    ];
-    
-    // Select the appropriate templates based on detected industry
-    const templates = detectedIndustry && industryTemplates[detectedIndustry] 
-      ? industryTemplates[detectedIndustry] 
-      : defaultTemplates;
-    
-    // Extract metrics from the CV to make achievements more realistic
-    const metricPatterns = [
-      /(\d+)%\s+(?:increase|improvement|reduction|decrease|growth)/gi,
-      /(?:increased|improved|reduced|decreased|grew)\s+(?:by\s+)?(\d+)%/gi,
-      /\$(\d+(?:\.\d+)?)\s*(?:million|m|k|thousand)/gi
-    ];
-    
-    // Extract actual metrics from the original CV if available
-    const extractedMetrics: string[] = [];
-    metricPatterns.forEach(pattern => {
-      let match;
-      const originalTextLower = originalText.toLowerCase();
-      while ((match = pattern.exec(originalTextLower)) !== null) {
-        if (match[1]) {
-          extractedMetrics.push(match[1]);
-        }
-      }
-    });
-    
-    // Generate achievements for each keyword
-    let achievements = '';
-    keywordsToUse.forEach((keyword, index) => {
-      if (index < templates.length) {
-        // Replace the template placeholder with the keyword
-        let achievement = templates[index].replace('{keyword}', keyword.toLowerCase());
-        
-        // If we have extracted metrics, use them to make the achievements more realistic
-        if (extractedMetrics.length > index) {
-          // Replace numeric values with actual metrics from the CV
-          achievement = achievement.replace(/\d+%/, `${extractedMetrics[index]}%`);
-        }
-        
-        achievements += achievement + '\n';
-      }
-    });
-    
-    return achievements;
-  };
-  
-  // Enhance the extractKeywords function with more sophisticated NLP-like techniques
-  const extractKeywords = (text: string, isJobDescription: boolean = false): string[] => {
-    // More comprehensive list of common words to filter out
-    const commonWords = [
-      'and', 'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'of', 'as', 
-      'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 
-      'does', 'did', 'will', 'would', 'should', 'can', 'could', 'may', 'might', 'must',
-      'that', 'this', 'these', 'those', 'it', 'its', 'we', 'our', 'you', 'your', 'they', 'their',
-      'from', 'then', 'than', 'when', 'where', 'which', 'who', 'whom', 'whose', 'what', 'why', 'how',
-      'all', 'any', 'both', 'each', 'few', 'more', 'most', 'some', 'such', 'no', 'nor', 'not', 'only',
-      'own', 'same', 'so', 'than', 'too', 'very', 'just', 'but', 'however', 'therefore'
-    ];
-    
-    // Industry-specific terms that should be recognized as important
-    const industryTerms = [
-      'experience', 'skills', 'knowledge', 'proficient', 'expert', 'familiar', 'degree',
-      'certification', 'qualified', 'responsible', 'manage', 'develop', 'implement',
-      'analyze', 'design', 'create', 'maintain', 'improve', 'optimize', 'lead', 'collaborate',
-      'strategic', 'technical', 'professional', 'specialized', 'advanced', 'senior', 'junior',
-      'entry-level', 'mid-level', 'executive', 'director', 'manager', 'supervisor', 'coordinator',
-      'specialist', 'analyst', 'consultant', 'engineer', 'developer', 'architect', 'designer'
-    ];
-    
-    // Identify multi-word phrases that are likely to be important
-    const extractPhrases = (text: string): string[] => {
-      const phrases: string[] = [];
-      
-      // Common phrase patterns in job descriptions and CVs
-      const phrasePatterns = [
-        /([A-Z][a-z]+\s[A-Z][a-z]+(?:\s[A-Z][a-z]+)?)/g, // Capitalized phrases like "Project Management"
-        /([a-z]+\s(?:management|engineering|development|analysis|design|architecture|strategy|planning))/gi, // Domain-specific phrases
-        /([0-9]+\+?\s(?:years|yrs)(?:\sof)?\s(?:experience|exp))/gi, // Experience requirements
-        /((?:bachelor'?s?|master'?s?|phd|doctorate|mba|bs|ms|ba)(?:\sdegree)?(?:\sin\s[a-z\s]+)?)/gi, // Education requirements
-        /((?:proficient|skilled|experienced|knowledgeable|expert)(?:\sin\s[a-z\s]+))/gi, // Skill descriptors
-        /([a-z]+(?:-[a-z]+)+)/gi, // Hyphenated terms like "cross-functional"
-      ];
-      
-      // Extract phrases using patterns
-      phrasePatterns.forEach(pattern => {
-        const matches = text.match(pattern);
-        if (matches) {
-          matches.forEach(match => {
-            if (match.length > 5 && !commonWords.includes(match.toLowerCase())) {
-              phrases.push(match.trim());
-            }
-          });
-        }
-      });
-      
-      return phrases;
-    };
-    
-    // Extract sections for more targeted keyword extraction
-    const extractSections = (text: string, isJobDescription: boolean): Record<string, string[]> => {
-      const sections: Record<string, string[]> = {
-        requirements: [],
-        responsibilities: [],
-        qualifications: [],
-        skills: []
-      };
-      
-      if (isJobDescription) {
-        // Extract requirements section
-        const requirementsMatch = text.match(/(?:requirements|qualifications|what you'll need|what you need|what we're looking for)(?::|.{0,10})\s*([\s\S]*?)(?:\n\n|\n[A-Z]|$)/i);
-        if (requirementsMatch && requirementsMatch[1]) {
-          const reqLines = requirementsMatch[1].split('\n').filter(line => line.trim().length > 0);
-          sections.requirements = reqLines.map(line => {
-            // Clean up bullet points and other markers
-            return line.replace(/^[\s•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+/, '').trim();
-          });
-        }
-        
-        // Extract responsibilities section
-        const responsibilitiesMatch = text.match(/(?:responsibilities|duties|what you'll do|role description|job description)(?::|.{0,10})\s*([\s\S]*?)(?:\n\n|\n[A-Z]|$)/i);
-        if (responsibilitiesMatch && responsibilitiesMatch[1]) {
-          const respLines = responsibilitiesMatch[1].split('\n').filter(line => line.trim().length > 0);
-          sections.responsibilities = respLines.map(line => {
-            return line.replace(/^[\s•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+/, '').trim();
-          });
-        }
-        
-        // Extract skills section
-        const skillsMatch = text.match(/(?:skills|technical skills|required skills|key skills)(?::|.{0,10})\s*([\s\S]*?)(?:\n\n|\n[A-Z]|$)/i);
-        if (skillsMatch && skillsMatch[1]) {
-          const skillLines = skillsMatch[1].split('\n').filter(line => line.trim().length > 0);
-          sections.skills = skillLines.map(line => {
-            return line.replace(/^[\s•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+/, '').trim();
-          });
-        }
-      }
-      
-      return sections;
-    };
-    
-    // Extract words, including multi-word phrases for job descriptions
-    let words: string[] = [];
-    const phrases = extractPhrases(text);
-    words = [...words, ...phrases];
-    
-    // Extract sections for more targeted keyword extraction
-    const sections = extractSections(text, isJobDescription);
-    
-    if (isJobDescription) {
-      // For job descriptions, prioritize keywords from specific sections
-      Object.values(sections).forEach(sectionLines => {
-        sectionLines.forEach(line => {
-          // Extract key terms from each line
-          const lineWords = line.toLowerCase()
-            .replace(/[.,;:()\[\]{}]/g, ' ')
-            .split(/\s+/)
-            .filter(word => word.length > 3 && !commonWords.includes(word));
-          
-          words = [...words, ...lineWords];
-        });
-      });
-      
-      // Extract skills specifically mentioned with "proficient in" or similar phrases
-      const skillPatterns = [
-        /experience (?:in|with) ([\w\s]+?)(?:\.|\,|\;|\n|$)/gi,
-        /knowledge of ([\w\s]+?)(?:\.|\,|\;|\n|$)/gi,
-        /proficient (?:in|with) ([\w\s]+?)(?:\.|\,|\;|\n|$)/gi,
-        /familiar (?:with) ([\w\s]+?)(?:\.|\,|\;|\n|$)/gi,
-        /skills (?:in|with) ([\w\s]+?)(?:\.|\,|\;|\n|$)/gi,
-        /expertise (?:in|with) ([\w\s]+?)(?:\.|\,|\;|\n|$)/gi
-      ];
-      
-      // Extract multi-word skills
-      skillPatterns.forEach(pattern => {
-        let match;
-        while ((match = pattern.exec(text)) !== null) {
-          if (match[1] && match[1].trim().length > 3) {
-            words.push(match[1].trim());
-          }
-        }
-      });
-    }
-    
-    // Also extract individual words
-    const singleWords = text.toLowerCase()
-      .replace(/[.,;:()\[\]{}]/g, ' ')
-      .split(/\s+/)
-      .filter(word => word.length > 3 && !commonWords.includes(word));
-    
-    words = [...words, ...singleWords];
-    
-    // Count word frequency with special handling for industry terms
-    const wordCount: Record<string, number> = {};
-    words.forEach(word => {
-      // Normalize the word
-      const normalizedWord = word.toLowerCase().trim();
-      
-      // Skip common words and very short words
-      if (normalizedWord.length <= 3 || commonWords.includes(normalizedWord)) {
-        return;
-      }
-      
-      // Give higher weight to industry terms and phrases
-      let weight = 1;
-      if (industryTerms.includes(normalizedWord)) {
-        weight = 3; // Higher weight for industry terms
-      } else if (normalizedWord.includes(' ')) {
-        weight = 2; // Higher weight for multi-word phrases
-      }
-      
-      // Add to count
-      wordCount[normalizedWord] = (wordCount[normalizedWord] || 0) + weight;
-    });
-    
-    // Sort by frequency and get top keywords
-    const sortedKeywords = Object.entries(wordCount)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, isJobDescription ? 20 : 15) // Get more keywords for job descriptions
-      .map(([word]) => {
-        // Capitalize each word in multi-word phrases
-        if (word.includes(' ')) {
-          return word.split(' ')
-            .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-            .join(' ');
-        }
-        return word.charAt(0).toUpperCase() + word.slice(1);
-      });
-    
-    return sortedKeywords;
   };
   
   // Update the generateStructuredCV function to create a more interesting title
@@ -887,8 +648,8 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         professional: professionalSkills
       };
 
-      // Generate achievements
-      const achievements = generateAchievements(jobKeywords, structuredExperience);
+      // Generate achievements with just jobKeywords
+      const generatedAchievements = generateAchievements(jobKeywords, jobDescription.toLowerCase().includes('technology') ? 'technology' : undefined);
 
       // Calculate job match score and generate recommendations
       const matchScore = calculateJobMatchScore(cvKeywords, jobKeywords);
@@ -905,7 +666,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         experience: structuredExperience,
         education,
         skills,
-        achievements
+        achievements: generatedAchievements
       };
     } catch (error) {
       console.error('Error generating structured CV:', error);
@@ -1076,138 +837,6 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     }
     
     return professionalSkills;
-  };
-  
-  // Helper function to generate achievements
-  const generateAchievements = (keywords: string[], experience: any[]) => {
-    const achievements = [];
-  // Add a function to extract skills data from the CV
-  const extractSkillsData = (cvText: string) => {
-    // Split CV into sections
-    const sections = cvText.split('\n\n').filter(section => section.trim().length > 0);
-    
-    // Find the skills section
-    const skillsSection = sections.find(section => 
-      section.toLowerCase().includes('skills') || 
-      section.toLowerCase().includes('expertise') ||
-      section.toLowerCase().includes('competencies')
-    );
-    
-    if (!skillsSection) return null;
-    
-    // Extract skills from bullet points or comma-separated lists
-    const skills = skillsSection
-      .split('\n')
-      .filter(line => line.trim().length > 0)
-      .map(line => {
-        const cleanLine = line.replace(/^[\s•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+/, '').trim();
-        
-        if (cleanLine.includes(',')) {
-          // Handle comma-separated skills
-          return cleanLine.split(',').map(s => s.trim()).filter(s => s.length > 0);
-        } else if (cleanLine.length > 0) {
-          // Handle single skill per line
-          return [cleanLine];
-        }
-        
-        return [];
-      })
-      .flat();
-    
-    return skills;
-  };
-  
-  // Add a function to extract achievements data from the CV
-  const extractAchievementsData = (cvText: string) => {
-    // Split CV into sections
-    const sections = cvText.split('\n\n').filter(section => section.trim().length > 0);
-    
-    // Find the achievements section
-    const achievementsSection = sections.find(section => 
-      section.toLowerCase().includes('achievements') || 
-      section.toLowerCase().includes('accomplishments') ||
-      section.toLowerCase().includes('highlights')
-    );
-    
-    if (!achievementsSection) return null;
-    
-    // Extract achievements from bullet points
-    const achievements = achievementsSection
-      .split('\n')
-      .filter(line => line.trim().length > 0)
-      .map(line => {
-        const cleanLine = line.replace(/^[\s•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+/, '').trim();
-        return cleanLine.length > 0 ? cleanLine : null;
-      })
-      .filter(achievement => achievement !== null);
-    
-    return achievements;
-  };
-  
-  // Helper function to calculate years of experience
-  const calculateYearsOfExperience = (experience: ExperienceEntry[] | null): number => {
-    if (!experience || experience.length === 0) return 0;
-    
-    const totalYears = experience.reduce((acc, entry) => {
-      if (!entry.dates) return acc;
-      
-      const [startYear] = entry.dates.match(/(\d{4})/) || [];
-      const [endYear] = entry.dates.match(/(?:-\s*)(\d{4})/) || [];
-      
-      if (!startYear) return acc;
-      
-      const start = parseInt(startYear);
-      const end = endYear ? parseInt(endYear) : new Date().getFullYear();
-      
-      return acc + (end - start);
-    }, 0);
-    
-    return Math.round(totalYears / 365); // Convert days to years
-  };
-  
-  // Helper function to analyze job match
-  const analyzeJobMatch = (cvKeywords: string[], jobKeywords: string[]) => {
-    const matchedKeywords = cvKeywords.filter(k => jobKeywords.includes(k));
-    const matchScore = Math.round((matchedKeywords.length / jobKeywords.length) * 100);
-    const missingKeywords = jobKeywords.filter(k => !cvKeywords.includes(k));
-    
-    return {
-      matchScore,
-      matchedKeywords,
-      missingKeywords
-    };
-  };
-  
-  // Helper function to calculate job match score
-  const calculateJobMatchScore = (cvKeywords: string[], jobKeywords: string[]): number => {
-    const matchedKeywords = cvKeywords.filter(k => jobKeywords.includes(k));
-    return Math.round((matchedKeywords.length / jobKeywords.length) * 100);
-  };
-  
-  // Helper function to generate recommendations
-  const generateRecommendations = (cvKeywords: string[], jobKeywords: string[], matchScore: number): string[] => {
-    const recommendations: string[] = [];
-    const missingKeywords = jobKeywords.filter(k => !cvKeywords.includes(k));
-    
-    if (matchScore < 70) {
-      recommendations.push(`Add more relevant keywords: ${missingKeywords.slice(0, 3).join(', ')}`);
-    }
-    
-    if (matchScore < 50) {
-      recommendations.push('Consider adding more specific achievements and metrics');
-      recommendations.push('Include more industry-specific experience and skills');
-    }
-    
-    return recommendations;
-  };
-  
-  // Handle reset
-  const handleResetProcessing = () => {
-    setIsProcessing(false);
-    setProcessingProgress(0);
-    setProcessingStatus("");
-    setProcessingTooLong(false);
-    setError(null);
   };
   
   // Add missing functions at the top of the file
@@ -1512,6 +1141,15 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   const extractIndustrySkills = (skills: SkillsData): string => {
     // Combine both technical and professional skills for industry knowledge
     return [...skills.technical, ...skills.professional].join(', ');
+  };
+  
+  // Add back the handleResetProcessing function
+  const handleResetProcessing = () => {
+    setIsProcessing(false);
+    setProcessingProgress(0);
+    setProcessingStatus("");
+    setProcessingTooLong(false);
+    setError(null);
   };
   
   return (
@@ -1867,9 +1505,9 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
                       <CheckCircle className="w-3 h-3 mr-1" />
                       {item.keyword}
                       {/* Add tooltip with context if available */}
-                      {item.context && (
+                      {item.placement && (
                         <div className="absolute bottom-full left-0 mb-2 w-64 p-2 bg-gray-800 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity z-10 text-xs">
-                          <p className="text-white">{item.context}</p>
+                          <p className="text-white">{item.placement}</p>
                           <div className="absolute bottom-0 left-4 transform translate-y-1/2 rotate-45 w-2 h-2 bg-gray-800"></div>
                         </div>
                       )}
