@@ -6,28 +6,5 @@ Optimize the content and design of the optimized cv result document.
 (all flags --DONE means they are fixed or implemented and we shall no worry about anymore)
 
 
-- Delete edit words like "Developed" "Achieved" "Incresead" "Coordinated" --DONE
-
-- Delete all * --DONE
-
-- implement the sections Goals or Achievements
-    this sections will be backed up by actual data
-        the consist of 3 bullet point highlithing the user best career achievements and their top priority goals right now
-            the formating of this section shall be quatified, showing numbers of an estimated acomplished in this goals and achievements --DONE
-
-- order of the section in the optimized cv result
-    1. header (currently perfect)
-    2. Profile quick summary of the user
-    3. Achievements
-    4. Goals
-    5. Skills
-    6. Languages
-    7. Education  --DONE
-
-
-- fix bugs --DONE
-
-- improve UI to make all pages in the in app pages match the dashboard page --DONE
-
-- Generate optimize/specific system
-    consists of user copying and pasting the desired job description and the optimize cv system use its built in process to adjust the cv for the jobs best matching keywords and fit for the job perfectly.
+- Improve the content on the result that the specific/optimize cv document provides
+    currently the sections are well implemented but the contents of the sections just say Not specified. 

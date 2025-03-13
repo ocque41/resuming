@@ -343,8 +343,42 @@ async function optimizeCVForJob(
           - Incorporate keywords naturally throughout the CV
           - Use simple formatting that ATS systems can parse easily
           
+          Format the CV with clear section headings using markdown format:
+          
+          # PROFILE
+          [Profile content here]
+          
+          # ACHIEVEMENTS
+          - [Achievement 1 with metrics]
+          - [Achievement 2 with metrics]
+          - [Achievement 3 with metrics]
+          
+          # EXPERIENCE
+          ## [Company Name] - [Position] ([Duration])
+          - [Responsibility 1]
+          - [Responsibility 2]
+          - [Responsibility 3]
+          
+          ## [Company Name] - [Position] ([Duration])
+          - [Responsibility 1]
+          - [Responsibility 2]
+          - [Responsibility 3]
+          
+          # SKILLS
+          - [Skill 1]
+          - [Skill 2]
+          - [Skill 3]
+          
+          # EDUCATION
+          ## [Degree]
+          [Institution], [Year]
+          
+          # LANGUAGES
+          [Language 1]: [Proficiency]
+          [Language 2]: [Proficiency]
+          
           Return your response as a JSON object with the following properties:
-          - optimizedText: the complete optimized CV text with all sections properly formatted
+          - optimizedText: the complete optimized CV text with all sections properly formatted as shown above
           - matchScore: a number between 0-100 representing how well the optimized CV matches the job
           - keywordsMatched: an array of keywords from the job description found in the CV, with context about where and how they're used
           - suggestedImprovements: an array of specific, actionable suggestions to further improve the CV for this job`
@@ -410,8 +444,41 @@ async function optimizeCVForJob(
       }
     }
     
+    // Ensure the optimized text has proper section headings
+    let formattedText = optimizedText;
+    
+    // Check if the text already has markdown headings
+    if (!formattedText.includes("# PROFILE") && !formattedText.includes("# ACHIEVEMENTS")) {
+      // Try to add section headings
+      const sections = [
+        { name: "PROFILE", regex: /^(.*?)(?=\n\n|$)/s },
+        { name: "ACHIEVEMENTS", regex: /(?:^|\n)(?:•|-|\*)\s+.*?(?:\n(?:•|-|\*)\s+.*?)*(?=\n\n|$)/s },
+        { name: "EXPERIENCE", regex: /(?:^|\n)(?:Company|Work|Employment).*?(?:\n(?:•|-|\*)\s+.*?)*(?=\n\n|$)/s },
+        { name: "SKILLS", regex: /(?:^|\n)(?:Skills|Competencies|Technical).*?(?:\n(?:•|-|\*)\s+.*?)*(?=\n\n|$)/s },
+        { name: "EDUCATION", regex: /(?:^|\n)(?:Education|Degree|University|College).*?(?=\n\n|$)/s },
+        { name: "LANGUAGES", regex: /(?:^|\n)(?:Languages|Language).*?(?=\n\n|$)/s }
+      ];
+      
+      let newText = formattedText;
+      for (const section of sections) {
+        const match = newText.match(section.regex);
+        if (match && match.index !== undefined) {
+          const beforeMatch = newText.substring(0, match.index);
+          const matchContent = match[0];
+          const afterMatch = newText.substring(match.index + matchContent.length);
+          
+          // Only add heading if it's not already there
+          if (!matchContent.includes(`# ${section.name}`)) {
+            newText = beforeMatch + `\n\n# ${section.name}\n\n` + matchContent + afterMatch;
+          }
+        }
+      }
+      
+      formattedText = newText;
+    }
+    
     return {
-      optimizedText,
+      optimizedText: formattedText,
       matchScore,
       keywordsMatched: processedKeywordsMatched,
       suggestedImprovements: processedSuggestions
