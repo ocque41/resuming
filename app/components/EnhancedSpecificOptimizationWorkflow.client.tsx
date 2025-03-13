@@ -12,31 +12,27 @@ import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle } 
 import { analyzeCVContent, optimizeCVForJob } from '@/app/lib/services/mistral.service';
 
 // Type definitions
-type KeywordMatch = {
+interface KeywordMatch {
   keyword: string;
   relevance: number;
   frequency: number;
   placement: string;
-};
+}
 
 interface MissingKeyword {
   keyword: string;
   importance: number;
-  suggestedPlacement?: string;
+  suggestedPlacement: string;
 }
 
 interface ExperienceEntry {
-  dates: string;
-  title: string | null;
-  company: string | null;
-  responsibilities: string[];
+  title?: string;
+  startDate?: string;
+  endDate?: string;
 }
 
 interface EducationEntry {
   degree: string;
-  field: string | null;
-  institution: string | null;
-  year: string | null;
 }
 
 interface SkillsData {
@@ -48,18 +44,8 @@ interface StructuredCV {
   name: string;
   subheader: string;
   profile: string;
-  experience: Array<{
-    title: string;
-    company: string;
-    dates: string;
-    responsibilities: string[];
-  }>;
-  education: Array<{
-    degree: string;
-    field: string;
-    institution: string;
-    year: string;
-  }>;
+  experience: ExperienceEntry[];
+  education: EducationEntry[];
   skills: {
     technical: string[];
     professional: string[];
@@ -95,29 +81,154 @@ interface JobMatchAnalysis {
 }
 
 interface EnhancedSpecificOptimizationWorkflowProps {
-  cvs?: string[];
+  cvs: {
+    id: string;
+    name: string;
+  }[];
 }
 
 // Utility functions
 const extractKeywords = (text: string, isJobDescription: boolean = false): string[] => {
-  // Remove special characters and convert to lowercase
-  const cleanText = text.toLowerCase().replace(/[^\w\s]/g, ' ');
-  
-  // Split into words and filter out common words
-  const commonWords = new Set(['the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i', 'it', 'for', 'not', 'on', 'with', 'he', 'as', 'you', 'do', 'at']);
-  const words = cleanText.split(/\s+/).filter(word => word.length > 2 && !commonWords.has(word));
-  
+  const commonWords = new Set([
+    'the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i', 'it', 'for', 'not', 'on', 'with', 'he', 'as', 'you',
+    'do', 'at', 'this', 'but', 'his', 'by', 'from', 'they', 'we', 'say', 'her', 'she', 'or', 'an', 'will', 'my', 'one',
+    'all', 'would', 'there', 'their', 'what', 'so', 'up', 'out', 'if', 'about', 'who', 'get', 'which', 'go', 'me'
+  ]);
+
+  // Split text into words and clean them
+  const words = text.toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .split(/\s+/)
+    .filter(word => 
+      word.length > 2 && 
+      !commonWords.has(word) &&
+      !/^\d+$/.test(word)
+    );
+
   // Count word frequency
-  const wordCount = words.reduce((acc: Record<string, number>, word: string) => {
-    acc[word] = (acc[word] || 0) + 1;
-    return acc;
-  }, {});
-  
-  // Sort by frequency and get top keywords
-  return Object.entries(wordCount)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, isJobDescription ? 20 : 15)
+  const wordFrequency = new Map<string, number>();
+  words.forEach(word => {
+    wordFrequency.set(word, (wordFrequency.get(word) || 0) + 1);
+  });
+
+  // Sort by frequency and get unique words
+  const sortedWords = Array.from(wordFrequency.entries())
+    .sort((a, b) => b[1] - a[1])
     .map(([word]) => word);
+
+  // For job descriptions, focus on requirement-related words
+  if (isJobDescription) {
+    const requirementIndicators = [
+      'required', 'must', 'should', 'need', 'essential', 'necessary',
+      'qualification', 'experience', 'skill', 'proficiency', 'knowledge'
+    ];
+
+    const requirements = sortedWords.filter(word =>
+      requirementIndicators.some(indicator => text.toLowerCase().includes(`${indicator} ${word}`))
+    );
+
+    return [...new Set([...requirements, ...sortedWords])];
+  }
+
+  return [...new Set(sortedWords)];
+};
+
+const extractExperienceData = (text: string): ExperienceEntry[] => {
+  const experiencePattern = /(?:experience|work history|employment)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+  const match = text.match(experiencePattern);
+  
+  if (!match || !match[1]) return [];
+  
+  const experienceSection = match[1];
+  const entries = experienceSection.split(/\n(?=\d{4}|\d{2}\/\d{2}|\w+\s+\d{4})/);
+  
+  return entries.map(entry => {
+    const datePattern = /(\d{4}|\d{2}\/\d{2}|\w+\s+\d{4})\s*[-–—]\s*(\d{4}|\d{2}\/\d{2}|\w+\s+\d{4}|present)/i;
+    const titlePattern = /(?:^|\n)([^-–—\n]+?)(?=\s*[-–—]|\s*\d{4}|\s*\d{2}\/\d{2}|\s*\w+\s+\d{4})/i;
+    
+    const dateMatch = entry.match(datePattern);
+    const titleMatch = entry.match(titlePattern);
+    
+    return {
+      title: titleMatch ? titleMatch[1].trim() : undefined,
+      startDate: dateMatch ? dateMatch[1] : undefined,
+      endDate: dateMatch ? dateMatch[2] : undefined
+    };
+  });
+};
+
+const extractEducationData = (text: string): EducationEntry[] => {
+  const educationPattern = /(?:education|qualifications|academic)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+  const match = text.match(educationPattern);
+  
+  if (!match || !match[1]) return [];
+  
+  const educationSection = match[1];
+  const entries = educationSection.split(/\n(?=\d{4}|\d{2}\/\d{2}|\w+\s+\d{4})/);
+  
+  return entries.map(entry => {
+    const degreePattern = /(?:degree|diploma|certificate):\s*([^.,\n]+)/i;
+    const degreeMatch = entry.match(degreePattern);
+    
+    return {
+      degree: degreeMatch ? degreeMatch[1].trim() : ''
+    };
+  });
+};
+
+const calculateYearsOfExperience = (experience: ExperienceEntry[]): number => {
+  if (!experience || experience.length === 0) return 0;
+  
+  let totalYears = 0;
+  const currentYear = new Date().getFullYear();
+  
+  experience.forEach((exp: ExperienceEntry) => {
+    if (exp.startDate && exp.endDate) {
+      const start = new Date(exp.startDate).getFullYear();
+      const end = exp.endDate.toLowerCase() === 'present' ? 
+        currentYear : 
+        new Date(exp.endDate).getFullYear();
+      
+      totalYears += end - start;
+    }
+  });
+  
+  return totalYears;
+};
+
+const calculateSkillsMatch = (cvText: string, jobDescription: string): number => {
+  const cvSkills = extractKeywords(cvText);
+  const requiredSkills = extractKeywords(jobDescription);
+  
+  if (requiredSkills.length === 0) return 100;
+  
+  const matchedSkills = cvSkills.filter((skill: string) => 
+    requiredSkills.some((req: string) => req.toLowerCase().includes(skill.toLowerCase()) || 
+                               skill.toLowerCase().includes(req.toLowerCase()))
+  );
+  
+  return Math.round((matchedSkills.length / requiredSkills.length) * 100);
+};
+
+const generateRecommendations = (cvKeywords: string[], jobKeywords: string[], overallScore: number): string[] => {
+  const recommendations: string[] = [];
+  
+  // Missing keywords recommendations
+  const missingKeywords = jobKeywords.filter(k => !cvKeywords.includes(k));
+  if (missingKeywords.length > 0) {
+    recommendations.push(`Consider adding these keywords: ${missingKeywords.join(', ')}`);
+  }
+  
+  // Score-based recommendations
+  if (overallScore < 50) {
+    recommendations.push('Your CV needs significant improvements to match this job\'s requirements');
+  } else if (overallScore < 70) {
+    recommendations.push('Your CV could benefit from moderate improvements to better match this position');
+  } else if (overallScore < 90) {
+    recommendations.push('Your CV is a good match, but could be optimized further');
+  }
+  
+  return recommendations;
 };
 
 // Modern file dropdown component
@@ -186,149 +297,663 @@ function ModernFileDropdown({
   );
 }
 
-// Add missing functions before the component
+// Update the analyzeJobMatch function
 const analyzeJobMatch = (cvText: string, jobDescription: string): JobMatchAnalysis => {
   const cvKeywords = extractKeywords(cvText);
   const jobKeywords = extractKeywords(jobDescription);
   
+  // Calculate keyword matches with relevance scores
   const matchedKeywords: KeywordMatch[] = cvKeywords
     .filter((keyword: string) => jobKeywords.includes(keyword))
-    .map((keyword: string) => ({
-      keyword,
-      relevance: 1,
-      frequency: (cvText.match(new RegExp(keyword, 'gi')) || []).length,
-      placement: 'various'
-    }));
+    .map((keyword: string) => {
+      const frequency = (cvText.match(new RegExp(keyword, 'gi')) || []).length;
+      const placement = determineKeywordPlacement(cvText, keyword);
+      const relevance = calculateKeywordRelevance(keyword, jobDescription, placement, frequency);
+      
+      return {
+        keyword,
+        relevance,
+        frequency,
+        placement
+      };
+    });
 
+  // Calculate missing keywords with importance scores
   const missingKeywords: MissingKeyword[] = jobKeywords
     .filter((keyword: string) => !cvKeywords.includes(keyword))
     .map((keyword: string) => ({
       keyword,
-      importance: 1,
-      suggestedPlacement: 'skills'
+      importance: calculateKeywordImportance(keyword, jobDescription),
+      suggestedPlacement: suggestKeywordPlacement(keyword, jobDescription)
     }));
 
-  const matchScore = calculateJobMatchScore(cvKeywords, jobKeywords);
-  const recommendations = generateRecommendations(cvKeywords, jobKeywords, matchScore);
+  // Calculate dimensional scores
+  const skillsMatch = calculateSkillsMatch(cvText, jobDescription);
+  const experienceMatch = calculateExperienceMatch(cvText, jobDescription);
+  const educationMatch = calculateEducationMatch(cvText, jobDescription);
+  const industryFit = calculateIndustryFit(cvText, jobDescription);
+  const keywordDensity = calculateKeywordDensity(cvText, jobKeywords);
+  const formatCompatibility = calculateFormatCompatibility(cvText);
+  const contentRelevance = calculateContentRelevance(cvText, jobDescription);
+
+  // Calculate overall compatibility score
+  const overallCompatibility = Math.round(
+    (skillsMatch * 0.25) +
+    (experienceMatch * 0.25) +
+    (educationMatch * 0.15) +
+    (industryFit * 0.15) +
+    (keywordDensity * 0.1) +
+    (formatCompatibility * 0.05) +
+    (contentRelevance * 0.05)
+  );
+
+  // Generate section analysis
+  const sectionAnalysis = {
+    profile: analyzeCVSection(cvText, 'profile', jobDescription),
+    skills: analyzeCVSection(cvText, 'skills', jobDescription),
+    experience: analyzeCVSection(cvText, 'experience', jobDescription),
+    education: analyzeCVSection(cvText, 'education', jobDescription),
+    achievements: analyzeCVSection(cvText, 'achievements', jobDescription)
+  };
+
+  // Calculate improvement potential
+  const improvementPotential = 100 - overallCompatibility;
+
+  // Generate recommendations
+  const recommendations = generateRecommendations(cvKeywords, jobKeywords, overallCompatibility);
+
+  // Generate detailed analysis
+  const detailedAnalysis = generateDetailedAnalysis({
+    matchedKeywords,
+    missingKeywords,
+    dimensionalScores: {
+      skillsMatch,
+      experienceMatch,
+      educationMatch,
+      industryFit,
+      overallCompatibility,
+      keywordDensity,
+      formatCompatibility,
+      contentRelevance
+    },
+    sectionAnalysis
+  });
 
   return {
-    score: matchScore,
+    score: overallCompatibility,
     matchedKeywords,
     missingKeywords,
     recommendations,
-    skillGap: missingKeywords.map((k: MissingKeyword) => k.keyword).join(', '),
+    skillGap: generateSkillGapAnalysis(missingKeywords),
     dimensionalScores: {
-      skillsMatch: matchScore,
-      experienceMatch: 0,
-      educationMatch: 0,
-      industryFit: 0,
-      overallCompatibility: matchScore,
-      keywordDensity: 0,
-      formatCompatibility: 0,
-      contentRelevance: 0
+      skillsMatch,
+      experienceMatch,
+      educationMatch,
+      industryFit,
+      overallCompatibility,
+      keywordDensity,
+      formatCompatibility,
+      contentRelevance
     },
-    detailedAnalysis: '',
-    improvementPotential: 0,
-    sectionAnalysis: {
-      profile: { score: 0, feedback: '' },
-      skills: { score: 0, feedback: '' },
-      experience: { score: 0, feedback: '' },
-      education: { score: 0, feedback: '' },
-      achievements: { score: 0, feedback: '' }
-    }
+    detailedAnalysis,
+    improvementPotential,
+    sectionAnalysis
   };
 };
 
-const calculateYearsOfExperience = (experience: ExperienceEntry[] | null): number => {
-  if (!experience || experience.length === 0) return 0;
-  
-  return experience.reduce((total, exp) => {
-    const dates = exp.dates.split('-').map(d => d.trim());
-    if (dates.length !== 2) return total;
-    
-    const startDate = new Date(dates[0]);
-    const endDate = dates[1].toLowerCase() === 'present' ? new Date() : new Date(dates[1]);
-    
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return total;
-    
-    const years = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 365);
-    return total + Math.max(0, years);
-  }, 0);
-};
+// Add helper functions for keyword analysis
+const determineKeywordPlacement = (text: string, keyword: string): string => {
+  const sections = {
+    profile: /(?:profile|summary|objective)/i,
+    experience: /(?:experience|work history|employment)/i,
+    skills: /(?:skills|expertise|competencies)/i,
+    education: /(?:education|qualifications|academic)/i,
+    achievements: /(?:achievements|accomplishments)/i
+  };
 
-const calculateJobMatchScore = (cvKeywords: string[], jobKeywords: string[]): number => {
-  const matchedCount = cvKeywords.filter(keyword => jobKeywords.includes(keyword)).length;
-  return Math.round((matchedCount / jobKeywords.length) * 100);
-};
-
-const generateRecommendations = (cvKeywords: string[], jobKeywords: string[], matchScore: number): string[] => {
-  const recommendations: string[] = [];
-  
-  if (matchScore < 50) {
-    recommendations.push('Add more relevant keywords from the job description');
-    recommendations.push('Include specific achievements related to required skills');
-  }
-  
-  const missingKeywords = jobKeywords.filter(keyword => !cvKeywords.includes(keyword));
-  if (missingKeywords.length > 0) {
-    recommendations.push(`Consider adding experience with: ${missingKeywords.slice(0, 3).join(', ')}`);
-  }
-  
-  return recommendations;
-};
-
-// Add this near other constants in the component
-type IndustryTemplates = {
-  technology: string[];
-  manufacturing: string[];
-  education: string[];
-  healthcare: string[];
-  [key: string]: string[]; // Index signature for type safety
-};
-
-const industryTemplates: IndustryTemplates = {
-  technology: [
-    "• Implemented {keyword} system that improved API response times by 40%",
-    "• Developed {keyword} architecture supporting 1M+ daily users"
-  ],
-  manufacturing: [
-    "• Optimized {keyword} production line reducing downtime by 25%",
-    "• Implemented {keyword} quality control system cutting defects by 30%"
-  ],
-  education: [
-    "• Developed {keyword} curriculum improving test scores by 15%",
-    "• Implemented {keyword} learning platform increasing engagement by 40%"
-  ],
-  healthcare: [
-    "• Streamlined {keyword} patient intake process reducing wait times by 35%",
-    "• Implemented {keyword} record system improving data accuracy by 50%"
-  ]
-};
-
-const defaultTemplates = [
-  "• Optimized {keyword} processes resulting in 30% efficiency gains",
-  "• Spearheaded {keyword} initiative that reduced costs by 25%"
-];
-
-// Update generateAchievements parameter type
-const generateAchievements = (keywords: string[], industry?: string): string[] => {
-  const validIndustry = industry as keyof IndustryTemplates;
-  const templates = industry && industryTemplates[validIndustry] 
-    ? industryTemplates[validIndustry] 
-    : defaultTemplates;
-
-  return templates.map((template: string) => {
-    // Replace up to 2 {keyword} placeholders with actual keywords
-    let achievement = template;
-    const keywordSlots = achievement.match(/{keyword}/g)?.length || 0;
-    
-    for (let i = 0; i < Math.min(keywordSlots, keywords.length); i++) {
-      achievement = achievement.replace(/{keyword}/, keywords[i]);
+  for (const [section, pattern] of Object.entries(sections)) {
+    const sectionMatch = text.match(pattern);
+    if (sectionMatch && sectionMatch.index !== undefined) {
+      const sectionStart = sectionMatch.index;
+      const keywordMatch = text.slice(sectionStart).match(new RegExp(keyword, 'i'));
+      if (keywordMatch) {
+        return section;
+      }
     }
+  }
+
+  return 'various';
+};
+
+const calculateKeywordRelevance = (
+  keyword: string,
+  jobDescription: string,
+  placement: string,
+  frequency: number
+): number => {
+  let relevance = 0;
+
+  // Base relevance from frequency
+  relevance += Math.min(frequency * 10, 30);
+
+  // Relevance from job description emphasis
+  const keywordEmphasis = (jobDescription.match(new RegExp(keyword, 'gi')) || []).length;
+  relevance += Math.min(keywordEmphasis * 15, 40);
+
+  // Placement bonus
+  const placementScores: Record<string, number> = {
+    profile: 20,
+    skills: 25,
+    experience: 30,
+    achievements: 15,
+    education: 10,
+    various: 5
+  };
+  relevance += placementScores[placement] || 0;
+
+  // Normalize to 0-100
+  return Math.min(Math.round(relevance), 100);
+};
+
+const calculateKeywordImportance = (keyword: string, jobDescription: string): number => {
+  let importance = 0;
+
+  // Frequency in job description
+  const frequency = (jobDescription.match(new RegExp(keyword, 'gi')) || []).length;
+  importance += Math.min(frequency * 15, 45);
+
+  // Position in job description
+  const firstOccurrence = jobDescription.toLowerCase().indexOf(keyword.toLowerCase());
+  if (firstOccurrence !== -1) {
+    const positionScore = Math.max(0, 30 - Math.floor(firstOccurrence / 100));
+    importance += positionScore;
+  }
+
+  // Context importance
+  const requirementContext = new RegExp(`(required|must have|essential).*?${keyword}`, 'i');
+  if (requirementContext.test(jobDescription)) {
+    importance += 25;
+  }
+
+  return Math.min(Math.round(importance), 100);
+};
+
+const suggestKeywordPlacement = (keyword: string, jobDescription: string): string => {
+  const contexts = {
+    technical: /(technical|programming|software|development|engineering)/i,
+    management: /(management|leadership|coordination|supervision)/i,
+    business: /(business|strategy|planning|analysis)/i,
+    soft: /(communication|interpersonal|teamwork|collaboration)/i
+  };
+
+  for (const [type, pattern] of Object.entries(contexts)) {
+    if (pattern.test(keyword) || pattern.test(jobDescription)) {
+      switch (type) {
+        case 'technical': return 'skills section (technical)';
+        case 'management': return 'experience section and profile';
+        case 'business': return 'profile and achievements';
+        case 'soft': return 'skills section (professional)';
+        default: return 'skills section';
+      }
+    }
+  }
+
+  return 'skills section';
+};
+
+const calculateKeywordDensity = (text: string, keywords: string[]): number => {
+  const words = text.toLowerCase().split(/\s+/).length;
+  let keywordCount = 0;
+  
+  keywords.forEach(keyword => {
+    const matches = text.match(new RegExp(keyword, 'gi'));
+    if (matches) {
+      keywordCount += matches.length;
+    }
+  });
+  
+  const density = (keywordCount / words) * 100;
+  
+  // Optimal density is between 1-3%
+  if (density >= 1 && density <= 3) {
+    return 100;
+  } else if (density < 1) {
+    return Math.round((density / 1) * 100);
+  } else {
+    return Math.round((3 / density) * 100);
+  }
+};
+
+const calculateFormatCompatibility = (text: string): number => {
+  let score = 0;
+  
+  // Check for clear section headers
+  const hasHeaders = /(?:profile|summary|experience|education|skills|achievements)/gi.test(text);
+  score += hasHeaders ? 30 : 0;
+  
+  // Check for bullet points
+  const hasBullets = /(?:^|\n)\s*[•\-\*]\s+/m.test(text);
+  score += hasBullets ? 20 : 0;
+  
+  // Check for consistent date formatting
+  const hasConsistentDates = /(?:19|20)\d{2}\s*[-–—]\s*(?:(?:19|20)\d{2}|present)/gi.test(text);
+  score += hasConsistentDates ? 20 : 0;
+  
+  // Check for appropriate length (between 300 and 1000 words)
+  const wordCount = text.split(/\s+/).length;
+  if (wordCount >= 300 && wordCount <= 1000) {
+    score += 30;
+  } else if (wordCount > 1000) {
+    score += 15;
+  } else {
+    score += Math.round((wordCount / 300) * 30);
+  }
+  
+  return score;
+};
+
+const calculateContentRelevance = (cvText: string, jobDescription: string): number => {
+  const relevanceFactors = [
+    {
+      pattern: /(?:required|must have|essential).*?(?:skills|qualifications|experience)/gi,
+      weight: 0.4
+    },
+    {
+      pattern: /(?:responsibilities|duties|tasks)/gi,
+      weight: 0.3
+    },
+    {
+      pattern: /(?:preferred|desired|nice to have)/gi,
+      weight: 0.2
+    },
+    {
+      pattern: /(?:benefits|offer|provide)/gi,
+      weight: 0.1
+    }
+  ];
+  
+  let totalScore = 0;
+  let totalWeight = 0;
+  
+  relevanceFactors.forEach(({ pattern, weight }) => {
+    const jobRequirements = jobDescription.match(pattern) || [];
+    if (jobRequirements.length > 0) {
+      const matchCount = jobRequirements.filter(req => 
+        new RegExp(req.replace(/(?:required|must have|essential|preferred|desired)/gi, ''), 'i').test(cvText)
+      ).length;
+      
+      totalScore += (matchCount / jobRequirements.length) * weight * 100;
+      totalWeight += weight;
+    }
+  });
+  
+  return totalWeight > 0 ? Math.round(totalScore / totalWeight) : 50;
+};
+
+const analyzeCVSection = (
+  cvText: string,
+  section: string,
+  jobDescription: string
+): { score: number; feedback: string } => {
+  const sectionPatterns: Record<string, RegExp> = {
+    profile: /(?:profile|summary|objective)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is,
+    skills: /(?:skills|expertise|competencies)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is,
+    experience: /(?:experience|work history|employment)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is,
+    education: /(?:education|qualifications|academic)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is,
+    achievements: /(?:achievements|accomplishments)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is
+  };
+
+  const sectionContent = cvText.match(sectionPatterns[section]);
+  if (!sectionContent) {
+    return {
+      score: 0,
+      feedback: `${section.charAt(0).toUpperCase() + section.slice(1)} section not found or not clearly defined.`
+    };
+  }
+
+  const content = sectionContent[1];
+  let score = 0;
+  let feedback: string[] = [];
+
+  // Check content length
+  const words = content.split(/\s+/).length;
+  if (words < 50) {
+    score += 20;
+    feedback.push("Consider expanding this section with more details.");
+  } else if (words < 100) {
+    score += 40;
+    feedback.push("Good length, but could be enhanced with more specific details.");
+  } else {
+    score += 60;
+    feedback.push("Excellent detailed content.");
+  }
+
+  // Check keyword relevance
+  const jobKeywords = extractKeywords(jobDescription);
+  const sectionKeywords = extractKeywords(content);
+  const matchedKeywords = sectionKeywords.filter(k => jobKeywords.includes(k));
+  
+  const keywordScore = Math.round((matchedKeywords.length / jobKeywords.length) * 40);
+  score += keywordScore;
+
+  if (keywordScore < 20) {
+    feedback.push("Add more relevant keywords from the job description.");
+  } else if (keywordScore < 30) {
+    feedback.push("Good keyword usage, consider adding a few more relevant terms.");
+  } else {
+    feedback.push("Excellent keyword optimization.");
+  }
+
+  return {
+    score: Math.min(score, 100),
+    feedback: feedback.join(" ")
+  };
+};
+
+const generateDetailedAnalysis = (analysis: {
+  matchedKeywords: KeywordMatch[];
+  missingKeywords: MissingKeyword[];
+  dimensionalScores: {
+    skillsMatch: number;
+    experienceMatch: number;
+    educationMatch: number;
+    industryFit: number;
+    overallCompatibility: number;
+    keywordDensity: number;
+    formatCompatibility: number;
+    contentRelevance: number;
+  };
+  sectionAnalysis: {
+    profile: { score: number; feedback: string };
+    skills: { score: number; feedback: string };
+    experience: { score: number; feedback: string };
+    education: { score: number; feedback: string };
+    achievements: { score: number; feedback: string };
+  };
+}): string => {
+  const {
+    matchedKeywords,
+    missingKeywords,
+    dimensionalScores,
+    sectionAnalysis
+  } = analysis;
+
+  const strengths: string[] = [];
+  const improvements: string[] = [];
+
+  // Analyze matched keywords
+  if (matchedKeywords.length > 0) {
+    strengths.push(`Strong alignment with ${matchedKeywords.length} key job requirements`);
+  }
+
+  // Analyze scores
+  if (dimensionalScores.skillsMatch > 70) {
+    strengths.push('Excellent skills match with job requirements');
+  } else if (dimensionalScores.skillsMatch < 50) {
+    improvements.push('Consider enhancing your skills section to better match job requirements');
+  }
+
+  if (dimensionalScores.experienceMatch > 70) {
+    strengths.push('Experience level well-aligned with position requirements');
+  } else if (dimensionalScores.experienceMatch < 50) {
+    improvements.push('Your experience level might need to be better highlighted or enhanced');
+  }
+
+  if (dimensionalScores.industryFit > 70) {
+    strengths.push('Strong industry alignment');
+  } else if (dimensionalScores.industryFit < 50) {
+    improvements.push('Consider emphasizing industry-specific experience and knowledge');
+  }
+
+  // Analyze sections
+  Object.entries(sectionAnalysis).forEach(([section, analysis]) => {
+    if (analysis.score > 70) {
+      strengths.push(`Strong ${section} section: ${analysis.feedback}`);
+    } else if (analysis.score < 50) {
+      improvements.push(`${section.charAt(0).toUpperCase() + section.slice(1)} needs improvement: ${analysis.feedback}`);
+    }
+  });
+
+  // Compile the analysis
+  let analysisText = 'CV Analysis Summary:\n\n';
+  
+  if (strengths.length > 0) {
+    analysisText += 'Strengths:\n- ' + strengths.join('\n- ') + '\n\n';
+  }
+  
+  if (improvements.length > 0) {
+    analysisText += 'Areas for Improvement:\n- ' + improvements.join('\n- ') + '\n\n';
+  }
+  
+  if (missingKeywords.length > 0) {
+    analysisText += `Consider incorporating these key terms: ${missingKeywords.map(k => k.keyword).join(', ')}`;
+  }
+
+  return analysisText;
+};
+
+const generateSkillGapAnalysis = (missingKeywords: MissingKeyword[]): string => {
+  if (missingKeywords.length === 0) {
+    return "Your CV demonstrates strong alignment with the job requirements.";
+  }
+
+  const criticalSkills = missingKeywords
+    .filter(k => k.importance > 70)
+    .map(k => k.keyword);
+  
+  const desiredSkills = missingKeywords
+    .filter(k => k.importance <= 70)
+    .map(k => k.keyword);
+
+  let analysis = '';
+  
+  if (criticalSkills.length > 0) {
+    analysis += `Critical skills to add: ${criticalSkills.join(', ')}. `;
+  }
+  
+  if (desiredSkills.length > 0) {
+    analysis += `Consider highlighting experience with: ${desiredSkills.join(', ')}.`;
+  }
+
+  return analysis;
+};
+
+// Add missing helper functions for job match analysis
+const calculateExperienceMatch = (cvText: string, jobDescription: string): number => {
+  let score = 0;
+  
+  // Required years of experience
+  const reqYearsMatch = jobDescription.match(/(\d+)(?:\+)?\s*(?:years?|yrs?)\s*(?:of)?\s*experience/i);
+  const reqYears = reqYearsMatch ? parseInt(reqYearsMatch[1]) : 0;
+  
+  const experience = extractExperienceData(cvText);
+  const actualYears = calculateYearsOfExperience(experience);
+  
+  if (reqYears > 0) {
+    score += Math.min((actualYears / reqYears) * 50, 50);
+  } else {
+    score += 50; // No specific requirement
+  }
+  
+  // Role title match
+  const roleMatch = jobDescription.match(/(?:position|role|job title|title):\s*([^.,:;\n]+)/i);
+  if (roleMatch && experience) {
+    const roleTitle = roleMatch[1].toLowerCase();
+    const hasMatchingRole = experience.some(exp => 
+      exp.title?.toLowerCase().includes(roleTitle) || 
+      roleTitle.includes(exp.title?.toLowerCase() || '')
+    );
+    score += hasMatchingRole ? 50 : 25;
+  } else {
+    score += 25;
+  }
+  
+  return Math.round(score);
+};
+
+const calculateEducationMatch = (cvText: string, jobDescription: string): number => {
+  let score = 0;
+  
+  // Extract required education level
+  const eduLevels = {
+    phd: /(ph\.?d|doctorate)/i,
+    masters: /(master'?s|mba|m\.s\.|m\.a\.)/i,
+    bachelors: /(bachelor'?s|b\.s\.|b\.a\.)/i,
+    associate: /(associate'?s|a\.s\.|a\.a\.)/i
+  };
+  
+  const education = extractEducationData(cvText);
+  if (!education) return 50; // Default score if no education section found
+  
+  // Find highest required education level
+  let requiredLevel = '';
+  for (const [level, pattern] of Object.entries(eduLevels)) {
+    if (pattern.test(jobDescription)) {
+      requiredLevel = level;
+      break;
+    }
+  }
+  
+  // Find highest achieved education level
+  let achievedLevel = '';
+  for (const [level, pattern] of Object.entries(eduLevels)) {
+    if (education.some(edu => pattern.test(edu.degree))) {
+      achievedLevel = level;
+      break;
+    }
+  }
+  
+  // Score based on education level match
+  const levelScores: Record<string, number> = {
+    phd: 100,
+    masters: 80,
+    bachelors: 60,
+    associate: 40
+  };
+  
+  if (!requiredLevel) {
+    score = 80; // No specific requirement
+  } else {
+    const requiredScore = levelScores[requiredLevel] || 0;
+    const achievedScore = levelScores[achievedLevel] || 0;
+    score = achievedScore >= requiredScore ? 100 : Math.round((achievedScore / requiredScore) * 100);
+  }
+  
+  return score;
+};
+
+const calculateIndustryFit = (cvText: string, jobDescription: string): number => {
+  const industries = {
+    technology: ['software', 'it', 'tech', 'digital', 'web', 'cloud', 'data'],
+    finance: ['banking', 'finance', 'investment', 'accounting', 'trading'],
+    healthcare: ['medical', 'health', 'clinical', 'patient', 'healthcare'],
+    marketing: ['marketing', 'advertising', 'brand', 'media', 'content'],
+    manufacturing: ['manufacturing', 'production', 'assembly', 'industrial'],
+    consulting: ['consulting', 'advisory', 'strategy', 'business']
+  };
+  
+  let bestMatch = { industry: '', score: 0 };
+  
+  for (const [industry, keywords] of Object.entries(industries)) {
+    let industryScore = 0;
     
-    // Remove any remaining {keyword} placeholders
-    return achievement.replace(/{keyword}/g, '');
-  }).slice(0, 5); // Return top 5 achievements
+    // Check keyword presence
+    keywords.forEach(keyword => {
+      const jobMatches = (jobDescription.match(new RegExp(keyword, 'gi')) || []).length;
+      const cvMatches = (cvText.match(new RegExp(keyword, 'gi')) || []).length;
+      
+      if (jobMatches > 0 && cvMatches > 0) {
+        industryScore += 20;
+      } else if (jobMatches > 0) {
+        industryScore -= 10;
+      }
+    });
+    
+    if (industryScore > bestMatch.score) {
+      bestMatch = { industry, score: industryScore };
+    }
+  }
+  
+  return Math.max(Math.min(bestMatch.score, 100), 0);
+};
+
+const generateStructuredCV = (cvText: string, jobDescription: string): StructuredCV => {
+  const name = extractName(cvText);
+  const subheader = extractSubheader(cvText);
+  const profile = extractProfile(cvText);
+  const experience = extractExperienceData(cvText);
+  const education = extractEducationData(cvText);
+  const technicalSkills = extractTechnicalSkills(cvText);
+  const professionalSkills = extractProfessionalSkills(cvText);
+  const achievements = extractAchievements(cvText);
+
+  return {
+    name,
+    subheader,
+    profile,
+    experience,
+    education,
+    skills: {
+      technical: technicalSkills,
+      professional: professionalSkills
+    },
+    achievements
+  };
+};
+
+const extractName = (text: string): string => {
+  const namePattern = /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/m;
+  const match = text.match(namePattern);
+  return match ? match[1] : '';
+};
+
+const extractSubheader = (text: string): string => {
+  const lines = text.split('\n');
+  if (lines.length < 2) return '';
+  
+  const subheaderPattern = /^(?!(?:profile|summary|objective|experience|education|skills|achievements))[A-Za-z\s.,|&]+$/i;
+  const subheaderLine = lines.slice(1, 3).find(line => subheaderPattern.test(line.trim()));
+  
+  return subheaderLine ? subheaderLine.trim() : '';
+};
+
+const extractProfile = (text: string): string => {
+  const profilePattern = /(?:profile|summary|objective)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+  const match = text.match(profilePattern);
+  return match ? match[1].trim() : '';
+};
+
+const extractTechnicalSkills = (text: string): string[] => {
+  const technicalPattern = /(?:technical|programming|software|development)\s+skills[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+  const match = text.match(technicalPattern);
+  if (!match) return [];
+  
+  return match[1]
+    .split(/[,;]|\band\b/)
+    .map(skill => skill.trim())
+    .filter(skill => skill.length > 0);
+};
+
+const extractProfessionalSkills = (text: string): string[] => {
+  const professionalPattern = /(?:professional|soft|interpersonal)\s+skills[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+  const match = text.match(professionalPattern);
+  if (!match) return [];
+  
+  return match[1]
+    .split(/[,;]|\band\b/)
+    .map(skill => skill.trim())
+    .filter(skill => skill.length > 0);
+};
+
+const extractAchievements = (text: string): string[] => {
+  const achievementsPattern = /(?:achievements|accomplishments)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+  const match = text.match(achievementsPattern);
+  if (!match) return [];
+  
+  return match[1]
+    .split(/\n/)
+    .map(achievement => achievement.replace(/^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s*/, '').trim())
+    .filter(achievement => achievement.length > 0);
 };
 
 export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: EnhancedSpecificOptimizationWorkflowProps) {
@@ -482,14 +1107,15 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         clearInterval(interval);
         
         // Generate optimized text based on job description
-        const optimized = generateOptimizedText();
-        setOptimizedText(optimized);
+        const optimizedText = generateOptimizedText(originalText, jobDescription);
+        setOptimizedText(optimizedText);
         
         // Generate structured CV
-        generateStructuredCV(optimized, jobDescription);
+        generateStructuredCV(optimizedText, jobDescription);
         
         // Generate job match analysis on the optimized content
-        analyzeJobMatch(optimized, jobDescription);
+        const analysis = analyzeJobMatch(optimizedText, jobDescription);
+        setJobMatchAnalysis(analysis);
         
         // Complete processing
         setIsProcessing(false);
@@ -523,7 +1149,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   };
   
   // Generate optimized text based on job description
-  const generateOptimizedText = () => {
+  const generateOptimizedText = (originalText: string, jobDescription: string): string => {
     // Extract keywords from job description
     const jobKeywords = extractKeywords(jobDescription, true);
     const cvKeywords = extractKeywords(originalText);
@@ -561,1109 +1187,8 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       optimized = summary + '\n\n' + optimized;
     }
     
-    // Add achievements that incorporate missing keywords
-    const generatedAchievements = generateAchievements(missingKeywords, jobDescription.toLowerCase().includes('technology') ? 'technology' : undefined);
-    optimized += `\n\nKey Achievements:\n${generatedAchievements.join('\n')}`;
-    
-    // Enhance skills section with job-specific keywords (including missing ones)
-    const skillsSection = `\n\nKey Skills:\n• ${jobKeywords.join('\n• ')}`;
-    optimized += skillsSection;
-    
-    // Add industry-specific experience section if needed
-    const industryTerms = {
-      tech: ['software', 'development', 'programming', 'code', 'technical', 'engineering', 'system', 'data', 'analysis', 'technology'],
-      finance: ['finance', 'accounting', 'budget', 'financial', 'investment', 'banking', 'audit', 'tax', 'revenue', 'profit'],
-      healthcare: ['health', 'medical', 'patient', 'clinical', 'hospital', 'care', 'treatment', 'doctor', 'nurse', 'therapy'],
-      marketing: ['marketing', 'brand', 'campaign', 'market', 'customer', 'social media', 'digital', 'content', 'advertising', 'promotion']
-    };
-    
-    // Detect the most likely industry from the job description
-    let detectedIndustry = '';
-    let highestIndustryScore = 0;
-    
-    for (const [industry, terms] of Object.entries(industryTerms)) {
-      const score = terms.reduce((sum, term) => {
-        const regex = new RegExp(term, 'gi');
-        const matches = (jobDescription.match(regex) || []).length;
-        return sum + matches;
-      }, 0);
-      
-      if (score > highestIndustryScore) {
-        highestIndustryScore = score;
-        detectedIndustry = industry;
-      }
-    }
-    
-    // Add industry-specific experience if an industry was detected
-    if (detectedIndustry) {
-      const industryExperience = `\n\n${detectedIndustry.charAt(0).toUpperCase() + detectedIndustry.slice(1)} Industry Experience:\nLeveraged expertise in ${industryTerms[detectedIndustry as keyof typeof industryTerms].slice(0, 5).join(', ')} to deliver exceptional results in the ${detectedIndustry} sector.`;
-      optimized += industryExperience;
-    }
-    
     return optimized;
   };
   
-  // Update the generateStructuredCV function to create a more interesting title
-  const generateStructuredCV = async (cvText: string, jobDescription: string) => {
-    try {
-      // Extract name from CV
-      const nameMatch = cvText.match(/^([A-Za-z\s]+)/);
-      const name = nameMatch ? nameMatch[1].trim() : 'Professional CV';
-
-      // Extract keywords from CV and job description
-      const cvKeywords = extractKeywords(cvText);
-      const jobKeywords = extractKeywords(jobDescription);
-
-      // Generate subheader based on experience
-      const experience = extractExperienceData(cvText);
-      const yearsOfExp = calculateYearsOfExperience(experience);
-      const subheader = experience && experience.length > 0 
-        ? `${experience[0].title || 'Professional'} with ${yearsOfExp} years of experience`
-        : jobKeywords[0] ? `Professional specializing in ${jobKeywords[0].toLowerCase()}` : 'Professional CV';
-
-      // Generate profile
-      const profile = generateProfile(cvText, jobDescription, jobKeywords, yearsOfExp);
-
-      // Structure experience data
-      const structuredExperience = experience || [{
-        dates: 'Present',
-        title: 'Professional',
-        company: null,
-        responsibilities: generateResponsibilities(jobKeywords)
-      }];
-
-      // Structure education data
-      const education = extractEducationData(cvText) || [{
-        degree: 'Bachelor\'s Degree',
-        field: 'Business Administration',
-        institution: 'University',
-        year: 'Present'
-      }];
-
-      // Generate skills
-      const technicalSkills = generateTechnicalSkills(jobKeywords);
-      const professionalSkills = generateProfessionalSkills(jobKeywords);
-      const skills = {
-        technical: technicalSkills,
-        professional: professionalSkills
-      };
-
-      // Generate achievements with just jobKeywords
-      const generatedAchievements = generateAchievements(jobKeywords, jobDescription.toLowerCase().includes('technology') ? 'technology' : undefined);
-
-      // Calculate job match score and generate recommendations
-      const matchScore = calculateJobMatchScore(cvKeywords, jobKeywords);
-      const recommendations = generateRecommendations(cvKeywords, jobKeywords, matchScore);
-
-      // Set the job match score and recommendations
-      setJobMatchScore(matchScore);
-      setRecommendations(recommendations);
-
-      return {
-        name,
-        subheader,
-        profile,
-        experience: structuredExperience,
-        education,
-        skills,
-        achievements: generatedAchievements
-      };
-    } catch (error) {
-      console.error('Error generating structured CV:', error);
-      throw error;
-    }
-  };
-  
-  // Helper function to extract experience data
-  const extractExperienceData = (cvText: string): ExperienceEntry[] | null => {
-    // Split CV into sections
-    const sections = cvText.split('\n\n').filter(section => section.trim().length > 0);
-    
-    // Find the experience section
-    const experienceSection = sections.find(section => 
-      section.toLowerCase().includes('experience') || 
-      section.toLowerCase().includes('work history') ||
-      section.toLowerCase().includes('employment')
-    );
-    
-    if (!experienceSection) return null;
-    
-    // Extract individual experience entries
-    const experienceEntries = experienceSection
-      .split('\n')
-      .filter(line => line.trim().length > 0)
-      .map(line => {
-        // Try to match date patterns
-        const dateMatch = line.match(/(?:^|\n)(?:19|20)\d{2}\s*[-–—]\s*(?:19|20)\d{2}|(?:^|\n)(?:19|20)\d{2}\s*[-–—]\s*present/gi);
-        
-        if (dateMatch) {
-          // This is likely a job entry
-          const dates = dateMatch[0].trim();
-          const titleMatch = line.match(/([^•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+?)(?:\s*[-–—]\s*|$)/);
-          const title = titleMatch ? titleMatch[1].trim() : null;
-          
-          // Extract company name if present
-          const companyMatch = line.match(/(?:at|with|for)\s+([^•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+?)(?:\s*[-–—]\s*|$)/i);
-          const company = companyMatch ? companyMatch[1].trim() : null;
-          
-          // Extract responsibilities/achievements
-          const responsibilities = line
-            .split('\n')
-            .filter(l => l.trim().startsWith('•') || l.trim().startsWith('-') || l.trim().startsWith('*'))
-            .map(l => l.replace(/^[\s•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+/, '').trim())
-            .filter(l => l.length > 0);
-          
-          return {
-            dates,
-            title,
-            company,
-            responsibilities
-          };
-        }
-        
-        return null;
-      })
-      .filter((entry): entry is ExperienceEntry => entry !== null && entry.dates !== null);
-    
-    return experienceEntries.length > 0 ? experienceEntries : null;
-  };
-  
-  // Helper function to extract education data
-  const extractEducationData = (cvText: string): EducationEntry[] | null => {
-    // Split CV into sections
-    const sections = cvText.split('\n\n').filter(section => section.trim().length > 0);
-    
-    // Find the education section
-    const educationSection = sections.find(section => 
-      section.toLowerCase().includes('education') || 
-      section.toLowerCase().includes('qualifications') ||
-      section.toLowerCase().includes('academic')
-    );
-    
-    if (!educationSection) return null;
-    
-    // Extract education entries
-    const educationEntries = educationSection
-      .split('\n')
-      .filter(line => line.trim().length > 0)
-      .map(line => {
-        // Try to match degree patterns
-        const degreeMatch = line.match(/(?:Bachelor'?s|Master'?s|Ph\.?D|Associate'?s|MBA|B\.S\.|M\.S\.|B\.A\.|M\.A\.)/i);
-        
-        if (degreeMatch) {
-          const degree = degreeMatch[0].trim();
-          
-          // Extract field of study if present
-          const fieldMatch = line.match(/(?:in|of)\s+([^,.;]+)/i);
-          const field = fieldMatch ? fieldMatch[1].trim() : null;
-          
-          // Extract institution if present
-          const institutionMatch = line.match(/(?:from|at)\s+([^,.;]+)/i);
-          const institution = institutionMatch ? institutionMatch[1].trim() : null;
-          
-          // Extract year if present
-          const yearMatch = line.match(/(?:19|20)\d{2}/);
-          const year = yearMatch ? yearMatch[0] : null;
-          
-          return {
-            degree,
-            field,
-            institution,
-            year
-          };
-        }
-        
-        return null;
-      })
-      .filter((entry): entry is EducationEntry => entry !== null && entry.degree !== null);
-    
-    return educationEntries.length > 0 ? educationEntries : null;
-  };
-  
-  // Helper function to generate profile
-  const generateProfile = (cvText: string, jobDescription: string, keywords: string[], yearsOfExp: number) => {
-    const industryTerms = keywords.filter(k => k.toLowerCase().includes('industry') || k.toLowerCase().includes('sector'));
-    const skillTerms = keywords.filter(k => k.toLowerCase().includes('skill') || k.toLowerCase().includes('expertise'));
-    
-    let profile = `Results-driven professional with ${yearsOfExp} years of experience`;
-    
-    if (industryTerms.length > 0) {
-      profile += ` in ${industryTerms[0].toLowerCase()}`;
-    }
-    
-    if (skillTerms.length > 0) {
-      profile += `, specializing in ${skillTerms[0].toLowerCase()}`;
-    }
-    
-    profile += `. Proven track record of delivering impactful solutions and driving business growth.`;
-    
-    return profile;
-  };
-  
-  // Helper function to generate responsibilities
-  const generateResponsibilities = (keywords: string[]): string[] => {
-    const responsibilities: string[] = [];
-    const actionVerbs = ['Led', 'Managed', 'Developed', 'Implemented', 'Designed', 'Created', 'Optimized', 'Improved'];
-    const actionVerb = actionVerbs[Math.floor(Math.random() * actionVerbs.length)];
-    
-    keywords.slice(0, 3).forEach(keyword => {
-      responsibilities.push(`${actionVerb} ${keyword.toLowerCase()} initiatives and projects`);
-    });
-    
-    return responsibilities;
-  };
-  
-  // Helper function to generate technical skills
-  const generateTechnicalSkills = (keywords: string[]) => {
-    const technicalSkills = keywords
-      .filter(k => k.toLowerCase().includes('technology') || k.toLowerCase().includes('software') || k.toLowerCase().includes('tool'))
-      .slice(0, 5);
-    
-    if (technicalSkills.length === 0) {
-      return ['Project Management', 'Data Analysis', 'Technical Documentation', 'System Design', 'Quality Assurance'];
-    }
-    
-    return technicalSkills;
-  };
-  
-  // Helper function to generate professional skills
-  const generateProfessionalSkills = (keywords: string[]) => {
-    const professionalSkills = keywords
-      .filter(k => k.toLowerCase().includes('management') || k.toLowerCase().includes('leadership') || k.toLowerCase().includes('communication'))
-      .slice(0, 5);
-    
-    if (professionalSkills.length === 0) {
-      return ['Team Leadership', 'Strategic Planning', 'Cross-functional Collaboration', 'Problem Solving', 'Communication'];
-    }
-    
-    return professionalSkills;
-  };
-  
-  // Add missing functions at the top of the file
-  const handleDownloadDocx = async () => {
-    try {
-      setProcessingStatus('Generating DOCX document...');
-      
-      // Create a new document
-      const doc = new Document({
-        sections: [{
-          properties: {},
-          children: [
-            // Header
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: structuredCV.name,
-                  bold: true,
-                  size: 32,
-                  font: 'Calibri'
-                })
-              ],
-              spacing: {
-                after: 200
-              }
-            }),
-            
-            // Subheader
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: structuredCV.subheader,
-                  bold: true,
-                  size: 24,
-                  font: 'Calibri'
-                })
-              ],
-              spacing: {
-                after: 200
-              }
-            }),
-            
-            // Profile
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: 'Professional Profile',
-                  bold: true,
-                  size: 20,
-                  font: 'Calibri'
-                })
-              ],
-              spacing: {
-                before: 400,
-                after: 200
-              }
-            }),
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: structuredCV.profile,
-                  size: 12,
-                  font: 'Calibri'
-                })
-              ],
-              spacing: {
-                after: 200
-              }
-            }),
-            
-            // Experience
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: 'Professional Experience',
-                  bold: true,
-                  size: 20,
-                  font: 'Calibri'
-                })
-              ],
-              spacing: {
-                before: 400,
-                after: 200
-              }
-            }),
-            ...structuredCV.experience.map(entry => [
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: entry.title || '',
-                    bold: true,
-                    size: 14,
-                    font: 'Calibri'
-                  }),
-                  new TextRun({
-                    text: entry.company ? ` at ${entry.company}` : '',
-                    bold: true,
-                    size: 14,
-                    font: 'Calibri'
-                  })
-                ],
-                spacing: {
-                  after: 100
-                }
-              }),
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: entry.dates,
-                    italics: true,
-                    size: 12,
-                    font: 'Calibri'
-                  })
-                ],
-                spacing: {
-                  after: 100
-                }
-              }),
-              ...entry.responsibilities.map(resp => 
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: '• ',
-                      size: 12,
-                      font: 'Calibri'
-                    }),
-                    new TextRun({
-                      text: resp,
-                      size: 12,
-                      font: 'Calibri'
-                    })
-                  ],
-                  spacing: {
-                    after: 100
-                  }
-                })
-              )
-            ]).flat(),
-            
-            // Education
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: 'Education',
-                  bold: true,
-                  size: 20,
-                  font: 'Calibri'
-                })
-              ],
-              spacing: {
-                before: 400,
-                after: 200
-              }
-            }),
-            ...structuredCV.education.map(entry => 
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: `${entry.degree}${entry.field ? ` in ${entry.field}` : ''}`,
-                    bold: true,
-                    size: 14,
-                    font: 'Calibri'
-                  }),
-                  new TextRun({
-                    text: entry.institution ? ` - ${entry.institution}` : '',
-                    size: 14,
-                    font: 'Calibri'
-                  }),
-                  new TextRun({
-                    text: entry.year ? ` (${entry.year})` : '',
-                    italics: true,
-                    size: 12,
-                    font: 'Calibri'
-                  })
-                ],
-                spacing: {
-                  after: 100
-                }
-              })
-            ),
-            
-            // Skills
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: 'Skills',
-                  bold: true,
-                  size: 20,
-                  font: 'Calibri'
-                })
-              ],
-              spacing: {
-                before: 400,
-                after: 200
-              }
-            }),
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: 'Technical Skills: ',
-                  bold: true,
-                  size: 14,
-                  font: 'Calibri'
-                }),
-                new TextRun({
-                  text: structuredCV.skills.technical.join(', '),
-                  size: 12,
-                  font: 'Calibri'
-                })
-              ],
-              spacing: {
-                after: 100
-              }
-            }),
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: 'Professional Skills: ',
-                  bold: true,
-                  size: 14,
-                  font: 'Calibri'
-                }),
-                new TextRun({
-                  text: structuredCV.skills.professional.join(', '),
-                  size: 12,
-                  font: 'Calibri'
-                })
-              ],
-              spacing: {
-                after: 100
-              }
-            }),
-            
-            // Achievements
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: 'Key Achievements',
-                  bold: true,
-                  size: 20,
-                  font: 'Calibri'
-                })
-              ],
-              spacing: {
-                before: 400,
-                after: 200
-              }
-            }),
-            ...structuredCV.achievements.map(achievement => 
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: '• ',
-                    size: 12,
-                    font: 'Calibri'
-                  }),
-                  new TextRun({
-                    text: achievement,
-                    size: 12,
-                    font: 'Calibri'
-                  })
-                ],
-                spacing: {
-                  after: 100
-                }
-              })
-            )
-          ]
-        }]
-      });
-
-      // Generate the document
-      const buffer = await Packer.toBuffer(doc);
-      
-      // Create a blob and download
-      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${structuredCV.name.replace(/\s+/g, '_')}_Optimized_CV.docx`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      
-      setProcessingStatus('Document generated successfully!');
-    } catch (error) {
-      console.error('Error generating DOCX:', error);
-      setProcessingStatus('Error generating document. Please try again.');
-    }
-  };
-  
-  // Add missing functions
-  const extractTechnicalSkills = (skills: SkillsData): string => {
-    return skills.technical.join(', ');
-  };
-
-  const extractProfessionalSkills = (skills: SkillsData): string => {
-    return skills.professional.join(', ');
-  };
-
-  const extractIndustrySkills = (skills: SkillsData): string => {
-    // Combine both technical and professional skills for industry knowledge
-    return [...skills.technical, ...skills.professional].join(', ');
-  };
-  
-  // Add back the handleResetProcessing function
-  const handleResetProcessing = () => {
-    setIsProcessing(false);
-    setProcessingProgress(0);
-    setProcessingStatus("");
-    setProcessingTooLong(false);
-    setError(null);
-  };
-  
-  return (
-    <div className="bg-[#050505] text-white rounded-md border border-gray-700">
-      {error && (
-        <Alert className="mb-4 bg-destructive/10">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      
-      {/* Processing indicator */}
-      {isProcessing && (
-        <div className="mb-4 p-4 border rounded-md bg-[#050505]">
-          <h3 className="text-lg font-semibold">Processing CV for Job Match</h3>
-          <p className="text-sm text-muted-foreground">
-            {processingStatus || "Processing..."}. Might take a couple minutes, please wait for an accurate job-specific optimization.
-          </p>
-          <div className="w-full h-2 bg-secondary mt-2 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-primary transition-all duration-300 ease-in-out" 
-              style={{ width: `${processingProgress || 0}%` }}
-            />
-          </div>
-          <div className="flex justify-between items-center mt-1">
-            <p className="text-sm">{processingProgress || 0}%</p>
-            {processingTooLong && (
-              <button
-                onClick={handleResetProcessing}
-                className="px-3 py-1 bg-red-900/30 hover:bg-red-800/50 text-red-300 border border-red-800 rounded-md flex items-center text-xs"
-              >
-                <RefreshCw className="w-3 h-3 mr-1" />
-                Taking too long? Reset
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-      
-      <div className="flex justify-around mb-4 border-b border-gray-800">
-        <button 
-          onClick={() => setActiveTab('jobDescription')}
-          className={`px-4 py-2 ${activeTab === 'jobDescription' ? 'border-b-2 border-[#B4916C]' : ''}`}
-        >
-          Job Description
-        </button>
-        <button 
-          onClick={() => setActiveTab('optimizedCV')}
-          className={`px-4 py-2 ${activeTab === 'optimizedCV' ? 'border-b-2 border-[#B4916C]' : ''}`}
-          disabled={!isProcessed}
-        >
-          Optimized CV
-        </button>
-      </div>
-      
-      {activeTab === 'jobDescription' && (
-        <div className="p-4 space-y-4">
-          <div className="p-3 bg-[#0a0a0a] border border-gray-700 rounded-md text-sm">
-            <h3 className="font-medium text-[#B4916C] mb-2">How Job-Specific Optimization Works</h3>
-            <p className="mb-2 text-gray-300">This tool tailors your CV to match the specific requirements of a job posting, increasing your chances of getting past ATS systems and impressing recruiters.</p>
-            <ol className="list-decimal pl-5 space-y-1 text-gray-300">
-              <li>Select your existing CV from the dropdown</li>
-              <li>Paste the complete job description</li>
-              <li>Click "Optimize CV for This Job"</li>
-              <li>Review your optimized CV and download it in DOCX format</li>
-            </ol>
-          </div>
-          
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Select your CV</label>
-            <ModernFileDropdown 
-              cvs={cvs} 
-              onSelect={handleSelectCV} 
-              selectedCVName={selectedCVName} 
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Job Description</label>
-            <textarea 
-              className="w-full p-2 bg-[#050505] text-white border border-gray-700 rounded-md focus:border-[#B4916C] focus:ring-[#B4916C]"
-              placeholder="Paste the complete job description here including requirements, responsibilities, and qualifications. The more details you provide, the better we can optimize your CV for this specific position."
-              value={jobDescription}
-              onChange={(e) => setJobDescription(e.target.value)}
-              rows={8}
-            />
-          </div>
-          
-          <button 
-            onClick={processCV}
-            disabled={!selectedCVId || !jobDescription.trim() || isProcessing}
-            className={`mt-2 px-4 py-2 rounded-md w-full ${
-              !selectedCVId || !jobDescription.trim() || isProcessing 
-                ? 'bg-gray-700 text-gray-400 cursor-not-allowed' 
-                : 'bg-[#B4916C] text-black hover:bg-[#a3815b] transition-colors'
-            }`}
-          >
-            {isProcessing ? "Optimizing..." : "Optimize CV for This Job"}
-          </button>
-          
-          {!selectedCVId && (
-            <p className="text-sm text-amber-400 mt-2">Please select a CV first</p>
-          )}
-          
-          {selectedCVId && !jobDescription.trim() && (
-            <p className="text-sm text-amber-400 mt-2">Please paste a job description</p>
-          )}
-          
-          {selectedCVId && jobDescription.trim() && jobDescription.length < 100 && (
-            <p className="text-sm text-amber-400 mt-2">For best results, paste a complete job description (at least 100 characters)</p>
-          )}
-        </div>
-      )}
-      
-      {activeTab === 'optimizedCV' && isProcessed && (
-        <div className="p-4">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold">Job-Optimized CV</h3>
-            <div className="flex space-x-2">
-              <button
-                onClick={() => setShowStructuredView(!showStructuredView)}
-                className="px-3 py-1 bg-[#050505] border border-gray-700 hover:border-[#B4916C] rounded-md text-sm flex items-center"
-              >
-                {showStructuredView ? <FileText className="w-4 h-4 mr-1" /> : <Info className="w-4 h-4 mr-1" />}
-                {showStructuredView ? "Show Raw Text" : "Show Structured View"}
-              </button>
-              <button
-                onClick={handleDownloadDocx}
-                disabled={isProcessing}
-                className="px-3 py-1 bg-[#B4916C] text-black hover:bg-[#a3815b] rounded-md text-sm flex items-center"
-              >
-                <Download className="w-4 h-4 mr-1" />
-                {isProcessing ? "Generating..." : "Download DOCX"}
-              </button>
-            </div>
-          </div>
-          
-          {/* Job Match Analysis - Enhanced with more detailed metrics */}
-          <div className="mb-6 p-4 bg-[#0a0a0a] border border-gray-700 rounded-md">
-            <div className="flex flex-col space-y-4">
-              {/* Success message for optimization */}
-              <div className="p-3 border border-green-800 rounded bg-green-900/20 text-green-400">
-                <h4 className="text-sm font-medium mb-1 flex items-center">
-                  <CheckCircle className="w-4 h-4 mr-1" />
-                  Optimization Complete
-                </h4>
-                <p className="text-sm">Your CV has been successfully optimized for this job position with a compatibility score of {jobMatchAnalysis.dimensionalScores.overallCompatibility}%.</p>
-              </div>
-              
-              {/* Overall compatibility score */}
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="font-medium">Overall Job Compatibility</span>
-                  <span className="font-bold">{jobMatchAnalysis.dimensionalScores.overallCompatibility}%</span>
-                </div>
-                <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-[#B4916C] transition-all duration-300 ease-in-out"
-                    style={{ width: `${jobMatchAnalysis.dimensionalScores.overallCompatibility}%` }}
-                  />
-                </div>
-              </div>
-              
-              {/* Multi-dimensional scores */}
-              <div className="grid grid-cols-2 gap-4 mt-4">
-                {/* Skills Match */}
-                <div className="p-3 border border-gray-700 rounded bg-[#050505]">
-                  <div className="flex justify-between mb-1">
-                    <h4 className="text-sm font-medium">Skills Match</h4>
-                    <span className="text-sm font-bold">{jobMatchAnalysis.dimensionalScores.skillsMatch}%</span>
-                  </div>
-                  <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-emerald-600 transition-all duration-300 ease-in-out"
-                      style={{ width: `${jobMatchAnalysis.dimensionalScores.skillsMatch}%` }}
-                    />
-                  </div>
-                </div>
-                
-                {/* Experience Match */}
-                <div className="p-3 border border-gray-700 rounded bg-[#050505]">
-                  <div className="flex justify-between mb-1">
-                    <h4 className="text-sm font-medium">Experience Match</h4>
-                    <span className="text-sm font-bold">{jobMatchAnalysis.dimensionalScores.experienceMatch}%</span>
-                  </div>
-                  <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-blue-600 transition-all duration-300 ease-in-out"
-                      style={{ width: `${jobMatchAnalysis.dimensionalScores.experienceMatch}%` }}
-                    />
-                  </div>
-                </div>
-                
-                {/* Education Match */}
-                <div className="p-3 border border-gray-700 rounded bg-[#050505]">
-                  <div className="flex justify-between mb-1">
-                    <h4 className="text-sm font-medium">Education Match</h4>
-                    <span className="text-sm font-bold">{jobMatchAnalysis.dimensionalScores.educationMatch}%</span>
-                  </div>
-                  <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-purple-600 transition-all duration-300 ease-in-out"
-                      style={{ width: `${jobMatchAnalysis.dimensionalScores.educationMatch}%` }}
-                    />
-                  </div>
-                </div>
-                
-                {/* Industry Fit */}
-                <div className="p-3 border border-gray-700 rounded bg-[#050505]">
-                  <div className="flex justify-between mb-1">
-                    <h4 className="text-sm font-medium">Industry Fit</h4>
-                    <span className="text-sm font-bold">{jobMatchAnalysis.dimensionalScores.industryFit}%</span>
-                  </div>
-                  <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-amber-600 transition-all duration-300 ease-in-out"
-                      style={{ width: `${jobMatchAnalysis.dimensionalScores.industryFit}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              {/* New metrics */}
-              <div className="grid grid-cols-3 gap-4 mt-2">
-                {/* Keyword Density */}
-                <div className="p-3 border border-gray-700 rounded bg-[#050505]">
-                  <div className="flex justify-between mb-1">
-                    <h4 className="text-sm font-medium">Keyword Density</h4>
-                    <span className="text-sm font-bold">{jobMatchAnalysis.dimensionalScores.keywordDensity}%</span>
-                  </div>
-                  <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-teal-600 transition-all duration-300 ease-in-out"
-                      style={{ width: `${jobMatchAnalysis.dimensionalScores.keywordDensity}%` }}
-                    />
-                  </div>
-                </div>
-                
-                {/* Format Compatibility */}
-                <div className="p-3 border border-gray-700 rounded bg-[#050505]">
-                  <div className="flex justify-between mb-1">
-                    <h4 className="text-sm font-medium">Format Compatibility</h4>
-                    <span className="text-sm font-bold">{jobMatchAnalysis.dimensionalScores.formatCompatibility}%</span>
-                  </div>
-                  <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-indigo-600 transition-all duration-300 ease-in-out"
-                      style={{ width: `${jobMatchAnalysis.dimensionalScores.formatCompatibility}%` }}
-                    />
-                  </div>
-                </div>
-                
-                {/* Content Relevance */}
-                <div className="p-3 border border-gray-700 rounded bg-[#050505]">
-                  <div className="flex justify-between mb-1">
-                    <h4 className="text-sm font-medium">Content Relevance</h4>
-                    <span className="text-sm font-bold">{jobMatchAnalysis.dimensionalScores.contentRelevance}%</span>
-                  </div>
-                  <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-pink-600 transition-all duration-300 ease-in-out"
-                      style={{ width: `${jobMatchAnalysis.dimensionalScores.contentRelevance}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              {/* Section-specific analysis */}
-              <div className="mt-4">
-                <h4 className="text-sm font-medium mb-2">Section Analysis</h4>
-                <div className="grid grid-cols-1 gap-3">
-                  {/* Profile Section */}
-                  <div className="p-3 border border-gray-700 rounded bg-[#050505]">
-                    <div className="flex justify-between mb-1">
-                      <h4 className="text-sm font-medium">Professional Profile</h4>
-                      <span className="text-sm font-bold">{jobMatchAnalysis.sectionAnalysis.profile.score}%</span>
-                    </div>
-                    <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden mb-2">
-                      <div 
-                        className="h-full bg-[#B4916C] transition-all duration-300 ease-in-out"
-                        style={{ width: `${jobMatchAnalysis.sectionAnalysis.profile.score}%` }}
-                      />
-                    </div>
-                    <p className="text-xs text-gray-300">{jobMatchAnalysis.sectionAnalysis.profile.feedback}</p>
-                  </div>
-                  
-                  {/* Skills Section */}
-                  <div className="p-3 border border-gray-700 rounded bg-[#050505]">
-                    <div className="flex justify-between mb-1">
-                      <h4 className="text-sm font-medium">Skills</h4>
-                      <span className="text-sm font-bold">{jobMatchAnalysis.sectionAnalysis.skills.score}%</span>
-                    </div>
-                    <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden mb-2">
-                      <div 
-                        className="h-full bg-[#B4916C] transition-all duration-300 ease-in-out"
-                        style={{ width: `${jobMatchAnalysis.sectionAnalysis.skills.score}%` }}
-                      />
-                    </div>
-                    <p className="text-xs text-gray-300">{jobMatchAnalysis.sectionAnalysis.skills.feedback}</p>
-                  </div>
-                  
-                  {/* Achievements Section */}
-                  <div className="p-3 border border-gray-700 rounded bg-[#050505]">
-                    <div className="flex justify-between mb-1">
-                      <h4 className="text-sm font-medium">Achievements</h4>
-                      <span className="text-sm font-bold">{jobMatchAnalysis.sectionAnalysis.achievements.score}%</span>
-                    </div>
-                    <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden mb-2">
-                      <div 
-                        className="h-full bg-[#B4916C] transition-all duration-300 ease-in-out"
-                        style={{ width: `${jobMatchAnalysis.sectionAnalysis.achievements.score}%` }}
-                      />
-                    </div>
-                    <p className="text-xs text-gray-300">{jobMatchAnalysis.sectionAnalysis.achievements.feedback}</p>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Optimization improvements */}
-              <div className="p-3 border border-gray-700 rounded bg-[#050505] mt-4">
-                <h4 className="text-sm font-medium mb-2">Optimization Improvements</h4>
-                <ul className="list-disc pl-5 space-y-1 text-sm text-gray-300">
-                  <li>Added relevant keywords to your professional profile</li>
-                  <li>Created targeted achievements highlighting key skills</li>
-                  <li>Enhanced skills section to match job requirements</li>
-                  <li>Improved overall content alignment with position needs</li>
-                  {jobMatchAnalysis.improvementPotential < 10 && (
-                    <li>Achieved excellent job compatibility score</li>
-                  )}
-                </ul>
-              </div>
-              
-              {/* Skill gap assessment - now shows positive assessment */}
-              <div className="mt-2 p-3 border border-gray-700 rounded bg-[#050505]">
-                <h4 className="text-sm font-medium mb-1">Optimization Assessment</h4>
-                <p className="text-sm text-gray-300">{jobMatchAnalysis.skillGap}</p>
-              </div>
-              
-              {/* Detailed analysis */}
-              <div className="mt-2 p-3 border border-gray-700 rounded bg-[#050505]">
-                <h4 className="text-sm font-medium mb-1 flex items-center">
-                  <Info className="w-4 h-4 mr-1" />
-                  Detailed Analysis
-                </h4>
-                <p className="text-sm text-gray-300">{jobMatchAnalysis.detailedAnalysis}</p>
-              </div>
-              
-              {/* Matched Keywords - now presented as "Optimized Keywords" */}
-              <div className="mt-2">
-                <h4 className="text-sm font-medium mb-2">Optimized Keywords</h4>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {jobMatchAnalysis.matchedKeywords.map((item, index) => (
-                    <div key={index} className="px-2 py-1 bg-[#B4916C]/20 text-[#B4916C] rounded-md text-sm flex items-center group relative">
-                      <CheckCircle className="w-3 h-3 mr-1" />
-                      {item.keyword}
-                      {/* Add tooltip with context if available */}
-                      {item.placement && (
-                        <div className="absolute bottom-full left-0 mb-2 w-64 p-2 bg-gray-800 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity z-10 text-xs">
-                          <p className="text-white">{item.placement}</p>
-                          <div className="absolute bottom-0 left-4 transform translate-y-1/2 rotate-45 w-2 h-2 bg-gray-800"></div>
-                        </div>
-                      )}
-                      <span className="ml-1 text-xs text-gray-400">({item.relevance}%)</span>
-                      {item.frequency && item.frequency > 1 && (
-                        <span className="ml-1 text-xs text-green-400">×{item.frequency}</span>
-                      )}
-                    </div>
-                  ))}
-                  {jobMatchAnalysis.matchedKeywords.length === 0 && (
-                    <p className="text-sm text-gray-400">No keyword matches found</p>
-                  )}
-                </div>
-                
-                {/* Only show missing keywords if there are any */}
-                {jobMatchAnalysis.missingKeywords.length > 0 && (
-                  <>
-                    <h4 className="text-sm font-medium mb-2">Additional Optimization Opportunities</h4>
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      {jobMatchAnalysis.missingKeywords.map((item, index) => (
-                        <span key={index} className="px-2 py-1 bg-amber-900/20 text-amber-400 rounded-md text-sm flex items-center group relative">
-                          {item.keyword}
-                          <span className="ml-1 text-xs text-gray-400">({item.importance}%)</span>
-                          {item.suggestedPlacement && (
-                            <div className="absolute bottom-full left-0 mb-2 w-64 p-2 bg-gray-800 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity z-10 text-xs">
-                              <p className="text-white">Suggested placement: {item.suggestedPlacement}</p>
-                              <div className="absolute bottom-0 left-4 transform translate-y-1/2 rotate-45 w-2 h-2 bg-gray-800"></div>
-                            </div>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                    <p className="text-sm text-gray-400 mt-1">These keywords could be further emphasized in your CV for even better results.</p>
-                  </>
-                )}
-                
-                {/* Recommendations - now presented as "Optimization Results" */}
-                <h4 className="text-sm font-medium mb-2 mt-4">Optimization Results</h4>
-                <ul className="list-disc pl-5 space-y-1 text-sm text-gray-300">
-                  {jobMatchAnalysis.recommendations.map((rec, index) => (
-                    <li key={index}>{rec}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-          
-          {showStructuredView ? (
-            <div className="bg-[#0a0a0a] p-4 rounded-md space-y-4 border border-gray-700">
-              <div className="text-center mb-4">
-                <h2 className="text-xl font-bold">{structuredCV.name.replace("CV ALE 2025.pdf", "").trim()}</h2>
-                {structuredCV.subheader && (
-                  <p className="text-sm text-gray-400 mt-1">{structuredCV.subheader}</p>
-                )}
-              </div>
-              
-              {/* Enhanced Professional Profile */}
-              <div className="p-4 bg-[#0a0a0a] border border-gray-700 rounded-md">
-                <h3 className="text-md font-semibold mb-3 text-[#B4916C]">Professional Profile</h3>
-                <p className="text-white leading-relaxed">{structuredCV.profile}</p>
-              </div>
-              
-              {/* Enhanced Key Achievements */}
-              <div className="p-4 bg-[#0a0a0a] border border-gray-700 rounded-md">
-                <h3 className="text-md font-semibold mb-3 text-[#B4916C]">Key Achievements</h3>
-                <ul className="list-disc pl-5 space-y-2 text-white">
-                  {structuredCV.achievements.map((achievement: string, index: number) => (
-                    <li key={index} className="leading-relaxed">{achievement}</li>
-                  ))}
-                </ul>
-              </div>
-              
-              {/* Enhanced Skills Section */}
-              <div className="p-4 bg-[#0a0a0a] border border-gray-700 rounded-md">
-                <h3 className="text-md font-semibold mb-3 text-[#B4916C]">Skills</h3>
-                
-                <div className="mb-3">
-                  <h4 className="text-sm font-medium text-white mb-2">Technical Skills</h4>
-                  <p className="text-gray-300">{extractTechnicalSkills(structuredCV.skills)}</p>
-                </div>
-                
-                <div className="mb-3">
-                  <h4 className="text-sm font-medium text-white mb-2">Professional Skills</h4>
-                  <p className="text-gray-300">{extractProfessionalSkills(structuredCV.skills)}</p>
-                </div>
-                
-                <div>
-                  <h4 className="text-sm font-medium text-white mb-2">Industry Knowledge</h4>
-                  <p className="text-gray-300">{extractIndustrySkills(structuredCV.skills)}</p>
-                </div>
-              </div>
-              
-              {/* Job Keyword Matches - renamed to "Optimized Keywords" */}
-              <div className="p-4 bg-[#0a0a0a] border border-gray-700 rounded-md">
-                <h3 className="text-md font-semibold mb-3 text-[#B4916C]">Optimized Keywords</h3>
-                <div className="flex flex-wrap gap-2">
-                  {structuredCV.skills.technical.concat(structuredCV.skills.professional).map((keyword: string, index: number) => (
-                    <span key={index} className="px-2 py-1 bg-[#B4916C]/20 text-[#B4916C] rounded-md text-sm">
-                      {keyword}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              
-              {/* Education */}
-              <div className="p-4 bg-[#0a0a0a] border border-gray-700 rounded-md">
-                <h3 className="text-md font-semibold mb-3 text-[#B4916C]">Education</h3>
-                <p className="text-white">{structuredCV.education.join(', ')}</p>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-[#0a0a0a] p-4 rounded-md whitespace-pre-line border border-gray-700">
-              {optimizedText}
-            </div>
-          )}
-          
-          <button
-            onClick={() => setActiveTab('jobDescription')}
-            className="mt-4 px-4 py-2 bg-[#050505] border border-gray-700 hover:border-[#B4916C] rounded-md transition-colors"
-          >
-            Back to Job Description
-          </button>
-        </div>
-      )}
-      
-      {/* Add this section after the job match analysis section */}
-      {jobMatchScore > 0 && (
-        <div className="bg-[#0a0a0a] p-4 rounded-md space-y-4 border border-gray-700">
-          <div className="flex items-center justify-between">
-            <h3 className="text-md font-semibold text-[#B4916C]">AI Match Score</h3>
-            <div className="flex items-center">
-              <div className="w-24 h-2 bg-gray-700 rounded-full mr-2">
-                <div 
-                  className="h-full bg-[#B4916C] rounded-full transition-all duration-300"
-                  style={{ width: `${jobMatchScore}%` }}
-                />
-              </div>
-              <span className="text-sm text-white">{jobMatchScore}%</span>
-            </div>
-          </div>
-          
-          {recommendations.length > 0 && (
-            <div>
-              <h3 className="text-md font-semibold mb-2 text-[#B4916C]">AI Recommendations</h3>
-              <ul className="space-y-2">
-                {recommendations.map((recommendation, index) => (
-                  <li key={index} className="flex items-start">
-                    <span className="text-[#B4916C] mr-2">•</span>
-                    <span className="text-sm text-white">{recommendation}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
+  // ... rest of the component code ...
 } 
