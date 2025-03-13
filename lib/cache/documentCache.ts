@@ -1,23 +1,7 @@
 // Document caching utilities
 // Provides caching functionality for optimized documents
 
-type CachedDocument = {
-  docxBase64: string;
-  pdfBase64?: string;
-  originalAtsScore: number;
-  improvedAtsScore: number;
-  timestamp: number;
-  expiryTime: number; // Time in ms after which cache is considered stale
-  originalText?: string; // Original CV text
-  optimizedText?: string; // Optimized CV text
-  improvements?: string[]; // List of improvements made
-  version?: number; // Version number of this optimization
-};
-
-type CacheEntry = {
-  cvId: string;
-  documents: CachedDocument;
-};
+import { CachedDocument } from "@/lib/types";
 
 type OptimizationHistory = {
   versions: CachedDocument[];
@@ -29,10 +13,67 @@ const HISTORY_PREFIX = 'cv_history_';
 const DEFAULT_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 const MAX_HISTORY_ENTRIES = 5; // Maximum number of history entries to keep
 
+// In-memory cache for document content
+const documentCache = new Map<string, CachedDocument>();
+
 /**
- * Store optimized CV document in cache
+ * Cache document content with a timestamp
  */
-export const cacheDocument = (
+export async function cacheDocument(
+  documentId: string, 
+  content: string, 
+  type: 'general' | 'specific' = 'general'
+): Promise<void> {
+  documentCache.set(documentId + (type === 'specific' ? '_specific' : ''), {
+    content,
+    timestamp: Date.now(),
+    type
+  });
+}
+
+/**
+ * Get cached document content
+ */
+export async function getCachedDocument(
+  documentId: string,
+  type: 'general' | 'specific' = 'general'
+): Promise<CachedDocument | null> {
+  const cacheKey = documentId + (type === 'specific' ? '_specific' : '');
+  return documentCache.get(cacheKey) || null;
+}
+
+/**
+ * Clear cached document content
+ */
+export async function clearCachedDocument(
+  documentId: string,
+  type: 'general' | 'specific' = 'general'
+): Promise<void> {
+  const cacheKey = documentId + (type === 'specific' ? '_specific' : '');
+  documentCache.delete(cacheKey);
+}
+
+/**
+ * Get the age of a cached document in milliseconds
+ */
+export async function getCacheAge(
+  documentId: string,
+  type: 'general' | 'specific' = 'general'
+): Promise<number | null> {
+  const cacheKey = documentId + (type === 'specific' ? '_specific' : '');
+  const cached = documentCache.get(cacheKey);
+  
+  if (!cached) {
+    return null;
+  }
+  
+  return Date.now() - cached.timestamp;
+}
+
+/**
+ * Store optimized CV document in cache (legacy implementation)
+ */
+export const cacheDocumentInCache = (
   cvId: string, 
   data: {
     docxBase64: string;
@@ -63,11 +104,12 @@ export const cacheDocument = (
     
     // Create new cache document
     const cacheEntry: CachedDocument = {
+      content: data.optimizedText || "",
+      timestamp: Date.now(),
       docxBase64: data.docxBase64,
       pdfBase64: data.pdfBase64,
       originalAtsScore: data.originalAtsScore,
       improvedAtsScore: data.improvedAtsScore,
-      timestamp: Date.now(),
       expiryTime: data.expiryTime || DEFAULT_EXPIRY,
       originalText: data.originalText,
       optimizedText: data.optimizedText,
@@ -93,7 +135,7 @@ export const cacheDocument = (
 };
 
 /**
- * Update PDF in cached document entry
+ * Update PDF in cached document entry (legacy implementation)
  */
 export const updateCachedPDF = (
   cvId: string,
@@ -129,38 +171,7 @@ export const updateCachedPDF = (
 };
 
 /**
- * Retrieve cached document
- * Returns null if not found or expired
- */
-export const getCachedDocument = (
-  cvId: string,
-  ignoreExpiry: boolean = false
-): CachedDocument | null => {
-  if (!cvId) return null;
-  
-  try {
-    const cacheKey = `${CACHE_PREFIX}${cvId}`;
-    const cachedData = localStorage.getItem(cacheKey);
-    
-    if (!cachedData) return null;
-    
-    const cacheEntry: CachedDocument = JSON.parse(cachedData);
-    
-    // Check if cache is expired
-    if (!ignoreExpiry && Date.now() > cacheEntry.timestamp + cacheEntry.expiryTime) {
-      console.log(`Cache expired for CV ID ${cvId}`);
-      return null;
-    }
-    
-    return cacheEntry;
-  } catch (error) {
-    console.error('Error retrieving cached document:', error);
-    return null;
-  }
-};
-
-/**
- * Get optimization history for a CV
+ * Get optimization history for a CV (legacy implementation)
  */
 export const getOptimizationHistory = (
   cvId: string
@@ -181,7 +192,7 @@ export const getOptimizationHistory = (
 };
 
 /**
- * Get a specific version from history
+ * Get a specific version from history (legacy implementation)
  */
 export const getHistoryVersion = (
   cvId: string,
@@ -201,22 +212,7 @@ export const getHistoryVersion = (
 };
 
 /**
- * Clear cached document for specific CV
- */
-export const clearCachedDocument = (cvId: string): void => {
-  if (!cvId) return;
-  
-  try {
-    const cacheKey = `${CACHE_PREFIX}${cvId}`;
-    localStorage.removeItem(cacheKey);
-    console.log(`Cleared cache for CV ID ${cvId}`);
-  } catch (error) {
-    console.error('Error clearing cached document:', error);
-  }
-};
-
-/**
- * Clear optimization history for specific CV
+ * Clear optimization history for specific CV (legacy implementation)
  */
 export const clearOptimizationHistory = (cvId: string): void => {
   if (!cvId) return;
@@ -231,7 +227,7 @@ export const clearOptimizationHistory = (cvId: string): void => {
 };
 
 /**
- * Clear all document caches
+ * Clear all document caches (legacy implementation)
  */
 export const clearAllCachedDocuments = (): void => {
   try {
@@ -254,7 +250,7 @@ export const clearAllCachedDocuments = (): void => {
 /**
  * Get cache age in human-readable format
  */
-export const getCacheAge = (timestamp: number): string => {
+export const getCacheAgeInHumanReadable = (timestamp: number): string => {
   const now = Date.now();
   const diffMs = now - timestamp;
   

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { extractKeywords } from "@/lib/keywords";
 import { structureCV } from "@/lib/cv/structureCV";
@@ -11,8 +10,8 @@ import { generateQuantifiedAchievements, generateQuantifiedGoals } from "@/lib/c
 export async function POST(req: NextRequest) {
   try {
     // Check authentication
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const user = await getUser(req);
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -28,45 +27,47 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Job description is required" }, { status: 400 });
     }
 
-    // Get CV from database
-    const cv = await prisma.cV.findUnique({
-      where: {
-        id: cvId,
-        userId: session.user.id,
-      },
-    });
-
-    if (!cv) {
-      return NextResponse.json({ error: "CV not found" }, { status: 404 });
-    }
-
     // Get cached document if available
     const cachedDoc = await getCachedDocument(cvId);
-    if (!cachedDoc) {
-      return NextResponse.json({ error: "CV content not found in cache" }, { status: 404 });
+    
+    // If not in cache, try to get from database
+    let cvContent = "";
+    if (cachedDoc) {
+      cvContent = cachedDoc.content;
+    } else {
+      // Get CV from database
+      const cv = await prisma.cv.findUnique({
+        where: { id: cvId }
+      });
+      
+      if (!cv) {
+        return NextResponse.json({ error: "CV not found" }, { status: 404 });
+      }
+      
+      cvContent = cv.content;
     }
 
     // Extract keywords from job description
     const jobKeywords = extractKeywords(jobDescription);
 
     // Structure the CV
-    const structuredCV = await structureCV(cachedDoc.content);
+    const structuredCV = await structureCV(cvContent);
 
     // Extract keywords from CV
-    const cvKeywords = extractKeywords(cachedDoc.content);
+    const cvKeywords = extractKeywords(cvContent);
 
     // Calculate keyword matches and missing keywords
     const keywordMatches = jobKeywords
       .filter(keyword => cvKeywords.includes(keyword))
       .map(keyword => ({
         keyword,
-        count: cachedDoc.content.toLowerCase().split(keyword.toLowerCase()).length - 1
+        count: cvContent.toLowerCase().split(keyword.toLowerCase()).length - 1
       }));
 
     const missingKeywords = jobKeywords.filter(keyword => !cvKeywords.includes(keyword));
 
     // Calculate match score
-    const matchScore = Math.round((keywordMatches.length / jobKeywords.length) * 100);
+    const matchScore = Math.round((keywordMatches.length / (jobKeywords.length || 1)) * 100);
 
     // Generate job-specific achievements and goals
     const jobSpecificAchievements = generateQuantifiedAchievements(jobKeywords);

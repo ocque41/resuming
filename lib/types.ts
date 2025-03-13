@@ -3,6 +3,16 @@ export interface CachedDocument {
   content: string;
   timestamp: number;
   type?: 'general' | 'specific';
+  // Additional properties for legacy cache compatibility
+  docxBase64?: string;
+  pdfBase64?: string;
+  originalAtsScore?: number;
+  improvedAtsScore?: number;
+  expiryTime?: number;
+  originalText?: string;
+  optimizedText?: string;
+  improvements?: string[];
+  version?: number;
 }
 
 // CV structure types

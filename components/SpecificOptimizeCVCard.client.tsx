@@ -192,9 +192,24 @@ export default function SpecificOptimizeCVCard({ cvs = [] }: SpecificOptimizeCVC
         throw new Error(data.error || "Optimization failed");
       }
       
-      // Start polling for status
-      setStatusPollingEnabled(true);
-      setStatusPollingInterval(1000);
+      // Set the results
+      setMatchScore(data.matchScore);
+      setKeywordMatches(data.keywordMatches);
+      setMissingKeywords(data.missingKeywords);
+      setOptimizedText(data.optimizedText);
+      
+      // Mark as processed
+      setIsProcessed(true);
+      setIsProcessing(false);
+      setProcessingProgress(100);
+      setProcessingStatus("Optimization complete");
+      
+      // Show success toast
+      toast({
+        title: "Optimization Complete",
+        description: "Your CV has been optimized for the job description",
+        duration: 3000,
+      });
       
     } catch (error) {
       console.error("Error optimizing CV:", error);
@@ -204,6 +219,125 @@ export default function SpecificOptimizeCVCard({ cvs = [] }: SpecificOptimizeCVC
       setStatusPollingEnabled(false);
     }
   }, [selectedCVId, selectedCVName, jobDescription]);
+  
+  // Add polling for processing status
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout | null = null;
+    
+    const checkStatus = async () => {
+      if (!statusPollingEnabled || !selectedCVId) return;
+      
+      try {
+        // In a real implementation, we would call an API endpoint to check status
+        // For now, we'll use the mock implementation with simulated progress
+        
+        // Check if we have a cached document
+        const cachedDoc = await getCachedDocument(selectedCVId, 'specific');
+        
+        if (cachedDoc && isProcessing) {
+          // If we have a cached document, the processing is complete
+          setProcessingProgress(100);
+          setProcessingStatus("Optimization complete");
+          setIsProcessed(true);
+          setIsProcessing(false);
+          setStatusPollingEnabled(false);
+          
+          // Set the results from the cached document
+          if (cachedDoc.content) {
+            setOptimizedText(cachedDoc.content);
+          }
+          
+          return;
+        }
+        
+        // If no cached document yet, continue with simulated progress
+        if (isProcessing && processingProgress < 100) {
+          // Increment progress by 5-15% each time
+          const increment = Math.floor(Math.random() * 10) + 5;
+          const newProgress = Math.min(processingProgress + increment, 100);
+          
+          setProcessingProgress(newProgress);
+          
+          // Update status message based on progress
+          if (newProgress < 30) {
+            setProcessingStatus("Analyzing job description...");
+          } else if (newProgress < 60) {
+            setProcessingStatus("Extracting keywords and requirements...");
+          } else if (newProgress < 90) {
+            setProcessingStatus("Optimizing CV content...");
+          } else {
+            setProcessingStatus("Finalizing optimization...");
+          }
+          
+          // If we've reached 100%, mark as complete after a short delay
+          if (newProgress === 100) {
+            setTimeout(() => {
+              setIsProcessed(true);
+              setIsProcessing(false);
+              setStatusPollingEnabled(false);
+            }, 1000);
+          } else {
+            // Continue polling
+            timeoutId = setTimeout(checkStatus, statusPollingInterval);
+          }
+        }
+      } catch (err) {
+        console.error("Error checking status:", err);
+        setStatusPollingEnabled(false);
+      }
+    };
+    
+    if (statusPollingEnabled) {
+      timeoutId = setTimeout(checkStatus, statusPollingInterval);
+    }
+    
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [statusPollingEnabled, statusPollingInterval, selectedCVId, isProcessing, processingProgress]);
+  
+  // Add a useEffect to detect when processing is taking too long
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
+    if (isProcessing && processingStatus) {
+      // Set a timeout to show the reset button after 30 seconds
+      timeoutId = setTimeout(() => {
+        setProcessingTooLong(true);
+      }, 30000); // 30 seconds
+    } else {
+      // Clear processing too long flag when not processing
+      setProcessingTooLong(false);
+    }
+    
+    // Clean up the timeout when the component unmounts or status changes
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [isProcessing, processingStatus]);
+  
+  // Add a function to handle reset
+  const handleResetProcessing = async () => {
+    try {
+      // Reset processing state
+      setProcessingStatus('Starting job-specific optimization...');
+      setProcessingProgress(0);
+      setError(null);
+      
+      // Restart the process
+      processCV();
+      
+      // Show toast notification
+      toast({
+        title: 'Processing Reset',
+        description: 'CV optimization has been reset. Trying again...',
+        duration: 3000
+      });
+    } catch (error) {
+      console.error('Error resetting processing:', error);
+      setError('Failed to reset processing. Please try again.');
+    }
+  };
   
   // Handle download DOCX
   const handleDownloadDocx = async () => {
@@ -305,6 +439,16 @@ export default function SpecificOptimizeCVCard({ cvs = [] }: SpecificOptimizeCVC
                 <span className="text-[#B4916C]">{processingProgress}%</span>
               </div>
               <Progress value={processingProgress} className="h-2" />
+              
+              {processingTooLong && (
+                <button
+                  onClick={handleResetProcessing}
+                  className="px-3 py-1 bg-red-900/30 hover:bg-red-800/50 text-red-300 border border-red-800 rounded-md flex items-center text-xs mt-2"
+                >
+                  <RefreshCw className="w-3 h-3 mr-1" />
+                  Taking too long? Reset
+                </button>
+              )}
             </div>
           )}
           
