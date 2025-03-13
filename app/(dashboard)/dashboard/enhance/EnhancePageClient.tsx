@@ -27,13 +27,19 @@ import {
 import { cn } from "@/lib/utils";
 import { Check } from "lucide-react";
 
-// Define props interface with serializable types
+// Define the Document interface properly
+interface Document {
+  id: string;
+  fileName: string;
+  createdAt: Date;
+  content?: string;
+  filePath?: string;
+  type?: string;
+  size?: number;
+}
+
 interface EnhancePageClientProps {
-  documentsData: {
-    id: string;
-    fileName: string;
-    createdAt: string; // ISO string format
-  }[];
+  documentsData: Document[];
 }
 
 interface Message {
@@ -47,7 +53,7 @@ type EyeState = 'normal' | 'blink' | 'excited' | 'thinking' | 'happy' | 'surpris
 export default function EnhancePageClient({ documentsData }: EnhancePageClientProps) {
   const [inputMessage, setInputMessage] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
-  const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
+  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const logoRef = useRef<HTMLDivElement>(null);
@@ -62,6 +68,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   })));
   const { toast } = useToast();
   const [mode, setMode] = useState<'create' | 'edit'>('create');
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   
   // Scroll to bottom of messages when new ones are added
   useEffect(() => {
@@ -152,7 +159,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   };
   
   const handleSelectDocument = (id: string, fileName: string) => {
-    setSelectedDocument(fileName);
+    setSelectedDocument(documentsData.find(doc => doc.id === id) || null);
     setSelectedDocumentId(id);
     
     // Show happy animation when selecting document
@@ -243,7 +250,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
       setDocuments(prev => [newDocument, ...prev]);
       
       // Auto-select the uploaded document
-      setSelectedDocument(data.fileName);
+      setSelectedDocument(newDocument);
       setSelectedDocumentId(data.fileId);
       
       toast({
@@ -275,34 +282,37 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   };
   
   // Update the document selection handler
-  const handleDocumentSelect = (document: { id: string; fileName: string }) => {
-    setSelectedDocument(document.fileName);
-    setSelectedDocumentId(document.id);
-    setMode('edit');
-    
-    // Add a message about the selected document
-    setMessages(prev => [
-      ...prev,
-      {
-        role: 'system',
-        content: `Selected document: ${document.fileName}`
-      },
-      {
-        role: 'assistant',
-        content: `I've opened "${document.fileName}". What would you like to do with this document?`
-      }
-    ]);
-    
-    // Set happy eye state
-    setEyeState('happy');
-    setTimeout(() => setEyeState('normal'), 1000);
-    
-    // Scroll to bottom
-    setTimeout(() => {
-      if (messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-      }
-    }, 100);
+  const handleDocumentSelect = (documentId: string) => {
+    const document = documentsData.find(doc => doc.id === documentId);
+    if (document) {
+      setSelectedDocument(document);
+      setSelectedDocumentId(document.id);
+      setMode('edit');
+      
+      // Add a message about the selected document
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'system',
+          content: `Selected document: ${document.fileName}`
+        },
+        {
+          role: 'assistant',
+          content: `I've opened "${document.fileName}". What would you like to do with this document?`
+        }
+      ]);
+      
+      // Set happy eye state
+      setEyeState('happy');
+      setTimeout(() => setEyeState('normal'), 1000);
+      
+      // Scroll to bottom
+      setTimeout(() => {
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+        }
+      }, 100);
+    }
   };
   
   // Update the document deselection handler
@@ -455,7 +465,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
                     >
                       {selectedDocument ? (
                         <div className="flex items-center justify-between w-full">
-                          <span className="truncate">{selectedDocument}</span>
+                          <span className="truncate">{selectedDocument.fileName}</span>
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
@@ -482,13 +492,13 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
                           <CommandItem
                             key={document.id}
                             value={document.id}
-                            onSelect={() => handleDocumentSelect(document)}
+                            onSelect={() => handleDocumentSelect(document.id)}
                             className="cursor-pointer hover:bg-[#2D2D2D]"
                           >
                             <Check
                               className={cn(
                                 "mr-2 h-4 w-4",
-                                selectedDocument === document.fileName ? "opacity-100" : "opacity-0"
+                                selectedDocument === document ? "opacity-100" : "opacity-0"
                               )}
                             />
                             <span className="truncate">{document.fileName}</span>
@@ -513,7 +523,10 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
           
           {/* Messages area */}
           {messages.length > 0 && (
-            <div className="mt-4 space-y-2 md:space-y-3 px-1 md:px-2 max-h-[300px] overflow-y-auto">
+            <div 
+              ref={messagesContainerRef}
+              className="mt-4 space-y-2 md:space-y-3 px-1 md:px-2 max-h-[300px] overflow-y-auto"
+            >
               {messages.map((message, index) => (
                 <div 
                   key={index} 
