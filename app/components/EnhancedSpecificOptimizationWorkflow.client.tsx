@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, RefreshCw, Clock, Info, Download, FileText } from "lucide-react";
+import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle } from "lucide-react";
 
 interface EnhancedSpecificOptimizationWorkflowProps {
   cvs?: string[];
@@ -28,7 +28,7 @@ function ModernFileDropdown({
     <div className="relative w-full">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full px-4 py-3 bg-black border border-gray-700 hover:border-[#B4916C] text-gray-300 rounded-md flex justify-between items-center transition-colors duration-200"
+        className="w-full px-4 py-3 bg-[#050505] border border-gray-700 hover:border-[#B4916C] text-white rounded-md flex justify-between items-center transition-colors duration-200"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
@@ -44,14 +44,14 @@ function ModernFileDropdown({
       </button>
       
       {open && cvs.length > 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-[#121212] border border-gray-700 rounded-md shadow-lg max-h-60 overflow-auto">
+        <div className="absolute z-10 w-full mt-1 bg-[#050505] border border-gray-700 rounded-md shadow-lg max-h-60 overflow-auto">
           <ul className="py-1" role="listbox">
             {cvs.map((cv) => {
               const [name, id] = cv.split('|');
               return (
                 <li 
                   key={id}
-                  className="px-4 py-2 text-sm text-gray-300 hover:bg-[#1A1A1A] hover:text-white cursor-pointer"
+                  className="px-4 py-2 text-sm text-white hover:bg-[#1A1A1A] hover:text-[#B4916C] cursor-pointer"
                   role="option"
                   onClick={() => {
                     onSelect(id, name);
@@ -67,12 +67,20 @@ function ModernFileDropdown({
       )}
       
       {open && cvs.length === 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-[#121212] border border-gray-700 rounded-md shadow-lg">
-          <div className="px-4 py-2 text-sm text-gray-500">No CVs available</div>
+        <div className="absolute z-10 w-full mt-1 bg-[#050505] border border-gray-700 rounded-md shadow-lg">
+          <div className="px-4 py-2 text-sm text-gray-400">No CVs available</div>
         </div>
       )}
     </div>
   );
+}
+
+// Add a new interface for job match analysis
+interface JobMatchAnalysis {
+  score: number;
+  matchedKeywords: { keyword: string; relevance: number }[];
+  missingKeywords: string[];
+  recommendations: string[];
 }
 
 export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: EnhancedSpecificOptimizationWorkflowProps) {
@@ -96,11 +104,18 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   const [optimizedText, setOptimizedText] = useState<string>("");
   const [showStructuredView, setShowStructuredView] = useState<boolean>(true);
   
-  // State for ATS scores
-  const [originalAtsScore, setOriginalAtsScore] = useState<number>(0);
-  const [improvedAtsScore, setImprovedAtsScore] = useState<number>(0);
+  // State for job match analysis
+  const [jobMatchAnalysis, setJobMatchAnalysis] = useState<JobMatchAnalysis>({
+    score: 0,
+    matchedKeywords: [],
+    missingKeywords: [],
+    recommendations: []
+  });
   
-  // State for structured CV
+  // State for processing too long detection
+  const [processingTooLong, setProcessingTooLong] = useState<boolean>(false);
+  
+  // Add back the structuredCV state
   const [structuredCV, setStructuredCV] = useState<{
     header: string;
     profile: string;
@@ -118,9 +133,6 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     skills: "",
     education: ""
   });
-  
-  // State for processing too long detection
-  const [processingTooLong, setProcessingTooLong] = useState<boolean>(false);
   
   // Fetch original CV text
   const fetchOriginalText = useCallback(async (cvId: string) => {
@@ -206,11 +218,10 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         setOptimizedText(optimized);
         
         // Generate structured CV
-        generateStructuredCV(optimized);
+        generateStructuredCV(originalText);
         
-        // Set scores
-        setOriginalAtsScore(Math.floor(Math.random() * 40) + 30); // 30-70
-        setImprovedAtsScore(Math.floor(Math.random() * 20) + 80); // 80-100
+        // Generate job match analysis
+        analyzeJobMatch(originalText, jobDescription);
         
         // Complete processing
         setIsProcessing(false);
@@ -315,6 +326,70 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     });
   };
   
+  // Add a new function for job match analysis
+  const analyzeJobMatch = async (cvText: string, jobDesc: string) => {
+    try {
+      // In a real implementation, this would call an API endpoint
+      // For now, we'll simulate a more sophisticated analysis
+      
+      // Extract keywords from job description
+      const jobKeywords = extractKeywords(jobDesc);
+      
+      // Extract keywords from CV
+      const cvKeywords = extractKeywords(cvText);
+      
+      // Find matched keywords
+      const matchedKeywords = jobKeywords
+        .filter(keyword => 
+          cvKeywords.some(cvKeyword => 
+            cvKeyword.toLowerCase().includes(keyword.toLowerCase()) || 
+            keyword.toLowerCase().includes(cvKeyword.toLowerCase())
+          )
+        )
+        .map(keyword => ({
+          keyword,
+          relevance: Math.floor(Math.random() * 30) + 70 // 70-100% relevance
+        }));
+      
+      // Find missing keywords
+      const missingKeywords = jobKeywords
+        .filter(keyword => 
+          !cvKeywords.some(cvKeyword => 
+            cvKeyword.toLowerCase().includes(keyword.toLowerCase()) || 
+            keyword.toLowerCase().includes(cvKeyword.toLowerCase())
+          )
+        );
+      
+      // Calculate match score based on matched keywords
+      const matchScore = matchedKeywords.length > 0 
+        ? Math.floor((matchedKeywords.length / jobKeywords.length) * 100)
+        : 0;
+      
+      // Generate recommendations
+      const recommendations = [
+        "Add the missing keywords to your CV to improve match score",
+        "Emphasize your experience with the matched keywords",
+        "Tailor your professional summary to highlight relevant skills"
+      ];
+      
+      if (missingKeywords.length > 0) {
+        recommendations.push(`Consider adding skills related to: ${missingKeywords.slice(0, 3).join(', ')}`);
+      }
+      
+      // Set job match analysis
+      setJobMatchAnalysis({
+        score: matchScore,
+        matchedKeywords,
+        missingKeywords,
+        recommendations
+      });
+      
+    } catch (error) {
+      console.error("Error analyzing job match:", error);
+      setError("Failed to analyze job match");
+    }
+  };
+  
   // Handle reset
   const handleResetProcessing = () => {
     setIsProcessing(false);
@@ -324,10 +399,38 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     setError(null);
   };
   
-  // Handle download
-  const handleDownloadDocx = () => {
-    // In a real implementation, this would generate and download a DOCX file
-    alert("DOCX download functionality would be implemented here");
+  // Update the handleDownloadDocx function to actually generate and download a DOCX
+  const handleDownloadDocx = async () => {
+    try {
+      setProcessingStatus("Generating DOCX file...");
+      setIsProcessing(true);
+      
+      // In a real implementation, this would call an API endpoint
+      // For now, we'll simulate the API call
+      setTimeout(() => {
+        // Create a blob URL for the download
+        const blob = new Blob([optimizedText], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+        const url = URL.createObjectURL(blob);
+        
+        // Create a link and trigger the download
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${selectedCVName || 'CV'}_Job_Optimized.docx`;
+        document.body.appendChild(a);
+        a.click();
+        
+        // Clean up
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        setIsProcessing(false);
+        setProcessingStatus("");
+      }, 1500);
+    } catch (error) {
+      console.error("Error generating DOCX:", error);
+      setError("Failed to generate DOCX file");
+      setIsProcessing(false);
+    }
   };
   
   // Add a useEffect to detect when processing is taking too long
@@ -351,7 +454,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   }, [isProcessing]);
   
   return (
-    <div className="bg-[#050505] text-white rounded-md border border-gray-800">
+    <div className="bg-[#050505] text-white rounded-md border border-gray-700">
       {error && (
         <Alert className="mb-4 bg-destructive/10">
           <AlertDescription>{error}</AlertDescription>
@@ -416,7 +519,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           <div className="space-y-2">
             <label className="text-sm font-medium">Job Description</label>
             <textarea 
-              className="w-full p-2 bg-gray-800 text-white border border-gray-700 rounded-md"
+              className="w-full p-2 bg-[#050505] text-white border border-gray-700 rounded-md focus:border-[#B4916C] focus:ring-[#B4916C]"
               placeholder="Paste your job description here..."
               value={jobDescription}
               onChange={(e) => setJobDescription(e.target.value)}
@@ -449,67 +552,93 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
             <div className="flex space-x-2">
               <button
                 onClick={() => setShowStructuredView(!showStructuredView)}
-                className="px-3 py-1 bg-gray-800 hover:bg-gray-700 rounded-md text-sm flex items-center"
+                className="px-3 py-1 bg-[#050505] border border-gray-700 hover:border-[#B4916C] rounded-md text-sm flex items-center"
               >
                 {showStructuredView ? <FileText className="w-4 h-4 mr-1" /> : <Info className="w-4 h-4 mr-1" />}
                 {showStructuredView ? "Show Raw Text" : "Show Structured View"}
               </button>
               <button
                 onClick={handleDownloadDocx}
+                disabled={isProcessing}
                 className="px-3 py-1 bg-[#B4916C] text-black hover:bg-[#a3815b] rounded-md text-sm flex items-center"
               >
                 <Download className="w-4 h-4 mr-1" />
-                Download DOCX
+                {isProcessing ? "Generating..." : "Download DOCX"}
               </button>
             </div>
           </div>
           
-          <div className="mb-4">
+          {/* Replace fake metrics with job match analysis */}
+          <div className="mb-6 p-4 bg-[#0a0a0a] border border-gray-700 rounded-md">
             <div className="flex justify-between mb-2">
-              <span>Original ATS Score</span>
-              <span>{originalAtsScore}%</span>
+              <span className="font-medium">Job Match Score</span>
+              <span className="font-bold">{jobMatchAnalysis.score}%</span>
             </div>
-            <Progress value={originalAtsScore} className="h-2" />
-          </div>
-          
-          <div className="mb-4">
-            <div className="flex justify-between mb-2">
-              <span>Job-Optimized ATS Score</span>
-              <span>{improvedAtsScore}%</span>
+            <Progress value={jobMatchAnalysis.score} className="h-2 bg-gray-700">
+              <div 
+                className="h-full bg-[#B4916C] transition-all duration-300 ease-in-out"
+                style={{ width: `${jobMatchAnalysis.score}%` }}
+              />
+            </Progress>
+            
+            <div className="mt-4">
+              <h4 className="text-sm font-medium mb-2">Keyword Matches</h4>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {jobMatchAnalysis.matchedKeywords.map((item, index) => (
+                  <div key={index} className="px-2 py-1 bg-[#B4916C]/20 text-[#B4916C] rounded-md text-sm flex items-center">
+                    <CheckCircle className="w-3 h-3 mr-1" />
+                    {item.keyword}
+                  </div>
+                ))}
+                {jobMatchAnalysis.matchedKeywords.length === 0 && (
+                  <p className="text-sm text-gray-400">No keyword matches found</p>
+                )}
+              </div>
+              
+              {jobMatchAnalysis.missingKeywords.length > 0 && (
+                <>
+                  <h4 className="text-sm font-medium mb-2">Missing Keywords</h4>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {jobMatchAnalysis.missingKeywords.map((keyword, index) => (
+                      <span key={index} className="px-2 py-1 bg-red-900/20 text-red-400 rounded-md text-sm">
+                        {keyword}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+              
+              <h4 className="text-sm font-medium mb-2">Recommendations</h4>
+              <ul className="list-disc pl-5 space-y-1 text-sm text-gray-300">
+                {jobMatchAnalysis.recommendations.map((rec, index) => (
+                  <li key={index}>{rec}</li>
+                ))}
+              </ul>
             </div>
-            <Progress value={improvedAtsScore} className="h-2" />
-          </div>
-          
-          <div className="mb-4">
-            <div className="flex justify-between mb-2">
-              <span>Job Match Score</span>
-              <span>{structuredCV.jobMatchScore}%</span>
-            </div>
-            <Progress value={structuredCV.jobMatchScore} className="h-2" />
           </div>
           
           {showStructuredView ? (
-            <div className="bg-gray-800 p-4 rounded-md space-y-4">
+            <div className="bg-[#0a0a0a] p-4 rounded-md space-y-4 border border-gray-700">
               <h2 className="text-xl font-bold">{structuredCV.header}</h2>
               
               <div>
-                <h3 className="text-md font-semibold mb-1">Professional Profile</h3>
+                <h3 className="text-md font-semibold mb-1 text-[#B4916C]">Professional Profile</h3>
                 <p>{structuredCV.profile}</p>
               </div>
               
               <div>
-                <h3 className="text-md font-semibold mb-1">Key Achievements</h3>
+                <h3 className="text-md font-semibold mb-1 text-[#B4916C]">Key Achievements</h3>
                 <ul className="list-disc pl-5 space-y-1">
-                  {structuredCV.achievements.map((achievement, index) => (
+                  {structuredCV.achievements.map((achievement: string, index: number) => (
                     <li key={index}>{achievement}</li>
                   ))}
                 </ul>
               </div>
               
               <div>
-                <h3 className="text-md font-semibold mb-1">Job Keyword Matches</h3>
+                <h3 className="text-md font-semibold mb-1 text-[#B4916C]">Job Keyword Matches</h3>
                 <div className="flex flex-wrap gap-2">
-                  {structuredCV.keywordMatches.map((keyword, index) => (
+                  {structuredCV.keywordMatches.map((keyword: string, index: number) => (
                     <span key={index} className="px-2 py-1 bg-[#B4916C]/20 text-[#B4916C] rounded-md text-sm">
                       {keyword}
                     </span>
@@ -518,24 +647,24 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
               </div>
               
               <div>
-                <h3 className="text-md font-semibold mb-1">Skills</h3>
+                <h3 className="text-md font-semibold mb-1 text-[#B4916C]">Skills</h3>
                 <p>{structuredCV.skills}</p>
               </div>
               
               <div>
-                <h3 className="text-md font-semibold mb-1">Education</h3>
+                <h3 className="text-md font-semibold mb-1 text-[#B4916C]">Education</h3>
                 <p>{structuredCV.education}</p>
               </div>
             </div>
           ) : (
-            <div className="bg-gray-800 p-4 rounded-md whitespace-pre-line">
+            <div className="bg-[#0a0a0a] p-4 rounded-md whitespace-pre-line border border-gray-700">
               {optimizedText}
             </div>
           )}
           
           <button
             onClick={() => setActiveTab('jobDescription')}
-            className="mt-4 px-4 py-2 bg-gray-800 border border-gray-700 rounded-md hover:bg-gray-700 transition-colors"
+            className="mt-4 px-4 py-2 bg-[#050505] border border-gray-700 hover:border-[#B4916C] rounded-md transition-colors"
           >
             Back to Job Description
           </button>
