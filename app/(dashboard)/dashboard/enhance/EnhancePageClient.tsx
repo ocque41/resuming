@@ -65,7 +65,13 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   const [isLoading, setIsLoading] = useState(true);
   const [placeholderOpacity, setPlaceholderOpacity] = useState(1);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
-  const placeholders = ["Ask a question...", "Type your message here...", "What's on your mind?"];
+  const placeholders = [
+    "Transform your PDF into an engaging presentation...",
+    "Convert complex Excel data into a clear report...",
+    "Enhance your Word document with professional formatting...",
+    "Create compelling slides from your document...",
+    "Optimize your spreadsheet for better readability..."
+  ];
   const [title, setTitle] = useState("Let's Create");
   
   const animationPresets = {

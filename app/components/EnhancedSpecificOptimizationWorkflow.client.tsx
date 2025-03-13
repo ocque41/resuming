@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle } from "lucide-react";
+import { analyzeCVContent, optimizeCVForJob } from '@/app/lib/services/mistral.service';
 
 interface EnhancedSpecificOptimizationWorkflowProps {
   cvs?: string[];
@@ -299,6 +300,10 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     },
     achievements: []
   });
+  
+  // Add new state variables
+  const [jobMatchScore, setJobMatchScore] = useState<number>(0);
+  const [recommendations, setRecommendations] = useState<string[]>([]);
   
   // Fetch original CV text
   const fetchOriginalText = useCallback(async (cvId: string) => {
@@ -819,105 +824,60 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   
   // Update the generateStructuredCV function to create a more interesting title
   const generateStructuredCV = async (cvText: string, jobDescription: string) => {
-    // Extract data from original CV
-    const experienceData = extractExperienceData(cvText);
-    const educationData = extractEducationData(cvText);
-    const skillsData = extractSkillsData(cvText);
-    const achievementsData = extractAchievementsData(cvText);
-
-    // Extract keywords from job description
-    const jobKeywords = extractKeywords(jobDescription);
-    
-    // Generate header with actual name from CV
-    const nameMatch = cvText.match(/^([A-Za-z\s]+)(?:\n|$)/);
-    const name = nameMatch ? nameMatch[1].trim() : 'Professional CV';
-    
-    // Generate subheader based on most recent experience
-    let subheader = '';
-    if (experienceData && experienceData.length > 0) {
-      const mostRecent = experienceData[0];
-      subheader = `${mostRecent.title}${mostRecent.company ? ` at ${mostRecent.company}` : ''}`;
-    }
-
-    // Generate profile using actual experience and skills
-    let profile = '';
-    if (experienceData && experienceData.length > 0) {
-      const mostRecent = experienceData[0];
-      const yearsOfExperience = calculateYearsOfExperience(experienceData);
+    try {
+      // First, analyze the CV content using Mistral AI
+      const analysisResult = await analyzeCVContent(cvText);
       
-      profile = `Results-driven ${mostRecent.title} with ${yearsOfExperience} years of experience`;
-      if (mostRecent.company) {
-        profile += ` at ${mostRecent.company}`;
+      // Then, optimize the CV for the specific job
+      const optimizationResult = await optimizeCVForJob(cvText, jobDescription);
+      
+      // Extract name from CV text
+      const nameMatch = cvText.match(/^([A-Za-z\s]+)(?:\n|$)/);
+      const name = nameMatch ? nameMatch[1].trim() : 'Professional CV';
+      
+      // Generate subheader based on most recent experience
+      let subheader = '';
+      if (analysisResult.experience && analysisResult.experience.length > 0) {
+        const mostRecent = analysisResult.experience[0];
+        subheader = `${mostRecent.title}${mostRecent.company ? ` at ${mostRecent.company}` : ''}`;
       }
       
-      // Add relevant skills from actual CV
-      if (skillsData) {
-        const relevantSkills = skillsData
-          .filter(skill => jobKeywords.some(keyword => 
-            skill.toLowerCase().includes(keyword.toLowerCase())
-          ))
-          .slice(0, 3);
-        
-        if (relevantSkills.length > 0) {
-          profile += `. Proficient in ${relevantSkills.join(', ')}`;
-        }
-      }
+      // Use the AI-generated profile
+      const profile = analysisResult.profile;
+      
+      // Use the AI-analyzed experience data
+      const experience = analysisResult.experience;
+      
+      // Use the AI-analyzed education data
+      const education = analysisResult.education;
+      
+      // Use the AI-analyzed skills data
+      const skills = analysisResult.skills;
+      
+      // Use the AI-analyzed achievements
+      const achievements = analysisResult.achievements;
+      
+      // Update job match score with AI-calculated score
+      setJobMatchScore(optimizationResult.matchScore);
+      
+      // Update recommendations with AI-generated ones
+      setRecommendations(optimizationResult.recommendations);
+      
+      return {
+        name,
+        subheader,
+        profile,
+        experience,
+        education,
+        skills,
+        achievements
+      };
+    } catch (error) {
+      console.error('Error generating structured CV:', error);
+      throw new Error('Failed to generate structured CV');
     }
-
-    // Generate experience section using actual data
-    const experience = experienceData ? experienceData.map(entry => ({
-      title: entry.title,
-      company: entry.company,
-      dates: entry.dates,
-      responsibilities: entry.responsibilities
-        .filter(resp => jobKeywords.some(keyword => 
-          resp.toLowerCase().includes(keyword.toLowerCase())
-        ))
-        .slice(0, 3)
-    })) : [];
-
-    // Generate education section using actual data
-    const education = educationData ? educationData.map(entry => ({
-      degree: entry.degree,
-      field: entry.field,
-      institution: entry.institution,
-      year: entry.year
-    })) : [];
-
-    // Generate skills section using actual data
-    const skills = skillsData ? {
-      technical: skillsData.filter(skill => 
-        jobKeywords.some(keyword => 
-          skill.toLowerCase().includes(keyword.toLowerCase())
-        )
-      ),
-      professional: skillsData.filter(skill => 
-        !jobKeywords.some(keyword => 
-          skill.toLowerCase().includes(keyword.toLowerCase())
-        )
-      )
-    } : { technical: [], professional: [] };
-
-    // Generate achievements using actual data
-    const achievements = achievementsData ? achievementsData
-      .filter(achievement => 
-        jobKeywords.some(keyword => 
-          achievement.toLowerCase().includes(keyword.toLowerCase())
-        )
-      )
-      .slice(0, 3) : [];
-
-    return {
-      name,
-      subheader,
-      profile,
-      experience,
-      education,
-      skills,
-      achievements
-    };
   };
-
+  
   // Helper function to calculate years of experience
   const calculateYearsOfExperience = (experienceData: any[]) => {
     let totalYears = 0;
@@ -2367,6 +2327,38 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           >
             Back to Job Description
           </button>
+        </div>
+      )}
+      
+      {/* Add this section after the job match analysis section */}
+      {jobMatchScore > 0 && (
+        <div className="bg-[#0a0a0a] p-4 rounded-md space-y-4 border border-gray-700">
+          <div className="flex items-center justify-between">
+            <h3 className="text-md font-semibold text-[#B4916C]">AI Match Score</h3>
+            <div className="flex items-center">
+              <div className="w-24 h-2 bg-gray-700 rounded-full mr-2">
+                <div 
+                  className="h-full bg-[#B4916C] rounded-full transition-all duration-300"
+                  style={{ width: `${jobMatchScore}%` }}
+                />
+              </div>
+              <span className="text-sm text-white">{jobMatchScore}%</span>
+            </div>
+          </div>
+          
+          {recommendations.length > 0 && (
+            <div>
+              <h3 className="text-md font-semibold mb-2 text-[#B4916C]">AI Recommendations</h3>
+              <ul className="space-y-2">
+                {recommendations.map((recommendation, index) => (
+                  <li key={index} className="flex items-start">
+                    <span className="text-[#B4916C] mr-2">•</span>
+                    <span className="text-sm text-white">{recommendation}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>
