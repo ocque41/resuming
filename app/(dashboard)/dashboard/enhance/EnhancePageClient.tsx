@@ -35,7 +35,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const logoRef = useRef<HTMLDivElement>(null);
   const [eyePosition, setEyePosition] = useState({ x: 0, y: 0 });
-  const [eyeState, setEyeState] = useState<'normal' | 'blink'>('normal');
+  const [eyeState, setEyeState] = useState<'normal' | 'blink' | 'excited' | 'thinking' | 'happy'>('normal');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [documents, setDocuments] = useState(documentsData.map(doc => ({
@@ -74,14 +74,28 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
   
-  // Simple blinking animation
+  // Random animations at intervals
   useEffect(() => {
-    const blinkInterval = setInterval(() => {
-      setEyeState('blink');
-      setTimeout(() => setEyeState('normal'), 200);
-    }, 3000);
+    const animationStates: ('normal' | 'blink' | 'excited' | 'thinking' | 'happy')[] = [
+      'blink', 'excited', 'thinking', 'happy'
+    ];
     
-    return () => clearInterval(blinkInterval);
+    const randomAnimation = () => {
+      const randomState = animationStates[Math.floor(Math.random() * animationStates.length)];
+      setEyeState(randomState);
+      
+      // Reset to normal after animation
+      setTimeout(() => {
+        setEyeState('normal');
+      }, randomState === 'blink' ? 200 : 1000);
+    };
+    
+    // Trigger random animations periodically
+    const animationInterval = setInterval(() => {
+      randomAnimation();
+    }, 5000);
+    
+    return () => clearInterval(animationInterval);
   }, []);
   
   const handleSendMessage = () => {
@@ -92,40 +106,65 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
       content: inputMessage,
     };
     
-    setMessages((prev) => [...prev, newMessage]);
+    setMessages([...messages, newMessage]);
     setInputMessage("");
     
-    // Simulate assistant response
+    // Simulate AI response
     setTimeout(() => {
-      const assistantMessage: Message = {
+      const aiResponse: Message = {
         role: "assistant",
         content: "I'm processing your request. This is a placeholder response.",
       };
-      setMessages((prev) => [...prev, assistantMessage]);
+      setMessages(prev => [...prev, aiResponse]);
     }, 1000);
+    
+    // Show excited animation when sending message
+    setEyeState('excited');
+    setTimeout(() => setEyeState('normal'), 1000);
   };
   
   const handleSelectDocument = (id: string, fileName: string) => {
     setSelectedDocument(fileName);
     setSelectedDocumentId(id);
+    
+    // Show happy animation when selecting document
+    setEyeState('happy');
+    setTimeout(() => setEyeState('normal'), 1000);
   };
   
   const handleDeselectDocument = (e: React.MouseEvent) => {
-    e.stopPropagation();
+    e.stopPropagation(); // Prevent dropdown from opening
     setSelectedDocument(null);
     setSelectedDocumentId(null);
   };
   
   const handleFileUpload = () => {
-    fileInputRef.current?.click();
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
   };
   
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
+    // Show thinking animation during upload
+    setEyeState('thinking');
+    
+    // Check file size (10MB max)
+    const MAX_FILE_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE) {
+      toast({
+        title: "File too large",
+        description: "Maximum file size is 10MB",
+        variant: "destructive",
+      });
+      setEyeState('normal');
+      return;
+    }
+    
     // Check file type
-    const supportedTypes = [
+    const SUPPORTED_TYPES = [
       'application/pdf',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'application/msword',
@@ -135,33 +174,22 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
       'application/vnd.openxmlformats-officedocument.presentationml.presentation',
       'application/vnd.ms-powerpoint',
       'image/jpeg',
-      'image/png',
-      'application/rtf',
+      'image/png'
     ];
     
-    if (!supportedTypes.includes(file.type)) {
+    if (!SUPPORTED_TYPES.includes(file.type)) {
       toast({
         title: "Unsupported file type",
-        description: "Please upload a supported document type.",
+        description: "Please upload a PDF, Word, Excel, PowerPoint, text file, or image",
         variant: "destructive",
       });
+      setEyeState('normal');
       return;
     }
-    
-    // Check file size (10MB max)
-    const maxSize = 10 * 1024 * 1024;
-    if (file.size > maxSize) {
-      toast({
-        title: "File too large",
-        description: "Maximum file size is 10MB.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    setIsUploading(true);
     
     try {
+      setIsUploading(true);
+      
       const formData = new FormData();
       formData.append('file', file);
       
@@ -171,7 +199,8 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
       });
       
       if (!response.ok) {
-        throw new Error('Upload failed');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to upload document');
       }
       
       const data = await response.json();
@@ -185,186 +214,241 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
       
       setDocuments(prev => [newDocument, ...prev]);
       
-      // Select the newly uploaded document
+      // Auto-select the uploaded document
       setSelectedDocument(data.fileName);
       setSelectedDocumentId(data.fileId);
       
       toast({
         title: "Document uploaded",
-        description: "Your document has been uploaded successfully.",
+        description: `${data.fileName} has been uploaded successfully`,
       });
       
-      // Reset file input
+      // Show happy animation on success
+      setEyeState('happy');
+      setTimeout(() => setEyeState('normal'), 1000);
+      
+    } catch (error) {
+      console.error('Error uploading document:', error);
+      toast({
+        title: "Upload failed",
+        description: error instanceof Error ? error.message : "Failed to upload document",
+        variant: "destructive",
+      });
+      
+      // Show stressed animation on error
+      setEyeState('thinking');
+      setTimeout(() => setEyeState('normal'), 1000);
+    } finally {
+      setIsUploading(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
-    } catch (error) {
-      console.error('Upload error:', error);
-      toast({
-        title: "Upload failed",
-        description: "There was an error uploading your document.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsUploading(false);
     }
   };
   
   return (
-    <div className="flex flex-col items-center w-full max-w-3xl mx-auto">
-      {/* Logo and title */}
-      <div ref={logoRef} className="w-16 h-16 bg-[#111111] rounded-full flex items-center justify-center mb-4">
-        <div className="relative w-8 h-3">
+    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-80px)]">
+      <div className="w-full max-w-3xl px-4">
+        {/* Character */}
+        <div className="flex justify-center mb-4">
           <div 
-            className={`absolute w-3 h-3 bg-white rounded-full left-0 transform ${
-              eyeState === 'blink' ? 'scale-y-[0.1]' : ''
-            }`}
-            style={{
-              transform: `translate(${eyePosition.x * 2}px, ${eyePosition.y * 2}px) ${eyeState === 'blink' ? 'scaleY(0.1)' : ''}`,
-            }}
-          />
-          <div 
-            className={`absolute w-3 h-3 bg-white rounded-full right-0 transform ${
-              eyeState === 'blink' ? 'scale-y-[0.1]' : ''
-            }`}
-            style={{
-              transform: `translate(${eyePosition.x * 2}px, ${eyePosition.y * 2}px) ${eyeState === 'blink' ? 'scaleY(0.1)' : ''}`,
-            }}
-          />
-        </div>
-      </div>
-      <h1 className="text-2xl font-bold text-white mb-6">Let's Create</h1>
-      
-      {/* Main card */}
-      <div className="w-full bg-[#1A1A1A] rounded-2xl p-4">
-        {/* Input area */}
-        <div className="space-y-4">
-          <Textarea
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            placeholder="Ask a question..."
-            className="w-full bg-[#111111] border-none text-white resize-none rounded-xl focus:ring-1 focus:ring-[#B4916C] focus-visible:ring-[#B4916C] focus-visible:ring-1"
-            rows={3}
-          />
-          
-          {/* Document selection and buttons */}
-          <div className="flex items-center space-x-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  className={`rounded-full text-xs px-3 py-1 h-auto border-[#B4916C]/30 ${
-                    selectedDocument ? 'bg-[#B4916C]/20 text-[#B4916C]' : 'bg-transparent text-gray-400 hover:bg-[#B4916C]/10'
-                  }`}
-                >
-                  {selectedDocument ? (
-                    <div className="flex items-center">
-                      <FileText className="h-3 w-3 mr-1" />
-                      <span className="truncate max-w-[120px]">{selectedDocument}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-4 w-4 ml-1 rounded-full hover:bg-[#B4916C]/20 p-0"
-                        onClick={handleDeselectDocument}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center">
-                      <FileText className="h-3 w-3 mr-1" />
-                      <span>Documents</span>
-                      <ChevronDown className="h-3 w-3 ml-1" />
-                    </div>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="bg-[#222222] border-[#333333] text-white">
-                {documents.length > 0 ? (
-                  documents.map((doc) => (
-                    <DropdownMenuItem
-                      key={doc.id}
-                      onClick={() => handleSelectDocument(doc.id, doc.fileName)}
-                      className="flex items-center py-2 px-3 hover:bg-[#333333] cursor-pointer"
-                    >
-                      <div className="flex items-center">
-                        <FileText className="h-4 w-4 mr-2 text-[#B4916C]" />
-                        <div>
-                          <div className="font-medium">{doc.fileName}</div>
-                          <div className="text-xs text-gray-400">
-                            {format(doc.createdAt, "MMM d, yyyy")}
-                          </div>
-                        </div>
-                      </div>
-                    </DropdownMenuItem>
-                  ))
-                ) : (
-                  <DropdownMenuItem disabled className="text-gray-500">
-                    No documents available
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            
-            {/* File input (hidden) */}
-            <input
-              type="file"
-              ref={fileInputRef}
-              className="hidden"
-              onChange={handleFileChange}
-              accept=".pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,.rtf,.jpg,.jpeg,.png"
-            />
-            
-            {/* Right Buttons */}
-            <div className="ml-auto flex items-center space-x-2">
-              <Button
-                variant="ghost"
-                className="bg-[#222222] hover:bg-[#333333] text-white rounded-full p-1 h-8 w-8 md:h-9 md:w-9 flex items-center justify-center"
-                aria-label="Attach file"
-                onClick={handleFileUpload}
-                disabled={isUploading}
-              >
-                {isUploading ? (
-                  <div className="h-3 w-3 md:h-4 md:w-4 border-2 border-t-transparent border-white rounded-full animate-spin" />
-                ) : (
-                  <Paperclip className="h-3 w-3 md:h-4 md:w-4" />
-                )}
-              </Button>
+            ref={logoRef}
+            className="w-16 h-16 bg-[#333333] rounded-full flex items-center justify-center"
+          >
+            <div className="relative w-full h-full flex items-center justify-center">
+              {eyeState === 'normal' && (
+                <>
+                  <div 
+                    className="absolute w-2.5 h-2.5 bg-white rounded-full"
+                    style={{ 
+                      left: `calc(50% - 5px + ${eyePosition.x * 4}px)`,
+                      top: `calc(50% + ${eyePosition.y * 4}px)`
+                    }}
+                  />
+                  <div 
+                    className="absolute w-2.5 h-2.5 bg-white rounded-full"
+                    style={{ 
+                      left: `calc(50% + 5px + ${eyePosition.x * 4}px)`,
+                      top: `calc(50% + ${eyePosition.y * 4}px)`
+                    }}
+                  />
+                </>
+              )}
               
-              <Button
-                onClick={handleSendMessage}
-                variant="ghost"
-                className="bg-[#222222] hover:bg-[#333333] text-white rounded-full p-1 h-8 w-8 md:h-9 md:w-9 flex items-center justify-center"
-                aria-label="Submit"
-              >
-                <Send className="h-3 w-3 md:h-4 md:w-4" />
-              </Button>
+              {eyeState === 'blink' && (
+                <>
+                  <div className="absolute w-2.5 h-0.5 bg-white rounded-full" style={{ left: 'calc(50% - 5px)', top: '50%' }} />
+                  <div className="absolute w-2.5 h-0.5 bg-white rounded-full" style={{ left: 'calc(50% + 5px)', top: '50%' }} />
+                </>
+              )}
+              
+              {eyeState === 'excited' && (
+                <>
+                  <div className="absolute w-2.5 h-2.5 bg-white rounded-full" style={{ left: 'calc(50% - 5px)', top: 'calc(50% - 2px)' }} />
+                  <div className="absolute w-2.5 h-2.5 bg-white rounded-full" style={{ left: 'calc(50% + 5px)', top: 'calc(50% - 2px)' }} />
+                </>
+              )}
+              
+              {eyeState === 'thinking' && (
+                <>
+                  <div className="absolute w-2.5 h-2.5 bg-white rounded-full" style={{ left: 'calc(50% - 5px)', top: 'calc(50% + 2px)' }} />
+                  <div className="absolute w-2 h-0.5 bg-white rounded-full" style={{ left: 'calc(50% + 5px)', top: '50%', transform: 'rotate(20deg)' }} />
+                </>
+              )}
+              
+              {eyeState === 'happy' && (
+                <>
+                  <div className="absolute w-2.5 h-1 bg-white rounded-full" style={{ left: 'calc(50% - 5px)', top: 'calc(50% - 1px)', transform: 'rotate(-10deg)' }} />
+                  <div className="absolute w-2.5 h-1 bg-white rounded-full" style={{ left: 'calc(50% + 5px)', top: 'calc(50% - 1px)', transform: 'rotate(10deg)' }} />
+                </>
+              )}
             </div>
           </div>
         </div>
         
-        {/* Messages area */}
-        {messages.length > 0 && (
-          <div className="mt-4 space-y-2 md:space-y-3 px-1 md:px-2 max-h-[300px] overflow-y-auto">
-            {messages.map((message, index) => (
-              <div 
-                key={index} 
-                className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-              >
-                <div 
-                  className={`max-w-[90%] rounded-xl p-2 text-xs md:text-sm ${
-                    message.role === "user" 
-                      ? "bg-[#2A2A2A] text-white" 
-                      : "bg-[#B4916C]/10 text-white border border-[#B4916C]/20"
-                  }`}
+        {/* Title */}
+        <h1 className="text-2xl md:text-3xl font-bold text-center text-white mb-6">
+          Let's Create
+        </h1>
+        
+        {/* Main Card */}
+        <div className="bg-[#1A1A1A] rounded-2xl p-4 md:p-6">
+          {/* Input Area */}
+          <div className="relative">
+            <Textarea
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              placeholder="Ask a question..."
+              className="min-h-[100px] w-full bg-[#111111] border-none text-white placeholder:text-gray-500 resize-none rounded-xl p-4"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
+            />
+            
+            <div className="flex items-center mt-3">
+              {/* Left Buttons */}
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="ghost"
+                  className="bg-[#222222] hover:bg-[#333333] text-white rounded-full p-1 h-8 w-8 md:h-9 md:w-9 flex items-center justify-center"
+                  aria-label="Attach file"
+                  onClick={handleFileUpload}
+                  disabled={isUploading}
                 >
-                  {message.content}
-                </div>
+                  {isUploading ? (
+                    <div className="h-3 w-3 md:h-4 md:w-4 border-2 border-t-transparent border-white rounded-full animate-spin" />
+                  ) : (
+                    <Paperclip className="h-3 w-3 md:h-4 md:w-4" />
+                  )}
+                </Button>
+                
+                <Button
+                  onClick={handleSendMessage}
+                  variant="ghost"
+                  className="bg-[#222222] hover:bg-[#333333] text-white rounded-full p-1 h-8 w-8 md:h-9 md:w-9 flex items-center justify-center"
+                  aria-label="Submit"
+                >
+                  <Send className="h-3 w-3 md:h-4 md:w-4" />
+                </Button>
               </div>
-            ))}
-            <div ref={messagesEndRef} />
+              
+              {/* Document Dropdown (moved to the right) */}
+              <div className="ml-auto">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      className={`rounded-full px-3 py-1 text-xs md:text-sm flex items-center ${
+                        selectedDocument 
+                          ? "bg-[#B4916C] hover:bg-[#A3815C] text-white" 
+                          : "bg-[#222222] hover:bg-[#333333] text-white"
+                      }`}
+                    >
+                      <FileText className="h-3 w-3 md:h-4 md:w-4 mr-2" />
+                      {selectedDocument ? (
+                        <div className="flex items-center">
+                          <span className="max-w-[150px] truncate">{selectedDocument}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5 ml-1 hover:bg-[#A3815C] rounded-full"
+                            onClick={handleDeselectDocument}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <span>Documents</span>
+                      )}
+                      <ChevronDown className="h-3 w-3 md:h-4 md:w-4 ml-1" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  
+                  <DropdownMenuContent align="end" className="bg-[#222222] border-[#333333] text-white rounded-xl">
+                    {documents.length > 0 ? (
+                      documents.map((doc) => (
+                        <DropdownMenuItem
+                          key={doc.id}
+                          onClick={() => handleSelectDocument(doc.id, doc.fileName)}
+                          className="flex items-center py-2 px-3 hover:bg-[#333333] cursor-pointer rounded-lg"
+                        >
+                          <div className="flex items-center">
+                            <FileText className="h-4 w-4 mr-2 text-[#B4916C]" />
+                            <div>
+                              <div className="font-medium">{doc.fileName}</div>
+                              <div className="text-xs text-gray-400">
+                                {format(doc.createdAt, "MMM d, yyyy")}
+                              </div>
+                            </div>
+                          </div>
+                        </DropdownMenuItem>
+                      ))
+                    ) : (
+                      <DropdownMenuItem disabled className="text-gray-500">
+                        No documents available
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
           </div>
-        )}
+          
+          {/* File input (hidden) */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            className="hidden"
+            onChange={handleFileChange}
+            accept=".pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,.rtf,.jpg,.jpeg,.png"
+          />
+          
+          {/* Messages area */}
+          {messages.length > 0 && (
+            <div className="mt-4 space-y-2 md:space-y-3 px-1 md:px-2 max-h-[300px] overflow-y-auto">
+              {messages.map((message, index) => (
+                <div 
+                  key={index} 
+                  className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  <div 
+                    className={`max-w-[90%] rounded-xl p-2 text-xs md:text-sm ${
+                      message.role === "user" 
+                        ? "bg-[#2A2A2A] text-white" 
+                        : "bg-[#B4916C]/10 text-white border border-[#B4916C]/20"
+                    }`}
+                  >
+                    {message.content}
+                  </div>
+                </div>
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
