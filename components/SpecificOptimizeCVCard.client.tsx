@@ -1,17 +1,18 @@
 "use client";
 
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, RefreshCw, Clock, Info, Download, FileText } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
+import { AlertCircle, RefreshCw, Download, FileText, Briefcase } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
-import { cacheDocument, getCachedDocument, clearCachedDocument, getCacheAge } from "@/lib/cache/documentCache";
-import { toast } from "@/hooks/use-toast";
 
-// Modern SimpleFileDropdown component
+interface SpecificOptimizeCVCardProps {
+  cvs: string[];
+}
+
+// Modern File Dropdown component for CV selection
 function ModernFileDropdown({ 
   cvs, 
   onSelect, 
@@ -74,420 +75,226 @@ function ModernFileDropdown({
   );
 }
 
-// Interface for the component props
-interface SpecificOptimizeCVCardProps {
-  cvs?: string[]; // Format: "filename|id"
-}
-
-// Component implementation
 export default function SpecificOptimizeCVCard({ cvs = [] }: SpecificOptimizeCVCardProps) {
   // State for CV selection
-  const [selectedCV, setSelectedCV] = useState<string | null>(null);
   const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
   const [selectedCVName, setSelectedCVName] = useState<string | null>(null);
   
   // State for job description
   const [jobDescription, setJobDescription] = useState<string>("");
   
-  // State for processing
+  // Processing states
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [isProcessed, setIsProcessed] = useState<boolean>(false);
+  const [processingStatus, setProcessingStatus] = useState<string | null>(null);
   const [processingProgress, setProcessingProgress] = useState<number>(0);
-  const [processingStatus, setProcessingStatus] = useState<string | null>("");
   const [error, setError] = useState<string | null>(null);
+  const [isProcessed, setIsProcessed] = useState<boolean>(false);
   
-  // State for optimization results
-  const [matchScore, setMatchScore] = useState<number>(0);
-  const [keywordMatches, setKeywordMatches] = useState<{keyword: string, count: number}[]>([]);
-  const [missingKeywords, setMissingKeywords] = useState<string[]>([]);
-  const [optimizedText, setOptimizedText] = useState<string>("");
-  const [improvements, setImprovements] = useState<string[]>([]);
-  
-  // State for UI views
-  const [showStructuredView, setShowStructuredView] = useState<boolean>(true);
-  
-  // State for DOCX download
-  const [isDownloadingDocx, setIsDownloadingDocx] = useState<boolean>(false);
-  
-  // State for status polling
-  const [statusPollingEnabled, setStatusPollingEnabled] = useState<boolean>(false);
-  const [statusPollingInterval, setStatusPollingInterval] = useState<number>(1000);
-  
-  // State for processing too long detection
-  const [processingTooLong, setProcessingTooLong] = useState<boolean>(false);
-  
-  // Auto-select first CV if available
-  useEffect(() => {
-    if (cvs.length > 0 && !selectedCVId) {
-      const [name, id] = cvs[0].split('|');
-      handleSelectCV(id, name);
-    }
-  }, [cvs]);
+  // Results states
+  const [optimizedText, setOptimizedText] = useState<string | null>(null);
+  const [jobMatchScore, setJobMatchScore] = useState<number | null>(null);
+  const [keywordMatches, setKeywordMatches] = useState<string[]>([]);
+  const [suggestedImprovements, setSuggestedImprovements] = useState<string[]>([]);
   
   // Handle CV selection
-  const handleSelectCV = useCallback(async (cvId: string, cvName: string) => {
+  const handleSelectCV = (cvId: string, cvName: string) => {
     setSelectedCVId(cvId);
     setSelectedCVName(cvName);
-    setSelectedCV(`${cvName}|${cvId}`);
-    console.log(`Selected CV: ${cvName} (ID: ${cvId})`);
-    
-    // Reset states when a new CV is selected
     setIsProcessed(false);
-    setIsProcessing(false);
-    setProcessingProgress(0);
-    setProcessingStatus("");
-    setError(null);
-    setOptimizedText("");
-    setMatchScore(0);
+    setOptimizedText(null);
+    setJobMatchScore(null);
     setKeywordMatches([]);
-    setMissingKeywords([]);
-    
-    // Start polling for status
-    setStatusPollingEnabled(true);
-    setStatusPollingInterval(1000);
-  }, []);
+    setSuggestedImprovements([]);
+  };
   
-  // Process the CV with job description
-  const processCV = useCallback(async () => {
-    if (!selectedCVId) {
-      setError("Please select a CV first");
+  // Process the CV for job matching
+  const processCV = async (forceRefresh: boolean = false) => {
+    if (!selectedCVId || !jobDescription.trim()) {
+      setError("Please select a CV and provide a job description");
       return;
     }
     
-    if (!jobDescription.trim()) {
-      setError("Please enter a job description");
-      return;
-    }
-    
-    // Set processing state
-    setIsProcessing(true);
-    setIsProcessed(false);
-    setProcessingProgress(0);
-    setProcessingStatus("Starting job-specific optimization...");
     setError(null);
+    setIsProcessing(true);
+    setProcessingProgress(0);
     
     try {
-      console.log(`Processing CV: ${selectedCVName} (ID: ${selectedCVId}) with job description`);
-      
-      // Start the optimization process
-      const response = await fetch('/api/cv/process-specific', {
+      // Call the job-specific optimization API
+      const response = await fetch('/api/cv/job-optimize', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           cvId: selectedCVId,
-          jobDescription: jobDescription
+          jobDescription: jobDescription,
         }),
       });
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
-        throw new Error(errorData.error || `Failed to optimize CV: ${response.status}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to optimize CV');
       }
       
       const data = await response.json();
       
-      if (!data.success) {
-        throw new Error(data.error || "Optimization failed");
-      }
-      
-      // Set the results
-      setMatchScore(data.matchScore);
-      setKeywordMatches(data.keywordMatches);
-      setMissingKeywords(data.missingKeywords);
+      // Update state with optimization results
       setOptimizedText(data.optimizedText);
-      
-      // Mark as processed
+      setJobMatchScore(data.jobMatchScore);
+      setKeywordMatches(data.keywordMatches);
+      setSuggestedImprovements(data.suggestedImprovements);
       setIsProcessed(true);
-      setIsProcessing(false);
       setProcessingProgress(100);
-      setProcessingStatus("Optimization complete");
-      
-      // Show success toast
-      toast({
-        title: "Optimization Complete",
-        description: "Your CV has been optimized for the job description",
-        duration: 3000,
-      });
       
     } catch (error) {
-      console.error("Error optimizing CV:", error);
-      setError(error instanceof Error ? error.message : "An unknown error occurred during optimization");
+      console.error("Error processing CV:", error);
+      setError(error instanceof Error ? error.message : "Failed to process CV. Please try again.");
+    } finally {
       setIsProcessing(false);
-      setProcessingProgress(0);
-      setStatusPollingEnabled(false);
-    }
-  }, [selectedCVId, selectedCVName, jobDescription]);
-  
-  // Add polling for processing status
-  useEffect(() => {
-    let timeoutId: NodeJS.Timeout | null = null;
-    
-    const checkStatus = async () => {
-      if (!statusPollingEnabled || !selectedCVId) return;
-      
-      try {
-        // In a real implementation, we would call an API endpoint to check status
-        // For now, we'll use the mock implementation with simulated progress
-        
-        // Check if we have a cached document
-        const cachedDoc = await getCachedDocument(selectedCVId, 'specific');
-        
-        if (cachedDoc && isProcessing) {
-          // If we have a cached document, the processing is complete
-          setProcessingProgress(100);
-          setProcessingStatus("Optimization complete");
-          setIsProcessed(true);
-          setIsProcessing(false);
-          setStatusPollingEnabled(false);
-          
-          // Set the results from the cached document
-          if (cachedDoc.content) {
-            setOptimizedText(cachedDoc.content);
-          }
-          
-          return;
-        }
-        
-        // If no cached document yet, continue with simulated progress
-        if (isProcessing && processingProgress < 100) {
-          // Increment progress by 5-15% each time
-          const increment = Math.floor(Math.random() * 10) + 5;
-          const newProgress = Math.min(processingProgress + increment, 100);
-          
-          setProcessingProgress(newProgress);
-          
-          // Update status message based on progress
-          if (newProgress < 30) {
-            setProcessingStatus("Analyzing job description...");
-          } else if (newProgress < 60) {
-            setProcessingStatus("Extracting keywords and requirements...");
-          } else if (newProgress < 90) {
-            setProcessingStatus("Optimizing CV content...");
-          } else {
-            setProcessingStatus("Finalizing optimization...");
-          }
-          
-          // If we've reached 100%, mark as complete after a short delay
-          if (newProgress === 100) {
-            setTimeout(() => {
-              setIsProcessed(true);
-              setIsProcessing(false);
-              setStatusPollingEnabled(false);
-            }, 1000);
-          } else {
-            // Continue polling
-            timeoutId = setTimeout(checkStatus, statusPollingInterval);
-          }
-        }
-      } catch (err) {
-        console.error("Error checking status:", err);
-        setStatusPollingEnabled(false);
-      }
-    };
-    
-    if (statusPollingEnabled) {
-      timeoutId = setTimeout(checkStatus, statusPollingInterval);
-    }
-    
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, [statusPollingEnabled, statusPollingInterval, selectedCVId, isProcessing, processingProgress]);
-  
-  // Add a useEffect to detect when processing is taking too long
-  useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
-    
-    if (isProcessing && processingStatus) {
-      // Set a timeout to show the reset button after 30 seconds
-      timeoutId = setTimeout(() => {
-        setProcessingTooLong(true);
-      }, 30000); // 30 seconds
-    } else {
-      // Clear processing too long flag when not processing
-      setProcessingTooLong(false);
-    }
-    
-    // Clean up the timeout when the component unmounts or status changes
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, [isProcessing, processingStatus]);
-  
-  // Add a function to handle reset
-  const handleResetProcessing = async () => {
-    try {
-      // Reset processing state
-      setProcessingStatus('Starting job-specific optimization...');
-      setProcessingProgress(0);
-      setError(null);
-      
-      // Restart the process
-      processCV();
-      
-      // Show toast notification
-      toast({
-        title: 'Processing Reset',
-        description: 'CV optimization has been reset. Trying again...',
-        duration: 3000
-      });
-    } catch (error) {
-      console.error('Error resetting processing:', error);
-      setError('Failed to reset processing. Please try again.');
     }
   };
-  
-  // Handle download DOCX
+
+  // Handle DOCX download
   const handleDownloadDocx = async () => {
-    if (!selectedCVId || !isProcessed) return;
-    
-    setIsDownloadingDocx(true);
+    if (!optimizedText) return;
     
     try {
-      const response = await fetch(`/api/cv/generate-docx?cvId=${selectedCVId}&type=specific`);
+      const response = await fetch('/api/cv/generate-docx', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cvId: selectedCVId,
+          optimizedText: optimizedText,
+        }),
+      });
       
       if (!response.ok) {
         throw new Error('Failed to generate DOCX file');
       }
       
-      // Get the filename from the content-disposition header or use a default
-      const contentDisposition = response.headers.get('content-disposition');
-      const filename = contentDisposition
-        ? contentDisposition.split('filename=')[1].replace(/"/g, '')
-        : 'optimized-cv.docx';
+      const data = await response.json();
       
-      // Create a blob from the response
-      const blob = await response.blob();
+      // Convert base64 to blob
+      const docxBlob = new Blob(
+        [Buffer.from(data.docxBase64, 'base64')],
+        { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }
+      );
       
-      // Create a download link and click it
-      const url = window.URL.createObjectURL(blob);
+      // Create download link
+      const downloadUrl = URL.createObjectURL(docxBlob);
       const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
+      a.href = downloadUrl;
+      a.download = `${selectedCVName}-job-optimized.docx`;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+      URL.revokeObjectURL(downloadUrl);
       
-      toast({
-        title: "Success",
-        description: "Your optimized CV has been downloaded",
-        duration: 3000,
-      });
     } catch (error) {
       console.error('Error downloading DOCX:', error);
-      setError('Failed to download the optimized CV');
-      
-      toast({
-        title: "Error",
-        description: "Failed to download the optimized CV",
-        variant: "destructive",
-        duration: 3000,
-      });
-    } finally {
-      setIsDownloadingDocx(false);
+      setError(error instanceof Error ? error.message : 'Failed to download DOCX');
     }
   };
-  
+
   return (
     <Card className="w-full shadow-lg border border-[#B4916C]/20 bg-[#121212]">
       <CardHeader>
-        <CardTitle className="text-xl font-bold text-[#B4916C]">Job-Specific CV Optimization</CardTitle>
+        <CardTitle className="text-xl font-bold text-[#B4916C] flex items-center gap-2">
+          <Briefcase className="w-5 h-5" />
+          <span>Job-Specific Optimization</span>
+        </CardTitle>
         <CardDescription className="text-gray-400">
-          Optimize your CV for a specific job by providing the job description
+          Optimize your CV for a specific job position
         </CardDescription>
       </CardHeader>
       
       <CardContent className="p-4 md:p-6">
-        <div className="space-y-6">
-          {/* CV Selection */}
-          <div>
-            <div className="mb-2 text-gray-400 text-sm">Select your CV</div>
-            <ModernFileDropdown 
-              cvs={cvs} 
-              selectedCVName={selectedCVName} 
-              onSelect={handleSelectCV} 
-            />
-          </div>
-          
-          {/* Job Description Input */}
-          <div>
-            <div className="mb-2 text-gray-400 text-sm">Paste the job description</div>
-            <Textarea
-              value={jobDescription}
-              onChange={(e) => setJobDescription(e.target.value)}
-              placeholder="Paste the job description here..."
-              className="min-h-[200px] bg-black border-gray-700 focus:border-[#B4916C] text-white"
-            />
-          </div>
-          
-          {/* Error Display */}
-          {error && (
-            <Alert className="bg-red-950 border-red-900">
-              <AlertCircle className="h-4 w-4 text-red-400" />
-              <AlertDescription className="text-red-300">{error}</AlertDescription>
-            </Alert>
-          )}
-          
-          {/* Processing Status */}
-          {isProcessing && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-400">{processingStatus}</span>
-                <span className="text-[#B4916C]">{processingProgress}%</span>
-              </div>
-              <Progress value={processingProgress} className="h-2" />
-              
-              {processingTooLong && (
-                <button
-                  onClick={handleResetProcessing}
-                  className="px-3 py-1 bg-red-900/30 hover:bg-red-800/50 text-red-300 border border-red-800 rounded-md flex items-center text-xs mt-2"
-                >
-                  <RefreshCw className="w-3 h-3 mr-1" />
-                  Taking too long? Reset
-                </button>
-              )}
+        {/* CV Selection */}
+        <div className="mb-6">
+          <div className="mb-2 text-gray-400 text-sm">Select a CV to optimize</div>
+          <ModernFileDropdown 
+            cvs={cvs} 
+            onSelect={handleSelectCV} 
+            selectedCVName={selectedCVName}
+          />
+        </div>
+        
+        {/* Job Description Input */}
+        <div className="mb-6">
+          <div className="mb-2 text-gray-400 text-sm">Paste the job description</div>
+          <Textarea
+            value={jobDescription}
+            onChange={(e) => setJobDescription(e.target.value)}
+            placeholder="Paste the job description here..."
+            className="min-h-[200px] bg-black border-gray-700 focus:border-[#B4916C] text-white"
+          />
+        </div>
+        
+        {/* Error Display */}
+        {error && (
+          <Alert className="mb-6 bg-red-950 border-red-900 text-red-200">
+            <AlertCircle className="h-4 w-4 mr-2" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        
+        {/* Process Button */}
+        {!isProcessed && !isProcessing && (
+          <Button 
+            onClick={() => processCV(false)} 
+            disabled={!selectedCVId || !jobDescription.trim() || isProcessing}
+            className="w-full bg-[#B4916C] hover:bg-[#A27D59] text-black font-medium mb-4"
+          >
+            Optimize for Job
+          </Button>
+        )}
+        
+        {/* Processing Indicator */}
+        {isProcessing && (
+          <div className="mb-4 p-4 border rounded-md bg-[#050505]">
+            <h3 className="text-lg font-semibold">Processing CV</h3>
+            <p className="text-sm text-muted-foreground">
+              {processingStatus || "Analyzing job requirements..."}
+            </p>
+            <div className="w-full h-2 bg-secondary mt-2 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-primary transition-all duration-300 ease-in-out" 
+                style={{ width: `${processingProgress}%` }}
+              />
             </div>
-          )}
-          
-          {/* Optimization Results */}
-          {isProcessed && (
+            <p className="text-sm mt-1">{processingProgress}%</p>
+          </div>
+        )}
+        
+        {/* Results Section */}
+        {isProcessed && optimizedText && (
+          <div className="mt-6">
             <div className="space-y-6">
-              {/* Match Score */}
-              <div className="bg-black p-4 rounded-lg border border-gray-800">
-                <h3 className="text-lg font-semibold text-white mb-2">Job Match Score</h3>
-                <div className="flex items-center">
-                  <div className="text-4xl font-bold text-[#B4916C]">{matchScore}%</div>
-                  <div className="ml-4 text-sm text-gray-400">
-                    Match with job requirements
+              {/* Job Match Score */}
+              <div className="p-4 bg-[#050505] rounded-lg border border-gray-800">
+                <h4 className="text-lg font-semibold mb-2">Job Match Score</h4>
+                <div className="flex items-center gap-2">
+                  <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-[#B4916C] transition-all duration-300 ease-in-out" 
+                      style={{ width: `${jobMatchScore}%` }}
+                    />
                   </div>
+                  <span className="text-sm font-medium">{Math.round(jobMatchScore || 0)}%</span>
                 </div>
               </div>
               
               {/* Keyword Matches */}
-              <div className="bg-black p-4 rounded-lg border border-gray-800">
-                <h3 className="text-lg font-semibold text-white mb-2">Keyword Matches</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {keywordMatches.map(({ keyword, count }) => (
-                    <div key={keyword} className="flex justify-between items-center">
-                      <span className="text-gray-300">{keyword}</span>
-                      <span className="text-[#B4916C]">×{count}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              {/* Missing Keywords */}
-              {missingKeywords.length > 0 && (
-                <div className="bg-black p-4 rounded-lg border border-gray-800">
-                  <h3 className="text-lg font-semibold text-white mb-2">Missing Keywords</h3>
+              {keywordMatches.length > 0 && (
+                <div className="p-4 bg-[#050505] rounded-lg border border-gray-800">
+                  <h4 className="text-lg font-semibold mb-2">Matched Keywords</h4>
                   <div className="flex flex-wrap gap-2">
-                    {missingKeywords.map((keyword) => (
+                    {keywordMatches.map((keyword, index) => (
                       <span 
-                        key={keyword}
-                        className="px-2 py-1 bg-red-950/30 text-red-300 border border-red-900/50 rounded-md text-sm"
+                        key={index}
+                        className="px-2 py-1 bg-[#B4916C]/10 border border-[#B4916C]/20 rounded text-sm"
                       >
                         {keyword}
                       </span>
@@ -496,38 +303,52 @@ export default function SpecificOptimizeCVCard({ cvs = [] }: SpecificOptimizeCVC
                 </div>
               )}
               
+              {/* Suggested Improvements */}
+              {suggestedImprovements.length > 0 && (
+                <div className="p-4 bg-[#050505] rounded-lg border border-gray-800">
+                  <h4 className="text-lg font-semibold mb-2">Suggested Improvements</h4>
+                  <ul className="list-disc pl-5 space-y-1">
+                    {suggestedImprovements.map((improvement, index) => (
+                      <li key={index} className="text-sm text-gray-300">{improvement}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {/* Optimized Content */}
+              <div className="p-4 bg-[#050505] rounded-lg border border-gray-800">
+                <h4 className="text-lg font-semibold mb-2">Optimized Content</h4>
+                <div className="whitespace-pre-wrap text-sm text-gray-300 max-h-96 overflow-y-auto">
+                  {optimizedText}
+                </div>
+              </div>
+              
               {/* Download Button */}
               <Button
                 onClick={handleDownloadDocx}
-                disabled={isDownloadingDocx}
-                className="w-full bg-[#B4916C] hover:bg-[#A27D59] text-white font-medium"
+                className="w-full bg-[#121212] hover:bg-gray-800 text-white border border-gray-700"
               >
-                {isDownloadingDocx ? (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    Generating DOCX...
-                  </>
-                ) : (
-                  <>
-                    <Download className="mr-2 h-4 w-4" />
-                    Download Optimized CV
-                  </>
-                )}
+                <Download className="h-4 w-4 mr-2" />
+                Download as DOCX
+              </Button>
+              
+              {/* Reset Button */}
+              <Button
+                onClick={() => {
+                  setIsProcessed(false);
+                  setOptimizedText(null);
+                  setJobMatchScore(null);
+                  setKeywordMatches([]);
+                  setSuggestedImprovements([]);
+                }}
+                className="w-full bg-transparent hover:bg-gray-800 text-gray-400 border border-gray-700"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Start Over
               </Button>
             </div>
-          )}
-          
-          {/* Optimize Button */}
-          {!isProcessing && !isProcessed && (
-            <Button
-              onClick={processCV}
-              disabled={!selectedCVId || !jobDescription.trim()}
-              className="w-full bg-[#B4916C] hover:bg-[#A27D59] text-white font-medium"
-            >
-              Optimize CV for Job
-            </Button>
-          )}
-        </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

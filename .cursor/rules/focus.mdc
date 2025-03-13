@@ -2,9 +2,9 @@
 description: current top priority
 globs: 
 ---
-Optimize the content and design of the optimized cv result document.
+# - Optimize the content and design of the optimized cv result document.
 (all flags --DONE means they are fixed or implemented and we shall no worry about anymore)
-
+# - do not go implement a bunch of things without permision only focus on this priority focus
 
 - generate the specific tab system, this system is very similar to the general except the cv will be optimized based on the copyed and pasted the user desired job description and the AI adjusting the CV keywords and make it the perfect fit for the job
 

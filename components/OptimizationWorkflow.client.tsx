@@ -300,7 +300,11 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
   
   // Handle tab changes
   const handleTabChange = (value: string) => {
-    // Remove the specific tab restriction
+    if (value === "specific") {
+      // Specific tab is coming soon, don't allow switching to it
+      return;
+    }
+    
     setActiveStep(value as "general" | "specific");
     setError(null);
   };
@@ -409,7 +413,9 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
       <Tabs defaultValue="general" onValueChange={handleTabChange} value={activeStep}>
         <TabsList className="w-full grid grid-cols-2">
           <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="specific">Job-Specific</TabsTrigger>
+          <TabsTrigger value="specific" disabled={true}>
+            Specific (Coming Soon)
+          </TabsTrigger>
         </TabsList>
         
         <TabsContent value="general" className="space-y-4 mt-4">
@@ -430,12 +436,13 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
             <div>
               <h2 className="text-2xl font-bold">Job-Specific Optimization</h2>
               <p className="text-muted-foreground">
-                Optimize your CV for a specific job by providing the job description.
+                Optimize your CV for a specific job by pasting the job description below. Our AI will tailor your CV to match the job requirements.
               </p>
             </div>
           </div>
           
           <SpecificOptimizeCVCard cvs={cvs} />
+          
         </TabsContent>
       </Tabs>
     </div>

@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateDocx } from '@/lib/docx/docxGenerator';
-import { getUser } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
-import { getCachedDocument } from "@/lib/cache/documentCache";
+import { getUser, getCVsForUser } from '@/lib/db/queries.server';
 
 export async function POST(request: NextRequest) {
   try {
     // Check authentication
-    const user = await getUser(request);
+    const user = await getUser();
     if (!user) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     // Parse request body
     const body = await request.json();
-    const { cvId, optimizedText, type = 'general' } = body;
+    const { cvId, optimizedText } = body;
 
     if (!cvId) {
       return NextResponse.json({ success: false, error: 'CV ID is required' }, { status: 400 });
@@ -22,26 +20,28 @@ export async function POST(request: NextRequest) {
 
     let cvText = optimizedText;
 
-    // If optimized text wasn't provided, fetch it from the cache
+    // If optimized text wasn't provided, fetch it from the database
     if (!cvText) {
       try {
-        // Get cached document
-        const cachedDoc = await getCachedDocument(cvId, type);
+        // Get all CVs for the user
+        const cvs = await getCVsForUser(user.id);
         
-        if (!cachedDoc) {
-          // Fallback to getting from database
-          const cv = await prisma.cv.findUnique({
-            where: { id: cvId }
-          });
+        // Find the specific CV by ID
+        const cvRecord = cvs.find(cv => cv.id === parseInt(cvId));
 
-          if (!cv) {
-            return NextResponse.json({ success: false, error: 'CV not found' }, { status: 404 });
-          }
-
-          cvText = cv.content;
-        } else {
-          cvText = cachedDoc.content;
+        if (!cvRecord) {
+          return NextResponse.json({ success: false, error: 'CV not found' }, { status: 404 });
         }
+
+        // Use rawText since optimizedText doesn't exist in the schema
+        if (!cvRecord.rawText) {
+          return NextResponse.json(
+            { success: false, error: 'No text available for this CV' },
+            { status: 400 }
+          );
+        }
+
+        cvText = cvRecord.rawText;
       } catch (dbError) {
         console.error('Database error:', dbError);
         return NextResponse.json(
@@ -52,11 +52,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate the DOCX file
-    const docxBuffer = await generateDocx(cvText, {
-      title: `Optimized CV - ${type === 'specific' ? 'Job-Specific' : 'General'}`,
-      author: user.name || "CV Owner",
-      description: `Optimized CV - ${type === 'specific' ? 'Job-Specific' : 'General'} Version`,
-    });
+    const docxBuffer = await generateDocx(cvText);
 
     // Convert buffer to base64 for response
     const base64Data = docxBuffer.toString('base64');
@@ -78,75 +74,62 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     // Check authentication
-    const user = await getUser(req);
+    const user = await getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get query parameters
-    const searchParams = req.nextUrl.searchParams;
-    const cvId = searchParams.get("cvId");
-    const type = searchParams.get("type") || "general"; // "general" or "specific"
+    // Get the CV ID from the query parameters
+    const { searchParams } = new URL(request.url);
+    const cvId = searchParams.get('cvId');
 
     if (!cvId) {
-      return NextResponse.json({ error: "CV ID is required" }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'CV ID is required' }, { status: 400 });
     }
 
-    // Get cached document if available
-    const cachedDoc = await getCachedDocument(cvId, type as 'general' | 'specific');
-    if (!cachedDoc) {
-      // Fallback to getting from database
-      const cv = await prisma.cv.findUnique({
-        where: { id: cvId }
-      });
+    // Get all CVs for the user
+    const cvs = await getCVsForUser(user.id);
+    
+    // Find the specific CV by ID
+    const cvRecord = cvs.find(cv => cv.id === parseInt(cvId));
 
-      if (!cv) {
-        return NextResponse.json({ error: "CV not found" }, { status: 404 });
-      }
-
-      // Generate DOCX from raw text
-      const docxBuffer = await generateDocx(cv.content, {
-        title: `Optimized CV - ${type === 'specific' ? 'Job-Specific' : 'General'}`,
-        author: user.name || "CV Owner",
-        description: `Optimized CV - ${type === 'specific' ? 'Job-Specific' : 'General'} Version`,
-      });
-
-      // Set response headers
-      const headers = new Headers();
-      headers.set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-      headers.set("Content-Disposition", `attachment; filename="cv_${type}_optimized.docx"`);
-
-      // Return the DOCX file
-      return new NextResponse(docxBuffer, {
-        status: 200,
-        headers,
-      });
+    if (!cvRecord) {
+      return NextResponse.json({ success: false, error: 'CV not found' }, { status: 404 });
     }
 
-    // Generate DOCX from cached content
-    const docxBuffer = await generateDocx(cachedDoc.content, {
-      title: `Optimized CV - ${type === 'specific' ? 'Job-Specific' : 'General'}`,
-      author: user.name || "CV Owner",
-      description: `Optimized CV - ${type === 'specific' ? 'Job-Specific' : 'General'} Version`,
-    });
+    // Use rawText since optimizedText doesn't exist in the schema
+    if (!cvRecord.rawText) {
+      return NextResponse.json(
+        { success: false, error: 'No text available for this CV' },
+        { status: 400 }
+      );
+    }
 
-    // Set response headers
-    const headers = new Headers();
-    headers.set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-    headers.set("Content-Disposition", `attachment; filename="cv_${type}_optimized.docx"`);
+    // Generate the DOCX file
+    const docxBuffer = await generateDocx(cvRecord.rawText);
 
-    // Return the DOCX file
+    // Create a filename for the download
+    const filename = cvRecord.fileName 
+      ? `${cvRecord.fileName.replace(/\.[^/.]+$/, '')}-optimized.docx` 
+      : 'optimized-cv.docx';
+
+    // Return the DOCX file as a downloadable attachment
     return new NextResponse(docxBuffer, {
-      status: 200,
-      headers,
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+      },
     });
   } catch (error) {
-    console.error("Error generating DOCX:", error);
+    console.error('Error generating DOCX:', error);
     return NextResponse.json(
-      { error: "Failed to generate DOCX" },
+      { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'An unknown error occurred' 
+      },
       { status: 500 }
     );
   }
