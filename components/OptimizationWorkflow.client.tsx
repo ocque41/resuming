@@ -434,7 +434,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
           <p className="text-muted-foreground">
             Optimize your CV for a specific job by pasting the job description below. Our AI will tailor your CV to match the job requirements.
           </p>
-          <EnhancedSpecificOptimizationWorkflow />
+          <EnhancedSpecificOptimizationWorkflow cvs={cvs} />
         </TabsContent>
       </Tabs>
     </div>

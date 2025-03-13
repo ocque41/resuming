@@ -34,7 +34,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const logoRef = useRef<HTMLDivElement>(null);
   const [eyePosition, setEyePosition] = useState({ x: 0, y: 0 });
-  const [eyeState, setEyeState] = useState<'normal' | 'yawning' | 'stressed'>('normal');
+  const [eyeState, setEyeState] = useState<'normal' | 'yawning' | 'stressed' | 'happy' | 'wink' | 'surprised'>('normal');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [documents, setDocuments] = useState(documentsData.map(doc => ({
@@ -70,17 +70,26 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
       }
     };
     
-    // Random eye animations
+    // Enhanced random eye animations with more variety
     const animationInterval = setInterval(() => {
       const randomNum = Math.random();
-      if (randomNum < 0.05) {
+      if (randomNum < 0.03) {
         setEyeState('yawning');
         setTimeout(() => setEyeState('normal'), 1000);
-      } else if (randomNum < 0.1) {
+      } else if (randomNum < 0.06) {
         setEyeState('stressed');
         setTimeout(() => setEyeState('normal'), 800);
+      } else if (randomNum < 0.09) {
+        setEyeState('happy');
+        setTimeout(() => setEyeState('normal'), 1200);
+      } else if (randomNum < 0.11) {
+        setEyeState('wink');
+        setTimeout(() => setEyeState('normal'), 600);
+      } else if (randomNum < 0.13) {
+        setEyeState('surprised');
+        setTimeout(() => setEyeState('normal'), 700);
       }
-    }, 3000);
+    }, 2500);
     
     window.addEventListener('mousemove', handleMouseMove);
     
@@ -124,7 +133,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
     ]);
     
     // Show happy eyes briefly when selecting a document
-    setEyeState('yawning');
+    setEyeState('happy');
     setTimeout(() => setEyeState('normal'), 800);
   };
   
@@ -168,7 +177,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
     }
     
     setIsUploading(true);
-    setEyeState('stressed');
+    setEyeState('surprised');
     
     try {
       // Create form data
@@ -201,40 +210,36 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
       // Show success message
       toast({
         title: "Document uploaded",
-        description: `${file.name} has been successfully uploaded.`,
+        description: `${file.name} has been uploaded successfully.`,
       });
+      
+      // Show happy eyes briefly
+      setEyeState('happy');
+      setTimeout(() => setEyeState('normal'), 1000);
       
       // Add a message about the uploaded document
       setMessages(prev => [
         ...prev, 
         { 
           role: "assistant", 
-          content: `I've received your document "${file.name}". How would you like to enhance it?` 
+          content: `I've uploaded "${file.name}" for you. How would you like to enhance it?` 
         }
       ]);
-      
-      // Show happy eyes
-      setEyeState('yawning');
-      setTimeout(() => setEyeState('normal'), 800);
-      
     } catch (error) {
       console.error('Error uploading document:', error);
       
       // Show error message
       toast({
         title: "Upload failed",
-        description: error instanceof Error ? error.message : "Failed to upload document. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to upload document.",
         variant: "destructive"
       });
       
-      // Show stressed eyes for longer
+      // Show stressed eyes briefly
       setEyeState('stressed');
-      setTimeout(() => setEyeState('normal'), 1500);
-      
+      setTimeout(() => setEyeState('normal'), 800);
     } finally {
       setIsUploading(false);
-      
-      // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -242,78 +247,127 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   };
   
   return (
-    <div className="w-full flex flex-col items-center justify-center min-h-screen py-10 px-4">
-      {/* Hidden file input */}
-      <input
-        type="file"
-        ref={fileInputRef}
-        className="hidden"
-        onChange={handleFileChange}
-        accept=".pdf,.doc,.docx,.txt,.md"
-        aria-label="Upload document"
-      />
-      
-      {/* Main Content Container */}
-      <div className="w-full max-w-4xl flex flex-col items-center">
-        {/* Logo and Title */}
-        <div className="w-full text-center mb-8 md:mb-12">
-          <div className="flex justify-center mb-6">
+    <div className="flex flex-col items-center justify-center min-h-screen py-8 px-4">
+      <div className="w-full max-w-2xl">
+        <h1 className="text-2xl md:text-3xl font-bold text-white text-center mb-6">Let's make a document</h1>
+        
+        <div className="bg-[#111111] rounded-xl shadow-lg overflow-hidden w-full max-w-2xl">
+          {/* Logo with animated eyes */}
+          <div className="flex justify-center my-4">
             <div 
               ref={logoRef}
-              className="h-16 w-16 bg-[#222222] rounded-full flex items-center justify-center relative overflow-hidden"
-              aria-hidden="true"
+              className="relative h-14 w-14 bg-[#B4916C] rounded-full flex items-center justify-center"
             >
+              {/* Eyes */}
               {eyeState === 'normal' && (
                 <>
-                  <div 
-                    className="h-2 w-2 bg-white rounded-full absolute transition-all duration-200 ease-out"
+                  <div className="absolute h-2.5 w-2.5 bg-black rounded-full" 
                     style={{ 
-                      left: `calc(50% - 4px + ${eyePosition.x}px)`, 
-                      top: `calc(50% + ${eyePosition.y}px)`,
-                      transform: 'translateX(-50%)'
+                      left: `calc(35% + ${eyePosition.x}px)`, 
+                      top: `calc(40% + ${eyePosition.y}px)` 
                     }}
-                  ></div>
-                  <div 
-                    className="h-2 w-2 bg-white rounded-full absolute transition-all duration-200 ease-out"
+                  />
+                  <div className="absolute h-2.5 w-2.5 bg-black rounded-full" 
                     style={{ 
-                      left: `calc(50% + 4px + ${eyePosition.x}px)`, 
-                      top: `calc(50% + ${eyePosition.y}px)`,
-                      transform: 'translateX(-50%)'
+                      right: `calc(35% - ${eyePosition.x}px)`, 
+                      top: `calc(40% + ${eyePosition.y}px)` 
                     }}
-                  ></div>
+                  />
                 </>
               )}
               
+              {/* Yawning eyes */}
               {eyeState === 'yawning' && (
                 <>
-                  <div className="h-2 w-2 bg-white rounded-full absolute" style={{ left: 'calc(50% - 4px)', top: 'calc(50% - 3px)' }}></div>
-                  <div className="h-2 w-2 bg-white rounded-full absolute" style={{ left: 'calc(50% + 4px)', top: 'calc(50% - 3px)' }}></div>
-                  <div className="h-1 w-4 bg-white rounded-full absolute" style={{ left: 'calc(50% - 2px)', top: 'calc(50% + 3px)' }}></div>
+                  <div className="absolute h-0.5 w-2.5 bg-black rounded-full" 
+                    style={{ left: '35%', top: '40%' }}
+                  />
+                  <div className="absolute h-0.5 w-2.5 bg-black rounded-full" 
+                    style={{ right: '35%', top: '40%' }}
+                  />
+                  <div className="absolute h-2 w-4 bg-black rounded-full"
+                    style={{ bottom: '30%', left: '50%', transform: 'translateX(-50%)' }}
+                  />
                 </>
               )}
               
+              {/* Stressed eyes */}
               {eyeState === 'stressed' && (
                 <>
-                  <div className="h-1 w-3 bg-white absolute" style={{ left: 'calc(50% - 5px)', top: 'calc(50%)', transform: 'rotate(45deg)' }}></div>
-                  <div className="h-1 w-3 bg-white absolute" style={{ left: 'calc(50% - 5px)', top: 'calc(50%)', transform: 'rotate(-45deg)' }}></div>
-                  <div className="h-1 w-3 bg-white absolute" style={{ left: 'calc(50% + 2px)', top: 'calc(50%)', transform: 'rotate(45deg)' }}></div>
-                  <div className="h-1 w-3 bg-white absolute" style={{ left: 'calc(50% + 2px)', top: 'calc(50%)', transform: 'rotate(-45deg)' }}></div>
+                  <div className="absolute h-2.5 w-2.5 flex items-center justify-center"
+                    style={{ left: '35%', top: '40%' }}
+                  >
+                    <div className="h-3 w-0.5 bg-black absolute rotate-45" />
+                    <div className="h-3 w-0.5 bg-black absolute -rotate-45" />
+                  </div>
+                  <div className="absolute h-2.5 w-2.5 flex items-center justify-center"
+                    style={{ right: '35%', top: '40%' }}
+                  >
+                    <div className="h-3 w-0.5 bg-black absolute rotate-45" />
+                    <div className="h-3 w-0.5 bg-black absolute -rotate-45" />
+                  </div>
+                </>
+              )}
+              
+              {/* Happy eyes */}
+              {eyeState === 'happy' && (
+                <>
+                  <div className="absolute h-2.5 w-2.5 border-b-2 border-black rounded-full" 
+                    style={{ left: '35%', top: '40%' }}
+                  />
+                  <div className="absolute h-2.5 w-2.5 border-b-2 border-black rounded-full" 
+                    style={{ right: '35%', top: '40%' }}
+                  />
+                  <div className="absolute h-1 w-4 bg-black rounded-full"
+                    style={{ bottom: '35%', left: '50%', transform: 'translateX(-50%) rotate(10deg)' }}
+                  />
+                </>
+              )}
+              
+              {/* Winking eye */}
+              {eyeState === 'wink' && (
+                <>
+                  <div className="absolute h-0.5 w-2.5 bg-black rounded-full" 
+                    style={{ left: '35%', top: '40%' }}
+                  />
+                  <div className="absolute h-2.5 w-2.5 bg-black rounded-full" 
+                    style={{ right: '35%', top: '40%' }}
+                  />
+                </>
+              )}
+              
+              {/* Surprised eyes */}
+              {eyeState === 'surprised' && (
+                <>
+                  <div className="absolute h-3 w-3 bg-black rounded-full" 
+                    style={{ left: '35%', top: '40%', transform: 'translate(-15%, -15%)' }}
+                  />
+                  <div className="absolute h-3 w-3 bg-black rounded-full" 
+                    style={{ right: '35%', top: '40%', transform: 'translate(15%, -15%)' }}
+                  />
+                  <div className="absolute h-2 w-2 bg-black rounded-full"
+                    style={{ bottom: '30%', left: '50%', transform: 'translateX(-50%)' }}
+                  />
                 </>
               )}
             </div>
           </div>
-          <h1 className="text-3xl md:text-5xl font-bold text-white">Let's make a document</h1>
-        </div>
-        
-        {/* Search Container */}
-        <div className="w-full">
-          <div className="bg-[#1A1A1A] rounded-2xl p-4 md:p-6 shadow-xl border border-[#333333]">
-            {/* Search Input */}
+          
+          {/* Input area */}
+          <div className="p-3 md:p-4">
+            <input 
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              onChange={handleFileChange}
+              accept=".pdf,.doc,.docx,.txt,.md"
+            />
+            
             <Textarea
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               placeholder="Describe the document you want to create..."
-              className="w-full bg-[#1A1A1A] border-none text-white text-base md:text-lg resize-none min-h-[60px] md:min-h-[80px] focus:outline-none focus:ring-0 placeholder-gray-500"
+              className="w-full bg-[#1A1A1A] border-none text-white text-sm md:text-base resize-none min-h-[50px] md:min-h-[60px] focus:outline-none focus:ring-0 placeholder-gray-500"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -324,19 +378,19 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
             />
             
             {/* Button Row */}
-            <div className="flex flex-wrap items-center gap-3 mt-4 md:mt-6">
+            <div className="flex flex-wrap items-center gap-2 mt-3">
               {/* Left Buttons */}
               <div className="flex items-center">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      className="bg-[#B4916C] hover:bg-[#A3815C] text-white rounded-full px-3 md:px-4 h-9 md:h-10 flex items-center text-sm md:text-base"
+                      className="bg-[#B4916C] hover:bg-[#A3815C] text-white rounded-full px-2 md:px-3 h-8 md:h-9 flex items-center text-xs md:text-sm"
                       aria-label="Select document"
                     >
-                      <FileText className="h-4 w-4 mr-1 md:mr-2" />
-                      <span>{selectedDocument || "Documents"}</span>
-                      <ChevronDown className="h-3 w-3 md:h-4 md:w-4 ml-1 md:ml-2" />
+                      <FileText className="h-3 w-3 md:h-4 md:w-4 mr-1" />
+                      <span className="truncate max-w-[100px] md:max-w-[150px]">{selectedDocument || "Documents"}</span>
+                      <ChevronDown className="h-3 w-3 ml-1" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="bg-[#2A2A2A] border-[#444444] text-white">
@@ -348,7 +402,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
                           className="hover:bg-[#3A3A3A] cursor-pointer"
                         >
                           <div className="flex flex-col">
-                            <span className="font-medium">{doc.fileName}</span>
+                            <span className="font-medium text-sm truncate max-w-[200px]">{doc.fileName}</span>
                             <span className="text-xs text-gray-400">
                               {format(doc.createdAt, 'MMM d, yyyy')}
                             </span>
@@ -356,7 +410,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
                         </DropdownMenuItem>
                       ))
                     ) : (
-                      <DropdownMenuItem disabled className="text-gray-500">
+                      <DropdownMenuItem disabled className="text-gray-500 text-sm">
                         No documents available
                       </DropdownMenuItem>
                     )}
@@ -368,25 +422,25 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
               <div className="ml-auto flex items-center space-x-2">
                 <Button
                   variant="ghost"
-                  className="bg-[#222222] hover:bg-[#333333] text-white rounded-full p-2 h-9 w-9 md:h-10 md:w-10 flex items-center justify-center"
+                  className="bg-[#222222] hover:bg-[#333333] text-white rounded-full p-1 h-8 w-8 md:h-9 md:w-9 flex items-center justify-center"
                   aria-label="Attach file"
                   onClick={handleFileUpload}
                   disabled={isUploading}
                 >
                   {isUploading ? (
-                    <div className="h-4 w-4 md:h-5 md:w-5 border-2 border-t-transparent border-white rounded-full animate-spin" />
+                    <div className="h-3 w-3 md:h-4 md:w-4 border-2 border-t-transparent border-white rounded-full animate-spin" />
                   ) : (
-                    <Paperclip className="h-4 w-4 md:h-5 md:w-5" />
+                    <Paperclip className="h-3 w-3 md:h-4 md:w-4" />
                   )}
                 </Button>
                 
                 <Button
                   onClick={handleSendMessage}
                   variant="ghost"
-                  className="bg-[#222222] hover:bg-[#333333] text-white rounded-full p-2 h-9 w-9 md:h-10 md:w-10 flex items-center justify-center"
+                  className="bg-[#222222] hover:bg-[#333333] text-white rounded-full p-1 h-8 w-8 md:h-9 md:w-9 flex items-center justify-center"
                   aria-label="Submit"
                 >
-                  <Send className="h-4 w-4 md:h-5 md:w-5" />
+                  <Send className="h-3 w-3 md:h-4 md:w-4" />
                 </Button>
               </div>
             </div>
@@ -394,14 +448,14 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
           
           {/* Messages area */}
           {messages.length > 0 && (
-            <div className="mt-6 md:mt-8 space-y-3 md:space-y-4 px-1 md:px-2">
+            <div className="mt-4 space-y-2 md:space-y-3 px-1 md:px-2 max-h-[300px] overflow-y-auto">
               {messages.map((message, index) => (
                 <div 
                   key={index} 
                   className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   <div 
-                    className={`max-w-[90%] rounded-lg p-2 md:p-3 text-sm md:text-base ${
+                    className={`max-w-[90%] rounded-lg p-2 text-xs md:text-sm ${
                       message.role === "user" 
                         ? "bg-[#2A2A2A] text-white" 
                         : "bg-[#B4916C]/10 text-white border border-[#B4916C]/20"
