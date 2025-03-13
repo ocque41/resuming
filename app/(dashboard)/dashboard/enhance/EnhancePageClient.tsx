@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronUp, Paperclip, Globe } from 'lucide-react';
+import { Paperclip } from 'lucide-react';
 
 interface DocumentData {
   id: string;
@@ -17,8 +17,38 @@ interface EnhancePageClientProps {
 
 export default function EnhancePageClient({ documentsData }: EnhancePageClientProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [isSpeedDropdownOpen, setIsSpeedDropdownOpen] = useState(false);
-  const [selectedSpeed, setSelectedSpeed] = useState('Speed');
+  const [isDocumentsDropdownOpen, setIsDocumentsDropdownOpen] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState<DocumentData | null>(null);
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Rotating placeholder phrases
+  const placeholders = [
+    "Create a professional resume for a software engineer...",
+    "Edit my cover letter to highlight leadership skills...",
+    "Format this document as a business proposal...",
+    "Rewrite this paragraph to be more concise...",
+    "Create a project timeline document with milestones..."
+  ];
+  
+  // Rotate placeholders every 4 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPlaceholderIndex((prevIndex) => (prevIndex + 1) % placeholders.length);
+    }, 4000);
+    
+    return () => clearInterval(interval);
+  }, []);
+  
+  // Handle file upload
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      // Here you would implement the actual file upload logic
+      console.log("File selected:", files[0].name);
+      // After upload is complete, you would add the new document to documentsData
+    }
+  };
   
   // Animation variants
   const containerVariants = {
@@ -59,7 +89,9 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
             <div className="w-2 h-2 bg-white rounded-full"></div>
           </div>
         </div>
-        <h1 className="text-5xl font-bold mb-4">Discover Smarter Search</h1>
+        <h1 className="text-5xl font-bold mb-4">
+          {selectedDocument ? "Let's Edit" : "Let's Create"}
+        </h1>
       </motion.div>
       
       {/* Search Container */}
@@ -69,16 +101,16 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
         initial="hidden"
         animate="visible"
       >
-        {/* Search Input and Buttons */}
+        {/* Input and Buttons */}
         <motion.div 
           variants={itemVariants}
           className="bg-[#1E1E1E] rounded-2xl p-4 mb-4"
         >
           <div className="flex flex-col">
-            {/* Search Input */}
+            {/* Input Field */}
             <input
               type="text"
-              placeholder="Ask a question..."
+              placeholder={placeholders[placeholderIndex]}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="bg-transparent text-white text-xl p-4 outline-none w-full mb-4"
@@ -86,71 +118,70 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
             
             {/* Buttons Row */}
             <div className="flex items-center justify-between">
-              {/* Speed Dropdown */}
+              {/* Documents Dropdown */}
               <div className="relative">
                 <button
-                  onClick={() => setIsSpeedDropdownOpen(!isSpeedDropdownOpen)}
+                  onClick={() => setIsDocumentsDropdownOpen(!isDocumentsDropdownOpen)}
                   className="flex items-center space-x-2 bg-[#1E1E1E] hover:bg-[#2A2A2A] text-white px-4 py-2 rounded-lg border border-[#333333]"
                 >
                   <svg className="w-5 h-5 text-green-500" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M12 8L18 14H6L12 8Z" fill="currentColor" />
                   </svg>
-                  <span>{selectedSpeed}</span>
+                  <span>{selectedDocument ? selectedDocument.name : "Documents"}</span>
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
                 
-                {isSpeedDropdownOpen && (
-                  <div className="absolute top-full left-0 mt-1 bg-[#1E1E1E] border border-[#333333] rounded-lg shadow-lg z-10">
+                {isDocumentsDropdownOpen && (
+                  <div className="absolute top-full left-0 mt-1 bg-[#1E1E1E] border border-[#333333] rounded-lg shadow-lg z-10 w-64">
                     <ul>
                       <li 
-                        className="px-4 py-2 hover:bg-[#2A2A2A] cursor-pointer"
+                        className="px-4 py-2 hover:bg-[#2A2A2A] cursor-pointer text-gray-400 border-b border-[#333333]"
                         onClick={() => {
-                          setSelectedSpeed('Fast');
-                          setIsSpeedDropdownOpen(false);
+                          setSelectedDocument(null);
+                          setIsDocumentsDropdownOpen(false);
                         }}
                       >
-                        Fast
+                        Create new document
                       </li>
-                      <li 
-                        className="px-4 py-2 hover:bg-[#2A2A2A] cursor-pointer"
-                        onClick={() => {
-                          setSelectedSpeed('Balanced');
-                          setIsSpeedDropdownOpen(false);
-                        }}
-                      >
-                        Balanced
-                      </li>
-                      <li 
-                        className="px-4 py-2 hover:bg-[#2A2A2A] cursor-pointer"
-                        onClick={() => {
-                          setSelectedSpeed('Precise');
-                          setIsSpeedDropdownOpen(false);
-                        }}
-                      >
-                        Precise
-                      </li>
+                      {documentsData.map((doc) => (
+                        <li 
+                          key={doc.id}
+                          className={`px-4 py-2 hover:bg-[#2A2A2A] cursor-pointer ${selectedDocument?.id === doc.id ? 'bg-[#2A2A2A]' : ''}`}
+                          onClick={() => {
+                            setSelectedDocument(doc);
+                            setIsDocumentsDropdownOpen(false);
+                          }}
+                        >
+                          <div className="flex justify-between items-center">
+                            <span>{doc.name}</span>
+                            <span className="text-xs text-gray-500">{new Date(doc.createdAt).toLocaleDateString()}</span>
+                          </div>
+                          <div className="text-xs text-gray-500">Type: {doc.type}</div>
+                        </li>
+                      ))}
                     </ul>
                   </div>
                 )}
               </div>
               
-              {/* Search Button */}
-              <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center space-x-2">
-                <Globe className="w-5 h-5" />
-                <span>Search</span>
-              </button>
+              {/* Hidden File Input */}
+              <input 
+                type="file" 
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                className="hidden"
+                accept=".doc,.docx,.pdf,.txt"
+              />
               
-              {/* Utility Buttons */}
-              <div className="flex space-x-2">
-                <button className="bg-[#1E1E1E] hover:bg-[#2A2A2A] p-2 rounded-full border border-[#333333]">
-                  <Paperclip className="w-5 h-5" />
-                </button>
-                <button className="bg-[#1E1E1E] hover:bg-[#2A2A2A] p-2 rounded-full border border-[#333333]">
-                  <ChevronUp className="w-5 h-5" />
-                </button>
-              </div>
+              {/* Upload Button */}
+              <button 
+                className="bg-[#1E1E1E] hover:bg-[#2A2A2A] p-2 rounded-full border border-[#333333]"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Paperclip className="w-5 h-5" />
+              </button>
             </div>
           </div>
         </motion.div>

@@ -2391,7 +2391,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         ? selectedCVName.replace(/\.\w+$/, '') 
         : 'CV';
       
-      // Method 2: Use API-based document generation (more reliable)
+      // Use API-based document generation
       if (!selectedCVId) {
         throw new Error('No CV selected for document generation');
       }
@@ -2433,37 +2433,18 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       
       console.log(`Received base64 data of length: ${data.docxBase64.length}`);
       
-      // Create a blob from the base64 data
-      const byteCharacters = atob(data.docxBase64);
-      const byteNumbers = new Array(byteCharacters.length);
-      
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-      
-      // Create a download link
-      const downloadUrl = URL.createObjectURL(blob);
+      // Create a download link for the DOCX file using data URL
+      const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${data.docxBase64}`;
       const downloadLink = document.createElement('a');
-      downloadLink.href = downloadUrl;
+      downloadLink.href = linkSource;
       downloadLink.download = `${cvName}-optimized.docx`;
-      console.log(`Setting download filename to: ${downloadLink.download}`);
       
       // Append to the document, click, and remove
       document.body.appendChild(downloadLink);
-      console.log("Download link appended to document");
-      
-      // Trigger the download
       downloadLink.click();
-      console.log("Download triggered");
-      
-      // Clean up
       document.body.removeChild(downloadLink);
-      URL.revokeObjectURL(downloadUrl);
-      console.log("Download link removed and URL revoked");
       
+      console.log("Download completed");
       setIsGeneratingDocument(false);
     } catch (error) {
       console.error('Error generating document:', error);

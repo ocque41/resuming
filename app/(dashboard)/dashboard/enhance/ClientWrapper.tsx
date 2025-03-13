@@ -23,7 +23,7 @@ function EnhancePageFallback() {
     <div className="h-full flex items-center justify-center bg-black text-white">
       <div className="text-center">
         <div className="w-16 h-16 border-t-4 border-white border-solid rounded-full animate-spin mx-auto mb-4"></div>
-        <p className="text-white font-medium">Loading search interface...</p>
+        <p className="text-white font-medium">Loading document interface...</p>
       </div>
     </div>
   );
