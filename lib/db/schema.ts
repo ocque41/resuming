@@ -187,3 +187,6 @@ export enum ActivityType {
   INVITE_TEAM_MEMBER = 'INVITE_TEAM_MEMBER',
   ACCEPT_INVITATION = 'ACCEPT_INVITATION',
 }
+
+export type Document = typeof documents.$inferSelect;
+export type CV = typeof cvs.$inferSelect;
