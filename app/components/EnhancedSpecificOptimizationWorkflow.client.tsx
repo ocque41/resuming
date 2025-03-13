@@ -2095,6 +2095,9 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   const [activeTab, setActiveTab] = useState('jobDescription');
   const [processingTooLong, setProcessingTooLong] = useState<boolean>(false);
 
+  // Add state for error messages
+  const [documentError, setDocumentError] = useState<string | null>(null);
+
   // Fetch original CV text
   const fetchOriginalText = useCallback(async (cvId: string) => {
     try {
@@ -2373,47 +2376,92 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   // Add download document handler
   const handleDownloadDocument = async () => {
     if (!optimizedText) {
-      console.error("No optimized text available");
+      setDocumentError("No optimized text available. Please optimize your CV first.");
       return;
     }
     
     setIsGeneratingDocument(true);
+    setDocumentError(null);
     
     try {
-      // Generate structured CV data
-      const structuredData = generateStructuredCV(originalText || '', jobDescription || '');
+      // Method 1: Try client-side document generation first
+      try {
+        // Generate structured CV data
+        const structuredData = generateStructuredCV(originalText || '', jobDescription || '');
+        
+        // Get CV name without file extension
+        const cvName = selectedCVName 
+          ? selectedCVName.replace(/\.\w+$/, '') 
+          : 'CV';
+        
+        // Generate document with structured data
+        const doc = await generateOptimizedDocument(
+          optimizedText, 
+          cvName, 
+          structuredData.contactInfo,
+          structuredData
+        );
+        
+        // Use Packer.toBlob for browser environments
+        const blob = await Packer.toBlob(doc);
+        
+        // Use file-saver to save the blob
+        saveAs(blob, `${cvName}-optimized.docx`);
+        
+        setIsGeneratingDocument(false);
+        return; // Exit if successful
+      } catch (clientError) {
+        console.warn('Client-side document generation failed, falling back to API:', clientError);
+        // Continue to Method 2 (API fallback)
+      }
       
-      // Get CV name without file extension
+      // Method 2: Fall back to API-based document generation
+      if (!selectedCVId) {
+        throw new Error('No CV selected for API-based document generation');
+      }
+      
+      const response = await fetch('/api/cv/generate-docx', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cvId: selectedCVId,
+          optimizedText: optimizedText
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate DOCX file via API');
+      }
+      
+      const data = await response.json();
+      
+      if (!data.success || !data.docxBase64) {
+        throw new Error('Failed to generate DOCX file: No data received from server');
+      }
+      
+      // Create a download link for the DOCX file
+      const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${data.docxBase64}`;
+      const downloadLink = document.createElement('a');
+      downloadLink.href = linkSource;
+      
+      // Use a professional filename format
       const cvName = selectedCVName 
         ? selectedCVName.replace(/\.\w+$/, '') 
         : 'CV';
+      downloadLink.download = `${cvName}-optimized.docx`;
       
-      // Generate document with structured data
-      const doc = await generateOptimizedDocument(
-        optimizedText, 
-        cvName, 
-        structuredData.contactInfo,
-        structuredData
-      );
-      
-      // Convert to blob
-      const blob = await Packer.toBuffer(doc);
-      
-      // Create a download link
-      const url = window.URL.createObjectURL(new Blob([blob], { 
-        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
-      }));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `${cvName}-optimized.docx`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      // Append to the document, click, and remove
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
       
       setIsGeneratingDocument(false);
     } catch (error) {
       console.error('Error generating document:', error);
+      setDocumentError(`Failed to generate document: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIsGeneratingDocument(false);
     }
   };
@@ -2574,13 +2622,28 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
                 <button
                   onClick={handleDownloadDocument}
                   className="flex items-center px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A37F5C] transition-colors"
-                  disabled={!optimizedText}
+                  disabled={!optimizedText || isGeneratingDocument}
                 >
-                  <Download className="w-4 h-4 mr-2" />
-                  Download DOCX
+                  {isGeneratingDocument ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4 mr-2" />
+                      Download DOCX
+                    </>
+                  )}
                 </button>
               </div>
             </div>
+            {documentError && (
+              <Alert className="mb-4 bg-destructive/10">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{documentError}</AlertDescription>
+              </Alert>
+            )}
             <div className="whitespace-pre-wrap font-mono text-sm bg-[#050505] p-4 rounded-md border border-gray-700">
               {optimizedText}
             </div>

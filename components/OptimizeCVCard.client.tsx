@@ -45,6 +45,9 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
   const [originalAtsScore, setOriginalAtsScore] = useState<number>(65);
   const [improvedAtsScore, setImprovedAtsScore] = useState<number>(85);
 
+  // Add a state for DOCX download loading
+  const [isDownloadingDocx, setIsDownloadingDocx] = useState<boolean>(false);
+
   // Extract display names for the CV dropdown (without the ID part)
   const displayCVOptions = cvOptions.map(cv => {
     const parts = cv.split('|');
@@ -467,6 +470,9 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
   // Function to handle download - DOCX
   const handleDownloadDOCX = useCallback(async () => {
     try {
+      setIsDownloadingDocx(true);
+      setError(null);
+      
       if (!optimizedDocxData) {
         // If we don't have DOCX data cached, fetch it
         const cvParts = selectedCV?.split('|') || [];
@@ -474,6 +480,7 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
         
         if (!cvId) {
           setError("Cannot retrieve CV ID for DOCX download");
+          setIsDownloadingDocx(false);
           return;
         }
         
@@ -486,7 +493,7 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
         });
         
         if (!response.ok) {
-          const errorData = await response.json();
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
           throw new Error(errorData.error || 'Failed to generate DOCX file');
         }
         
@@ -502,30 +509,38 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
         // Use the cached DOCX data
         downloadDocx(optimizedDocxData);
       }
+      
+      setIsDownloadingDocx(false);
     } catch (error) {
       console.error("Error downloading DOCX:", error);
       setError(`DOCX download error: ${error instanceof Error ? error.message : String(error)}`);
+      setIsDownloadingDocx(false);
     }
   }, [selectedCV, optimizedDocxData]);
   
   // Helper function to download DOCX
   const downloadDocx = (docxBase64: string) => {
-    // Create a link element for download
-    const link = document.createElement('a');
-    link.href = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${docxBase64}`;
-    
-    // Set the download attribute with a filename
-    const fileName = selectedCV ? selectedCV.split('|')[0].trim() : 'optimized-cv';
-    link.download = `${fileName}-optimized.docx`;
-    
-    // Append to the document
-    document.body.appendChild(link);
-    
-    // Trigger the download
-    link.click();
-    
-    // Clean up
-    document.body.removeChild(link);
+    try {
+      // Create a link element for download
+      const link = document.createElement('a');
+      link.href = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${docxBase64}`;
+      
+      // Set the download attribute with a filename
+      const fileName = selectedCV ? selectedCV.split('|')[0].trim() : 'optimized-cv';
+      link.download = `${fileName}-optimized.docx`;
+      
+      // Append to the document
+      document.body.appendChild(link);
+      
+      // Trigger the download
+      link.click();
+      
+      // Clean up
+      document.body.removeChild(link);
+    } catch (downloadError) {
+      console.error("Error in download process:", downloadError);
+      setError(`Download error: ${downloadError instanceof Error ? downloadError.message : String(downloadError)}`);
+    }
   };
 
   // Function to handle accepting the CV optimization
@@ -686,10 +701,20 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
                 
                 <Button 
                   onClick={handleDownloadDOCX}
+                  disabled={isDownloadingDocx}
                   className="flex-1 bg-[#B4916C] hover:bg-[#A3815C] text-white"
                 >
-                  <Download className="mr-2 h-4 w-4" />
-                  Download DOCX
+                  {isDownloadingDocx ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="mr-2 h-4 w-4" />
+                      Download DOCX
+                    </>
+                  )}
                 </Button>
               </div>
               
