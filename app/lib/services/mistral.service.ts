@@ -1,9 +1,7 @@
-import { MistralClient } from '@mistralai/mistralai';
+import MistralClient from '@mistralai/mistralai';
 
 // Initialize Mistral client
-const client = new MistralClient({
-  apiKey: process.env.MISTRAL_API_KEY || ''
-});
+const client = new MistralClient(process.env.MISTRAL_API_KEY || '');
 
 export interface CVAnalysisResult {
   experience: Array<{
@@ -49,7 +47,7 @@ export async function analyzeCVContent(cvText: string): Promise<CVAnalysisResult
         }
       ],
       temperature: 0.1,
-      max_tokens: 2000
+      maxTokens: 2000
     });
 
     const result = JSON.parse(response.choices[0].message.content);
@@ -93,7 +91,7 @@ export async function optimizeCVForJob(cvText: string, jobDescription: string): 
         }
       ],
       temperature: 0.2,
-      max_tokens: 3000
+      maxTokens: 3000
     });
 
     const result = JSON.parse(response.choices[0].message.content);

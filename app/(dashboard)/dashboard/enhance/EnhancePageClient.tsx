@@ -258,7 +258,6 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
       setIsUploading(false);
       setEyeState('normal');
     }
-    playAnimationSequence('documentUpload');
   };
   
   // Prevent dropdown from closing when selecting/deselecting
@@ -266,7 +265,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
     e.stopPropagation();
     setSelectedDocument(doc);
     setMode('edit');
-    playAnimationSequence('documentSelect');
+    // Don't close dropdown automatically
   };
 
   const handleDocumentDeselect = (e: React.MouseEvent) => {
@@ -313,10 +312,49 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
           transform: 'translate(3px, -2px) rotate(5deg) scaleX(0.9)',
           transition: 'all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55)'
         };
+      case 'happy':
+        return {
+          ...baseStyle,
+          transform: 'scale(1.1) translateY(-1px)',
+          transition: 'all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
+        };
       default:
         return baseStyle;
     }
   };
+
+  // Add random eye animations
+  useEffect(() => {
+    // Random blinks
+    const blinkInterval = setInterval(() => {
+      if (eyeState === 'normal') {
+        setEyeState('blink');
+        setTimeout(() => setEyeState('normal'), 150);
+      }
+    }, Math.random() * 3000 + 2000);
+    
+    // Random winks
+    const winkInterval = setInterval(() => {
+      if (eyeState === 'normal') {
+        setEyeState('wink');
+        setTimeout(() => setEyeState('normal'), 300);
+      }
+    }, Math.random() * 15000 + 10000);
+    
+    // Random look around
+    const lookAroundInterval = setInterval(() => {
+      if (eyeState === 'normal') {
+        setEyeState('look-around');
+        setTimeout(() => setEyeState('normal'), 1200);
+      }
+    }, Math.random() * 8000 + 5000);
+    
+    return () => {
+      clearInterval(blinkInterval);
+      clearInterval(winkInterval);
+      clearInterval(lookAroundInterval);
+    };
+  }, [eyeState]);
 
   if (isLoading) {
     return (
@@ -339,17 +377,23 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
           {title}
         </h1>
         
-        <Button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isUploading}
-          className="bg-[#050505] hover:bg-[#1D1D1D] rounded-xl p-2 w-10 h-10 
-            flex items-center justify-center border border-[#2D2D2D]
-            transition-all duration-300 hover:scale-105 hover:border-[#B4916C]
-            active:scale-95"
-          aria-label="Upload file"
-        >
-          <Paperclip className="h-5 w-5 text-[#B4916C] transition-transform duration-300" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            onChange={handleFileChange}
+            className="hidden"
+            accept=".pdf,.doc,.docx,.txt"
+          />
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className="bg-[#B4916C] hover:bg-[#A3815C]"
+          >
+            <Paperclip className="h-4 w-4 mr-2" />
+            {isUploading ? 'Uploading...' : 'Upload'}
+          </Button>
+        </div>
 
         <div className="relative">
           <input
@@ -367,6 +411,41 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
             }}
           />
         </div>
+
+        <Popover open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              aria-expanded={isDropdownOpen}
+              className="w-full justify-between"
+            >
+              {selectedDocument ? selectedDocument.fileName : "Select a document..."}
+              <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-full p-0">
+            <div className="max-h-[300px] overflow-y-auto">
+              {documents.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="flex items-center justify-between px-4 py-2 hover:bg-[#1D1D1D] cursor-pointer"
+                  onClick={(e) => handleDocumentSelect(doc, e)}
+                >
+                  <span>{doc.fileName}</span>
+                  {selectedDocument?.id === doc.id && (
+                    <button
+                      onClick={handleDocumentDeselect}
+                      className="p-1 hover:bg-[#2D2D2D] rounded-full"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
     </div>
   );
