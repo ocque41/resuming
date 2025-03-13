@@ -2410,8 +2410,17 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       });
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || 'Failed to generate DOCX file via API');
+        const errorText = await response.text();
+        let errorMessage = 'Failed to generate DOCX file via API';
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          console.error("Error parsing error response:", e);
+        }
+        
+        throw new Error(errorMessage);
       }
       
       const data = await response.json();
@@ -2424,12 +2433,21 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       
       console.log(`Received base64 data of length: ${data.docxBase64.length}`);
       
-      // Create a download link for the DOCX file
-      const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${data.docxBase64}`;
-      const downloadLink = document.createElement('a');
-      downloadLink.href = linkSource;
+      // Create a blob from the base64 data
+      const byteCharacters = atob(data.docxBase64);
+      const byteNumbers = new Array(byteCharacters.length);
       
-      // Use a professional filename format
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      
+      // Create a download link
+      const downloadUrl = URL.createObjectURL(blob);
+      const downloadLink = document.createElement('a');
+      downloadLink.href = downloadUrl;
       downloadLink.download = `${cvName}-optimized.docx`;
       console.log(`Setting download filename to: ${downloadLink.download}`);
       
@@ -2437,25 +2455,16 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       document.body.appendChild(downloadLink);
       console.log("Download link appended to document");
       
-      // Add a small delay before clicking to ensure the browser has time to process
-      setTimeout(() => {
-        try {
-          console.log("Triggering download...");
-          downloadLink.click();
-          console.log("Download triggered");
-          
-          // Remove the link after a short delay
-          setTimeout(() => {
-            document.body.removeChild(downloadLink);
-            console.log("Download link removed");
-            setIsGeneratingDocument(false);
-          }, 100);
-        } catch (clickError) {
-          console.error("Error during download click:", clickError);
-          setDocumentError(`Download error: ${clickError instanceof Error ? clickError.message : 'Unknown error'}`);
-          setIsGeneratingDocument(false);
-        }
-      }, 100);
+      // Trigger the download
+      downloadLink.click();
+      console.log("Download triggered");
+      
+      // Clean up
+      document.body.removeChild(downloadLink);
+      URL.revokeObjectURL(downloadUrl);
+      console.log("Download link removed and URL revoked");
+      
+      setIsGeneratingDocument(false);
     } catch (error) {
       console.error('Error generating document:', error);
       setDocumentError(`Failed to generate document: ${error instanceof Error ? error.message : 'Unknown error'}`);
