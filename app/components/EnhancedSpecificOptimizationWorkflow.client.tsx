@@ -1642,6 +1642,55 @@ const optimizeSkills = (
   };
 };
 
+const optimizeEducation = (education: EducationEntry[], jobDescription: string, jobKeywords: string[]): EducationEntry[] => {
+  if (!education || education.length === 0) return [];
+  
+  const scoredEducation = education.map(entry => {
+    let score = 0;
+    
+    // Score based on degree relevance to job description
+    if (entry.degree && jobDescription.toLowerCase().includes(entry.degree.toLowerCase())) {
+      score += 30;
+    }
+    
+    // Score based on keywords
+    jobKeywords.forEach(keyword => {
+      if (entry.degree.toLowerCase().includes(keyword.toLowerCase())) {
+        score += 20;
+      }
+    });
+    
+    // Bonus for recent education
+    if (entry.year) {
+      const yearMatch = entry.year.match(/(\d{4})/g);
+      if (yearMatch) {
+        const mostRecentYear = Math.max(...yearMatch.map(y => parseInt(y)));
+        const currentYear = new Date().getFullYear();
+        const yearDiff = currentYear - mostRecentYear;
+        
+        if (yearDiff < 5) score += 15;
+        else if (yearDiff < 10) score += 10;
+        else score += 5;
+      }
+    }
+    
+    // Bonus for high GPA
+    if (entry.gpa) {
+      const gpa = parseFloat(entry.gpa);
+      if (gpa >= 3.5) score += 15;
+      else if (gpa >= 3.0) score += 10;
+      else if (gpa >= 2.5) score += 5;
+    }
+    
+    return { entry, score };
+  });
+  
+  // Sort by score and return entries
+  return scoredEducation
+    .sort((a, b) => b.score - a.score)
+    .map(({ entry }) => entry);
+};
+
 // Add generateOptimizedDocument function
 const generateOptimizedDocument = async (content: string, name: string = 'CV', contactInfo?: StructuredCV['contactInfo'], structuredCV?: StructuredCV): Promise<Document> => {
   // Define brand color
@@ -1653,94 +1702,6 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
     month: 'long',
     day: 'numeric'
   });
-  
-  // Parse content into sections
-  const sections: { [key: string]: string } = {};
-  let currentSection = '';
-  let currentContent: string[] = [];
-  
-  // Split content by lines
-  const lines = content.split('\n');
-  
-  // Extract sections
-  lines.forEach(line => {
-    // Check if line is a section header
-    const sectionMatch = line.match(/^([A-Z][A-Za-z\s]+):$/);
-    
-    if (sectionMatch) {
-      // If we have a previous section, save it
-      if (currentSection && currentContent.length > 0) {
-        sections[currentSection] = currentContent.join('\n');
-      }
-      
-      // Start new section
-      currentSection = sectionMatch[1].trim();
-      currentContent = [];
-    } else if (currentSection) {
-      // Add line to current section
-      currentContent.push(line);
-    }
-  });
-  
-  // Add the last section
-  if (currentSection && currentContent.length > 0) {
-    sections[currentSection] = currentContent.join('\n');
-  }
-  
-  // Define section order
-  const sectionOrder = [
-    'Profile',
-    'Skills',
-    'Technical Skills',
-    'Professional Skills',
-    'Experience',
-    'Education',
-    'Achievements',
-    'Career Goals',
-    'Languages',
-    'References'
-  ];
-  
-  // Define section icons (using Unicode characters)
-  const sectionIcons: { [key: string]: string } = {
-    'Profile': '👤 ',
-    'Skills': '🔧 ',
-    'Technical Skills': '💻 ',
-    'Professional Skills': '🤝 ',
-    'Experience': '📋 ',
-    'Education': '🎓 ',
-    'Achievements': '🏆 ',
-    'Career Goals': '🎯 ',
-    'Languages': '🌐 ',
-    'References': '📞 '
-  };
-  
-  // Create custom bullet points
-  const customBullet = (text: string, level: number = 0): Paragraph => {
-    const bulletSymbols = ['•', '○', '▪', '▫'];
-    const symbol = bulletSymbols[level % bulletSymbols.length];
-    const indent = level * 360;
-    
-    return new Paragraph({
-      children: [
-        new TextRun({
-          text: symbol + ' ',
-          bold: true,
-          color: brandColor
-        }),
-        new TextRun({
-          text: text
-        })
-      ],
-      spacing: {
-        before: 80,
-        after: 80
-      },
-      indent: {
-        left: indent
-      }
-    });
-  };
   
   // Create document
   const doc = new Document({
@@ -1755,33 +1716,6 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
           }
         }
       },
-      headers: {
-        default: new Header({
-          children: [
-            new Paragraph({
-              text: '',
-              style: 'Header'
-            })
-          ]
-        })
-      },
-      footers: {
-        default: new Footer({
-          children: [
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: `${name} | ${currentDate}`,
-                  size: 18,
-                  color: '666666'
-                })
-              ],
-              alignment: AlignmentType.CENTER,
-              style: 'Footer'
-            })
-          ]
-        })
-      },
       children: [
         // Title
         new Paragraph({
@@ -1794,16 +1728,8 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
           style: 'Title'
         }),
         
-        // Contact information header if available
+        // Contact information if available
         ...(contactInfo ? [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: '',
-                break: 1
-              })
-            ]
-          }),
           new Paragraph({
             alignment: AlignmentType.CENTER,
             spacing: {
@@ -1834,607 +1760,272 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
                 new TextRun({
                   text: contactInfo.location,
                   style: 'ContactInfo'
-                }),
-                ...(contactInfo.linkedin || contactInfo.website ? [
-                  new TextRun({
-                    text: ' | ',
-                    style: 'ContactSeparator'
-                  })
-                ] : [])
-              ] : []),
-              ...(contactInfo.linkedin ? [
-                new TextRun({
-                  text: `LinkedIn: ${contactInfo.linkedin}`,
-                  style: 'ContactInfo'
-                }),
-                ...(contactInfo.website ? [
-                  new TextRun({
-                    text: ' | ',
-                    style: 'ContactSeparator'
-                  })
-                ] : [])
-              ] : []),
-              ...(contactInfo.website ? [
-                new TextRun({
-                  text: contactInfo.website,
-                  style: 'ContactInfo'
                 })
               ] : [])
             ]
+          })
+        ] : []),
+        
+        // Profile section
+        ...(structuredCV?.profile ? [
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: 'Profile',
+                size: 28,
+                bold: true,
+                color: brandColor
+              })
+            ],
+            spacing: {
+              before: 400,
+              after: 200
+            }
           }),
           new Paragraph({
-            thematicBreak: true,
+            text: structuredCV.profile,
             spacing: {
-              after: 300
+              before: 100,
+              after: 200
             }
           })
         ] : []),
         
-        // Add each section in order
-        ...sectionOrder.flatMap(sectionName => {
-          // Special handling for Profile section
-          if (sectionName === 'Profile' && structuredCV && structuredCV.profile) {
-            return [
-              // Section header with icon
+        // Skills section
+        ...(structuredCV?.skills ? [
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: 'Skills',
+                size: 28,
+                bold: true,
+                color: brandColor
+              })
+            ],
+            spacing: {
+              before: 400,
+              after: 200
+            }
+          }),
+          // Technical Skills
+          ...(structuredCV.skills.technical.length > 0 ? [
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: 'Technical Skills',
+                  bold: true,
+                  size: 24
+                })
+              ],
+              spacing: {
+                before: 200,
+                after: 100
+              }
+            }),
+            ...structuredCV.skills.technical.map(skill => 
               new Paragraph({
                 children: [
                   new TextRun({
-                    text: sectionIcons[sectionName] || '',
-                    size: 28
-                  }),
-                  new TextRun({
-                    text: sectionName,
-                    size: 28,
+                    text: '• ',
                     bold: true,
                     color: brandColor
+                  }),
+                  new TextRun({
+                    text: skill
                   })
                 ],
-                heading: HeadingLevel.HEADING_2,
                 spacing: {
-                  before: 400,
-                  after: 200
+                  before: 80,
+                  after: 80
                 },
-                thematicBreak: true,
-                style: 'Heading2'
-              }),
-              
-              // Profile content
+                indent: {
+                  left: 360
+                }
+              })
+            )
+          ] : []),
+          // Professional Skills
+          ...(structuredCV.skills.professional.length > 0 ? [
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: 'Professional Skills',
+                  bold: true,
+                  size: 24
+                })
+              ],
+              spacing: {
+                before: 200,
+                after: 100
+              }
+            }),
+            ...structuredCV.skills.professional.map(skill => 
               new Paragraph({
                 children: [
                   new TextRun({
-                    text: structuredCV.profile,
+                    text: '• ',
+                    bold: true,
+                    color: brandColor
+                  }),
+                  new TextRun({
+                    text: skill
+                  })
+                ],
+                spacing: {
+                  before: 80,
+                  after: 80
+                },
+                indent: {
+                  left: 360
+                }
+              })
+            )
+          ] : [])
+        ] : []),
+        
+        // Experience section
+        ...(structuredCV?.experience ? [
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: 'Experience',
+                size: 28,
+                bold: true,
+                color: brandColor
+              })
+            ],
+            spacing: {
+              before: 400,
+              after: 200
+            }
+          }),
+          ...structuredCV.experience.map(exp => [
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: exp.title || '',
+                  bold: true,
+                  size: 24
+                })
+              ],
+              spacing: {
+                before: 200,
+                after: 80
+              }
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: `${exp.startDate || ''} - ${exp.endDate || 'Present'}`,
+                  italics: true,
+                  size: 22,
+                  color: '666666'
+                })
+              ],
+              spacing: {
+                before: 80,
+                after: 80
+              }
+            })
+          ]).flat()
+        ] : []),
+        
+        // Education section
+        ...(structuredCV?.education ? [
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: 'Education',
+                size: 28,
+                bold: true,
+                color: brandColor
+              })
+            ],
+            spacing: {
+              before: 400,
+              after: 200
+            }
+          }),
+          ...structuredCV.education.map(edu => [
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: edu.degree,
+                  bold: true,
+                  size: 24
+                }),
+                ...(edu.institution ? [
+                  new TextRun({
+                    text: `, ${edu.institution}`,
                     size: 24
                   })
-                ],
-                spacing: {
-                  before: 100,
-                  after: 100
-                },
-                style: 'Normal'
-              })
-            ];
-          }
-          // Special handling for Experience section if structured data is available
-          else if (sectionName === 'Experience' && structuredCV && structuredCV.experience && structuredCV.experience.length > 0) {
-            return [
-              // Section header with icon
+                ] : [])
+              ],
+              spacing: {
+                before: 200,
+                after: 80
+              }
+            }),
+            ...(edu.year || edu.gpa ? [
               new Paragraph({
                 children: [
                   new TextRun({
-                    text: sectionIcons[sectionName] || '',
-                    size: 28
-                  }),
-                  new TextRun({
-                    text: sectionName,
-                    size: 28,
-                    bold: true,
-                    color: brandColor
-                  })
-                ],
-                heading: HeadingLevel.HEADING_2,
-                spacing: {
-                  before: 400,
-                  after: 200
-                },
-                thematicBreak: true,
-                style: 'Heading2'
-              }),
-              
-              // Format experience entries
-              ...structuredCV.experience.flatMap(exp => {
-                const paragraphs = [];
-                
-                // Job title and company
-                paragraphs.push(
-                  new Paragraph({
-                    children: [
-                      new TextRun({
-                        text: exp.title || '',
-                        bold: true,
-                        size: 24
-                      })
-                    ],
-                    spacing: {
-                      before: 200,
-                      after: 80
-                    }
-                  })
-                );
-                
-                // Dates
-                if (exp.startDate || exp.endDate) {
-                  paragraphs.push(
-                    new Paragraph({
-                      children: [
-                        new TextRun({
-                          text: `${exp.startDate || ''} - ${exp.endDate || 'Present'}`,
-                          italics: true,
-                          size: 22,
-                          color: '666666'
-                        })
-                      ],
-                      spacing: {
-                        before: 80,
-                        after: 80
-                      }
-                    })
-                  );
-                }
-                
-                // Extract responsibilities from the section content
-                const expContent = sections[sectionName];
-                const jobSection = expContent?.split(/\n\n/).find(section => 
-                  section.includes(exp.title || '') || 
-                  (exp.startDate && section.includes(exp.startDate))
-                );
-                
-                if (jobSection) {
-                  const responsibilities = jobSection
-                    .split('\n')
-                    .filter(line => line.trim().startsWith('•'))
-                    .map(line => line.trim().replace(/^•\s*/, ''));
-                  
-                  responsibilities.forEach(resp => {
-                    paragraphs.push(customBullet(resp, 1));
-                  });
-                }
-                
-                return paragraphs;
-              })
-            ];
-          }
-          // Special handling for Education section if structured data is available
-          else if (sectionName === 'Education' && structuredCV && structuredCV.education && structuredCV.education.length > 0) {
-            return [
-              // Section header with icon
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: sectionIcons[sectionName] || '',
-                    size: 28
-                  }),
-                  new TextRun({
-                    text: sectionName,
-                    size: 28,
-                    bold: true,
-                    color: brandColor
-                  })
-                ],
-                heading: HeadingLevel.HEADING_2,
-                spacing: {
-                  before: 400,
-                  after: 200
-                },
-                thematicBreak: true,
-                style: 'Heading2'
-              }),
-              
-              // Format education entries
-              ...structuredCV.education.flatMap(edu => {
-                const paragraphs = [];
-                
-                // Degree and institution
-                paragraphs.push(
-                  new Paragraph({
-                    children: [
-                      new TextRun({
-                        text: edu.degree,
-                        bold: true,
-                        size: 24
-                      }),
-                      ...(edu.institution ? [
-                        new TextRun({
-                          text: `, ${edu.institution}`,
-                          size: 24
-                        })
-                      ] : [])
-                    ],
-                    spacing: {
-                      before: 200,
-                      after: 80
-                    },
-                    style: 'EducationDegree'
-                  })
-                );
-                
-                // Year and GPA
-                const yearGpaText = [
-                  edu.year,
-                  edu.gpa ? `GPA: ${edu.gpa}` : null
-                ].filter(Boolean).join(', ');
-                
-                if (yearGpaText) {
-                  paragraphs.push(
-                    new Paragraph({
-                      children: [
-                        new TextRun({
-                          text: yearGpaText,
-                          italics: true,
-                          size: 22,
-                          color: '666666'
-                        })
-                      ],
-                      spacing: {
-                        before: 80,
-                        after: 80
-                      }
-                    })
-                  );
-                }
-                
-                // Relevant courses
-                if (edu.relevantCourses && edu.relevantCourses.length > 0) {
-                  paragraphs.push(
-                    new Paragraph({
-                      children: [
-                        new TextRun({
-                          text: 'Relevant Courses: ',
-                          bold: true,
-                          size: 22
-                        })
-                      ],
-                      spacing: {
-                        before: 80,
-                        after: 40
-                      }
-                    })
-                  );
-                  
-                  edu.relevantCourses.forEach(course => {
-                    paragraphs.push(customBullet(course, 1));
-                  });
-                }
-                
-                // Achievements
-                if (edu.achievements && edu.achievements.length > 0) {
-                  paragraphs.push(
-                    new Paragraph({
-                      children: [
-                        new TextRun({
-                          text: 'Achievements: ',
-                          bold: true,
-                          size: 22
-                        })
-                      ],
-                      spacing: {
-                        before: 80,
-                        after: 40
-                      }
-                    })
-                  );
-                  
-                  edu.achievements.forEach(achievement => {
-                    paragraphs.push(customBullet(achievement, 1));
-                  });
-                }
-                
-                return paragraphs;
-              })
-            ];
-          }
-          // Special handling for Skills section
-          else if ((sectionName === 'Skills' || sectionName === 'Technical Skills' || sectionName === 'Professional Skills') && 
-                   structuredCV && structuredCV.skills) {
-            const skillsToShow = sectionName === 'Technical Skills' ? 
-              structuredCV.skills.technical : 
-              (sectionName === 'Professional Skills' ? 
-                structuredCV.skills.professional : 
-                [...structuredCV.skills.technical, ...structuredCV.skills.professional]);
-            
-            if (skillsToShow.length === 0) return [];
-            
-            return [
-              // Section header with icon
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: sectionIcons[sectionName] || '',
-                    size: 28
-                  }),
-                  new TextRun({
-                    text: sectionName,
-                    size: 28,
-                    bold: true,
-                    color: brandColor
-                  })
-                ],
-                heading: HeadingLevel.HEADING_2,
-                spacing: {
-                  before: 400,
-                  after: 200
-                },
-                thematicBreak: true,
-                style: 'Heading2'
-              }),
-              
-              // Skills in a table format (3 columns)
-              new Table({
-                width: {
-                  size: 100,
-                  type: WidthType.PERCENTAGE
-                },
-                rows: Array(Math.ceil(skillsToShow.length / 3))
-                  .fill(0)
-                  .map((_, rowIndex) => {
-                    return new TableRow({
-                      children: Array(3)
-                        .fill(0)
-                        .map((_, colIndex) => {
-                          const skillIndex = rowIndex * 3 + colIndex;
-                          const skill = skillsToShow[skillIndex];
-                          
-                          return new TableCell({
-                            children: skill ? [
-                              new Paragraph({
-                                children: [
-                                  new TextRun({
-                                    text: '• ',
-                                    color: brandColor,
-                                    bold: true
-                                  }),
-                                  new TextRun({
-                                    text: skill
-                                  })
-                                ]
-                              })
-                            ] : [new Paragraph({})],
-                            borders: {
-                              top: { style: BorderStyle.NONE },
-                              bottom: { style: BorderStyle.NONE },
-                              left: { style: BorderStyle.NONE },
-                              right: { style: BorderStyle.NONE }
-                            }
-                          });
-                        })
-                    });
-                  })
-              })
-            ];
-          }
-          // Special handling for Languages section
-          else if (sectionName === 'Languages' && structuredCV && structuredCV.languages && structuredCV.languages.length > 0) {
-            return [
-              // Section header with icon
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: sectionIcons[sectionName] || '',
-                    size: 28
-                  }),
-                  new TextRun({
-                    text: sectionName,
-                    size: 28,
-                    bold: true,
-                    color: brandColor
-                  })
-                ],
-                heading: HeadingLevel.HEADING_2,
-                spacing: {
-                  before: 400,
-                  after: 200
-                },
-                thematicBreak: true,
-                style: 'Heading2'
-              }),
-              
-              // Languages in a table format (2 columns)
-              new Table({
-                width: {
-                  size: 100,
-                  type: WidthType.PERCENTAGE
-                },
-                rows: Array(Math.ceil(structuredCV.languages.length / 2))
-                  .fill(0)
-                  .map((_, rowIndex) => {
-                    return new TableRow({
-                      children: Array(2)
-                        .fill(0)
-                        .map((_, colIndex) => {
-                          const langIndex = rowIndex * 2 + colIndex;
-                          const language = structuredCV.languages[langIndex];
-                          
-                          return new TableCell({
-                            children: language ? [
-                              new Paragraph({
-                                children: [
-                                  new TextRun({
-                                    text: '🗣️ ',
-                                    size: 20
-                                  }),
-                                  new TextRun({
-                                    text: language
-                                  })
-                                ]
-                              })
-                            ] : [new Paragraph({})],
-                            borders: {
-                              top: { style: BorderStyle.NONE },
-                              bottom: { style: BorderStyle.NONE },
-                              left: { style: BorderStyle.NONE },
-                              right: { style: BorderStyle.NONE }
-                            }
-                          });
-                        })
-                    });
-                  })
-              })
-            ];
-          }
-          // Special handling for Achievements section
-          else if (sectionName === 'Achievements' && structuredCV && structuredCV.achievements && structuredCV.achievements.length > 0) {
-            return [
-              // Section header with icon
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: sectionIcons[sectionName] || '',
-                    size: 28
-                  }),
-                  new TextRun({
-                    text: sectionName,
-                    size: 28,
-                    bold: true,
-                    color: brandColor
-                  })
-                ],
-                heading: HeadingLevel.HEADING_2,
-                spacing: {
-                  before: 400,
-                  after: 200
-                },
-                thematicBreak: true,
-                style: 'Heading2'
-              }),
-              
-              // Introduction to achievements
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: 'Key accomplishments relevant to the position:',
+                    text: [
+                      edu.year,
+                      edu.gpa ? `GPA: ${edu.gpa}` : null
+                    ].filter(Boolean).join(', '),
                     italics: true,
-                    size: 24
+                    size: 22,
+                    color: '666666'
                   })
                 ],
                 spacing: {
-                  before: 100,
-                  after: 100
-                }
-              }),
-              
-              // Achievements as highlighted bullet points
-              ...structuredCV.achievements.map(achievement => {
-                // Check if achievement contains quantifiable results
-                const hasQuantifiableResults = /\d+%|\d+\s*(?:million|thousand|hundred|k|m|b|billion|x|times)/i.test(achievement);
-                
-                return new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: '★ ',
-                      bold: true,
-                      color: brandColor,
-                      size: 24
-                    }),
-                    new TextRun({
-                      text: achievement,
-                      ...(hasQuantifiableResults ? { bold: true } : {})
-                    })
-                  ],
-                  spacing: {
-                    before: 120,
-                    after: 120
-                  },
-                  indent: {
-                    left: 360
-                  }
-                });
-              })
-            ];
-          }
-          // Special handling for Career Goals section
-          else if (sectionName === 'Career Goals' && structuredCV && structuredCV.goals && structuredCV.goals.length > 0) {
-            return [
-              // Section header with icon
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: sectionIcons[sectionName] || '',
-                    size: 28
-                  }),
-                  new TextRun({
-                    text: sectionName,
-                    size: 28,
-                    bold: true,
-                    color: brandColor
-                  })
-                ],
-                heading: HeadingLevel.HEADING_2,
-                spacing: {
-                  before: 400,
-                  after: 200
-                },
-                thematicBreak: true,
-                style: 'Heading2'
-              }),
-              
-              // Goals as bullet points
-              ...structuredCV.goals.map(goal => customBullet(goal))
-            ];
-          }
-          else if (sections[sectionName]) {
-            return [
-              // Section header with icon
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: sectionIcons[sectionName] || '',
-                    size: 28
-                  }),
-                  new TextRun({
-                    text: sectionName,
-                    size: 28,
-                    bold: true,
-                    color: brandColor
-                  })
-                ],
-                heading: HeadingLevel.HEADING_2,
-                spacing: {
-                  before: 400,
-                  after: 200
-                },
-                thematicBreak: true,
-                style: 'Heading2'
-              }),
-              
-              // Section content - handle bullet points
-              ...sections[sectionName].split('\n').map(line => {
-                const bulletMatch = line.match(/^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s+(.+)$/);
-                
-                if (bulletMatch) {
-                  // This is a bullet point
-                  return customBullet(bulletMatch[1]);
-                } else if (line.trim().startsWith('  ')) {
-                  // This is a sub-bullet or indented content
-                  return customBullet(line.trim().replace(/^  /, ''), 1);
-                } else {
-                  // Regular paragraph
-                  return new Paragraph({
-                    children: [
-                      new TextRun({
-                        text: line
-                      })
-                    ],
-                    spacing: {
-                      before: 100,
-                      after: 100
-                    },
-                    style: 'Normal'
-                  });
+                  before: 80,
+                  after: 80
                 }
               })
-            ];
-          }
-          return [];
-        })
+            ] : [])
+          ]).flat()
+        ] : []),
+        
+        // Achievements section
+        ...(structuredCV?.achievements ? [
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: 'Achievements',
+                size: 28,
+                bold: true,
+                color: brandColor
+              })
+            ],
+            spacing: {
+              before: 400,
+              after: 200
+            }
+          }),
+          ...structuredCV.achievements.map(achievement => 
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: '★ ',
+                  bold: true,
+                  color: brandColor
+                }),
+                new TextRun({
+                  text: achievement
+                })
+              ],
+              spacing: {
+                before: 120,
+                after: 120
+              },
+              indent: {
+                left: 360
+              }
+            })
+          )
+        ] : [])
       ]
     }],
     styles: {
@@ -2458,79 +2049,6 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
           }
         },
         {
-          id: 'Heading2',
-          name: 'Heading 2',
-          basedOn: 'Normal',
-          next: 'Normal',
-          run: {
-            size: 28,
-            bold: true,
-            color: brandColor
-          },
-          paragraph: {
-            spacing: { 
-              before: 400, 
-              after: 200 
-            },
-            border: {
-              bottom: {
-                color: brandColor,
-                space: 1,
-                style: BorderStyle.SINGLE,
-                size: 1
-              }
-            }
-          }
-        },
-        {
-          id: 'BulletPoint',
-          name: 'Bullet Point',
-          basedOn: 'Normal',
-          next: 'Normal',
-          run: {
-            size: 24
-          },
-          paragraph: {
-            spacing: { 
-              before: 100, 
-              after: 100 
-            }
-          }
-        },
-        {
-          id: 'SubBulletPoint',
-          name: 'Sub Bullet Point',
-          basedOn: 'Normal',
-          next: 'Normal',
-          run: {
-            size: 24,
-            italics: true
-          },
-          paragraph: {
-            spacing: { 
-              before: 80, 
-              after: 80 
-            },
-            indent: {
-              left: 720
-            }
-          }
-        },
-        {
-          id: 'Normal',
-          name: 'Normal',
-          next: 'Normal',
-          run: {
-            size: 24
-          },
-          paragraph: {
-            spacing: { 
-              before: 100, 
-              after: 100 
-            }
-          }
-        },
-        {
           id: 'ContactInfo',
           name: 'Contact Info',
           basedOn: 'Normal',
@@ -2549,222 +2067,12 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
             size: 20,
             color: brandColor
           }
-        },
-        {
-          id: 'ExperienceBullet',
-          name: 'Experience Bullet',
-          basedOn: 'BulletPoint',
-          next: 'Normal',
-          run: {
-            size: 22
-          },
-          paragraph: {
-            spacing: { 
-              before: 80, 
-              after: 80 
-            },
-            indent: {
-              left: 360
-            }
-          }
-        },
-        {
-          id: 'EducationDegree',
-          name: 'Education Degree',
-          basedOn: 'Normal',
-          next: 'Normal',
-          run: {
-            size: 24,
-            bold: true
-          },
-          paragraph: {
-            spacing: { 
-              before: 200, 
-              after: 80 
-            }
-          }
-        },
-        {
-          id: 'EducationCourses',
-          name: 'Education Courses',
-          basedOn: 'Normal',
-          next: 'Normal',
-          run: {
-            size: 22
-          },
-          paragraph: {
-            spacing: { 
-              before: 80, 
-              after: 80 
-            },
-            indent: {
-              left: 360
-            }
-          }
-        },
-        {
-          id: 'EducationAchievements',
-          name: 'Education Achievements',
-          basedOn: 'Normal',
-          next: 'Normal',
-          run: {
-            size: 22
-          },
-          paragraph: {
-            spacing: { 
-              before: 80, 
-              after: 80 
-            },
-            indent: {
-              left: 360
-            }
-          }
-        },
-        {
-          id: 'Header',
-          name: 'Header',
-          basedOn: 'Normal',
-          next: 'Normal',
-          run: {
-            size: 18,
-            color: '666666'
-          },
-          paragraph: {
-            spacing: { 
-              before: 100, 
-              after: 100 
-            },
-            alignment: AlignmentType.RIGHT
-          }
-        },
-        {
-          id: 'Footer',
-          name: 'Footer',
-          basedOn: 'Normal',
-          next: 'Normal',
-          run: {
-            size: 18,
-            color: '666666'
-          },
-          paragraph: {
-            spacing: { 
-              before: 100, 
-              after: 100 
-            },
-            alignment: AlignmentType.CENTER
-          }
         }
       ]
     }
   });
 
   return doc;
-};
-
-const optimizeEducation = (education: EducationEntry[], jobDescription: string, jobKeywords: string[]): EducationEntry[] => {
-  if (education.length === 0) {
-    return [];
-  }
-  
-  // Extract education requirements from job description
-  const educationRequirements: string[] = [];
-  const educationPatterns = [
-    /(?:degree|diploma|certificate)\s+(?:in|of)\s+([^.]+)/gi,
-    /(?:bachelor|master|phd|doctorate|mba|bsc|ba|ma|ms)(?:'s)?\s+(?:degree\s+)?(?:in|of)?\s+([^.]+)/gi,
-    /(?:education|qualification)(?:\s+requirements?)?[:\s]+([^.]+)/gi
-  ];
-  
-  educationPatterns.forEach(pattern => {
-    const matches = [...jobDescription.matchAll(pattern)];
-    matches.forEach(match => {
-      if (match[1]) {
-        educationRequirements.push(match[1].trim());
-      }
-    });
-  });
-  
-  // Score education entries based on relevance to job requirements
-  const scoredEducation = education.map(entry => {
-    let score = 0;
-    
-    // Score based on degree relevance to job requirements
-    educationRequirements.forEach(req => {
-      if (entry.degree.toLowerCase().includes(req.toLowerCase())) {
-        score += 30;
-      }
-    });
-    
-    // Score based on degree relevance to job keywords
-    jobKeywords.forEach(keyword => {
-      if (entry.degree.toLowerCase().includes(keyword.toLowerCase())) {
-        score += 20;
-      }
-      
-      // Also check relevant courses if available
-      if (entry.relevantCourses) {
-        entry.relevantCourses.forEach(course => {
-          if (course.toLowerCase().includes(keyword.toLowerCase())) {
-            score += 10;
-          }
-        });
-      }
-    });
-    
-    // Bonus for recent education
-    if (entry.year) {
-      const yearMatch = entry.year.match(/(\d{4})/g);
-      if (yearMatch && yearMatch.length > 0) {
-        const mostRecentYear = Math.max(...yearMatch.map(y => parseInt(y)));
-        const currentYear = new Date().getFullYear();
-        const yearDiff = currentYear - mostRecentYear;
-        
-        if (yearDiff < 5) {
-          score += 15;
-        } else if (yearDiff < 10) {
-          score += 10;
-        } else {
-          score += 5;
-        }
-      }
-    }
-    
-    // Bonus for high GPA
-    if (entry.gpa) {
-      const gpaValue = parseFloat(entry.gpa);
-      if (gpaValue >= 3.5) {
-        score += 15;
-      } else if (gpaValue >= 3.0) {
-        score += 10;
-      } else if (gpaValue >= 2.5) {
-        score += 5;
-      }
-    }
-    
-    return { entry, score };
-  });
-  
-  // Sort by relevance score
-  scoredEducation.sort((a, b) => b.score - a.score);
-  
-  // Enhance education entries with relevant courses if missing
-  return scoredEducation.map(({ entry }) => {
-    // If no relevant courses and we have job keywords, add some based on job requirements
-    if ((!entry.relevantCourses || entry.relevantCourses.length === 0) && jobKeywords.length > 0) {
-      const fieldOfStudy = entry.degree.replace(/(?:bachelor|master|phd|doctorate|mba|bsc|ba|ma|ms)(?:'s)?\s+(?:degree\s+)?(?:in|of)?\s+/i, '');
-      
-      // Generate relevant courses based on job keywords and field of study
-      const suggestedCourses = jobKeywords
-        .filter(keyword => keyword.length > 3)
-        .slice(0, 3)
-        .map(keyword => `Advanced ${keyword.charAt(0).toUpperCase() + keyword.slice(1)} in ${fieldOfStudy}`);
-      
-      if (suggestedCourses.length > 0) {
-        entry.relevantCourses = suggestedCourses;
-      }
-    }
-    
-    return entry;
-  });
 };
 
 export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: EnhancedSpecificOptimizationWorkflowProps): JSX.Element {
@@ -3064,7 +2372,10 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
 
   // Add download document handler
   const handleDownloadDocument = async () => {
-    if (!optimizedText) return;
+    if (!optimizedText) {
+      console.error("No optimized text available");
+      return;
+    }
     
     setIsGeneratingDocument(true);
     
@@ -3086,10 +2397,19 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       );
       
       // Convert to blob
-      const blob = await Packer.toBlob(doc);
+      const blob = await Packer.toBuffer(doc);
       
-      // Save file
-      saveAs(blob, `${cvName}.docx`);
+      // Create a download link
+      const url = window.URL.createObjectURL(new Blob([blob], { 
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+      }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${cvName}-optimized.docx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
       
       setIsGeneratingDocument(false);
     } catch (error) {
