@@ -1824,456 +1824,526 @@ const generateOptimizedDocument = async (content: string, name: string = 'Optimi
         
         // Add each section in order
         ...sectionOrder.flatMap(sectionName => {
-          if (sections[sectionName]) {
-            // Special handling for Experience section if structured data is available
-            if (sectionName === 'Experience' && structuredCV && structuredCV.experience && structuredCV.experience.length > 0) {
-              return [
-                // Section header with icon
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: sectionIcons[sectionName] || '',
-                      size: 28
-                    }),
-                    new TextRun({
-                      text: sectionName,
-                      size: 28,
-                      bold: true,
-                      color: brandColor
-                    })
-                  ],
-                  heading: HeadingLevel.HEADING_2,
-                  spacing: {
-                    before: 400,
-                    after: 200
-                  },
-                  thematicBreak: true,
-                  style: 'Heading2'
-                }),
+          // Special handling for Profile section
+          if (sectionName === 'Profile' && structuredCV && structuredCV.profile) {
+            return [
+              // Section header with icon
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: sectionIcons[sectionName] || '',
+                    size: 28
+                  }),
+                  new TextRun({
+                    text: sectionName,
+                    size: 28,
+                    bold: true,
+                    color: brandColor
+                  })
+                ],
+                heading: HeadingLevel.HEADING_2,
+                spacing: {
+                  before: 400,
+                  after: 200
+                },
+                thematicBreak: true,
+                style: 'Heading2'
+              }),
+              
+              // Profile content
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: structuredCV.profile,
+                    size: 24
+                  })
+                ],
+                spacing: {
+                  before: 100,
+                  after: 100
+                },
+                style: 'Normal'
+              })
+            ];
+          }
+          // Special handling for Experience section if structured data is available
+          else if (sectionName === 'Experience' && structuredCV && structuredCV.experience && structuredCV.experience.length > 0) {
+            return [
+              // Section header with icon
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: sectionIcons[sectionName] || '',
+                    size: 28
+                  }),
+                  new TextRun({
+                    text: sectionName,
+                    size: 28,
+                    bold: true,
+                    color: brandColor
+                  })
+                ],
+                heading: HeadingLevel.HEADING_2,
+                spacing: {
+                  before: 400,
+                  after: 200
+                },
+                thematicBreak: true,
+                style: 'Heading2'
+              }),
+              
+              // Format experience entries
+              ...structuredCV.experience.flatMap(exp => {
+                const paragraphs = [];
                 
-                // Format experience entries
-                ...structuredCV.experience.flatMap(exp => {
-                  const paragraphs = [];
-                  
-                  // Job title and company
+                // Job title and company
+                paragraphs.push(
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: exp.title || '',
+                        bold: true,
+                        size: 24
+                      })
+                    ],
+                    spacing: {
+                      before: 200,
+                      after: 80
+                    }
+                  })
+                );
+                
+                // Dates
+                if (exp.startDate || exp.endDate) {
                   paragraphs.push(
                     new Paragraph({
                       children: [
                         new TextRun({
-                          text: exp.title || '',
-                          bold: true,
-                          size: 24
+                          text: `${exp.startDate || ''} - ${exp.endDate || 'Present'}`,
+                          italics: true,
+                          size: 22,
+                          color: '666666'
                         })
                       ],
                       spacing: {
-                        before: 200,
+                        before: 80,
                         after: 80
                       }
                     })
                   );
-                  
-                  // Dates
-                  if (exp.startDate || exp.endDate) {
-                    paragraphs.push(
-                      new Paragraph({
-                        children: [
-                          new TextRun({
-                            text: `${exp.startDate || ''} - ${exp.endDate || 'Present'}`,
-                            italics: true,
-                            size: 22,
-                            color: '666666'
-                          })
-                        ],
-                        spacing: {
-                          before: 80,
-                          after: 80
-                        }
-                      })
-                    );
-                  }
-                  
-                  // Extract responsibilities from the section content
-                  const expContent = sections[sectionName];
-                  const jobSection = expContent.split(/\n\n/).find(section => 
-                    section.includes(exp.title || '') || 
-                    (exp.startDate && section.includes(exp.startDate))
-                  );
-                  
-                  if (jobSection) {
-                    const responsibilities = jobSection
-                      .split('\n')
-                      .filter(line => line.trim().startsWith('•'))
-                      .map(line => line.trim().replace(/^•\s*/, ''));
-                    
-                    responsibilities.forEach(resp => {
-                      paragraphs.push(customBullet(resp, 1));
-                    });
-                  }
-                  
-                  return paragraphs;
-                })
-              ];
-            }
-            // Special handling for Education section if structured data is available
-            else if (sectionName === 'Education' && structuredCV && structuredCV.education && structuredCV.education.length > 0) {
-              return [
-                // Section header with icon
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: sectionIcons[sectionName] || '',
-                      size: 28
-                    }),
-                    new TextRun({
-                      text: sectionName,
-                      size: 28,
-                      bold: true,
-                      color: brandColor
-                    })
-                  ],
-                  heading: HeadingLevel.HEADING_2,
-                  spacing: {
-                    before: 400,
-                    after: 200
-                  },
-                  thematicBreak: true,
-                  style: 'Heading2'
-                }),
+                }
                 
-                // Format education entries
-                ...structuredCV.education.flatMap(edu => {
-                  const paragraphs = [];
+                // Extract responsibilities from the section content
+                const expContent = sections[sectionName];
+                const jobSection = expContent?.split(/\n\n/).find(section => 
+                  section.includes(exp.title || '') || 
+                  (exp.startDate && section.includes(exp.startDate))
+                );
+                
+                if (jobSection) {
+                  const responsibilities = jobSection
+                    .split('\n')
+                    .filter(line => line.trim().startsWith('•'))
+                    .map(line => line.trim().replace(/^•\s*/, ''));
                   
-                  // Degree and institution
+                  responsibilities.forEach(resp => {
+                    paragraphs.push(customBullet(resp, 1));
+                  });
+                }
+                
+                return paragraphs;
+              })
+            ];
+          }
+          // Special handling for Education section if structured data is available
+          else if (sectionName === 'Education' && structuredCV && structuredCV.education && structuredCV.education.length > 0) {
+            return [
+              // Section header with icon
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: sectionIcons[sectionName] || '',
+                    size: 28
+                  }),
+                  new TextRun({
+                    text: sectionName,
+                    size: 28,
+                    bold: true,
+                    color: brandColor
+                  })
+                ],
+                heading: HeadingLevel.HEADING_2,
+                spacing: {
+                  before: 400,
+                  after: 200
+                },
+                thematicBreak: true,
+                style: 'Heading2'
+              }),
+              
+              // Format education entries
+              ...structuredCV.education.flatMap(edu => {
+                const paragraphs = [];
+                
+                // Degree and institution
+                paragraphs.push(
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: edu.degree,
+                        bold: true,
+                        size: 24
+                      }),
+                      ...(edu.institution ? [
+                        new TextRun({
+                          text: `, ${edu.institution}`,
+                          size: 24
+                        })
+                      ] : [])
+                    ],
+                    spacing: {
+                      before: 200,
+                      after: 80
+                    },
+                    style: 'EducationDegree'
+                  })
+                );
+                
+                // Year and GPA
+                const yearGpaText = [
+                  edu.year,
+                  edu.gpa ? `GPA: ${edu.gpa}` : null
+                ].filter(Boolean).join(', ');
+                
+                if (yearGpaText) {
                   paragraphs.push(
                     new Paragraph({
                       children: [
                         new TextRun({
-                          text: edu.degree,
-                          bold: true,
-                          size: 24
-                        }),
-                        ...(edu.institution ? [
-                          new TextRun({
-                            text: `, ${edu.institution}`,
-                            size: 24
-                          })
-                        ] : [])
-                      ],
-                      spacing: {
-                        before: 200,
-                        after: 80
-                      },
-                      style: 'EducationDegree'
-                    })
-                  );
-                  
-                  // Year and GPA
-                  const yearGpaText = [
-                    edu.year,
-                    edu.gpa ? `GPA: ${edu.gpa}` : null
-                  ].filter(Boolean).join(', ');
-                  
-                  if (yearGpaText) {
-                    paragraphs.push(
-                      new Paragraph({
-                        children: [
-                          new TextRun({
-                            text: yearGpaText,
-                            italics: true,
-                            size: 22,
-                            color: '666666'
-                          })
-                        ],
-                        spacing: {
-                          before: 80,
-                          after: 80
-                        }
-                      })
-                    );
-                  }
-                  
-                  // Relevant courses
-                  if (edu.relevantCourses && edu.relevantCourses.length > 0) {
-                    paragraphs.push(
-                      new Paragraph({
-                        children: [
-                          new TextRun({
-                            text: 'Relevant Courses: ',
-                            bold: true,
-                            size: 22
-                          })
-                        ],
-                        spacing: {
-                          before: 80,
-                          after: 40
-                        }
-                      })
-                    );
-                    
-                    edu.relevantCourses.forEach(course => {
-                      paragraphs.push(customBullet(course, 1));
-                    });
-                  }
-                  
-                  // Achievements
-                  if (edu.achievements && edu.achievements.length > 0) {
-                    paragraphs.push(
-                      new Paragraph({
-                        children: [
-                          new TextRun({
-                            text: 'Achievements: ',
-                            bold: true,
-                            size: 22
-                          })
-                        ],
-                        spacing: {
-                          before: 80,
-                          after: 40
-                        }
-                      })
-                    );
-                    
-                    edu.achievements.forEach(achievement => {
-                      paragraphs.push(customBullet(achievement, 1));
-                    });
-                  }
-                  
-                  return paragraphs;
-                })
-              ];
-            }
-            // Special handling for Skills section
-            else if ((sectionName === 'Skills' || sectionName === 'Technical Skills' || sectionName === 'Professional Skills') && 
-                     structuredCV && structuredCV.skills) {
-              const skillsToShow = sectionName === 'Technical Skills' ? 
-                structuredCV.skills.technical : 
-                (sectionName === 'Professional Skills' ? 
-                  structuredCV.skills.professional : 
-                  [...structuredCV.skills.technical, ...structuredCV.skills.professional]);
-              
-              if (skillsToShow.length === 0) return [];
-              
-              return [
-                // Section header with icon
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: sectionIcons[sectionName] || '',
-                      size: 28
-                    }),
-                    new TextRun({
-                      text: sectionName,
-                      size: 28,
-                      bold: true,
-                      color: brandColor
-                    })
-                  ],
-                  heading: HeadingLevel.HEADING_2,
-                  spacing: {
-                    before: 400,
-                    after: 200
-                  },
-                  thematicBreak: true,
-                  style: 'Heading2'
-                }),
-                
-                // Skills in a table format (3 columns)
-                new Table({
-                  width: {
-                    size: 100,
-                    type: WidthType.PERCENTAGE
-                  },
-                  rows: Array(Math.ceil(skillsToShow.length / 3))
-                    .fill(0)
-                    .map((_, rowIndex) => {
-                      return new TableRow({
-                        children: Array(3)
-                          .fill(0)
-                          .map((_, colIndex) => {
-                            const skillIndex = rowIndex * 3 + colIndex;
-                            const skill = skillsToShow[skillIndex];
-                            
-                            return new TableCell({
-                              children: skill ? [
-                                new Paragraph({
-                                  children: [
-                                    new TextRun({
-                                      text: '• ',
-                                      color: brandColor,
-                                      bold: true
-                                    }),
-                                    new TextRun({
-                                      text: skill
-                                    })
-                                  ]
-                                })
-                              ] : [new Paragraph({})],
-                              borders: {
-                                top: { style: BorderStyle.NONE },
-                                bottom: { style: BorderStyle.NONE },
-                                left: { style: BorderStyle.NONE },
-                                right: { style: BorderStyle.NONE }
-                              }
-                            });
-                          })
-                      });
-                    })
-                })
-              ];
-            }
-            // Special handling for Languages section
-            else if (sectionName === 'Languages' && structuredCV && structuredCV.languages && structuredCV.languages.length > 0) {
-              return [
-                // Section header with icon
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: sectionIcons[sectionName] || '',
-                      size: 28
-                    }),
-                    new TextRun({
-                      text: sectionName,
-                      size: 28,
-                      bold: true,
-                      color: brandColor
-                    })
-                  ],
-                  heading: HeadingLevel.HEADING_2,
-                  spacing: {
-                    before: 400,
-                    after: 200
-                  },
-                  thematicBreak: true,
-                  style: 'Heading2'
-                }),
-                
-                // Languages in a table format (2 columns)
-                new Table({
-                  width: {
-                    size: 100,
-                    type: WidthType.PERCENTAGE
-                  },
-                  rows: Array(Math.ceil(structuredCV.languages.length / 2))
-                    .fill(0)
-                    .map((_, rowIndex) => {
-                      return new TableRow({
-                        children: Array(2)
-                          .fill(0)
-                          .map((_, colIndex) => {
-                            const langIndex = rowIndex * 2 + colIndex;
-                            const language = structuredCV.languages[langIndex];
-                            
-                            return new TableCell({
-                              children: language ? [
-                                new Paragraph({
-                                  children: [
-                                    new TextRun({
-                                      text: '🗣️ ',
-                                      size: 20
-                                    }),
-                                    new TextRun({
-                                      text: language
-                                    })
-                                  ]
-                                })
-                              ] : [new Paragraph({})],
-                              borders: {
-                                top: { style: BorderStyle.NONE },
-                                bottom: { style: BorderStyle.NONE },
-                                left: { style: BorderStyle.NONE },
-                                right: { style: BorderStyle.NONE }
-                              }
-                            });
-                          })
-                      });
-                    })
-                })
-              ];
-            }
-            // Special handling for Achievements section
-            else if (sectionName === 'Achievements' && structuredCV && structuredCV.achievements && structuredCV.achievements.length > 0) {
-              return [
-                // Section header with icon
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: sectionIcons[sectionName] || '',
-                      size: 28
-                    }),
-                    new TextRun({
-                      text: sectionName,
-                      size: 28,
-                      bold: true,
-                      color: brandColor
-                    })
-                  ],
-                  heading: HeadingLevel.HEADING_2,
-                  spacing: {
-                    before: 400,
-                    after: 200
-                  },
-                  thematicBreak: true,
-                  style: 'Heading2'
-                }),
-                
-                // Achievements as bullet points
-                ...structuredCV.achievements.map(achievement => customBullet(achievement))
-              ];
-            }
-            else {
-              return [
-                // Section header with icon
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: sectionIcons[sectionName] || '',
-                      size: 28
-                    }),
-                    new TextRun({
-                      text: sectionName,
-                      size: 28,
-                      bold: true,
-                      color: brandColor
-                    })
-                  ],
-                  heading: HeadingLevel.HEADING_2,
-                  spacing: {
-                    before: 400,
-                    after: 200
-                  },
-                  thematicBreak: true,
-                  style: 'Heading2'
-                }),
-                
-                // Section content - handle bullet points
-                ...sections[sectionName].split('\n').map(line => {
-                  const bulletMatch = line.match(/^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s+(.+)$/);
-                  
-                  if (bulletMatch) {
-                    // This is a bullet point
-                    return customBullet(bulletMatch[1]);
-                  } else if (line.trim().startsWith('  ')) {
-                    // This is a sub-bullet or indented content
-                    return customBullet(line.trim().replace(/^  /, ''), 1);
-                  } else {
-                    // Regular paragraph
-                    return new Paragraph({
-                      children: [
-                        new TextRun({
-                          text: line
+                          text: yearGpaText,
+                          italics: true,
+                          size: 22,
+                          color: '666666'
                         })
                       ],
                       spacing: {
-                        before: 100,
-                        after: 100
-                      },
-                      style: 'Normal'
+                        before: 80,
+                        after: 80
+                      }
+                    })
+                  );
+                }
+                
+                // Relevant courses
+                if (edu.relevantCourses && edu.relevantCourses.length > 0) {
+                  paragraphs.push(
+                    new Paragraph({
+                      children: [
+                        new TextRun({
+                          text: 'Relevant Courses: ',
+                          bold: true,
+                          size: 22
+                        })
+                      ],
+                      spacing: {
+                        before: 80,
+                        after: 40
+                      }
+                    })
+                  );
+                  
+                  edu.relevantCourses.forEach(course => {
+                    paragraphs.push(customBullet(course, 1));
+                  });
+                }
+                
+                // Achievements
+                if (edu.achievements && edu.achievements.length > 0) {
+                  paragraphs.push(
+                    new Paragraph({
+                      children: [
+                        new TextRun({
+                          text: 'Achievements: ',
+                          bold: true,
+                          size: 22
+                        })
+                      ],
+                      spacing: {
+                        before: 80,
+                        after: 40
+                      }
+                    })
+                  );
+                  
+                  edu.achievements.forEach(achievement => {
+                    paragraphs.push(customBullet(achievement, 1));
+                  });
+                }
+                
+                return paragraphs;
+              })
+            ];
+          }
+          // Special handling for Skills section
+          else if ((sectionName === 'Skills' || sectionName === 'Technical Skills' || sectionName === 'Professional Skills') && 
+                   structuredCV && structuredCV.skills) {
+            const skillsToShow = sectionName === 'Technical Skills' ? 
+              structuredCV.skills.technical : 
+              (sectionName === 'Professional Skills' ? 
+                structuredCV.skills.professional : 
+                [...structuredCV.skills.technical, ...structuredCV.skills.professional]);
+            
+            if (skillsToShow.length === 0) return [];
+            
+            return [
+              // Section header with icon
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: sectionIcons[sectionName] || '',
+                    size: 28
+                  }),
+                  new TextRun({
+                    text: sectionName,
+                    size: 28,
+                    bold: true,
+                    color: brandColor
+                  })
+                ],
+                heading: HeadingLevel.HEADING_2,
+                spacing: {
+                  before: 400,
+                  after: 200
+                },
+                thematicBreak: true,
+                style: 'Heading2'
+              }),
+              
+              // Skills in a table format (3 columns)
+              new Table({
+                width: {
+                  size: 100,
+                  type: WidthType.PERCENTAGE
+                },
+                rows: Array(Math.ceil(skillsToShow.length / 3))
+                  .fill(0)
+                  .map((_, rowIndex) => {
+                    return new TableRow({
+                      children: Array(3)
+                        .fill(0)
+                        .map((_, colIndex) => {
+                          const skillIndex = rowIndex * 3 + colIndex;
+                          const skill = skillsToShow[skillIndex];
+                          
+                          return new TableCell({
+                            children: skill ? [
+                              new Paragraph({
+                                children: [
+                                  new TextRun({
+                                    text: '• ',
+                                    color: brandColor,
+                                    bold: true
+                                  }),
+                                  new TextRun({
+                                    text: skill
+                                  })
+                                ]
+                              })
+                            ] : [new Paragraph({})],
+                            borders: {
+                              top: { style: BorderStyle.NONE },
+                              bottom: { style: BorderStyle.NONE },
+                              left: { style: BorderStyle.NONE },
+                              right: { style: BorderStyle.NONE }
+                            }
+                          });
+                        })
                     });
-                  }
-                })
-              ];
-            }
+                  })
+              })
+            ];
+          }
+          // Special handling for Languages section
+          else if (sectionName === 'Languages' && structuredCV && structuredCV.languages && structuredCV.languages.length > 0) {
+            return [
+              // Section header with icon
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: sectionIcons[sectionName] || '',
+                    size: 28
+                  }),
+                  new TextRun({
+                    text: sectionName,
+                    size: 28,
+                    bold: true,
+                    color: brandColor
+                  })
+                ],
+                heading: HeadingLevel.HEADING_2,
+                spacing: {
+                  before: 400,
+                  after: 200
+                },
+                thematicBreak: true,
+                style: 'Heading2'
+              }),
+              
+              // Languages in a table format (2 columns)
+              new Table({
+                width: {
+                  size: 100,
+                  type: WidthType.PERCENTAGE
+                },
+                rows: Array(Math.ceil(structuredCV.languages.length / 2))
+                  .fill(0)
+                  .map((_, rowIndex) => {
+                    return new TableRow({
+                      children: Array(2)
+                        .fill(0)
+                        .map((_, colIndex) => {
+                          const langIndex = rowIndex * 2 + colIndex;
+                          const language = structuredCV.languages[langIndex];
+                          
+                          return new TableCell({
+                            children: language ? [
+                              new Paragraph({
+                                children: [
+                                  new TextRun({
+                                    text: '🗣️ ',
+                                    size: 20
+                                  }),
+                                  new TextRun({
+                                    text: language
+                                  })
+                                ]
+                              })
+                            ] : [new Paragraph({})],
+                            borders: {
+                              top: { style: BorderStyle.NONE },
+                              bottom: { style: BorderStyle.NONE },
+                              left: { style: BorderStyle.NONE },
+                              right: { style: BorderStyle.NONE }
+                            }
+                          });
+                        })
+                    });
+                  })
+              })
+            ];
+          }
+          // Special handling for Achievements section
+          else if (sectionName === 'Achievements' && structuredCV && structuredCV.achievements && structuredCV.achievements.length > 0) {
+            return [
+              // Section header with icon
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: sectionIcons[sectionName] || '',
+                    size: 28
+                  }),
+                  new TextRun({
+                    text: sectionName,
+                    size: 28,
+                    bold: true,
+                    color: brandColor
+                  })
+                ],
+                heading: HeadingLevel.HEADING_2,
+                spacing: {
+                  before: 400,
+                  after: 200
+                },
+                thematicBreak: true,
+                style: 'Heading2'
+              }),
+              
+              // Achievements as bullet points
+              ...structuredCV.achievements.map(achievement => customBullet(achievement))
+            ];
+          }
+          // Special handling for Career Goals section
+          else if (sectionName === 'Career Goals' && structuredCV && structuredCV.goals && structuredCV.goals.length > 0) {
+            return [
+              // Section header with icon
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: sectionIcons[sectionName] || '',
+                    size: 28
+                  }),
+                  new TextRun({
+                    text: sectionName,
+                    size: 28,
+                    bold: true,
+                    color: brandColor
+                  })
+                ],
+                heading: HeadingLevel.HEADING_2,
+                spacing: {
+                  before: 400,
+                  after: 200
+                },
+                thematicBreak: true,
+                style: 'Heading2'
+              }),
+              
+              // Goals as bullet points
+              ...structuredCV.goals.map(goal => customBullet(goal))
+            ];
+          }
+          else if (sections[sectionName]) {
+            return [
+              // Section header with icon
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: sectionIcons[sectionName] || '',
+                    size: 28
+                  }),
+                  new TextRun({
+                    text: sectionName,
+                    size: 28,
+                    bold: true,
+                    color: brandColor
+                  })
+                ],
+                heading: HeadingLevel.HEADING_2,
+                spacing: {
+                  before: 400,
+                  after: 200
+                },
+                thematicBreak: true,
+                style: 'Heading2'
+              }),
+              
+              // Section content - handle bullet points
+              ...sections[sectionName].split('\n').map(line => {
+                const bulletMatch = line.match(/^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s+(.+)$/);
+                
+                if (bulletMatch) {
+                  // This is a bullet point
+                  return customBullet(bulletMatch[1]);
+                } else if (line.trim().startsWith('  ')) {
+                  // This is a sub-bullet or indented content
+                  return customBullet(line.trim().replace(/^  /, ''), 1);
+                } else {
+                  // Regular paragraph
+                  return new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: line
+                      })
+                    ],
+                    spacing: {
+                      before: 100,
+                      after: 100
+                    },
+                    style: 'Normal'
+                  });
+                }
+              })
+            ];
           }
           return [];
         })
@@ -2610,79 +2680,25 @@ const optimizeEducation = (education: EducationEntry[], jobDescription: string, 
 };
 
 export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: EnhancedSpecificOptimizationWorkflowProps): JSX.Element {
-  // State for CV selection
   const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
   const [selectedCVName, setSelectedCVName] = useState<string | null>(null);
+  const [originalText, setOriginalText] = useState<string | null>(null);
+  const [optimizedText, setOptimizedText] = useState<string | null>(null);
+  const [jobDescription, setJobDescription] = useState<string>('');
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [processingStatus, setProcessingStatus] = useState<string | null>(null);
+  const [jobMatchAnalysis, setJobMatchAnalysis] = useState<JobMatchAnalysis | null>(null);
+  const [isGeneratingDocument, setIsGeneratingDocument] = useState<boolean>(false);
   
-  // State for job description
-  const [jobDescription, setJobDescription] = useState('');
-  
-  // State for processing
+  // Additional state variables for processing
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isProcessed, setIsProcessed] = useState<boolean>(false);
   const [processingProgress, setProcessingProgress] = useState<number>(0);
-  const [processingStatus, setProcessingStatus] = useState<string | null>("");
-  const [error, setError] = useState<string | null>(null);
-  
-  // State for UI views
   const [activeTab, setActiveTab] = useState('jobDescription');
-  const [originalText, setOriginalText] = useState<string>("");
-  const [optimizedText, setOptimizedText] = useState<string>("");
-  const [showStructuredView, setShowStructuredView] = useState<boolean>(true);
-  
-  // State for job match analysis
-  const [jobMatchAnalysis, setJobMatchAnalysis] = useState<JobMatchAnalysis>({
-    score: 0,
-    matchedKeywords: [],
-    missingKeywords: [],
-    recommendations: [],
-    skillGap: "",
-    dimensionalScores: {
-      skillsMatch: 0,
-      experienceMatch: 0,
-      educationMatch: 0,
-      industryFit: 0,
-      overallCompatibility: 0,
-      keywordDensity: 0,
-      formatCompatibility: 0,
-      contentRelevance: 0
-    },
-    detailedAnalysis: "",
-    improvementPotential: 0,
-    sectionAnalysis: {
-      profile: { score: 0, feedback: "" },
-      skills: { score: 0, feedback: "" },
-      experience: { score: 0, feedback: "" },
-      education: { score: 0, feedback: "" },
-      achievements: { score: 0, feedback: "" }
-    }
-  });
-  
-  // State for processing too long detection
   const [processingTooLong, setProcessingTooLong] = useState<boolean>(false);
-  
-  // Add back the structuredCV state
-  const [structuredCV, setStructuredCV] = useState<StructuredCV>({
-    name: "",
-    subheader: "",
-    profile: "",
-    experience: [],
-    education: [],
-    skills: {
-      technical: [],
-      professional: []
-    },
-    achievements: [],
-    goals: [],
-    languages: [],
-    contactInfo: {}
-  });
-  
-  // Add new state variables
-  const [jobMatchScore, setJobMatchScore] = useState<number>(0);
-  const [recommendations, setRecommendations] = useState<string[]>([]);
-  const [keywordMatches, setKeywordMatches] = useState<KeywordMatch[]>([]);
-  
+
   // Fetch original CV text
   const fetchOriginalText = useCallback(async (cvId: string) => {
     try {
@@ -2763,7 +2779,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         clearInterval(interval);
         
         // Generate optimized text based on job description
-        const optimizedText = generateOptimizedText(originalText, jobDescription);
+        const optimizedText = generateOptimizedText(originalText || '', jobDescription);
         setOptimizedText(optimizedText);
         
         // Generate structured CV
@@ -3016,35 +3032,35 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   };
 
   // Add download document handler
-  const handleDownloadDocument = useCallback(async () => {
+  const handleDownloadDocument = async () => {
     if (!optimizedText) return;
-
+    
+    setIsGeneratingDocument(true);
+    
     try {
-      setProcessingStatus("Generating document...");
+      // Generate structured CV data
+      const structuredData = generateStructuredCV(originalText || '', jobDescription || '');
       
-      // Extract structured data from optimized text
-      const structuredCV = generateStructuredCV(optimizedText, jobDescription);
-      
-      // Generate document with contact info and structured CV
+      // Generate document with structured data
       const doc = await generateOptimizedDocument(
         optimizedText, 
-        selectedCVName || undefined,
-        structuredCV.contactInfo,
-        structuredCV
+        'Optimized CV', 
+        structuredData.contactInfo,
+        structuredData
       );
       
-      // Generate blob
-      const buffer = await Packer.toBlob(doc);
+      // Convert to blob
+      const blob = await Packer.toBlob(doc);
       
       // Save file
-      saveAs(buffer, `${selectedCVName ? selectedCVName.replace(/\.[^/.]+$/, '') : 'CV'}_Optimized.docx`);
+      saveAs(blob, `${selectedCVName ? selectedCVName.replace(/\.\w+$/, '') : 'Optimized_CV'}.docx`);
       
-      setProcessingStatus(null);
+      setIsGeneratingDocument(false);
     } catch (error) {
-      console.error("Error generating document:", error);
-      setError("Failed to generate document. Please try again.");
+      console.error('Error generating document:', error);
+      setIsGeneratingDocument(false);
     }
-  }, [optimizedText, selectedCVName, jobDescription]);
+  };
 
   return (
     <div className="w-full max-w-6xl mx-auto">
@@ -3117,83 +3133,82 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       {isProcessed && (
         <div className="space-y-6">
           {/* Job match score */}
-          <div className="p-6 border border-gray-700 rounded-md">
-            <h3 className="text-xl font-semibold mb-4">Job Match Analysis</h3>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-sm text-gray-400">Match Score</p>
-                <p className="text-3xl font-bold">{jobMatchAnalysis.score}%</p>
-              </div>
-              <div className="w-16 h-16 relative">
-                {/* Add a circular progress indicator here */}
-              </div>
-            </div>
-            
-            {/* Dimensional scores */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div>
-                <p className="text-sm text-gray-400">Skills Match</p>
-                <p className="text-lg font-semibold">{jobMatchAnalysis.dimensionalScores.skillsMatch}%</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-400">Experience Match</p>
-                <p className="text-lg font-semibold">{jobMatchAnalysis.dimensionalScores.experienceMatch}%</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-400">Education Match</p>
-                <p className="text-lg font-semibold">{jobMatchAnalysis.dimensionalScores.educationMatch}%</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-400">Industry Fit</p>
-                <p className="text-lg font-semibold">{jobMatchAnalysis.dimensionalScores.industryFit}%</p>
-              </div>
-            </div>
-
-            {/* Recommendations */}
-            <div className="mb-6">
-              <h4 className="text-lg font-semibold mb-2">Recommendations</h4>
-              <ul className="space-y-2">
-                {jobMatchAnalysis.recommendations.map((recommendation, index) => (
-                  <li key={index} className="flex items-start">
-                    <Info className="w-4 h-4 mr-2 mt-1 text-[#B4916C]" />
-                    <span>{recommendation}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Keyword matches */}
-            <div className="mb-6">
-              <h4 className="text-lg font-semibold mb-2">Keyword Matches</h4>
-              <div className="flex flex-wrap gap-2">
-                {jobMatchAnalysis.matchedKeywords.map((match, index) => (
-                  <div
-                    key={index}
-                    className="px-3 py-1 bg-[#B4916C]/20 border border-[#B4916C]/30 rounded-full text-sm"
-                  >
-                    {match.keyword}
+          {jobMatchAnalysis && (
+            <div className="mt-8 space-y-6">
+              <div className="bg-[#0D0D0D] rounded-lg p-6 border border-[#1D1D1D]">
+                <h3 className="text-xl font-semibold mb-4">Job Match Analysis</h3>
+                
+                <div className="flex items-center mb-6">
+                  <div className="w-32 h-32 rounded-full flex items-center justify-center border-4 border-[#B4916C] mr-6">
+                    <span className="text-3xl font-bold text-[#B4916C]">{jobMatchAnalysis.score}%</span>
                   </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Missing keywords */}
-            {jobMatchAnalysis.missingKeywords.length > 0 && (
-              <div>
-                <h4 className="text-lg font-semibold mb-2">Missing Keywords</h4>
-                <div className="flex flex-wrap gap-2">
-                  {jobMatchAnalysis.missingKeywords.map((keyword, index) => (
-                    <div
-                      key={index}
-                      className="px-3 py-1 bg-red-900/20 border border-red-800/30 rounded-full text-sm"
-                    >
-                      {keyword.keyword}
+                  
+                  <div className="flex-1">
+                    <h4 className="text-lg font-medium mb-2">Match Score</h4>
+                    <p className="text-gray-400 mb-4">
+                      Your CV is {jobMatchAnalysis.score < 50 ? 'not well' : jobMatchAnalysis.score < 70 ? 'somewhat' : 'well'} aligned with this job description.
+                    </p>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-gray-400">Skills Match</p>
+                        <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
+                          <div className="bg-[#B4916C] h-2 rounded-full" style={{ width: `${jobMatchAnalysis.dimensionalScores.skillsMatch}%` }}></div>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-400">Experience Match</p>
+                        <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
+                          <div className="bg-[#B4916C] h-2 rounded-full" style={{ width: `${jobMatchAnalysis.dimensionalScores.experienceMatch}%` }}></div>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-400">Education Match</p>
+                        <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
+                          <div className="bg-[#B4916C] h-2 rounded-full" style={{ width: `${jobMatchAnalysis.dimensionalScores.educationMatch}%` }}></div>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-400">Keyword Density</p>
+                        <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
+                          <div className="bg-[#B4916C] h-2 rounded-full" style={{ width: `${jobMatchAnalysis.dimensionalScores.keywordDensity}%` }}></div>
+                        </div>
+                      </div>
                     </div>
-                  ))}
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-lg font-medium mb-2">Recommendations</h4>
+                    <ul className="list-disc pl-5 space-y-1 text-gray-300">
+                      {jobMatchAnalysis.recommendations.map((rec, index) => (
+                        <li key={index}>{rec}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  
+                  <div>
+                    <h4 className="text-lg font-medium mb-2">Matched Keywords</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {jobMatchAnalysis.matchedKeywords.map((keyword, index) => (
+                        <span 
+                          key={index} 
+                          className="px-2 py-1 bg-[#1D1D1D] rounded text-sm"
+                          style={{ 
+                            backgroundColor: `rgba(180, 145, 108, ${keyword.relevance / 100})`,
+                            color: keyword.relevance > 50 ? '#000' : '#fff'
+                          }}
+                        >
+                          {keyword.keyword}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Optimized CV */}
           <div className="p-6 border border-gray-700 rounded-md">

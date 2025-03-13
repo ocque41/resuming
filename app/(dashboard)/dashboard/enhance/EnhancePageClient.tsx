@@ -26,7 +26,6 @@ import {
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { Check } from "lucide-react";
-import { Document } from '@/types/documents';
 import { interactWithAssistant, streamWithAssistant } from '@/app/lib/agents/openai-agent';
 
 interface Message {
@@ -37,8 +36,16 @@ interface Message {
 // Update the eye state type to include all animation states
 type EyeState = 'normal' | 'blink' | 'excited' | 'thinking' | 'happy' | 'look-around' | 'wink';
 
+interface DocumentItem {
+  id: string;
+  fileName?: string;
+  name?: string;
+  type?: string;
+  createdAt?: string;
+}
+
 interface EnhancePageClientProps {
-  documentsData: Array<Omit<Document, 'createdAt'> & { createdAt: string }>;
+  documentsData: DocumentItem[];
 }
 
 interface ChatMessage {
@@ -47,10 +54,10 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-export default function EnhancePageClient({ documentsData }: EnhancePageClientProps) {
+export default function EnhancePageClient({ documentsData = [] }: EnhancePageClientProps) {
   const [inputMessage, setInputMessage] = useState<string>("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
+  const [selectedDocument, setSelectedDocument] = useState<DocumentItem | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const logoRef = useRef<HTMLDivElement>(null);
@@ -58,12 +65,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   const [eyeState, setEyeState] = useState<EyeState>('normal');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [documents, setDocuments] = useState<Document[]>(() => 
-    documentsData.map(doc => ({
-      ...doc,
-      createdAt: new Date(doc.createdAt) // Convert string to Date
-    }))
-  );
+  const [documents, setDocuments] = useState<DocumentItem[]>(documentsData);
   const { toast } = useToast();
   const [mode, setMode] = useState<'create' | 'edit'>('create');
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -293,11 +295,10 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
       setEyeState('thinking');
 
       // Create new document object
-      const newDoc: Document = {
+      const newDoc: DocumentItem = {
         id: Date.now().toString(), // Temporary ID
         fileName: file.name,
-        createdAt: new Date(),
-        size: file.size,
+        createdAt: new Date().toISOString(),
         type: file.type
       };
 
@@ -325,7 +326,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   };
   
   // Prevent dropdown from closing when selecting/deselecting
-  const handleDocumentSelect = (doc: Document, e: React.MouseEvent) => {
+  const handleDocumentSelect = (doc: DocumentItem, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedDocument(doc);
     setMode('edit');
@@ -392,6 +393,16 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
     };
   }, [eyeState]);
 
+  // Add a state to track if documents are loading
+  const [isDocumentsLoading, setIsDocumentsLoading] = useState(false);
+  
+  // Handle empty documents state
+  useEffect(() => {
+    if (documentsData.length === 0 && !error) {
+      setError("No documents found. Try uploading a document using the paperclip button.");
+    }
+  }, [documentsData, error]);
+  
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
@@ -408,6 +419,12 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
 
   return (
     <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-center p-4 md:p-8">
+      {error && (
+        <div className="bg-red-900/20 border border-red-800 rounded-md p-3 mb-4 max-w-3xl mx-auto">
+          <p className="text-red-400">{error}</p>
+        </div>
+      )}
+      
       <div className="w-full max-w-3xl mx-auto flex flex-col items-center">
         {/* Character/Logo with eyes - exactly as in image */}
         <div 
@@ -504,34 +521,41 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
                     className="bg-[#050505] hover:bg-[#1A1A1A] rounded-xl px-4 py-2 
                       flex items-center justify-center border border-[#2D2D2D]
                       transition-all duration-300"
+                    disabled={isDocumentsLoading || documents.length === 0}
                   >
                     <svg className="h-5 w-5 text-[#B4916C] mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M13 5L21 12L13 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                       <path d="M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
-                    <span>Documents</span>
+                    <span>{isDocumentsLoading ? "Loading..." : "Documents"}</span>
                     <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[250px] p-0 rounded-xl border-[#2D2D2D] bg-[#050505]">
                   <div className="max-h-[300px] overflow-y-auto">
-                    {documents.map((doc) => (
-                      <div
-                        key={doc.id}
-                        className="flex items-center justify-between px-4 py-2 hover:bg-[#1D1D1D] cursor-pointer"
-                        onClick={(e) => handleDocumentSelect(doc, e)}
-                      >
-                        <span className="text-white">{doc.fileName}</span>
-                        {selectedDocument?.id === doc.id && (
-                          <button
-                            onClick={handleDocumentDeselect}
-                            className="p-1 hover:bg-[#2D2D2D] rounded-xl"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        )}
+                    {documents.length > 0 ? (
+                      documents.map((doc) => (
+                        <div
+                          key={doc.id}
+                          className="flex items-center justify-between px-4 py-2 hover:bg-[#1D1D1D] cursor-pointer"
+                          onClick={(e) => handleDocumentSelect(doc, e)}
+                        >
+                          <span className="text-white">{doc.fileName || doc.name || "Untitled"}</span>
+                          {selectedDocument?.id === doc.id && (
+                            <button
+                              onClick={handleDocumentDeselect}
+                              className="p-1 hover:bg-[#2D2D2D] rounded-xl"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="px-4 py-2 text-gray-400">
+                        No documents found
                       </div>
-                    ))}
+                    )}
                   </div>
                 </PopoverContent>
               </Popover>
