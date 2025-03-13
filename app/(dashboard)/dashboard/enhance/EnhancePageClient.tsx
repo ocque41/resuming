@@ -275,51 +275,23 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   };
   
   const getEyeStyle = () => {
-    const baseStyle = {
-      transform: 'translate(0, 0)',
-      transition: 'all 0.3s ease-out'
-    };
-
-    switch(eyeState) {
+    // Return styles without transform property
+    switch (eyeState) {
       case 'blink':
-        return {
-          ...baseStyle,
-          transform: 'scaleY(0.1)',
-          transition: 'transform 0.1s ease-in-out'
-        };
-      case 'look-around':
-        const time = Date.now() / 200;
-        return {
-          ...baseStyle,
-          transform: `translate(${Math.sin(time) * 3}px, ${Math.cos(time) * 2}px)`,
-          transition: 'transform 0.5s ease-out'
-        };
-      case 'wink':
-        return {
-          ...baseStyle,
-          transform: 'scaleY(0.1) rotate(-5deg)',
-          transition: 'all 0.2s cubic-bezier(0.68, -0.55, 0.265, 1.55)'
-        };
+        return { height: '0px', transition: 'height 0.1s ease-in-out' };
       case 'excited':
-        return {
-          ...baseStyle,
-          transform: `scale(1.2) translate(0, ${Math.sin(Date.now() / 100) * 2}px)`,
-          transition: 'all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
-        };
+        return { height: '4px', width: '4px', transition: 'all 0.2s ease-in-out' };
       case 'thinking':
-        return {
-          ...baseStyle,
-          transform: 'translate(3px, -2px) rotate(5deg) scaleX(0.9)',
-          transition: 'all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55)'
-        };
+        return { height: '1px', transition: 'height 0.2s ease-in-out' };
       case 'happy':
-        return {
-          ...baseStyle,
-          transform: 'scale(1.1) translateY(-1px)',
-          transition: 'all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
-        };
+        return { height: '1px', borderRadius: '0 0 100% 100%', transition: 'all 0.2s ease-in-out' };
+      case 'look-around':
+        // No transform here, handled separately
+        return { transition: 'all 0.3s ease-in-out' };
+      case 'wink':
+        return { height: eyePosition.x % 2 === 0 ? '0px' : '2px', transition: 'height 0.1s ease-in-out' };
       default:
-        return baseStyle;
+        return { transition: 'all 0.2s ease-in-out' };
     }
   };
 
@@ -371,82 +343,145 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   }
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white p-4 md:p-8">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <h1 className="text-2xl font-bold mb-4 transition-all duration-300 hover:text-[#B4916C]">
+    <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-center p-4 md:p-8">
+      <div className="w-full max-w-3xl mx-auto flex flex-col items-center">
+        {/* Character/Logo with eyes - exactly as in image */}
+        <div 
+          ref={characterRef}
+          className="mb-10 relative w-16 h-16 bg-[#1A1A1A] rounded-full flex items-center justify-center"
+        >
+          <div className="flex space-x-4">
+            <div 
+              className="w-2 h-2 bg-white rounded-full"
+              style={{
+                transform: `translate(${eyePosition.x}px, ${eyePosition.y}px)`,
+                ...getEyeStyle()
+              }}
+            />
+            <div 
+              className="w-2 h-2 bg-white rounded-full"
+              style={{
+                transform: `translate(${eyePosition.x}px, ${eyePosition.y}px)`,
+                ...getEyeStyle()
+              }}
+            />
+          </div>
+        </div>
+        
+        {/* Title - exactly as in image */}
+        <h1 className="text-5xl font-bold mb-16 text-center">
           {title}
         </h1>
         
-        <div className="flex items-center gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            onChange={handleFileChange}
-            className="hidden"
-            accept=".pdf,.doc,.docx,.txt"
-          />
-          <Button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
-            className="bg-[#050505] hover:bg-[#1D1D1D] rounded-xl p-2 w-10 h-10 
-              flex items-center justify-center border border-[#2D2D2D]
-              transition-all duration-300"
-            aria-label="Upload file"
-          >
-            <Paperclip className="h-5 w-5 text-[#B4916C]" />
-          </Button>
+        {/* Search container - exactly matching image layout */}
+        <div className="w-full max-w-2xl bg-[#0A0A0A] rounded-3xl p-6">
+          {/* Input field - styled exactly like image */}
+          <div className="relative mb-6">
+            <input
+              type="text"
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              placeholder={placeholders[placeholderIndex]}
+              className="w-full bg-[#1A1A1A] rounded-2xl px-6 py-5 
+                focus:outline-none focus:ring-1 focus:ring-[#2D2D2D]
+                transition-all duration-300
+                placeholder-gray-500 text-lg"
+              style={{ 
+                opacity: placeholderOpacity, 
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)' 
+              }}
+            />
+          </div>
           
-          <Popover open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
-            <PopoverTrigger asChild>
+          {/* Controls - positioned exactly as in image */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              {/* Speed button with dropdown */}
               <Button
-                variant="outline"
-                role="combobox"
-                aria-expanded={isDropdownOpen}
-                className="w-full justify-between rounded-xl border-[#2D2D2D] bg-[#050505] text-white hover:bg-[#1D1D1D]"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                className="bg-[#050505] hover:bg-[#1A1A1A] rounded-xl px-4 py-2 
+                  flex items-center justify-center border border-[#2D2D2D]
+                  transition-all duration-300"
               >
-                {selectedDocument ? selectedDocument.fileName : "Select a document..."}
-                <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                <svg className="h-5 w-5 text-[#B4916C] mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M13 5L21 12L13 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M21 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <span>Speed</span>
+                <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
               </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-full p-0 rounded-xl border-[#2D2D2D] bg-[#050505]">
-              <div className="max-h-[300px] overflow-y-auto">
-                {documents.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="flex items-center justify-between px-4 py-2 hover:bg-[#1D1D1D] cursor-pointer"
-                    onClick={(e) => handleDocumentSelect(doc, e)}
-                  >
-                    <span className="text-white">{doc.fileName}</span>
-                    {selectedDocument?.id === doc.id && (
-                      <button
-                        onClick={handleDocumentDeselect}
-                        className="p-1 hover:bg-[#2D2D2D] rounded-xl"
+              
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={handleFileChange}
+                className="hidden"
+                accept=".pdf,.doc,.docx,.txt"
+              />
+              
+              {/* Search button */}
+              <Button
+                onClick={() => setIsDropdownOpen(true)}
+                className="bg-[#1D1D1D] hover:bg-[#2D2D2D] rounded-xl px-4 py-2
+                  flex items-center justify-center
+                  transition-all duration-300"
+              >
+                <svg className="h-5 w-5 text-[#B4916C] mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/>
+                  <path d="M21 21L16.65 16.65" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+                <span>Search</span>
+              </Button>
+              
+              {/* Document selection popover */}
+              <Popover open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
+                <PopoverContent className="w-[250px] p-0 rounded-xl border-[#2D2D2D] bg-[#050505]">
+                  <div className="max-h-[300px] overflow-y-auto">
+                    {documents.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="flex items-center justify-between px-4 py-2 hover:bg-[#1D1D1D] cursor-pointer"
+                        onClick={(e) => handleDocumentSelect(doc, e)}
                       >
-                        <X className="h-4 w-4" />
-                      </button>
-                    )}
+                        <span className="text-white">{doc.fileName}</span>
+                        {selectedDocument?.id === doc.id && (
+                          <button
+                            onClick={handleDocumentDeselect}
+                            className="p-1 hover:bg-[#2D2D2D] rounded-xl"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </PopoverContent>
-          </Popover>
-        </div>
-
-        <div className="relative">
-          <input
-            type="text"
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            placeholder={placeholders[placeholderIndex]}
-            className="w-full bg-[#1D1D1D] rounded-xl px-4 py-2 
-              focus:outline-none focus:ring-2 focus:ring-[#B4916C]
-              transition-all duration-300 hover:bg-[#2D2D2D]
-              placeholder-gray-500"
-            style={{ 
-              opacity: placeholderOpacity, 
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)' 
-            }}
-          />
+                </PopoverContent>
+              </Popover>
+            </div>
+            
+            {/* Action buttons on the right - exactly as in image */}
+            <div className="flex items-center space-x-2">
+              <Button
+                className="bg-transparent hover:bg-[#1A1A1A] rounded-full w-10 h-10
+                  flex items-center justify-center
+                  transition-all duration-300"
+              >
+                <Paperclip className="h-5 w-5 text-[#B4916C]" />
+              </Button>
+              
+              <Button
+                className="bg-transparent hover:bg-[#1A1A1A] rounded-full w-10 h-10
+                  flex items-center justify-center
+                  transition-all duration-300"
+              >
+                <svg className="h-5 w-5 text-[#B4916C]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 5L12 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  <path d="M5 12L19 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -956,6 +956,92 @@ const extractAchievements = (text: string): string[] => {
     .filter(achievement => achievement.length > 0);
 };
 
+// Add generateOptimizedDocument function
+const generateOptimizedDocument = async (content: string, name: string = 'Optimized CV'): Promise<Document> => {
+  const doc = new Document({
+    sections: [{
+      properties: {},
+      children: [
+        // Title
+        new Paragraph({
+          text: name,
+          heading: HeadingLevel.HEADING_1,
+          spacing: {
+            after: 200
+          },
+          alignment: AlignmentType.CENTER
+        }),
+
+        // Split content into sections and paragraphs
+        ...content.split('\n\n').map(section => {
+          // Check if it's a section header
+          if (/^[A-Z][A-Za-z\s]+:/.test(section)) {
+            const [header, ...content] = section.split(':');
+            return [
+              new Paragraph({
+                text: header.trim(),
+                heading: HeadingLevel.HEADING_2,
+                spacing: {
+                  before: 400,
+                  after: 200
+                },
+                thematicBreak: true
+              }),
+              ...content.join(':').split('\n').map(line => 
+                new Paragraph({
+                  text: line.trim(),
+                  spacing: {
+                    before: 100,
+                    after: 100
+                  },
+                  bullet: {
+                    level: 0
+                  }
+                })
+              )
+            ];
+          }
+          
+          // Regular paragraph
+          return new Paragraph({
+            text: section,
+            spacing: {
+              before: 100,
+              after: 100
+            }
+          });
+        }).flat()
+      ]
+    }],
+    styles: {
+      default: {
+        heading1: {
+          run: {
+            size: 36,
+            bold: true,
+            color: '#B4916C'
+          },
+          paragraph: {
+            spacing: { after: 200 }
+          }
+        },
+        heading2: {
+          run: {
+            size: 28,
+            bold: true,
+            color: '#B4916C'
+          },
+          paragraph: {
+            spacing: { before: 400, after: 200 }
+          }
+        }
+      }
+    }
+  });
+
+  return doc;
+};
+
 export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: EnhancedSpecificOptimizationWorkflowProps): JSX.Element {
   // State for CV selection
   const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
@@ -1190,6 +1276,27 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     return optimized;
   };
 
+  // Add download document handler
+  const handleDownloadDocument = useCallback(async () => {
+    if (!optimizedText) return;
+
+    try {
+      setProcessingStatus("Generating document...");
+      const doc = await generateOptimizedDocument(optimizedText, selectedCVName || undefined);
+      
+      // Generate blob
+      const buffer = await Packer.toBlob(doc);
+      
+      // Save file
+      saveAs(buffer, `${selectedCVName ? selectedCVName.replace(/\.[^/.]+$/, '') : 'CV'}_Optimized.docx`);
+      
+      setProcessingStatus(null);
+    } catch (error) {
+      console.error("Error generating document:", error);
+      setError("Failed to generate document. Please try again.");
+    }
+  }, [optimizedText, selectedCVName]);
+
   return (
     <div className="w-full max-w-6xl mx-auto">
       {/* File selection */}
@@ -1343,13 +1450,16 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           <div className="p-6 border border-gray-700 rounded-md">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-semibold">Optimized CV</h3>
-              <button
-                onClick={() => {/* Add download functionality */}}
-                className="flex items-center px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A37F5C] transition-colors"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Download
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleDownloadDocument}
+                  className="flex items-center px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A37F5C] transition-colors"
+                  disabled={!optimizedText}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download DOCX
+                </button>
+              </div>
             </div>
             <div className="whitespace-pre-wrap font-mono text-sm bg-[#050505] p-4 rounded-md border border-gray-700">
               {optimizedText}
