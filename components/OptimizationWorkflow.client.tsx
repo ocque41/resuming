@@ -357,6 +357,12 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
     }
   };
   
+  // Format CVs for EnhancedSpecificOptimizationWorkflow
+  const formattedCvsForSpecific = cvs.map(cv => {
+    const [name, id] = cv.split('|');
+    return { id, name };
+  });
+
   return (
     <div className="w-full max-w-6xl mx-auto">
       {error && (
@@ -434,7 +440,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
           <p className="text-muted-foreground">
             Optimize your CV for a specific job by pasting the job description below. Our AI will tailor your CV to match the job requirements.
           </p>
-          <EnhancedSpecificOptimizationWorkflow cvs={cvs} />
+          <EnhancedSpecificOptimizationWorkflow cvs={formattedCvsForSpecific} />
         </TabsContent>
       </Tabs>
     </div>
