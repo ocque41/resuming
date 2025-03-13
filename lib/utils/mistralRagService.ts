@@ -1,6 +1,6 @@
 import { logger } from '@/lib/utils/logger';
 import OpenAI from 'openai';
-import { Mistral } from "@mistralai/mistralai";
+import Mistral from '@mistralai/mistralai';
 
 /**
  * Simple cache to store embeddings and avoid redundant API calls
@@ -146,9 +146,7 @@ export class MistralRAGService {
       const mistralApiKey = process.env.MISTRAL_API_KEY;
       if (mistralApiKey) {
         try {
-          this.mistralClient = new Mistral({
-            apiKey: mistralApiKey,
-          });
+          this.mistralClient = new Mistral(mistralApiKey);
           this.useMistral = true;
           logger.info('Successfully initialized Mistral client');
         } catch (mistralError) {
@@ -225,7 +223,7 @@ export class MistralRAGService {
       // Pre-warm the models to avoid cold start issues
       try {
         if (this.useMistral && this.mistralClient) {
-          await this.mistralClient.chat.complete({
+          await this.mistralClient.chat({
             model: this.mistralGenerationModel,
             messages: [
               {
@@ -526,85 +524,31 @@ export class MistralRAGService {
   private async generateDirectResponse(query: string, systemPrompt?: string): Promise<string> {
     try {
       if (this.useMistral && this.mistralClient) {
-        // Use Mistral API
-        try {
-          logger.info(`Generating response using Mistral model: ${this.mistralGenerationModel}`);
-          const response = await this.mistralClient.chat.complete({
-            model: this.mistralGenerationModel,
-            messages: [
-              {
-                role: 'system',
-                content: systemPrompt || 'You are a helpful assistant.'
-              },
-              {
-                role: 'user',
-                content: query
-              }
-            ]
-          });
-          
-          if (!response || !response.choices || !response.choices[0] || !response.choices[0].message) {
-            throw new Error('Invalid response format from Mistral API');
-          }
-          
-          // Handle Mistral response format
-          const content = response.choices[0].message.content;
-          if (typeof content === 'string') {
-            return content;
-          } else if (Array.isArray(content)) {
-            // Handle content chunks if returned as an array
-            return content.map(chunk => {
-              if (typeof chunk === 'string') {
-                return chunk;
-              } else if (chunk && typeof chunk === 'object') {
-                // Handle different types of content chunks
-                if ('type' in chunk && chunk.type === 'text' && 'text' in chunk) {
-                  return chunk.text as string;
-                }
-                // For other chunk types, return empty string
-                return '';
-              }
-              return '';
-            }).join('');
-          }
-          
-          return '';
-        } catch (mistralError) {
-          // If Mistral fails, fall back to OpenAI
-          logger.warn(`Mistral API error, falling back to OpenAI: ${mistralError instanceof Error ? mistralError.message : String(mistralError)}`);
-          this.useMistral = false;
-        }
+        const response = await this.mistralClient.chat({
+          model: this.mistralGenerationModel,
+          messages: [
+            ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
+            { role: 'user' as const, content: query }
+          ],
+          temperature: 0.7,
+          maxTokens: 2000
+        });
+        return response.choices[0].message.content || '';
+      } else {
+        const response = await this.openaiClient.chat.completions.create({
+          model: this.openaiGenerationModel,
+          messages: [
+            ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
+            { role: 'user' as const, content: query }
+          ],
+          temperature: 0.7,
+          max_tokens: 2000
+        });
+        return response.choices[0].message.content || '';
       }
-      
-      // Use OpenAI API (either as primary or fallback)
-      logger.info(`Generating response using OpenAI model: ${this.openaiGenerationModel}`);
-      const response = await this.openaiClient.chat.completions.create({
-        model: this.openaiGenerationModel,
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt || 'You are a helpful assistant.'
-          },
-          {
-            role: 'user',
-            content: query
-          }
-        ]
-      });
-      
-      if (!response.choices || !response.choices[0] || !response.choices[0].message) {
-        throw new Error('Invalid response format from OpenAI API');
-      }
-      
-      const generatedResponse = response.choices[0].message.content || '';
-      // Remove any '*Developed *' or '*Implemented *' prefixes from the response
-      const cleanedResponse = generatedResponse.replace(/^\*(?:Developed|Implemented)\s*\*?/, '').trim();
-      return cleanedResponse;
     } catch (error) {
-      // Fix error type handling for logger
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error generating direct response: ${errorMessage}`);
-      return 'Unable to generate a response at this time.';
+      logger.error(`Error generating direct response: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
     }
   }
 
