@@ -1,12 +1,4 @@
-import { redirect } from "next/navigation";
-import dynamic from "next/dynamic";
-import { Suspense } from "react";
-
-// Use dynamic import with no SSR to avoid hydration issues
-const EnhancePageClient = dynamic(
-  () => import("./EnhancePageClient"),
-  { ssr: false }
-);
+import ClientWrapper from "./ClientWrapper";
 
 // Define the type for the combined data
 interface DocumentData {
@@ -14,15 +6,6 @@ interface DocumentData {
   name: string;
   type: "document" | "cv";
   createdAt: string;
-}
-
-// Create a fallback component
-function EnhancePageFallback() {
-  return (
-    <div className="h-full flex items-center justify-center bg-[#050505] text-white">
-      <p className="text-[#B4916C]">Loading enhance page...</p>
-    </div>
-  );
 }
 
 // Create a simple error component
@@ -39,10 +22,34 @@ function ErrorDisplay({ error }: { error: Error }) {
 }
 
 export default function EnhancePage() {
+  // Create mock data that will always work
+  const mockData: DocumentData[] = [
+    {
+      id: "mock1",
+      name: "Sample Document 1",
+      type: "document",
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: "mock2",
+      name: "Sample Document 2",
+      type: "document",
+      createdAt: new Date(Date.now() - 86400000).toISOString() // Yesterday
+    },
+    {
+      id: "mock3",
+      name: "Sample CV",
+      type: "cv",
+      createdAt: new Date(Date.now() - 172800000).toISOString() // 2 days ago
+    }
+  ];
+
+  console.log("Using mock data for development");
+  console.log("Mock data:", JSON.stringify(mockData, null, 2));
+  
   return (
-    <div className="h-full bg-[#050505] text-white p-4">
-      <h1 className="text-2xl font-bold mb-4 text-[#B4916C]">Enhance Documents</h1>
-      <p>This is a static page with no client components.</p>
+    <div className="h-full">
+      <ClientWrapper documentsData={mockData} />
     </div>
   );
 } 
