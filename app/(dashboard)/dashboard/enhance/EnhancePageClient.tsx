@@ -58,111 +58,113 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
         const logoCenterX = logoRect.left + logoRect.width / 2;
         const logoCenterY = logoRect.top + logoRect.height / 2;
         
-        // Calculate distance from cursor to logo center
-        const deltaX = e.clientX - logoCenterX;
-        const deltaY = e.clientY - logoCenterY;
+        // Calculate distance from center (normalized)
+        const distX = (e.clientX - logoCenterX) / (window.innerWidth / 2);
+        const distY = (e.clientY - logoCenterY) / (window.innerHeight / 2);
         
-        // Limit eye movement to a small range
-        const maxMove = 3;
-        const moveX = Math.max(-maxMove, Math.min(maxMove, deltaX / 20));
-        const moveY = Math.max(-maxMove, Math.min(maxMove, deltaY / 20));
+        // Limit movement range
+        const limitedX = Math.max(-0.5, Math.min(0.5, distX * 0.5));
+        const limitedY = Math.max(-0.5, Math.min(0.5, distY * 0.5));
         
-        setEyePosition({ x: moveX, y: moveY });
+        setEyePosition({ x: limitedX, y: limitedY });
       }
     };
-    
-    // Enhanced random eye animations with more variety
-    const animationInterval = setInterval(() => {
-      const randomNum = Math.random();
-      if (randomNum < 0.03) {
-        setEyeState('yawning');
-        setTimeout(() => setEyeState('normal'), 1000);
-      } else if (randomNum < 0.06) {
-        setEyeState('stressed');
-        setTimeout(() => setEyeState('normal'), 800);
-      } else if (randomNum < 0.09) {
-        setEyeState('happy');
-        setTimeout(() => setEyeState('normal'), 1200);
-      } else if (randomNum < 0.11) {
-        setEyeState('wink');
-        setTimeout(() => setEyeState('normal'), 600);
-      } else if (randomNum < 0.13) {
-        setEyeState('surprised');
-        setTimeout(() => setEyeState('normal'), 700);
-      }
-    }, 2500);
     
     window.addEventListener('mousemove', handleMouseMove);
-    
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      clearInterval(animationInterval);
-    };
+    return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
   
+  // Handle sending a message
   const handleSendMessage = () => {
-    if (!inputMessage.trim()) return;
+    if (inputMessage.trim() === "") return;
     
     // Add user message
-    setMessages(prev => [...prev, { role: "user", content: inputMessage }]);
+    const userMessage: Message = { role: "user", content: inputMessage };
+    setMessages(prev => [...prev, userMessage]);
     
-    // Simulate assistant response
-    setTimeout(() => {
-      let response = selectedDocument 
-        ? `I'll help you create this document based on "${selectedDocument}". What specific content would you like to include?`
-        : "I'll help you create this document. What specific content would you like to include?";
-      setMessages(prev => [...prev, { role: "assistant", content: response }]);
-    }, 1000);
-    
+    // Clear input
     setInputMessage("");
     
-    // Show stressed eyes briefly when sending a message
-    setEyeState('stressed');
-    setTimeout(() => setEyeState('normal'), 500);
+    // Trigger eye animation
+    setEyeState('happy');
+    setTimeout(() => setEyeState('normal'), 1000);
+    
+    // Simulate assistant response after a delay
+    setTimeout(() => {
+      let responseContent = "I'm here to help you enhance your documents. ";
+      
+      if (selectedDocument) {
+        responseContent += `I see you've selected "${selectedDocument}". What would you like to do with it?`;
+      } else {
+        responseContent += "You can select a document from the dropdown or upload a new one to get started.";
+      }
+      
+      const assistantMessage: Message = { role: "assistant", content: responseContent };
+      setMessages(prev => [...prev, assistantMessage]);
+      
+      // Trigger eye animation for response
+      setEyeState('wink');
+      setTimeout(() => setEyeState('normal'), 1000);
+    }, 1000);
   };
   
-  const handleSelectDocument = (fileName: string, id: string) => {
+  // Handle document selection
+  const handleSelectDocument = (id: string, fileName: string) => {
     setSelectedDocument(fileName);
     setSelectedDocumentId(id);
     
-    // Show happy eyes briefly when selecting a document
-    setEyeState('happy');
-    setTimeout(() => setEyeState('normal'), 800);
+    // Trigger eye animation
+    setEyeState('surprised');
+    setTimeout(() => setEyeState('normal'), 1000);
     
     // Add assistant message about document selection
-    setMessages(prev => [...prev, { 
+    const assistantMessage: Message = { 
       role: "assistant", 
-      content: `I'll use "${fileName}" as a reference. How would you like to enhance this document?` 
-    }]);
+      content: `You've selected "${fileName}". What would you like me to help you with?` 
+    };
+    setMessages(prev => [...prev, assistantMessage]);
   };
   
+  // Handle document deselection
   const handleDeselectDocument = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent dropdown from opening
     setSelectedDocument(null);
     setSelectedDocumentId(null);
     
-    // Show surprised eyes briefly when deselecting a document
+    // Trigger eye animation
     setEyeState('surprised');
-    setTimeout(() => setEyeState('normal'), 600);
+    setTimeout(() => setEyeState('normal'), 1000);
     
     // Add assistant message about document deselection
-    setMessages(prev => [...prev, { 
+    const assistantMessage: Message = { 
       role: "assistant", 
-      content: "I've removed the document reference. What kind of document would you like to create now?" 
-    }]);
+      content: "You've deselected the document. You can select another one or upload a new document." 
+    };
+    setMessages(prev => [...prev, assistantMessage]);
   };
   
+  // Handle file upload button click
   const handleFileUpload = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
+    fileInputRef.current?.click();
   };
   
+  // Handle file selection
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
-    // Supported file types
+    // Check file size (10MB max)
+    const MAX_FILE_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE) {
+      toast({
+        title: "File too large",
+        description: "Maximum file size is 10MB",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Check file type
     const SUPPORTED_TYPES = [
       'application/pdf',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -177,37 +179,25 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
       'application/rtf',
     ];
     
-    // Maximum file size (10MB)
-    const MAX_FILE_SIZE = 10 * 1024 * 1024;
-    
-    // Validate file type
     if (!SUPPORTED_TYPES.includes(file.type)) {
       toast({
         title: "Unsupported file type",
-        description: "Please upload a PDF, Word, Excel, PowerPoint, text, or image file.",
+        description: "Please upload a PDF, Word, Excel, PowerPoint, text, or image file",
         variant: "destructive",
       });
       return;
     }
     
-    // Validate file size
-    if (file.size > MAX_FILE_SIZE) {
-      toast({
-        title: "File too large",
-        description: "Please upload a file smaller than 10MB.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
+    // Set uploading state
     setIsUploading(true);
     setEyeState('stressed');
     
+    // Create form data
+    const formData = new FormData();
+    formData.append('file', file);
+    
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      
-      // Use the existing document upload API endpoint
+      // Upload file
       const response = await fetch('/api/document/upload', {
         method: 'POST',
         body: formData,
@@ -220,7 +210,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
       
       const data = await response.json();
       
-      // Add the new document to the list
+      // Add new document to list
       const newDocument = {
         id: data.fileId,
         fileName: data.fileName,
@@ -230,14 +220,28 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
       setDocuments(prev => [newDocument, ...prev]);
       
       // Select the newly uploaded document
-      handleSelectDocument(newDocument.fileName, newDocument.id);
+      setSelectedDocument(data.fileName);
+      setSelectedDocumentId(data.fileId);
       
+      // Show success message
       toast({
         title: "Document uploaded",
-        description: `${file.name} has been uploaded successfully.`,
+        description: `${data.fileName} has been uploaded successfully`,
       });
       
-      // Show happy eyes briefly
+      // Add assistant message
+      const assistantMessage: Message = { 
+        role: "assistant", 
+        content: `I've uploaded "${data.fileName}" for you. What would you like to do with it?` 
+      };
+      setMessages(prev => [...prev, assistantMessage]);
+      
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      
+      // Change eye state to happy
       setEyeState('happy');
       setTimeout(() => setEyeState('normal'), 1000);
       
@@ -249,140 +253,113 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
         variant: "destructive",
       });
       
-      // Show stressed eyes briefly
+      // Change eye state to stressed
       setEyeState('stressed');
-      setTimeout(() => setEyeState('normal'), 800);
+      setTimeout(() => setEyeState('normal'), 1000);
     } finally {
       setIsUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
     }
   };
   
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen py-6 px-4 bg-black">
-      <div className="w-full max-w-3xl mx-auto">
-        {/* Logo and Title */}
-        <div className="flex flex-col items-center mb-6">
-          {/* Character Logo */}
+    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-80px)] p-4">
+      {/* Character and title */}
+      <div 
+        ref={logoRef}
+        className="w-16 h-16 bg-[#222222] rounded-full flex items-center justify-center mb-4"
+      >
+        <div className="relative w-full h-full">
+          {/* Eyes */}
           <div 
-            ref={logoRef}
-            className="w-16 h-16 bg-[#333333] rounded-full flex items-center justify-center mb-4"
-          >
-            <div className="relative w-8 h-3">
-              {/* Left Eye */}
-              <div 
-                className={`absolute w-3 h-3 bg-white rounded-full left-0 top-0`}
-                style={{ 
-                  transform: eyeState === 'normal' 
-                    ? `translate(${eyePosition.x}px, ${eyePosition.y}px)` 
-                    : eyeState === 'yawning' || eyeState === 'stressed'
-                      ? 'scale(0.7)'
-                      : eyeState === 'wink'
-                        ? 'scale(0.1)'
-                        : eyeState === 'surprised'
-                          ? 'scale(1.2)'
-                          : 'translate(0, 0)'
+            className="absolute left-1/3 top-1/2 w-2 h-2 bg-white rounded-full"
+            style={{ 
+              transform: `translate(${eyePosition.x * 4}px, ${eyePosition.y * 4 - 4}px)`,
+              transition: eyeState === 'normal' ? 'transform 0.1s ease-out' : 'none'
+            }}
+          />
+          <div 
+            className="absolute right-1/3 top-1/2 w-2 h-2 bg-white rounded-full"
+            style={{ 
+              transform: `translate(${eyePosition.x * 4}px, ${eyePosition.y * 4 - 4}px)`,
+              transition: eyeState === 'normal' ? 'transform 0.1s ease-out' : 'none'
+            }}
+          />
+        </div>
+      </div>
+      
+      <h1 className="text-2xl md:text-3xl font-bold text-white mb-6">Discover Smarter Search</h1>
+      
+      {/* Main card */}
+      <div className="w-full max-w-3xl bg-[#111111] rounded-2xl p-4 md:p-6 shadow-lg">
+        <div className="space-y-4">
+          {/* Input area */}
+          <div className="relative">
+            <div className="rounded-2xl bg-[#1A1A1A] p-2 md:p-3">
+              <Textarea
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                placeholder="Ask a question..."
+                className="min-h-[80px] resize-none bg-transparent border-0 focus-visible:ring-0 text-white p-2 rounded-xl"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
                 }}
               />
               
-              {/* Right Eye */}
-              <div 
-                className={`absolute w-3 h-3 bg-white rounded-full right-0 top-0`}
-                style={{ 
-                  transform: eyeState === 'normal' 
-                    ? `translate(${eyePosition.x}px, ${eyePosition.y}px)` 
-                    : eyeState === 'yawning' || eyeState === 'stressed'
-                      ? 'scale(0.7)'
-                      : eyeState === 'happy'
-                        ? 'scale(0.7) translate(0, 1px)'
-                        : eyeState === 'surprised'
-                          ? 'scale(1.2)'
-                          : 'translate(0, 0)'
-                }}
-              />
-            </div>
-          </div>
-          
-          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Let's Make a Document</h1>
-        </div>
-        
-        {/* Chat Interface */}
-        <div className="bg-[#1A1A1A] rounded-lg shadow-lg p-4 md:p-6">
-          {/* Input Area */}
-          <div className="bg-[#222222] rounded-lg p-2 md:p-3">
-            <div className="flex flex-col">
-              {/* Document Selection */}
-              <div className="flex items-center mb-2 md:mb-3">
+              {/* Document selection dropdown - moved below the input */}
+              <div className="flex items-center mt-2 px-2">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button 
                       variant="ghost" 
-                      className="h-8 px-2 text-xs md:text-sm text-white bg-[#B4916C]/20 hover:bg-[#B4916C]/30 rounded flex items-center"
+                      className="flex items-center justify-between bg-[#B4916C] hover:bg-[#A3815C] text-white text-xs md:text-sm h-8 px-3 rounded-full"
                     >
+                      <div className="flex items-center">
+                        <FileText className="h-3 w-3 md:h-4 md:w-4 mr-2" />
+                        <span className="max-w-[150px] truncate">
+                          {selectedDocument || "Documents"}
+                        </span>
+                      </div>
                       {selectedDocument ? (
-                        <div className="flex items-center">
-                          <FileText className="h-3 w-3 md:h-4 md:w-4 mr-1" />
-                          <span className="truncate max-w-[120px] md:max-w-[150px]">{selectedDocument}</span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-5 w-5 ml-1 hover:bg-[#B4916C]/40 rounded-full p-0"
-                            onClick={handleDeselectDocument}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </div>
+                        <X 
+                          className="h-3 w-3 md:h-4 md:w-4 ml-2 hover:text-gray-200" 
+                          onClick={handleDeselectDocument}
+                        />
                       ) : (
-                        <>
-                          <span>Select Document</span>
-                          <ChevronDown className="h-3 w-3 md:h-4 md:w-4 ml-1" />
-                        </>
+                        <ChevronDown className="h-3 w-3 md:h-4 md:w-4 ml-2" />
                       )}
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent className="bg-[#2A2A2A] border border-[#444444] text-white">
+                  <DropdownMenuContent align="start" className="bg-[#222222] border border-[#333333] rounded-xl">
                     {documents.length > 0 ? (
-                      documents.map(doc => (
-                        <DropdownMenuItem 
+                      documents.map((doc) => (
+                        <DropdownMenuItem
                           key={doc.id}
-                          onClick={() => handleSelectDocument(doc.fileName, doc.id)}
-                          className="hover:bg-[#3A3A3A] cursor-pointer"
+                          onClick={() => handleSelectDocument(doc.id, doc.fileName)}
+                          className="text-white hover:bg-[#333333] focus:bg-[#333333] rounded-lg cursor-pointer"
                         >
-                          <div className="flex flex-col">
-                            <span className="font-medium text-sm truncate max-w-[200px]">{doc.fileName}</span>
-                            <span className="text-xs text-gray-400">
-                              {format(doc.createdAt, 'MMM d, yyyy')}
-                            </span>
+                          <div className="flex items-center">
+                            <FileText className="h-4 w-4 mr-2 text-[#B4916C]" />
+                            <div>
+                              <div className="font-medium">{doc.fileName}</div>
+                              <div className="text-xs text-gray-400">
+                                {format(doc.createdAt, "MMM d, yyyy")}
+                              </div>
+                            </div>
                           </div>
                         </DropdownMenuItem>
                       ))
                     ) : (
-                      <DropdownMenuItem disabled className="text-gray-500 text-sm">
+                      <DropdownMenuItem disabled className="text-gray-500">
                         No documents available
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>
                 </DropdownMenu>
-              </div>
-              
-              {/* Text Input */}
-              <div className="flex items-end">
-                <Textarea
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  placeholder="Type your message..."
-                  className="flex-1 bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0 text-white resize-none h-10 min-h-[40px] py-2 text-sm"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage();
-                    }
-                  }}
-                />
                 
-                {/* Hidden file input */}
+                {/* File input (hidden) */}
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -429,7 +406,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
                   className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   <div 
-                    className={`max-w-[90%] rounded-lg p-2 text-xs md:text-sm ${
+                    className={`max-w-[90%] rounded-xl p-2 text-xs md:text-sm ${
                       message.role === "user" 
                         ? "bg-[#2A2A2A] text-white" 
                         : "bg-[#B4916C]/10 text-white border border-[#B4916C]/20"

@@ -2,6 +2,8 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle } from 'docx';
+import { saveAs } from 'file-saver';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -75,13 +77,110 @@ function ModernFileDropdown({
   );
 }
 
-// Add a new interface for job match analysis
+// Update the JobMatchAnalysis interface to include more detailed information
 interface JobMatchAnalysis {
   score: number;
-  matchedKeywords: { keyword: string; relevance: number }[];
-  missingKeywords: string[];
+  matchedKeywords: { 
+    keyword: string; 
+    relevance: number;
+    context?: string; // Add context where the keyword appears
+  }[];
+  missingKeywords: { 
+    keyword: string; 
+    importance: number; // How important this keyword is in the job description
+  }[];
   recommendations: string[];
+  skillGap: string; // Overall assessment of skill gap
 }
+
+// Add a function to generate diverse achievements based on keywords
+const generateAchievements = (keywords: string[]): string[] => {
+  // Achievement templates with placeholders for keywords
+  const achievementTemplates = [
+    "Led initiatives to improve {keyword} processes, resulting in 30% increased efficiency and positive stakeholder feedback.",
+    "Developed and implemented {keyword} strategies that reduced costs by 25% while maintaining quality standards.",
+    "Spearheaded the adoption of new {keyword} methodologies, increasing team productivity by 40% over 6 months.",
+    "Created comprehensive {keyword} documentation and training materials that improved onboarding time by 50%.",
+    "Optimized {keyword} workflows through innovative approaches, leading to 35% reduction in turnaround time.",
+    "Managed cross-functional {keyword} projects with budgets exceeding $500K, delivering all milestones on time and under budget.",
+    "Recognized for excellence in {keyword}, receiving departmental award for outstanding contributions.",
+    "Redesigned {keyword} systems that improved data accuracy by 45% and reduced manual processing time.",
+    "Collaborated with stakeholders to enhance {keyword} capabilities, resulting in 28% improvement in customer satisfaction scores.",
+    "Pioneered new {keyword} techniques that became standard practice across the organization."
+  ];
+  
+  // Industry-specific achievement templates
+  const industryAchievements = {
+    // Technology-related keywords
+    tech: [
+      "Architected and implemented {keyword} solutions that scaled to support 200% business growth.",
+      "Reduced system downtime by 75% through improved {keyword} monitoring and maintenance protocols.",
+      "Migrated legacy systems to modern {keyword} platforms, improving performance by 60%."
+    ],
+    // Business/management keywords
+    business: [
+      "Exceeded {keyword} targets by 40% through strategic planning and team leadership.",
+      "Negotiated {keyword} contracts resulting in $1.2M annual savings while improving service levels.",
+      "Streamlined {keyword} operations by eliminating redundancies and optimizing resource allocation."
+    ],
+    // Creative/design keywords
+    creative: [
+      "Designed award-winning {keyword} materials that increased brand recognition by 45%.",
+      "Created innovative {keyword} campaigns that generated 300% ROI and expanded market reach.",
+      "Revitalized the {keyword} strategy, resulting in 65% increase in engagement metrics."
+    ]
+  };
+  
+  // Categorize keywords into industry groups
+  const techKeywords = ['software', 'development', 'programming', 'code', 'technical', 'engineering', 'system', 'data', 'analysis', 'technology', 'infrastructure', 'network', 'security', 'cloud', 'database'];
+  const businessKeywords = ['management', 'leadership', 'strategy', 'business', 'operations', 'project', 'financial', 'marketing', 'sales', 'client', 'customer', 'service', 'planning', 'budget', 'compliance'];
+  const creativeKeywords = ['design', 'creative', 'content', 'writing', 'visual', 'brand', 'media', 'communication', 'presentation', 'graphic', 'video', 'production', 'storytelling', 'campaign'];
+  
+  // Select achievements based on keyword categories and ensure diversity
+  const achievements: string[] = [];
+  const usedTemplates = new Set<string>();
+  
+  // Process up to 5 keywords or all keywords if less than 5
+  const keywordsToProcess = keywords.slice(0, Math.min(5, keywords.length));
+  
+  keywordsToProcess.forEach(keyword => {
+    // Determine if this keyword fits into a specific industry category
+    let categoryTemplates: string[] = [];
+    
+    if (techKeywords.some(tech => keyword.toLowerCase().includes(tech))) {
+      categoryTemplates = industryAchievements.tech;
+    } else if (businessKeywords.some(business => keyword.toLowerCase().includes(business))) {
+      categoryTemplates = industryAchievements.business;
+    } else if (creativeKeywords.some(creative => keyword.toLowerCase().includes(creative))) {
+      categoryTemplates = industryAchievements.creative;
+    }
+    
+    // Combine general templates with any category-specific ones
+    const allTemplates = [...achievementTemplates, ...categoryTemplates];
+    
+    // Find a template we haven't used yet
+    let template = '';
+    for (let i = 0; i < allTemplates.length; i++) {
+      const candidateTemplate = allTemplates[Math.floor(Math.random() * allTemplates.length)];
+      if (!usedTemplates.has(candidateTemplate)) {
+        template = candidateTemplate;
+        usedTemplates.add(candidateTemplate);
+        break;
+      }
+    }
+    
+    // If all templates have been used, just pick a random one
+    if (!template) {
+      template = allTemplates[Math.floor(Math.random() * allTemplates.length)];
+    }
+    
+    // Replace the placeholder with the keyword
+    const achievement = template.replace('{keyword}', keyword.toLowerCase());
+    achievements.push(achievement);
+  });
+  
+  return achievements;
+};
 
 export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: EnhancedSpecificOptimizationWorkflowProps) {
   // State for CV selection
@@ -109,7 +208,8 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     score: 0,
     matchedKeywords: [],
     missingKeywords: [],
-    recommendations: []
+    recommendations: [],
+    skillGap: ""
   });
   
   // State for processing too long detection
@@ -281,35 +381,83 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     return optimized;
   };
   
-  // Extract keywords from job description
-  const extractKeywords = (text: string): string[] => {
-    // Simple keyword extraction (in a real implementation, this would be more sophisticated)
-    const commonWords = ['and', 'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'of', 'as'];
-    const words = text.toLowerCase().match(/\b\w+\b/g) || [];
+  // Enhance the extractKeywords function to be more sophisticated
+  const extractKeywords = (text: string, isJobDescription: boolean = false): string[] => {
+    // More comprehensive list of common words to filter out
+    const commonWords = [
+      'and', 'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'of', 'as', 
+      'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 
+      'does', 'did', 'will', 'would', 'should', 'can', 'could', 'may', 'might', 'must',
+      'that', 'this', 'these', 'those', 'it', 'its', 'we', 'our', 'you', 'your', 'they', 'their'
+    ];
     
-    // Count word frequency
+    // Industry-specific terms that should be recognized as important
+    const industryTerms = [
+      'experience', 'skills', 'knowledge', 'proficient', 'expert', 'familiar', 'degree',
+      'certification', 'qualified', 'responsible', 'manage', 'develop', 'implement',
+      'analyze', 'design', 'create', 'maintain', 'improve', 'optimize', 'lead', 'collaborate'
+    ];
+    
+    // Extract words, including multi-word phrases for job descriptions
+    let words: string[] = [];
+    
+    if (isJobDescription) {
+      // For job descriptions, try to extract multi-word technical terms and skills
+      // Look for patterns like "X years of experience in [skill]" or "proficient in [skill]"
+      const skillPatterns = [
+        /experience (?:in|with) ([\w\s]+?)(?:\.|\,|\;|\n|$)/gi,
+        /knowledge of ([\w\s]+?)(?:\.|\,|\;|\n|$)/gi,
+        /proficient (?:in|with) ([\w\s]+?)(?:\.|\,|\;|\n|$)/gi,
+        /familiar (?:with) ([\w\s]+?)(?:\.|\,|\;|\n|$)/gi,
+        /skills (?:in|with) ([\w\s]+?)(?:\.|\,|\;|\n|$)/gi
+      ];
+      
+      // Extract multi-word skills
+      skillPatterns.forEach(pattern => {
+        let match;
+        while ((match = pattern.exec(text)) !== null) {
+          if (match[1] && match[1].trim().length > 3) {
+            words.push(match[1].trim());
+          }
+        }
+      });
+    }
+    
+    // Also extract individual words
+    const singleWords = text.toLowerCase().match(/\b\w+\b/g) || [];
+    words = [...words, ...singleWords];
+    
+    // Count word frequency with special handling for industry terms
     const wordCount: Record<string, number> = {};
     words.forEach(word => {
-      if (word.length > 3 && !commonWords.includes(word)) {
-        wordCount[word] = (wordCount[word] || 0) + 1;
+      // Normalize the word
+      const normalizedWord = word.toLowerCase().trim();
+      
+      // Skip common words and very short words
+      if (normalizedWord.length <= 3 || commonWords.includes(normalizedWord)) {
+        return;
       }
+      
+      // Give higher weight to industry terms
+      const weight = industryTerms.includes(normalizedWord) ? 2 : 1;
+      
+      // Add to count
+      wordCount[normalizedWord] = (wordCount[normalizedWord] || 0) + weight;
     });
     
     // Sort by frequency and get top keywords
     return Object.entries(wordCount)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
+      .slice(0, 15) // Get more keywords for better matching
       .map(([word]) => word.charAt(0).toUpperCase() + word.slice(1));
   };
   
-  // Generate structured CV
+  // Update the generateStructuredCV function to use the new achievement generator
   const generateStructuredCV = (text: string) => {
-    const keywords = extractKeywords(jobDescription);
+    const keywords = extractKeywords(jobDescription, true);
     
-    // Generate achievements that incorporate job keywords
-    const achievements = keywords.slice(0, 5).map(keyword => 
-      `Improved ${keyword.toLowerCase()} processes by 30%, resulting in increased efficiency and customer satisfaction.`
-    );
+    // Generate diverse achievements based on keywords
+    const achievements = generateAchievements(keywords);
     
     // Calculate job match score (70-100%)
     const jobMatchScore = Math.floor(Math.random() * 30) + 70;
@@ -326,54 +474,132 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     });
   };
   
-  // Add a new function for job match analysis
+  // Completely rewrite the analyzeJobMatch function for better analysis
   const analyzeJobMatch = async (cvText: string, jobDesc: string) => {
     try {
       // In a real implementation, this would call an API endpoint
-      // For now, we'll simulate a more sophisticated analysis
+      // For now, we'll implement a more sophisticated analysis
       
-      // Extract keywords from job description
-      const jobKeywords = extractKeywords(jobDesc);
+      // Extract keywords from job description with special handling
+      const jobKeywords = extractKeywords(jobDesc, true);
       
       // Extract keywords from CV
       const cvKeywords = extractKeywords(cvText);
       
-      // Find matched keywords
+      // Create a map of CV content for context extraction
+      const cvParagraphs = cvText.split('\n\n').filter(p => p.trim().length > 0);
+      
+      // Find matched keywords with context and relevance
       const matchedKeywords = jobKeywords
-        .filter(keyword => 
-          cvKeywords.some(cvKeyword => 
-            cvKeyword.toLowerCase().includes(keyword.toLowerCase()) || 
-            keyword.toLowerCase().includes(cvKeyword.toLowerCase())
-          )
-        )
-        .map(keyword => ({
-          keyword,
-          relevance: Math.floor(Math.random() * 30) + 70 // 70-100% relevance
-        }));
+        .filter(jobKeyword => {
+          // Check if any CV keyword is similar to this job keyword
+          return cvKeywords.some(cvKeyword => {
+            const jobKeywordLower = jobKeyword.toLowerCase();
+            const cvKeywordLower = cvKeyword.toLowerCase();
+            
+            // Check for exact match, partial match, or stemmed match
+            return cvKeywordLower === jobKeywordLower || 
+                   cvKeywordLower.includes(jobKeywordLower) || 
+                   jobKeywordLower.includes(cvKeywordLower);
+          });
+        })
+        .map(keyword => {
+          // Find context where this keyword appears in the CV
+          let context = '';
+          for (const paragraph of cvParagraphs) {
+            if (paragraph.toLowerCase().includes(keyword.toLowerCase())) {
+              // Extract a snippet around the keyword
+              const keywordIndex = paragraph.toLowerCase().indexOf(keyword.toLowerCase());
+              const start = Math.max(0, keywordIndex - 30);
+              const end = Math.min(paragraph.length, keywordIndex + keyword.length + 30);
+              context = '...' + paragraph.substring(start, end) + '...';
+              break;
+            }
+          }
+          
+          // Calculate relevance based on frequency and position in job description
+          const keywordFrequency = (jobDesc.toLowerCase().match(new RegExp(keyword.toLowerCase(), 'g')) || []).length;
+          const keywordPosition = jobDesc.toLowerCase().indexOf(keyword.toLowerCase()) / jobDesc.length;
+          const relevance = Math.min(100, Math.floor(70 + (keywordFrequency * 10) - (keywordPosition * 20)));
+          
+          return {
+            keyword,
+            relevance,
+            context: context || undefined
+          };
+        });
       
-      // Find missing keywords
+      // Find truly missing keywords (not just variations of matched ones)
       const missingKeywords = jobKeywords
-        .filter(keyword => 
-          !cvKeywords.some(cvKeyword => 
-            cvKeyword.toLowerCase().includes(keyword.toLowerCase()) || 
-            keyword.toLowerCase().includes(cvKeyword.toLowerCase())
-          )
-        );
+        .filter(jobKeyword => {
+          // A keyword is truly missing if no CV keyword is similar to it
+          return !cvKeywords.some(cvKeyword => {
+            const jobKeywordLower = jobKeyword.toLowerCase();
+            const cvKeywordLower = cvKeyword.toLowerCase();
+            
+            return cvKeywordLower === jobKeywordLower || 
+                   cvKeywordLower.includes(jobKeywordLower) || 
+                   jobKeywordLower.includes(cvKeywordLower);
+          });
+        })
+        .map(keyword => {
+          // Calculate importance based on frequency and position in job description
+          const keywordFrequency = (jobDesc.toLowerCase().match(new RegExp(keyword.toLowerCase(), 'g')) || []).length;
+          const keywordPosition = jobDesc.toLowerCase().indexOf(keyword.toLowerCase()) / jobDesc.length;
+          const importance = Math.min(100, Math.floor(60 + (keywordFrequency * 15) - (keywordPosition * 10)));
+          
+          return {
+            keyword,
+            importance
+          };
+        });
       
-      // Calculate match score based on matched keywords
-      const matchScore = matchedKeywords.length > 0 
-        ? Math.floor((matchedKeywords.length / jobKeywords.length) * 100)
+      // Calculate match score based on matched keywords and their relevance
+      const totalKeywords = jobKeywords.length;
+      const weightedMatches = matchedKeywords.reduce((sum, item) => sum + (item.relevance / 100), 0);
+      const matchScore = totalKeywords > 0 
+        ? Math.floor((weightedMatches / totalKeywords) * 100)
         : 0;
       
-      // Generate recommendations
-      const recommendations = [
-        "Add the missing keywords to your CV to improve match score",
-        "Emphasize your experience with the matched keywords",
-        "Tailor your professional summary to highlight relevant skills"
-      ];
+      // Generate more specific recommendations
+      const recommendations: string[] = [];
       
       if (missingKeywords.length > 0) {
-        recommendations.push(`Consider adding skills related to: ${missingKeywords.slice(0, 3).join(', ')}`);
+        // Sort missing keywords by importance
+        const criticalKeywords = missingKeywords
+          .filter(k => k.importance > 80)
+          .map(k => k.keyword);
+        
+        const importantKeywords = missingKeywords
+          .filter(k => k.importance > 60 && k.importance <= 80)
+          .map(k => k.keyword);
+        
+        if (criticalKeywords.length > 0) {
+          recommendations.push(`Add these critical keywords to your CV: ${criticalKeywords.join(', ')}`);
+        }
+        
+        if (importantKeywords.length > 0) {
+          recommendations.push(`Consider highlighting experience with: ${importantKeywords.join(', ')}`);
+        }
+      }
+      
+      // Add general recommendations
+      recommendations.push("Tailor your professional summary to highlight relevant skills");
+      
+      if (matchedKeywords.length > 0) {
+        recommendations.push("Expand on your experience with the matched keywords");
+      }
+      
+      // Generate skill gap assessment
+      let skillGap = "";
+      if (matchScore > 80) {
+        skillGap = "Your CV is well-aligned with this job. Focus on highlighting your relevant experience.";
+      } else if (matchScore > 60) {
+        skillGap = "Your CV matches many requirements but could be better tailored to this specific role.";
+      } else if (matchScore > 40) {
+        skillGap = "There's a moderate gap between your CV and this job. Consider addressing the missing keywords.";
+      } else {
+        skillGap = "There's a significant gap between your CV and this job. Consider if this role aligns with your experience.";
       }
       
       // Set job match analysis
@@ -381,7 +607,8 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         score: matchScore,
         matchedKeywords,
         missingKeywords,
-        recommendations
+        recommendations,
+        skillGap
       });
       
     } catch (error) {
@@ -399,36 +626,137 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     setError(null);
   };
   
-  // Update the handleDownloadDocx function to actually generate and download a DOCX
+  // Update the handleDownloadDocx function to use docx.js for proper document generation
   const handleDownloadDocx = async () => {
     try {
       setProcessingStatus("Generating DOCX file...");
       setIsProcessing(true);
       
-      // In a real implementation, this would call an API endpoint
-      // For now, we'll simulate the API call
-      setTimeout(() => {
-        // Create a blob URL for the download
-        const blob = new Blob([optimizedText], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-        const url = URL.createObjectURL(blob);
+      // Create a new document
+      const doc = new Document({
+        sections: [
+          {
+            properties: {},
+            children: [
+              // Header with name and title
+              new Paragraph({
+                text: structuredCV.header,
+                heading: HeadingLevel.HEADING_1,
+                alignment: AlignmentType.CENTER,
+                spacing: {
+                  after: 200,
+                },
+              }),
+              
+              // Professional Profile
+              new Paragraph({
+                text: "Professional Profile",
+                heading: HeadingLevel.HEADING_2,
+                thematicBreak: true,
+              }),
+              new Paragraph({
+                text: structuredCV.profile,
+                spacing: {
+                  after: 200,
+                },
+              }),
+              
+              // Key Achievements
+              new Paragraph({
+                text: "Key Achievements",
+                heading: HeadingLevel.HEADING_2,
+                thematicBreak: true,
+              }),
+              ...structuredCV.achievements.map(
+                (achievement) =>
+                  new Paragraph({
+                    text: `• ${achievement}`,
+                    spacing: {
+                      before: 100,
+                    },
+                  })
+              ),
+              new Paragraph({
+                text: "",
+                spacing: {
+                  after: 200,
+                },
+              }),
+              
+              // Skills
+              new Paragraph({
+                text: "Skills",
+                heading: HeadingLevel.HEADING_2,
+                thematicBreak: true,
+              }),
+              new Paragraph({
+                text: structuredCV.skills,
+                spacing: {
+                  after: 200,
+                },
+              }),
+              
+              // Education
+              new Paragraph({
+                text: "Education",
+                heading: HeadingLevel.HEADING_2,
+                thematicBreak: true,
+              }),
+              new Paragraph({
+                text: structuredCV.education,
+                spacing: {
+                  after: 200,
+                },
+              }),
+              
+              // Job Match Analysis
+              new Paragraph({
+                text: "Job Match Analysis",
+                heading: HeadingLevel.HEADING_2,
+                thematicBreak: true,
+              }),
+              new Paragraph({
+                text: `Job Match Score: ${jobMatchAnalysis.score}%`,
+                spacing: {
+                  before: 100,
+                },
+              }),
+              new Paragraph({
+                text: `Matched Keywords: ${jobMatchAnalysis.matchedKeywords.map(k => k.keyword).join(', ')}`,
+                spacing: {
+                  before: 100,
+                },
+              }),
+              new Paragraph({
+                text: jobMatchAnalysis.skillGap,
+                spacing: {
+                  before: 100,
+                  after: 200,
+                },
+              }),
+            ],
+          },
+        ],
+      });
+      
+      try {
+        // Generate the document as a blob
+        const blob = await Packer.toBlob(doc);
         
-        // Create a link and trigger the download
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${selectedCVName || 'CV'}_Job_Optimized.docx`;
-        document.body.appendChild(a);
-        a.click();
+        // Use file-saver to save the document
+        saveAs(blob, `${selectedCVName || 'CV'}_Job_Optimized.docx`);
         
-        // Clean up
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
+        // Reset processing state
         setIsProcessing(false);
         setProcessingStatus("");
-      }, 1500);
+      } catch (error) {
+        console.error("Error generating DOCX:", error);
+        setError("Failed to generate DOCX file. Please try again.");
+        setIsProcessing(false);
+      }
     } catch (error) {
-      console.error("Error generating DOCX:", error);
-      setError("Failed to generate DOCX file");
+      console.error("Error in DOCX generation:", error);
+      setError("Failed to generate DOCX file. Please try again.");
       setIsProcessing(false);
     }
   };
@@ -581,13 +909,27 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
               />
             </Progress>
             
+            {/* Add skill gap assessment */}
+            <div className="mt-4 p-3 border border-gray-700 rounded bg-[#050505]">
+              <h4 className="text-sm font-medium mb-1">Skill Gap Assessment</h4>
+              <p className="text-sm text-gray-300">{jobMatchAnalysis.skillGap}</p>
+            </div>
+            
             <div className="mt-4">
               <h4 className="text-sm font-medium mb-2">Keyword Matches</h4>
               <div className="flex flex-wrap gap-2 mb-4">
                 {jobMatchAnalysis.matchedKeywords.map((item, index) => (
-                  <div key={index} className="px-2 py-1 bg-[#B4916C]/20 text-[#B4916C] rounded-md text-sm flex items-center">
+                  <div key={index} className="px-2 py-1 bg-[#B4916C]/20 text-[#B4916C] rounded-md text-sm flex items-center group relative">
                     <CheckCircle className="w-3 h-3 mr-1" />
                     {item.keyword}
+                    {/* Add tooltip with context if available */}
+                    {item.context && (
+                      <div className="absolute bottom-full left-0 mb-2 w-64 p-2 bg-gray-800 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity z-10 text-xs">
+                        <p className="text-white">{item.context}</p>
+                        <div className="absolute bottom-0 left-4 transform translate-y-1/2 rotate-45 w-2 h-2 bg-gray-800"></div>
+                      </div>
+                    )}
+                    <span className="ml-1 text-xs text-gray-400">({item.relevance}%)</span>
                   </div>
                 ))}
                 {jobMatchAnalysis.matchedKeywords.length === 0 && (
@@ -599,9 +941,10 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
                 <>
                   <h4 className="text-sm font-medium mb-2">Missing Keywords</h4>
                   <div className="flex flex-wrap gap-2 mb-4">
-                    {jobMatchAnalysis.missingKeywords.map((keyword, index) => (
-                      <span key={index} className="px-2 py-1 bg-red-900/20 text-red-400 rounded-md text-sm">
-                        {keyword}
+                    {jobMatchAnalysis.missingKeywords.map((item, index) => (
+                      <span key={index} className="px-2 py-1 bg-red-900/20 text-red-400 rounded-md text-sm flex items-center">
+                        {item.keyword}
+                        <span className="ml-1 text-xs text-gray-400">({item.importance}%)</span>
                       </span>
                     ))}
                   </div>
