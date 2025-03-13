@@ -27,6 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Check } from "lucide-react";
 import { Document } from '@/types/documents';
+import { interactWithAssistant, streamWithAssistant } from '@/app/lib/agents/openai-agent';
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -40,9 +41,15 @@ interface EnhancePageClientProps {
   documentsData: Array<Omit<Document, 'createdAt'> & { createdAt: string }>;
 }
 
+interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: Date;
+}
+
 export default function EnhancePageClient({ documentsData }: EnhancePageClientProps) {
   const [inputMessage, setInputMessage] = useState<string>("");
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -182,28 +189,85 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
     setTitle(mode === 'edit' ? "Let's Edit" : "Let's Create");
   }, [mode]);
   
-  const handleSendMessage = () => {
-    if (!inputMessage.trim()) return;
+  // Add error state
+  const [error, setError] = useState<string | null>(null);
+  
+  // Chat state
+  const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Initialize with welcome message
+  useEffect(() => {
+    setMessages([
+      {
+        role: 'assistant',
+        content: 'Hello! I can help you create, edit, and analyze documents. What would you like to do today?',
+        timestamp: new Date()
+      }
+    ]);
+  }, []);
+  
+  // Handle sending messages
+  const handleSendMessage = async () => {
+    if (!inputMessage.trim() || isProcessing) return;
     
-    const newMessage: Message = {
-      role: "user",
+    // Add user message to chat
+    const userMessage: ChatMessage = {
+      role: 'user',
       content: inputMessage,
+      timestamp: new Date()
     };
     
-    setMessages([...messages, newMessage]);
-    setInputMessage("");
+    setMessages(prev => [...prev, userMessage]);
+    setInputMessage('');
+    setIsProcessing(true);
     
-    // Simulate AI response
-    setTimeout(() => {
-      const aiResponse: Message = {
-        role: "assistant",
-        content: "I'm processing your request. This is a placeholder response.",
+    try {
+      // Get context for the assistant
+      const context = {
+        selectedDocument: selectedDocument ? {
+          id: selectedDocument.id,
+          name: selectedDocument.fileName
+        } : null
       };
-      setMessages(prev => [...prev, aiResponse]);
-    }, 1000);
-    
-    // Show excited animation when sending message
-    playAnimationSequence('messageSend');
+      
+      // Create message history for the assistant
+      const messageHistory = messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+      
+      // Add a temporary message for streaming
+      const tempMessage: ChatMessage = {
+        role: 'assistant',
+        content: '',
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, tempMessage]);
+      
+      // Stream the response
+      await streamWithAssistant(
+        userMessage.content,
+        context,
+        messageHistory,
+        (chunk) => {
+          setMessages(prev => {
+            const newMessages = [...prev];
+            const lastMessage = newMessages[newMessages.length - 1];
+            if (lastMessage.role === 'assistant') {
+              lastMessage.content += chunk;
+            }
+            return newMessages;
+          });
+        }
+      );
+      
+      setIsProcessing(false);
+    } catch (error) {
+      console.error('Error getting response from assistant:', error);
+      setError('Failed to get a response. Please try again.');
+      setIsProcessing(false);
+    }
   };
   
   const handleSelectDocument = (id: string, fileName: string) => {
@@ -373,14 +437,53 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
           {title}
         </h1>
         
-        {/* Search container - exactly matching image layout */}
+        {/* Chat messages */}
+        <div className="w-full max-w-2xl mb-6 max-h-[50vh] overflow-y-auto">
+          {messages.map((message, index) => (
+            <div 
+              key={index}
+              className={`mb-4 ${message.role === 'user' ? 'text-right' : 'text-left'}`}
+            >
+              <div 
+                className={`inline-block px-4 py-2 rounded-xl ${
+                  message.role === 'user' 
+                    ? 'bg-[#B4916C] text-white' 
+                    : 'bg-[#1A1A1A] text-white'
+                }`}
+              >
+                {message.content}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                {message.timestamp.toLocaleTimeString()}
+              </div>
+            </div>
+          ))}
+          {isProcessing && (
+            <div className="text-left mb-4">
+              <div className="inline-block px-4 py-2 rounded-xl bg-[#1A1A1A]">
+                <div className="flex space-x-2">
+                  <div className="w-2 h-2 bg-[#B4916C] rounded-full animate-bounce" />
+                  <div className="w-2 h-2 bg-[#B4916C] rounded-full animate-bounce delay-100" />
+                  <div className="w-2 h-2 bg-[#B4916C] rounded-full animate-bounce delay-200" />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {/* Input field - styled exactly like image */}
         <div className="w-full max-w-2xl">
-          {/* Input field - styled exactly like image */}
           <div className="relative mb-6">
             <input
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
               placeholder={placeholders[placeholderIndex]}
               className="w-full bg-[#1A1A1A] rounded-2xl px-6 py-5 
                 focus:outline-none focus:ring-1 focus:ring-[#2D2D2D]
@@ -442,8 +545,8 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
               />
             </div>
             
-            {/* Only paperclip button on the right */}
-            <div className="flex items-center">
+            {/* Send button on the right */}
+            <div className="flex items-center space-x-2">
               <Button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
@@ -452,6 +555,16 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
                   transition-all duration-300"
               >
                 <Paperclip className="h-5 w-5 text-[#B4916C]" />
+              </Button>
+              
+              <Button
+                onClick={handleSendMessage}
+                disabled={!inputMessage.trim() || isProcessing}
+                className="bg-transparent hover:bg-[#1A1A1A] rounded-full w-10 h-10
+                  flex items-center justify-center
+                  transition-all duration-300"
+              >
+                <Send className="h-5 w-5 text-[#B4916C]" />
               </Button>
             </div>
           </div>
