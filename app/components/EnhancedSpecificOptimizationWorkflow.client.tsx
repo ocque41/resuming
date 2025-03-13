@@ -235,6 +235,26 @@ interface StructuredCV {
   achievements: string[];
 }
 
+// Add type definitions at the top of the file
+interface ExperienceEntry {
+  dates: string;
+  title: string | null;
+  company: string | null;
+  responsibilities: string[];
+}
+
+interface EducationEntry {
+  degree: string;
+  field: string | null;
+  institution: string | null;
+  year: string | null;
+}
+
+interface SkillsData {
+  technical: string[];
+  professional: string[];
+}
+
 export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: EnhancedSpecificOptimizationWorkflowProps) {
   // State for CV selection
   const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
@@ -825,114 +845,178 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   // Update the generateStructuredCV function to create a more interesting title
   const generateStructuredCV = async (cvText: string, jobDescription: string) => {
     try {
-      // Extract name from CV text
-      const nameMatch = cvText.match(/^([A-Za-z\s]+)(?:\n|$)/);
+      // Extract name from CV
+      const nameMatch = cvText.match(/^([A-Za-z\s]+)/);
       const name = nameMatch ? nameMatch[1].trim() : 'Professional CV';
 
-      // Extract keywords from both CV and job description
+      // Extract keywords from CV and job description
       const cvKeywords = extractKeywords(cvText);
-      const jobKeywords = extractKeywords(jobDescription, true);
-      
-      // Combine and prioritize keywords
-      const combinedKeywords = [...new Set([...cvKeywords, ...jobKeywords])];
-      
-      // Generate subheader based on keywords and experience
-      const experienceMatch = cvText.match(/(?:experience|work|employment)[\s\S]*?([A-Za-z\s]+(?:\s+at\s+[A-Za-z\s]+)?)[\s\S]*?(\d{4}(?:\s*-\s*(?:present|\d{4}))?)/i);
-      let subheader = '';
-      if (experienceMatch) {
-        subheader = `${experienceMatch[1].trim()}${experienceMatch[2] ? ` (${experienceMatch[2].trim()})` : ''}`;
-      } else {
-        // Use most relevant keyword as subheader
-        subheader = combinedKeywords[0] || 'Professional';
-      }
+      const jobKeywords = extractKeywords(jobDescription);
 
-      // Generate profile using keywords and experience
-      const yearsOfExp = calculateYearsOfExperience(extractExperienceData(cvText));
-      const profile = generateProfile(cvText, jobDescription, combinedKeywords, yearsOfExp);
+      // Generate subheader based on experience
+      const experience = extractExperienceData(cvText);
+      const yearsOfExp = calculateYearsOfExperience(experience);
+      const subheader = experience && experience.length > 0 
+        ? `${experience[0].title || 'Professional'} with ${yearsOfExp} years of experience`
+        : jobKeywords[0] ? `Professional specializing in ${jobKeywords[0].toLowerCase()}` : 'Professional CV';
 
-      // Extract and structure experience data
-      const experience = extractExperienceData(cvText).map(exp => ({
-        title: exp.title || combinedKeywords[0] || 'Professional',
-        company: exp.company || 'Company',
-        dates: exp.dates || 'Present',
-        responsibilities: exp.responsibilities || generateResponsibilities(combinedKeywords)
-      }));
+      // Generate profile
+      const profile = generateProfile(cvText, jobDescription, jobKeywords, yearsOfExp);
 
-      // Extract and structure education data
-      const education = extractEducationData(cvText).map(edu => ({
-        degree: edu.degree || 'Degree',
-        field: edu.field || combinedKeywords[0] || 'Field',
-        institution: edu.institution || 'Institution',
-        year: edu.year || new Date().getFullYear().toString()
-      }));
+      // Structure experience data
+      const structuredExperience = experience || [{
+        dates: 'Present',
+        title: 'Professional',
+        company: null,
+        responsibilities: generateResponsibilities(jobKeywords)
+      }];
 
-      // Generate skills based on keywords and job requirements
+      // Structure education data
+      const education = extractEducationData(cvText) || [{
+        degree: 'Bachelor\'s Degree',
+        field: 'Business Administration',
+        institution: 'University',
+        year: 'Present'
+      }];
+
+      // Generate skills
+      const technicalSkills = generateTechnicalSkills(jobKeywords);
+      const professionalSkills = generateProfessionalSkills(jobKeywords);
       const skills = {
-        technical: generateTechnicalSkills(combinedKeywords),
-        professional: generateProfessionalSkills(combinedKeywords)
+        technical: technicalSkills,
+        professional: professionalSkills
       };
 
-      // Generate achievements based on keywords and experience
-      const achievements = generateAchievements(combinedKeywords, experience);
+      // Generate achievements
+      const achievements = generateAchievements(jobKeywords, structuredExperience);
 
-      // Calculate job match score
+      // Calculate job match score and generate recommendations
       const matchScore = calculateJobMatchScore(cvKeywords, jobKeywords);
-      setJobMatchScore(matchScore);
-
-      // Generate recommendations
       const recommendations = generateRecommendations(cvKeywords, jobKeywords, matchScore);
+
+      // Set the job match score and recommendations
+      setJobMatchScore(matchScore);
       setRecommendations(recommendations);
 
       return {
         name,
         subheader,
         profile,
-        experience,
+        experience: structuredExperience,
         education,
         skills,
         achievements
       };
     } catch (error) {
       console.error('Error generating structured CV:', error);
-      throw new Error('Failed to generate structured CV');
+      throw error;
     }
   };
   
   // Helper function to extract experience data
-  const extractExperienceData = (text: string) => {
-    const experienceBlocks = text.split(/(?:experience|work|employment)/i);
-    return experienceBlocks.slice(1).map(block => {
-      const titleMatch = block.match(/([A-Za-z\s]+(?:\s+at\s+[A-Za-z\s]+)?)/);
-      const datesMatch = block.match(/(\d{4}(?:\s*-\s*(?:present|\d{4}))?)/);
-      const responsibilities = block
-        .split('\n')
-        .filter(line => line.trim().match(/^[-•*]\s/))
-        .map(line => line.replace(/^[-•*]\s*/, '').trim());
-
-      return {
-        title: titleMatch ? titleMatch[1].trim() : null,
-        company: null, // Could be extracted with more complex regex
-        dates: datesMatch ? datesMatch[1].trim() : null,
-        responsibilities: responsibilities.length > 0 ? responsibilities : null
-      };
-    });
+  const extractExperienceData = (cvText: string): ExperienceEntry[] | null => {
+    // Split CV into sections
+    const sections = cvText.split('\n\n').filter(section => section.trim().length > 0);
+    
+    // Find the experience section
+    const experienceSection = sections.find(section => 
+      section.toLowerCase().includes('experience') || 
+      section.toLowerCase().includes('work history') ||
+      section.toLowerCase().includes('employment')
+    );
+    
+    if (!experienceSection) return null;
+    
+    // Extract individual experience entries
+    const experienceEntries = experienceSection
+      .split('\n')
+      .filter(line => line.trim().length > 0)
+      .map(line => {
+        // Try to match date patterns
+        const dateMatch = line.match(/(?:^|\n)(?:19|20)\d{2}\s*[-–—]\s*(?:19|20)\d{2}|(?:^|\n)(?:19|20)\d{2}\s*[-–—]\s*present/gi);
+        
+        if (dateMatch) {
+          // This is likely a job entry
+          const dates = dateMatch[0].trim();
+          const titleMatch = line.match(/([^•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+?)(?:\s*[-–—]\s*|$)/);
+          const title = titleMatch ? titleMatch[1].trim() : null;
+          
+          // Extract company name if present
+          const companyMatch = line.match(/(?:at|with|for)\s+([^•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+?)(?:\s*[-–—]\s*|$)/i);
+          const company = companyMatch ? companyMatch[1].trim() : null;
+          
+          // Extract responsibilities/achievements
+          const responsibilities = line
+            .split('\n')
+            .filter(l => l.trim().startsWith('•') || l.trim().startsWith('-') || l.trim().startsWith('*'))
+            .map(l => l.replace(/^[\s•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+/, '').trim())
+            .filter(l => l.length > 0);
+          
+          return {
+            dates,
+            title,
+            company,
+            responsibilities
+          };
+        }
+        
+        return null;
+      })
+      .filter((entry): entry is ExperienceEntry => entry !== null && entry.dates !== null);
+    
+    return experienceEntries.length > 0 ? experienceEntries : null;
   };
   
   // Helper function to extract education data
-  const extractEducationData = (text: string) => {
-    const educationBlocks = text.split(/(?:education|academic|qualification)/i);
-    return educationBlocks.slice(1).map(block => {
-      const degreeMatch = block.match(/(bachelor'?s?|master'?s?|phd|doctorate|mba|bs|ms|ba)/i);
-      const yearMatch = block.match(/(\d{4})/);
-      const institutionMatch = block.match(/(?:from|at|in)\s+([A-Za-z\s]+)/i);
-
-      return {
-        degree: degreeMatch ? degreeMatch[1].trim() : null,
-        field: null, // Could be extracted with more complex regex
-        institution: institutionMatch ? institutionMatch[1].trim() : null,
-        year: yearMatch ? yearMatch[1].trim() : null
-      };
-    });
+  const extractEducationData = (cvText: string): EducationEntry[] | null => {
+    // Split CV into sections
+    const sections = cvText.split('\n\n').filter(section => section.trim().length > 0);
+    
+    // Find the education section
+    const educationSection = sections.find(section => 
+      section.toLowerCase().includes('education') || 
+      section.toLowerCase().includes('qualifications') ||
+      section.toLowerCase().includes('academic')
+    );
+    
+    if (!educationSection) return null;
+    
+    // Extract education entries
+    const educationEntries = educationSection
+      .split('\n')
+      .filter(line => line.trim().length > 0)
+      .map(line => {
+        // Try to match degree patterns
+        const degreeMatch = line.match(/(?:Bachelor'?s|Master'?s|Ph\.?D|Associate'?s|MBA|B\.S\.|M\.S\.|B\.A\.|M\.A\.)/i);
+        
+        if (degreeMatch) {
+          const degree = degreeMatch[0].trim();
+          
+          // Extract field of study if present
+          const fieldMatch = line.match(/(?:in|of)\s+([^,.;]+)/i);
+          const field = fieldMatch ? fieldMatch[1].trim() : null;
+          
+          // Extract institution if present
+          const institutionMatch = line.match(/(?:from|at)\s+([^,.;]+)/i);
+          const institution = institutionMatch ? institutionMatch[1].trim() : null;
+          
+          // Extract year if present
+          const yearMatch = line.match(/(?:19|20)\d{2}/);
+          const year = yearMatch ? yearMatch[0] : null;
+          
+          return {
+            degree,
+            field,
+            institution,
+            year
+          };
+        }
+        
+        return null;
+      })
+      .filter((entry): entry is EducationEntry => entry !== null && entry.degree !== null);
+    
+    return educationEntries.length > 0 ? educationEntries : null;
   };
   
   // Helper function to generate profile
@@ -956,8 +1040,8 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   };
   
   // Helper function to generate responsibilities
-  const generateResponsibilities = (keywords: string[]) => {
-    const responsibilities = [];
+  const generateResponsibilities = (keywords: string[]): string[] => {
+    const responsibilities: string[] = [];
     const actionVerbs = ['Led', 'Managed', 'Developed', 'Implemented', 'Designed', 'Created', 'Optimized', 'Improved'];
     const actionVerb = actionVerbs[Math.floor(Math.random() * actionVerbs.length)];
     
@@ -997,25 +1081,112 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   // Helper function to generate achievements
   const generateAchievements = (keywords: string[], experience: any[]) => {
     const achievements = [];
-    const metrics = ['25%', '40%', '50%', '60%', '75%', '100%'];
-    const metric = metrics[Math.floor(Math.random() * metrics.length)];
+  // Add a function to extract skills data from the CV
+  const extractSkillsData = (cvText: string) => {
+    // Split CV into sections
+    const sections = cvText.split('\n\n').filter(section => section.trim().length > 0);
     
-    keywords.slice(0, 3).forEach(keyword => {
-      achievements.push(`Achieved ${metric} improvement in ${keyword.toLowerCase()} through strategic implementation`);
-    });
+    // Find the skills section
+    const skillsSection = sections.find(section => 
+      section.toLowerCase().includes('skills') || 
+      section.toLowerCase().includes('expertise') ||
+      section.toLowerCase().includes('competencies')
+    );
+    
+    if (!skillsSection) return null;
+    
+    // Extract skills from bullet points or comma-separated lists
+    const skills = skillsSection
+      .split('\n')
+      .filter(line => line.trim().length > 0)
+      .map(line => {
+        const cleanLine = line.replace(/^[\s•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+/, '').trim();
+        
+        if (cleanLine.includes(',')) {
+          // Handle comma-separated skills
+          return cleanLine.split(',').map(s => s.trim()).filter(s => s.length > 0);
+        } else if (cleanLine.length > 0) {
+          // Handle single skill per line
+          return [cleanLine];
+        }
+        
+        return [];
+      })
+      .flat();
+    
+    return skills;
+  };
+  
+  // Add a function to extract achievements data from the CV
+  const extractAchievementsData = (cvText: string) => {
+    // Split CV into sections
+    const sections = cvText.split('\n\n').filter(section => section.trim().length > 0);
+    
+    // Find the achievements section
+    const achievementsSection = sections.find(section => 
+      section.toLowerCase().includes('achievements') || 
+      section.toLowerCase().includes('accomplishments') ||
+      section.toLowerCase().includes('highlights')
+    );
+    
+    if (!achievementsSection) return null;
+    
+    // Extract achievements from bullet points
+    const achievements = achievementsSection
+      .split('\n')
+      .filter(line => line.trim().length > 0)
+      .map(line => {
+        const cleanLine = line.replace(/^[\s•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+/, '').trim();
+        return cleanLine.length > 0 ? cleanLine : null;
+      })
+      .filter(achievement => achievement !== null);
     
     return achievements;
   };
   
+  // Helper function to calculate years of experience
+  const calculateYearsOfExperience = (experience: ExperienceEntry[] | null): number => {
+    if (!experience || experience.length === 0) return 0;
+    
+    const totalYears = experience.reduce((acc, entry) => {
+      if (!entry.dates) return acc;
+      
+      const [startYear] = entry.dates.match(/(\d{4})/) || [];
+      const [endYear] = entry.dates.match(/(?:-\s*)(\d{4})/) || [];
+      
+      if (!startYear) return acc;
+      
+      const start = parseInt(startYear);
+      const end = endYear ? parseInt(endYear) : new Date().getFullYear();
+      
+      return acc + (end - start);
+    }, 0);
+    
+    return Math.round(totalYears / 365); // Convert days to years
+  };
+  
+  // Helper function to analyze job match
+  const analyzeJobMatch = (cvKeywords: string[], jobKeywords: string[]) => {
+    const matchedKeywords = cvKeywords.filter(k => jobKeywords.includes(k));
+    const matchScore = Math.round((matchedKeywords.length / jobKeywords.length) * 100);
+    const missingKeywords = jobKeywords.filter(k => !cvKeywords.includes(k));
+    
+    return {
+      matchScore,
+      matchedKeywords,
+      missingKeywords
+    };
+  };
+  
   // Helper function to calculate job match score
-  const calculateJobMatchScore = (cvKeywords: string[], jobKeywords: string[]) => {
+  const calculateJobMatchScore = (cvKeywords: string[], jobKeywords: string[]): number => {
     const matchedKeywords = cvKeywords.filter(k => jobKeywords.includes(k));
     return Math.round((matchedKeywords.length / jobKeywords.length) * 100);
   };
   
   // Helper function to generate recommendations
-  const generateRecommendations = (cvKeywords: string[], jobKeywords: string[], matchScore: number) => {
-    const recommendations = [];
+  const generateRecommendations = (cvKeywords: string[], jobKeywords: string[], matchScore: number): string[] => {
+    const recommendations: string[] = [];
     const missingKeywords = jobKeywords.filter(k => !cvKeywords.includes(k));
     
     if (matchScore < 70) {
@@ -1039,7 +1210,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     setError(null);
   };
   
-  // Update the handleDownloadDocx function to remove Job Optimization Results and enhance Skills and Profile
+  // Add missing functions at the top of the file
   const handleDownloadDocx = async () => {
     try {
       setProcessingStatus('Generating DOCX document...');
@@ -1126,7 +1297,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
               new Paragraph({
                 children: [
                   new TextRun({
-                    text: entry.title,
+                    text: entry.title || '',
                     bold: true,
                     size: 14,
                     font: 'Calibri'
@@ -1329,207 +1500,18 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     }
   };
   
-  // Update helper functions to handle the new skills structure
-  const extractTechnicalSkills = (skills: { technical: string[]; professional: string[] }) => {
+  // Add missing functions
+  const extractTechnicalSkills = (skills: SkillsData): string => {
     return skills.technical.join(', ');
   };
-  
-  const extractProfessionalSkills = (skills: { technical: string[]; professional: string[] }) => {
+
+  const extractProfessionalSkills = (skills: SkillsData): string => {
     return skills.professional.join(', ');
   };
-  
-  const extractIndustrySkills = (skills: { technical: string[]; professional: string[] }) => {
+
+  const extractIndustrySkills = (skills: SkillsData): string => {
     // Combine both technical and professional skills for industry knowledge
     return [...skills.technical, ...skills.professional].join(', ');
-  };
-  
-  // Add a useEffect to detect when processing is taking too long
-  useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
-    
-    if (isProcessing) {
-      // Set a timeout to show the reset button after 10 seconds
-      timeoutId = setTimeout(() => {
-        setProcessingTooLong(true);
-      }, 10000);
-    } else {
-      // Clear processing too long flag when not processing
-      setProcessingTooLong(false);
-    }
-    
-    // Clean up the timeout when the component unmounts or status changes
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, [isProcessing]);
-  
-  // Add a function to extract and structure experience data from the CV
-  const extractExperienceData = (cvText: string) => {
-    // Split CV into sections
-    const sections = cvText.split('\n\n').filter(section => section.trim().length > 0);
-    
-    // Find the experience section
-    const experienceSection = sections.find(section => 
-      section.toLowerCase().includes('experience') || 
-      section.toLowerCase().includes('work history') ||
-      section.toLowerCase().includes('employment')
-    );
-    
-    if (!experienceSection) return null;
-    
-    // Extract individual experience entries
-    const experienceEntries = experienceSection
-      .split('\n')
-      .filter(line => line.trim().length > 0)
-      .map(line => {
-        // Try to match date patterns
-        const dateMatch = line.match(/(?:^|\n)(?:19|20)\d{2}\s*[-–—]\s*(?:19|20)\d{2}|(?:^|\n)(?:19|20)\d{2}\s*[-–—]\s*present/gi);
-        
-        if (dateMatch) {
-          // This is likely a job entry
-          const dates = dateMatch[0].trim();
-          const titleMatch = line.match(/([^•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+?)(?:\s*[-–—]\s*|$)/);
-          const title = titleMatch ? titleMatch[1].trim() : '';
-          
-          // Extract company name if present
-          const companyMatch = line.match(/(?:at|with|for)\s+([^•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+?)(?:\s*[-–—]\s*|$)/i);
-          const company = companyMatch ? companyMatch[1].trim() : '';
-          
-          // Extract responsibilities/achievements
-          const responsibilities = line
-            .split('\n')
-            .filter(l => l.trim().startsWith('•') || l.trim().startsWith('-') || l.trim().startsWith('*'))
-            .map(l => l.replace(/^[\s•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+/, '').trim())
-            .filter(l => l.length > 0);
-          
-          return {
-            dates,
-            title,
-            company,
-            responsibilities
-          };
-        }
-        
-        return null;
-      })
-      .filter(entry => entry !== null);
-    
-    return experienceEntries;
-  };
-  
-  // Add a function to extract education data from the CV
-  const extractEducationData = (cvText: string) => {
-    // Split CV into sections
-    const sections = cvText.split('\n\n').filter(section => section.trim().length > 0);
-    
-    // Find the education section
-    const educationSection = sections.find(section => 
-      section.toLowerCase().includes('education') || 
-      section.toLowerCase().includes('qualifications') ||
-      section.toLowerCase().includes('academic')
-    );
-    
-    if (!educationSection) return null;
-    
-    // Extract education entries
-    const educationEntries = educationSection
-      .split('\n')
-      .filter(line => line.trim().length > 0)
-      .map(line => {
-        // Try to match degree patterns
-        const degreeMatch = line.match(/(?:Bachelor'?s|Master'?s|Ph\.?D|Associate'?s|MBA|B\.S\.|M\.S\.|B\.A\.|M\.A\.)/i);
-        
-        if (degreeMatch) {
-          const degree = degreeMatch[0].trim();
-          
-          // Extract field of study if present
-          const fieldMatch = line.match(/(?:in|of)\s+([^,.;]+)/i);
-          const field = fieldMatch ? fieldMatch[1].trim() : '';
-          
-          // Extract institution if present
-          const institutionMatch = line.match(/(?:from|at)\s+([^,.;]+)/i);
-          const institution = institutionMatch ? institutionMatch[1].trim() : '';
-          
-          // Extract year if present
-          const yearMatch = line.match(/(?:19|20)\d{2}/);
-          const year = yearMatch ? yearMatch[0] : '';
-          
-          return {
-            degree,
-            field,
-            institution,
-            year
-          };
-        }
-        
-        return null;
-      })
-      .filter(entry => entry !== null);
-    
-    return educationEntries;
-  };
-  
-  // Add a function to extract skills data from the CV
-  const extractSkillsData = (cvText: string) => {
-    // Split CV into sections
-    const sections = cvText.split('\n\n').filter(section => section.trim().length > 0);
-    
-    // Find the skills section
-    const skillsSection = sections.find(section => 
-      section.toLowerCase().includes('skills') || 
-      section.toLowerCase().includes('expertise') ||
-      section.toLowerCase().includes('competencies')
-    );
-    
-    if (!skillsSection) return null;
-    
-    // Extract skills from bullet points or comma-separated lists
-    const skills = skillsSection
-      .split('\n')
-      .filter(line => line.trim().length > 0)
-      .map(line => {
-        const cleanLine = line.replace(/^[\s•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+/, '').trim();
-        
-        if (cleanLine.includes(',')) {
-          // Handle comma-separated skills
-          return cleanLine.split(',').map(s => s.trim()).filter(s => s.length > 0);
-        } else if (cleanLine.length > 0) {
-          // Handle single skill per line
-          return [cleanLine];
-        }
-        
-        return [];
-      })
-      .flat();
-    
-    return skills;
-  };
-  
-  // Add a function to extract achievements data from the CV
-  const extractAchievementsData = (cvText: string) => {
-    // Split CV into sections
-    const sections = cvText.split('\n\n').filter(section => section.trim().length > 0);
-    
-    // Find the achievements section
-    const achievementsSection = sections.find(section => 
-      section.toLowerCase().includes('achievements') || 
-      section.toLowerCase().includes('accomplishments') ||
-      section.toLowerCase().includes('highlights')
-    );
-    
-    if (!achievementsSection) return null;
-    
-    // Extract achievements from bullet points
-    const achievements = achievementsSection
-      .split('\n')
-      .filter(line => line.trim().length > 0)
-      .map(line => {
-        const cleanLine = line.replace(/^[\s•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+/, '').trim();
-        return cleanLine.length > 0 ? cleanLine : null;
-      })
-      .filter(achievement => achievement !== null);
-    
-    return achievements;
   };
   
   return (
