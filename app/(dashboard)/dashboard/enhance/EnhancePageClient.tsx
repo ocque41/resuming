@@ -26,21 +26,7 @@ import {
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { Check } from "lucide-react";
-
-// Define the Document interface properly
-interface Document {
-  id: string;
-  fileName: string;
-  createdAt: Date;
-  content?: string;
-  filePath?: string;
-  type?: string;
-  size?: number;
-}
-
-interface EnhancePageClientProps {
-  documentsData: Document[];
-}
+import { Document } from '@/types/documents';
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -49,6 +35,10 @@ interface Message {
 
 // Update the eye state type to match the values we're using
 type EyeState = 'normal' | 'blink' | 'excited' | 'thinking' | 'happy' | 'surprised' | 'blinking' | 'looking-left' | 'looking-right' | 'looking-up' | 'looking-down';
+
+interface EnhancePageClientProps {
+  documentsData: Array<Omit<Document, 'createdAt'> & { createdAt: string }>;
+}
 
 export default function EnhancePageClient({ documentsData }: EnhancePageClientProps) {
   const [inputMessage, setInputMessage] = useState<string>("");
@@ -61,11 +51,12 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   const [eyeState, setEyeState] = useState<EyeState>('normal');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [documents, setDocuments] = useState(documentsData.map(doc => ({
-    id: doc.id,
-    fileName: doc.fileName,
-    createdAt: new Date(doc.createdAt)
-  })));
+  const [documents, setDocuments] = useState<Document[]>(() => 
+    documentsData.map(doc => ({
+      ...doc,
+      createdAt: new Date(doc.createdAt) // Convert string to Date
+    }))
+  );
   const { toast } = useToast();
   const [mode, setMode] = useState<'create' | 'edit'>('create');
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -159,7 +150,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   };
   
   const handleSelectDocument = (id: string, fileName: string) => {
-    setSelectedDocument(documentsData.find(doc => doc.id === id) || null);
+    setSelectedDocument(documents.find(doc => doc.id === id) || null);
     setSelectedDocumentId(id);
     
     // Show happy animation when selecting document
@@ -283,7 +274,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   
   // Update the document selection handler
   const handleDocumentSelect = (documentId: string) => {
-    const document = documentsData.find(doc => doc.id === documentId);
+    const document = documents.find(doc => doc.id === documentId);
     if (document) {
       setSelectedDocument(document);
       setSelectedDocumentId(document.id);

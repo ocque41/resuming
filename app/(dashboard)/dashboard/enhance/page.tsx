@@ -18,6 +18,21 @@ interface Document {
   createdAt: Date;
 }
 
+async function getDocuments() {
+  const res = await fetch('/api/documents');
+  const data = await res.json();
+  
+  return data.map((doc: any) => ({
+    id: doc.id.toString(),
+    fileName: doc.fileName,
+    createdAt: doc.createdAt, // Keep as string
+    filePath: doc.filePath || undefined,
+    content: doc.content || undefined,
+    type: doc.type || undefined,
+    size: doc.size || undefined
+  }));
+}
+
 export default async function DocumentEditorPage() {
   try {
     const user = await getUser();
