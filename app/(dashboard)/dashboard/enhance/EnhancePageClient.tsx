@@ -60,59 +60,56 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   const { toast } = useToast();
   const [mode, setMode] = useState<'create' | 'edit'>('create');
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const characterRef = useRef<HTMLDivElement>(null);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   
   // Scroll to bottom of messages when new ones are added
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
   
-  // Handle mouse movement for eye tracking
+  // Enhanced eye movement
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (logoRef.current) {
-        const logoRect = logoRef.current.getBoundingClientRect();
-        const logoCenterX = logoRect.left + logoRect.width / 2;
-        const logoCenterY = logoRect.top + logoRect.height / 2;
+      if (characterRef.current && eyeState === 'normal') {
+        const rect = characterRef.current.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
         
-        // Calculate distance from center (normalized)
-        const distX = (e.clientX - logoCenterX) / (window.innerWidth / 2);
-        const distY = (e.clientY - logoCenterY) / (window.innerHeight / 2);
+        // Calculate distance from center
+        const deltaX = e.clientX - centerX;
+        const deltaY = e.clientY - centerY;
         
-        // Limit movement range
-        const limitedX = Math.max(-0.5, Math.min(0.5, distX * 0.5));
-        const limitedY = Math.max(-0.5, Math.min(0.5, distY * 0.5));
+        // Limit eye movement range
+        const maxMove = 3;
+        const moveX = Math.min(Math.max(deltaX / 100, -maxMove), maxMove);
+        const moveY = Math.min(Math.max(deltaY / 100, -maxMove), maxMove);
         
-        setEyePosition({ x: limitedX, y: limitedY });
+        // Smooth transition
+        setEyePosition({
+          x: moveX,
+          y: moveY
+        });
       }
     };
-    
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, []);
-  
-  // Random animations at intervals
-  useEffect(() => {
-    const animationStates: EyeState[] = [
-      'blink', 'excited', 'thinking', 'happy'
-    ];
-    
-    const randomAnimation = () => {
-      const randomState = animationStates[Math.floor(Math.random() * animationStates.length)];
-      setEyeState(randomState);
-      
-      // Reset to normal after animation
-      setTimeout(() => {
-        setEyeState('normal');
-      }, randomState === 'blink' ? 200 : 1000);
+
+    // Random eye movement when mouse is not moving
+    const randomEyeMovement = () => {
+      if (eyeState === 'normal') {
+        const randomX = (Math.random() - 0.5) * 4;
+        const randomY = (Math.random() - 0.5) * 4;
+        setEyePosition({ x: randomX, y: randomY });
+      }
     };
-    
-    // Trigger random animations periodically
-    const animationInterval = setInterval(() => {
-      randomAnimation();
-    }, 5000);
-    
-    return () => clearInterval(animationInterval);
-  }, []);
+
+    window.addEventListener('mousemove', handleMouseMove);
+    const interval = setInterval(randomEyeMovement, 3000);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      clearInterval(interval);
+    };
+  }, [eyeState]);
   
   // Initialize with the correct mode based on whether a document is selected
   useEffect(() => {
@@ -164,183 +161,58 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
     setSelectedDocumentId(null);
   };
   
-  const handleFileUpload = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  };
-  
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
-    // Show thinking animation during upload
-    setEyeState('thinking');
-    
-    // Check file size (10MB max)
-    const MAX_FILE_SIZE = 10 * 1024 * 1024;
-    if (file.size > MAX_FILE_SIZE) {
-      toast({
-        title: "File too large",
-        description: "Maximum file size is 10MB",
-        variant: "destructive",
-      });
-      setEyeState('normal');
-      return;
-    }
-    
-    // Check file type
-    const SUPPORTED_TYPES = [
-      'application/pdf',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/msword',
-      'text/plain',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      'application/vnd.ms-powerpoint',
-      'image/jpeg',
-      'image/png'
-    ];
-    
-    if (!SUPPORTED_TYPES.includes(file.type)) {
-      toast({
-        title: "Unsupported file type",
-        description: "Please upload a PDF, Word, Excel, PowerPoint, text file, or image",
-        variant: "destructive",
-      });
-      setEyeState('normal');
-      return;
-    }
-    
+
     try {
       setIsUploading(true);
-      
-      const formData = new FormData();
-      formData.append('file', file);
-      
-      const response = await fetch('/api/document/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to upload document');
-      }
-      
-      const data = await response.json();
-      
-      // Add the new document to the list
-      const newDocument = {
-        id: data.fileId,
-        fileName: data.fileName,
+      setEyeState('thinking');
+
+      // Create new document object
+      const newDoc: Document = {
+        id: Date.now().toString(), // Temporary ID
+        fileName: file.name,
         createdAt: new Date(),
+        size: file.size,
+        type: file.type
       };
+
+      // Add to documents list immediately for UI feedback
+      setDocuments(prev => [newDoc, ...prev]);
       
-      setDocuments(prev => [newDocument, ...prev]);
-      
-      // Auto-select the uploaded document
-      setSelectedDocument(newDocument);
-      setSelectedDocumentId(data.fileId);
-      
-      toast({
-        title: "Document uploaded",
-        description: `${data.fileName} has been uploaded successfully`,
-      });
-      
-      // Show happy animation on success
+      // Select the new document
+      setSelectedDocument(newDoc);
+      setMode('edit');
+
+      // Reset states
+      setIsUploading(false);
       setEyeState('happy');
       setTimeout(() => setEyeState('normal'), 1000);
-      
-    } catch (error) {
-      console.error('Error uploading document:', error);
-      toast({
-        title: "Upload failed",
-        description: error instanceof Error ? error.message : "Failed to upload document",
-        variant: "destructive",
-      });
-      
-      // Show stressed animation on error
-      setEyeState('thinking');
-      setTimeout(() => setEyeState('normal'), 1000);
-    } finally {
-      setIsUploading(false);
+
+      // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
+    } catch (error) {
+      console.error('Upload error:', error);
+      setIsUploading(false);
+      setEyeState('normal');
     }
   };
   
-  // Update the document selection handler
-  const handleDocumentSelect = (documentId: string) => {
-    const document = documents.find(doc => doc.id === documentId);
-    if (document) {
-      setSelectedDocument(document);
-      setSelectedDocumentId(document.id);
-      setMode('edit');
-      
-      // Add a message about the selected document
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'system',
-          content: `Selected document: ${document.fileName}`
-        },
-        {
-          role: 'assistant',
-          content: `I've opened "${document.fileName}". What would you like to do with this document?`
-        }
-      ]);
-      
-      // Set happy eye state
-      setEyeState('happy');
-      setTimeout(() => setEyeState('normal'), 1000);
-      
-      // Scroll to bottom
-      setTimeout(() => {
-        if (messagesEndRef.current) {
-          messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-        }
-      }, 100);
-    }
-  };
-  
-  // Update the document deselection handler
-  const handleDocumentDeselect = (e: React.MouseEvent) => {
-    // Stop the event from propagating to the parent (which would select the document again)
+  // Prevent dropdown from closing when selecting/deselecting
+  const handleDocumentSelect = (doc: Document, e: React.MouseEvent) => {
     e.stopPropagation();
-    
-    // Only proceed if a document is actually selected
-    if (!selectedDocument) return;
-    
+    setSelectedDocument(doc);
+    setMode('edit');
+    // Don't close dropdown automatically
+  };
+
+  const handleDocumentDeselect = (e: React.MouseEvent) => {
+    e.stopPropagation();
     setSelectedDocument(null);
-    setSelectedDocumentId(null);
     setMode('create');
-    
-    // Add a message about deselecting the document
-    setMessages(prev => [
-      ...prev,
-      {
-        role: 'system',
-        content: `Document deselected. You are now in create mode.`
-      },
-      {
-        role: 'assistant',
-        content: `I've closed the document. You're now in create mode. What would you like to create?`
-      }
-    ]);
-    
-    // Set eye state
-    setEyeState('excited');
-    setTimeout(() => setEyeState('normal'), 1000);
-    
-    // Scroll to bottom
-    setTimeout(() => {
-      if (messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-      }
-    }, 100);
   };
   
   return (
@@ -353,52 +225,62 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
             className="w-16 h-16 bg-[#333333] rounded-full flex items-center justify-center"
           >
             <div className="relative w-full h-full flex items-center justify-center">
-              {eyeState === 'normal' && (
-                <>
-                  <div 
-                    className="absolute w-2.5 h-2.5 bg-white rounded-full"
-                    style={{ 
-                      left: `calc(50% - 5px + ${eyePosition.x * 4}px)`,
-                      top: `calc(50% + ${eyePosition.y * 4}px)`
-                    }}
-                  />
-                  <div 
-                    className="absolute w-2.5 h-2.5 bg-white rounded-full"
-                    style={{ 
-                      left: `calc(50% + 5px + ${eyePosition.x * 4}px)`,
-                      top: `calc(50% + ${eyePosition.y * 4}px)`
-                    }}
-                  />
-                </>
-              )}
-              
-              {eyeState === 'blink' && (
-                <>
-                  <div className="absolute w-2.5 h-0.5 bg-white rounded-full" style={{ left: 'calc(50% - 5px)', top: '50%' }} />
-                  <div className="absolute w-2.5 h-0.5 bg-white rounded-full" style={{ left: 'calc(50% + 5px)', top: '50%' }} />
-                </>
-              )}
-              
-              {eyeState === 'excited' && (
-                <>
-                  <div className="absolute w-2.5 h-2.5 bg-white rounded-full" style={{ left: 'calc(50% - 5px)', top: 'calc(50% - 2px)' }} />
-                  <div className="absolute w-2.5 h-2.5 bg-white rounded-full" style={{ left: 'calc(50% + 5px)', top: 'calc(50% - 2px)' }} />
-                </>
-              )}
-              
-              {eyeState === 'thinking' && (
-                <>
-                  <div className="absolute w-2.5 h-2.5 bg-white rounded-full" style={{ left: 'calc(50% - 5px)', top: 'calc(50% + 2px)' }} />
-                  <div className="absolute w-2 h-0.5 bg-white rounded-full" style={{ left: 'calc(50% + 5px)', top: '50%', transform: 'rotate(20deg)' }} />
-                </>
-              )}
-              
-              {eyeState === 'happy' && (
-                <>
-                  <div className="absolute w-2.5 h-1 bg-white rounded-full" style={{ left: 'calc(50% - 5px)', top: 'calc(50% - 1px)', transform: 'rotate(-10deg)' }} />
-                  <div className="absolute w-2.5 h-1 bg-white rounded-full" style={{ left: 'calc(50% + 5px)', top: 'calc(50% - 1px)', transform: 'rotate(10deg)' }} />
-                </>
-              )}
+              <div ref={characterRef} className="relative">
+                <div className="eyes-container">
+                  <div className="eye" 
+                    style={{
+                      transform: `translate(${eyePosition.x}px, ${eyePosition.y}px)`,
+                      transition: 'transform 0.3s ease-out'
+                    }}>
+                    {eyeState === 'normal' && (
+                      <>
+                        <div 
+                          className="absolute w-2.5 h-2.5 bg-white rounded-full"
+                          style={{ 
+                            left: `calc(50% - 5px + ${eyePosition.x * 4}px)`,
+                            top: `calc(50% + ${eyePosition.y * 4}px)`
+                          }}
+                        />
+                        <div 
+                          className="absolute w-2.5 h-2.5 bg-white rounded-full"
+                          style={{ 
+                            left: `calc(50% + 5px + ${eyePosition.x * 4}px)`,
+                            top: `calc(50% + ${eyePosition.y * 4}px)`
+                          }}
+                        />
+                      </>
+                    )}
+                    
+                    {eyeState === 'blink' && (
+                      <>
+                        <div className="absolute w-2.5 h-0.5 bg-white rounded-full" style={{ left: 'calc(50% - 5px)', top: '50%' }} />
+                        <div className="absolute w-2.5 h-0.5 bg-white rounded-full" style={{ left: 'calc(50% + 5px)', top: '50%' }} />
+                      </>
+                    )}
+                    
+                    {eyeState === 'excited' && (
+                      <>
+                        <div className="absolute w-2.5 h-2.5 bg-white rounded-full" style={{ left: 'calc(50% - 5px)', top: 'calc(50% - 2px)' }} />
+                        <div className="absolute w-2.5 h-2.5 bg-white rounded-full" style={{ left: 'calc(50% + 5px)', top: 'calc(50% - 2px)' }} />
+                      </>
+                    )}
+                    
+                    {eyeState === 'thinking' && (
+                      <>
+                        <div className="absolute w-2.5 h-2.5 bg-white rounded-full" style={{ left: 'calc(50% - 5px)', top: 'calc(50% + 2px)' }} />
+                        <div className="absolute w-2 h-0.5 bg-white rounded-full" style={{ left: 'calc(50% + 5px)', top: '50%', transform: 'rotate(20deg)' }} />
+                      </>
+                    )}
+                    
+                    {eyeState === 'happy' && (
+                      <>
+                        <div className="absolute w-2.5 h-1 bg-white rounded-full" style={{ left: 'calc(50% - 5px)', top: 'calc(50% - 1px)', transform: 'rotate(-10deg)' }} />
+                        <div className="absolute w-2.5 h-1 bg-white rounded-full" style={{ left: 'calc(50% + 5px)', top: 'calc(50% - 1px)', transform: 'rotate(10deg)' }} />
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -427,90 +309,63 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
             
             <div className="flex items-center mt-3">
               {/* Left Buttons */}
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  accept=".pdf,.doc,.docx,.txt"
+                />
                 <Button
-                  variant="ghost"
-                  className="bg-[#222222] hover:bg-[#333333] text-white rounded-full p-1 h-8 w-8 md:h-9 md:w-9 flex items-center justify-center"
-                  aria-label="Attach file"
-                  onClick={handleFileUpload}
+                  onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading}
+                  className="bg-[#B4916C] hover:bg-[#A3815C]"
                 >
-                  {isUploading ? (
-                    <div className="h-3 w-3 md:h-4 md:w-4 border-2 border-t-transparent border-white rounded-full animate-spin" />
-                  ) : (
-                    <Paperclip className="h-3 w-3 md:h-4 md:w-4" />
-                  )}
+                  <Paperclip className="h-4 w-4 mr-2" />
+                  {isUploading ? 'Uploading...' : 'Upload'}
                 </Button>
               </div>
               
               {/* Document Dropdown (moved to the right) */}
               <div className="ml-auto">
-                <Popover>
+                <Popover open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
                       role="combobox"
-                      className={`w-full justify-between bg-[#1D1D1D] border-[#333] text-white hover:bg-[#2D2D2D] hover:text-white ${
-                        selectedDocument ? "bg-[#B4916C] hover:bg-[#A3815C] text-white" : "bg-[#222222] hover:bg-[#333333] text-white"
-                      }`}
+                      aria-expanded={isDropdownOpen}
+                      className="w-full justify-between"
                     >
-                      {selectedDocument ? (
-                        <div className="flex items-center justify-between w-full">
-                          <span className="truncate">{selectedDocument.fileName}</span>
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDocumentDeselect(e);
-                            }}
-                            className="ml-2 p-1 rounded-full hover:bg-[#333] transition-colors"
-                            aria-label="Deselect document"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <span>Documents</span>
-                      )}
+                      {selectedDocument ? selectedDocument.fileName : "Select a document..."}
                       <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-full p-0 bg-[#1D1D1D] border-[#333] text-white">
-                    <Command>
-                      <CommandInput placeholder="Search documents..." className="bg-[#1D1D1D] text-white" />
-                      <CommandEmpty>No documents found.</CommandEmpty>
-                      <CommandGroup>
-                        {documents.map((document) => (
-                          <CommandItem
-                            key={document.id}
-                            value={document.id}
-                            onSelect={() => handleDocumentSelect(document.id)}
-                            className="cursor-pointer hover:bg-[#2D2D2D]"
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                selectedDocument === document ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            <span className="truncate">{document.fileName}</span>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </Command>
+                  <PopoverContent className="w-full p-0">
+                    <div className="max-h-[300px] overflow-y-auto">
+                      {documents.map((doc) => (
+                        <div
+                          key={doc.id}
+                          className="flex items-center justify-between px-4 py-2 hover:bg-[#1D1D1D] cursor-pointer"
+                          onClick={(e) => handleDocumentSelect(doc, e)}
+                        >
+                          <span>{doc.fileName}</span>
+                          {selectedDocument?.id === doc.id && (
+                            <button
+                              onClick={handleDocumentDeselect}
+                              className="p-1 hover:bg-[#2D2D2D] rounded-full"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </PopoverContent>
                 </Popover>
               </div>
             </div>
           </div>
-          
-          {/* File input (hidden) */}
-          <input
-            type="file"
-            ref={fileInputRef}
-            className="hidden"
-            onChange={handleFileChange}
-            accept=".pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,.rtf,.jpg,.jpeg,.png"
-          />
           
           {/* Messages area */}
           {messages.length > 0 && (
