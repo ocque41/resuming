@@ -4,9 +4,9 @@ import React, { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AnalyzeCVCard from "@/components/AnalyzeCVCard.client";
 import EnhancedOptimizeCVCard from "@/components/EnhancedOptimizeCVCard.client";
+import SpecificOptimizeCVCard from "@/components/SpecificOptimizeCVCard.client";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import SpecificOptimizeCVCard from "@/components/SpecificOptimizeCVCard.client";
 
 // Toast functionality without using the use-toast hook
 function showToast(message: { title: string; description: string; duration: number }) {
@@ -300,6 +300,7 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
   
   // Handle tab changes
   const handleTabChange = (value: string) => {
+    // Remove the specific tab restriction
     setActiveStep(value as "general" | "specific");
     setError(null);
   };
@@ -408,7 +409,7 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
       <Tabs defaultValue="general" onValueChange={handleTabChange} value={activeStep}>
         <TabsList className="w-full grid grid-cols-2">
           <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="specific">Specific</TabsTrigger>
+          <TabsTrigger value="specific">Job-Specific</TabsTrigger>
         </TabsList>
         
         <TabsContent value="general" className="space-y-4 mt-4">
@@ -429,18 +430,12 @@ export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps)
             <div>
               <h2 className="text-2xl font-bold">Job-Specific Optimization</h2>
               <p className="text-muted-foreground">
-                Optimize your CV for a specific job by pasting the job description. Our AI will tailor your CV to match the job requirements.
+                Optimize your CV for a specific job by providing the job description.
               </p>
             </div>
           </div>
           
-          <AnalyzeCVCard onAnalysisComplete={handleAnalysisComplete} cvs={cvs} />
-          
-          {selectedCVId && (
-            <div className="mt-4">
-              <SpecificOptimizeCVCard selectedCVId={selectedCVId} selectedCVName={selectedCVName || undefined} />
-            </div>
-          )}
+          <SpecificOptimizeCVCard cvs={cvs} />
         </TabsContent>
       </Tabs>
     </div>

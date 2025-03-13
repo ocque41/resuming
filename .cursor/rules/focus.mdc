@@ -6,5 +6,7 @@ Optimize the content and design of the optimized cv result document.
 (all flags --DONE means they are fixed or implemented and we shall no worry about anymore)
 
 
-- Improve the content on the result that the specific/optimize cv document provides
-    currently the sections are well implemented but the contents of the sections just say Not specified. 
+- generate the specific tab system, this system is very similar to the general except the cv will be optimized based on the copyed and pasted the user desired job description and the AI adjusting the CV keywords and make it the perfect fit for the job
+
+this system is a completelly new functionality that does not has to do anything with the general for that reason do not edit the general optimize cv to match both general and specific, create a new function for the specific with a lookalike functionality to the general but DO NOT conflict the two they are separate functions and one serves a completelly different purpose to the other
+
