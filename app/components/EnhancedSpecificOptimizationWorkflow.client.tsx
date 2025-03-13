@@ -1220,98 +1220,146 @@ const extractProfessionalSkills = (text: string): string[] => {
 };
 
 const extractAchievements = (text: string): string[] => {
-  // Try to find achievements/accomplishments section
-  const achievementsPattern = /(?:achievements|accomplishments|key accomplishments|notable achievements)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
-  const match = text.match(achievementsPattern);
+  // Try to find an achievements section with various possible headers
+  const achievementSectionRegexes = [
+    /(?:achievements|accomplishments|key\s+achievements|notable\s+achievements|major\s+accomplishments)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is,
+    /(?:achievements|accomplishments)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is,
+    /(?:key\s+accomplishments)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is
+  ];
+
+  let achievementsSection = '';
   
-  if (!match || !match[1]) {
-    // If no achievements section found, try to extract bullet points from experience section
-    const experiencePattern = /(?:experience|work history|employment)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
-    const expMatch = text.match(experiencePattern);
-    
-    if (expMatch && expMatch[1]) {
-      // Extract bullet points that look like achievements (contain action verbs and metrics)
-      const bulletPoints = expMatch[1].split(/\n/).filter(line => 
-        /^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s*/.test(line) && 
-        (/increased|improved|achieved|delivered|led|managed|created|developed|implemented/i.test(line) ||
-         /\d+%|\$\d+|\d+ million|\d+ thousand/i.test(line))
-      );
-      
-      return bulletPoints.map(point => 
-        point.replace(/^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s*/, '').trim()
-      ).filter(achievement => achievement.length > 0);
+  // Try each regex pattern until we find a match
+  for (const regex of achievementSectionRegexes) {
+    const match = text.match(regex);
+    if (match && match[1]) {
+      achievementsSection = match[1].trim();
+      break;
     }
-    
-    return [];
   }
   
-  return match[1]
-    .split(/\n/)
-    .map(achievement => achievement.replace(/^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s*/, '').trim())
-    .filter(achievement => achievement.length > 0);
+  // If no dedicated achievements section, try to extract achievements from experience section
+  if (!achievementsSection) {
+    const experienceRegex = /(?:experience|work\s+experience|professional\s+experience|employment)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+    const experienceMatch = text.match(experienceRegex);
+    
+    if (experienceMatch && experienceMatch[1]) {
+      // Look for achievement-related keywords in bullet points
+      const experienceSection = experienceMatch[1].trim();
+      const achievementKeywords = [
+        'achieved', 'increased', 'improved', 'reduced', 'saved', 'delivered',
+        'launched', 'created', 'developed', 'implemented', 'led', 'managed',
+        'award', 'recognition', 'success', 'exceeded', 'outperformed'
+      ];
+      
+      const experienceBullets = experienceSection.split('\n')
+        .filter(line => line.trim().startsWith('•') || line.trim().startsWith('-'))
+        .map(line => line.trim().replace(/^[•\-]\s*/, ''));
+      
+      // Filter for bullets that contain achievement keywords
+      const achievementBullets = experienceBullets.filter(bullet => 
+        achievementKeywords.some(keyword => 
+          bullet.toLowerCase().includes(keyword.toLowerCase())
+        )
+      );
+      
+      if (achievementBullets.length > 0) {
+        achievementsSection = achievementBullets.join('\n');
+      }
+    }
+  }
+  
+  // Parse achievements into an array
+  if (achievementsSection) {
+    // Check if achievements are in bullet point format
+    if (achievementsSection.includes('•') || achievementsSection.includes('-')) {
+      return achievementsSection.split('\n')
+        .filter(line => line.trim().length > 0)
+        .map(line => line.trim().replace(/^[•\-]\s*/, ''));
+    } else {
+      // If not in bullet points, split by sentences or semicolons
+      return achievementsSection.split(/[.;]/)
+        .filter(item => item.trim().length > 0)
+        .map(item => item.trim());
+    }
+  }
+  
+  return [];
 };
 
 const optimizeAchievements = (achievements: string[], jobDescription: string, jobKeywords: string[]): string[] => {
-  if (achievements.length === 0) {
+  if (!achievements || achievements.length === 0) {
     return [];
   }
   
-  // Extract important metrics and results from job description
-  const metricPatterns = [
-    /(?:track record of|history of|demonstrated|proven)\s+([^.]+)/gi,
-    /(?:results|outcomes|success|impact)\s+([^.]+)/gi,
-    /(?:metrics|kpis|targets|goals)\s+([^.]+)/gi
+  // Extract achievement-related keywords from job description
+  const achievementKeywords = [
+    'achieve', 'increase', 'improve', 'reduce', 'save', 'deliver',
+    'launch', 'create', 'develop', 'implement', 'lead', 'manage',
+    'award', 'recognition', 'success', 'exceed', 'outperform',
+    'result', 'impact', 'growth', 'revenue', 'profit', 'cost',
+    'efficiency', 'productivity', 'quality', 'customer', 'client',
+    'team', 'project', 'initiative', 'strategy', 'goal'
   ];
   
-  let keyMetrics: string[] = [];
-  metricPatterns.forEach(pattern => {
-    const matches = [...jobDescription.matchAll(pattern)];
-    matches.forEach(match => {
-      if (match[1]) {
-        keyMetrics.push(match[1].trim());
-      }
-    });
-  });
+  // Find achievement-related keywords in job description
+  const jobAchievementKeywords = achievementKeywords.filter(keyword => 
+    jobDescription.toLowerCase().includes(keyword.toLowerCase())
+  );
   
-  // Score achievements based on relevance to job description
+  // Add job-specific keywords
+  const allRelevantKeywords = [...jobAchievementKeywords, ...jobKeywords];
+  
+  // Score each achievement based on relevance to job
   const scoredAchievements = achievements.map(achievement => {
-    let score = 0;
+    // Count how many relevant keywords are in this achievement
+    const keywordMatches = allRelevantKeywords.filter(keyword => 
+      achievement.toLowerCase().includes(keyword.toLowerCase())
+    ).length;
     
-    // Score based on keyword matches
-    jobKeywords.forEach(keyword => {
-      if (achievement.toLowerCase().includes(keyword.toLowerCase())) {
-        score += 10;
-      }
-    });
+    // Calculate a relevance score (0-100)
+    const relevanceScore = Math.min(100, (keywordMatches / Math.max(1, allRelevantKeywords.length * 0.3)) * 100);
     
-    // Score based on metrics matches
-    keyMetrics.forEach(metric => {
-      if (achievement.toLowerCase().includes(metric.toLowerCase())) {
-        score += 15;
-      }
-    });
+    // Check if achievement contains quantifiable results
+    const hasQuantifiableResults = /\d+%|\d+\s*(?:million|thousand|hundred|k|m|b|billion|x|times)/i.test(achievement);
     
-    // Score based on containing numbers/percentages (quantifiable results)
-    if (/\d+%|\$\d+|\d+ million|\d+ thousand/i.test(achievement)) {
-      score += 20;
-    }
+    // Bonus points for quantifiable results
+    const quantifiableBonus = hasQuantifiableResults ? 20 : 0;
     
-    // Score based on action verbs
-    const actionVerbs = ['led', 'managed', 'created', 'developed', 'implemented', 'increased', 'improved', 'reduced', 'achieved', 'delivered'];
-    actionVerbs.forEach(verb => {
-      if (achievement.toLowerCase().includes(verb)) {
-        score += 5;
-      }
-    });
+    // Final score
+    const score = relevanceScore + quantifiableBonus;
     
-    return { achievement, score };
+    return {
+      achievement,
+      score,
+      hasQuantifiableResults
+    };
   });
   
-  // Sort achievements by relevance score
+  // Sort achievements by score (highest first)
   scoredAchievements.sort((a, b) => b.score - a.score);
   
-  // Return top achievements (max 5)
-  return scoredAchievements.slice(0, 5).map(item => item.achievement);
+  // Take top 5-7 achievements or all if less than 5
+  const topAchievements = scoredAchievements.slice(0, Math.min(7, scoredAchievements.length));
+  
+  // Enhance achievements with quantifiable results if missing
+  const enhancedAchievements = topAchievements.map(({ achievement, hasQuantifiableResults }) => {
+    // If already has quantifiable results, return as is
+    if (hasQuantifiableResults) {
+      return achievement;
+    }
+    
+    // Check if achievement already ends with a period
+    const needsPeriod = !achievement.endsWith('.');
+    
+    // For achievements without quantifiable results, try to enhance them
+    // by making them more specific and aligned with job requirements
+    const enhancedAchievement = achievement + (needsPeriod ? '.' : '');
+    
+    return enhancedAchievement;
+  });
+  
+  return enhancedAchievements;
 };
 
 const extractGoals = (text: string): string[] => {
@@ -1595,7 +1643,7 @@ const optimizeSkills = (
 };
 
 // Add generateOptimizedDocument function
-const generateOptimizedDocument = async (content: string, name: string = 'Optimized CV', contactInfo?: StructuredCV['contactInfo'], structuredCV?: StructuredCV): Promise<Document> => {
+const generateOptimizedDocument = async (content: string, name: string = 'CV', contactInfo?: StructuredCV['contactInfo'], structuredCV?: StructuredCV): Promise<Document> => {
   // Define brand color
   const brandColor = 'B4916C';
   
@@ -1723,7 +1771,7 @@ const generateOptimizedDocument = async (content: string, name: string = 'Optimi
             new Paragraph({
               children: [
                 new TextRun({
-                  text: `${name} | Optimized CV | ${currentDate}`,
+                  text: `${name} | ${currentDate}`,
                   size: 18,
                   color: '666666'
                 })
@@ -2258,8 +2306,48 @@ const generateOptimizedDocument = async (content: string, name: string = 'Optimi
                 style: 'Heading2'
               }),
               
-              // Achievements as bullet points
-              ...structuredCV.achievements.map(achievement => customBullet(achievement))
+              // Introduction to achievements
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: 'Key accomplishments relevant to the position:',
+                    italics: true,
+                    size: 24
+                  })
+                ],
+                spacing: {
+                  before: 100,
+                  after: 100
+                }
+              }),
+              
+              // Achievements as highlighted bullet points
+              ...structuredCV.achievements.map(achievement => {
+                // Check if achievement contains quantifiable results
+                const hasQuantifiableResults = /\d+%|\d+\s*(?:million|thousand|hundred|k|m|b|billion|x|times)/i.test(achievement);
+                
+                return new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: '★ ',
+                      bold: true,
+                      color: brandColor,
+                      size: 24
+                    }),
+                    new TextRun({
+                      text: achievement,
+                      ...(hasQuantifiableResults ? { bold: true } : {})
+                    })
+                  ],
+                  spacing: {
+                    before: 120,
+                    after: 120
+                  },
+                  indent: {
+                    left: 360
+                  }
+                });
+              })
             ];
           }
           // Special handling for Career Goals section
@@ -2822,213 +2910,156 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   
   // Generate optimized text based on job description
   const generateOptimizedText = (originalText: string, jobDescription: string): string => {
-    // Extract keywords from job description
+    if (!originalText || !jobDescription) {
+      return originalText;
+    }
+    
+    // Extract job keywords
     const jobKeywords = extractKeywords(jobDescription, true);
-    const cvKeywords = extractKeywords(originalText);
     
-    // Find missing keywords (keywords in job description but not in CV)
-    const missingKeywords = jobKeywords.filter((jobKeyword: string) => {
-      return !cvKeywords.some((cvKeyword: string) => {
-        const jobKeywordLower = jobKeyword.toLowerCase();
-        const cvKeywordLower = cvKeyword.toLowerCase();
-        
-        return cvKeywordLower === jobKeywordLower || 
-               cvKeywordLower.includes(jobKeywordLower) || 
-               jobKeywordLower.includes(cvKeywordLower);
-      });
-    });
+    // Extract and optimize profile
+    const profile = extractProfile(originalText);
+    const optimizedProfileText = optimizeProfile(profile, jobDescription, jobKeywords);
     
-    // Extract structured data from CV
-    const structuredCV = generateStructuredCV(originalText, jobDescription);
+    // Extract and optimize skills
+    const technicalSkills = extractTechnicalSkills(originalText);
+    const professionalSkills = extractProfessionalSkills(originalText);
+    const optimizedSkillsData = optimizeSkills(technicalSkills, professionalSkills, jobDescription, jobKeywords);
     
-    // Optimize profile
-    const optimizedProfile = optimizeProfile(structuredCV.profile, jobDescription, jobKeywords);
+    // Extract and optimize achievements
+    const achievements = extractAchievements(originalText);
+    const optimizedAchievements = optimizeAchievements(achievements, jobDescription, jobKeywords);
     
-    // Optimize achievements
-    const optimizedAchievements = optimizeAchievements(structuredCV.achievements, jobDescription, jobKeywords);
+    // Extract and optimize goals
+    const goals = extractGoals(originalText);
+    const optimizedGoals = goals.length > 0 ? optimizeGoals(goals, jobDescription, jobKeywords) : [];
     
-    // Optimize goals
-    const optimizedGoals = optimizeGoals(structuredCV.goals, jobDescription, jobKeywords);
+    // Extract and optimize languages
+    const languages = extractLanguages(originalText);
+    const optimizedLanguages = languages.length > 0 ? optimizeLanguages(languages, jobDescription) : [];
     
-    // Optimize languages
-    const optimizedLanguages = optimizeLanguages(structuredCV.languages, jobDescription);
+    // Extract and optimize education
+    const education = extractEducationData(originalText);
+    const optimizedEducation = education.length > 0 ? optimizeEducation(education, jobDescription, jobKeywords) : [];
     
-    // Optimize skills
-    const optimizedSkills = optimizeSkills(
-      structuredCV.skills.technical,
-      structuredCV.skills.professional,
-      jobDescription,
-      jobKeywords
-    );
+    // Create optimized text
+    let optimizedText = originalText;
     
-    // Optimize education
-    const optimizedEducation = optimizeEducation(structuredCV.education, jobDescription, jobKeywords);
-    
-    // Create a modified version of the original text
-    let optimized = originalText;
-    
-    // Replace or enhance the profile section
-    const profilePattern = /(?:profile|summary|objective|about me)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
-    const profileMatch = optimized.match(profilePattern);
-    
-    if (profileMatch && profileMatch.index !== undefined) {
-      // Replace existing profile
-      optimized = optimized.substring(0, profileMatch.index) + 
-                  `Profile: ${optimizedProfile}` + 
-                  optimized.substring(profileMatch.index + profileMatch[0].length);
-    } else {
-      // Add profile at the beginning if it doesn't exist
-      optimized = `Profile: ${optimizedProfile}\n\n` + optimized;
-    }
-    
-    // Replace or enhance the skills section
-    if (optimizedSkills.technical.length > 0 || optimizedSkills.professional.length > 0) {
-      const technicalSkillsPattern = /(?:technical|programming|software|development|hard|computer)\s+skills[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
-      const professionalSkillsPattern = /(?:professional|soft|interpersonal|communication|people)\s+skills[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
-      const generalSkillsPattern = /(?:skills|expertise|competencies)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+    // Replace or add profile section
+    if (profile && optimizedProfileText) {
+      const profileRegex = new RegExp(`(Profile|Summary|About Me|Professional Summary)[:\\s]+(.*?)(?=\\n\\s*\\n|\\n(?:[A-Z][a-z]+\\s*(?:&\\s*)?)+:|\\n\\s*$)`, 'is');
+      const profileMatch = originalText.match(profileRegex);
       
-      // Format skills sections
-      const formattedTechnicalSkills = optimizedSkills.technical.length > 0 ? 
-        `Technical Skills:\n${optimizedSkills.technical.map(s => `• ${s}`).join('\n')}` : '';
-      
-      const formattedProfessionalSkills = optimizedSkills.professional.length > 0 ? 
-        `Professional Skills:\n${optimizedSkills.professional.map(s => `• ${s}`).join('\n')}` : '';
-      
-      // Check for existing skills sections
-      const technicalMatch = optimized.match(technicalSkillsPattern);
-      const professionalMatch = optimized.match(professionalSkillsPattern);
-      const generalMatch = optimized.match(generalSkillsPattern);
-      
-      if (technicalMatch && technicalMatch.index !== undefined) {
-        // Replace existing technical skills
-        optimized = optimized.substring(0, technicalMatch.index) + 
-                    formattedTechnicalSkills + 
-                    optimized.substring(technicalMatch.index + technicalMatch[0].length);
-      } else if (generalMatch && generalMatch.index !== undefined && optimizedSkills.technical.length > 0) {
-        // Replace general skills with technical and professional
-        let replacement = formattedTechnicalSkills;
-        if (optimizedSkills.professional.length > 0) {
-          replacement += '\n\n' + formattedProfessionalSkills;
-        }
-        
-        optimized = optimized.substring(0, generalMatch.index) + 
-                    replacement + 
-                    optimized.substring(generalMatch.index + generalMatch[0].length);
-      } else if (optimizedSkills.technical.length > 0) {
-        // Add technical skills if they don't exist
-        optimized = optimized + '\n\n' + formattedTechnicalSkills;
-      }
-      
-      // Handle professional skills separately if not already handled
-      if (professionalMatch && professionalMatch.index !== undefined) {
-        // Replace existing professional skills
-        optimized = optimized.substring(0, professionalMatch.index) + 
-                    formattedProfessionalSkills + 
-                    optimized.substring(professionalMatch.index + professionalMatch[0].length);
-      } else if (!generalMatch && optimizedSkills.professional.length > 0 && !optimized.includes(formattedProfessionalSkills)) {
-        // Add professional skills if they don't exist and weren't added with technical skills
-        optimized = optimized + '\n\n' + formattedProfessionalSkills;
-      }
-    }
-    
-    // Replace or enhance the education section
-    if (optimizedEducation.length > 0) {
-      const educationPattern = /(?:education|qualifications|academic|educational background)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
-      const educationMatch = optimized.match(educationPattern);
-      
-      // Format education entries
-      const formattedEducation = `Education:\n${optimizedEducation.map(edu => {
-        let entry = `• ${edu.degree}`;
-        if (edu.institution) entry += `, ${edu.institution}`;
-        if (edu.location) entry += `, ${edu.location}`;
-        if (edu.year) entry += ` (${edu.year})`;
-        if (edu.gpa) entry += `, GPA: ${edu.gpa}`;
-        
-        // Add relevant courses if available
-        if (edu.relevantCourses && edu.relevantCourses.length > 0) {
-          entry += `\n  Relevant Courses: ${edu.relevantCourses.join(', ')}`;
-        }
-        
-        // Add achievements if available
-        if (edu.achievements && edu.achievements.length > 0) {
-          entry += `\n  Achievements: ${edu.achievements.join(', ')}`;
-        }
-        
-        return entry;
-      }).join('\n\n')}`;
-      
-      if (educationMatch && educationMatch.index !== undefined) {
-        // Replace existing education section
-        optimized = optimized.substring(0, educationMatch.index) + 
-                    formattedEducation + 
-                    optimized.substring(educationMatch.index + educationMatch[0].length);
+      if (profileMatch) {
+        // Replace existing profile
+        optimizedText = optimizedText.replace(profileRegex, `$1:\n${optimizedProfileText}`);
       } else {
-        // Add education section if it doesn't exist
-        optimized = optimized + '\n\n' + formattedEducation;
+        // Add profile at the beginning
+        optimizedText = `Profile:\n${optimizedProfileText}\n\n${optimizedText}`;
       }
     }
     
-    // Replace or enhance the achievements section
-    if (optimizedAchievements.length > 0) {
-      const achievementsPattern = /(?:achievements|accomplishments|key accomplishments|notable achievements)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
-      const achievementsMatch = optimized.match(achievementsPattern);
+    // Replace or add skills section
+    if (optimizedSkillsData.technical.length > 0 || optimizedSkillsData.professional.length > 0) {
+      const skillsRegex = new RegExp(`(Skills|Technical Skills|Professional Skills)[:\\s]+(.*?)(?=\\n\\s*\\n|\\n(?:[A-Z][a-z]+\\s*(?:&\\s*)?)+:|\\n\\s*$)`, 'is');
+      const skillsMatch = originalText.match(skillsRegex);
       
-      const formattedAchievements = `Achievements:\n${optimizedAchievements.map(a => `• ${a}`).join('\n')}`;
+      const formattedTechnicalSkills = optimizedSkillsData.technical.map(skill => `• ${skill}`).join('\n');
+      const formattedProfessionalSkills = optimizedSkillsData.professional.map(skill => `• ${skill}`).join('\n');
       
-      if (achievementsMatch && achievementsMatch.index !== undefined) {
-        // Replace existing achievements
-        optimized = optimized.substring(0, achievementsMatch.index) + 
-                    formattedAchievements + 
-                    optimized.substring(achievementsMatch.index + achievementsMatch[0].length);
+      let formattedSkills = '';
+      
+      if (optimizedSkillsData.technical.length > 0 && optimizedSkillsData.professional.length > 0) {
+        formattedSkills = `Technical Skills:\n${formattedTechnicalSkills}\n\nProfessional Skills:\n${formattedProfessionalSkills}`;
+      } else if (optimizedSkillsData.technical.length > 0) {
+        formattedSkills = `Technical Skills:\n${formattedTechnicalSkills}`;
       } else {
-        // Add achievements after profile if they don't exist
-        const sections = optimized.split(/\n\s*\n/);
-        if (sections.length > 1) {
-          sections.splice(1, 0, formattedAchievements);
-          optimized = sections.join('\n\n');
+        formattedSkills = `Professional Skills:\n${formattedProfessionalSkills}`;
+      }
+      
+      if (skillsMatch) {
+        // Replace existing skills
+        optimizedText = optimizedText.replace(skillsRegex, `Skills:\n${formattedSkills}`);
+      } else {
+        // Add skills after profile or at the beginning
+        const profileEnd = optimizedText.match(/Profile:.*?\n\s*\n/s);
+        if (profileEnd) {
+          const insertPosition = profileEnd.index! + profileEnd[0].length;
+          optimizedText = optimizedText.substring(0, insertPosition) + `Skills:\n${formattedSkills}\n\n` + optimizedText.substring(insertPosition);
         } else {
-          optimized = optimized + '\n\n' + formattedAchievements;
+          optimizedText = `Skills:\n${formattedSkills}\n\n${optimizedText}`;
         }
       }
     }
     
-    // Replace or enhance the goals section
+    // Replace or add achievements section
+    if (optimizedAchievements.length > 0) {
+      const achievementsRegex = new RegExp(`(Achievements|Accomplishments|Key Achievements)[:\\s]+(.*?)(?=\\n\\s*\\n|\\n(?:[A-Z][a-z]+\\s*(?:&\\s*)?)+:|\\n\\s*$)`, 'is');
+      const achievementsMatch = originalText.match(achievementsRegex);
+      
+      const formattedAchievements = optimizedAchievements.map(achievement => `• ${achievement}`).join('\n');
+      
+      if (achievementsMatch) {
+        // Replace existing achievements
+        optimizedText = optimizedText.replace(achievementsRegex, `Achievements:\n${formattedAchievements}`);
+      } else {
+        // Add achievements after skills or profile
+        const skillsEnd = optimizedText.match(/Skills:.*?\n\s*\n/s);
+        const profileEnd = optimizedText.match(/Profile:.*?\n\s*\n/s);
+        
+        if (skillsEnd) {
+          const insertPosition = skillsEnd.index! + skillsEnd[0].length;
+          optimizedText = optimizedText.substring(0, insertPosition) + `Achievements:\n${formattedAchievements}\n\n` + optimizedText.substring(insertPosition);
+        } else if (profileEnd) {
+          const insertPosition = profileEnd.index! + profileEnd[0].length;
+          optimizedText = optimizedText.substring(0, insertPosition) + `Achievements:\n${formattedAchievements}\n\n` + optimizedText.substring(insertPosition);
+        } else {
+          // Add after experience section if it exists
+          const experienceEnd = optimizedText.match(/Experience:.*?\n\s*\n/s);
+          if (experienceEnd) {
+            const insertPosition = experienceEnd.index! + experienceEnd[0].length;
+            optimizedText = optimizedText.substring(0, insertPosition) + `Achievements:\n${formattedAchievements}\n\n` + optimizedText.substring(insertPosition);
+          } else {
+            // Add at the end
+            optimizedText = `${optimizedText}\n\nAchievements:\n${formattedAchievements}`;
+          }
+        }
+      }
+    }
+    
+    // Replace or add goals section if present in original
     if (optimizedGoals.length > 0) {
-      const goalsPattern = /(?:goals|objectives|targets|career goals|professional goals)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
-      const goalsMatch = optimized.match(goalsPattern);
+      const goalsRegex = new RegExp(`(Career Goals|Objectives|Professional Goals)[:\\s]+(.*?)(?=\\n\\s*\\n|\\n(?:[A-Z][a-z]+\\s*(?:&\\s*)?)+:|\\n\\s*$)`, 'is');
+      const goalsMatch = originalText.match(goalsRegex);
       
-      const formattedGoals = `Career Goals:\n${optimizedGoals.map(g => `• ${g}`).join('\n')}`;
+      const formattedGoals = optimizedGoals.map(goal => `• ${goal}`).join('\n');
       
-      if (goalsMatch && goalsMatch.index !== undefined) {
+      if (goalsMatch) {
         // Replace existing goals
-        optimized = optimized.substring(0, goalsMatch.index) + 
-                    formattedGoals + 
-                    optimized.substring(goalsMatch.index + goalsMatch[0].length);
-      } else {
-        // Add goals after achievements or profile
-        optimized = optimized + '\n\n' + formattedGoals;
+        optimizedText = optimizedText.replace(goalsRegex, `Career Goals:\n${formattedGoals}`);
+      } else if (goals.length > 0) {
+        // Only add if original had goals
+        optimizedText = `${optimizedText}\n\nCareer Goals:\n${formattedGoals}`;
       }
     }
     
-    // Replace or enhance the languages section
+    // Replace or add languages section if present in original
     if (optimizedLanguages.length > 0) {
-      const languagesPattern = /(?:languages|language skills|fluent in|proficient in|spoken languages)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
-      const languagesMatch = optimized.match(languagesPattern);
+      const languagesRegex = new RegExp(`(Languages|Language Skills|Language Proficiency)[:\\s]+(.*?)(?=\\n\\s*\\n|\\n(?:[A-Z][a-z]+\\s*(?:&\\s*)?)+:|\\n\\s*$)`, 'is');
+      const languagesMatch = originalText.match(languagesRegex);
       
-      const formattedLanguages = `Languages:\n${optimizedLanguages.map(l => `• ${l}`).join('\n')}`;
+      const formattedLanguages = optimizedLanguages.map(language => `• ${language}`).join('\n');
       
-      if (languagesMatch && languagesMatch.index !== undefined) {
+      if (languagesMatch) {
         // Replace existing languages
-        optimized = optimized.substring(0, languagesMatch.index) + 
-                    formattedLanguages + 
-                    optimized.substring(languagesMatch.index + languagesMatch[0].length);
-      } else {
-        // Add languages after goals, achievements or profile
-        optimized = optimized + '\n\n' + formattedLanguages;
+        optimizedText = optimizedText.replace(languagesRegex, `Languages:\n${formattedLanguages}`);
+      } else if (languages.length > 0) {
+        // Only add if original had languages
+        optimizedText = `${optimizedText}\n\nLanguages:\n${formattedLanguages}`;
       }
     }
     
-    return optimized;
+    return optimizedText;
   };
 
   // Add download document handler
@@ -3041,10 +3072,15 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       // Generate structured CV data
       const structuredData = generateStructuredCV(originalText || '', jobDescription || '');
       
+      // Get CV name without file extension
+      const cvName = selectedCVName 
+        ? selectedCVName.replace(/\.\w+$/, '') 
+        : 'CV';
+      
       // Generate document with structured data
       const doc = await generateOptimizedDocument(
         optimizedText, 
-        'Optimized CV', 
+        cvName, 
         structuredData.contactInfo,
         structuredData
       );
@@ -3053,7 +3089,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       const blob = await Packer.toBlob(doc);
       
       // Save file
-      saveAs(blob, `${selectedCVName ? selectedCVName.replace(/\.\w+$/, '') : 'Optimized_CV'}.docx`);
+      saveAs(blob, `${cvName}.docx`);
       
       setIsGeneratingDocument(false);
     } catch (error) {

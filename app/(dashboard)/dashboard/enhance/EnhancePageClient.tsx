@@ -44,8 +44,15 @@ interface DocumentItem {
   createdAt?: string;
 }
 
+interface DocumentData {
+  id: string;
+  name: string;
+  type: "document" | "cv";
+  createdAt: string;
+}
+
 interface EnhancePageClientProps {
-  documentsData: DocumentItem[];
+  documentsData: DocumentData[];
 }
 
 interface ChatMessage {
@@ -65,7 +72,12 @@ export default function EnhancePageClient({ documentsData = [] }: EnhancePageCli
   const [eyeState, setEyeState] = useState<EyeState>('normal');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [documents, setDocuments] = useState<DocumentItem[]>(documentsData);
+  const [documents, setDocuments] = useState<DocumentItem[]>(documentsData.map(data => ({
+    id: data.id,
+    name: data.name,
+    type: data.type,
+    createdAt: data.createdAt
+  })));
   const { toast } = useToast();
   const [mode, setMode] = useState<'create' | 'edit'>('create');
   const messagesContainerRef = useRef<HTMLDivElement>(null);

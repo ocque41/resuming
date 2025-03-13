@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import EnhancePageClient from "./EnhancePageClient";
+import { Suspense } from "react";
 
 // Define the type for the combined data
 interface DocumentData {
@@ -7,6 +8,15 @@ interface DocumentData {
   name: string;
   type: "document" | "cv";
   createdAt: string;
+}
+
+// Create a fallback component
+function EnhancePageFallback() {
+  return (
+    <div className="h-full flex items-center justify-center">
+      <p className="text-gray-500">Loading enhance page...</p>
+    </div>
+  );
 }
 
 export default async function EnhancePage() {
@@ -40,12 +50,27 @@ export default async function EnhancePage() {
     }
   ];
 
-  // For now, use mock data to get the page working
   console.log("Using mock data for development");
+  console.log("Mock data:", JSON.stringify(mockData, null, 2));
   
-  return (
-    <div className="h-full">
-      <EnhancePageClient documentsData={mockData} />
-    </div>
-  );
+  try {
+    return (
+      <div className="h-full">
+        <Suspense fallback={<EnhancePageFallback />}>
+          <EnhancePageClient documentsData={mockData} />
+        </Suspense>
+      </div>
+    );
+  } catch (error) {
+    console.error("Error rendering EnhancePage:", error);
+    return (
+      <div className="h-full flex flex-col items-center justify-center">
+        <h2 className="text-xl font-bold mb-4">Something went wrong</h2>
+        <p className="text-gray-500 mb-4">We're having trouble loading this page.</p>
+        <pre className="bg-gray-100 p-4 rounded text-sm overflow-auto max-w-full">
+          {error instanceof Error ? error.message : "Unknown error"}
+        </pre>
+      </div>
+    );
+  }
 } 
