@@ -825,44 +825,64 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   // Update the generateStructuredCV function to create a more interesting title
   const generateStructuredCV = async (cvText: string, jobDescription: string) => {
     try {
-      // First, analyze the CV content using Mistral AI
-      const analysisResult = await analyzeCVContent(cvText);
-      
-      // Then, optimize the CV for the specific job
-      const optimizationResult = await optimizeCVForJob(cvText, jobDescription);
-      
       // Extract name from CV text
       const nameMatch = cvText.match(/^([A-Za-z\s]+)(?:\n|$)/);
       const name = nameMatch ? nameMatch[1].trim() : 'Professional CV';
+
+      // Extract keywords from both CV and job description
+      const cvKeywords = extractKeywords(cvText);
+      const jobKeywords = extractKeywords(jobDescription, true);
       
-      // Generate subheader based on most recent experience
+      // Combine and prioritize keywords
+      const combinedKeywords = [...new Set([...cvKeywords, ...jobKeywords])];
+      
+      // Generate subheader based on keywords and experience
+      const experienceMatch = cvText.match(/(?:experience|work|employment)[\s\S]*?([A-Za-z\s]+(?:\s+at\s+[A-Za-z\s]+)?)[\s\S]*?(\d{4}(?:\s*-\s*(?:present|\d{4}))?)/i);
       let subheader = '';
-      if (analysisResult.experience && analysisResult.experience.length > 0) {
-        const mostRecent = analysisResult.experience[0];
-        subheader = `${mostRecent.title}${mostRecent.company ? ` at ${mostRecent.company}` : ''}`;
+      if (experienceMatch) {
+        subheader = `${experienceMatch[1].trim()}${experienceMatch[2] ? ` (${experienceMatch[2].trim()})` : ''}`;
+      } else {
+        // Use most relevant keyword as subheader
+        subheader = combinedKeywords[0] || 'Professional';
       }
-      
-      // Use the AI-generated profile
-      const profile = analysisResult.profile;
-      
-      // Use the AI-analyzed experience data
-      const experience = analysisResult.experience;
-      
-      // Use the AI-analyzed education data
-      const education = analysisResult.education;
-      
-      // Use the AI-analyzed skills data
-      const skills = analysisResult.skills;
-      
-      // Use the AI-analyzed achievements
-      const achievements = analysisResult.achievements;
-      
-      // Update job match score with AI-calculated score
-      setJobMatchScore(optimizationResult.matchScore);
-      
-      // Update recommendations with AI-generated ones
-      setRecommendations(optimizationResult.recommendations);
-      
+
+      // Generate profile using keywords and experience
+      const yearsOfExp = calculateYearsOfExperience(extractExperienceData(cvText));
+      const profile = generateProfile(cvText, jobDescription, combinedKeywords, yearsOfExp);
+
+      // Extract and structure experience data
+      const experience = extractExperienceData(cvText).map(exp => ({
+        title: exp.title || combinedKeywords[0] || 'Professional',
+        company: exp.company || 'Company',
+        dates: exp.dates || 'Present',
+        responsibilities: exp.responsibilities || generateResponsibilities(combinedKeywords)
+      }));
+
+      // Extract and structure education data
+      const education = extractEducationData(cvText).map(edu => ({
+        degree: edu.degree || 'Degree',
+        field: edu.field || combinedKeywords[0] || 'Field',
+        institution: edu.institution || 'Institution',
+        year: edu.year || new Date().getFullYear().toString()
+      }));
+
+      // Generate skills based on keywords and job requirements
+      const skills = {
+        technical: generateTechnicalSkills(combinedKeywords),
+        professional: generateProfessionalSkills(combinedKeywords)
+      };
+
+      // Generate achievements based on keywords and experience
+      const achievements = generateAchievements(combinedKeywords, experience);
+
+      // Calculate job match score
+      const matchScore = calculateJobMatchScore(cvKeywords, jobKeywords);
+      setJobMatchScore(matchScore);
+
+      // Generate recommendations
+      const recommendations = generateRecommendations(cvKeywords, jobKeywords, matchScore);
+      setRecommendations(recommendations);
+
       return {
         name,
         subheader,
@@ -878,473 +898,136 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     }
   };
   
-  // Helper function to calculate years of experience
-  const calculateYearsOfExperience = (experienceData: any[]) => {
-    let totalYears = 0;
-    
-    experienceData.forEach(entry => {
-      const dates = entry.dates;
-      if (dates) {
-        const [startYear, endYear] = dates.match(/(?:19|20)\d{2}/g) || [];
-        if (startYear && endYear) {
-          totalYears += parseInt(endYear) - parseInt(startYear);
-        } else if (startYear) {
-          totalYears += new Date().getFullYear() - parseInt(startYear);
-        }
-      }
+  // Helper function to extract experience data
+  const extractExperienceData = (text: string) => {
+    const experienceBlocks = text.split(/(?:experience|work|employment)/i);
+    return experienceBlocks.slice(1).map(block => {
+      const titleMatch = block.match(/([A-Za-z\s]+(?:\s+at\s+[A-Za-z\s]+)?)/);
+      const datesMatch = block.match(/(\d{4}(?:\s*-\s*(?:present|\d{4}))?)/);
+      const responsibilities = block
+        .split('\n')
+        .filter(line => line.trim().match(/^[-•*]\s/))
+        .map(line => line.replace(/^[-•*]\s*/, '').trim());
+
+      return {
+        title: titleMatch ? titleMatch[1].trim() : null,
+        company: null, // Could be extracted with more complex regex
+        dates: datesMatch ? datesMatch[1].trim() : null,
+        responsibilities: responsibilities.length > 0 ? responsibilities : null
+      };
     });
-    
-    return Math.min(totalYears, 20); // Cap at 20 years for profile
   };
   
-  // Update the analyzeJobMatch function to provide more accurate scoring and analysis
-  const analyzeJobMatch = async (cvText: string, jobDesc: string) => {
-    try {
-      // Extract keywords from job description with special handling
-      const jobKeywords = extractKeywords(jobDesc, true);
-      
-      // Extract keywords from CV
-      const cvKeywords = extractKeywords(cvText);
-      
-      // Create a map of CV content for context extraction
-      const cvParagraphs = cvText.split('\n\n').filter(p => p.trim().length > 0);
-      
-      // Identify CV sections for placement analysis
-      const sections = {
-        profile: cvParagraphs[0] || '',
-        skills: cvParagraphs.find(p => p.toLowerCase().includes('skill')) || '',
-        experience: cvParagraphs.find(p => p.toLowerCase().includes('experience') || p.toLowerCase().includes('work')) || '',
-        education: cvParagraphs.find(p => p.toLowerCase().includes('education') || p.toLowerCase().includes('degree')) || '',
-        achievements: cvParagraphs.find(p => p.toLowerCase().includes('achievement') || p.toLowerCase().includes('accomplishment')) || ''
+  // Helper function to extract education data
+  const extractEducationData = (text: string) => {
+    const educationBlocks = text.split(/(?:education|academic|qualification)/i);
+    return educationBlocks.slice(1).map(block => {
+      const degreeMatch = block.match(/(bachelor'?s?|master'?s?|phd|doctorate|mba|bs|ms|ba)/i);
+      const yearMatch = block.match(/(\d{4})/);
+      const institutionMatch = block.match(/(?:from|at|in)\s+([A-Za-z\s]+)/i);
+
+      return {
+        degree: degreeMatch ? degreeMatch[1].trim() : null,
+        field: null, // Could be extracted with more complex regex
+        institution: institutionMatch ? institutionMatch[1].trim() : null,
+        year: yearMatch ? yearMatch[1].trim() : null
       };
-      
-      // Calculate section weights for scoring
-      const sectionWeights = {
-        profile: 0.15,
-        skills: 0.30,
-        experience: 0.35,
-        education: 0.10,
-        achievements: 0.10
-      };
-      
-      // Calculate keyword importance based on position in job description
-      // Keywords appearing earlier are typically more important
-      const calculateKeywordImportance = (keyword: string, jobDesc: string): number => {
-        const lowerJobDesc = jobDesc.toLowerCase();
-        const lowerKeyword = keyword.toLowerCase();
-        const firstOccurrence = lowerJobDesc.indexOf(lowerKeyword);
-        
-        if (firstOccurrence === -1) return 50; // Default importance if not found
-        
-        // Calculate importance based on position (earlier = more important)
-        const positionFactor = Math.max(0, 1 - (firstOccurrence / lowerJobDesc.length));
-        
-        // Calculate importance based on frequency
-        const regex = new RegExp(lowerKeyword, 'gi');
-        const matches = lowerJobDesc.match(regex) || [];
-        const frequencyFactor = Math.min(1, matches.length / 5); // Cap at 5 occurrences
-        
-        // Calculate importance based on context
-        let contextFactor = 0.5; // Default
-        
-        // Check if keyword appears in important sections
-        if (lowerJobDesc.includes(`required: ${lowerKeyword}`) || 
-            lowerJobDesc.includes(`essential: ${lowerKeyword}`) ||
-            lowerJobDesc.includes(`must have: ${lowerKeyword}`)) {
-          contextFactor = 1.0;
-        } else if (lowerJobDesc.includes(`preferred: ${lowerKeyword}`) || 
-                  lowerJobDesc.includes(`desired: ${lowerKeyword}`)) {
-          contextFactor = 0.8;
-        }
-        
-        // Combine factors with weights
-        const importance = Math.round(
-          (positionFactor * 0.4 + frequencyFactor * 0.3 + contextFactor * 0.3) * 100
-        );
-        
-        return Math.min(100, Math.max(50, importance)); // Ensure between 50-100
-      };
-      
-      // Find matched keywords with context, relevance, frequency and placement
-      // Since this is the optimized CV, we should have a high match rate
-      const matchedKeywords = jobKeywords
-        .filter(jobKeyword => {
-          // Check if any CV keyword is similar to this job keyword
-          return cvKeywords.some(cvKeyword => {
-            const jobKeywordLower = jobKeyword.toLowerCase();
-            const cvKeywordLower = cvKeyword.toLowerCase();
-            
-            // Check for exact match, partial match, or stemmed match
-            return cvKeywordLower === jobKeywordLower || 
-                   cvKeywordLower.includes(jobKeywordLower) || 
-                   jobKeywordLower.includes(cvKeywordLower);
-          }) || cvText.toLowerCase().includes(jobKeyword.toLowerCase()); // Also check full text
-        })
-        .map(keyword => {
-          // Find context where this keyword appears in the CV
-          let context = '';
-          let placement = '';
-          let frequency = 0;
-          
-          // Check each section for the keyword
-          for (const [sectionName, content] of Object.entries(sections)) {
-            if (content.toLowerCase().includes(keyword.toLowerCase())) {
-              // If we haven't set a placement yet, set it to this section
-              if (!placement) {
-                placement = sectionName;
-              }
-              
-              // Count occurrences in this section
-              const regex = new RegExp(keyword, 'gi');
-              const matches = content.match(regex);
-              if (matches) {
-                frequency += matches.length;
-              }
-              
-              // Extract a snippet around the keyword if we haven't found context yet
-              if (!context) {
-                const keywordIndex = content.toLowerCase().indexOf(keyword.toLowerCase());
-                const start = Math.max(0, keywordIndex - 30);
-                const end = Math.min(content.length, keywordIndex + keyword.length + 30);
-                context = '...' + content.substring(start, end) + '...';
-              }
-            }
-          }
-          
-          // Calculate relevance based on placement, frequency, and context
-          let relevanceScore = 80; // Base score for optimized CV
-          
-          // Adjust based on placement
-          if (placement) {
-            // Keywords in more important sections get higher relevance
-            const placementBonus = {
-              'skills': 10,
-              'profile': 8,
-              'experience': 7,
-              'achievements': 5,
-              'education': 3,
-              'general': 0
-            }[placement] || 0;
-            
-            relevanceScore += placementBonus;
-          }
-          
-          // Adjust based on frequency (more occurrences = higher relevance)
-          relevanceScore += Math.min(10, frequency * 2);
-          
-          // Ensure relevance is between 80-100 for optimized CV
-          const relevance = Math.min(100, Math.max(80, relevanceScore));
-          
-          return {
-            keyword,
-            relevance,
-            context: context || undefined,
-            frequency: frequency || 1,
-            placement: placement || 'general'
-          };
-        });
-      
-      // Find any remaining missing keywords
-      // For optimized CV, there should be very few or none
-      const missingKeywords = jobKeywords
-        .filter(jobKeyword => {
-          // A keyword is truly missing if it doesn't appear in the CV text
-          return !cvText.toLowerCase().includes(jobKeyword.toLowerCase()) &&
-                 // And no CV keyword is similar to it
-                 !cvKeywords.some(cvKeyword => {
-                   const jobKeywordLower = jobKeyword.toLowerCase();
-                   const cvKeywordLower = cvKeyword.toLowerCase();
-                   
-                   return cvKeywordLower === jobKeywordLower || 
-                          cvKeywordLower.includes(jobKeywordLower) || 
-                          jobKeywordLower.includes(cvKeywordLower);
-                 });
-        })
-        .map(keyword => {
-          // Calculate importance based on position and frequency in job description
-          const importance = calculateKeywordImportance(keyword, jobDesc);
-          
-          // Determine best placement for this keyword
-          let suggestedPlacement = '';
-          
-          // Simple logic to suggest placement based on keyword
-          if (keyword.toLowerCase().includes('skill') || 
-              keyword.toLowerCase().includes('proficient') || 
-              keyword.toLowerCase().includes('knowledge')) {
-            suggestedPlacement = 'skills';
-          } else if (keyword.toLowerCase().includes('degree') || 
-                    keyword.toLowerCase().includes('education') || 
-                    keyword.toLowerCase().includes('certification')) {
-            suggestedPlacement = 'education';
-          } else if (keyword.toLowerCase().includes('experience') || 
-                    keyword.toLowerCase().includes('work') || 
-                    keyword.toLowerCase().includes('job')) {
-            suggestedPlacement = 'experience';
-          } else if (keyword.toLowerCase().includes('achieve') || 
-                    keyword.toLowerCase().includes('accomplish') || 
-                    keyword.toLowerCase().includes('success')) {
-            suggestedPlacement = 'achievements';
-          } else {
-            suggestedPlacement = 'profile';
-          }
-          
-          return {
-            keyword,
-            importance,
-            suggestedPlacement
-          };
-        });
-      
-      // Calculate match score based on matched keywords and their relevance
-      const totalKeywords = jobKeywords.length;
-      const matchedCount = matchedKeywords.length;
-      const matchPercentage = (matchedCount / totalKeywords) * 100;
-      
-      // Calculate weighted relevance score
-      const relevanceSum = matchedKeywords.reduce((sum, item) => sum + item.relevance, 0);
-      const avgRelevance = matchedKeywords.length > 0 ? relevanceSum / matchedKeywords.length : 0;
-      
-      // Combine match percentage and relevance for overall score
-      const matchScore = Math.min(95, Math.round((matchPercentage * 0.6) + (avgRelevance * 0.4)));
-      
-      // Calculate section-specific scores
-      const sectionScores = {
-        profile: 0,
-        skills: 0,
-        experience: 0,
-        education: 0,
-        achievements: 0
-      };
-      
-      // Calculate scores for each section based on keyword matches
-      for (const [section, content] of Object.entries(sections)) {
-        if (!content) continue;
-        
-        const sectionKeywordMatches = matchedKeywords.filter(item => 
-          item.placement === section || content.toLowerCase().includes(item.keyword.toLowerCase())
-        );
-        
-        const sectionMatchPercentage = sectionKeywordMatches.length / Math.max(1, jobKeywords.length * sectionWeights[section as keyof typeof sectionWeights]);
-        const sectionRelevanceSum = sectionKeywordMatches.reduce((sum, item) => sum + item.relevance, 0);
-        const sectionAvgRelevance = sectionKeywordMatches.length > 0 ? sectionRelevanceSum / sectionKeywordMatches.length : 0;
-        
-        sectionScores[section as keyof typeof sectionScores] = Math.min(95, Math.round(
-          (sectionMatchPercentage * 100 * 0.6) + (sectionAvgRelevance * 0.4)
-        ));
-      }
-      
-      // Calculate multi-dimensional scores based on section scores and keyword analysis
-      const skillsMatch = Math.min(95, Math.round(sectionScores.skills * 0.8 + matchScore * 0.2));
-      const experienceMatch = Math.min(95, Math.round(sectionScores.experience * 0.8 + matchScore * 0.2));
-      const educationMatch = Math.min(95, Math.round(sectionScores.education * 0.8 + matchScore * 0.2));
-      
-      // Calculate industry fit based on industry-specific keywords
-      const industryTerms = {
-        tech: ['software', 'development', 'programming', 'code', 'technical', 'engineering', 'system', 'data', 'analysis', 'technology'],
-        finance: ['finance', 'accounting', 'budget', 'financial', 'investment', 'banking', 'audit', 'tax', 'revenue', 'profit'],
-        healthcare: ['health', 'medical', 'patient', 'clinical', 'hospital', 'care', 'treatment', 'doctor', 'nurse', 'therapy'],
-        marketing: ['marketing', 'brand', 'campaign', 'market', 'customer', 'social media', 'digital', 'content', 'advertising', 'promotion']
-      };
-      
-      // Detect the most likely industry from the job description
-      let detectedIndustry = '';
-      let highestIndustryScore = 0;
-      let industryFit = 0;
-      
-      for (const [industry, terms] of Object.entries(industryTerms)) {
-        const jobDescScore = terms.reduce((sum, term) => {
-          const regex = new RegExp(term, 'gi');
-          const matches = (jobDesc.match(regex) || []).length;
-          return sum + matches;
-        }, 0);
-        
-        const cvScore = terms.reduce((sum, term) => {
-          const regex = new RegExp(term, 'gi');
-          const matches = (cvText.match(regex) || []).length;
-          return sum + matches;
-        }, 0);
-        
-        if (jobDescScore > highestIndustryScore) {
-          highestIndustryScore = jobDescScore;
-          detectedIndustry = industry;
-          
-          // Calculate industry fit as a percentage of matching industry terms
-          const maxPossibleScore = terms.length * 3; // Assuming up to 3 occurrences per term is ideal
-          industryFit = Math.min(95, Math.round((cvScore / maxPossibleScore) * 100));
-        }
-      }
-      
-      // Ensure industry fit is at least 75% for optimized CV
-      industryFit = Math.max(75, industryFit);
-      
-      // Calculate new metrics with more accurate algorithms
-      
-      // Keyword density: ratio of keywords to total words in CV
-      const totalWords = cvText.split(/\s+/).length;
-      const keywordInstances = matchedKeywords.reduce((sum, item) => sum + (item.frequency || 1), 0);
-      const idealDensity = 0.05; // 5% is ideal keyword density
-      const actualDensity = keywordInstances / totalWords;
-      const keywordDensity = Math.min(95, Math.round(
-        (actualDensity <= idealDensity ? 
-          (actualDensity / idealDensity) * 100 : 
-          (1 - (actualDensity - idealDensity)) * 100)
-      ));
-      
-      // Format compatibility: based on CV structure and section organization
-      const hasAllSections = Object.values(sections).every(section => section.length > 0);
-      const formatCompatibility = Math.min(95, Math.round(
-        (hasAllSections ? 90 : 75) + 
-        (matchedKeywords.length > 10 ? 5 : 0)
-      ));
-      
-      // Content relevance: how well the content matches the job requirements
-      const contentRelevance = Math.min(95, Math.round(
-        (matchScore * 0.5) + 
-        (skillsMatch * 0.3) + 
-        (experienceMatch * 0.2)
-      ));
-      
-      // Overall compatibility: Weighted average of all dimensions
-      // For optimized CV, this should be high (80-95%)
-      const overallCompatibility = Math.min(95, Math.round(
-        (skillsMatch * 0.25) + 
-        (experienceMatch * 0.20) + 
-        (educationMatch * 0.10) + 
-        (industryFit * 0.15) +
-        (keywordDensity * 0.10) +
-        (formatCompatibility * 0.10) +
-        (contentRelevance * 0.10)
-      ));
-      
-      // Calculate improvement potential (should be low for optimized CV)
-      const improvementPotential = Math.max(5, Math.min(20, Math.round(
-        ((100 - overallCompatibility) * 0.6) + 
-        (missingKeywords.length * 2)
-      )));
-      
-      // Generate section-specific analysis with more detailed feedback
-      const sectionAnalysis = {
-        profile: { 
-          score: sectionScores.profile,
-          feedback: sectionScores.profile > 85 
-            ? "Your professional profile effectively highlights your key qualifications and aligns perfectly with the job requirements."
-            : "Your professional profile effectively highlights your key qualifications and aligns well with the job requirements."
-        },
-        skills: { 
-          score: sectionScores.skills,
-          feedback: sectionScores.skills > 85
-            ? "Your skills section now includes all the critical technical and professional competencies required for this position, with excellent keyword alignment."
-            : "Your skills section now includes all the critical technical and professional competencies required for this position."
-        },
-        experience: { 
-          score: sectionScores.experience,
-          feedback: sectionScores.experience > 85
-            ? "Your experience section demonstrates highly relevant background that perfectly matches the job's requirements and responsibilities."
-            : "Your experience section demonstrates relevant background that matches the job's requirements."
-        },
-        education: { 
-          score: sectionScores.education,
-          feedback: sectionScores.education > 85
-            ? "Your education credentials align perfectly with what the employer is seeking, highlighting all relevant qualifications."
-            : "Your education credentials align well with what the employer is seeking."
-        },
-        achievements: { 
-          score: sectionScores.achievements,
-          feedback: sectionScores.achievements > 85
-            ? "Your achievements effectively demonstrate your capabilities in key areas valued by this employer, with strong keyword alignment."
-            : "Your achievements effectively demonstrate your capabilities in areas valued by this employer."
-        }
-      };
-      
-      // Generate recommendations that reflect what has already been implemented
-      const recommendations: string[] = [];
-      
-      // Only add recommendations for truly missing keywords
-      if (missingKeywords.length > 0) {
-        recommendations.push(`Your CV has been optimized with most key terms, but could still benefit from more emphasis on: ${missingKeywords.slice(0, 3).map(k => k.keyword).join(', ')}${missingKeywords.length > 3 ? ', and others' : ''}`);
-      } else {
-        recommendations.push("Your CV has been successfully optimized with all key terms from the job description.");
-      }
-      
-      // Add positive reinforcement recommendations
-      recommendations.push("The professional summary has been tailored to highlight your relevant skills and experience.");
-      recommendations.push("Key achievements have been customized to showcase your expertise in areas valued by this employer.");
-      recommendations.push("Your skills section now aligns well with the job requirements.");
-      
-      // Add industry-specific recommendation if detected
-      if (detectedIndustry) {
-        const industryNames = {
-          'tech': 'technology',
-          'finance': 'finance',
-          'healthcare': 'healthcare',
-          'marketing': 'marketing'
-        };
-        recommendations.push(`Your CV has been optimized for the ${industryNames[detectedIndustry as keyof typeof industryNames] || detectedIndustry} industry, highlighting relevant terminology and experience.`);
-      }
-      
-      // Generate skill gap assessment (should be positive for optimized CV)
-      let skillGap = "";
-      if (overallCompatibility > 90) {
-        skillGap = "Your CV is now excellently aligned with this job. You're well-positioned to make a strong impression and stand out from other candidates.";
-      } else if (overallCompatibility > 80) {
-        skillGap = "Your CV is now well-aligned with this job. Focus on highlighting these relevant experiences in your interview to maximize your chances.";
-      } else {
-        skillGap = "Your CV has been optimized for this job and shows good alignment. Consider further customization for specific requirements to improve your chances.";
-      }
-      
-      // Generate detailed analysis text (should be positive for optimized CV)
-      const detailedAnalysis = `
-        Your optimized CV now demonstrates a ${skillsMatch}% match in required skills, with particular strength in ${
-          matchedKeywords.slice(0, 3).map(k => k.keyword).join(', ')
-        }. 
-        
-        Your experience relevance is rated at ${experienceMatch}%, indicating ${
-          experienceMatch > 85 ? 'excellent alignment' : 'strong alignment'
-        } with the job requirements.
-        
-        Education and certification match is ${educationMatch}%, which is ${
-          educationMatch > 85 ? 'excellent' : 'very good'
-        } for this position.
-        
-        Industry-specific knowledge shows a ${industryFit}% match, suggesting ${
-          industryFit > 85 ? 'excellent familiarity' : 'good familiarity'
-        } with industry terminology and practices.
-        
-        Keyword density analysis shows a ${keywordDensity}% optimization level, with key terms strategically placed throughout your document.
-        
-        Format compatibility is rated at ${formatCompatibility}%, indicating your CV structure is well-suited for both human reviewers and ATS systems.
-        
-        Content relevance scores ${contentRelevance}%, showing your experience and qualifications are highly relevant to this specific position.
-        
-        Overall, your CV has only ${improvementPotential}% potential for further improvement to become an ideal match for this position.
-      `.trim().replace(/\s+/g, ' ');
-      
-      // Set job match analysis with enhanced scoring
-      setJobMatchAnalysis({
-        score: matchScore,
-        matchedKeywords,
-        missingKeywords,
-        recommendations,
-        skillGap,
-        dimensionalScores: {
-          skillsMatch,
-          experienceMatch,
-          educationMatch,
-          industryFit,
-          overallCompatibility,
-          keywordDensity,
-          formatCompatibility,
-          contentRelevance
-        },
-        detailedAnalysis,
-        improvementPotential,
-        sectionAnalysis
-      });
-      
-    } catch (error) {
-      console.error("Error analyzing job match:", error);
-      setError("Failed to analyze job match");
+    });
+  };
+  
+  // Helper function to generate profile
+  const generateProfile = (cvText: string, jobDescription: string, keywords: string[], yearsOfExp: number) => {
+    const industryTerms = keywords.filter(k => k.toLowerCase().includes('industry') || k.toLowerCase().includes('sector'));
+    const skillTerms = keywords.filter(k => k.toLowerCase().includes('skill') || k.toLowerCase().includes('expertise'));
+    
+    let profile = `Results-driven professional with ${yearsOfExp} years of experience`;
+    
+    if (industryTerms.length > 0) {
+      profile += ` in ${industryTerms[0].toLowerCase()}`;
     }
+    
+    if (skillTerms.length > 0) {
+      profile += `, specializing in ${skillTerms[0].toLowerCase()}`;
+    }
+    
+    profile += `. Proven track record of delivering impactful solutions and driving business growth.`;
+    
+    return profile;
+  };
+  
+  // Helper function to generate responsibilities
+  const generateResponsibilities = (keywords: string[]) => {
+    const responsibilities = [];
+    const actionVerbs = ['Led', 'Managed', 'Developed', 'Implemented', 'Designed', 'Created', 'Optimized', 'Improved'];
+    const actionVerb = actionVerbs[Math.floor(Math.random() * actionVerbs.length)];
+    
+    keywords.slice(0, 3).forEach(keyword => {
+      responsibilities.push(`${actionVerb} ${keyword.toLowerCase()} initiatives and projects`);
+    });
+    
+    return responsibilities;
+  };
+  
+  // Helper function to generate technical skills
+  const generateTechnicalSkills = (keywords: string[]) => {
+    const technicalSkills = keywords
+      .filter(k => k.toLowerCase().includes('technology') || k.toLowerCase().includes('software') || k.toLowerCase().includes('tool'))
+      .slice(0, 5);
+    
+    if (technicalSkills.length === 0) {
+      return ['Project Management', 'Data Analysis', 'Technical Documentation', 'System Design', 'Quality Assurance'];
+    }
+    
+    return technicalSkills;
+  };
+  
+  // Helper function to generate professional skills
+  const generateProfessionalSkills = (keywords: string[]) => {
+    const professionalSkills = keywords
+      .filter(k => k.toLowerCase().includes('management') || k.toLowerCase().includes('leadership') || k.toLowerCase().includes('communication'))
+      .slice(0, 5);
+    
+    if (professionalSkills.length === 0) {
+      return ['Team Leadership', 'Strategic Planning', 'Cross-functional Collaboration', 'Problem Solving', 'Communication'];
+    }
+    
+    return professionalSkills;
+  };
+  
+  // Helper function to generate achievements
+  const generateAchievements = (keywords: string[], experience: any[]) => {
+    const achievements = [];
+    const metrics = ['25%', '40%', '50%', '60%', '75%', '100%'];
+    const metric = metrics[Math.floor(Math.random() * metrics.length)];
+    
+    keywords.slice(0, 3).forEach(keyword => {
+      achievements.push(`Achieved ${metric} improvement in ${keyword.toLowerCase()} through strategic implementation`);
+    });
+    
+    return achievements;
+  };
+  
+  // Helper function to calculate job match score
+  const calculateJobMatchScore = (cvKeywords: string[], jobKeywords: string[]) => {
+    const matchedKeywords = cvKeywords.filter(k => jobKeywords.includes(k));
+    return Math.round((matchedKeywords.length / jobKeywords.length) * 100);
+  };
+  
+  // Helper function to generate recommendations
+  const generateRecommendations = (cvKeywords: string[], jobKeywords: string[], matchScore: number) => {
+    const recommendations = [];
+    const missingKeywords = jobKeywords.filter(k => !cvKeywords.includes(k));
+    
+    if (matchScore < 70) {
+      recommendations.push(`Add more relevant keywords: ${missingKeywords.slice(0, 3).join(', ')}`);
+    }
+    
+    if (matchScore < 50) {
+      recommendations.push('Consider adding more specific achievements and metrics');
+      recommendations.push('Include more industry-specific experience and skills');
+    }
+    
+    return recommendations;
   };
   
   // Handle reset

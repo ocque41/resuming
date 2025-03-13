@@ -265,7 +265,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
     e.stopPropagation();
     setSelectedDocument(doc);
     setMode('edit');
-    // Don't close dropdown automatically
+    playAnimationSequence('documentSelect');
   };
 
   const handleDocumentDeselect = (e: React.MouseEvent) => {
@@ -388,11 +388,48 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
           <Button
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
-            className="bg-[#B4916C] hover:bg-[#A3815C]"
+            className="bg-[#050505] hover:bg-[#1D1D1D] rounded-xl p-2 w-10 h-10 
+              flex items-center justify-center border border-[#2D2D2D]
+              transition-all duration-300"
+            aria-label="Upload file"
           >
-            <Paperclip className="h-4 w-4 mr-2" />
-            {isUploading ? 'Uploading...' : 'Upload'}
+            <Paperclip className="h-5 w-5 text-[#B4916C]" />
           </Button>
+          
+          <Popover open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={isDropdownOpen}
+                className="w-full justify-between rounded-xl border-[#2D2D2D] bg-[#050505] text-white hover:bg-[#1D1D1D]"
+              >
+                {selectedDocument ? selectedDocument.fileName : "Select a document..."}
+                <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-full p-0 rounded-xl border-[#2D2D2D] bg-[#050505]">
+              <div className="max-h-[300px] overflow-y-auto">
+                {documents.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="flex items-center justify-between px-4 py-2 hover:bg-[#1D1D1D] cursor-pointer"
+                    onClick={(e) => handleDocumentSelect(doc, e)}
+                  >
+                    <span className="text-white">{doc.fileName}</span>
+                    {selectedDocument?.id === doc.id && (
+                      <button
+                        onClick={handleDocumentDeselect}
+                        className="p-1 hover:bg-[#2D2D2D] rounded-xl"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
 
         <div className="relative">
@@ -411,41 +448,6 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
             }}
           />
         </div>
-
-        <Popover open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              role="combobox"
-              aria-expanded={isDropdownOpen}
-              className="w-full justify-between"
-            >
-              {selectedDocument ? selectedDocument.fileName : "Select a document..."}
-              <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-full p-0">
-            <div className="max-h-[300px] overflow-y-auto">
-              {documents.map((doc) => (
-                <div
-                  key={doc.id}
-                  className="flex items-center justify-between px-4 py-2 hover:bg-[#1D1D1D] cursor-pointer"
-                  onClick={(e) => handleDocumentSelect(doc, e)}
-                >
-                  <span>{doc.fileName}</span>
-                  {selectedDocument?.id === doc.id && (
-                    <button
-                      onClick={handleDocumentDeselect}
-                      className="p-1 hover:bg-[#2D2D2D] rounded-full"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
       </div>
     </div>
   );
