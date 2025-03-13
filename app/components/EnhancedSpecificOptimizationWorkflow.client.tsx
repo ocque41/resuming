@@ -490,8 +490,81 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     // Take up to 5 keywords to create achievements
     const keywordsToUse = keywords.slice(0, 5);
     
-    // Achievement templates
-    const templates = [
+    // Detect industry to use industry-specific templates
+    const industryTerms = {
+      tech: ['software', 'development', 'programming', 'code', 'technical', 'engineering', 'system', 'data', 'analysis', 'technology'],
+      finance: ['finance', 'accounting', 'budget', 'financial', 'investment', 'banking', 'audit', 'tax', 'revenue', 'profit'],
+      healthcare: ['health', 'medical', 'patient', 'clinical', 'hospital', 'care', 'treatment', 'doctor', 'nurse', 'therapy'],
+      marketing: ['marketing', 'brand', 'campaign', 'market', 'customer', 'social media', 'digital', 'content', 'advertising', 'promotion'],
+      manufacturing: ['manufacturing', 'production', 'quality', 'assembly', 'operations', 'supply chain', 'lean', 'process', 'efficiency'],
+      education: ['education', 'teaching', 'curriculum', 'learning', 'student', 'academic', 'training', 'instruction', 'assessment']
+    };
+    
+    // Detect the most likely industry from the job description
+    let detectedIndustry = '';
+    let highestIndustryScore = 0;
+    
+    for (const [industry, terms] of Object.entries(industryTerms)) {
+      const score = terms.reduce((sum, term) => {
+        const regex = new RegExp(term, 'gi');
+        const matches = (jobDescription.match(regex) || []).length;
+        return sum + matches;
+      }, 0);
+      
+      if (score > highestIndustryScore) {
+        highestIndustryScore = score;
+        detectedIndustry = industry;
+      }
+    }
+    
+    // Industry-specific achievement templates
+    const industryTemplates: Record<string, string[]> = {
+      tech: [
+        "• Developed {keyword} solutions that improved system performance by 40%, resulting in enhanced user experience.",
+        "• Led the implementation of {keyword} architecture that scaled to support 200% business growth.",
+        "• Optimized {keyword} processes, reducing development time by 35% and improving code quality.",
+        "• Created {keyword} documentation and training materials that reduced onboarding time by 50%.",
+        "• Implemented {keyword} best practices that reduced system downtime by 75%."
+      ],
+      finance: [
+        "• Developed {keyword} analysis that identified $1.2M in cost-saving opportunities.",
+        "• Led {keyword} initiatives that improved financial reporting accuracy by 45%.",
+        "• Implemented {keyword} controls that ensured 100% compliance with regulatory requirements.",
+        "• Optimized {keyword} processes, reducing month-end close time by 30%.",
+        "• Created {keyword} dashboards that improved executive decision-making capabilities."
+      ],
+      healthcare: [
+        "• Implemented {keyword} protocols that improved patient satisfaction scores by 35%.",
+        "• Developed {keyword} training programs that reduced error rates by 40%.",
+        "• Led {keyword} initiatives that improved care coordination and reduced readmissions by 25%.",
+        "• Optimized {keyword} workflows, increasing provider efficiency by 30%.",
+        "• Created {keyword} documentation that ensured 100% compliance with healthcare regulations."
+      ],
+      marketing: [
+        "• Developed {keyword} campaigns that increased customer engagement by 45%.",
+        "• Led {keyword} initiatives that generated 30% increase in qualified leads.",
+        "• Implemented {keyword} strategies that improved conversion rates by 25%.",
+        "• Created {keyword} content that increased organic traffic by 60%.",
+        "• Optimized {keyword} channels, resulting in 35% reduction in customer acquisition costs."
+      ],
+      manufacturing: [
+        "• Implemented {keyword} processes that improved production efficiency by 35%.",
+        "• Led {keyword} initiatives that reduced defect rates by 40%.",
+        "• Developed {keyword} training programs that improved worker productivity by 25%.",
+        "• Optimized {keyword} workflows, reducing production cycle time by 30%.",
+        "• Created {keyword} documentation that ensured 100% compliance with safety regulations."
+      ],
+      education: [
+        "• Developed {keyword} curriculum that improved student performance metrics by 30%.",
+        "• Led {keyword} initiatives that increased student engagement and participation by 45%.",
+        "• Implemented {keyword} methodologies that improved learning outcomes by 25%.",
+        "• Created {keyword} assessment tools that provided more accurate measurement of student progress.",
+        "• Optimized {keyword} resources, resulting in more efficient use of instructional time."
+      ]
+    };
+    
+    // Default templates for when no specific industry is detected
+    const defaultTemplates = [
       "• Led initiatives to improve {keyword} processes, resulting in 30% increased efficiency.",
       "• Developed and implemented {keyword} strategies that reduced costs by 25%.",
       "• Spearheaded the adoption of new {keyword} methodologies, increasing productivity by 40%.",
@@ -499,11 +572,44 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       "• Optimized {keyword} workflows through innovative approaches."
     ];
     
+    // Select the appropriate templates based on detected industry
+    const templates = detectedIndustry && industryTemplates[detectedIndustry] 
+      ? industryTemplates[detectedIndustry] 
+      : defaultTemplates;
+    
+    // Extract metrics from the CV to make achievements more realistic
+    const metricPatterns = [
+      /(\d+)%\s+(?:increase|improvement|reduction|decrease|growth)/gi,
+      /(?:increased|improved|reduced|decreased|grew)\s+(?:by\s+)?(\d+)%/gi,
+      /\$(\d+(?:\.\d+)?)\s*(?:million|m|k|thousand)/gi
+    ];
+    
+    // Extract actual metrics from the original CV if available
+    const extractedMetrics: string[] = [];
+    metricPatterns.forEach(pattern => {
+      let match;
+      const originalTextLower = originalText.toLowerCase();
+      while ((match = pattern.exec(originalTextLower)) !== null) {
+        if (match[1]) {
+          extractedMetrics.push(match[1]);
+        }
+      }
+    });
+    
     // Generate achievements for each keyword
     let achievements = '';
     keywordsToUse.forEach((keyword, index) => {
       if (index < templates.length) {
-        achievements += templates[index].replace('{keyword}', keyword.toLowerCase()) + '\n';
+        // Replace the template placeholder with the keyword
+        let achievement = templates[index].replace('{keyword}', keyword.toLowerCase());
+        
+        // If we have extracted metrics, use them to make the achievements more realistic
+        if (extractedMetrics.length > index) {
+          // Replace numeric values with actual metrics from the CV
+          achievement = achievement.replace(/\d+%/, `${extractedMetrics[index]}%`);
+        }
+        
+        achievements += achievement + '\n';
       }
     });
     
@@ -697,25 +803,81 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   
   // Update the generateStructuredCV function to create a more interesting title
   const generateStructuredCV = (text: string) => {
-    const keywords = extractKeywords(text, true);
+    // Extract keywords from both the CV text and job description for more accurate matching
+    const cvKeywords = extractKeywords(text, false);
+    const jobKeywords = extractKeywords(jobDescription, true);
     
-    // Generate diverse achievements based on keywords
-    const achievements = generateAchievements(keywords);
+    // Find common keywords between CV and job description for better relevance
+    const commonKeywords = cvKeywords.filter(cvKeyword => 
+      jobKeywords.some(jobKeyword => 
+        jobKeyword.toLowerCase().includes(cvKeyword.toLowerCase()) || 
+        cvKeyword.toLowerCase().includes(jobKeyword.toLowerCase())
+      )
+    );
     
-    // Calculate job match score (70-100%)
-    const jobMatchScore = Math.floor(Math.random() * 30) + 70;
+    // Extract years of experience from the CV text using regex patterns
+    const experiencePatterns = [
+      /(\d+)\+?\s*(?:years|yrs)(?:\s+of)?\s+(?:experience|exp)/i,
+      /(?:experience|exp)(?:\s+of)?\s+(\d+)\+?\s*(?:years|yrs)/i,
+      /(?:over|more than)\s+(\d+)\s*(?:years|yrs)/i
+    ];
     
-    // Create a more sophisticated header
-    const currentDate = new Date();
-    const formattedDate = currentDate.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
+    let yearsOfExperience = 0;
+    for (const pattern of experiencePatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        const years = parseInt(match[1], 10);
+        if (years > yearsOfExperience) {
+          yearsOfExperience = years;
+        }
+      }
+    }
     
-    // Create a more comprehensive and interesting title
-    // Extract potential job title from keywords or use a default
-    const potentialJobTitles = keywords.filter(k => 
+    // If no years found, make a reasonable estimate based on content
+    if (yearsOfExperience === 0) {
+      // Count job positions as a heuristic
+      const positionCount = (text.match(/(?:^|\n)(?:19|20)\d{2}\s*[-–—]\s*(?:19|20)\d{2}|(?:^|\n)(?:19|20)\d{2}\s*[-–—]\s*present/gi) || []).length;
+      yearsOfExperience = Math.max(1, Math.min(20, positionCount * 2));
+    }
+    
+    // Extract education level from CV
+    const educationLevels = [
+      { regex: /(?:ph\.?d|doctorate|doctoral)/i, level: "Ph.D." },
+      { regex: /(?:master'?s|mba|m\.s\.|m\.a\.|m\.b\.a\.)/i, level: "Master's Degree" },
+      { regex: /(?:bachelor'?s|b\.s\.|b\.a\.|b\.eng\.)/i, level: "Bachelor's Degree" },
+      { regex: /(?:associate'?s|a\.s\.|a\.a\.)/i, level: "Associate's Degree" },
+      { regex: /(?:certificate|certification|certified)/i, level: "Professional Certification" }
+    ];
+    
+    let highestEducation = "Professional Certification";
+    for (const { regex, level } of educationLevels) {
+      if (regex.test(text)) {
+        highestEducation = level;
+        break;
+      }
+    }
+    
+    // Extract field of study if available
+    let fieldOfStudy = "";
+    const fieldMatch = text.match(/(?:degree|diploma|certification) in\s+([^,.;]+)/i);
+    if (fieldMatch && fieldMatch[1]) {
+      fieldOfStudy = fieldMatch[1].trim();
+    }
+    
+    // Generate achievements based on actual keywords from job description
+    // Prioritize keywords that appear in both CV and job description
+    const achievementKeywords = commonKeywords.length >= 5 ? 
+      commonKeywords.slice(0, 5) : 
+      [...commonKeywords, ...jobKeywords.filter(k => !commonKeywords.includes(k))].slice(0, 5);
+    
+    const achievements = generateAchievements(achievementKeywords);
+    
+    // Calculate job match score based on actual keyword matches rather than random
+    const matchPercentage = Math.min(95, Math.round((commonKeywords.length / Math.max(1, jobKeywords.length)) * 100));
+    const jobMatchScore = Math.max(70, matchPercentage); // Ensure minimum 70% for optimized CV
+    
+    // Extract potential job title from job description keywords
+    const potentialJobTitles = jobKeywords.filter(k => 
       k.toLowerCase().includes('manager') || 
       k.toLowerCase().includes('developer') || 
       k.toLowerCase().includes('engineer') || 
@@ -728,38 +890,132 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       k.toLowerCase().includes('lead')
     );
     
-    const jobTitle = potentialJobTitles.length > 0 ? potentialJobTitles[0] : 'Professional';
+    // Try to extract job title from job description directly
+    let extractedJobTitle = '';
+    const jobTitlePatterns = [
+      /job title:?\s*([^,.;:]+)/i,
+      /position:?\s*([^,.;:]+)/i,
+      /role:?\s*([^,.;:]+)/i,
+      /^([^,.;:]+(?:manager|developer|engineer|specialist|analyst|consultant|director|designer|coordinator|lead)[^,.;:]*)/im
+    ];
+    
+    for (const pattern of jobTitlePatterns) {
+      const match = jobDescription.match(pattern);
+      if (match && match[1] && match[1].trim().length > 3) {
+        extractedJobTitle = match[1].trim();
+        break;
+      }
+    }
+    
+    // Use the extracted job title, or fall back to keywords
+    const jobTitle = extractedJobTitle || 
+                    (potentialJobTitles.length > 0 ? potentialJobTitles[0] : 'Professional');
     
     // Create an engaging header that incorporates the CV name and potential job title
-    const header = `${selectedCVName ? selectedCVName.replace('.pdf', '').replace('.docx', '') : 'Strategic Resume'} | ${jobTitle} Portfolio`;
+    const header = selectedCVName ? 
+      selectedCVName.replace('.pdf', '').replace('.docx', '') : 
+      'Strategic Resume';
     
     // Keep subheader empty as requested
     const subheader = '';
     
-    // Create an enhanced profile with more detail and structure
-    const topKeywords = keywords.slice(0, 3);
-    const secondaryKeywords = keywords.slice(3, 7);
+    // Extract top skills from CV text
+    const skillsSection = text.match(/(?:skills|technical skills|core competencies|expertise)(?::|.{0,10})\s*([\s\S]*?)(?:\n\n|\n[A-Z]|$)/i);
+    let extractedSkills: string[] = [];
+    
+    if (skillsSection && skillsSection[1]) {
+      // Extract skills from the skills section
+      const skillText = skillsSection[1];
+      const skillLines = skillText.split('\n').filter(line => line.trim().length > 0);
+      
+      // Extract skills from bullet points or comma-separated lists
+      skillLines.forEach(line => {
+        const cleanLine = line.replace(/^[\s•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+/, '').trim();
+        if (cleanLine.includes(',')) {
+          // Handle comma-separated skills
+          const commaSkills = cleanLine.split(',').map(s => s.trim()).filter(s => s.length > 0);
+          extractedSkills.push(...commaSkills);
+        } else if (cleanLine.length > 0) {
+          // Handle single skill per line
+          extractedSkills.push(cleanLine);
+        }
+      });
+    }
+    
+    // If no skills section found, use keywords from CV
+    if (extractedSkills.length === 0) {
+      extractedSkills = cvKeywords;
+    }
+    
+    // Prioritize skills that match job keywords
+    const prioritizedSkills = [
+      ...extractedSkills.filter(skill => 
+        jobKeywords.some(keyword => 
+          skill.toLowerCase().includes(keyword.toLowerCase()) || 
+          keyword.toLowerCase().includes(skill.toLowerCase())
+        )
+      ),
+      ...extractedSkills.filter(skill => 
+        !jobKeywords.some(keyword => 
+          skill.toLowerCase().includes(keyword.toLowerCase()) || 
+          keyword.toLowerCase().includes(skill.toLowerCase())
+        )
+      )
+    ];
+    
+    // Create an enhanced profile with actual data from CV and job description
+    const topJobKeywords = jobKeywords.slice(0, 3);
+    const secondaryJobKeywords = jobKeywords.slice(3, 7);
+    
+    // Extract industry from job description
+    const industries = [
+      { name: "technology", keywords: ["software", "IT", "tech", "digital", "computer", "web", "data", "cloud"] },
+      { name: "finance", keywords: ["finance", "banking", "investment", "accounting", "financial", "budget"] },
+      { name: "healthcare", keywords: ["health", "medical", "clinical", "patient", "care", "hospital"] },
+      { name: "marketing", keywords: ["marketing", "brand", "market", "advertising", "social media", "content"] },
+      { name: "manufacturing", keywords: ["manufacturing", "production", "factory", "assembly", "quality control"] },
+      { name: "education", keywords: ["education", "teaching", "academic", "school", "university", "training"] }
+    ];
+    
+    let detectedIndustry = "";
+    let highestScore = 0;
+    
+    for (const industry of industries) {
+      const score = industry.keywords.reduce((count, keyword) => {
+        return count + (jobDescription.toLowerCase().includes(keyword.toLowerCase()) ? 1 : 0);
+      }, 0);
+      
+      if (score > highestScore) {
+        highestScore = score;
+        detectedIndustry = industry.name;
+      }
+    }
+    
+    // Create a more personalized and data-driven profile
     const enhancedProfile = `
-      Results-driven professional with ${Math.floor(Math.random() * 10) + 5} years of demonstrated expertise in ${topKeywords.join(', ')}. 
-      Proven track record of delivering exceptional outcomes in ${secondaryKeywords.join(', ')}, 
-      consistently exceeding targets and expectations. Adept at leveraging ${keywords[0]} and ${keywords[1]} 
-      to drive innovation and operational excellence. Seeking to apply my extensive background in 
-      ${keywords[2]} and ${keywords[3]} to make an immediate impact in this role.
+      ${detectedIndustry ? `${detectedIndustry.charAt(0).toUpperCase() + detectedIndustry.slice(1)} professional` : 'Results-driven professional'} with ${yearsOfExperience} years of demonstrated expertise in ${topJobKeywords.join(', ')}. 
+      Proven track record of delivering exceptional outcomes in ${secondaryJobKeywords.join(', ')}, 
+      consistently exceeding targets and expectations. Adept at leveraging ${commonKeywords.slice(0, 2).join(' and ')} 
+      to drive innovation and operational excellence. ${highestEducation}${fieldOfStudy ? ` in ${fieldOfStudy}` : ''} with extensive background in 
+      ${commonKeywords.slice(2, 4).join(' and ')}.
     `.trim().replace(/\s+/g, ' ');
     
-    // Create enhanced skills section with better categorization
-    const enhancedSkills = `Expert in: ${keywords.join(', ')}`;
+    // Create enhanced skills section with better categorization based on actual skills
+    const enhancedSkills = prioritizedSkills.slice(0, 15).join(', ');
     
-    // Set structured CV with enhanced header and profile
+    // Create education section based on extracted education
+    const educationText = `${highestEducation}${fieldOfStudy ? ` in ${fieldOfStudy}` : ''} with continuous professional development`;
+    
+    // Set structured CV with enhanced data-driven content
     setStructuredCV({
       header,
       subheader,
       profile: enhancedProfile,
       achievements,
       jobMatchScore,
-      keywordMatches: keywords,
+      keywordMatches: commonKeywords,
       skills: enhancedSkills,
-      education: "Bachelor's Degree in relevant field with continuous professional development and industry certifications"
+      education: educationText
     });
   };
   
