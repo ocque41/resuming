@@ -211,6 +211,29 @@ const generateAchievements = (keywords: string[]): string[] => {
   return achievements;
 };
 
+interface StructuredCV {
+  name: string;
+  subheader: string;
+  profile: string;
+  experience: Array<{
+    title: string;
+    company: string;
+    dates: string;
+    responsibilities: string[];
+  }>;
+  education: Array<{
+    degree: string;
+    field: string;
+    institution: string;
+    year: string;
+  }>;
+  skills: {
+    technical: string[];
+    professional: string[];
+  };
+  achievements: string[];
+}
+
 export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: EnhancedSpecificOptimizationWorkflowProps) {
   // State for CV selection
   const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
@@ -264,24 +287,17 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   const [processingTooLong, setProcessingTooLong] = useState<boolean>(false);
   
   // Add back the structuredCV state
-  const [structuredCV, setStructuredCV] = useState<{
-    header: string;
-    subheader?: string;
-    profile: string;
-    achievements: string[];
-    jobMatchScore: number;
-    keywordMatches: string[];
-    skills: string;
-    education: string;
-  }>({
-    header: "",
+  const [structuredCV, setStructuredCV] = useState<StructuredCV>({
+    name: "",
     subheader: "",
     profile: "",
-    achievements: [],
-    jobMatchScore: 0,
-    keywordMatches: [],
-    skills: "",
-    education: ""
+    experience: [],
+    education: [],
+    skills: {
+      technical: [],
+      professional: []
+    },
+    achievements: []
   });
   
   // Fetch original CV text
@@ -368,7 +384,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         setOptimizedText(optimized);
         
         // Generate structured CV
-        generateStructuredCV(optimized);
+        generateStructuredCV(optimized, jobDescription);
         
         // Generate job match analysis on the optimized content
         analyzeJobMatch(optimized, jobDescription);
@@ -802,221 +818,123 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   };
   
   // Update the generateStructuredCV function to create a more interesting title
-  const generateStructuredCV = (text: string) => {
-    // Extract keywords from both the CV text and job description for more accurate matching
-    const cvKeywords = extractKeywords(text, false);
-    const jobKeywords = extractKeywords(jobDescription, true);
+  const generateStructuredCV = async (cvText: string, jobDescription: string) => {
+    // Extract data from original CV
+    const experienceData = extractExperienceData(cvText);
+    const educationData = extractEducationData(cvText);
+    const skillsData = extractSkillsData(cvText);
+    const achievementsData = extractAchievementsData(cvText);
+
+    // Extract keywords from job description
+    const jobKeywords = extractKeywords(jobDescription);
     
-    // Find common keywords between CV and job description for better relevance
-    const commonKeywords = cvKeywords.filter(cvKeyword => 
-      jobKeywords.some(jobKeyword => 
-        jobKeyword.toLowerCase().includes(cvKeyword.toLowerCase()) || 
-        cvKeyword.toLowerCase().includes(jobKeyword.toLowerCase())
-      )
-    );
+    // Generate header with actual name from CV
+    const nameMatch = cvText.match(/^([A-Za-z\s]+)(?:\n|$)/);
+    const name = nameMatch ? nameMatch[1].trim() : 'Professional CV';
     
-    // Extract years of experience from the CV text using regex patterns
-    const experiencePatterns = [
-      /(\d+)\+?\s*(?:years|yrs)(?:\s+of)?\s+(?:experience|exp)/i,
-      /(?:experience|exp)(?:\s+of)?\s+(\d+)\+?\s*(?:years|yrs)/i,
-      /(?:over|more than)\s+(\d+)\s*(?:years|yrs)/i
-    ];
-    
-    let yearsOfExperience = 0;
-    for (const pattern of experiencePatterns) {
-      const match = text.match(pattern);
-      if (match && match[1]) {
-        const years = parseInt(match[1], 10);
-        if (years > yearsOfExperience) {
-          yearsOfExperience = years;
-        }
-      }
+    // Generate subheader based on most recent experience
+    let subheader = '';
+    if (experienceData && experienceData.length > 0) {
+      const mostRecent = experienceData[0];
+      subheader = `${mostRecent.title}${mostRecent.company ? ` at ${mostRecent.company}` : ''}`;
     }
-    
-    // If no years found, make a reasonable estimate based on content
-    if (yearsOfExperience === 0) {
-      // Count job positions as a heuristic
-      const positionCount = (text.match(/(?:^|\n)(?:19|20)\d{2}\s*[-–—]\s*(?:19|20)\d{2}|(?:^|\n)(?:19|20)\d{2}\s*[-–—]\s*present/gi) || []).length;
-      yearsOfExperience = Math.max(1, Math.min(20, positionCount * 2));
-    }
-    
-    // Extract education level from CV
-    const educationLevels = [
-      { regex: /(?:ph\.?d|doctorate|doctoral)/i, level: "Ph.D." },
-      { regex: /(?:master'?s|mba|m\.s\.|m\.a\.|m\.b\.a\.)/i, level: "Master's Degree" },
-      { regex: /(?:bachelor'?s|b\.s\.|b\.a\.|b\.eng\.)/i, level: "Bachelor's Degree" },
-      { regex: /(?:associate'?s|a\.s\.|a\.a\.)/i, level: "Associate's Degree" },
-      { regex: /(?:certificate|certification|certified)/i, level: "Professional Certification" }
-    ];
-    
-    let highestEducation = "Professional Certification";
-    for (const { regex, level } of educationLevels) {
-      if (regex.test(text)) {
-        highestEducation = level;
-        break;
-      }
-    }
-    
-    // Extract field of study if available
-    let fieldOfStudy = "";
-    const fieldMatch = text.match(/(?:degree|diploma|certification) in\s+([^,.;]+)/i);
-    if (fieldMatch && fieldMatch[1]) {
-      fieldOfStudy = fieldMatch[1].trim();
-    }
-    
-    // Generate achievements based on actual keywords from job description
-    // Prioritize keywords that appear in both CV and job description
-    const achievementKeywords = commonKeywords.length >= 5 ? 
-      commonKeywords.slice(0, 5) : 
-      [...commonKeywords, ...jobKeywords.filter(k => !commonKeywords.includes(k))].slice(0, 5);
-    
-    const achievements = generateAchievements(achievementKeywords);
-    
-    // Calculate job match score based on actual keyword matches rather than random
-    const matchPercentage = Math.min(95, Math.round((commonKeywords.length / Math.max(1, jobKeywords.length)) * 100));
-    const jobMatchScore = Math.max(70, matchPercentage); // Ensure minimum 70% for optimized CV
-    
-    // Extract potential job title from job description keywords
-    const potentialJobTitles = jobKeywords.filter(k => 
-      k.toLowerCase().includes('manager') || 
-      k.toLowerCase().includes('developer') || 
-      k.toLowerCase().includes('engineer') || 
-      k.toLowerCase().includes('specialist') || 
-      k.toLowerCase().includes('analyst') || 
-      k.toLowerCase().includes('consultant') || 
-      k.toLowerCase().includes('director') ||
-      k.toLowerCase().includes('designer') ||
-      k.toLowerCase().includes('coordinator') ||
-      k.toLowerCase().includes('lead')
-    );
-    
-    // Try to extract job title from job description directly
-    let extractedJobTitle = '';
-    const jobTitlePatterns = [
-      /job title:?\s*([^,.;:]+)/i,
-      /position:?\s*([^,.;:]+)/i,
-      /role:?\s*([^,.;:]+)/i,
-      /^([^,.;:]+(?:manager|developer|engineer|specialist|analyst|consultant|director|designer|coordinator|lead)[^,.;:]*)/im
-    ];
-    
-    for (const pattern of jobTitlePatterns) {
-      const match = jobDescription.match(pattern);
-      if (match && match[1] && match[1].trim().length > 3) {
-        extractedJobTitle = match[1].trim();
-        break;
-      }
-    }
-    
-    // Use the extracted job title, or fall back to keywords
-    const jobTitle = extractedJobTitle || 
-                    (potentialJobTitles.length > 0 ? potentialJobTitles[0] : 'Professional');
-    
-    // Create an engaging header that incorporates the CV name and potential job title
-    const header = selectedCVName ? 
-      selectedCVName.replace('.pdf', '').replace('.docx', '') : 
-      'Strategic Resume';
-    
-    // Keep subheader empty as requested
-    const subheader = '';
-    
-    // Extract top skills from CV text
-    const skillsSection = text.match(/(?:skills|technical skills|core competencies|expertise)(?::|.{0,10})\s*([\s\S]*?)(?:\n\n|\n[A-Z]|$)/i);
-    let extractedSkills: string[] = [];
-    
-    if (skillsSection && skillsSection[1]) {
-      // Extract skills from the skills section
-      const skillText = skillsSection[1];
-      const skillLines = skillText.split('\n').filter(line => line.trim().length > 0);
+
+    // Generate profile using actual experience and skills
+    let profile = '';
+    if (experienceData && experienceData.length > 0) {
+      const mostRecent = experienceData[0];
+      const yearsOfExperience = calculateYearsOfExperience(experienceData);
       
-      // Extract skills from bullet points or comma-separated lists
-      skillLines.forEach(line => {
-        const cleanLine = line.replace(/^[\s•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+/, '').trim();
-        if (cleanLine.includes(',')) {
-          // Handle comma-separated skills
-          const commaSkills = cleanLine.split(',').map(s => s.trim()).filter(s => s.length > 0);
-          extractedSkills.push(...commaSkills);
-        } else if (cleanLine.length > 0) {
-          // Handle single skill per line
-          extractedSkills.push(cleanLine);
+      profile = `Results-driven ${mostRecent.title} with ${yearsOfExperience} years of experience`;
+      if (mostRecent.company) {
+        profile += ` at ${mostRecent.company}`;
+      }
+      
+      // Add relevant skills from actual CV
+      if (skillsData) {
+        const relevantSkills = skillsData
+          .filter(skill => jobKeywords.some(keyword => 
+            skill.toLowerCase().includes(keyword.toLowerCase())
+          ))
+          .slice(0, 3);
+        
+        if (relevantSkills.length > 0) {
+          profile += `. Proficient in ${relevantSkills.join(', ')}`;
         }
-      });
+      }
     }
-    
-    // If no skills section found, use keywords from CV
-    if (extractedSkills.length === 0) {
-      extractedSkills = cvKeywords;
-    }
-    
-    // Prioritize skills that match job keywords
-    const prioritizedSkills = [
-      ...extractedSkills.filter(skill => 
+
+    // Generate experience section using actual data
+    const experience = experienceData ? experienceData.map(entry => ({
+      title: entry.title,
+      company: entry.company,
+      dates: entry.dates,
+      responsibilities: entry.responsibilities
+        .filter(resp => jobKeywords.some(keyword => 
+          resp.toLowerCase().includes(keyword.toLowerCase())
+        ))
+        .slice(0, 3)
+    })) : [];
+
+    // Generate education section using actual data
+    const education = educationData ? educationData.map(entry => ({
+      degree: entry.degree,
+      field: entry.field,
+      institution: entry.institution,
+      year: entry.year
+    })) : [];
+
+    // Generate skills section using actual data
+    const skills = skillsData ? {
+      technical: skillsData.filter(skill => 
         jobKeywords.some(keyword => 
-          skill.toLowerCase().includes(keyword.toLowerCase()) || 
-          keyword.toLowerCase().includes(skill.toLowerCase())
+          skill.toLowerCase().includes(keyword.toLowerCase())
         )
       ),
-      ...extractedSkills.filter(skill => 
+      professional: skillsData.filter(skill => 
         !jobKeywords.some(keyword => 
-          skill.toLowerCase().includes(keyword.toLowerCase()) || 
-          keyword.toLowerCase().includes(skill.toLowerCase())
+          skill.toLowerCase().includes(keyword.toLowerCase())
         )
       )
-    ];
-    
-    // Create an enhanced profile with actual data from CV and job description
-    const topJobKeywords = jobKeywords.slice(0, 3);
-    const secondaryJobKeywords = jobKeywords.slice(3, 7);
-    
-    // Extract industry from job description
-    const industries = [
-      { name: "technology", keywords: ["software", "IT", "tech", "digital", "computer", "web", "data", "cloud"] },
-      { name: "finance", keywords: ["finance", "banking", "investment", "accounting", "financial", "budget"] },
-      { name: "healthcare", keywords: ["health", "medical", "clinical", "patient", "care", "hospital"] },
-      { name: "marketing", keywords: ["marketing", "brand", "market", "advertising", "social media", "content"] },
-      { name: "manufacturing", keywords: ["manufacturing", "production", "factory", "assembly", "quality control"] },
-      { name: "education", keywords: ["education", "teaching", "academic", "school", "university", "training"] }
-    ];
-    
-    let detectedIndustry = "";
-    let highestScore = 0;
-    
-    for (const industry of industries) {
-      const score = industry.keywords.reduce((count, keyword) => {
-        return count + (jobDescription.toLowerCase().includes(keyword.toLowerCase()) ? 1 : 0);
-      }, 0);
-      
-      if (score > highestScore) {
-        highestScore = score;
-        detectedIndustry = industry.name;
-      }
-    }
-    
-    // Create a more personalized and data-driven profile
-    const enhancedProfile = `
-      ${detectedIndustry ? `${detectedIndustry.charAt(0).toUpperCase() + detectedIndustry.slice(1)} professional` : 'Results-driven professional'} with ${yearsOfExperience} years of demonstrated expertise in ${topJobKeywords.join(', ')}. 
-      Proven track record of delivering exceptional outcomes in ${secondaryJobKeywords.join(', ')}, 
-      consistently exceeding targets and expectations. Adept at leveraging ${commonKeywords.slice(0, 2).join(' and ')} 
-      to drive innovation and operational excellence. ${highestEducation}${fieldOfStudy ? ` in ${fieldOfStudy}` : ''} with extensive background in 
-      ${commonKeywords.slice(2, 4).join(' and ')}.
-    `.trim().replace(/\s+/g, ' ');
-    
-    // Create enhanced skills section with better categorization based on actual skills
-    const enhancedSkills = prioritizedSkills.slice(0, 15).join(', ');
-    
-    // Create education section based on extracted education
-    const educationText = `${highestEducation}${fieldOfStudy ? ` in ${fieldOfStudy}` : ''} with continuous professional development`;
-    
-    // Set structured CV with enhanced data-driven content
-    setStructuredCV({
-      header,
+    } : { technical: [], professional: [] };
+
+    // Generate achievements using actual data
+    const achievements = achievementsData ? achievementsData
+      .filter(achievement => 
+        jobKeywords.some(keyword => 
+          achievement.toLowerCase().includes(keyword.toLowerCase())
+        )
+      )
+      .slice(0, 3) : [];
+
+    return {
+      name,
       subheader,
-      profile: enhancedProfile,
-      achievements,
-      jobMatchScore,
-      keywordMatches: commonKeywords,
-      skills: enhancedSkills,
-      education: educationText
+      profile,
+      experience,
+      education,
+      skills,
+      achievements
+    };
+  };
+
+  // Helper function to calculate years of experience
+  const calculateYearsOfExperience = (experienceData: any[]) => {
+    let totalYears = 0;
+    
+    experienceData.forEach(entry => {
+      const dates = entry.dates;
+      if (dates) {
+        const [startYear, endYear] = dates.match(/(?:19|20)\d{2}/g) || [];
+        if (startYear && endYear) {
+          totalYears += parseInt(endYear) - parseInt(startYear);
+        } else if (startYear) {
+          totalYears += new Date().getFullYear() - parseInt(startYear);
+        }
+      }
     });
+    
+    return Math.min(totalYears, 20); // Cap at 20 years for profile
   };
   
   // Update the analyzeJobMatch function to provide more accurate scoring and analysis
@@ -1481,217 +1399,305 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   // Update the handleDownloadDocx function to remove Job Optimization Results and enhance Skills and Profile
   const handleDownloadDocx = async () => {
     try {
-      setProcessingStatus("Generating DOCX file...");
-      setIsProcessing(true);
+      setProcessingStatus('Generating DOCX document...');
       
       // Create a new document
       const doc = new Document({
-        sections: [
-          {
-            properties: {},
-            children: [
-              // Enhanced header with name and title - remove "CV ALE 2025.pdf" reference
-              new Paragraph({
-                text: structuredCV.header.replace("CV ALE 2025.pdf", "").trim(),
-                heading: HeadingLevel.HEADING_1,
-                alignment: AlignmentType.CENTER,
-                spacing: {
-                  after: 100,
-                },
-              }),
-              
-              // Add subheader if available
-              structuredCV.subheader ? new Paragraph({
-                text: structuredCV.subheader,
-                alignment: AlignmentType.CENTER,
-                spacing: {
-                  after: 200,
-                },
-              }) : new Paragraph({
-                text: "",
-                spacing: {
-                  after: 200,
-                },
-              }),
-              
-              // Enhanced Professional Profile
-              new Paragraph({
-                text: "Professional Profile",
-                heading: HeadingLevel.HEADING_2,
-                thematicBreak: true,
-              }),
+        sections: [{
+          properties: {},
+          children: [
+            // Header
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: structuredCV.name,
+                  bold: true,
+                  size: 32,
+                  font: 'Calibri'
+                })
+              ],
+              spacing: {
+                after: 200
+              }
+            }),
+            
+            // Subheader
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: structuredCV.subheader,
+                  bold: true,
+                  size: 24,
+                  font: 'Calibri'
+                })
+              ],
+              spacing: {
+                after: 200
+              }
+            }),
+            
+            // Profile
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: 'Professional Profile',
+                  bold: true,
+                  size: 20,
+                  font: 'Calibri'
+                })
+              ],
+              spacing: {
+                before: 400,
+                after: 200
+              }
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: structuredCV.profile,
+                  size: 12,
+                  font: 'Calibri'
+                })
+              ],
+              spacing: {
+                after: 200
+              }
+            }),
+            
+            // Experience
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: 'Professional Experience',
+                  bold: true,
+                  size: 20,
+                  font: 'Calibri'
+                })
+              ],
+              spacing: {
+                before: 400,
+                after: 200
+              }
+            }),
+            ...structuredCV.experience.map(entry => [
               new Paragraph({
                 children: [
                   new TextRun({
-                    text: structuredCV.profile,
-                    bold: false,
+                    text: entry.title,
+                    bold: true,
+                    size: 14,
+                    font: 'Calibri'
                   }),
-                ],
-                spacing: {
-                  after: 200,
-                },
-              }),
-              
-              // Key Achievements
-              new Paragraph({
-                text: "Key Achievements",
-                heading: HeadingLevel.HEADING_2,
-                thematicBreak: true,
-              }),
-              ...structuredCV.achievements.map(
-                (achievement) =>
-                  new Paragraph({
-                    text: `• ${achievement}`,
-                    spacing: {
-                      before: 100,
-                    },
+                  new TextRun({
+                    text: entry.company ? ` at ${entry.company}` : '',
+                    bold: true,
+                    size: 14,
+                    font: 'Calibri'
                   })
-              ),
-              new Paragraph({
-                text: "",
+                ],
                 spacing: {
-                  after: 200,
-                },
+                  after: 100
+                }
               }),
-              
-              // Enhanced Skills section
-              new Paragraph({
-                text: "Skills",
-                heading: HeadingLevel.HEADING_2,
-                thematicBreak: true,
-              }),
-              
-              // Group skills by category for better organization
               new Paragraph({
                 children: [
                   new TextRun({
-                    text: "Technical Skills",
-                    bold: true,
-                  }),
+                    text: entry.dates,
+                    italics: true,
+                    size: 12,
+                    font: 'Calibri'
+                  })
                 ],
                 spacing: {
-                  before: 100,
-                },
+                  after: 100
+                }
               }),
-              new Paragraph({
-                text: extractTechnicalSkills(structuredCV.skills),
-                spacing: {
-                  after: 100,
-                },
-              }),
-              
+              ...entry.responsibilities.map(resp => 
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: '• ',
+                      size: 12,
+                      font: 'Calibri'
+                    }),
+                    new TextRun({
+                      text: resp,
+                      size: 12,
+                      font: 'Calibri'
+                    })
+                  ],
+                  spacing: {
+                    after: 100
+                  }
+                })
+              )
+            ]).flat(),
+            
+            // Education
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: 'Education',
+                  bold: true,
+                  size: 20,
+                  font: 'Calibri'
+                })
+              ],
+              spacing: {
+                before: 400,
+                after: 200
+              }
+            }),
+            ...structuredCV.education.map(entry => 
               new Paragraph({
                 children: [
                   new TextRun({
-                    text: "Professional Skills",
+                    text: `${entry.degree}${entry.field ? ` in ${entry.field}` : ''}`,
                     bold: true,
+                    size: 14,
+                    font: 'Calibri'
                   }),
+                  new TextRun({
+                    text: entry.institution ? ` - ${entry.institution}` : '',
+                    size: 14,
+                    font: 'Calibri'
+                  }),
+                  new TextRun({
+                    text: entry.year ? ` (${entry.year})` : '',
+                    italics: true,
+                    size: 12,
+                    font: 'Calibri'
+                  })
                 ],
                 spacing: {
-                  before: 100,
-                },
-              }),
-              new Paragraph({
-                text: extractProfessionalSkills(structuredCV.skills),
-                spacing: {
-                  after: 100,
-                },
-              }),
-              
+                  after: 100
+                }
+              })
+            ),
+            
+            // Skills
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: 'Skills',
+                  bold: true,
+                  size: 20,
+                  font: 'Calibri'
+                })
+              ],
+              spacing: {
+                before: 400,
+                after: 200
+              }
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: 'Technical Skills: ',
+                  bold: true,
+                  size: 14,
+                  font: 'Calibri'
+                }),
+                new TextRun({
+                  text: structuredCV.skills.technical.join(', '),
+                  size: 12,
+                  font: 'Calibri'
+                })
+              ],
+              spacing: {
+                after: 100
+              }
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: 'Professional Skills: ',
+                  bold: true,
+                  size: 14,
+                  font: 'Calibri'
+                }),
+                new TextRun({
+                  text: structuredCV.skills.professional.join(', '),
+                  size: 12,
+                  font: 'Calibri'
+                })
+              ],
+              spacing: {
+                after: 100
+              }
+            }),
+            
+            // Achievements
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: 'Key Achievements',
+                  bold: true,
+                  size: 20,
+                  font: 'Calibri'
+                })
+              ],
+              spacing: {
+                before: 400,
+                after: 200
+              }
+            }),
+            ...structuredCV.achievements.map(achievement => 
               new Paragraph({
                 children: [
                   new TextRun({
-                    text: "Industry Knowledge",
-                    bold: true,
+                    text: '• ',
+                    size: 12,
+                    font: 'Calibri'
                   }),
+                  new TextRun({
+                    text: achievement,
+                    size: 12,
+                    font: 'Calibri'
+                  })
                 ],
                 spacing: {
-                  before: 100,
-                },
-              }),
-              new Paragraph({
-                text: extractIndustrySkills(structuredCV.skills),
-                spacing: {
-                  after: 200,
-                },
-              }),
-              
-              // Education
-              new Paragraph({
-                text: "Education",
-                heading: HeadingLevel.HEADING_2,
-                thematicBreak: true,
-              }),
-              new Paragraph({
-                text: structuredCV.education,
-                spacing: {
-                  after: 200,
-                },
-              }),
-            ],
-          },
-        ],
+                  after: 100
+                }
+              })
+            )
+          ]
+        }]
       });
+
+      // Generate the document
+      const buffer = await Packer.toBuffer(doc);
       
-      try {
-        // Generate the document as a blob
-        const blob = await Packer.toBlob(doc);
-        
-        // Use file-saver to save the document
-        saveAs(blob, `${selectedCVName || 'CV'}_Job_Optimized.docx`);
-        
-        // Reset processing state
-        setIsProcessing(false);
-        setProcessingStatus("");
-      } catch (error) {
-        console.error("Error generating DOCX:", error);
-        setError("Failed to generate DOCX file. Please try again.");
-        setIsProcessing(false);
-      }
+      // Create a blob and download
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${structuredCV.name.replace(/\s+/g, '_')}_Optimized_CV.docx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      setProcessingStatus('Document generated successfully!');
     } catch (error) {
-      console.error("Error in DOCX generation:", error);
-      setError("Failed to generate DOCX file. Please try again.");
-      setIsProcessing(false);
+      console.error('Error generating DOCX:', error);
+      setProcessingStatus('Error generating document. Please try again.');
     }
   };
   
-  // Helper functions to categorize skills
-  const extractTechnicalSkills = (skillsText: string): string => {
-    const skills = skillsText.replace("Expert in:", "").split(",").map(s => s.trim());
-    const technicalKeywords = ['software', 'development', 'programming', 'code', 'technical', 'engineering', 'system', 'data', 'analysis', 'technology', 'infrastructure', 'network', 'security', 'cloud', 'database', 'platform', 'application', 'design', 'architecture', 'solution'];
-    
-    const technicalSkills = skills.filter(skill => 
-      technicalKeywords.some(keyword => skill.toLowerCase().includes(keyword))
-    );
-    
-    return technicalSkills.length > 0 ? technicalSkills.join(", ") : "Technical skills aligned with job requirements";
+  // Update helper functions to handle the new skills structure
+  const extractTechnicalSkills = (skills: { technical: string[]; professional: string[] }) => {
+    return skills.technical.join(', ');
   };
   
-  const extractProfessionalSkills = (skillsText: string): string => {
-    const skills = skillsText.replace("Expert in:", "").split(",").map(s => s.trim());
-    const professionalKeywords = ['management', 'leadership', 'strategy', 'business', 'operations', 'project', 'financial', 'marketing', 'sales', 'client', 'customer', 'service', 'planning', 'budget', 'compliance', 'communication', 'presentation', 'negotiation', 'teamwork', 'collaboration'];
-    
-    const professionalSkills = skills.filter(skill => 
-      professionalKeywords.some(keyword => skill.toLowerCase().includes(keyword))
-    );
-    
-    return professionalSkills.length > 0 ? professionalSkills.join(", ") : "Professional skills tailored to position requirements";
+  const extractProfessionalSkills = (skills: { technical: string[]; professional: string[] }) => {
+    return skills.professional.join(', ');
   };
   
-  const extractIndustrySkills = (skillsText: string): string => {
-    const skills = skillsText.replace("Expert in:", "").split(",").map(s => s.trim());
-    const industryKeywords = ['industry', 'market', 'sector', 'domain', 'field', 'specialized', 'specific', 'knowledge', 'expertise', 'experience'];
-    
-    // Get skills that don't match technical or professional categories
-    const technicalKeywords = ['software', 'development', 'programming', 'code', 'technical', 'engineering', 'system', 'data', 'analysis', 'technology', 'infrastructure', 'network', 'security', 'cloud', 'database', 'platform', 'application', 'design', 'architecture', 'solution'];
-    const professionalKeywords = ['management', 'leadership', 'strategy', 'business', 'operations', 'project', 'financial', 'marketing', 'sales', 'client', 'customer', 'service', 'planning', 'budget', 'compliance', 'communication', 'presentation', 'negotiation', 'teamwork', 'collaboration'];
-    
-    const industrySkills = skills.filter(skill => 
-      !technicalKeywords.some(keyword => skill.toLowerCase().includes(keyword)) &&
-      !professionalKeywords.some(keyword => skill.toLowerCase().includes(keyword))
-    );
-    
-    return industrySkills.length > 0 ? industrySkills.join(", ") : "Industry-specific knowledge relevant to the position";
+  const extractIndustrySkills = (skills: { technical: string[]; professional: string[] }) => {
+    // Combine both technical and professional skills for industry knowledge
+    return [...skills.technical, ...skills.professional].join(', ');
   };
   
   // Add a useEffect to detect when processing is taking too long
@@ -1713,6 +1719,175 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       if (timeoutId) clearTimeout(timeoutId);
     };
   }, [isProcessing]);
+  
+  // Add a function to extract and structure experience data from the CV
+  const extractExperienceData = (cvText: string) => {
+    // Split CV into sections
+    const sections = cvText.split('\n\n').filter(section => section.trim().length > 0);
+    
+    // Find the experience section
+    const experienceSection = sections.find(section => 
+      section.toLowerCase().includes('experience') || 
+      section.toLowerCase().includes('work history') ||
+      section.toLowerCase().includes('employment')
+    );
+    
+    if (!experienceSection) return null;
+    
+    // Extract individual experience entries
+    const experienceEntries = experienceSection
+      .split('\n')
+      .filter(line => line.trim().length > 0)
+      .map(line => {
+        // Try to match date patterns
+        const dateMatch = line.match(/(?:^|\n)(?:19|20)\d{2}\s*[-–—]\s*(?:19|20)\d{2}|(?:^|\n)(?:19|20)\d{2}\s*[-–—]\s*present/gi);
+        
+        if (dateMatch) {
+          // This is likely a job entry
+          const dates = dateMatch[0].trim();
+          const titleMatch = line.match(/([^•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+?)(?:\s*[-–—]\s*|$)/);
+          const title = titleMatch ? titleMatch[1].trim() : '';
+          
+          // Extract company name if present
+          const companyMatch = line.match(/(?:at|with|for)\s+([^•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+?)(?:\s*[-–—]\s*|$)/i);
+          const company = companyMatch ? companyMatch[1].trim() : '';
+          
+          // Extract responsibilities/achievements
+          const responsibilities = line
+            .split('\n')
+            .filter(l => l.trim().startsWith('•') || l.trim().startsWith('-') || l.trim().startsWith('*'))
+            .map(l => l.replace(/^[\s•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+/, '').trim())
+            .filter(l => l.length > 0);
+          
+          return {
+            dates,
+            title,
+            company,
+            responsibilities
+          };
+        }
+        
+        return null;
+      })
+      .filter(entry => entry !== null);
+    
+    return experienceEntries;
+  };
+  
+  // Add a function to extract education data from the CV
+  const extractEducationData = (cvText: string) => {
+    // Split CV into sections
+    const sections = cvText.split('\n\n').filter(section => section.trim().length > 0);
+    
+    // Find the education section
+    const educationSection = sections.find(section => 
+      section.toLowerCase().includes('education') || 
+      section.toLowerCase().includes('qualifications') ||
+      section.toLowerCase().includes('academic')
+    );
+    
+    if (!educationSection) return null;
+    
+    // Extract education entries
+    const educationEntries = educationSection
+      .split('\n')
+      .filter(line => line.trim().length > 0)
+      .map(line => {
+        // Try to match degree patterns
+        const degreeMatch = line.match(/(?:Bachelor'?s|Master'?s|Ph\.?D|Associate'?s|MBA|B\.S\.|M\.S\.|B\.A\.|M\.A\.)/i);
+        
+        if (degreeMatch) {
+          const degree = degreeMatch[0].trim();
+          
+          // Extract field of study if present
+          const fieldMatch = line.match(/(?:in|of)\s+([^,.;]+)/i);
+          const field = fieldMatch ? fieldMatch[1].trim() : '';
+          
+          // Extract institution if present
+          const institutionMatch = line.match(/(?:from|at)\s+([^,.;]+)/i);
+          const institution = institutionMatch ? institutionMatch[1].trim() : '';
+          
+          // Extract year if present
+          const yearMatch = line.match(/(?:19|20)\d{2}/);
+          const year = yearMatch ? yearMatch[0] : '';
+          
+          return {
+            degree,
+            field,
+            institution,
+            year
+          };
+        }
+        
+        return null;
+      })
+      .filter(entry => entry !== null);
+    
+    return educationEntries;
+  };
+  
+  // Add a function to extract skills data from the CV
+  const extractSkillsData = (cvText: string) => {
+    // Split CV into sections
+    const sections = cvText.split('\n\n').filter(section => section.trim().length > 0);
+    
+    // Find the skills section
+    const skillsSection = sections.find(section => 
+      section.toLowerCase().includes('skills') || 
+      section.toLowerCase().includes('expertise') ||
+      section.toLowerCase().includes('competencies')
+    );
+    
+    if (!skillsSection) return null;
+    
+    // Extract skills from bullet points or comma-separated lists
+    const skills = skillsSection
+      .split('\n')
+      .filter(line => line.trim().length > 0)
+      .map(line => {
+        const cleanLine = line.replace(/^[\s•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+/, '').trim();
+        
+        if (cleanLine.includes(',')) {
+          // Handle comma-separated skills
+          return cleanLine.split(',').map(s => s.trim()).filter(s => s.length > 0);
+        } else if (cleanLine.length > 0) {
+          // Handle single skill per line
+          return [cleanLine];
+        }
+        
+        return [];
+      })
+      .flat();
+    
+    return skills;
+  };
+  
+  // Add a function to extract achievements data from the CV
+  const extractAchievementsData = (cvText: string) => {
+    // Split CV into sections
+    const sections = cvText.split('\n\n').filter(section => section.trim().length > 0);
+    
+    // Find the achievements section
+    const achievementsSection = sections.find(section => 
+      section.toLowerCase().includes('achievements') || 
+      section.toLowerCase().includes('accomplishments') ||
+      section.toLowerCase().includes('highlights')
+    );
+    
+    if (!achievementsSection) return null;
+    
+    // Extract achievements from bullet points
+    const achievements = achievementsSection
+      .split('\n')
+      .filter(line => line.trim().length > 0)
+      .map(line => {
+        const cleanLine = line.replace(/^[\s•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]+/, '').trim();
+        return cleanLine.length > 0 ? cleanLine : null;
+      })
+      .filter(achievement => achievement !== null);
+    
+    return achievements;
+  };
   
   return (
     <div className="bg-[#050505] text-white rounded-md border border-gray-700">
@@ -2120,7 +2295,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           {showStructuredView ? (
             <div className="bg-[#0a0a0a] p-4 rounded-md space-y-4 border border-gray-700">
               <div className="text-center mb-4">
-                <h2 className="text-xl font-bold">{structuredCV.header.replace("CV ALE 2025.pdf", "").trim()}</h2>
+                <h2 className="text-xl font-bold">{structuredCV.name.replace("CV ALE 2025.pdf", "").trim()}</h2>
                 {structuredCV.subheader && (
                   <p className="text-sm text-gray-400 mt-1">{structuredCV.subheader}</p>
                 )}
@@ -2166,7 +2341,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
               <div className="p-4 bg-[#0a0a0a] border border-gray-700 rounded-md">
                 <h3 className="text-md font-semibold mb-3 text-[#B4916C]">Optimized Keywords</h3>
                 <div className="flex flex-wrap gap-2">
-                  {structuredCV.keywordMatches.map((keyword: string, index: number) => (
+                  {structuredCV.skills.technical.concat(structuredCV.skills.professional).map((keyword: string, index: number) => (
                     <span key={index} className="px-2 py-1 bg-[#B4916C]/20 text-[#B4916C] rounded-md text-sm">
                       {keyword}
                     </span>
@@ -2177,7 +2352,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
               {/* Education */}
               <div className="p-4 bg-[#0a0a0a] border border-gray-700 rounded-md">
                 <h3 className="text-md font-semibold mb-3 text-[#B4916C]">Education</h3>
-                <p className="text-white">{structuredCV.education}</p>
+                <p className="text-white">{structuredCV.education.join(', ')}</p>
               </div>
             </div>
           ) : (

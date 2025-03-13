@@ -33,8 +33,8 @@ interface Message {
   content: string;
 }
 
-// Update the eye state type to match the values we're using
-type EyeState = 'normal' | 'blink' | 'excited' | 'thinking' | 'happy' | 'surprised' | 'blinking' | 'looking-left' | 'looking-right' | 'looking-up' | 'looking-down';
+// Update the eye state type to include all animation states
+type EyeState = 'normal' | 'blink' | 'excited' | 'thinking' | 'happy' | 'look-around' | 'wink';
 
 interface EnhancePageClientProps {
   documentsData: Array<Omit<Document, 'createdAt'> & { createdAt: string }>;
@@ -62,6 +62,39 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const characterRef = useRef<HTMLDivElement>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [placeholderOpacity, setPlaceholderOpacity] = useState(1);
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const placeholders = ["Ask a question...", "Type your message here...", "What's on your mind?"];
+  const [title, setTitle] = useState("Let's Create");
+  
+  const animationPresets = {
+    documentSelect: {
+      eyes: 'excited' as EyeState,
+      duration: 1000,
+      sequence: ['look-around', 'excited', 'normal'] as EyeState[]
+    },
+    documentUpload: {
+      eyes: 'thinking' as EyeState,
+      duration: 1500,
+      sequence: ['excited', 'thinking', 'happy', 'normal'] as EyeState[]
+    },
+    messageSend: {
+      eyes: 'thinking' as EyeState,
+      duration: 800,
+      sequence: ['excited', 'thinking', 'normal'] as EyeState[]
+    }
+  };
+
+  const playAnimationSequence = (preset: keyof typeof animationPresets) => {
+    const { sequence, duration } = animationPresets[preset];
+    
+    sequence.forEach((animation, index) => {
+      setTimeout(() => {
+        setEyeState(animation);
+      }, (duration / sequence.length) * index);
+    });
+  };
   
   // Scroll to bottom of messages when new ones are added
   useEffect(() => {
@@ -121,6 +154,28 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
     }
   }, []);
   
+  // Enhanced placeholder rotation with fade effect
+  useEffect(() => {
+    // Simulate initial loading
+    setTimeout(() => setIsLoading(false), 1500);
+
+    const rotatePlaceholder = () => {
+      setPlaceholderOpacity(0);
+      setTimeout(() => {
+        setPlaceholderIndex((prev) => (prev + 1) % placeholders.length);
+        setPlaceholderOpacity(1);
+      }, 200);
+    };
+
+    const interval = setInterval(rotatePlaceholder, 5000);
+    return () => clearInterval(interval);
+  }, []);
+  
+  // Update title when mode changes
+  useEffect(() => {
+    setTitle(mode === 'edit' ? "Let's Edit" : "Let's Create");
+  }, [mode]);
+  
   const handleSendMessage = () => {
     if (!inputMessage.trim()) return;
     
@@ -142,8 +197,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
     }, 1000);
     
     // Show excited animation when sending message
-    setEyeState('excited');
-    setTimeout(() => setEyeState('normal'), 1000);
+    playAnimationSequence('messageSend');
   };
   
   const handleSelectDocument = (id: string, fileName: string) => {
@@ -151,8 +205,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
     setSelectedDocumentId(id);
     
     // Show happy animation when selecting document
-    setEyeState('happy');
-    setTimeout(() => setEyeState('normal'), 1000);
+    playAnimationSequence('documentSelect');
   };
   
   const handleDeselectDocument = (e: React.MouseEvent) => {
@@ -199,6 +252,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
       setIsUploading(false);
       setEyeState('normal');
     }
+    playAnimationSequence('documentUpload');
   };
   
   // Prevent dropdown from closing when selecting/deselecting
@@ -206,7 +260,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
     e.stopPropagation();
     setSelectedDocument(doc);
     setMode('edit');
-    // Don't close dropdown automatically
+    playAnimationSequence('documentSelect');
   };
 
   const handleDocumentDeselect = (e: React.MouseEvent) => {
@@ -215,183 +269,97 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
     setMode('create');
   };
   
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-80px)]">
-      <div className="w-full max-w-3xl px-4">
-        {/* Character */}
-        <div className="flex justify-center mb-4">
-          <div 
-            ref={logoRef}
-            className="w-16 h-16 bg-[#333333] rounded-full flex items-center justify-center"
-          >
-            <div className="relative w-full h-full flex items-center justify-center">
-              <div ref={characterRef} className="relative">
-                <div className="eyes-container">
-                  <div className="eye" 
-                    style={{
-                      transform: `translate(${eyePosition.x}px, ${eyePosition.y}px)`,
-                      transition: 'transform 0.3s ease-out'
-                    }}>
-                    {eyeState === 'normal' && (
-                      <>
-                        <div 
-                          className="absolute w-2.5 h-2.5 bg-white rounded-full"
-                          style={{ 
-                            left: `calc(50% - 5px + ${eyePosition.x * 4}px)`,
-                            top: `calc(50% + ${eyePosition.y * 4}px)`
-                          }}
-                        />
-                        <div 
-                          className="absolute w-2.5 h-2.5 bg-white rounded-full"
-                          style={{ 
-                            left: `calc(50% + 5px + ${eyePosition.x * 4}px)`,
-                            top: `calc(50% + ${eyePosition.y * 4}px)`
-                          }}
-                        />
-                      </>
-                    )}
-                    
-                    {eyeState === 'blink' && (
-                      <>
-                        <div className="absolute w-2.5 h-0.5 bg-white rounded-full" style={{ left: 'calc(50% - 5px)', top: '50%' }} />
-                        <div className="absolute w-2.5 h-0.5 bg-white rounded-full" style={{ left: 'calc(50% + 5px)', top: '50%' }} />
-                      </>
-                    )}
-                    
-                    {eyeState === 'excited' && (
-                      <>
-                        <div className="absolute w-2.5 h-2.5 bg-white rounded-full" style={{ left: 'calc(50% - 5px)', top: 'calc(50% - 2px)' }} />
-                        <div className="absolute w-2.5 h-2.5 bg-white rounded-full" style={{ left: 'calc(50% + 5px)', top: 'calc(50% - 2px)' }} />
-                      </>
-                    )}
-                    
-                    {eyeState === 'thinking' && (
-                      <>
-                        <div className="absolute w-2.5 h-2.5 bg-white rounded-full" style={{ left: 'calc(50% - 5px)', top: 'calc(50% + 2px)' }} />
-                        <div className="absolute w-2 h-0.5 bg-white rounded-full" style={{ left: 'calc(50% + 5px)', top: '50%', transform: 'rotate(20deg)' }} />
-                      </>
-                    )}
-                    
-                    {eyeState === 'happy' && (
-                      <>
-                        <div className="absolute w-2.5 h-1 bg-white rounded-full" style={{ left: 'calc(50% - 5px)', top: 'calc(50% - 1px)', transform: 'rotate(-10deg)' }} />
-                        <div className="absolute w-2.5 h-1 bg-white rounded-full" style={{ left: 'calc(50% + 5px)', top: 'calc(50% - 1px)', transform: 'rotate(10deg)' }} />
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
+  const getEyeStyle = () => {
+    const baseStyle = {
+      transform: 'translate(0, 0)',
+      transition: 'all 0.3s ease-out'
+    };
+
+    switch(eyeState) {
+      case 'blink':
+        return {
+          ...baseStyle,
+          transform: 'scaleY(0.1)',
+          transition: 'transform 0.1s ease-in-out'
+        };
+      case 'look-around':
+        const time = Date.now() / 200;
+        return {
+          ...baseStyle,
+          transform: `translate(${Math.sin(time) * 3}px, ${Math.cos(time) * 2}px)`,
+          transition: 'transform 0.5s ease-out'
+        };
+      case 'wink':
+        return {
+          ...baseStyle,
+          transform: 'scaleY(0.1) rotate(-5deg)',
+          transition: 'all 0.2s cubic-bezier(0.68, -0.55, 0.265, 1.55)'
+        };
+      case 'excited':
+        return {
+          ...baseStyle,
+          transform: `scale(1.2) translate(0, ${Math.sin(Date.now() / 100) * 2}px)`,
+          transition: 'all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
+        };
+      case 'thinking':
+        return {
+          ...baseStyle,
+          transform: 'translate(3px, -2px) rotate(5deg) scaleX(0.9)',
+          transition: 'all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55)'
+        };
+      default:
+        return baseStyle;
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative w-12 h-12">
+            <div className="absolute inset-0 border-t-2 border-[#B4916C] rounded-full animate-spin" />
+            <div className="absolute inset-1 border-t-2 border-[#B4916C] rounded-full animate-spin-slow" />
           </div>
+          <p className="text-[#B4916C] animate-pulse">Loading your workspace...</p>
         </div>
-        
-        {/* Title */}
-        <h1 className="text-2xl md:text-3xl font-bold text-center text-white mb-6">
-          Let's Create
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#050505] text-white p-4 md:p-8">
+      <div className="max-w-4xl mx-auto space-y-6">
+        <h1 className="text-2xl font-bold mb-4 transition-all duration-300 hover:text-[#B4916C]">
+          {title}
         </h1>
         
-        {/* Main Card */}
-        <div className="bg-[#1A1A1A] rounded-2xl p-4 md:p-6">
-          {/* Input Area */}
-          <div className="relative">
-            <Textarea
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              placeholder="Ask a question..."
-              className="min-h-[100px] w-full bg-[#111111] border-none text-white placeholder:text-gray-500 resize-none rounded-xl p-4"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage();
-                }
-              }}
-            />
-            
-            <div className="flex items-center mt-3">
-              {/* Left Buttons */}
-              <div className="flex items-center gap-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  onChange={handleFileChange}
-                  className="hidden"
-                  accept=".pdf,.doc,.docx,.txt"
-                />
-                <Button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="bg-[#B4916C] hover:bg-[#A3815C] rounded-xl p-2 w-10 h-10 flex items-center justify-center"
-                  aria-label="Upload file"
-                >
-                  <Paperclip className="h-5 w-5 text-white" />
-                </Button>
-              </div>
-              
-              {/* Document Dropdown (moved to the right) */}
-              <div className="ml-auto">
-                <Popover open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={isDropdownOpen}
-                      className="w-full justify-between rounded-xl border-[#2D2D2D] bg-[#050505] text-white hover:bg-[#1D1D1D]"
-                    >
-                      {selectedDocument ? selectedDocument.fileName : "Select a document..."}
-                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-full p-0 rounded-xl border-[#2D2D2D] bg-[#050505]">
-                    <div className="max-h-[300px] overflow-y-auto">
-                      {documents.map((doc) => (
-                        <div
-                          key={doc.id}
-                          className="flex items-center justify-between px-4 py-2 hover:bg-[#1D1D1D] first:rounded-t-xl last:rounded-b-xl cursor-pointer"
-                          onClick={(e) => handleDocumentSelect(doc, e)}
-                        >
-                          <span className="text-white">{doc.fileName}</span>
-                          {selectedDocument?.id === doc.id && (
-                            <button
-                              onClick={handleDocumentDeselect}
-                              className="p-1 hover:bg-[#2D2D2D] rounded-xl"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
-          </div>
-          
-          {/* Messages area */}
-          {messages.length > 0 && (
-            <div 
-              ref={messagesContainerRef}
-              className="mt-4 space-y-2 md:space-y-3 px-1 md:px-2 max-h-[300px] overflow-y-auto"
-            >
-              {messages.map((message, index) => (
-                <div 
-                  key={index} 
-                  className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-                >
-                  <div 
-                    className={`max-w-[90%] rounded-xl p-2 text-xs md:text-sm ${
-                      message.role === "user" 
-                        ? "bg-[#2A2A2A] text-white" 
-                        : "bg-[#B4916C]/10 text-white border border-[#B4916C]/20"
-                    }`}
-                  >
-                    {message.content}
-                  </div>
-                </div>
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
-          )}
+        <Button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isUploading}
+          className="bg-[#050505] hover:bg-[#1D1D1D] rounded-xl p-2 w-10 h-10 
+            flex items-center justify-center border border-[#2D2D2D]
+            transition-all duration-300 hover:scale-105 hover:border-[#B4916C]
+            active:scale-95"
+          aria-label="Upload file"
+        >
+          <Paperclip className="h-5 w-5 text-[#B4916C] transition-transform duration-300" />
+        </Button>
+
+        <div className="relative">
+          <input
+            type="text"
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            placeholder={placeholders[placeholderIndex]}
+            className="w-full bg-[#1D1D1D] rounded-xl px-4 py-2 
+              focus:outline-none focus:ring-2 focus:ring-[#B4916C]
+              transition-all duration-300 hover:bg-[#2D2D2D]
+              placeholder-gray-500"
+            style={{ 
+              opacity: placeholderOpacity, 
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)' 
+            }}
+          />
         </div>
       </div>
     </div>
