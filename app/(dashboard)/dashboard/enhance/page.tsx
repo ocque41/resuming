@@ -1,13 +1,11 @@
 import { redirect } from "next/navigation";
 import { getUser, getTeamForUser, getCVsForUser } from "@/lib/db/queries.server";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import Link from "next/link";
-import { ArrowLeft, FileText, Send, Settings, AlertTriangle } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ArrowLeft, AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
+// Import the client component wrapper
+import EnhancePageClient from "./EnhancePageClient";
 
 // Instruct Next.js that this page must render dynamically (to allow cookies usage)
 export const dynamic = "force-dynamic";
@@ -19,9 +17,6 @@ interface Document {
   fileName: string;
   createdAt: Date;
 }
-
-// Import the client component wrapper instead of using dynamic imports directly
-import EnhancePageClient from "./EnhancePageClient";
 
 export default async function DocumentEditorPage() {
   try {
@@ -63,25 +58,20 @@ export default async function DocumentEditorPage() {
     // Pass only serializable data to the client component under the prop name "documentsData"
     return (
       <div className="min-h-screen bg-[#050505] text-white">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 relative">
-          {/* Header with back button and title */}
-          <header className="flex items-center mb-8">
-            <Link 
-              href="/dashboard" 
-              className="flex items-center justify-center h-10 w-10 rounded-md bg-black hover:bg-[#1D1D1D] text-[#B4916C] mr-4 transition-colors"
-              aria-label="Back to dashboard"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-            <h1 className="text-2xl font-bold text-white">
-              Document AI Assistant
-            </h1>
-          </header>
-          
-          <div className="mt-6">
-            <EnhancePageClient documentsData={documents} />
-          </div>
-        </div>
+        {/* Header with back button */}
+        <header className="absolute top-4 left-4 md:top-8 md:left-8 z-10">
+          <Link 
+            href="/dashboard" 
+            className="flex items-center justify-center h-10 w-10 rounded-md bg-black hover:bg-[#1D1D1D] text-[#B4916C] transition-colors"
+            aria-label="Back to dashboard"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+        </header>
+        
+        <main className="w-full py-4">
+          <EnhancePageClient documentsData={documents} />
+        </main>
       </div>
     );
   } catch (error) {
