@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getUser } from "@/lib/db/queries.server";
+import { getUser, getCVsForUser } from "@/lib/db/queries.server";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import EnhancedSpecificOptimizationWorkflow from "../../components/EnhancedSpecificOptimizationWorkflow.client";
@@ -9,6 +9,13 @@ export default async function SpecificOptimizePage() {
   if (!user) {
     redirect("/sign-in");
   }
+
+  // Fetch CVs for the user
+  const cvs = await getCVsForUser(user.id);
+  const formattedCvs = cvs.map((cv: any) => ({
+    id: cv.id,
+    name: cv.fileName
+  }));
   
   return (
     <div className="min-h-screen bg-[#050505] text-white">
@@ -27,7 +34,7 @@ export default async function SpecificOptimizePage() {
           </h1>
         </header>
         
-        <EnhancedSpecificOptimizationWorkflow />
+        <EnhancedSpecificOptimizationWorkflow cvs={formattedCvs} />
       </div>
     </div>
   );

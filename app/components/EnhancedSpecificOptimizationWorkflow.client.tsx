@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle } from "lucide-react";
-import { analyzeCVContent, optimizeCVForJob } from '@/app/lib/services/mistral.service';
+import { analyzeCVContent, optimizeCVForJob } from '@/lib/services/mistral.service';
 
 // Type definitions
 interface KeywordMatch {
@@ -240,7 +240,7 @@ function ModernFileDropdown({
   cvs: string[]; 
   onSelect: (cvId: string, cvName: string) => void; 
   selectedCVName?: string | null; 
-}) {
+}): JSX.Element {
   const [open, setOpen] = useState(false);
   
   return (
@@ -956,7 +956,7 @@ const extractAchievements = (text: string): string[] => {
     .filter(achievement => achievement.length > 0);
 };
 
-export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: EnhancedSpecificOptimizationWorkflowProps) {
+export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: EnhancedSpecificOptimizationWorkflowProps): JSX.Element {
   // State for CV selection
   const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
   const [selectedCVName, setSelectedCVName] = useState<string | null>(null);
@@ -1189,6 +1189,174 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     
     return optimized;
   };
-  
-  // ... rest of the component code ...
+
+  return (
+    <div className="w-full max-w-6xl mx-auto">
+      {/* File selection */}
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold mb-2">Select CV</h3>
+        <ModernFileDropdown 
+          cvs={cvs.map(cv => `${cv.name}|${cv.id}`)}
+          onSelect={handleSelectCV}
+          selectedCVName={selectedCVName}
+        />
+      </div>
+
+      {/* Job description input */}
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold mb-2">Job Description</h3>
+        <textarea
+          className="w-full h-48 p-4 bg-[#050505] border border-gray-700 rounded-md text-white resize-none focus:border-[#B4916C] focus:ring-1 focus:ring-[#B4916C] focus:outline-none"
+          placeholder="Paste the job description here..."
+          value={jobDescription}
+          onChange={(e) => setJobDescription(e.target.value)}
+        />
+      </div>
+
+      {/* Process button */}
+      <div className="mb-6">
+        <button
+          onClick={processCV}
+          disabled={isProcessing || !selectedCVId || !jobDescription.trim()}
+          className={`w-full py-3 rounded-md font-semibold transition-colors duration-200 ${
+            isProcessing || !selectedCVId || !jobDescription.trim()
+              ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+              : 'bg-[#B4916C] text-white hover:bg-[#A37F5C]'
+          }`}
+        >
+          {isProcessing ? 'Processing...' : 'Optimize CV for Job'}
+        </button>
+      </div>
+
+      {/* Processing status */}
+      {isProcessing && (
+        <div className="mb-6 p-4 border border-gray-700 rounded-md">
+          <div className="flex items-center mb-2">
+            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+            <span>{processingStatus || 'Processing...'}</span>
+          </div>
+          <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[#B4916C] transition-all duration-300"
+              style={{ width: `${processingProgress}%` }}
+            />
+          </div>
+          <div className="mt-1 text-sm text-gray-400">
+            {processingProgress}% complete
+          </div>
+        </div>
+      )}
+
+      {/* Error message */}
+      {error && (
+        <div className="mb-6 p-4 border border-red-800 bg-red-900/20 rounded-md text-red-200">
+          <div className="flex items-center">
+            <AlertCircle className="w-4 h-4 mr-2" />
+            <span>{error}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Results */}
+      {isProcessed && (
+        <div className="space-y-6">
+          {/* Job match score */}
+          <div className="p-6 border border-gray-700 rounded-md">
+            <h3 className="text-xl font-semibold mb-4">Job Match Analysis</h3>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-sm text-gray-400">Match Score</p>
+                <p className="text-3xl font-bold">{jobMatchAnalysis.score}%</p>
+              </div>
+              <div className="w-16 h-16 relative">
+                {/* Add a circular progress indicator here */}
+              </div>
+            </div>
+            
+            {/* Dimensional scores */}
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div>
+                <p className="text-sm text-gray-400">Skills Match</p>
+                <p className="text-lg font-semibold">{jobMatchAnalysis.dimensionalScores.skillsMatch}%</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-400">Experience Match</p>
+                <p className="text-lg font-semibold">{jobMatchAnalysis.dimensionalScores.experienceMatch}%</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-400">Education Match</p>
+                <p className="text-lg font-semibold">{jobMatchAnalysis.dimensionalScores.educationMatch}%</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-400">Industry Fit</p>
+                <p className="text-lg font-semibold">{jobMatchAnalysis.dimensionalScores.industryFit}%</p>
+              </div>
+            </div>
+
+            {/* Recommendations */}
+            <div className="mb-6">
+              <h4 className="text-lg font-semibold mb-2">Recommendations</h4>
+              <ul className="space-y-2">
+                {jobMatchAnalysis.recommendations.map((recommendation, index) => (
+                  <li key={index} className="flex items-start">
+                    <Info className="w-4 h-4 mr-2 mt-1 text-[#B4916C]" />
+                    <span>{recommendation}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Keyword matches */}
+            <div className="mb-6">
+              <h4 className="text-lg font-semibold mb-2">Keyword Matches</h4>
+              <div className="flex flex-wrap gap-2">
+                {jobMatchAnalysis.matchedKeywords.map((match, index) => (
+                  <div
+                    key={index}
+                    className="px-3 py-1 bg-[#B4916C]/20 border border-[#B4916C]/30 rounded-full text-sm"
+                  >
+                    {match.keyword}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Missing keywords */}
+            {jobMatchAnalysis.missingKeywords.length > 0 && (
+              <div>
+                <h4 className="text-lg font-semibold mb-2">Missing Keywords</h4>
+                <div className="flex flex-wrap gap-2">
+                  {jobMatchAnalysis.missingKeywords.map((keyword, index) => (
+                    <div
+                      key={index}
+                      className="px-3 py-1 bg-red-900/20 border border-red-800/30 rounded-full text-sm"
+                    >
+                      {keyword.keyword}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Optimized CV */}
+          <div className="p-6 border border-gray-700 rounded-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold">Optimized CV</h3>
+              <button
+                onClick={() => {/* Add download functionality */}}
+                className="flex items-center px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A37F5C] transition-colors"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download
+              </button>
+            </div>
+            <div className="whitespace-pre-wrap font-mono text-sm bg-[#050505] p-4 rounded-md border border-gray-700">
+              {optimizedText}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 } 
