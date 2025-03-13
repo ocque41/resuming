@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AnalyzeCVCard from "@/components/AnalyzeCVCard.client";
 import EnhancedOptimizeCVCard from "@/components/EnhancedOptimizeCVCard.client";
-import SpecificOptimizeCVCard from "@/components/SpecificOptimizeCVCard.client";
+import SpecificOptimizeCVCard from "./SpecificOptimizeCVCard.client";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -23,7 +23,9 @@ interface OptimizationWorkflowProps {
  * Streamlined Optimization Workflow
  * A lightweight, high-performance workflow for analyzing and optimizing CVs
  */
-export default function OptimizationWorkflow({ cvs }: OptimizationWorkflowProps) {
+export default function OptimizationWorkflow(props: OptimizationWorkflowProps): JSX.Element {
+  const { cvs } = props;
+
   // Core states for workflow
   const [activeStep, setActiveStep] = useState<"general" | "specific">("general");
   const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
