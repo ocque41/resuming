@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AnalyzeCVCard from "@/components/AnalyzeCVCard.client";
 import EnhancedOptimizeCVCard from "@/components/EnhancedOptimizeCVCard.client";
 import SpecificOptimizeCVCard from "./SpecificOptimizeCVCard.client";
+import EnhancedSpecificOptimizationWorkflow from "../app/components/EnhancedSpecificOptimizationWorkflow.client";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -302,11 +303,6 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
   
   // Handle tab changes
   const handleTabChange = (value: string) => {
-    if (value === "specific") {
-      // Specific tab is coming soon, don't allow switching to it
-      return;
-    }
-    
     setActiveStep(value as "general" | "specific");
     setError(null);
   };
@@ -415,8 +411,8 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
       <Tabs defaultValue="general" onValueChange={handleTabChange} value={activeStep}>
         <TabsList className="w-full grid grid-cols-2">
           <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="specific" disabled={true}>
-            Specific (Coming Soon)
+          <TabsTrigger value="specific">
+            Specific
           </TabsTrigger>
         </TabsList>
         
@@ -434,17 +430,11 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
         </TabsContent>
         
         <TabsContent value="specific" className="space-y-4 mt-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-2xl font-bold">Job-Specific Optimization</h2>
-              <p className="text-muted-foreground">
-                Optimize your CV for a specific job by pasting the job description below. Our AI will tailor your CV to match the job requirements.
-              </p>
-            </div>
-          </div>
-          
-          <SpecificOptimizeCVCard cvs={cvs} />
-          
+          <h2 className="text-2xl font-bold">Job-Specific Optimization</h2>
+          <p className="text-muted-foreground">
+            Optimize your CV for a specific job by pasting the job description below. Our AI will tailor your CV to match the job requirements.
+          </p>
+          <EnhancedSpecificOptimizationWorkflow />
         </TabsContent>
       </Tabs>
     </div>
