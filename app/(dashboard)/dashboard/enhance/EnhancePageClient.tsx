@@ -12,6 +12,20 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command";
+import { cn } from "@/lib/utils";
+import { Check } from "lucide-react";
 
 // Define props interface with serializable types
 interface EnhancePageClientProps {
@@ -23,9 +37,12 @@ interface EnhancePageClientProps {
 }
 
 interface Message {
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
   content: string;
 }
+
+// Update the eye state type to match the values we're using
+type EyeState = 'normal' | 'blink' | 'excited' | 'thinking' | 'happy' | 'surprised' | 'blinking' | 'looking-left' | 'looking-right' | 'looking-up' | 'looking-down';
 
 export default function EnhancePageClient({ documentsData }: EnhancePageClientProps) {
   const [inputMessage, setInputMessage] = useState<string>("");
@@ -35,7 +52,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const logoRef = useRef<HTMLDivElement>(null);
   const [eyePosition, setEyePosition] = useState({ x: 0, y: 0 });
-  const [eyeState, setEyeState] = useState<'normal' | 'blink' | 'excited' | 'thinking' | 'happy'>('normal');
+  const [eyeState, setEyeState] = useState<EyeState>('normal');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [documents, setDocuments] = useState(documentsData.map(doc => ({
@@ -44,6 +61,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
     createdAt: new Date(doc.createdAt)
   })));
   const { toast } = useToast();
+  const [mode, setMode] = useState<'create' | 'edit'>('create');
   
   // Scroll to bottom of messages when new ones are added
   useEffect(() => {
@@ -76,7 +94,7 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
   
   // Random animations at intervals
   useEffect(() => {
-    const animationStates: ('normal' | 'blink' | 'excited' | 'thinking' | 'happy')[] = [
+    const animationStates: EyeState[] = [
       'blink', 'excited', 'thinking', 'happy'
     ];
     
@@ -96,6 +114,16 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
     }, 5000);
     
     return () => clearInterval(animationInterval);
+  }, []);
+  
+  // Initialize with the correct mode based on whether a document is selected
+  useEffect(() => {
+    // If a document is already selected (e.g., from props), set edit mode
+    if (selectedDocument) {
+      setMode('edit');
+    } else {
+      setMode('create');
+    }
   }, []);
   
   const handleSendMessage = () => {
@@ -246,6 +274,74 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
     }
   };
   
+  // Update the document selection handler
+  const handleDocumentSelect = (document: { id: string; fileName: string }) => {
+    setSelectedDocument(document.fileName);
+    setSelectedDocumentId(document.id);
+    setMode('edit');
+    
+    // Add a message about the selected document
+    setMessages(prev => [
+      ...prev,
+      {
+        role: 'system',
+        content: `Selected document: ${document.fileName}`
+      },
+      {
+        role: 'assistant',
+        content: `I've opened "${document.fileName}". What would you like to do with this document?`
+      }
+    ]);
+    
+    // Set happy eye state
+    setEyeState('happy');
+    setTimeout(() => setEyeState('normal'), 1000);
+    
+    // Scroll to bottom
+    setTimeout(() => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+      }
+    }, 100);
+  };
+  
+  // Update the document deselection handler
+  const handleDocumentDeselect = (e: React.MouseEvent) => {
+    // Stop the event from propagating to the parent (which would select the document again)
+    e.stopPropagation();
+    
+    // Only proceed if a document is actually selected
+    if (!selectedDocument) return;
+    
+    setSelectedDocument(null);
+    setSelectedDocumentId(null);
+    setMode('create');
+    
+    // Add a message about deselecting the document
+    setMessages(prev => [
+      ...prev,
+      {
+        role: 'system',
+        content: `Document deselected. You are now in create mode.`
+      },
+      {
+        role: 'assistant',
+        content: `I've closed the document. You're now in create mode. What would you like to create?`
+      }
+    ]);
+    
+    // Set eye state
+    setEyeState('excited');
+    setTimeout(() => setEyeState('normal'), 1000);
+    
+    // Scroll to bottom
+    setTimeout(() => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+      }
+    }, 100);
+  };
+  
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-80px)]">
       <div className="w-full max-w-3xl px-4">
@@ -344,75 +440,64 @@ export default function EnhancePageClient({ documentsData }: EnhancePageClientPr
                     <Paperclip className="h-3 w-3 md:h-4 md:w-4" />
                   )}
                 </Button>
-                
-                <Button
-                  onClick={handleSendMessage}
-                  variant="ghost"
-                  className="bg-[#222222] hover:bg-[#333333] text-white rounded-full p-1 h-8 w-8 md:h-9 md:w-9 flex items-center justify-center"
-                  aria-label="Submit"
-                >
-                  <Send className="h-3 w-3 md:h-4 md:w-4" />
-                </Button>
               </div>
               
               {/* Document Dropdown (moved to the right) */}
               <div className="ml-auto">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      className={`rounded-full px-3 py-1 text-xs md:text-sm flex items-center ${
-                        selectedDocument 
-                          ? "bg-[#B4916C] hover:bg-[#A3815C] text-white" 
-                          : "bg-[#222222] hover:bg-[#333333] text-white"
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className={`w-full justify-between bg-[#1D1D1D] border-[#333] text-white hover:bg-[#2D2D2D] hover:text-white ${
+                        selectedDocument ? "bg-[#B4916C] hover:bg-[#A3815C] text-white" : "bg-[#222222] hover:bg-[#333333] text-white"
                       }`}
                     >
-                      <FileText className="h-3 w-3 md:h-4 md:w-4 mr-2" />
                       {selectedDocument ? (
-                        <div className="flex items-center">
-                          <span className="max-w-[150px] truncate">{selectedDocument}</span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-5 w-5 ml-1 hover:bg-[#A3815C] rounded-full"
-                            onClick={handleDeselectDocument}
+                        <div className="flex items-center justify-between w-full">
+                          <span className="truncate">{selectedDocument}</span>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDocumentDeselect(e);
+                            }}
+                            className="ml-2 p-1 rounded-full hover:bg-[#333] transition-colors"
+                            aria-label="Deselect document"
                           >
-                            <X className="h-3 w-3" />
-                          </Button>
+                            <X className="h-4 w-4" />
+                          </button>
                         </div>
                       ) : (
                         <span>Documents</span>
                       )}
-                      <ChevronDown className="h-3 w-3 md:h-4 md:w-4 ml-1" />
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
-                  </DropdownMenuTrigger>
-                  
-                  <DropdownMenuContent align="end" className="bg-[#222222] border-[#333333] text-white rounded-xl">
-                    {documents.length > 0 ? (
-                      documents.map((doc) => (
-                        <DropdownMenuItem
-                          key={doc.id}
-                          onClick={() => handleSelectDocument(doc.id, doc.fileName)}
-                          className="flex items-center py-2 px-3 hover:bg-[#333333] cursor-pointer rounded-lg"
-                        >
-                          <div className="flex items-center">
-                            <FileText className="h-4 w-4 mr-2 text-[#B4916C]" />
-                            <div>
-                              <div className="font-medium">{doc.fileName}</div>
-                              <div className="text-xs text-gray-400">
-                                {format(doc.createdAt, "MMM d, yyyy")}
-                              </div>
-                            </div>
-                          </div>
-                        </DropdownMenuItem>
-                      ))
-                    ) : (
-                      <DropdownMenuItem disabled className="text-gray-500">
-                        No documents available
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0 bg-[#1D1D1D] border-[#333] text-white">
+                    <Command>
+                      <CommandInput placeholder="Search documents..." className="bg-[#1D1D1D] text-white" />
+                      <CommandEmpty>No documents found.</CommandEmpty>
+                      <CommandGroup>
+                        {documents.map((document) => (
+                          <CommandItem
+                            key={document.id}
+                            value={document.id}
+                            onSelect={() => handleDocumentSelect(document)}
+                            className="cursor-pointer hover:bg-[#2D2D2D]"
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                selectedDocument === document.fileName ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            <span className="truncate">{document.fileName}</span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
           </div>
