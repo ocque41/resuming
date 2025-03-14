@@ -121,6 +121,22 @@ async function generateSpecificDocx(cvText: string): Promise<Buffer> {
     // Parse the CV text into sections
     const sections = parseOptimizedText(cvText);
     
+    // Define section order for processing
+    const sectionOrder = [
+      'Header',
+      'PROFILE', 
+      'SUMMARY',
+      'ACHIEVEMENTS',
+      'GOALS', 
+      'CAREER GOALS',
+      'LANGUAGES',
+      'SKILLS', 
+      'TECHNICAL SKILLS', 
+      'PROFESSIONAL SKILLS',
+      'EDUCATION',
+      'EXPERIENCE'
+    ];
+    
     // Create document
     const doc = new Document({
       sections: [{
@@ -166,39 +182,42 @@ async function generateSpecificDocx(cvText: string): Promise<Buffer> {
             }
           }),
           
-          // Add each section
-          ...Object.entries(sections).flatMap(([sectionName, content]) => {
+          // Add each section in the specified order
+          ...sectionOrder.flatMap(sectionName => {
+            const content = sections[sectionName];
             if (!content || (Array.isArray(content) && content.length === 0)) {
               return [];
             }
             
             const paragraphs = [];
             
-            // Add section header
-            paragraphs.push(
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: sectionName.toUpperCase(),
-                    size: 28,
-                    bold: true,
-                    color: 'B4916C'
-                  })
-                ],
-                spacing: {
-                  before: 400,
-                  after: 200
-                },
-                border: {
-                  bottom: {
-                    color: 'B4916C',
-                    space: 1,
-                    style: BorderStyle.SINGLE,
-                    size: 6
+            // Add section header (except for Header section)
+            if (sectionName !== 'Header') {
+              paragraphs.push(
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: sectionName.toUpperCase(),
+                      size: 28,
+                      bold: true,
+                      color: 'B4916C'
+                    })
+                  ],
+                  spacing: {
+                    before: 400,
+                    after: 200
+                  },
+                  border: {
+                    bottom: {
+                      color: 'B4916C',
+                      space: 1,
+                      style: BorderStyle.SINGLE,
+                      size: 6
+                    }
                   }
-                }
-              })
-            );
+                })
+              );
+            }
             
             // Add section content
             if (typeof content === 'string') {
@@ -269,6 +288,29 @@ async function generateSpecificDocx(cvText: string): Promise<Buffer> {
             }
             
             return paragraphs;
+          }),
+          
+          // Add footer
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `Optimized CV | ${new Date().toLocaleDateString()}`,
+                size: 20,
+                color: '666666'
+              })
+            ],
+            spacing: {
+              before: 400
+            },
+            alignment: AlignmentType.CENTER,
+            border: {
+              top: {
+                color: 'B4916C',
+                space: 1,
+                style: BorderStyle.SINGLE,
+                size: 6
+              }
+            }
           })
         ]
       }]
@@ -294,12 +336,12 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
   // Define section patterns
   const sectionPatterns = [
     /^(PROFILE|SUMMARY):/i,
-    /^(SKILLS|TECHNICAL SKILLS|PROFESSIONAL SKILLS):/i,
-    /^(EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY):/i,
-    /^(EDUCATION|ACADEMIC BACKGROUND):/i,
     /^(ACHIEVEMENTS|ACCOMPLISHMENTS):/i,
     /^(GOALS|CAREER GOALS):/i,
     /^(LANGUAGES|LANGUAGE PROFICIENCY):/i,
+    /^(SKILLS|TECHNICAL SKILLS|PROFESSIONAL SKILLS):/i,
+    /^(EDUCATION|ACADEMIC BACKGROUND):/i,
+    /^(EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY):/i,
     /^(REFERENCES):/i
   ];
   
