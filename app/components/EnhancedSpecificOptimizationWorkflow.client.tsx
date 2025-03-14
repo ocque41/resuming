@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle } from "lucide-react";
 import { analyzeCVContent, optimizeCVForJob } from '@/lib/services/mistral.service';
+import { useToast } from "@/hooks/use-toast";
 
 // Type definitions
 interface KeywordMatch {
@@ -2364,6 +2365,7 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
 };
 
 export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: EnhancedSpecificOptimizationWorkflowProps): JSX.Element {
+  const { toast } = useToast();
   const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
   const [selectedCVName, setSelectedCVName] = useState<string | null>(null);
   const [originalText, setOriginalText] = useState<string | null>(null);
@@ -2385,6 +2387,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
 
   // Add state for error messages
   const [documentError, setDocumentError] = useState<string | null>(null);
+  const [structuredCV, setStructuredCV] = useState<StructuredCV | null>(null);
 
   // Fetch original CV text
   const fetchOriginalText = useCallback(async (cvId: string) => {
@@ -2460,7 +2463,13 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   const simulateProcessing = () => {
     let progress = 0;
     const interval = setInterval(() => {
-      progress += Math.random() * 10;
+      // More granular progress updates based on current progress
+      const increment = progress < 60 ? Math.random() * 5 :  // Faster at start
+                       progress < 80 ? Math.random() * 3 :   // Slower in middle
+                       progress < 95 ? Math.random() * 1 :   // Very slow near end
+                       Math.random() * 0.5;                  // Extremely slow at final stage
+      
+      progress += increment;
       if (progress >= 100) {
         progress = 100;
         clearInterval(interval);
@@ -2485,26 +2494,56 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       
       setProcessingProgress(Math.floor(progress));
       
-      // Update status messages based on progress
-      if (progress < 20) {
-        setProcessingStatus("Analyzing job description...");
-      } else if (progress < 40) {
-        setProcessingStatus("Extracting key requirements...");
+      // More detailed status messages based on progress
+      if (progress < 15) {
+        setProcessingStatus("Analyzing job description and requirements...");
+      } else if (progress < 30) {
+        setProcessingStatus("Extracting key skills and qualifications...");
+      } else if (progress < 45) {
+        setProcessingStatus("Analyzing CV content and structure...");
       } else if (progress < 60) {
         setProcessingStatus("Matching CV content to job requirements...");
-      } else if (progress < 80) {
-        setProcessingStatus("Optimizing CV content...");
+      } else if (progress < 75) {
+        setProcessingStatus("Optimizing CV sections and formatting...");
+      } else if (progress < 85) {
+        setProcessingStatus("Enhancing content relevance...");
+      } else if (progress < 95) {
+        setProcessingStatus("Finalizing optimizations...");
       } else {
-        setProcessingStatus("Finalizing optimized CV...");
+        setProcessingStatus("Completing final adjustments...");
       }
-    }, 200);
+    }, 500); // Increased interval for more stable updates
     
-    // Set timeout to show processing too long after 10 seconds
+    // Set multiple timeouts for progressive warnings
+    setTimeout(() => {
+      if (isProcessing && progress < 95) {
+        setProcessingStatus(prevStatus => `${prevStatus} (Still processing...)`);
+      }
+    }, 15000); // 15 seconds
+    
+    setTimeout(() => {
+      if (isProcessing && progress < 98) {
+        setProcessingStatus(prevStatus => `${prevStatus} (Almost there...)`);
+      }
+    }, 25000); // 25 seconds
+    
     setTimeout(() => {
       if (isProcessing) {
         setProcessingTooLong(true);
+        setProcessingStatus(prevStatus => 
+          prevStatus ? 
+            (prevStatus.includes("taking longer") 
+              ? prevStatus 
+              : `${prevStatus} (This is taking longer than usual, but please wait...)`)
+            : "Processing is taking longer than usual, please wait..."
+        );
       }
-    }, 10000);
+    }, 30000); // 30 seconds
+    
+    // Cleanup function
+    return () => {
+      clearInterval(interval);
+    };
   };
   
   // Generate optimized text based on job description
@@ -2688,6 +2727,14 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     
     return optimizedText;
   };
+
+  const showToast = useCallback(({ title, description, duration }: { title: string; description: string; duration: number }) => {
+    toast({
+      title,
+      description,
+      duration,
+    });
+  }, [toast]);
 
   // Add download document handler
   const handleDownloadDocument = async () => {
@@ -3064,6 +3111,67 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       console.error('Error generating document:', error);
       setDocumentError(`Failed to generate document: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIsGeneratingDocument(false);
+    }
+  };
+
+  const generateDocument = async (retryCount = 0, maxRetries = 3) => {
+    if (!optimizedText) {
+      setDocumentError("No optimized text available to generate document");
+      return;
+    }
+
+    setIsGeneratingDocument(true);
+    setDocumentError(null);
+
+    try {
+      // Add a small delay before generation to ensure state is settled
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const doc = await generateOptimizedDocument(
+        optimizedText,
+        selectedCVName || 'Optimized CV',
+        structuredCV?.contactInfo,
+        structuredCV || undefined
+      );
+
+      // Create blob and download
+      const blob = await Packer.toBlob(doc);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${selectedCVName || 'optimized-cv'}.docx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      setIsGeneratingDocument(false);
+      showToast({
+        title: "Success",
+        description: "Document generated successfully",
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error("Error generating document:", error);
+      
+      // If we haven't exceeded max retries, try again
+      if (retryCount < maxRetries) {
+        setDocumentError(`Generation attempt ${retryCount + 1} failed, retrying...`);
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+        return generateDocument(retryCount + 1, maxRetries);
+      }
+
+      setIsGeneratingDocument(false);
+      setDocumentError(
+        `Failed to generate document after ${maxRetries} attempts. ` +
+        `Error: ${error instanceof Error ? error.message : String(error)}`
+      );
+      
+      showToast({
+        title: "Error",
+        description: "Failed to generate document. Please try again.",
+        duration: 5000,
+      });
     }
   };
 

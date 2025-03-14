@@ -7,9 +7,13 @@ globs:
 
 # - do not go implement a bunch of things without permision only focus on this priority focus
 
-- generate the specific tab system, this system is very similar to the general except the cv will be optimized based on the copyed and pasted the user desired job description and the AI adjusting the CV keywords and make it the perfect fit for the job--DONE
+- CURRENT FOCUS: MAKING THE SPECIFIC/OPTIMIZE CV BASED ON JOB DESCRIPTION PERFECT.
 
-this system is a completelly new functionality that does not has to do anything with the general for that reason do not edit the general optimize cv to match both general and specific, create a new function for the specific with a lookalike functionality to the general but DO NOT conflict the two they are separate functions and one serves a completelly different purpose to the other--DONE
+- currently the specific/optimize cv is getting stuck between 95% and 99% and it does not completes, lets add more time for it to think better and have more time to optimize the cv perfectly
+
+- the document result (DOCX) is sometimes not generating and sometimes it is generating and the user is able to download it, lets add a more robust document generation system to improve it and add more error handling for the user to know what is happening
+
+- lets improve the job matching system for the user to have more insight letting them see if the job is for them or not
 
 - the system base is complete lets move on to enhancing the content showing in the optimized cv:
     - sections to extract and optimize content based on so the sections has optimize content of original data.
