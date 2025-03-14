@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
     // If optimized text wasn't provided, fetch it from the database
     if (!cvText) {
       try {
+        logger.info(`Fetching CV text for ID: ${cvId}`);
         // Get all CVs for the user
         const cvs = await getCVsForUser(user.id);
         
@@ -85,6 +86,7 @@ export async function POST(request: NextRequest) {
         }
 
         cvText = cvRecord.rawText;
+        logger.info(`Successfully fetched CV text for ID: ${cvId}`);
       } catch (dbError) {
         logger.error('Database error:', dbError instanceof Error ? dbError.message : String(dbError));
         return NextResponse.json(
@@ -94,11 +96,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate the DOCX file
+    // Validate the CV text
+    if (!cvText || typeof cvText !== 'string' || cvText.trim().length === 0) {
+      logger.error('Invalid or empty CV text provided');
+      return NextResponse.json(
+        { success: false, error: 'Invalid or empty CV text provided' },
+        { status: 400 }
+      );
+    }
+
+    // Generate the DOCX file with timeout
     let docxBuffer;
     try {
       logger.info(`Generating DOCX for CV ID: ${cvId}`);
-      docxBuffer = await generateSpecificDocx(cvText);
+      
+      // Create a promise with timeout
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('DOCX generation timed out after 30 seconds')), 30000);
+      });
+      
+      const generatePromise = generateSpecificDocx(cvText);
+      
+      // Race the generation against the timeout
+      docxBuffer = await Promise.race([generatePromise, timeoutPromise]);
+      
       logger.info(`DOCX generation successful for CV ID: ${cvId}`);
     } catch (genError) {
       logger.error('Error generating DOCX:', genError instanceof Error ? genError.message : String(genError));
@@ -339,8 +360,13 @@ async function generateSpecificDocx(cvText: string): Promise<Buffer> {
       }]
     });
 
-    // Generate buffer
-    return await Packer.toBuffer(doc);
+    // Generate buffer with timeout
+    try {
+      return await Packer.toBuffer(doc);
+    } catch (packError) {
+      logger.error('Error packing document to buffer:', packError instanceof Error ? packError.message : String(packError));
+      throw new Error(`Failed to pack document to buffer: ${packError instanceof Error ? packError.message : 'Unknown error'}`);
+    }
   } catch (error) {
     logger.error('Error generating specific DOCX:', error instanceof Error ? error.message : String(error));
     throw new Error(`Failed to generate specific DOCX: ${error instanceof Error ? error.message : String(error)}`);

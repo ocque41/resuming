@@ -2498,36 +2498,120 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       if (!cvId) return;
       
       const response = await fetch(`/api/cv/get-text?cvId=${cvId}`);
+      
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.text) {
           setOriginalText(data.text);
           return data.text;
+        } else {
+          throw new Error(data.error || 'Failed to fetch CV text');
         }
+      } else {
+        throw new Error(`Server responded with status: ${response.status}`);
       }
     } catch (error) {
-      console.error("Error fetching original CV text:", error);
+      console.error('Error fetching CV text:', error);
+      setError(`Failed to fetch CV text: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return null;
     }
-    return "";
   }, []);
-  
+
   // Handle CV selection
-  const handleSelectCV = useCallback(async (cvId: string, cvName: string) => {
+  const handleSelectCV = useCallback((cvId: string, cvName: string) => {
     setSelectedCVId(cvId);
     setSelectedCVName(cvName);
-    console.log(`Selected CV: ${cvName} (ID: ${cvId})`);
+    setOriginalText(null);
+    setOptimizedText(null);
+    setJobMatchAnalysis(null);
+    setError(null);
+    setDocumentError(null);
     
-    // Reset states when a new CV is selected
-    setIsProcessed(false);
-    setIsProcessing(false);
-    setProcessingProgress(0);
-    setProcessingStatus("");
+    // Fetch the CV text
+    fetchOriginalText(cvId);
+  }, [fetchOriginalText]);
+
+  // Add the handleAnalyzeCV function
+  const handleAnalyzeCV = async () => {
+    if (!selectedCVId || !jobDescription || isAnalyzing) return;
+    
+    setIsAnalyzing(true);
+    setError(null);
+    setJobMatchAnalysis(null);
+    
+    try {
+      // Make sure we have the original text
+      let cvText = originalText;
+      if (!cvText) {
+        cvText = await fetchOriginalText(selectedCVId);
+        if (!cvText) {
+          throw new Error('Failed to fetch CV text');
+        }
+      }
+      
+      // Analyze the job match
+      const analysis = analyzeJobMatch(cvText, jobDescription);
+      setJobMatchAnalysis(analysis);
+      
+      // Switch to the job match tab
+      setActiveTab('jobMatch');
+      
+      showToast({
+        title: "Analysis Complete",
+        description: `Job match score: ${analysis.score}%`,
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error('Error analyzing CV:', error);
+      setError(`Failed to analyze CV: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  // Add the handleOptimizeCV function
+  const handleOptimizeCV = async () => {
+    if (!selectedCVId || !jobDescription || !jobMatchAnalysis || isOptimizing) return;
+    
+    setIsOptimizing(true);
     setError(null);
     
-    // Fetch original text
-    await fetchOriginalText(cvId);
-  }, [fetchOriginalText]);
-  
+    try {
+      // Make sure we have the original text
+      let cvText = originalText;
+      if (!cvText) {
+        cvText = await fetchOriginalText(selectedCVId);
+        if (!cvText) {
+          throw new Error('Failed to fetch CV text');
+        }
+      }
+      
+      // Generate optimized text
+      const optimized = generateOptimizedText(cvText, jobDescription);
+      setOptimizedText(optimized);
+      
+      // Switch to the optimized CV tab
+      setActiveTab('optimizedCV');
+      
+      showToast({
+        title: "Optimization Complete",
+        description: "Your CV has been optimized for the job description.",
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error('Error optimizing CV:', error);
+      setError(`Failed to optimize CV: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsOptimizing(false);
+    }
+  };
+
+  // Fix the generateDocument function call in the UI
+  const handleGenerateDocument = () => {
+    if (!optimizedText || isGeneratingDocument) return;
+    generateDocument();
+  };
+
   // Process the CV for specific job
   const processCV = useCallback(async () => {
     if (!selectedCVId) {
@@ -3289,6 +3373,21 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       console.log(`Document generation progress: ${stage} (${percent}%)`);
     };
 
+    // Create a master timeout to prevent the entire process from hanging
+    const masterTimeout = setTimeout(() => {
+      console.error("Document generation process timed out after 60 seconds");
+      setDocumentError("Document generation timed out after 60 seconds. Please try again.");
+      setIsGeneratingDocument(false);
+      setProcessingProgress(0);
+      setProcessingStatus('');
+      
+      showToast({
+        title: "Generation Timeout",
+        description: "Document generation timed out. Please try again.",
+        duration: 5000,
+      });
+    }, 60000); // 60 second timeout for the entire process
+
     try {
       // Step 1: Check cache (5%)
       updateProgress("Checking document cache", 5);
@@ -3312,19 +3411,27 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         
         // Use cached blob for download
         const blob = cachedDocument.blob as Blob;
-        const downloadSuccess = await handleDocumentDownload(blob);
         
-        if (downloadSuccess) {
-          updateProgress("Document generation complete", 100);
-          setIsGeneratingDocument(false);
-          showToast({
-            title: "Success",
-            description: "Document generated successfully from cache.",
-            duration: 3000,
-          });
-          return;
-        } else {
-          // If download failed, continue with regeneration
+        try {
+          updateProgress("Downloading cached document", 90);
+          const downloadSuccess = await handleDocumentDownload(blob);
+          
+          if (downloadSuccess) {
+            updateProgress("Document generation complete", 100);
+            setIsGeneratingDocument(false);
+            showToast({
+              title: "Success",
+              description: "Document generated successfully from cache.",
+              duration: 3000,
+            });
+            clearTimeout(masterTimeout);
+            return;
+          } else {
+            // If download failed, continue with regeneration
+            updateProgress("Cache download failed, regenerating document", 10);
+          }
+        } catch (downloadError) {
+          console.error("Error downloading cached document:", downloadError);
           updateProgress("Cache download failed, regenerating document", 10);
         }
       }
@@ -3448,8 +3555,13 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         try {
           updateProgress("Requesting server-side document generation", 65);
           
+          // Create a timeout promise for the server request
+          const serverTimeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error("Server document generation timed out after 30 seconds")), 30000);
+          });
+          
           // Send optimized text to server for document generation
-          const response = await fetch('/api/cv/specific-generate-docx', {
+          const fetchPromise = fetch('/api/cv/specific-generate-docx', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -3460,6 +3572,9 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
               filename: `${cvName}_optimized.docx`
             }),
           });
+          
+          // Race the fetch promise against the timeout
+          const response = await Promise.race([fetchPromise, serverTimeoutPromise]);
           
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
@@ -3503,6 +3618,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
               50 + (retryCount * 5)); // Increment progress slightly with each retry
             
             await new Promise(resolve => setTimeout(resolve, backoffTime)); // Wait before retry
+            clearTimeout(masterTimeout); // Clear the master timeout before retrying
             return generateDocument(retryCount + 1, maxRetries);
           }
           
@@ -3518,7 +3634,15 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       // Step 8: Download (90%)
       updateProgress("Downloading document", 90);
       
-      const downloadSuccess = await handleDocumentDownload(blob);
+      let downloadSuccess = false;
+      try {
+        downloadSuccess = await handleDocumentDownload(blob);
+      } catch (downloadError) {
+        console.error("Document download failed:", downloadError);
+        // Don't throw here, we'll handle the failure below
+        downloadSuccess = false;
+      }
+      
       if (!downloadSuccess) {
         // If automatic download fails, store the blob for manual download
         setCachedDocument(prev => ({
@@ -3527,7 +3651,22 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           timestamp: Date.now()
         }));
         
-        throw new Error("Automatic download failed. Please use the manual download button.");
+        // Update UI to show manual download button
+        updateProgress("Automatic download failed", 95);
+        setDocumentError("Automatic download failed. Please use the manual download button below.");
+        
+        // Don't throw an error, just show a toast
+        showToast({
+          title: "Download Failed",
+          description: "Automatic download failed. Please use the manual download button.",
+          duration: 5000,
+        });
+        
+        // Still consider the generation process complete
+        updateProgress("Document generation complete", 100);
+        setIsGeneratingDocument(false);
+        clearTimeout(masterTimeout);
+        return;
       }
 
       // Step 9: Complete (100%)
@@ -3539,7 +3678,13 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         duration: 3000,
       });
       
+      // Clear the master timeout since we completed successfully
+      clearTimeout(masterTimeout);
+      
     } catch (error) {
+      // Clear the master timeout since we're handling the error
+      clearTimeout(masterTimeout);
+      
       console.error("Document generation failed:", error);
       
       // Provide user-friendly error message based on error type
@@ -3562,15 +3707,15 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       setDocumentError(errorMessage);
       setIsGeneratingDocument(false);
       
+      // Make sure we set progress to 100% to avoid getting stuck
+      setProcessingProgress(100);
+      setProcessingStatus('Failed');
+      
       showToast({
         title: "Document Generation Failed",
         description: errorMessage,
         duration: 5000,
       });
-      
-      // Reset progress
-      setProcessingProgress(0);
-      setProcessingStatus('');
     }
   };
 
@@ -3590,7 +3735,17 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       console.log(`Download progress (${method}): ${status}`);
     };
     
-    // Method 1: Using URL.createObjectURL
+    // Create a timeout promise to prevent hanging
+    const timeoutPromise = new Promise<boolean>((resolve) => {
+      setTimeout(() => {
+        console.warn("Document download timed out after 15 seconds");
+        updateDownloadProgress("Timeout", "Download timed out after 15 seconds");
+        // Don't reject, just resolve with false to continue with other methods
+        resolve(false);
+      }, 15000); // 15 second timeout
+    });
+    
+    // Method 1: Using URL.createObjectURL with timeout
     try {
       updateDownloadProgress("Method 1", "Creating object URL");
       const url = window.URL.createObjectURL(blob);
@@ -3602,13 +3757,42 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       try {
         updateDownloadProgress("Method 1", "Initiating download");
         document.body.appendChild(link);
-        link.click();
+        
+        // Create a promise that resolves when the download starts
+        const clickPromise = new Promise<boolean>((resolve) => {
+          link.onclick = () => {
+            // Give the browser a moment to start the download
+            setTimeout(() => {
+              resolve(true);
+            }, 500);
+          };
+          
+          // Click the link
+          link.click();
+          
+          // If onclick doesn't fire (which is common), resolve after a short delay
+          setTimeout(() => {
+            resolve(true);
+          }, 1000);
+        });
+        
+        // Race the click promise against the timeout
+        const clickResult = await Promise.race([clickPromise, timeoutPromise]);
+        
+        // Clean up
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
-        downloadSuccess = true;
-        console.log("Download successful using URL.createObjectURL");
-        updateDownloadProgress("Method 1", "Download successful");
-        return true;
+        
+        if (clickResult) {
+          downloadSuccess = true;
+          console.log("Download successful using URL.createObjectURL");
+          updateDownloadProgress("Method 1", "Download successful");
+          return true;
+        } else {
+          console.warn("URL.createObjectURL download timed out");
+          updateDownloadProgress("Method 1", "Failed - Timeout");
+          // Continue to next method
+        }
       } catch (clickError) {
         console.error("Error during link click:", clickError);
         updateDownloadProgress("Method 1", "Failed - Click error");
@@ -3617,60 +3801,94 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     } catch (urlError) {
       console.warn("URL.createObjectURL download failed:", urlError);
       updateDownloadProgress("Method 1", "Failed - URL creation error");
+    }
       
-      // Method 2: Using data URL
-      try {
-        updateDownloadProgress("Method 2", "Converting to data URL");
-        // Convert blob to base64
-        const reader = new FileReader();
-        
-        // Create a promise to handle the async FileReader
-        const readerPromise = new Promise<boolean>((resolve, reject) => {
-          reader.onload = function() {
-            try {
-              updateDownloadProgress("Method 2", "Creating download link");
-              const base64data = reader.result;
-              const dataUrl = base64data as string;
+    // Method 2: Using data URL with timeout
+    try {
+      updateDownloadProgress("Method 2", "Converting to data URL");
+      // Convert blob to base64
+      const reader = new FileReader();
+      
+      // Create a promise to handle the async FileReader
+      const readerPromise = new Promise<boolean>((resolve, reject) => {
+        reader.onload = function() {
+          try {
+            updateDownloadProgress("Method 2", "Creating download link");
+            const base64data = reader.result;
+            const dataUrl = base64data as string;
+            
+            const link = document.createElement('a');
+            link.href = dataUrl;
+            link.download = `${cvName}_optimized.docx`;
+            link.type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+            
+            updateDownloadProgress("Method 2", "Initiating download");
+            document.body.appendChild(link);
+            
+            // Create a promise that resolves when the download starts
+            const clickPromise = new Promise<boolean>((resolveClick) => {
+              link.onclick = () => {
+                // Give the browser a moment to start the download
+                setTimeout(() => {
+                  resolveClick(true);
+                }, 500);
+              };
               
-              const link = document.createElement('a');
-              link.href = dataUrl;
-              link.download = `${cvName}_optimized.docx`;
-              link.type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-              
-              updateDownloadProgress("Method 2", "Initiating download");
-              document.body.appendChild(link);
+              // Click the link
               link.click();
+              
+              // If onclick doesn't fire (which is common), resolve after a short delay
+              setTimeout(() => {
+                resolveClick(true);
+              }, 1000);
+            });
+            
+            // Race the click promise against the timeout
+            clickPromise.then((clickResult) => {
+              // Clean up
               document.body.removeChild(link);
               
-              downloadSuccess = true;
-              console.log("Download successful using data URL");
-              updateDownloadProgress("Method 2", "Download successful");
-              resolve(true);
-            } catch (dataUrlError) {
-              console.error("Error in data URL download:", dataUrlError);
-              updateDownloadProgress("Method 2", "Failed - Link creation error");
-              reject(dataUrlError);
-            }
-          };
-          
-          reader.onerror = function() {
-            console.error("Error reading blob as data URL");
-            updateDownloadProgress("Method 2", "Failed - File reading error");
-            reject(new Error("Failed to read blob as data URL"));
-          };
-        });
+              if (clickResult) {
+                downloadSuccess = true;
+                console.log("Download successful using data URL");
+                updateDownloadProgress("Method 2", "Download successful");
+                resolve(true);
+              } else {
+                console.warn("Data URL download timed out");
+                updateDownloadProgress("Method 2", "Failed - Timeout");
+                resolve(false);
+              }
+            }).catch((error) => {
+              console.error("Error in data URL click:", error);
+              updateDownloadProgress("Method 2", "Failed - Click error");
+              resolve(false);
+            });
+          } catch (dataUrlError) {
+            console.error("Error in data URL download:", dataUrlError);
+            updateDownloadProgress("Method 2", "Failed - Link creation error");
+            reject(dataUrlError);
+          }
+        };
         
-        reader.readAsDataURL(blob);
-        const result = await readerPromise;
-        if (result) return true;
-        
-      } catch (dataUrlError) {
-        console.warn("Data URL download failed:", dataUrlError);
-        updateDownloadProgress("Method 2", "Failed completely");
-      }
+        reader.onerror = function() {
+          console.error("Error reading blob as data URL");
+          updateDownloadProgress("Method 2", "Failed - File reading error");
+          reject(new Error("Failed to read blob as data URL"));
+        };
+      });
+      
+      reader.readAsDataURL(blob);
+      
+      // Race the reader promise against the timeout
+      const result = await Promise.race([readerPromise, timeoutPromise]);
+      if (result) return true;
+      
+    } catch (dataUrlError) {
+      console.warn("Data URL download failed:", dataUrlError);
+      updateDownloadProgress("Method 2", "Failed completely");
     }
     
-    // Method 3: Server-side download as fallback
+    // Method 3: Server-side download as fallback with timeout
     if (!downloadSuccess) {
       try {
         updateDownloadProgress("Method 3", "Preparing server download");
@@ -3686,25 +3904,47 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           reader.readAsDataURL(blob);
         });
         
-        const base64Data = await base64Promise;
+        // Race the base64 promise against the timeout
+        const base64Result = await Promise.race([
+          base64Promise,
+          new Promise<string>((_, reject) => {
+            setTimeout(() => reject(new Error("Base64 conversion timed out")), 10000);
+          })
+        ]);
+        
+        if (!base64Result) {
+          throw new Error("Failed to convert document to base64");
+        }
         
         updateDownloadProgress("Method 3", "Sending to server");
         
-        // Send to server for download
-        const response = await fetch('/api/cv/specific-generate-docx', {
+        // Send to server for download with timeout
+        const fetchPromise = fetch('/api/cv/specific-generate-docx', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             cvId: selectedCVId,
-            docxBase64: base64Data,
+            docxBase64: base64Result,
             filename: `${cvName}_optimized.docx`
           }),
         });
         
-        if (response.ok) {
-          const data = await response.json();
+        // Race the fetch promise against the timeout
+        const fetchResult = await Promise.race([
+          fetchPromise,
+          new Promise<Response>((_, reject) => {
+            setTimeout(() => reject(new Error("Server request timed out")), 15000);
+          })
+        ]);
+        
+        if (!fetchResult) {
+          throw new Error("Server request timed out");
+        }
+        
+        if (fetchResult.ok) {
+          const data = await fetchResult.json();
           
           if (data.success && data.downloadUrl) {
             updateDownloadProgress("Method 3", "Creating download link");
@@ -3716,18 +3956,47 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
             
             updateDownloadProgress("Method 3", "Initiating download");
             document.body.appendChild(link);
-            link.click();
+            
+            // Create a promise that resolves when the download starts
+            const clickPromise = new Promise<boolean>((resolve) => {
+              link.onclick = () => {
+                // Give the browser a moment to start the download
+                setTimeout(() => {
+                  resolve(true);
+                }, 500);
+              };
+              
+              // Click the link
+              link.click();
+              
+              // If onclick doesn't fire (which is common), resolve after a short delay
+              setTimeout(() => {
+                resolve(true);
+              }, 1000);
+            });
+            
+            // Race the click promise against the timeout
+            const clickResult = await Promise.race([clickPromise, timeoutPromise]);
+            
+            // Clean up
             document.body.removeChild(link);
             
-            downloadSuccess = true;
-            console.log("Download successful using server-side method");
-            updateDownloadProgress("Method 3", "Download successful");
-            return true;
+            if (clickResult) {
+              downloadSuccess = true;
+              console.log("Download successful using server-side method");
+              updateDownloadProgress("Method 3", "Download successful");
+              return true;
+            } else {
+              console.warn("Server-side download timed out");
+              updateDownloadProgress("Method 3", "Failed - Timeout");
+              throw new Error("Server-side download timed out");
+            }
           } else {
             throw new Error(data.error || "Server did not return a download URL");
           }
         } else {
-          throw new Error(`Server responded with status: ${response.status}`);
+          const errorText = await fetchResult.text().catch(() => "Unknown error");
+          throw new Error(`Server responded with status: ${fetchResult.status} - ${errorText}`);
         }
       } catch (serverError) {
         console.error("Server-side download failed:", serverError);
@@ -3747,6 +4016,21 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         
         return false;
       }
+    }
+    
+    // If we get here, all methods failed but we didn't throw an error
+    // Make sure we update the UI to show the manual download button
+    if (!downloadSuccess) {
+      setDocumentError(
+        "Automatic download failed. Please click the download button below to try again."
+      );
+      
+      // Store blob in state for manual download
+      setCachedDocument(prev => ({
+        ...prev,
+        blob,
+        timestamp: Date.now()
+      }));
     }
     
     return downloadSuccess;
@@ -3799,49 +4083,131 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         />
       </div>
 
-      {/* Process button */}
-      <div className="mb-6">
-        <button
-          onClick={processCV}
-          disabled={isProcessing || !selectedCVId || !jobDescription.trim()}
-          className={`w-full py-3 rounded-md font-semibold transition-colors duration-200 ${
-            isProcessing || !selectedCVId || !jobDescription.trim()
-              ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-              : 'bg-[#B4916C] text-white hover:bg-[#A37F5C]'
-          }`}
+      {/* Action buttons */}
+      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        <Button
+          onClick={handleAnalyzeCV}
+          disabled={!selectedCVId || !jobDescription || isAnalyzing || isOptimizing}
+          className="flex-1 bg-[#B4916C] hover:bg-[#A3815B] text-white"
         >
-          {isProcessing ? 'Processing...' : 'Optimize CV for Job'}
-        </button>
+          {isAnalyzing ? (
+            <>
+              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+              Analyzing...
+            </>
+          ) : (
+            'Analyze CV'
+          )}
+        </Button>
+        
+        <Button
+          onClick={handleOptimizeCV}
+          disabled={!selectedCVId || !jobDescription || !jobMatchAnalysis || isOptimizing}
+          className="flex-1 bg-[#B4916C] hover:bg-[#A3815B] text-white"
+        >
+          {isOptimizing ? (
+            <>
+              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+              Optimizing...
+            </>
+          ) : (
+            'Optimize CV'
+          )}
+        </Button>
+        
+        <Button
+          onClick={handleGenerateDocument}
+          disabled={!optimizedText || isGeneratingDocument}
+          className="flex-1 bg-[#B4916C] hover:bg-[#A3815B] text-white"
+        >
+          {isGeneratingDocument ? (
+            <>
+              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+              Generating DOCX...
+            </>
+          ) : (
+            <>
+              <FileText className="mr-2 h-4 w-4" />
+              Generate DOCX
+            </>
+          )}
+        </Button>
       </div>
 
-      {/* Processing status */}
-      {isProcessing && (
+      {/* Document generation status */}
+      {isGeneratingDocument && (
         <div className="mb-6 p-4 border border-gray-700 rounded-md">
-          <div className="flex items-center mb-2">
-            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-            <span>{processingStatus || 'Processing...'}</span>
-          </div>
-          <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-[#B4916C] transition-all duration-300"
-              style={{ width: `${processingProgress}%` }}
-            />
-          </div>
-          <div className="mt-1 text-sm text-gray-400">
-            {processingProgress}% complete
+          <h3 className="text-lg font-semibold mb-2">Document Generation</h3>
+          <div className="space-y-2">
+            <div className="flex justify-between items-center text-sm">
+              <span>{processingStatus}</span>
+              <span>{processingProgress}%</span>
+            </div>
+            <Progress value={processingProgress} className="h-2" />
           </div>
         </div>
       )}
 
-      {/* Error message */}
-      {error && (
-        <div className="mb-6 p-4 border border-red-800 bg-red-900/20 rounded-md text-red-200">
-          <div className="flex items-center">
-            <AlertCircle className="w-4 h-4 mr-2" />
-            <span>{error}</span>
+      {/* Document error with manual download button */}
+      {documentError && (
+        <div className="mb-6 p-4 border border-red-800 bg-red-900/20 rounded-md">
+          <div className="flex items-start">
+            <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 mr-2 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-red-300">{documentError}</p>
+              
+              {/* Manual download button - only show when there's a cached blob */}
+              {cachedDocument?.blob && documentError.includes("download failed") && (
+                <Button 
+                  onClick={handleManualDownload}
+                  className="mt-3 bg-[#B4916C] hover:bg-[#A3815B] text-white"
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Manual Download
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       )}
+
+      {/* Tabs for different sections */}
+      <div className="border-b border-gray-700 mb-6">
+        <div className="flex space-x-6">
+          <button
+            className={`pb-2 font-medium text-sm ${
+              activeTab === 'jobDescription'
+                ? 'border-b-2 border-[#B4916C] text-[#B4916C]'
+                : 'text-gray-400 hover:text-white'
+            }`}
+            onClick={() => setActiveTab('jobDescription')}
+          >
+            Job Description
+          </button>
+          <button
+            className={`pb-2 font-medium text-sm ${
+              activeTab === 'jobMatch'
+                ? 'border-b-2 border-[#B4916C] text-[#B4916C]'
+                : 'text-gray-400 hover:text-white'
+            }`}
+            onClick={() => setActiveTab('jobMatch')}
+            disabled={!jobMatchAnalysis}
+          >
+            Job Match
+          </button>
+          <button
+            className={`pb-2 font-medium text-sm ${
+              activeTab === 'optimizedCV'
+                ? 'border-b-2 border-[#B4916C] text-[#B4916C]'
+                : 'text-gray-400 hover:text-white'
+            }`}
+            onClick={() => setActiveTab('optimizedCV')}
+            disabled={!optimizedText}
+          >
+            Optimized CV
+          </button>
+        </div>
+      </div>
 
       {/* Results */}
       {isProcessed && (
