@@ -2477,16 +2477,6 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   const [processingTooLong, setProcessingTooLong] = useState<boolean>(false);
   const [activeAnalysisTab, setActiveAnalysisTab] = useState('keywords');
   
-  // Additional state variables for processing
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [isProcessed, setIsProcessed] = useState<boolean>(false);
-  const [processingProgress, setProcessingProgress] = useState<number>(0);
-  const [processingStatus, setProcessingStatus] = useState<string | null>(null);
-  const [jobMatchAnalysis, setJobMatchAnalysis] = useState<JobMatchAnalysis | null>(null);
-  const [isGeneratingDocument, setIsGeneratingDocument] = useState<boolean>(false);
-  
-  // Add state for error messages
-  const [documentError, setDocumentError] = useState<string | null>(null);
   const [structuredCV, setStructuredCV] = useState<StructuredCV | null>(null);
 
   // Add a new state variable for document caching
