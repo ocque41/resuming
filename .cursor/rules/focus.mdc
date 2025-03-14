@@ -9,7 +9,7 @@ globs:
 
 - CURRENT FOCUS: MAKING THE SPECIFIC/OPTIMIZE CV BASED ON JOB DESCRIPTION PERFECT.
 
-- currently the specific/optimize cv is getting stuck between 95% and 99% and it does not completes, lets add more time for it to think better and have more time to optimize the cv perfectly
+- currently the specific/optimize cv is getting stuck between 95% and 99% and it does not completes, lets add more time for it to think better and have more time to optimize the cv perfectly--DONE
 
 - the document result (DOCX) is sometimes not generating and sometimes it is generating and the user is able to download it, lets add a more robust document generation system to improve it and add more error handling for the user to know what is happening
 

@@ -2825,7 +2825,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           const blob = await Packer.toBlob(doc);
           
           // Save the file using file-saver
-          saveAs(blob, `${cvName}.docx`);
+          saveAs(new Blob([blob]), `${cvName}.docx`);
           
           console.log("Local document generation successful");
           downloadSuccess = true;
@@ -3117,61 +3117,309 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   const generateDocument = async (retryCount = 0, maxRetries = 3) => {
     if (!optimizedText) {
       setDocumentError("No optimized text available to generate document");
+      showToast({
+        title: "Error",
+        description: "No optimized text available. Please optimize your CV first.",
+        duration: 5000,
+      });
       return;
     }
 
     setIsGeneratingDocument(true);
     setDocumentError(null);
 
+    // Create a function to update progress with user feedback
+    const updateProgress = (stage: string, percent: number) => {
+      setDocumentError(`${stage} (${percent}%)...`);
+      console.log(`Document generation progress: ${stage} (${percent}%)`);
+    };
+
     try {
-      // Add a small delay before generation to ensure state is settled
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Step 1: Prepare data (10%)
+      updateProgress("Preparing document data", 10);
+      await new Promise(resolve => setTimeout(resolve, 500)); // Small delay for UI feedback
 
-      const doc = await generateOptimizedDocument(
-        optimizedText,
-        selectedCVName || 'Optimized CV',
-        structuredCV?.contactInfo,
-        structuredCV || undefined
-      );
-
-      // Create blob and download
-      const blob = await Packer.toBlob(doc);
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${selectedCVName || 'optimized-cv'}.docx`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
-      setIsGeneratingDocument(false);
-      showToast({
-        title: "Success",
-        description: "Document generated successfully",
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error("Error generating document:", error);
+      // Get CV name without file extension
+      const cvName = selectedCVName 
+        ? selectedCVName.replace(/\.\w+$/, '') 
+        : 'CV';
       
-      // If we haven't exceeded max retries, try again
-      if (retryCount < maxRetries) {
-        setDocumentError(`Generation attempt ${retryCount + 1} failed, retrying...`);
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
-        return generateDocument(retryCount + 1, maxRetries);
+      // Check if CV ID is available
+      if (!selectedCVId) {
+        throw new Error('No CV selected for document generation');
       }
 
-      setIsGeneratingDocument(false);
-      setDocumentError(
-        `Failed to generate document after ${maxRetries} attempts. ` +
-        `Error: ${error instanceof Error ? error.message : String(error)}`
-      );
+      // Step 2: Generate structured CV (30%)
+      updateProgress("Structuring CV content", 30);
+      await new Promise(resolve => setTimeout(resolve, 500)); // Small delay for UI feedback
+
+      // Generate structured CV data from optimized text
+      const structuredCVData = generateStructuredCV(optimizedText, jobDescription);
       
+      // Further enhance the structured data for better document formatting
+      const enhancedStructuredCV = {
+        ...structuredCVData,
+        education: structuredCVData.education.map(edu => {
+          // Parse relevant courses if they're in string format
+          let relevantCourses: string[] = [];
+          if (edu.relevantCourses) {
+            if (typeof edu.relevantCourses === 'string') {
+              relevantCourses = (edu.relevantCourses as string).split(',').map((course: string) => course.trim());
+            } else if (Array.isArray(edu.relevantCourses)) {
+              relevantCourses = edu.relevantCourses;
+            }
+          }
+          
+          // Parse achievements if they're in string format
+          let achievements: string[] = [];
+          if (edu.achievements) {
+            if (typeof edu.achievements === 'string') {
+              achievements = (edu.achievements as string).split(/[•\-*]\s*/).filter(Boolean).map((achievement: string) => achievement.trim());
+            } else if (Array.isArray(edu.achievements)) {
+              achievements = edu.achievements;
+            }
+          }
+          
+          return {
+            ...edu,
+            relevantCourses,
+            achievements
+          };
+        }),
+        achievements: structuredCVData.achievements.map(achievement => {
+          // Highlight quantifiable achievements
+          const hasQuantifiableResults = /\d+%|\d+\s*(?:million|thousand|hundred|k|m|b|billion|x|times)|\$\d+|increased|improved|reduced|saved|generated|delivered|achieved/i.test(achievement);
+          return achievement;
+        }),
+        languages: structuredCVData.languages.map(language => {
+          // Ensure consistent formatting for languages
+          const parts = language.split(/[:-]/).map(part => part.trim());
+          if (parts.length === 2) {
+            return `${parts[0]} - ${parts[1]}`;
+          }
+          return language;
+        })
+      };
+
+      // Step 3: Generate document (50%)
+      updateProgress("Generating document", 50);
+      
+      // Try to generate the document with a timeout to prevent hanging
+      const generateDocumentWithTimeout = async (): Promise<Document> => {
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("Document generation timed out")), 15000); // 15 second timeout
+        });
+        
+        try {
+          const docPromise = generateOptimizedDocument(
+            optimizedText, 
+            cvName, 
+            enhancedStructuredCV.contactInfo, 
+            enhancedStructuredCV
+          );
+          
+          return await Promise.race([docPromise, timeoutPromise]);
+        } catch (error) {
+          console.error("Error in document generation:", error);
+          throw error;
+        }
+      };
+      
+      let doc: Document;
+      try {
+        doc = await generateDocumentWithTimeout();
+      } catch (docGenError) {
+        console.error("Document generation error:", docGenError);
+        
+        // If we haven't exceeded max retries, try again
+        if (retryCount < maxRetries) {
+          setDocumentError(`Generation attempt ${retryCount + 1} failed, retrying...`);
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+          return generateDocument(retryCount + 1, maxRetries);
+        }
+        
+        throw docGenError;
+      }
+
+      // Step 4: Convert to blob (70%)
+      updateProgress("Preparing document for download", 70);
+      
+      // Convert to blob with error handling
+      let blob: Blob;
+      try {
+        // Use the correct type for the document
+        blob = await Packer.toBlob(doc);
+      } catch (blobError) {
+        console.error("Error converting document to blob:", blobError);
+        throw new Error(`Failed to prepare document for download: ${blobError instanceof Error ? blobError.message : String(blobError)}`);
+      }
+
+      // Step 5: Download document (90%)
+      updateProgress("Initiating download", 90);
+      
+      // Try multiple download methods
+      let downloadSuccess = false;
+      
+      // Method 1: Using URL.createObjectURL
+      try {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${cvName}.docx`;
+        
+        // Wrap the click operation in a try-catch to handle any potential errors
+        try {
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+          downloadSuccess = true;
+          console.log("Download successful using URL.createObjectURL");
+        } catch (clickError) {
+          console.error("Error during link click:", clickError);
+          throw clickError;
+        }
+      } catch (urlError) {
+        console.warn("URL.createObjectURL download failed:", urlError);
+        
+        // Method 2: Using data URL
+        try {
+          // Convert blob to base64
+          const reader = new FileReader();
+          reader.onload = function() {
+            try {
+              const base64data = reader.result as string;
+              const downloadLink = document.createElement('a');
+              downloadLink.href = base64data;
+              downloadLink.download = `${cvName}.docx`;
+              document.body.appendChild(downloadLink);
+              downloadLink.click();
+              document.body.removeChild(downloadLink);
+              downloadSuccess = true;
+              console.log("Download successful using data URL");
+            } catch (dataUrlClickError) {
+              console.error("Data URL click failed:", dataUrlClickError);
+            }
+          };
+          reader.readAsDataURL(blob);
+          
+          // Wait for reader to complete
+          await new Promise((resolve) => {
+            reader.onloadend = resolve;
+          });
+        } catch (dataUrlError) {
+          console.warn("Data URL download failed:", dataUrlError);
+        }
+      }
+
+      // If all client-side methods failed, try server-side download
+      if (!downloadSuccess) {
+        updateProgress("Attempting server-side download", 95);
+        
+        try {
+          // Try specific API endpoint
+          const specificResponse = await fetch('/api/cv/specific-generate-docx', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              cvId: selectedCVId,
+              optimizedText: optimizedText
+            }),
+          });
+          
+          if (specificResponse.ok) {
+            const specificData = await specificResponse.json();
+            
+            if (specificData.success && specificData.docxBase64) {
+              try {
+                const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${specificData.docxBase64}`;
+                const downloadLink = document.createElement('a');
+                downloadLink.href = linkSource;
+                downloadLink.download = `${cvName}.docx`;
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+                downloadSuccess = true;
+                console.log("Download successful using server-generated document");
+              } catch (serverDownloadError) {
+                console.error("Server download method failed:", serverDownloadError);
+              }
+            }
+          }
+        } catch (serverApiError) {
+          console.error("Server API error:", serverApiError);
+        }
+      }
+
+      // Final fallback: Direct download link
+      if (!downloadSuccess) {
+        updateProgress("Providing direct download link", 98);
+        
+        // Create a direct download link for the user
+        const timestamp = new Date().getTime();
+        const directDownloadUrl = `/api/cv/download-optimized-docx?cvId=${selectedCVId}&t=${timestamp}`;
+        
+        setDocumentError(
+          "Automatic download failed. " +
+          `<a href="${directDownloadUrl}" class="text-[#B4916C] underline" target="_blank" rel="noopener noreferrer">Click here to download</a>`
+        );
+        
+        // Also try to open the download in a new tab
+        window.open(directDownloadUrl, '_blank');
+      }
+
+      // Step 6: Complete (100%)
+      updateProgress("Document generation complete", 100);
+      
+      // Clear error message if download was successful
+      if (downloadSuccess) {
+        setDocumentError(null);
+        showToast({
+          title: "Success",
+          description: "Document generated and downloaded successfully",
+          duration: 3000,
+        });
+      }
+      
+      setIsGeneratingDocument(false);
+    } catch (error) {
+      console.error('Error in document generation process:', error);
+      
+      // Provide a user-friendly error message based on the error type
+      let errorMessage = "Failed to generate document";
+      
+      if (error instanceof Error) {
+        if (error.message.includes("timed out")) {
+          errorMessage = "Document generation timed out. Please try again or use a smaller CV.";
+        } else if (error.message.includes("memory")) {
+          errorMessage = "Not enough memory to generate document. Please try again with a smaller CV.";
+        } else if (error.message.includes("network") || error.message.includes("fetch")) {
+          errorMessage = "Network error while generating document. Please check your connection and try again.";
+        } else {
+          errorMessage = `Error: ${error.message}`;
+        }
+      }
+      
+      setDocumentError(errorMessage);
       showToast({
-        title: "Error",
-        description: "Failed to generate document. Please try again.",
+        title: "Document Generation Failed",
+        description: errorMessage,
         duration: 5000,
       });
+      
+      setIsGeneratingDocument(false);
+      
+      // If we haven't exceeded max retries and it's not a timeout error, try again
+      if (retryCount < maxRetries && !(error instanceof Error && error.message.includes("timed out"))) {
+        setDocumentError(`Generation attempt ${retryCount + 1} failed, retrying in 3 seconds...`);
+        
+        // Wait 3 seconds before retry
+        setTimeout(() => {
+          generateDocument(retryCount + 1, maxRetries);
+        }, 3000);
+      }
     }
   };
 
@@ -3347,12 +3595,35 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
                 </button>
               </div>
             </div>
-            {documentError && (
+            
+            {/* Document Generation Progress/Error */}
+            {isGeneratingDocument && (
+              <div className="mb-4 p-3 bg-[#121212] border border-[#B4916C]/30 rounded-md">
+                <div className="flex items-center mb-2">
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin text-[#B4916C]" />
+                  <span className="text-sm font-medium">
+                    {documentError && documentError.includes('(') && documentError.includes('%') 
+                      ? documentError 
+                      : "Generating document..."}
+                  </span>
+                </div>
+                <Progress 
+                  value={documentError && documentError.includes('(') && documentError.includes('%')
+                    ? parseInt(documentError.match(/\((\d+)%\)/)?.[1] || "0") 
+                    : 0} 
+                  className="h-1.5" 
+                />
+              </div>
+            )}
+            
+            {/* Document Error (when not generating) */}
+            {!isGeneratingDocument && documentError && (
               <Alert className="mb-4 bg-destructive/10">
                 <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{documentError}</AlertDescription>
+                <AlertDescription dangerouslySetInnerHTML={{ __html: documentError }} />
               </Alert>
             )}
+            
             <div className="whitespace-pre-wrap font-mono text-sm bg-[#050505] p-4 rounded-md border border-gray-700">
               {optimizedText}
             </div>
