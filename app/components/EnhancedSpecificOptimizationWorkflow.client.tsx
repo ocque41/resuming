@@ -1247,42 +1247,65 @@ const optimizeProfile = (profile: string, jobDescription: string, jobKeywords: s
 const extractTechnicalSkills = (text: string): string[] => {
   // Common technical skill keywords to validate against
   const commonTechnicalSkillKeywords = [
-    'programming', 'software', 'development', 'language', 'framework', 'tool', 'platform',
-    'system', 'database', 'cloud', 'architecture', 'design', 'analysis', 'testing', 'deployment',
-    'devops', 'security', 'network', 'infrastructure', 'algorithm', 'data', 'frontend', 'backend',
-    'fullstack', 'mobile', 'web', 'api', 'automation', 'scripting', 'configuration', 'management',
-    'monitoring', 'optimization', 'performance', 'scalability', 'reliability', 'maintenance',
+    // Programming Languages
     'javascript', 'python', 'java', 'c#', 'c++', 'ruby', 'php', 'typescript', 'go', 'rust', 'swift',
-    'kotlin', 'scala', 'perl', 'bash', 'powershell', 'sql', 'nosql', 'react', 'angular', 'vue',
-    'node', 'express', 'django', 'flask', 'spring', 'laravel', 'rails', 'asp.net', '.net',
+    'kotlin', 'scala', 'perl', 'bash', 'powershell', 'r', 'matlab', 'dart', 'lua', 'haskell',
+    
+    // Web Technologies
+    'html', 'css', 'sass', 'less', 'react', 'angular', 'vue', 'svelte', 'jquery', 'bootstrap',
+    'tailwind', 'material-ui', 'webpack', 'babel', 'node', 'express', 'django', 'flask', 'spring',
+    'laravel', 'rails', 'asp.net', '.net', 'graphql', 'rest', 'soap', 'xml', 'json',
+    
+    // Databases
+    'sql', 'mysql', 'postgresql', 'mongodb', 'redis', 'elasticsearch', 'dynamodb', 'oracle',
+    'cassandra', 'mariadb', 'sqlite', 'neo4j', 'couchdb', 'firebase',
+    
+    // Cloud & DevOps
     'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'terraform', 'jenkins', 'git', 'ci/cd',
-    'agile', 'scrum', 'kanban', 'jira', 'confluence', 'bitbucket', 'github', 'gitlab',
-    'rest', 'graphql', 'soap', 'microservices', 'serverless', 'blockchain', 'ai', 'ml',
-    'deep learning', 'nlp', 'computer vision', 'big data', 'hadoop', 'spark', 'kafka',
-    'elasticsearch', 'mongodb', 'mysql', 'postgresql', 'oracle', 'sql server', 'redis',
-    'html', 'css', 'sass', 'less', 'bootstrap', 'tailwind', 'material-ui', 'webpack',
-    'babel', 'npm', 'yarn', 'linux', 'unix', 'windows', 'macos', 'ios', 'android'
+    'linux', 'unix', 'windows', 'macos', 'devops', 'serverless', 'microservices',
+    
+    // AI & Data Science
+    'machine learning', 'deep learning', 'artificial intelligence', 'nlp', 'computer vision',
+    'tensorflow', 'pytorch', 'keras', 'scikit-learn', 'pandas', 'numpy', 'data science',
+    
+    // Mobile Development
+    'ios', 'android', 'react native', 'flutter', 'xamarin', 'swift', 'objective-c',
+    'mobile development', 'app development',
+    
+    // Other Technical Areas
+    'blockchain', 'cybersecurity', 'networking', 'cloud computing', 'big data', 'iot',
+    'embedded systems', 'system design', 'api design', 'testing', 'automation'
   ];
 
   // Function to validate if a string is likely a technical skill
   const isLikelyTechnicalSkill = (skill: string): boolean => {
     const lowerSkill = skill.toLowerCase();
     
-    // Check if it contains any common technical skill keywords
+    // Direct match with known technical skills
     if (commonTechnicalSkillKeywords.some(keyword => 
-      lowerSkill.includes(keyword.toLowerCase()) || 
-      keyword.toLowerCase().includes(lowerSkill)
+      lowerSkill === keyword || 
+      lowerSkill.includes(keyword) || 
+      keyword.includes(lowerSkill)
     )) {
       return true;
     }
     
-    // Check if it's a programming language, framework, or tool (typically single words or short phrases)
-    if (lowerSkill.length > 1 && lowerSkill.length < 20 && /^[a-z0-9\.\+\#\-\_]+$/i.test(lowerSkill)) {
+    // Check for technical patterns
+    const technicalPatterns = [
+      /^[a-z0-9\.\+\#\-\_]+$/i,  // Single word technical terms
+      /^[a-z0-9]+ (development|programming|engineering|design|architecture|administration|security)$/i,
+      /^(front|back|full).?end/i,
+      /^[a-z\s\-]+ (framework|library|platform|tool|system|database|language|stack)$/i,
+      /^(junior|senior|lead|principal)?\s*(?:software|systems?|data|cloud|security|network|database|web)\s+(?:engineer|developer|architect|administrator|analyst)/i,
+      /\d+\+?\s*years?\s+(?:of\s+)?experience\s+(?:with|in)\s+([a-z0-9\s\-\+]+)/i
+    ];
+    
+    if (technicalPatterns.some(pattern => pattern.test(lowerSkill))) {
       return true;
     }
     
-    // Check for common technical skill patterns
-    if (/^[a-z0-9]+ (development|programming|engineering|design|architecture|administration|security)$/i.test(lowerSkill)) {
+    // Check for version numbers or technical specifications
+    if (/\d+\.\d+/.test(skill) || /^v\d+/.test(skill)) {
       return true;
     }
     
@@ -1292,83 +1315,131 @@ const extractTechnicalSkills = (text: string): string[] => {
   // Try multiple patterns to find technical skills section
   const technicalPatterns = [
     /(?:technical|programming|software|development|hard|computer)\s+skills[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is,
-    /(?:skills|expertise|competencies)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is
+    /(?:skills|expertise|competencies)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is,
+    /(?:technologies|tools|platforms|programming languages)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is
   ];
-  
-  let match = null;
-  for (const pattern of technicalPatterns) {
-    match = text.match(pattern);
-    if (match && match[1]) break;
-  }
-  
-  if (!match || !match[1]) return [];
-  
-  // Extract skills from the matched section
-  const skillsText = match[1];
-  
-  // Try to detect if skills are in a list format
-  const hasBulletPoints = /^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s+/m.test(skillsText);
   
   let extractedSkills: string[] = [];
   
-  if (hasBulletPoints) {
-    // Extract skills from bullet points
-    extractedSkills = skillsText
-      .split(/\n/)
-      .map(skill => skill.replace(/^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s*/, '').trim())
-      .filter(skill => skill.length > 0);
-  } else {
-    // Extract skills from comma/semicolon separated list
-    extractedSkills = skillsText
-      .split(/[,;]|\band\b/)
-      .map(skill => skill.trim())
-      .filter(skill => skill.length > 0);
+  // First try to find a dedicated technical skills section
+  for (const pattern of technicalPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      const skillsText = match[1];
+      
+      // Try to detect if skills are in a list format
+      const hasBulletPoints = /^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s+/m.test(skillsText);
+      
+      if (hasBulletPoints) {
+        // Extract skills from bullet points
+        extractedSkills = skillsText
+          .split(/\n/)
+          .map(skill => skill.replace(/^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s*/, '').trim())
+          .filter(skill => skill.length > 0);
+      } else {
+        // Extract skills from comma/semicolon/newline separated list
+        extractedSkills = skillsText
+          .split(/[,;]|\band\b|\n/)
+          .map(skill => skill.trim())
+          .filter(skill => skill.length > 0);
+      }
+      
+      break;
+    }
   }
   
-  // Filter out non-technical skills and single words that aren't recognized technologies
-  return extractedSkills.filter(skill => {
-    // Allow multi-word phrases
-    if (skill.split(/\s+/).length > 1) {
-      return isLikelyTechnicalSkill(skill);
-    }
+  // If no dedicated section found, try to extract from experience section
+  if (extractedSkills.length === 0) {
+    const experiencePattern = /(?:experience|work history|employment)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+    const experienceMatch = text.match(experiencePattern);
     
-    // For single words, be more strict - must be a recognized technology
-    return commonTechnicalSkillKeywords.some(keyword => 
-      skill.toLowerCase() === keyword.toLowerCase() ||
-      isLikelyTechnicalSkill(skill)
-    );
-  });
+    if (experienceMatch && experienceMatch[1]) {
+      const experienceText = experienceMatch[1];
+      
+      // Extract words that look like technical skills
+      const words = experienceText.match(/\b[A-Za-z0-9][A-Za-z0-9\+\#\.\-\_]*(?:\s+[A-Za-z0-9\+\#\.\-\_]+)*\b/g) || [];
+      
+      extractedSkills = words.filter(word => isLikelyTechnicalSkill(word));
+    }
+  }
+  
+  // Filter and clean the skills
+  const skills = extractedSkills
+    .map(skill => skill.trim())
+    .filter(skill => skill.length > 0 && isLikelyTechnicalSkill(skill));
+  
+  // Remove duplicates and normalize
+  return [...new Set(skills.map(skill => {
+    // Remove any leading/trailing punctuation
+    skill = skill.replace(/^[^\w]+|[^\w]+$/g, '');
+    // Normalize spacing
+    skill = skill.replace(/\s+/g, ' ');
+    return skill;
+  }))];
 };
 
 const extractProfessionalSkills = (text: string): string[] => {
   // Common professional skill keywords to validate against
   const commonProfessionalSkillKeywords = [
-    'communication', 'leadership', 'teamwork', 'problem-solving', 'critical thinking',
-    'time management', 'organization', 'adaptability', 'flexibility', 'creativity',
-    'interpersonal', 'negotiation', 'conflict resolution', 'decision making', 'emotional intelligence',
-    'presentation', 'public speaking', 'writing', 'listening', 'customer service',
-    'project management', 'strategic planning', 'analytical', 'research', 'attention to detail',
-    'multitasking', 'prioritization', 'collaboration', 'mentoring', 'coaching',
-    'facilitation', 'delegation', 'motivation', 'persuasion', 'networking',
-    'relationship building', 'cultural awareness', 'diversity', 'inclusion', 'empathy',
-    'patience', 'resilience', 'self-motivation', 'initiative', 'integrity',
-    'ethics', 'professionalism', 'accountability', 'reliability', 'resourcefulness'
+    // Leadership & Management
+    'leadership', 'management', 'team lead', 'project management', 'strategic planning',
+    'decision making', 'delegation', 'mentoring', 'coaching', 'performance management',
+    
+    // Communication
+    'communication', 'presentation', 'public speaking', 'writing', 'reporting',
+    'documentation', 'technical writing', 'client communication', 'stakeholder management',
+    
+    // Collaboration
+    'teamwork', 'collaboration', 'cross-functional', 'team building', 'relationship building',
+    'partnership', 'coordination', 'facilitation', 'negotiation',
+    
+    // Problem Solving
+    'problem solving', 'critical thinking', 'analytical', 'research', 'troubleshooting',
+    'root cause analysis', 'decision making', 'strategic thinking', 'innovation',
+    
+    // Project Skills
+    'project planning', 'resource management', 'budgeting', 'risk management',
+    'scope management', 'agile', 'scrum', 'kanban', 'waterfall', 'lean',
+    
+    // Interpersonal Skills
+    'interpersonal', 'emotional intelligence', 'conflict resolution', 'cultural awareness',
+    'empathy', 'active listening', 'feedback', 'mentoring',
+    
+    // Organization
+    'organization', 'time management', 'prioritization', 'multitasking',
+    'planning', 'scheduling', 'coordination', 'detail oriented',
+    
+    // Business Skills
+    'business analysis', 'requirements gathering', 'process improvement',
+    'strategic planning', 'customer service', 'client relations',
+    
+    // Adaptability
+    'adaptability', 'flexibility', 'learning agility', 'change management',
+    'resilience', 'innovation', 'creativity'
   ];
 
   // Function to validate if a string is likely a professional skill
   const isLikelyProfessionalSkill = (skill: string): boolean => {
     const lowerSkill = skill.toLowerCase();
     
-    // Check if it contains any common professional skill keywords
+    // Direct match with known professional skills
     if (commonProfessionalSkillKeywords.some(keyword => 
-      lowerSkill.includes(keyword.toLowerCase()) || 
-      keyword.toLowerCase().includes(lowerSkill)
+      lowerSkill === keyword || 
+      lowerSkill.includes(keyword) || 
+      keyword.includes(lowerSkill)
     )) {
       return true;
     }
     
-    // Check for common professional skill patterns
-    if (/^(strong|excellent|effective|advanced) [a-z]+ (skills|abilities|capabilities)$/i.test(lowerSkill)) {
+    // Check for professional skill patterns
+    const professionalPatterns = [
+      /^(strong|excellent|effective|advanced|proven)\s+[a-z\s]+\s+(skills|abilities|capabilities)$/i,
+      /^[a-z\s]+(management|leadership|communication|analysis|planning)$/i,
+      /^(team|project|client|customer|business)\s+[a-z\s]+(skills|management|relations|service)$/i,
+      /^(verbal|written|interpersonal|organizational|analytical)\s+[a-z\s]+$/i
+    ];
+    
+    if (professionalPatterns.some(pattern => pattern.test(lowerSkill))) {
       return true;
     }
     
@@ -1378,41 +1449,67 @@ const extractProfessionalSkills = (text: string): string[] => {
   // Try multiple patterns to find professional skills section
   const professionalPatterns = [
     /(?:soft|professional|interpersonal|personal|communication)\s+skills[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is,
-    /(?:competencies|abilities|capabilities)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is
+    /(?:competencies|abilities|capabilities)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is,
+    /(?:core\s+competencies|key\s+strengths)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is
   ];
-  
-  let match = null;
-  for (const pattern of professionalPatterns) {
-    match = text.match(pattern);
-    if (match && match[1]) break;
-  }
-  
-  if (!match || !match[1]) return [];
-  
-  // Extract skills from the matched section
-  const skillsText = match[1];
-  
-  // Try to detect if skills are in a list format
-  const hasBulletPoints = /^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s+/m.test(skillsText);
   
   let extractedSkills: string[] = [];
   
-  if (hasBulletPoints) {
-    // Extract skills from bullet points
-    extractedSkills = skillsText
-      .split(/\n/)
-      .map(skill => skill.replace(/^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s*/, '').trim())
-      .filter(skill => skill.length > 0);
-  } else {
-    // Extract skills from comma/semicolon separated list
-    extractedSkills = skillsText
-      .split(/[,;]|\band\b/)
-      .map(skill => skill.trim())
-      .filter(skill => skill.length > 0);
+  // First try to find a dedicated professional skills section
+  for (const pattern of professionalPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      const skillsText = match[1];
+      
+      // Try to detect if skills are in a list format
+      const hasBulletPoints = /^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s+/m.test(skillsText);
+      
+      if (hasBulletPoints) {
+        // Extract skills from bullet points
+        extractedSkills = skillsText
+          .split(/\n/)
+          .map(skill => skill.replace(/^[•\-\*\+\>\·\♦\■\□\◆\◇\○\●\★\☆]\s*/, '').trim())
+          .filter(skill => skill.length > 0);
+      } else {
+        // Extract skills from comma/semicolon/newline separated list
+        extractedSkills = skillsText
+          .split(/[,;]|\band\b|\n/)
+          .map(skill => skill.trim())
+          .filter(skill => skill.length > 0);
+      }
+      
+      break;
+    }
   }
   
-  // Filter out non-professional skills
-  return extractedSkills.filter(skill => isLikelyProfessionalSkill(skill));
+  // If no dedicated section found, try to extract from summary/profile section
+  if (extractedSkills.length === 0) {
+    const summaryPattern = /(?:summary|profile|about)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+    const summaryMatch = text.match(summaryPattern);
+    
+    if (summaryMatch && summaryMatch[1]) {
+      const summaryText = summaryMatch[1];
+      
+      // Extract phrases that look like professional skills
+      const phrases = summaryText.match(/\b[A-Za-z]+(?:\s+[A-Za-z]+){0,3}\b/g) || [];
+      
+      extractedSkills = phrases.filter(phrase => isLikelyProfessionalSkill(phrase));
+    }
+  }
+  
+  // Filter and clean the skills
+  const skills = extractedSkills
+    .map(skill => skill.trim())
+    .filter(skill => skill.length > 0 && isLikelyProfessionalSkill(skill));
+  
+  // Remove duplicates and normalize
+  return [...new Set(skills.map(skill => {
+    // Remove any leading/trailing punctuation
+    skill = skill.replace(/^[^\w]+|[^\w]+$/g, '');
+    // Normalize spacing
+    skill = skill.replace(/\s+/g, ' ');
+    return skill;
+  }))];
 };
 
 const extractAchievements = (text: string): string[] => {
@@ -1870,7 +1967,8 @@ const optimizeSkills = (
 const optimizeEducation = (
   education: EducationEntry[],
   jobDescription: string,
-  jobKeywords: string[]
+  jobKeywords: string[],
+  isRelevant: boolean
 ): EducationEntry[] => {
   if (education.length === 0) return [];
   
@@ -1965,1148 +2063,198 @@ const optimizeEducation = (
     }
     
     return optimizedEdu;
-  });
+  }).filter(edu => edu.degree.length > 0 || edu.institution.length > 0);
 };
 
-// Add generateOptimizedDocument function
-const generateOptimizedDocument = async (content: string, name: string = 'CV', contactInfo?: StructuredCV['contactInfo'], structuredCV?: StructuredCV): Promise<Document> => {
-  // Define brand color
-  const brandColor = 'B4916C';
-  
-  // Get current date for footer
-  const currentDate = new Date().toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
-  
-  // Parse content into sections if structuredCV is not provided
-  let sections: any = {};
-  if (!structuredCV) {
-    // Split content by section headers
-    const sectionRegex = /^([A-Z][A-Z\s]+):\s*$/gm;
-    const lines = content.split('\n');
-    let currentSection = '';
-    let sectionContent: string[] = [];
+const extractKeywordsFromJobDescription = (jobDescription: string): string[] => {
+  try {
+    const keywords: string[] = [];
     
-    // Define section order
-    const sectionOrder = [
-      'HEADER',
-      'PROFILE', 
-      'SUMMARY',
-      'ACHIEVEMENTS',
-      'GOALS', 
-      'CAREER GOALS',
-      'LANGUAGES',
-      'SKILLS', 
-      'TECHNICAL SKILLS', 
-      'PROFESSIONAL SKILLS',
-      'EDUCATION',
-      'EXPERIENCE',
-      'REFERENCES'
-    ];
-    
-    // Initialize sections object
-    sectionOrder.forEach(section => {
-      sections[section] = [];
-    });
-    
-    // Extract header (first few lines)
-    let headerLines: string[] = [];
-    let i = 0;
-    while (i < lines.length && headerLines.length < 3) {
-      const line = lines[i].trim();
-      if (line && !line.match(sectionRegex)) {
-        headerLines.push(line);
-      } else {
-        break;
-      }
-      i++;
+    // Extract from requirements section
+    const requirementsSection = jobDescription.match(/(?:requirements|qualifications)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is);
+    if (requirementsSection && requirementsSection[1]) {
+      const requirements = requirementsSection[1]
+        .split(/[,;]|\band\b|\bor\b/)
+        .map(req => req.trim())
+        .filter(req => req.length > 0);
+      keywords.push(...requirements);
     }
     
-    // Process remaining lines
-    for (; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-      
-      // Check if this is a section header
-      const sectionMatch = line.match(/^([A-Z][A-Z\s]+):?\s*$/);
-      if (sectionMatch) {
-        currentSection = sectionMatch[1].trim();
-        continue;
-      }
-      
-      // Add content to current section
-      if (currentSection && sections[currentSection] !== undefined) {
-        sections[currentSection].push(line);
+    // Extract key phrases
+    const keyPhrases = jobDescription.match(/(?:[\d+]+ years?|experience in|proficiency|knowledge of|understanding of|ability to|skills in)[^.!?]+[.!?]/gi);
+    if (keyPhrases) {
+      keywords.push(...keyPhrases);
+    }
+    
+    // Extract technical terms
+    const technicalTerms = jobDescription.match(/\b(?:java|python|javascript|typescript|react|node|aws|azure|sql|nosql|mongodb|docker|kubernetes|ci\/cd|git|agile|scrum|rest|graphql|api|cloud|microservices|testing|devops)\b/gi);
+    if (technicalTerms) {
+      keywords.push(...technicalTerms);
+    }
+    
+    return [...new Set(keywords)];
+  } catch (error) {
+    console.error('Error extracting keywords:', error);
+    return [];
+  }
+};
+
+const generateOptimizedDocument = (cvText: string, jobDescription: string): string => {
+  try {
+    // Extract sections
+    const profile = extractProfile(cvText) || [];
+    const technicalSkills = extractTechnicalSkills(cvText);
+    const professionalSkills = extractProfessionalSkills(cvText);
+    const languages = extractLanguages(cvText);
+    const achievements = extractAchievements(cvText);
+    const goals = extractGoals(cvText);
+    const education = extractEducationData(cvText);
+    const experience = extractExperienceData(cvText);
+
+    // Validate extracted data
+    if (!technicalSkills.length && !professionalSkills.length && !experience.length) {
+      console.error('Failed to extract essential sections from CV');
+      throw new Error('Failed to extract CV sections');
+    }
+
+    // Extract keywords for optimization
+    const jobKeywords = extractKeywordsFromJobDescription(jobDescription);
+
+    // Optimize sections
+    const optimizedSkills = optimizeSkills({ technical: technicalSkills, professional: professionalSkills }, jobDescription);
+    const optimizedEducation = optimizeEducation(education, jobDescription, jobKeywords, true);
+    const optimizedLanguages = optimizeLanguages(languages, jobDescription);
+    const optimizedAchievements = optimizeAchievements(achievements, jobDescription);
+    const optimizedGoals = optimizeGoals(goals, jobDescription);
+
+    // Build document sections
+    const sections: string[] = [];
+
+    // Add profile section
+    if (profile && Array.isArray(profile) && profile.length > 0) {
+      sections.push(`PROFILE:\n${profile.join('\n')}`);
+    }
+
+    // Add experience section
+    if (experience && experience.length > 0) {
+      const experienceContent = experience
+        .map(exp => {
+          const parts = [];
+          if (exp.title) parts.push(exp.title);
+          if (exp.startDate && exp.endDate) {
+            parts.push(`${exp.startDate} - ${exp.endDate}`);
+          }
+          return parts.join('\n');
+        })
+        .filter(exp => exp.length > 0);
+
+      if (experienceContent.length > 0) {
+        sections.push(`EXPERIENCE:\n${experienceContent.join('\n\n')}`);
       }
     }
-  } else {
-    // Use the provided structuredCV
-    sections = {
-      'PROFILE': structuredCV.profile ? [structuredCV.profile] : [],
-      'SUMMARY': structuredCV.subheader ? [structuredCV.subheader] : [], // One sentence summary
-      'ACHIEVEMENTS': structuredCV.achievements || [],
-      'GOALS': structuredCV.goals || [],
-      'CAREER GOALS': structuredCV.goals || [],
-      'LANGUAGES': structuredCV.languages || [],
-      'SKILLS': [],
-      'TECHNICAL SKILLS': structuredCV.skills?.technical || [],
-      'PROFESSIONAL SKILLS': structuredCV.skills?.professional || [],
-      'EDUCATION': structuredCV.education || [],
-      'EXPERIENCE': structuredCV.experience || []
-    };
+
+    // Add education section
+    if (optimizedEducation && optimizedEducation.length > 0) {
+      const educationContent = optimizedEducation
+        .map(edu => {
+          const parts = [];
+          if (edu.degree) parts.push(edu.degree);
+          if (edu.institution) parts.push(edu.institution);
+          if (edu.year) parts.push(edu.year);
+          
+          let entry = parts.join(', ');
+          
+          if (edu.relevantCourses && edu.relevantCourses.length > 0) {
+            entry += `\nRelevant Courses: ${edu.relevantCourses.join(', ')}`;
+          }
+          
+          return entry;
+        })
+        .filter(edu => edu.length > 0);
+
+      if (educationContent.length > 0) {
+        sections.push(`EDUCATION:\n${educationContent.join('\n\n')}`);
+      }
+    }
+
+    // Add skills section
+    if (optimizedSkills.technical.length > 0 || optimizedSkills.professional.length > 0) {
+      const skillsContent = [];
+      
+      if (optimizedSkills.technical.length > 0) {
+        skillsContent.push('Technical Skills:');
+        skillsContent.push(...optimizedSkills.technical.map(skill => `• ${skill}`));
+      }
+      
+      if (optimizedSkills.professional.length > 0) {
+        if (skillsContent.length > 0) skillsContent.push('');
+        skillsContent.push('Professional Skills:');
+        skillsContent.push(...optimizedSkills.professional.map(skill => `• ${skill}`));
+      }
+
+      sections.push(`SKILLS:\n${skillsContent.join('\n')}`);
+    }
+
+    // Add languages section
+    if (optimizedLanguages && optimizedLanguages.length > 0) {
+      sections.push(`LANGUAGES:\n${optimizedLanguages.map(lang => `• ${lang}`).join('\n')}`);
+    }
+
+    // Add achievements section
+    if (optimizedAchievements && optimizedAchievements.length > 0) {
+      sections.push(`ACHIEVEMENTS:\n${optimizedAchievements.map(achievement => `• ${achievement}`).join('\n')}`);
+    }
+
+    // Add goals section
+    if (optimizedGoals && optimizedGoals.length > 0) {
+      sections.push(`GOALS:\n${optimizedGoals.map(goal => `• ${goal}`).join('\n')}`);
+    }
+
+    // Join all sections
+    const document = sections.join('\n\n');
+
+    if (!document) {
+      throw new Error('Generated document is empty');
+    }
+
+    return document;
+  } catch (error) {
+    console.error('Error generating optimized document:', error);
+    throw new Error('Failed to generate optimized document');
+  }
+};
+
+const formatExperienceEntry = (exp: ExperienceEntry): string => {
+  const parts = [];
+  if (exp.title) parts.push(exp.title);
+  if (exp.startDate && exp.endDate) {
+    parts.push(`${exp.startDate} - ${exp.endDate}`);
+  }
+  return parts.join('\n');
+};
+
+const formatEducationEntry = (edu: EducationEntry): string => {
+  const parts = [];
+  if (edu.degree) parts.push(edu.degree);
+  if (edu.institution) parts.push(edu.institution);
+  if (edu.location) parts.push(edu.location);
+  if (edu.year) parts.push(edu.year);
+  if (edu.gpa) parts.push(`GPA: ${edu.gpa}`);
+  
+  let entry = parts.join(', ');
+  
+  if (edu.relevantCourses && edu.relevantCourses.length > 0) {
+    entry += `\nRelevant Courses: ${edu.relevantCourses.join(', ')}`;
   }
   
-  // Section icons (using Unicode characters)
-  const sectionIcons = {
-    'PROFILE': '👤',
-    'SKILLS': '🔧',
-    'TECHNICAL SKILLS': '💻',
-    'PROFESSIONAL SKILLS': '📊',
-    'EXPERIENCE': '💼',
-    'EDUCATION': '🎓',
-    'ACHIEVEMENTS': '🏆',
-    'CAREER GOALS': '🎯',
-    'LANGUAGES': '🌐',
-    'REFERENCES': '📋'
-  };
+  if (edu.achievements && edu.achievements.length > 0) {
+    entry += `\nAchievements:\n${edu.achievements.map(a => `• ${a}`).join('\n')}`;
+  }
   
-  // Create document
-  const doc = new Document({
-    sections: [{
-      properties: {
-        page: {
-          margin: {
-            top: 1000,
-            right: 1000,
-            bottom: 1000,
-            left: 1000
-          }
-        }
-      },
-      children: [
-        // Title
-        new Paragraph({
-          text: name,
-          heading: HeadingLevel.HEADING_1,
-          spacing: {
-            after: 200
-          },
-          alignment: AlignmentType.CENTER,
-          style: 'Title'
-        }),
-        
-        // Contact information if available
-        ...(contactInfo ? [
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: {
-              after: 200
-            },
-            children: [
-              ...(contactInfo.email ? [
-                new TextRun({
-                  text: contactInfo.email,
-                  style: 'ContactInfo'
-                }),
-                new TextRun({
-                  text: ' | ',
-                  style: 'ContactSeparator'
-                })
-              ] : []),
-              ...(contactInfo.phone ? [
-                new TextRun({
-                  text: contactInfo.phone,
-                  style: 'ContactInfo'
-                }),
-                new TextRun({
-                  text: ' | ',
-                  style: 'ContactSeparator'
-                })
-              ] : []),
-              ...(contactInfo.location ? [
-                new TextRun({
-                  text: contactInfo.location,
-                  style: 'ContactInfo'
-                }),
-                ...(contactInfo.linkedin || contactInfo.website ? [
-                  new TextRun({
-                    text: ' | ',
-                    style: 'ContactSeparator'
-                  })
-                ] : [])
-              ] : []),
-              ...(contactInfo.linkedin ? [
-                new TextRun({
-                  text: contactInfo.linkedin,
-                  style: 'ContactInfo'
-                }),
-                ...(contactInfo.website ? [
-                  new TextRun({
-                    text: ' | ',
-                    style: 'ContactSeparator'
-                  })
-                ] : [])
-              ] : []),
-              ...(contactInfo.website ? [
-                new TextRun({
-                  text: contactInfo.website,
-                  style: 'ContactInfo'
-                })
-              ] : [])
-            ]
-          })
-        ] : []),
-        
-        // Add a horizontal line after header
-        new Paragraph({
-          children: [
-            new TextRun({
-              text: '',
-              size: 16
-            })
-          ],
-          border: {
-            bottom: {
-              color: brandColor,
-              space: 1,
-              style: BorderStyle.SINGLE,
-              size: 8
-            }
-          },
-          spacing: {
-            after: 300
-          }
-        }),
-        
-        // Profile section
-        ...(sections['PROFILE'] && sections['PROFILE'].length > 0 ? [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: `${sectionIcons['PROFILE']} Profile`,
-                size: 28,
-                bold: true,
-                color: brandColor
-              })
-            ],
-            spacing: {
-              before: 400,
-              after: 200
-            },
-            border: {
-              bottom: {
-                color: brandColor,
-                space: 1,
-                style: BorderStyle.SINGLE,
-                size: 6
-              }
-            }
-          }),
-          ...sections['PROFILE'].map((line: string) => 
-            new Paragraph({
-              text: line,
-              spacing: {
-                before: 120,
-                after: 120
-              }
-            })
-          )
-        ] : []),
-        
-        // Summary section (one sentence summary)
-        ...(sections['SUMMARY'] && sections['SUMMARY'].length > 0 ? [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: `${sectionIcons['PROFILE']} Summary`,
-                size: 28,
-                bold: true,
-                color: brandColor
-              })
-            ],
-            spacing: {
-              before: 400,
-              after: 200
-            },
-            border: {
-              bottom: {
-                color: brandColor,
-                space: 1,
-                style: BorderStyle.SINGLE,
-                size: 6
-              }
-            }
-          }),
-          ...sections['SUMMARY'].map((line: string) => 
-            new Paragraph({
-              text: line,
-              spacing: {
-                before: 120,
-                after: 120
-              }
-            })
-          )
-        ] : []),
-        
-        // Achievements section
-        ...(sections['ACHIEVEMENTS'] && sections['ACHIEVEMENTS'].length > 0 ? [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: `${sectionIcons['ACHIEVEMENTS']} Achievements`,
-                size: 28,
-                bold: true,
-                color: brandColor
-              })
-            ],
-            spacing: {
-              before: 400,
-              after: 200
-            },
-            border: {
-              bottom: {
-                color: brandColor,
-                space: 1,
-                style: BorderStyle.SINGLE,
-                size: 6
-              }
-            }
-          }),
-          ...sections['ACHIEVEMENTS'].map((achievement: string) => {
-            // Check if achievement contains quantifiable results
-            const hasQuantifiableResults = /\d+%|\d+\s*(?:million|thousand|hundred|k|m|b|billion|x|times)|\$\d+|increased|improved|reduced|saved|generated|delivered|achieved/i.test(achievement);
-            
-            return new Paragraph({
-              children: [
-                new TextRun({
-                  text: '• ',
-                  bold: true,
-                  color: brandColor
-                }),
-                new TextRun({
-                  text: achievement,
-                  bold: hasQuantifiableResults
-                })
-              ],
-              spacing: {
-                before: 120,
-                after: 120
-              },
-              indent: {
-                left: 360
-              }
-            });
-          })
-        ] : []),
-        
-        // Goals section
-        ...((sections['GOALS'] && sections['GOALS'].length > 0) || (sections['CAREER GOALS'] && sections['CAREER GOALS'].length > 0) ? [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: `${sectionIcons['CAREER GOALS']} Career Goals`,
-                size: 28,
-                bold: true,
-                color: brandColor
-              })
-            ],
-            spacing: {
-              before: 400,
-              after: 200
-            },
-            border: {
-              bottom: {
-                color: brandColor,
-                space: 1,
-                style: BorderStyle.SINGLE,
-                size: 6
-              }
-            }
-          }),
-          ...((sections['GOALS'] || sections['CAREER GOALS'] || []) as string[]).map((goal: string) => 
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: '• ',
-                  bold: true,
-                  color: brandColor
-                }),
-                new TextRun({
-                  text: goal
-                })
-              ],
-              spacing: {
-                before: 120,
-                after: 120
-              },
-              indent: {
-                left: 360
-              }
-            })
-          )
-        ] : []),
-        
-        // Languages section
-        ...(sections['LANGUAGES'] && sections['LANGUAGES'].length > 0 ? [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: `${sectionIcons['LANGUAGES']} Languages`,
-                size: 28,
-                bold: true,
-                color: brandColor
-              })
-            ],
-            spacing: {
-              before: 400,
-              after: 200
-            },
-            border: {
-              bottom: {
-                color: brandColor,
-                space: 1,
-                style: BorderStyle.SINGLE,
-                size: 6
-              }
-            }
-          }),
-          ...sections['LANGUAGES'].map((language: string) => {
-            // Parse language string to extract proficiency if available
-            const parts = language.split(/[:-]/);
-            const languageName = parts[0].trim();
-            const proficiency = parts.length > 1 ? parts[1].trim() : '';
-            
-            return new Paragraph({
-              children: [
-                new TextRun({
-                  text: '• ',
-                  bold: true,
-                  color: brandColor
-                }),
-                new TextRun({
-                  text: languageName,
-                  bold: true
-                }),
-                ...(proficiency ? [
-                  new TextRun({
-                    text: ` - ${proficiency}`,
-                    italics: true
-                  })
-                ] : [])
-              ],
-              spacing: {
-                before: 120,
-                after: 120
-              },
-              indent: {
-                left: 360
-              }
-            });
-          })
-        ] : []),
-        
-        // Skills section
-        ...((sections['SKILLS'] && sections['SKILLS'].length > 0) || 
-           (sections['TECHNICAL SKILLS'] && sections['TECHNICAL SKILLS'].length > 0) || 
-           (sections['PROFESSIONAL SKILLS'] && sections['PROFESSIONAL SKILLS'].length > 0) ? [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: `${sectionIcons['SKILLS']} Skills`,
-                size: 28,
-                bold: true,
-                color: brandColor
-              })
-            ],
-            spacing: {
-              before: 400,
-              after: 200
-            },
-            border: {
-              bottom: {
-                color: brandColor,
-                space: 1,
-                style: BorderStyle.SINGLE,
-                size: 6
-              }
-            }
-          }),
-          
-          // Technical Skills subsection
-          ...(sections['TECHNICAL SKILLS'] && sections['TECHNICAL SKILLS'].length > 0 ? [
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: 'Technical Skills',
-                  size: 24,
-                  bold: true
-                })
-              ],
-              spacing: {
-                before: 200,
-                after: 120
-              }
-            }),
-            ...sections['TECHNICAL SKILLS'].map((skill: string) => 
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: '• ',
-                    bold: true,
-                    color: brandColor
-                  }),
-                  new TextRun({
-                    text: skill
-                  })
-                ],
-                spacing: {
-                  before: 80,
-                  after: 80
-                },
-                indent: {
-                  left: 360
-                }
-              })
-            )
-          ] : []),
-          
-          // Professional Skills subsection
-          ...(sections['PROFESSIONAL SKILLS'] && sections['PROFESSIONAL SKILLS'].length > 0 ? [
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: 'Professional Skills',
-                  size: 24,
-                  bold: true
-                })
-              ],
-              spacing: {
-                before: 200,
-                after: 120
-              }
-            }),
-            ...sections['PROFESSIONAL SKILLS'].map((skill: string) => 
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: '• ',
-                    bold: true,
-                    color: brandColor
-                  }),
-                  new TextRun({
-                    text: skill
-                  })
-                ],
-                spacing: {
-                  before: 80,
-                  after: 80
-                },
-                indent: {
-                  left: 360
-                }
-              })
-            )
-          ] : []),
-          
-          // General Skills subsection
-          ...(sections['SKILLS'] && sections['SKILLS'].length > 0 ? [
-            ...(sections['TECHNICAL SKILLS']?.length > 0 || sections['PROFESSIONAL SKILLS']?.length > 0 ? [
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: 'Other Skills',
-                    size: 24,
-                    bold: true
-                  })
-                ],
-                spacing: {
-                  before: 200,
-                  after: 120
-                }
-              })
-            ] : []),
-            ...sections['SKILLS'].map((skill: string) => 
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: '• ',
-                    bold: true,
-                    color: brandColor
-                  }),
-                  new TextRun({
-                    text: skill
-                  })
-                ],
-                spacing: {
-                  before: 80,
-                  after: 80
-                },
-                indent: {
-                  left: 360
-                }
-              })
-            )
-          ] : [])
-        ] : []),
-        
-        // Education section
-        ...(sections['EDUCATION'] && sections['EDUCATION'].length > 0 ? [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: `${sectionIcons['EDUCATION']} Education`,
-                size: 28,
-                bold: true,
-                color: brandColor
-              })
-            ],
-            spacing: {
-              before: 400,
-              after: 200
-            },
-            border: {
-              bottom: {
-                color: brandColor,
-                space: 1,
-                style: BorderStyle.SINGLE,
-                size: 6
-              }
-            }
-          }),
-          ...(Array.isArray(sections['EDUCATION']) && sections['EDUCATION'].length > 0 ? 
-            (structuredCV && structuredCV.education ? 
-              // If we have structured education data
-              structuredCV.education.map(edu => [
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: edu.degree,
-                      bold: true,
-                      size: 24
-                    }),
-                    ...(edu.institution ? [
-                      new TextRun({
-                        text: `, ${edu.institution}`,
-                        size: 24
-                      })
-                    ] : []),
-                    ...(edu.location ? [
-                      new TextRun({
-                        text: `, ${edu.location}`,
-                        size: 24,
-                        italics: true
-                      })
-                    ] : [])
-                  ],
-                  spacing: {
-                    before: 200,
-                    after: 80
-                  }
-                }),
-                ...(edu.year || edu.gpa ? [
-                  new Paragraph({
-                    children: [
-                      new TextRun({
-                        text: [
-                          edu.year,
-                          edu.gpa ? `GPA: ${edu.gpa}` : null
-                        ].filter(Boolean).join(', '),
-                        italics: true,
-                        size: 22,
-                        color: '666666'
-                      })
-                    ],
-                    spacing: {
-                      before: 80,
-                      after: 80
-                    }
-                  })
-                ] : []),
-                ...(edu.relevantCourses && edu.relevantCourses.length > 0 ? [
-                  new Paragraph({
-                    children: [
-                      new TextRun({
-                        text: 'Relevant Courses: ',
-                        bold: true,
-                        size: 22
-                      }),
-                      new TextRun({
-                        text: Array.isArray(edu.relevantCourses) ? edu.relevantCourses.join(', ') : edu.relevantCourses,
-                        size: 22
-                      })
-                    ],
-                    spacing: {
-                      before: 80,
-                      after: 80
-                    },
-                    indent: {
-                      left: 360
-                    }
-                  })
-                ] : []),
-                ...(edu.achievements && edu.achievements.length > 0 ? 
-                  Array.isArray(edu.achievements) ? 
-                    edu.achievements.map(achievement => 
-                      new Paragraph({
-                        children: [
-                          new TextRun({
-                            text: '• ',
-                            bold: true,
-                            color: brandColor
-                          }),
-                          new TextRun({
-                            text: achievement
-                          })
-                        ],
-                        spacing: {
-                          before: 80,
-                          after: 80
-                        },
-                        indent: {
-                          left: 360
-                        }
-                      })
-                    ) : 
-                    [
-                      new Paragraph({
-                        children: [
-                          new TextRun({
-                            text: '• ',
-                            bold: true,
-                            color: brandColor
-                          }),
-                          new TextRun({
-                            text: String(edu.achievements)
-                          })
-                        ],
-                        spacing: {
-                          before: 80,
-                          after: 80
-                        },
-                        indent: {
-                          left: 360
-                        }
-                      })
-                    ]
-                : [])
-              ]).flat() 
-              : 
-              // If we don't have structured education data
-              sections['EDUCATION'].map((line: string) => 
-                new Paragraph({
-                  text: line,
-                  spacing: {
-                    before: 120,
-                    after: 120
-                  }
-                })
-              )
-            ) : []
-          )
-        ] : []),
-        
-        // Experience section
-        ...(sections['EXPERIENCE'] && sections['EXPERIENCE'].length > 0 ? [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: `${sectionIcons['EXPERIENCE']} Experience`,
-                size: 28,
-                bold: true,
-                color: brandColor
-              })
-            ],
-            spacing: {
-              before: 400,
-              after: 200
-            },
-            border: {
-              bottom: {
-                color: brandColor,
-                space: 1,
-                style: BorderStyle.SINGLE,
-                size: 6
-              }
-            }
-          }),
-          ...(Array.isArray(sections['EXPERIENCE']) && sections['EXPERIENCE'].length > 0 ? 
-            (structuredCV ? 
-              // If we have structured experience data
-              structuredCV.experience.map(exp => [
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: exp.title || '',
-                      bold: true,
-                      size: 24
-                    })
-                  ],
-                  spacing: {
-                    before: 200,
-                    after: 80
-                  }
-                }),
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: `${exp.startDate || ''} - ${exp.endDate || 'Present'}`,
-                      italics: true,
-                      size: 22,
-                      color: '666666'
-                    })
-                  ],
-                  spacing: {
-                    before: 80,
-                    after: 80
-                  }
-                })
-              ]).flat() 
-              : 
-              // If we don't have structured experience data
-              sections['EXPERIENCE'].map((line: string) => 
-                new Paragraph({
-                  text: line,
-                  spacing: {
-                    before: 120,
-                    after: 120
-                  }
-                })
-              )
-            ) : []
-          )
-        ] : []),
-        
-        // Footer
-        new Paragraph({
-          children: [
-            new TextRun({
-              text: `${name} | ${currentDate}`,
-              size: 20,
-              color: '666666'
-            })
-          ],
-          spacing: {
-            before: 400
-          },
-          alignment: AlignmentType.CENTER,
-          border: {
-            top: {
-              color: brandColor,
-              space: 1,
-              style: BorderStyle.SINGLE,
-              size: 6
-            }
-          }
-        })
-      ]
-    }]
-  });
-
-  return doc;
+  return entry;
 };
 
 export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: EnhancedSpecificOptimizationWorkflowProps): JSX.Element {
-  const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
-  const [selectedCVName, setSelectedCVName] = useState<string | null>(null);
-  const [originalText, setOriginalText] = useState<string | null>(null);
-  const [optimizedText, setOptimizedText] = useState<string | null>(null);
-  const [jobDescription, setJobDescription] = useState<string>('');
-  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
-  const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [processingStatus, setProcessingStatus] = useState<string | null>(null);
-  const [jobMatchAnalysis, setJobMatchAnalysis] = useState<JobMatchAnalysis | null>(null);
-  const [isGeneratingDocument, setIsGeneratingDocument] = useState<boolean>(false);
-  
-  // Additional state variables for processing
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [isProcessed, setIsProcessed] = useState<boolean>(false);
-  const [processingProgress, setProcessingProgress] = useState<number>(0);
-  const [activeTab, setActiveTab] = useState('jobDescription');
-  const [processingTooLong, setProcessingTooLong] = useState<boolean>(false);
-
-  // Add state for error messages
-  const [documentError, setDocumentError] = useState<string | null>(null);
-
-  // Fetch original CV text
-  const fetchOriginalText = useCallback(async (cvId: string) => {
-    try {
-      if (!cvId) return;
-      
-      const response = await fetch(`/api/cv/get-text?cvId=${cvId}`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.text) {
-          setOriginalText(data.text);
-          return data.text;
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching original CV text:", error);
-    }
-    return "";
-  }, []);
-  
-  // Handle CV selection
-  const handleSelectCV = useCallback(async (cvId: string, cvName: string) => {
-    setSelectedCVId(cvId);
-    setSelectedCVName(cvName);
-    console.log(`Selected CV: ${cvName} (ID: ${cvId})`);
-    
-    // Reset states when a new CV is selected
-    setIsProcessed(false);
-    setIsProcessing(false);
-    setProcessingProgress(0);
-    setProcessingStatus("");
-    setError(null);
-    
-    // Fetch original text
-    await fetchOriginalText(cvId);
-  }, [fetchOriginalText]);
-  
-  // Process the CV for specific job
-  const processCV = useCallback(async () => {
-    if (!selectedCVId) {
-      setError("Please select a CV first");
-      return;
-    }
-    
-    if (!jobDescription.trim()) {
-      setError("Please enter a job description");
-      return;
-    }
-    
-    // Set processing state
-    setIsProcessing(true);
-    setIsProcessed(false);
-    setProcessingProgress(0);
-    setProcessingStatus("Starting job-specific optimization...");
-    setError(null);
-    
-    try {
-      console.log(`Processing CV: ${selectedCVName} (ID: ${selectedCVId}) for specific job`);
-      
-      // Simulate API call for job-specific optimization
-      // In a real implementation, this would be an actual API call
-      simulateProcessing();
-      
-    } catch (error) {
-      console.error("Error optimizing CV for job:", error);
-      setError(error instanceof Error ? error.message : "An unknown error occurred during optimization");
-      setIsProcessing(false);
-      setProcessingProgress(0);
-    }
-  }, [selectedCVId, selectedCVName, jobDescription]);
-  
-  // Simulate processing with progress updates
-  const simulateProcessing = () => {
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 10;
-      if (progress >= 100) {
-        progress = 100;
-        clearInterval(interval);
-        
-        // Generate optimized text based on job description
-        const optimizedText = generateOptimizedText(originalText || '', jobDescription);
-        setOptimizedText(optimizedText);
-        
-        // Generate structured CV
-        generateStructuredCV(optimizedText, jobDescription);
-        
-        // Generate job match analysis on the optimized content
-        const analysis = analyzeJobMatch(optimizedText, jobDescription);
-        setJobMatchAnalysis(analysis);
-        
-        // Complete processing
-        setIsProcessing(false);
-        setIsProcessed(true);
-        setProcessingStatus("Optimization complete");
-        setActiveTab('optimizedCV');
-      }
-      
-      setProcessingProgress(Math.floor(progress));
-      
-      // Update status messages based on progress
-      if (progress < 20) {
-        setProcessingStatus("Analyzing job description...");
-      } else if (progress < 40) {
-        setProcessingStatus("Extracting key requirements...");
-      } else if (progress < 60) {
-        setProcessingStatus("Matching CV content to job requirements...");
-      } else if (progress < 80) {
-        setProcessingStatus("Optimizing CV content...");
-      } else {
-        setProcessingStatus("Finalizing optimized CV...");
-      }
-    }, 200);
-    
-    // Set timeout to show processing too long after 10 seconds
-    setTimeout(() => {
-      if (isProcessing) {
-        setProcessingTooLong(true);
-      }
-    }, 10000);
-  };
-  
-  // Generate optimized text based on job description
-  const generateOptimizedText = (originalText: string, jobDescription: string): string => {
-    if (!originalText || !jobDescription) {
-      return originalText;
-    }
-    
-    // Extract job keywords
-    const jobKeywords = extractKeywords(jobDescription, true);
-    
-    // Extract and optimize profile
-    const profile = extractProfile(originalText);
-    const optimizedProfileText = optimizeProfile(profile, jobDescription, jobKeywords);
-    
-    // Extract one sentence summary (subheader)
-    const subheader = extractSubheader(originalText) || 
-      `Experienced professional seeking to leverage skills and expertise in ${jobKeywords.slice(0, 3).join(', ')}`;
-    
-    // Extract and optimize achievements
-    const achievements = extractAchievements(originalText);
-    const optimizedAchievements = optimizeAchievements(achievements, jobDescription, jobKeywords);
-    
-    // Extract and optimize goals
-    const goals = extractGoals(originalText);
-    const optimizedGoals = goals.length > 0 ? optimizeGoals(goals, jobDescription, jobKeywords) : [];
-    
-    // Extract and optimize languages
-    const languages = extractLanguages(originalText);
-    const optimizedLanguages = languages.length > 0 ? optimizeLanguages(languages, jobDescription) : [];
-    
-    // Extract and optimize skills
-    const technicalSkills = extractTechnicalSkills(originalText);
-    const professionalSkills = extractProfessionalSkills(originalText);
-    const optimizedSkillsData = optimizeSkills(technicalSkills, professionalSkills, jobDescription, jobKeywords);
-    
-    // Extract and optimize education
-    const education = extractEducationData(originalText);
-    const optimizedEducation = education.length > 0 ? optimizeEducation(education, jobDescription, jobKeywords) : [];
-    
-    // Extract and optimize experience (will be placed at the end)
-    const experienceEntries = extractExperienceData(originalText);
-    
-    // Extract name and contact info for header
-    const name = extractName(originalText);
-    const contactInfo = extractContactInfo(originalText);
-    
-    // Create a well-structured optimized text with clear section headers
-    let optimizedText = '';
-    
-    // 1. HEADER: Add header section (name and contact info)
-    optimizedText += `${name}\n`;
-    
-    // Add contact info if available
-    const contactLines = [];
-    if (contactInfo.email) contactLines.push(contactInfo.email);
-    if (contactInfo.phone) contactLines.push(contactInfo.phone);
-    if (contactInfo.location) contactLines.push(contactInfo.location);
-    if (contactInfo.linkedin) contactLines.push(contactInfo.linkedin);
-    if (contactInfo.website) contactLines.push(contactInfo.website);
-    
-    if (contactLines.length > 0) {
-      optimizedText += `${contactLines.join(' | ')}\n`;
-    }
-    
-    optimizedText += '\n';
-    
-    // 2. PROFILE: Add profile section with clear header
-    optimizedText += `PROFILE:\n${optimizedProfileText}\n\n`;
-    
-    // 3. SUMMARY: Add one sentence summary of role scope
-    optimizedText += `SUMMARY:\n${subheader}\n\n`;
-    
-    // 4. ACHIEVEMENTS: Add achievements section with clear header
-    if (optimizedAchievements.length > 0) {
-      optimizedText += `ACHIEVEMENTS:\n`;
-      optimizedAchievements.forEach(achievement => {
-        // Check if achievement contains quantifiable results to highlight them
-        const hasQuantifiableResults = /\d+%|\d+\s*(?:million|thousand|hundred|k|m|b|billion|x|times)|\$\d+|increased|improved|reduced|saved|generated|delivered|achieved/i.test(achievement);
-        
-        if (hasQuantifiableResults) {
-          // Use a star symbol for achievements with metrics to make them stand out
-          optimizedText += `★ ${achievement}\n`;
-        } else {
-          optimizedText += `• ${achievement}\n`;
-        }
-      });
-      optimizedText += '\n';
-    }
-    
-    // 5. GOALS: Add goals section with clear header
-    if (optimizedGoals.length > 0) {
-      optimizedText += `GOALS:\n`;
-      optimizedGoals.forEach(goal => {
-        optimizedText += `• ${goal}\n`;
-      });
-      optimizedText += '\n';
-    }
-    
-    // 6. LANGUAGES: Add languages section with clear header
-    if (optimizedLanguages.length > 0) {
-      optimizedText += `LANGUAGES:\n`;
-      optimizedLanguages.forEach(language => {
-        // Format language entries consistently
-        const parts = language.split(/[:-]/).map(part => part.trim());
-        if (parts.length === 2) {
-          optimizedText += `• ${parts[0]} - ${parts[1]}\n`;
-        } else {
-          optimizedText += `• ${language}\n`;
-        }
-      });
-      optimizedText += '\n';
-    }
-    
-    // 7. SKILLS: Add skills section with clear header and subsections
-    optimizedText += `SKILLS:\n`;
-    
-    if (optimizedSkillsData.technical.length > 0) {
-      optimizedText += `Technical Skills:\n`;
-      optimizedSkillsData.technical.forEach((skill: string) => {
-        optimizedText += `• ${skill}\n`;
-      });
-      optimizedText += '\n';
-    }
-    
-    if (optimizedSkillsData.professional.length > 0) {
-      optimizedText += `Professional Skills:\n`;
-      optimizedSkillsData.professional.forEach((skill: string) => {
-        optimizedText += `• ${skill}\n`;
-      });
-      optimizedText += '\n';
-    }
-    
-    // 8. EDUCATION: Add education section with clear header
-    if (optimizedEducation.length > 0) {
-      optimizedText += `EDUCATION:\n`;
-      optimizedEducation.forEach((edu: EducationEntry) => {
-        let eduLine = edu.degree;
-        if (edu.institution) eduLine += `, ${edu.institution}`;
-        if (edu.location) eduLine += `, ${edu.location}`;
-        optimizedText += `${eduLine}\n`;
-        
-        let details = [];
-        if (edu.year) details.push(edu.year);
-        if (edu.gpa) details.push(`GPA: ${edu.gpa}`);
-        
-        if (details.length > 0) {
-          optimizedText += `${details.join(', ')}\n`;
-        }
-        
-        if (edu.relevantCourses && edu.relevantCourses.length > 0) {
-          optimizedText += `Relevant Courses:\n`;
-          edu.relevantCourses.forEach((course: string) => {
-            optimizedText += `• ${course}\n`;
-          });
-        }
-        
-        if (edu.achievements && edu.achievements.length > 0) {
           optimizedText += `Academic Achievements:\n`;
           edu.achievements.forEach((achievement: string) => {
             optimizedText += `• ${achievement}\n`;
