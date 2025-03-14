@@ -4009,96 +4009,28 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         try {
           console.log("Attempting API-based document generation...");
           
-          // First try our specific API endpoint designed for this workflow
-          const specificResponse = await fetch('/api/cv/specific-generate-docx', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              cvId: selectedCVId,
-              optimizedText: optimizedText
-            }),
-          });
-          
-          if (specificResponse.ok) {
-            const specificData = await specificResponse.json();
-            
-            if (specificData.success && specificData.docxBase64) {
-              console.log(`Received specific API base64 data of length: ${specificData.docxBase64.length}`);
-              
-              try {
-                // Try using data URL approach
-                const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${specificData.docxBase64}`;
-                const downloadLink = document.createElement('a');
-                downloadLink.href = linkSource;
-                downloadLink.download = `${cvName}.docx`;
-                
-                // Append to the document, click, and remove
-                document.body.appendChild(downloadLink);
-                downloadLink.click();
-                document.body.removeChild(downloadLink);
-                
-                console.log("Specific API download completed using data URL approach");
-                downloadSuccess = true;
-              } catch (dataUrlError) {
-                console.warn("Data URL download failed, trying file-saver approach:", dataUrlError);
-                
-                // Fallback to file-saver approach
-                try {
-                  // Convert base64 to blob
-                  const byteCharacters = atob(specificData.docxBase64);
-                  const byteNumbers = new Array(byteCharacters.length);
-                  
-                  for (let i = 0; i < byteCharacters.length; i++) {
-                    byteNumbers[i] = byteCharacters.charCodeAt(i);
-                  }
-                  
-                  const byteArray = new Uint8Array(byteNumbers);
-                  const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-                  
-                  // Use file-saver to save the blob
-                  saveAs(blob, `${cvName}.docx`);
-                  
-                  console.log("Specific API download completed using file-saver approach");
-                  downloadSuccess = true;
-                } catch (fileSaverError) {
-                  console.error("Both download methods failed for specific API:", fileSaverError);
-                  lastError = fileSaverError;
-                }
-              }
-            } else {
-              console.warn("Specific API response missing docxBase64 data:", specificData);
-              lastError = new Error('Specific API response missing docxBase64 data');
-            }
-          } else {
-            console.warn("Specific API request failed, trying enhanced API");
-          }
-          
-          // If specific API failed, try the enhanced DOCX generation API
-          if (!downloadSuccess) {
-            // Call the enhanced DOCX generation API
-            const enhancedResponse = await fetch('/api/cv/generate-enhanced-docx', {
+          // Try specific API endpoint first
+          try {
+            const specificResponse = await fetch('/api/cv/specific-generate-docx', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
                 cvId: selectedCVId,
-                optimizedText: optimizedText,
-                forceRefresh: true
+                optimizedText: optimizedText
               }),
             });
             
-            if (enhancedResponse.ok) {
-              const enhancedData = await enhancedResponse.json();
+            if (specificResponse.ok) {
+              const specificData = await specificResponse.json();
               
-              if (enhancedData.success && enhancedData.docxBase64) {
-                console.log(`Received enhanced base64 data of length: ${enhancedData.docxBase64.length}`);
+              if (specificData.success && specificData.docxBase64) {
+                console.log(`Received specific API base64 data of length: ${specificData.docxBase64.length}`);
                 
                 try {
                   // Try using data URL approach
-                  const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${enhancedData.docxBase64}`;
+                  const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${specificData.docxBase64}`;
                   const downloadLink = document.createElement('a');
                   downloadLink.href = linkSource;
                   downloadLink.download = `${cvName}.docx`;
@@ -4108,7 +4040,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
                   downloadLink.click();
                   document.body.removeChild(downloadLink);
                   
-                  console.log("Enhanced API download completed using data URL approach");
+                  console.log("Specific API download completed using data URL approach");
                   downloadSuccess = true;
                 } catch (dataUrlError) {
                   console.warn("Data URL download failed, trying file-saver approach:", dataUrlError);
@@ -4116,7 +4048,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
                   // Fallback to file-saver approach
                   try {
                     // Convert base64 to blob
-                    const byteCharacters = atob(enhancedData.docxBase64);
+                    const byteCharacters = atob(specificData.docxBase64);
                     const byteNumbers = new Array(byteCharacters.length);
                     
                     for (let i = 0; i < byteCharacters.length; i++) {
@@ -4129,25 +4061,105 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
                     // Use file-saver to save the blob
                     saveAs(blob, `${cvName}.docx`);
                     
-                    console.log("Enhanced API download completed using file-saver approach");
+                    console.log("Specific API download completed using file-saver approach");
                     downloadSuccess = true;
                   } catch (fileSaverError) {
-                    console.error("Both download methods failed for enhanced API:", fileSaverError);
+                    console.error("Both download methods failed for specific API:", fileSaverError);
                     lastError = fileSaverError;
                   }
                 }
               } else {
-                console.warn("Enhanced API response missing docxBase64 data:", enhancedData);
-                lastError = new Error('Enhanced API response missing docxBase64 data');
+                console.warn("Specific API response missing docxBase64 data:", specificData);
+                lastError = new Error('Specific API response missing docxBase64 data');
               }
             } else {
-              const errorText = await enhancedResponse.text();
-              console.error("Enhanced API request failed:", errorText);
-              lastError = new Error(`Enhanced API request failed: ${errorText}`);
+              console.warn("Specific API request failed, trying enhanced API");
+              lastError = new Error('Specific API request failed');
             }
-            
-            // If both specific and enhanced APIs failed, try the standard API
-            if (!downloadSuccess) {
+          } catch (specificApiError) {
+            console.warn("Specific API error:", specificApiError);
+            lastError = specificApiError;
+          }
+          
+          // If specific API failed, try the enhanced DOCX generation API
+          if (!downloadSuccess) {
+            try {
+              const enhancedResponse = await fetch('/api/cv/generate-enhanced-docx', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  cvId: selectedCVId,
+                  optimizedText: optimizedText,
+                  forceRefresh: true
+                }),
+              });
+              
+              if (enhancedResponse.ok) {
+                const enhancedData = await enhancedResponse.json();
+                
+                if (enhancedData.success && enhancedData.docxBase64) {
+                  console.log(`Received enhanced base64 data of length: ${enhancedData.docxBase64.length}`);
+                  
+                  try {
+                    // Try using data URL approach
+                    const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${enhancedData.docxBase64}`;
+                    const downloadLink = document.createElement('a');
+                    downloadLink.href = linkSource;
+                    downloadLink.download = `${cvName}.docx`;
+                    
+                    // Append to the document, click, and remove
+                    document.body.appendChild(downloadLink);
+                    downloadLink.click();
+                    document.body.removeChild(downloadLink);
+                    
+                    console.log("Enhanced API download completed using data URL approach");
+                    downloadSuccess = true;
+                  } catch (dataUrlError) {
+                    console.warn("Data URL download failed, trying file-saver approach:", dataUrlError);
+                    
+                    // Fallback to file-saver approach
+                    try {
+                      // Convert base64 to blob
+                      const byteCharacters = atob(enhancedData.docxBase64);
+                      const byteNumbers = new Array(byteCharacters.length);
+                      
+                      for (let i = 0; i < byteCharacters.length; i++) {
+                        byteNumbers[i] = byteCharacters.charCodeAt(i);
+                      }
+                      
+                      const byteArray = new Uint8Array(byteNumbers);
+                      const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+                      
+                      // Use file-saver to save the blob
+                      saveAs(blob, `${cvName}.docx`);
+                      
+                      console.log("Enhanced API download completed using file-saver approach");
+                      downloadSuccess = true;
+                    } catch (fileSaverError) {
+                      console.error("Both download methods failed for enhanced API:", fileSaverError);
+                      lastError = fileSaverError;
+                    }
+                  }
+                } else {
+                  console.warn("Enhanced API response missing docxBase64 data:", enhancedData);
+                  lastError = new Error('Enhanced API response missing docxBase64 data');
+                }
+              } else {
+                const errorText = await enhancedResponse.text();
+                console.error("Enhanced API request failed:", errorText);
+                lastError = new Error(`Enhanced API request failed: ${errorText}`);
+              }
+            } catch (enhancedApiError) {
+              console.warn("Enhanced API error:", enhancedApiError);
+              lastError = enhancedApiError;
+            }
+          }
+          
+          // If both specific and enhanced APIs failed, try the standard API
+          if (!downloadSuccess) {
+            try {
               console.log("Trying standard API as last resort");
               
               // Fall back to standard API
@@ -4217,13 +4229,13 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
                 console.error("Standard API request failed:", errorText);
                 lastError = new Error(`Standard API request failed: ${errorText}`);
               }
+            } catch (standardApiError) {
+              console.warn("Standard API error:", standardApiError);
+              lastError = standardApiError;
             }
-          } catch (apiError) {
-            console.warn("API-based download methods failed:", apiError);
-            lastError = apiError;
           }
         } catch (apiError) {
-          console.warn("API-based download methods failed:", apiError);
+          console.warn("All API-based download methods failed:", apiError);
           lastError = apiError;
         }
       }

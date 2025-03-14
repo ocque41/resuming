@@ -230,7 +230,7 @@ export default function HomePage() {
                   <strong>Analyze:</strong> Get detailed ATS compatibility scoring and content analysis.
                 </li>
                 <li>
-                  <strong>Optimize:</strong> Receive AI-powered suggestions for structure, keywords, and formatting.
+                  <strong>Optimize:</strong> Receive your new structured read-top-apply CV
                 </li>
               </ul>
             </motion.div>
