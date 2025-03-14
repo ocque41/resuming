@@ -99,25 +99,33 @@ const JobMatchDetailedAnalysis = ({ jobMatchAnalysis }: { jobMatchAnalysis: JobM
             </h4>
             
             {jobMatchAnalysis.matchedKeywords.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {jobMatchAnalysis.matchedKeywords
-                  .sort((a, b) => b.relevance - a.relevance)
-                  .map((keyword, index) => (
-                    <span 
-                      key={index} 
-                      className="px-2 py-1 rounded text-sm"
-                      style={{ 
-                        backgroundColor: `rgba(34, 197, 94, ${keyword.relevance / 100})`,
-                        color: keyword.relevance > 50 ? '#000' : '#fff',
-                        border: '1px solid rgba(34, 197, 94, 0.3)'
-                      }}
-                      title={`Relevance: ${keyword.relevance}%, Frequency: ${keyword.frequency}, Placement: ${keyword.placement}`}
-                    >
-                      {keyword.keyword}
-                    </span>
-                  ))
-                }
-              </div>
+              <>
+                <div className="flex flex-wrap gap-2">
+                  {jobMatchAnalysis.matchedKeywords
+                    .sort((a, b) => b.relevance - a.relevance)
+                    .slice(0, 15) // Only show top 15 most relevant keywords
+                    .map((keyword, index) => (
+                      <span 
+                        key={index} 
+                        className="px-2 py-1 rounded text-sm"
+                        style={{ 
+                          backgroundColor: `rgba(34, 197, 94, ${keyword.relevance / 100})`,
+                          color: keyword.relevance > 50 ? '#000' : '#fff',
+                          border: '1px solid rgba(34, 197, 94, 0.3)'
+                        }}
+                        title={`Relevance: ${keyword.relevance}%, Frequency: ${keyword.frequency}, Placement: ${keyword.placement}`}
+                      >
+                        {keyword.keyword}
+                      </span>
+                    ))
+                  }
+                </div>
+                {jobMatchAnalysis.matchedKeywords.length > 15 && (
+                  <p className="text-gray-400 text-xs mt-2">
+                    Showing top 15 of {jobMatchAnalysis.matchedKeywords.length} matched keywords by relevance
+                  </p>
+                )}
+              </>
             ) : (
               <p className="text-gray-400 text-sm">No matching keywords found.</p>
             )}
@@ -135,25 +143,33 @@ const JobMatchDetailedAnalysis = ({ jobMatchAnalysis }: { jobMatchAnalysis: JobM
             </h4>
             
             {jobMatchAnalysis.missingKeywords.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {jobMatchAnalysis.missingKeywords
-                  .sort((a, b) => b.importance - a.importance)
-                  .map((keyword, index) => (
-                    <span 
-                      key={index} 
-                      className="px-2 py-1 rounded text-sm"
-                      style={{ 
-                        backgroundColor: `rgba(239, 68, 68, ${keyword.importance / 100})`,
-                        color: keyword.importance > 50 ? '#000' : '#fff',
-                        border: '1px solid rgba(239, 68, 68, 0.3)'
-                      }}
-                      title={`Importance: ${keyword.importance}%, Suggested Placement: ${keyword.suggestedPlacement}`}
-                    >
-                      {keyword.keyword}
-                    </span>
-                  ))
-                }
-              </div>
+              <>
+                <div className="flex flex-wrap gap-2">
+                  {jobMatchAnalysis.missingKeywords
+                    .sort((a, b) => b.importance - a.importance)
+                    .slice(0, 10) // Only show top 10 most important keywords
+                    .map((keyword, index) => (
+                      <span 
+                        key={index} 
+                        className="px-2 py-1 rounded text-sm"
+                        style={{ 
+                          backgroundColor: `rgba(239, 68, 68, ${keyword.importance / 100})`,
+                          color: keyword.importance > 50 ? '#000' : '#fff',
+                          border: '1px solid rgba(239, 68, 68, 0.3)'
+                        }}
+                        title={`Importance: ${keyword.importance}%, Suggested Placement: ${keyword.suggestedPlacement}`}
+                      >
+                        {keyword.keyword}
+                      </span>
+                    ))
+                  }
+                </div>
+                {jobMatchAnalysis.missingKeywords.length > 10 && (
+                  <p className="text-gray-400 text-xs mt-2">
+                    Showing top 10 of {jobMatchAnalysis.missingKeywords.length} missing keywords by importance
+                  </p>
+                )}
+              </>
             ) : (
               <p className="text-gray-400 text-sm">No missing keywords found.</p>
             )}

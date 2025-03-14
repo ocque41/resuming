@@ -3218,22 +3218,41 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   };
 
   // Add a function to validate document content
-  const validateDocument = (doc: any): boolean => {
+  const validateDocument = (doc: any): { isValid: boolean; error?: string } => {
     try {
-      // Basic validation - check if document has content
-      if (!doc) return false;
+      // Basic validation - check if document exists
+      if (!doc) return { isValid: false, error: "Document is empty or undefined" };
       
       // Check if document has sections
-      if (!doc.sections || doc.sections.length === 0) return false;
+      if (!doc.sections || !Array.isArray(doc.sections) || doc.sections.length === 0) {
+        return { isValid: false, error: "Document has no sections" };
+      }
       
       // Check if document has children in the first section
       const firstSection = doc.sections[0];
-      if (!firstSection.children || firstSection.children.length === 0) return false;
+      if (!firstSection.children || !Array.isArray(firstSection.children) || firstSection.children.length === 0) {
+        return { isValid: false, error: "Document's first section has no content" };
+      }
       
-      return true;
+      // Check if document has at least some minimum content
+      let totalParagraphs = 0;
+      doc.sections.forEach((section: any) => {
+        if (section.children && Array.isArray(section.children)) {
+          totalParagraphs += section.children.length;
+        }
+      });
+      
+      if (totalParagraphs < 5) {
+        return { isValid: false, error: "Document has insufficient content (less than 5 paragraphs)" };
+      }
+      
+      return { isValid: true };
     } catch (error) {
       console.error("Document validation error:", error);
-      return false;
+      return { 
+        isValid: false, 
+        error: error instanceof Error ? `Validation error: ${error.message}` : "Unknown validation error" 
+      };
     }
   };
 
@@ -3251,10 +3270,12 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
 
     setIsGeneratingDocument(true);
     setDocumentError(null);
-
+    
     // Create a function to update progress with user feedback
     const updateProgress = (stage: string, percent: number) => {
-      setDocumentError(`${stage} (${percent}%)...`);
+      setProcessingProgress(percent);
+      setProcessingStatus(stage);
+      setDocumentError(null); // Clear any previous errors
       console.log(`Document generation progress: ${stage} (${percent}%)`);
     };
 
@@ -3266,12 +3287,13 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       const currentTimestamp = Date.now();
       const cacheMaxAge = 5 * 60 * 1000; // 5 minutes
       const isCacheValid = 
-        cachedDocument.text === optimizedText && 
-        cachedDocument.doc !== null && 
-        cachedDocument.blob !== null &&
+        cachedDocument?.text === optimizedText && 
+        cachedDocument?.doc !== null && 
+        cachedDocument?.blob !== null &&
+        cachedDocument?.timestamp &&
         (currentTimestamp - cachedDocument.timestamp) < cacheMaxAge;
       
-      if (isCacheValid) {
+      if (isCacheValid && cachedDocument?.blob) {
         updateProgress("Using cached document", 80);
         console.log("Using cached document");
         
@@ -3280,15 +3302,25 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         
         // Use cached blob for download
         const blob = cachedDocument.blob as Blob;
-        await handleDocumentDownload(blob);
+        const downloadSuccess = await handleDocumentDownload(blob);
         
-        updateProgress("Document generation complete", 100);
-        setIsGeneratingDocument(false);
-        return;
+        if (downloadSuccess) {
+          updateProgress("Document generation complete", 100);
+          setIsGeneratingDocument(false);
+          showToast({
+            title: "Success",
+            description: "Document generated successfully from cache.",
+            duration: 3000,
+          });
+          return;
+        } else {
+          // If download failed, continue with regeneration
+          updateProgress("Cache download failed, regenerating document", 10);
+        }
       }
       
-      // Step 2: Prepare data (10%)
-      updateProgress("Preparing document data", 10);
+      // Step 2: Prepare data (15%)
+      updateProgress("Preparing document data", 15);
       await new Promise(resolve => setTimeout(resolve, 500)); // Small delay for UI feedback
 
       // Get CV name without file extension
@@ -3303,63 +3335,52 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
 
       // Step 3: Generate structured CV (30%)
       updateProgress("Structuring CV content", 30);
-      await new Promise(resolve => setTimeout(resolve, 500)); // Small delay for UI feedback
-
+      
       // Generate structured CV data from optimized text
-      const structuredCVData = generateStructuredCV(optimizedText, jobDescription);
+      let structuredCVData;
+      try {
+        structuredCVData = generateStructuredCV(optimizedText, jobDescription);
+      } catch (structureError) {
+        console.error("Error structuring CV data:", structureError);
+        throw new Error(`Failed to structure CV content: ${structureError instanceof Error ? structureError.message : 'Unknown error'}`);
+      }
       
       // Further enhance the structured data for better document formatting
-      const enhancedStructuredCV = {
-        ...structuredCVData,
-        education: structuredCVData.education.map(edu => {
-          // Parse relevant courses if they're in string format
-          let relevantCourses: string[] = [];
-          if (edu.relevantCourses) {
-            if (typeof edu.relevantCourses === 'string') {
-              relevantCourses = (edu.relevantCourses as string).split(',').map((course: string) => course.trim());
-            } else if (Array.isArray(edu.relevantCourses)) {
-              relevantCourses = edu.relevantCourses;
+      updateProgress("Enhancing structured data", 40);
+      let enhancedStructuredCV;
+      try {
+        enhancedStructuredCV = {
+          ...structuredCVData,
+          education: structuredCVData.education.map(edu => {
+            // Parse relevant courses if they're in string format
+            let relevantCourses: string[] = [];
+            if (edu.relevantCourses) {
+              if (typeof edu.relevantCourses === 'string') {
+                relevantCourses = (edu.relevantCourses as string).split(',').map((course: string) => course.trim());
+              } else if (Array.isArray(edu.relevantCourses)) {
+                relevantCourses = edu.relevantCourses;
+              }
             }
-          }
-          
-          // Parse achievements if they're in string format
-          let achievements: string[] = [];
-          if (edu.achievements) {
-            if (typeof edu.achievements === 'string') {
-              achievements = (edu.achievements as string).split(/[•\-*]\s*/).filter(Boolean).map((achievement: string) => achievement.trim());
-            } else if (Array.isArray(edu.achievements)) {
-              achievements = edu.achievements;
-            }
-          }
-          
-          return {
-            ...edu,
-            relevantCourses,
-            achievements
-          };
-        }),
-        achievements: structuredCVData.achievements.map(achievement => {
-          // Highlight quantifiable achievements
-          const hasQuantifiableResults = /\d+%|\d+\s*(?:million|thousand|hundred|k|m|b|billion|x|times)|\$\d+|increased|improved|reduced|saved|generated|delivered|achieved/i.test(achievement);
-          return achievement;
-        }),
-        languages: structuredCVData.languages.map(language => {
-          // Ensure consistent formatting for languages
-          const parts = language.split(/[:-]/).map(part => part.trim());
-          if (parts.length === 2) {
-            return `${parts[0]} - ${parts[1]}`;
-          }
-          return language;
-        })
-      };
+            
+            return {
+              ...edu,
+              relevantCourses
+            };
+          })
+        };
+      } catch (enhanceError) {
+        console.error("Error enhancing structured data:", enhanceError);
+        // Continue with original data if enhancement fails
+        enhancedStructuredCV = structuredCVData;
+      }
 
       // Step 4: Generate document (50%)
       updateProgress("Generating document", 50);
       
-      // Try to generate the document with a timeout to prevent hanging
+      // Create a function to generate document with timeout
       const generateDocumentWithTimeout = async (): Promise<Document> => {
         const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error("Document generation timed out")), 20000); // 20 second timeout (increased from 15)
+          setTimeout(() => reject(new Error("Document generation timed out after 30 seconds")), 30000); // 30 second timeout (increased from 20)
         });
         
         try {
@@ -3383,42 +3404,43 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       } catch (docGenError) {
         console.error("Document generation error:", docGenError);
         
-        // If we haven't exceeded max retries, try again
+        // If we haven't exceeded max retries, try again with exponential backoff
         if (retryCount < maxRetries) {
-          setDocumentError(`Generation attempt ${retryCount + 1} failed, retrying...`);
-          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+          const backoffTime = Math.pow(2, retryCount) * 1000; // Exponential backoff: 1s, 2s, 4s, etc.
+          const errorMessage = docGenError instanceof Error ? docGenError.message : 'Unknown error';
+          
+          updateProgress(`Generation attempt ${retryCount + 1} failed (${errorMessage}), retrying in ${backoffTime/1000}s...`, 
+            50 + (retryCount * 5)); // Increment progress slightly with each retry
+          
+          await new Promise(resolve => setTimeout(resolve, backoffTime)); // Wait before retry
           return generateDocument(retryCount + 1, maxRetries);
         }
         
         throw docGenError;
       }
 
-      // Step 5: Validate document (60%)
-      updateProgress("Validating document", 60);
+      // Step 5: Validate document (70%)
+      updateProgress("Validating document", 70);
       
       // Validate the generated document
-      const isDocumentValid = validateDocument(doc);
-      if (!isDocumentValid) {
-        throw new Error("Generated document is invalid or incomplete");
+      const validationResult = validateDocument(doc);
+      if (!validationResult.isValid) {
+        throw new Error(validationResult.error || "Generated document is invalid or incomplete");
       }
 
-      // Step 6: Convert to blob (70%)
-      updateProgress("Preparing document for download", 70);
+      // Step 6: Convert to blob (80%)
+      updateProgress("Preparing document for download", 80);
       
-      // Convert to blob with error handling
       let blob: Blob;
       try {
-        // Use the correct type for the document
         blob = await Packer.toBlob(doc);
-      } catch (blobError) {
-        console.error("Error converting document to blob:", blobError);
-        throw new Error(`Failed to prepare document for download: ${blobError instanceof Error ? blobError.message : String(blobError)}`);
+      } catch (packError) {
+        console.error("Error packing document to blob:", packError);
+        throw new Error(`Failed to prepare document for download: ${packError instanceof Error ? packError.message : 'Unknown error'}`);
       }
-
-      // Step 7: Cache the document (80%)
-      updateProgress("Caching document", 80);
       
-      // Cache the document and blob for future use
+      // Step 7: Cache the document (85%)
+      updateProgress("Caching document", 85);
       setCachedDocument({
         doc,
         blob,
@@ -3426,55 +3448,53 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         timestamp: Date.now()
       });
 
-      // Step 8: Download document (90%)
-      updateProgress("Initiating download", 90);
+      // Step 8: Download (90%)
+      updateProgress("Downloading document", 90);
       
-      // Handle document download
-      await handleDocumentDownload(blob);
+      const downloadSuccess = await handleDocumentDownload(blob);
+      if (!downloadSuccess) {
+        throw new Error("Failed to download document after multiple attempts");
+      }
 
       // Step 9: Complete (100%)
       updateProgress("Document generation complete", 100);
       setIsGeneratingDocument(false);
-    } catch (error) {
-      console.error('Error in document generation process:', error);
+      showToast({
+        title: "Success",
+        description: "Document generated and downloaded successfully.",
+        duration: 3000,
+      });
       
-      // Provide a user-friendly error message based on the error type
+    } catch (error) {
+      console.error("Document generation failed:", error);
+      
+      // Provide user-friendly error message based on error type
       let errorMessage = "Failed to generate document";
       
       if (error instanceof Error) {
         if (error.message.includes("timed out")) {
-          errorMessage = "Document generation timed out. Please try again or use a smaller CV.";
+          errorMessage = "Document generation timed out. The document may be too complex or your connection too slow.";
         } else if (error.message.includes("memory")) {
-          errorMessage = "Not enough memory to generate document. Please try again with a smaller CV.";
+          errorMessage = "Out of memory while generating document. Try with a smaller CV or fewer sections.";
         } else if (error.message.includes("network") || error.message.includes("fetch")) {
           errorMessage = "Network error while generating document. Please check your connection and try again.";
-        } else if (error.message.includes("invalid") || error.message.includes("incomplete")) {
-          errorMessage = "Generated document is invalid or incomplete. Please try again.";
-        } else if (error.message.includes("blob")) {
-          errorMessage = "Error preparing document for download. Please try again.";
         } else {
           errorMessage = `Error: ${error.message}`;
         }
       }
       
       setDocumentError(errorMessage);
+      setIsGeneratingDocument(false);
+      
       showToast({
         title: "Document Generation Failed",
         description: errorMessage,
         duration: 5000,
       });
       
-      setIsGeneratingDocument(false);
-      
-      // If we haven't exceeded max retries and it's not a timeout error, try again
-      if (retryCount < maxRetries && !(error instanceof Error && error.message.includes("timed out"))) {
-        setDocumentError(`Generation attempt ${retryCount + 1} failed, retrying in 3 seconds...`);
-        
-        // Wait 3 seconds before retry
-        setTimeout(() => {
-          generateDocument(retryCount + 1, maxRetries);
-        }, 3000);
-      }
+      // Reset progress
+      setProcessingProgress(0);
+      setProcessingStatus('');
     }
   };
 
@@ -3488,30 +3508,43 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       ? selectedCVName.replace(/\.\w+$/, '') 
       : 'CV';
     
+    // Update progress for user feedback
+    const updateDownloadProgress = (method: string, status: string) => {
+      setProcessingStatus(`Download (${method}): ${status}`);
+      console.log(`Download progress (${method}): ${status}`);
+    };
+    
     // Method 1: Using URL.createObjectURL
     try {
+      updateDownloadProgress("Method 1", "Creating object URL");
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${cvName}.docx`;
+      link.download = `${cvName}_optimized.docx`;
       
       // Wrap the click operation in a try-catch to handle any potential errors
       try {
+        updateDownloadProgress("Method 1", "Initiating download");
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
         downloadSuccess = true;
         console.log("Download successful using URL.createObjectURL");
+        updateDownloadProgress("Method 1", "Download successful");
+        return true;
       } catch (clickError) {
         console.error("Error during link click:", clickError);
-        throw clickError;
+        updateDownloadProgress("Method 1", "Failed - Click error");
+        // Continue to next method
       }
     } catch (urlError) {
       console.warn("URL.createObjectURL download failed:", urlError);
+      updateDownloadProgress("Method 1", "Failed - URL creation error");
       
       // Method 2: Using data URL
       try {
+        updateDownloadProgress("Method 2", "Converting to data URL");
         // Convert blob to base64
         const reader = new FileReader();
         
@@ -3519,105 +3552,152 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         const readerPromise = new Promise<boolean>((resolve, reject) => {
           reader.onload = function() {
             try {
-              const base64data = reader.result as string;
-              const downloadLink = document.createElement('a');
-              downloadLink.href = base64data;
-              downloadLink.download = `${cvName}.docx`;
-              document.body.appendChild(downloadLink);
-              downloadLink.click();
-              document.body.removeChild(downloadLink);
+              updateDownloadProgress("Method 2", "Creating download link");
+              const base64data = reader.result;
+              const dataUrl = base64data as string;
+              
+              const link = document.createElement('a');
+              link.href = dataUrl;
+              link.download = `${cvName}_optimized.docx`;
+              link.type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+              
+              updateDownloadProgress("Method 2", "Initiating download");
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              
               downloadSuccess = true;
               console.log("Download successful using data URL");
+              updateDownloadProgress("Method 2", "Download successful");
               resolve(true);
-            } catch (dataUrlClickError) {
-              console.error("Data URL click failed:", dataUrlClickError);
-              reject(dataUrlClickError);
+            } catch (dataUrlError) {
+              console.error("Error in data URL download:", dataUrlError);
+              updateDownloadProgress("Method 2", "Failed - Link creation error");
+              reject(dataUrlError);
             }
           };
           
           reader.onerror = function() {
-            reject(new Error("FileReader error"));
+            console.error("Error reading blob as data URL");
+            updateDownloadProgress("Method 2", "Failed - File reading error");
+            reject(new Error("Failed to read blob as data URL"));
           };
         });
         
         reader.readAsDataURL(blob);
+        const result = await readerPromise;
+        if (result) return true;
         
-        // Wait for reader to complete
-        try {
-          await readerPromise;
-        } catch (readerError) {
-          console.warn("FileReader error:", readerError);
-        }
       } catch (dataUrlError) {
         console.warn("Data URL download failed:", dataUrlError);
+        updateDownloadProgress("Method 2", "Failed completely");
       }
     }
-
-    // If all client-side methods failed, try server-side download
+    
+    // Method 3: Server-side download as fallback
     if (!downloadSuccess) {
       try {
-        // Try specific API endpoint
-        const specificResponse = await fetch('/api/cv/specific-generate-docx', {
+        updateDownloadProgress("Method 3", "Preparing server download");
+        
+        // Convert blob to base64 for API request
+        const base64Promise = new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const base64 = (reader.result as string).split(',')[1]; // Remove data URL prefix
+            resolve(base64);
+          };
+          reader.onerror = () => reject(new Error("Failed to convert blob to base64"));
+          reader.readAsDataURL(blob);
+        });
+        
+        const base64Data = await base64Promise;
+        
+        updateDownloadProgress("Method 3", "Sending to server");
+        
+        // Send to server for download
+        const response = await fetch('/api/cv/specific-generate-docx', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             cvId: selectedCVId,
-            optimizedText: optimizedText
+            docxBase64: base64Data,
+            filename: `${cvName}_optimized.docx`
           }),
         });
         
-        if (specificResponse.ok) {
-          const specificData = await specificResponse.json();
+        if (response.ok) {
+          const data = await response.json();
           
-          if (specificData.success && specificData.docxBase64) {
-            try {
-              const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${specificData.docxBase64}`;
-              const downloadLink = document.createElement('a');
-              downloadLink.href = linkSource;
-              downloadLink.download = `${cvName}.docx`;
-              document.body.appendChild(downloadLink);
-              downloadLink.click();
-              document.body.removeChild(downloadLink);
-              downloadSuccess = true;
-              console.log("Download successful using server-generated document");
-            } catch (serverDownloadError) {
-              console.error("Server download method failed:", serverDownloadError);
-            }
+          if (data.success && data.downloadUrl) {
+            updateDownloadProgress("Method 3", "Creating download link");
+            
+            // Create a direct download link
+            const link = document.createElement('a');
+            link.href = data.downloadUrl;
+            link.download = `${cvName}_optimized.docx`;
+            
+            updateDownloadProgress("Method 3", "Initiating download");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            downloadSuccess = true;
+            console.log("Download successful using server-side method");
+            updateDownloadProgress("Method 3", "Download successful");
+            return true;
+          } else {
+            throw new Error(data.error || "Server did not return a download URL");
           }
+        } else {
+          throw new Error(`Server responded with status: ${response.status}`);
         }
-      } catch (serverApiError) {
-        console.error("Server API error:", serverApiError);
+      } catch (serverError) {
+        console.error("Server-side download failed:", serverError);
+        updateDownloadProgress("Method 3", "Failed - Server error");
+        
+        // Provide direct download link as last resort
+        setDocumentError(
+          "Automatic download failed. Please click the download button below to try again."
+        );
+        
+        // Store blob in state for manual download
+        setCachedDocument(prev => ({
+          ...prev,
+          blob,
+          timestamp: Date.now()
+        }));
+        
+        return false;
       }
-    }
-
-    // Final fallback: Direct download link
-    if (!downloadSuccess) {
-      // Create a direct download link for the user
-      const timestamp = new Date().getTime();
-      const directDownloadUrl = `/api/cv/download-optimized-docx?cvId=${selectedCVId}&t=${timestamp}`;
-      
-      setDocumentError(
-        "Automatic download failed. " +
-        `<a href="${directDownloadUrl}" class="text-[#B4916C] underline" target="_blank" rel="noopener noreferrer">Click here to download</a>`
-      );
-      
-      // Also try to open the download in a new tab
-      window.open(directDownloadUrl, '_blank');
-    }
-
-    // Clear error message if download was successful
-    if (downloadSuccess) {
-      setDocumentError(null);
-      showToast({
-        title: "Success",
-        description: "Document generated and downloaded successfully",
-        duration: 3000,
-      });
     }
     
     return downloadSuccess;
+  };
+
+  // Add a function for manual document download
+  const handleManualDownload = async () => {
+    if (cachedDocument?.blob) {
+      try {
+        setProcessingStatus("Manual download initiated");
+        const result = await handleDocumentDownload(cachedDocument.blob);
+        if (result) {
+          setDocumentError(null);
+          showToast({
+            title: "Success",
+            description: "Document downloaded successfully",
+            duration: 3000,
+          });
+        }
+      } catch (error) {
+        console.error("Manual download failed:", error);
+        setDocumentError("Manual download failed. Please try again later.");
+      }
+    } else {
+      setDocumentError("No document available. Please generate the document first.");
+      setIsGeneratingDocument(false);
+    }
   };
 
   return (
@@ -3733,81 +3813,215 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
                         'rgb(239, 68, 68)'
                       }`
                     }}>
-                      <p className="text-base">
-                        {jobMatchAnalysis.score >= 80 ? (
-                          <strong>Strong Match:</strong>
-                        ) : jobMatchAnalysis.score >= 60 ? (
-                          <strong>Moderate Match:</strong>
-                        ) : (
-                          <strong>Low Match:</strong>
-                        )}
-                        {' '}
+                      <div className="flex justify-between items-center mb-2">
+                        <h5 className="font-medium">
+                          {jobMatchAnalysis.score >= 80 ? (
+                            <span className="text-green-400">Strong Match</span>
+                          ) : jobMatchAnalysis.score >= 60 ? (
+                            <span className="text-yellow-400">Moderate Match</span>
+                          ) : (
+                            <span className="text-red-400">Low Match</span>
+                          )}
+                        </h5>
+                        <div className="flex items-center">
+                          <span className="text-xl font-bold mr-2" style={{ 
+                            color: jobMatchAnalysis.score >= 80 ? 'rgb(34, 197, 94)' : 
+                                  jobMatchAnalysis.score >= 60 ? 'rgb(234, 179, 8)' : 
+                                  'rgb(239, 68, 68)'
+                          }}>
+                            {jobMatchAnalysis.score}%
+                          </span>
+                          <div className="w-16 h-16 relative">
+                            <svg viewBox="0 0 36 36" className="w-full h-full">
+                              <path
+                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                fill="none"
+                                stroke="#444"
+                                strokeWidth="2"
+                                strokeDasharray="100, 100"
+                              />
+                              <path
+                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                fill="none"
+                                stroke={
+                                  jobMatchAnalysis.score >= 80 ? 'rgb(34, 197, 94)' : 
+                                  jobMatchAnalysis.score >= 60 ? 'rgb(234, 179, 8)' : 
+                                  'rgb(239, 68, 68)'
+                                }
+                                strokeWidth="2"
+                                strokeDasharray={`${jobMatchAnalysis.score}, 100`}
+                              />
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <p className="text-base mb-3">
                         {jobMatchAnalysis.score >= 80 ? 
                           "Your CV is well-aligned with this job. You appear to be a strong candidate based on your skills and experience." : 
                          jobMatchAnalysis.score >= 60 ? 
                           "Your CV is somewhat aligned with this job. With some targeted improvements, you could strengthen your candidacy." : 
                           "Your CV is not well-aligned with this job. Consider if this role matches your experience or if significant CV updates are needed."}
                       </p>
+                      
+                      <div className="grid grid-cols-2 gap-3 mt-4">
+                        <div className="flex flex-col">
+                          <span className="text-sm text-gray-400 mb-1">Skills Match</span>
+                          <div className="flex items-center">
+                            <div className="w-full bg-gray-700 h-2 rounded-full mr-2">
+                              <div 
+                                className="h-full rounded-full" 
+                                style={{ 
+                                  width: `${jobMatchAnalysis.dimensionalScores.skillsMatch}%`,
+                                  backgroundColor: 
+                                    jobMatchAnalysis.dimensionalScores.skillsMatch >= 80 ? 'rgb(34, 197, 94)' : 
+                                    jobMatchAnalysis.dimensionalScores.skillsMatch >= 60 ? 'rgb(234, 179, 8)' : 
+                                    'rgb(239, 68, 68)'
+                                }}
+                              ></div>
+                            </div>
+                            <span className="text-sm">{jobMatchAnalysis.dimensionalScores.skillsMatch}%</span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex flex-col">
+                          <span className="text-sm text-gray-400 mb-1">Experience Match</span>
+                          <div className="flex items-center">
+                            <div className="w-full bg-gray-700 h-2 rounded-full mr-2">
+                              <div 
+                                className="h-full rounded-full" 
+                                style={{ 
+                                  width: `${jobMatchAnalysis.dimensionalScores.experienceMatch}%`,
+                                  backgroundColor: 
+                                    jobMatchAnalysis.dimensionalScores.experienceMatch >= 80 ? 'rgb(34, 197, 94)' : 
+                                    jobMatchAnalysis.dimensionalScores.experienceMatch >= 60 ? 'rgb(234, 179, 8)' : 
+                                    'rgb(239, 68, 68)'
+                                }}
+                              ></div>
+                            </div>
+                            <span className="text-sm">{jobMatchAnalysis.dimensionalScores.experienceMatch}%</span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex flex-col">
+                          <span className="text-sm text-gray-400 mb-1">Education Match</span>
+                          <div className="flex items-center">
+                            <div className="w-full bg-gray-700 h-2 rounded-full mr-2">
+                              <div 
+                                className="h-full rounded-full" 
+                                style={{ 
+                                  width: `${jobMatchAnalysis.dimensionalScores.educationMatch}%`,
+                                  backgroundColor: 
+                                    jobMatchAnalysis.dimensionalScores.educationMatch >= 80 ? 'rgb(34, 197, 94)' : 
+                                    jobMatchAnalysis.dimensionalScores.educationMatch >= 60 ? 'rgb(234, 179, 8)' : 
+                                    'rgb(239, 68, 68)'
+                                }}
+                              ></div>
+                            </div>
+                            <span className="text-sm">{jobMatchAnalysis.dimensionalScores.educationMatch}%</span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex flex-col">
+                          <span className="text-sm text-gray-400 mb-1">Industry Fit</span>
+                          <div className="flex items-center">
+                            <div className="w-full bg-gray-700 h-2 rounded-full mr-2">
+                              <div 
+                                className="h-full rounded-full" 
+                                style={{ 
+                                  width: `${jobMatchAnalysis.dimensionalScores.industryFit}%`,
+                                  backgroundColor: 
+                                    jobMatchAnalysis.dimensionalScores.industryFit >= 80 ? 'rgb(34, 197, 94)' : 
+                                    jobMatchAnalysis.dimensionalScores.industryFit >= 60 ? 'rgb(234, 179, 8)' : 
+                                    'rgb(239, 68, 68)'
+                                }}
+                              ></div>
+                            </div>
+                            <span className="text-sm">{jobMatchAnalysis.dimensionalScores.industryFit}%</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-4 text-sm">
+                        <div className="flex items-center">
+                          <span className="w-3 h-3 rounded-full mr-2" style={{ 
+                            backgroundColor: jobMatchAnalysis.improvementPotential >= 30 ? 'rgb(34, 197, 94)' : 
+                                           jobMatchAnalysis.improvementPotential >= 15 ? 'rgb(234, 179, 8)' : 
+                                           'rgb(239, 68, 68)'
+                          }}></span>
+                          <span>
+                            {jobMatchAnalysis.improvementPotential >= 30 ? 
+                              "High potential for improvement with targeted changes" : 
+                             jobMatchAnalysis.improvementPotential >= 15 ? 
+                              "Moderate potential for improvement" : 
+                              "Limited potential for improvement without significant changes"}
+                          </span>
+                        </div>
+                      </div>
                     </div>
+                  </div>
+                </div>
+                
+                {/* Career Fit Indicator */}
+                <div className="mb-4 p-4 border border-gray-700 rounded-md">
+                  <h4 className="text-lg font-medium mb-3">Career Path Alignment</h4>
+                  
+                  <div className="flex items-center mb-3">
+                    <div className="relative w-full h-8 bg-gray-700 rounded-full overflow-hidden">
+                      <div className="absolute top-0 left-0 h-full flex">
+                        <div 
+                          className="h-full bg-red-500" 
+                          style={{ width: '33.33%' }}
+                        ></div>
+                        <div 
+                          className="h-full bg-yellow-500" 
+                          style={{ width: '33.33%' }}
+                        ></div>
+                        <div 
+                          className="h-full bg-green-500" 
+                          style={{ width: '33.33%' }}
+                        ></div>
+                      </div>
+                      
+                      {/* Position marker based on overall score */}
+                      <div 
+                        className="absolute top-0 w-4 h-8 bg-white rounded-full transform -translate-x-1/2"
+                        style={{ 
+                          left: `${jobMatchAnalysis.score}%`,
+                          boxShadow: '0 0 0 2px black, 0 0 0 4px white'
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-between text-xs text-gray-400 mb-4">
+                    <span>Career Change</span>
+                    <span>Career Shift</span>
+                    <span>Career Growth</span>
+                  </div>
+                  
+                  <div className="text-sm">
+                    <p className="mb-2">
+                      {jobMatchAnalysis.score >= 80 ? 
+                        "This job represents a natural progression in your career path. Your experience and skills align well with the requirements." : 
+                       jobMatchAnalysis.score >= 60 ? 
+                        "This job represents a moderate shift in your career path. You have some transferable skills, but may need to develop in certain areas." : 
+                        "This job represents a significant change from your current career path. Consider if this aligns with your long-term goals."}
+                    </p>
                     
-                    {/* Dimensional Scores */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm text-gray-400 flex justify-between">
-                          <span>Skills Match</span>
-                          <span className="font-medium text-white">{jobMatchAnalysis.dimensionalScores.skillsMatch}%</span>
-                        </p>
-                        <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
-                          <div className="h-2 rounded-full" style={{ 
-                            width: `${jobMatchAnalysis.dimensionalScores.skillsMatch}%`,
-                            backgroundColor: jobMatchAnalysis.dimensionalScores.skillsMatch >= 70 ? '#22c55e' : 
-                                            jobMatchAnalysis.dimensionalScores.skillsMatch >= 50 ? '#eab308' : 
-                                            '#ef4444'
-                          }}></div>
-                        </div>
+                    <div className="mt-3 flex items-start">
+                      <div className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center mt-0.5 mr-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
                       </div>
-                      <div>
-                        <p className="text-sm text-gray-400 flex justify-between">
-                          <span>Experience Match</span>
-                          <span className="font-medium text-white">{jobMatchAnalysis.dimensionalScores.experienceMatch}%</span>
-                        </p>
-                        <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
-                          <div className="h-2 rounded-full" style={{ 
-                            width: `${jobMatchAnalysis.dimensionalScores.experienceMatch}%`,
-                            backgroundColor: jobMatchAnalysis.dimensionalScores.experienceMatch >= 70 ? '#22c55e' : 
-                                            jobMatchAnalysis.dimensionalScores.experienceMatch >= 50 ? '#eab308' : 
-                                            '#ef4444'
-                          }}></div>
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-400 flex justify-between">
-                          <span>Education Match</span>
-                          <span className="font-medium text-white">{jobMatchAnalysis.dimensionalScores.educationMatch}%</span>
-                        </p>
-                        <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
-                          <div className="h-2 rounded-full" style={{ 
-                            width: `${jobMatchAnalysis.dimensionalScores.educationMatch}%`,
-                            backgroundColor: jobMatchAnalysis.dimensionalScores.educationMatch >= 70 ? '#22c55e' : 
-                                            jobMatchAnalysis.dimensionalScores.educationMatch >= 50 ? '#eab308' : 
-                                            '#ef4444'
-                          }}></div>
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-400 flex justify-between">
-                          <span>Industry Fit</span>
-                          <span className="font-medium text-white">{jobMatchAnalysis.dimensionalScores.industryFit}%</span>
-                        </p>
-                        <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
-                          <div className="h-2 rounded-full" style={{ 
-                            width: `${jobMatchAnalysis.dimensionalScores.industryFit}%`,
-                            backgroundColor: jobMatchAnalysis.dimensionalScores.industryFit >= 70 ? '#22c55e' : 
-                                            jobMatchAnalysis.dimensionalScores.industryFit >= 50 ? '#eab308' : 
-                                            '#ef4444'
-                          }}></div>
-                        </div>
-                      </div>
+                      <p className="text-xs text-gray-300">
+                        {jobMatchAnalysis.score >= 80 ? 
+                          "Focus on highlighting your directly relevant experience and achievements in your application." : 
+                         jobMatchAnalysis.score >= 60 ? 
+                          "Emphasize your transferable skills and demonstrate how your background prepares you for this role." : 
+                          "Consider addressing the career change directly in your cover letter and highlight transferable skills."}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -3875,6 +4089,56 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
               {optimizedText}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Document Generation Progress */}
+      {isGeneratingDocument && (
+        <div className="mt-4 p-4 border border-gray-700 rounded-md bg-gray-800/50">
+          <h3 className="text-lg font-medium mb-2 text-[#B4916C]">Generating Document</h3>
+          
+          <div className="mb-2">
+            <div className="flex justify-between text-sm mb-1">
+              <span>{processingStatus || "Preparing..."}</span>
+              <span>{processingProgress}%</span>
+            </div>
+            <div className="w-full bg-gray-700 h-2 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-[#B4916C] transition-all duration-300" 
+                style={{ width: `${processingProgress}%` }}
+              ></div>
+            </div>
+          </div>
+          
+          <p className="text-sm text-gray-400 mb-2">
+            Please wait while we generate your optimized document. This may take a few moments.
+          </p>
+          
+          {processingProgress > 0 && processingProgress < 100 && processingProgress === processingProgress && (
+            <div className="text-xs text-gray-500">
+              <p>Generating a document with all your optimized content...</p>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Document Error with Manual Download Option */}
+      {documentError && !isGeneratingDocument && (
+        <div className="mt-4 p-4 border border-red-800/50 rounded-md bg-red-900/20">
+          <h3 className="text-lg font-medium mb-2 text-red-400">Document Generation Issue</h3>
+          <p className="text-sm text-gray-300 mb-3">{documentError}</p>
+          
+          {cachedDocument?.blob && (
+            <button
+              onClick={handleManualDownload}
+              className="px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A3815B] transition-colors flex items-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Manual Download
+            </button>
+          )}
         </div>
       )}
     </div>
