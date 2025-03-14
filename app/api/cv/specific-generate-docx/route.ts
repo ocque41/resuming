@@ -1,0 +1,347 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getUser, getCVsForUser } from '@/lib/db/queries.server';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle } from 'docx';
+import { logger } from '@/lib/logger';
+
+/**
+ * Specific API endpoint for generating DOCX files from optimized CV text
+ * in the specific optimization workflow
+ */
+export async function POST(request: NextRequest) {
+  try {
+    // Check authentication
+    const user = await getUser();
+    if (!user) {
+      logger.warn('Unauthorized access attempt to specific-generate-docx');
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Parse request body
+    let body;
+    try {
+      body = await request.json();
+    } catch (parseError) {
+      logger.error('Error parsing request body:', parseError instanceof Error ? parseError.message : String(parseError));
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Invalid request body',
+        details: parseError instanceof Error ? parseError.message : 'Could not parse JSON'
+      }, { status: 400 });
+    }
+
+    const { cvId, optimizedText } = body || {};
+
+    if (!cvId) {
+      logger.error('Missing cvId parameter in specific-generate-docx request');
+      return NextResponse.json({ success: false, error: 'CV ID is required' }, { status: 400 });
+    }
+
+    let cvText = optimizedText;
+
+    // If optimized text wasn't provided, fetch it from the database
+    if (!cvText) {
+      try {
+        // Get all CVs for the user
+        const cvs = await getCVsForUser(user.id);
+        
+        // Find the specific CV by ID
+        const cvRecord = cvs.find(cv => cv.id === parseInt(cvId));
+
+        if (!cvRecord) {
+          logger.error(`CV not found for ID: ${cvId}`);
+          return NextResponse.json({ success: false, error: 'CV not found' }, { status: 404 });
+        }
+
+        // Use rawText since optimizedText doesn't exist in the schema
+        if (!cvRecord.rawText) {
+          logger.error(`No text available for CV ID: ${cvId}`);
+          return NextResponse.json(
+            { success: false, error: 'No text available for this CV' },
+            { status: 400 }
+          );
+        }
+
+        cvText = cvRecord.rawText;
+      } catch (dbError) {
+        logger.error('Database error:', dbError instanceof Error ? dbError.message : String(dbError));
+        return NextResponse.json(
+          { success: false, error: 'Failed to retrieve CV data' },
+          { status: 500 }
+        );
+      }
+    }
+
+    // Generate the DOCX file
+    let docxBuffer;
+    try {
+      logger.info(`Generating DOCX for CV ID: ${cvId}`);
+      docxBuffer = await generateSpecificDocx(cvText);
+      logger.info(`DOCX generation successful for CV ID: ${cvId}`);
+    } catch (genError) {
+      logger.error('Error generating DOCX:', genError instanceof Error ? genError.message : String(genError));
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Failed to generate DOCX document',
+          details: genError instanceof Error ? genError.message : 'Unknown error'
+        },
+        { status: 500 }
+      );
+    }
+
+    // Convert buffer to base64 for response
+    const base64Data = docxBuffer.toString('base64');
+
+    // Return the base64 data
+    return NextResponse.json({
+      success: true,
+      docxBase64: base64Data,
+    });
+  } catch (error) {
+    logger.error('Error in specific-generate-docx:', error instanceof Error ? error.message : String(error));
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'An unknown error occurred' 
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Generate a DOCX document from CV text specifically for the specific optimization workflow
+ */
+async function generateSpecificDocx(cvText: string): Promise<Buffer> {
+  if (!cvText) {
+    throw new Error('CV text is required');
+  }
+
+  try {
+    // Parse the CV text into sections
+    const sections = parseOptimizedText(cvText);
+    
+    // Create document
+    const doc = new Document({
+      sections: [{
+        properties: {
+          page: {
+            margin: {
+              top: 1000,
+              right: 1000,
+              bottom: 1000,
+              left: 1000
+            }
+          }
+        },
+        children: [
+          // Title
+          new Paragraph({
+            text: 'Optimized CV',
+            heading: HeadingLevel.HEADING_1,
+            spacing: {
+              after: 200
+            },
+            alignment: AlignmentType.CENTER,
+          }),
+          
+          // Add a horizontal line after header
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: '',
+                size: 16
+              })
+            ],
+            border: {
+              bottom: {
+                color: 'B4916C',
+                space: 1,
+                style: BorderStyle.SINGLE,
+                size: 8
+              }
+            },
+            spacing: {
+              after: 300
+            }
+          }),
+          
+          // Add each section
+          ...Object.entries(sections).flatMap(([sectionName, content]) => {
+            if (!content || (Array.isArray(content) && content.length === 0)) {
+              return [];
+            }
+            
+            const paragraphs = [];
+            
+            // Add section header
+            paragraphs.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: sectionName.toUpperCase(),
+                    size: 28,
+                    bold: true,
+                    color: 'B4916C'
+                  })
+                ],
+                spacing: {
+                  before: 400,
+                  after: 200
+                },
+                border: {
+                  bottom: {
+                    color: 'B4916C',
+                    space: 1,
+                    style: BorderStyle.SINGLE,
+                    size: 6
+                  }
+                }
+              })
+            );
+            
+            // Add section content
+            if (typeof content === 'string') {
+              // Split by lines and add each line as a paragraph
+              const lines = content.split('\n').filter(line => line.trim());
+              
+              for (const line of lines) {
+                // Check if line is a bullet point
+                if (line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*')) {
+                  paragraphs.push(
+                    new Paragraph({
+                      children: [
+                        new TextRun({
+                          text: '• ',
+                          bold: true,
+                          color: 'B4916C'
+                        }),
+                        new TextRun({
+                          text: line.replace(/^[•\-*]\s*/, '')
+                        })
+                      ],
+                      spacing: {
+                        before: 120,
+                        after: 120
+                      },
+                      indent: {
+                        left: 360
+                      }
+                    })
+                  );
+                } else {
+                  paragraphs.push(
+                    new Paragraph({
+                      text: line,
+                      spacing: {
+                        before: 120,
+                        after: 120
+                      }
+                    })
+                  );
+                }
+              }
+            } else if (Array.isArray(content)) {
+              // Add each item as a bullet point
+              for (const item of content) {
+                paragraphs.push(
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: '• ',
+                        bold: true,
+                        color: 'B4916C'
+                      }),
+                      new TextRun({
+                        text: item
+                      })
+                    ],
+                    spacing: {
+                      before: 120,
+                      after: 120
+                    },
+                    indent: {
+                      left: 360
+                    }
+                  })
+                );
+              }
+            }
+            
+            return paragraphs;
+          })
+        ]
+      }]
+    });
+
+    // Generate buffer
+    return await Packer.toBuffer(doc);
+  } catch (error) {
+    logger.error('Error generating specific DOCX:', error instanceof Error ? error.message : String(error));
+    throw new Error(`Failed to generate specific DOCX: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * Parse optimized text into sections
+ */
+function parseOptimizedText(text: string): Record<string, string | string[]> {
+  const sections: Record<string, string | string[]> = {};
+  
+  // Split text into lines
+  const lines = text.split('\n').filter(line => line.trim());
+  
+  // Define section patterns
+  const sectionPatterns = [
+    /^(PROFILE|SUMMARY):/i,
+    /^(SKILLS|TECHNICAL SKILLS|PROFESSIONAL SKILLS):/i,
+    /^(EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY):/i,
+    /^(EDUCATION|ACADEMIC BACKGROUND):/i,
+    /^(ACHIEVEMENTS|ACCOMPLISHMENTS):/i,
+    /^(GOALS|CAREER GOALS):/i,
+    /^(LANGUAGES|LANGUAGE PROFICIENCY):/i,
+    /^(REFERENCES):/i
+  ];
+  
+  let currentSection = '';
+  let sectionContent: string[] = [];
+  
+  // Process each line
+  for (const line of lines) {
+    // Check if this line is a section header
+    let isSectionHeader = false;
+    for (const pattern of sectionPatterns) {
+      if (pattern.test(line)) {
+        // If we were already processing a section, save it
+        if (currentSection) {
+          sections[currentSection] = sectionContent.join('\n');
+        }
+        
+        // Start a new section
+        currentSection = line.replace(/:/g, '').trim();
+        sectionContent = [];
+        isSectionHeader = true;
+        break;
+      }
+    }
+    
+    // If not a section header, add to current section
+    if (!isSectionHeader && currentSection) {
+      sectionContent.push(line);
+    } else if (!isSectionHeader && !currentSection) {
+      // If no section has been identified yet, this is likely header information
+      if (!sections['Header']) {
+        sections['Header'] = line;
+      } else {
+        sections['Header'] += '\n' + line;
+      }
+    }
+  }
+  
+  // Save the last section
+  if (currentSection && sectionContent.length > 0) {
+    sections[currentSection] = sectionContent.join('\n');
+  }
+  
+  return sections;
+} 

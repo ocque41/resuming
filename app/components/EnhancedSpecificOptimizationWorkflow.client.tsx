@@ -10,7 +10,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle } from "lucide-react";
 import { analyzeCVContent, optimizeCVForJob } from '@/lib/services/mistral.service';
-import { generateStructuredDocument, generateSimpleDocument, createTextFile, createTestDocument } from '../utils/documentGenerator';
 
 // Type definitions
 interface KeywordMatch {
@@ -3906,95 +3905,6 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     return optimizedText;
   };
 
-  // Function to generate a more structured document
-  // NOTE: This function is now imported from '../utils/documentGenerator.ts'
-  // and should be removed in a future refactoring to avoid duplication.
-  const generateStructuredDocument = async (text: string, name: string): Promise<Blob> => {
-    console.log("Generating structured document...");
-    
-    // Parse the text into sections
-    const lines = text.split('\n');
-    const sections: Record<string, string[]> = {};
-    let currentSection = 'HEADER';
-    sections[currentSection] = [];
-    
-    // Extract sections based on common headers (all caps followed by colon)
-    for (const line of lines) {
-      const sectionMatch = line.match(/^([A-Z][A-Z\s]+):$/);
-      if (sectionMatch) {
-        currentSection = sectionMatch[1].trim();
-        if (!sections[currentSection]) {
-          sections[currentSection] = [];
-        }
-      } else if (line.trim()) {
-        if (!sections[currentSection]) {
-          sections[currentSection] = [];
-        }
-        sections[currentSection].push(line.trim());
-      }
-    }
-    
-    console.log("Parsed sections:", Object.keys(sections));
-    
-    // Create document with better formatting
-    const doc = new Document({
-      sections: [{
-        properties: {},
-        children: [
-          // Header section (name and contact info)
-          ...(sections['HEADER'] && sections['HEADER'].length > 0 ? [
-            new Paragraph({
-              text: sections['HEADER'][0] || name,
-              heading: HeadingLevel.HEADING_1,
-              alignment: AlignmentType.CENTER,
-              spacing: { after: 200 }
-            }),
-            ...(sections['HEADER'].length > 1 ? [
-              new Paragraph({
-                text: sections['HEADER'].slice(1).join(' | '),
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 400 }
-              })
-            ] : [])
-          ] : [
-            new Paragraph({
-              text: name,
-              heading: HeadingLevel.HEADING_1,
-              alignment: AlignmentType.CENTER,
-              spacing: { after: 400 }
-            })
-          ]),
-          
-          // Process each section
-          ...Object.entries(sections)
-            .filter(([key]) => key !== 'HEADER') // Skip header section as it's already processed
-            .flatMap(([sectionName, sectionLines]) => [
-              // Section heading
-              new Paragraph({
-                text: sectionName,
-                heading: HeadingLevel.HEADING_2,
-                spacing: { before: 400, after: 200 }
-              }),
-              // Section content - check for bullet points
-              ...sectionLines.map(line => {
-                // Check if line starts with a bullet point or similar
-                const isBulletPoint = /^[•\-*]\s/.test(line);
-                
-                return new Paragraph({
-                  text: isBulletPoint ? line.replace(/^[•\-*]\s/, '') : line,
-                  bullet: isBulletPoint ? { level: 0 } : undefined,
-                  spacing: { before: 100, after: 100 }
-                });
-              })
-            ])
-        ]
-      }]
-    });
-    
-    // Convert to blob
-    return await Packer.toBlob(doc);
-  };
-
   // Add download document handler
   const handleDownloadDocument = async () => {
     if (!optimizedText) {
@@ -4013,67 +3923,347 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         ? selectedCVName.replace(/\.\w+$/, '') 
         : 'CV';
       
-      // Check if we have the required data
+      // Check if CV ID is available
       if (!selectedCVId) {
         throw new Error('No CV selected for document generation');
       }
       
       console.log(`Generating document for CV ID: ${selectedCVId}`);
       
-      // Try the structured document approach first
-      try {
-        console.log("Attempting structured document generation...");
-        
-        // Generate a structured document using our utility function
-        const blob = await generateStructuredDocument(optimizedText, cvName);
-        
-        // Save the file
-        saveAs(blob, `${cvName}-optimized.docx`);
-        
-        console.log("Structured document generation successful");
-        setIsGeneratingDocument(false);
-        return;
-      } catch (structuredError) {
-        console.error("Structured document generation failed:", structuredError);
-        // Continue to simpler approach
+      // Try multiple approaches to generate and download the document
+      let downloadSuccess = false;
+      let lastError = null;
+      
+      // Approach 1: Local document generation
+      if (!downloadSuccess) {
+        try {
+          console.log("Attempting local document generation...");
+          
+          // Generate structured CV data from optimized text
+          const structuredCV = generateStructuredCV(optimizedText, jobDescription);
+          
+          // Further enhance the structured data for better document formatting
+          const enhancedStructuredCV = {
+            ...structuredCV,
+            education: structuredCV.education.map(edu => {
+              // Parse relevant courses if they're in string format
+              let relevantCourses: string[] = [];
+              if (edu.relevantCourses) {
+                if (typeof edu.relevantCourses === 'string') {
+                  relevantCourses = (edu.relevantCourses as string).split(',').map((course: string) => course.trim());
+                } else if (Array.isArray(edu.relevantCourses)) {
+                  relevantCourses = edu.relevantCourses;
+                }
+              }
+              
+              // Parse achievements if they're in string format
+              let achievements: string[] = [];
+              if (edu.achievements) {
+                if (typeof edu.achievements === 'string') {
+                  achievements = (edu.achievements as string).split(/[•\-*]\s*/).filter(Boolean).map((achievement: string) => achievement.trim());
+                } else if (Array.isArray(edu.achievements)) {
+                  achievements = edu.achievements;
+                }
+              }
+              
+              return {
+                ...edu,
+                relevantCourses,
+                achievements
+              };
+            }),
+            achievements: structuredCV.achievements.map(achievement => {
+              // Highlight quantifiable achievements
+              const hasQuantifiableResults = /\d+%|\d+\s*(?:million|thousand|hundred|k|m|b|billion|x|times)|\$\d+|increased|improved|reduced|saved|generated|delivered|achieved/i.test(achievement);
+              return achievement;
+            }),
+            languages: structuredCV.languages.map(language => {
+              // Ensure consistent formatting for languages
+              const parts = language.split(/[:-]/).map(part => part.trim());
+              if (parts.length === 2) {
+                return `${parts[0]} - ${parts[1]}`;
+              }
+              return language;
+            })
+          };
+          
+          // Generate the document with enhanced formatting
+          const doc = await generateOptimizedDocument(optimizedText, cvName, enhancedStructuredCV.contactInfo, enhancedStructuredCV);
+          
+          // Convert to blob
+          const blob = await Packer.toBlob(doc);
+          
+          // Save the file using file-saver
+          saveAs(blob, `${cvName}.docx`);
+          
+          console.log("Local document generation successful");
+          downloadSuccess = true;
+        } catch (localGenError) {
+          console.warn("Local document generation failed:", localGenError);
+          lastError = localGenError;
+        }
       }
       
-      // SIMPLIFIED APPROACH: Generate document directly using docx library
-      try {
-        console.log("Attempting simplified document generation...");
-        
-        // Generate a simple document using our utility function
-        const blob = await generateSimpleDocument(optimizedText, cvName);
-        
-        // Save the file
-        saveAs(blob, `${cvName}-optimized.docx`);
-        
-        console.log("Basic document generation successful");
-        setIsGeneratingDocument(false);
-        return;
-      } catch (basicGenError) {
-        console.error("Basic document generation failed:", basicGenError);
-        // Continue to fallback methods
+      // Approach 2: API-based document generation with base64 encoding
+      if (!downloadSuccess) {
+        try {
+          console.log("Attempting API-based document generation...");
+          
+          // First try our specific API endpoint designed for this workflow
+          const specificResponse = await fetch('/api/cv/specific-generate-docx', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              cvId: selectedCVId,
+              optimizedText: optimizedText
+            }),
+          });
+          
+          if (specificResponse.ok) {
+            const specificData = await specificResponse.json();
+            
+            if (specificData.success && specificData.docxBase64) {
+              console.log(`Received specific API base64 data of length: ${specificData.docxBase64.length}`);
+              
+              try {
+                // Try using data URL approach
+                const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${specificData.docxBase64}`;
+                const downloadLink = document.createElement('a');
+                downloadLink.href = linkSource;
+                downloadLink.download = `${cvName}.docx`;
+                
+                // Append to the document, click, and remove
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+                
+                console.log("Specific API download completed using data URL approach");
+                downloadSuccess = true;
+              } catch (dataUrlError) {
+                console.warn("Data URL download failed, trying file-saver approach:", dataUrlError);
+                
+                // Fallback to file-saver approach
+                try {
+                  // Convert base64 to blob
+                  const byteCharacters = atob(specificData.docxBase64);
+                  const byteNumbers = new Array(byteCharacters.length);
+                  
+                  for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                  }
+                  
+                  const byteArray = new Uint8Array(byteNumbers);
+                  const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+                  
+                  // Use file-saver to save the blob
+                  saveAs(blob, `${cvName}.docx`);
+                  
+                  console.log("Specific API download completed using file-saver approach");
+                  downloadSuccess = true;
+                } catch (fileSaverError) {
+                  console.error("Both download methods failed for specific API:", fileSaverError);
+                  lastError = fileSaverError;
+                }
+              }
+            } else {
+              console.warn("Specific API response missing docxBase64 data:", specificData);
+              lastError = new Error('Specific API response missing docxBase64 data');
+            }
+          } else {
+            console.warn("Specific API request failed, trying enhanced API");
+          }
+          
+          // If specific API failed, try the enhanced DOCX generation API
+          if (!downloadSuccess) {
+            // Call the enhanced DOCX generation API
+            const enhancedResponse = await fetch('/api/cv/generate-enhanced-docx', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                cvId: selectedCVId,
+                optimizedText: optimizedText,
+                forceRefresh: true
+              }),
+            });
+            
+            if (enhancedResponse.ok) {
+              const enhancedData = await enhancedResponse.json();
+              
+              if (enhancedData.success && enhancedData.docxBase64) {
+                console.log(`Received enhanced base64 data of length: ${enhancedData.docxBase64.length}`);
+                
+                try {
+                  // Try using data URL approach
+                  const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${enhancedData.docxBase64}`;
+                  const downloadLink = document.createElement('a');
+                  downloadLink.href = linkSource;
+                  downloadLink.download = `${cvName}.docx`;
+                  
+                  // Append to the document, click, and remove
+                  document.body.appendChild(downloadLink);
+                  downloadLink.click();
+                  document.body.removeChild(downloadLink);
+                  
+                  console.log("Enhanced API download completed using data URL approach");
+                  downloadSuccess = true;
+                } catch (dataUrlError) {
+                  console.warn("Data URL download failed, trying file-saver approach:", dataUrlError);
+                  
+                  // Fallback to file-saver approach
+                  try {
+                    // Convert base64 to blob
+                    const byteCharacters = atob(enhancedData.docxBase64);
+                    const byteNumbers = new Array(byteCharacters.length);
+                    
+                    for (let i = 0; i < byteCharacters.length; i++) {
+                      byteNumbers[i] = byteCharacters.charCodeAt(i);
+                    }
+                    
+                    const byteArray = new Uint8Array(byteNumbers);
+                    const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+                    
+                    // Use file-saver to save the blob
+                    saveAs(blob, `${cvName}.docx`);
+                    
+                    console.log("Enhanced API download completed using file-saver approach");
+                    downloadSuccess = true;
+                  } catch (fileSaverError) {
+                    console.error("Both download methods failed for enhanced API:", fileSaverError);
+                    lastError = fileSaverError;
+                  }
+                }
+              } else {
+                console.warn("Enhanced API response missing docxBase64 data:", enhancedData);
+                lastError = new Error('Enhanced API response missing docxBase64 data');
+              }
+            } else {
+              const errorText = await enhancedResponse.text();
+              console.error("Enhanced API request failed:", errorText);
+              lastError = new Error(`Enhanced API request failed: ${errorText}`);
+            }
+            
+            // If both specific and enhanced APIs failed, try the standard API
+            if (!downloadSuccess) {
+              console.log("Trying standard API as last resort");
+              
+              // Fall back to standard API
+              const response = await fetch('/api/cv/generate-docx', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  cvId: selectedCVId,
+                  optimizedText: optimizedText
+                }),
+              });
+              
+              if (response.ok) {
+                const data = await response.json();
+                
+                if (data.success && data.docxBase64) {
+                  console.log(`Received standard base64 data of length: ${data.docxBase64.length}`);
+                  
+                  try {
+                    // Try using data URL approach
+                    const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${data.docxBase64}`;
+                    const downloadLink = document.createElement('a');
+                    downloadLink.href = linkSource;
+                    downloadLink.download = `${cvName}.docx`;
+                    
+                    // Append to the document, click, and remove
+                    document.body.appendChild(downloadLink);
+                    downloadLink.click();
+                    document.body.removeChild(downloadLink);
+                    
+                    console.log("Standard API download completed using data URL approach");
+                    downloadSuccess = true;
+                  } catch (dataUrlError) {
+                    console.warn("Data URL download failed, trying file-saver approach:", dataUrlError);
+                    
+                    // Fallback to file-saver approach
+                    try {
+                      // Convert base64 to blob
+                      const byteCharacters = atob(data.docxBase64);
+                      const byteNumbers = new Array(byteCharacters.length);
+                      
+                      for (let i = 0; i < byteCharacters.length; i++) {
+                        byteNumbers[i] = byteCharacters.charCodeAt(i);
+                      }
+                      
+                      const byteArray = new Uint8Array(byteNumbers);
+                      const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+                      
+                      // Use file-saver to save the blob
+                      saveAs(blob, `${cvName}.docx`);
+                      
+                      console.log("Standard API download completed using file-saver approach");
+                      downloadSuccess = true;
+                    } catch (fileSaverError) {
+                      console.error("Both download methods failed for standard API:", fileSaverError);
+                      lastError = fileSaverError;
+                    }
+                  }
+                } else {
+                  console.warn("Standard API response missing docxBase64 data:", data);
+                  lastError = new Error('Standard API response missing docxBase64 data');
+                }
+              } else {
+                const errorText = await response.text();
+                console.error("Standard API request failed:", errorText);
+                lastError = new Error(`Standard API request failed: ${errorText}`);
+              }
+            }
+          } catch (apiError) {
+            console.warn("API-based download methods failed:", apiError);
+            lastError = apiError;
+          }
+        } catch (apiError) {
+          console.warn("API-based download methods failed:", apiError);
+          lastError = apiError;
+        }
       }
       
-      // FALLBACK: Create a text file if all else fails
-      try {
-        console.log("Falling back to text file generation...");
-        
-        // Create a text blob using our utility function
-        const textBlob = createTextFile(optimizedText);
-        
-        // Save as text file
-        saveAs(textBlob, `${cvName}-optimized.txt`);
-        
-        console.log("Text file generation successful");
-        setDocumentError("Could not generate DOCX file. A text file has been downloaded instead.");
-        setIsGeneratingDocument(false);
-        return;
-      } catch (textError) {
-        console.error("Text file generation failed:", textError);
-        throw new Error("All document generation methods failed");
+      // Approach 3: Direct download using GET request
+      if (!downloadSuccess) {
+        try {
+          console.log("Attempting direct download via GET request");
+          
+          // Create a hidden iframe to trigger the download
+          const iframe = document.createElement('iframe');
+          iframe.style.display = 'none';
+          document.body.appendChild(iframe);
+          
+          // Set the iframe source to the download URL with a timestamp to prevent caching
+          const timestamp = new Date().getTime();
+          iframe.src = `/api/cv/download-optimized-docx?cvId=${selectedCVId}&t=${timestamp}`;
+          
+          // Remove the iframe after a delay
+          setTimeout(() => {
+            document.body.removeChild(iframe);
+          }, 5000);
+          
+          console.log("Direct download initiated");
+          
+          // Show a message to the user
+          setDocumentError("If the download doesn't start automatically, please check your browser's download manager or try again.");
+          downloadSuccess = true;
+        } catch (directDownloadError) {
+          console.error("Direct download method failed:", directDownloadError);
+          lastError = directDownloadError;
+        }
       }
+      
+      // If all approaches failed, throw an error
+      if (!downloadSuccess) {
+        throw new Error(lastError instanceof Error ? lastError.message : "All download methods failed");
+      }
+      
+      setIsGeneratingDocument(false);
     } catch (error) {
       console.error('Error generating document:', error);
       setDocumentError(`Failed to generate document: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -4081,94 +4271,163 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     }
   };
 
-  // Test DOCX generation
-  const testDocxGeneration = async () => {
-    try {
-      console.log("Testing DOCX generation...");
-      
-      // Create a test document using our utility function
-      const blob = await createTestDocument();
-      
-      // Save the file
-      saveAs(blob, 'test-document.docx');
-      
-      console.log("Test document generation successful");
-    } catch (error) {
-      console.error("Test document generation failed:", error);
-      setDocumentError(`Test document generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  };
-
   return (
-    <div className="flex flex-col space-y-4">
-      <div className="w-full">
-        <div className="mb-4">
-          <h3 className="text-lg font-semibold mb-2">Select CV</h3>
-          <ModernFileDropdown 
-            cvs={cvs.map(cv => `${cv.name}|${cv.id}`)} 
-            onSelect={handleSelectCV} 
-            selectedCVName={selectedCVName}
-          />
-        </div>
-        
-        <div className="mb-4">
-          <h3 className="text-lg font-semibold mb-2">Job Description</h3>
-          <textarea
-            className="w-full h-40 p-3 bg-[#050505] border border-gray-700 rounded-md text-white"
-            placeholder="Paste the job description here..."
-            value={jobDescription}
-            onChange={(e) => setJobDescription(e.target.value)}
-          />
-        </div>
-        
-        <Button
+    <div className="w-full max-w-6xl mx-auto">
+      {/* File selection */}
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold mb-2">Select CV</h3>
+        <ModernFileDropdown 
+          cvs={cvs.map(cv => `${cv.name}|${cv.id}`)}
+          onSelect={handleSelectCV}
+          selectedCVName={selectedCVName}
+        />
+      </div>
+
+      {/* Job description input */}
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold mb-2">Job Description</h3>
+        <textarea
+          className="w-full h-48 p-4 bg-[#050505] border border-gray-700 rounded-md text-white resize-none focus:border-[#B4916C] focus:ring-1 focus:ring-[#B4916C] focus:outline-none"
+          placeholder="Paste the job description here..."
+          value={jobDescription}
+          onChange={(e) => setJobDescription(e.target.value)}
+        />
+      </div>
+
+      {/* Process button */}
+      <div className="mb-6">
+        <button
           onClick={processCV}
           disabled={isProcessing || !selectedCVId || !jobDescription.trim()}
-          className="w-full bg-[#B4916C] hover:bg-[#A3815C] text-white"
+          className={`w-full py-3 rounded-md font-semibold transition-colors duration-200 ${
+            isProcessing || !selectedCVId || !jobDescription.trim()
+              ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+              : 'bg-[#B4916C] text-white hover:bg-[#A37F5C]'
+          }`}
         >
-          {isProcessing ? (
-            <div className="flex items-center">
-              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-              <span>Processing...</span>
-            </div>
-          ) : (
-            <span>Optimize for This Job</span>
-          )}
-        </Button>
-        
-        {error && (
-          <div className="mt-4 p-3 bg-red-900/20 border border-red-800 rounded-md text-red-200">
-            <AlertCircle className="inline-block w-4 h-4 mr-2" />
-            {error}
-          </div>
-        )}
-        
-        {isProcessing && (
-          <div className="mt-4">
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-sm text-gray-400">{processingStatus}</span>
-              <span className="text-sm font-medium text-gray-300">{processingProgress}%</span>
-            </div>
-            <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-[#B4916C] transition-all duration-300 ease-in-out" 
-                style={{ width: `${processingProgress}%` }}
-              />
-            </div>
-          </div>
-        )}
+          {isProcessing ? 'Processing...' : 'Optimize CV for Job'}
+        </button>
       </div>
-      
-      {isProcessed && optimizedText && (
-        <div className="mt-6">
-          <div className="flex flex-col space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold">Optimized CV</h3>
-              <div className="flex space-x-2">
+
+      {/* Processing status */}
+      {isProcessing && (
+        <div className="mb-6 p-4 border border-gray-700 rounded-md">
+          <div className="flex items-center mb-2">
+            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+            <span>{processingStatus || 'Processing...'}</span>
+          </div>
+          <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[#B4916C] transition-all duration-300"
+              style={{ width: `${processingProgress}%` }}
+            />
+          </div>
+          <div className="mt-1 text-sm text-gray-400">
+            {processingProgress}% complete
+          </div>
+        </div>
+      )}
+
+      {/* Error message */}
+      {error && (
+        <div className="mb-6 p-4 border border-red-800 bg-red-900/20 rounded-md text-red-200">
+          <div className="flex items-center">
+            <AlertCircle className="w-4 h-4 mr-2" />
+            <span>{error}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Results */}
+      {isProcessed && (
+        <div className="space-y-6">
+          {/* Job match score */}
+          {jobMatchAnalysis && (
+            <div className="mt-8 space-y-6">
+              <div className="bg-[#0D0D0D] rounded-lg p-6 border border-[#1D1D1D]">
+                <h3 className="text-xl font-semibold mb-4">Job Match Analysis</h3>
+                
+                <div className="flex items-center mb-6">
+                  <div className="w-32 h-32 rounded-full flex items-center justify-center border-4 border-[#B4916C] mr-6">
+                    <span className="text-3xl font-bold text-[#B4916C]">{jobMatchAnalysis.score}%</span>
+                  </div>
+                  
+                  <div className="flex-1">
+                    <h4 className="text-lg font-medium mb-2">Match Score</h4>
+                    <p className="text-gray-400 mb-4">
+                      Your CV is {jobMatchAnalysis.score < 50 ? 'not well' : jobMatchAnalysis.score < 70 ? 'somewhat' : 'well'} aligned with this job description.
+                    </p>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-gray-400">Skills Match</p>
+                        <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
+                          <div className="bg-[#B4916C] h-2 rounded-full" style={{ width: `${jobMatchAnalysis.dimensionalScores.skillsMatch}%` }}></div>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-400">Experience Match</p>
+                        <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
+                          <div className="bg-[#B4916C] h-2 rounded-full" style={{ width: `${jobMatchAnalysis.dimensionalScores.experienceMatch}%` }}></div>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-400">Education Match</p>
+                        <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
+                          <div className="bg-[#B4916C] h-2 rounded-full" style={{ width: `${jobMatchAnalysis.dimensionalScores.educationMatch}%` }}></div>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-400">Keyword Density</p>
+                        <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
+                          <div className="bg-[#B4916C] h-2 rounded-full" style={{ width: `${jobMatchAnalysis.dimensionalScores.keywordDensity}%` }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-lg font-medium mb-2">Recommendations</h4>
+                    <ul className="list-disc pl-5 space-y-1 text-gray-300">
+                      {jobMatchAnalysis.recommendations.map((rec, index) => (
+                        <li key={index}>{rec}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  
+                  <div>
+                    <h4 className="text-lg font-medium mb-2">Matched Keywords</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {jobMatchAnalysis.matchedKeywords.map((keyword, index) => (
+                        <span 
+                          key={index} 
+                          className="px-2 py-1 bg-[#1D1D1D] rounded text-sm"
+                          style={{ 
+                            backgroundColor: `rgba(180, 145, 108, ${keyword.relevance / 100})`,
+                            color: keyword.relevance > 50 ? '#000' : '#fff'
+                          }}
+                        >
+                          {keyword.keyword}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Optimized CV */}
+          <div className="p-6 border border-gray-700 rounded-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold">Optimized CV</h3>
+              <div className="flex gap-2">
                 <button
                   onClick={handleDownloadDocument}
-                  className="flex items-center px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A3815C] transition-colors"
-                  disabled={isGeneratingDocument}
+                  className="flex items-center px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A37F5C] transition-colors"
+                  disabled={!optimizedText || isGeneratingDocument}
                 >
                   {isGeneratingDocument ? (
                     <>
@@ -4178,104 +4437,20 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
                   ) : (
                     <>
                       <Download className="w-4 h-4 mr-2" />
-                      Download Document
+                      Download DOCX
                     </>
                   )}
                 </button>
-                <button
-                  onClick={testDocxGeneration}
-                  className="flex items-center px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
-                  disabled={isGeneratingDocument}
-                >
-                  <FileText className="w-4 h-4 mr-2" />
-                  Test DOCX
-                </button>
-                <button
-                  onClick={async () => {
-                    try {
-                      if (!optimizedText) return;
-                      const textBlob = createTextFile(optimizedText);
-                      saveAs(textBlob, 'debug-cv.txt');
-                    } catch (error) {
-                      console.error("Debug download failed:", error);
-                      setDocumentError(`Debug error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-                    }
-                  }}
-                  className="flex items-center px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
-                  disabled={!optimizedText}
-                >
-                  <FileText className="w-4 h-4 mr-2" />
-                  Debug (TXT)
-                </button>
               </div>
             </div>
-            
             {documentError && (
-              <div className="p-3 bg-red-900/20 border border-red-800 rounded-md text-red-200">
-                <AlertCircle className="inline-block w-4 h-4 mr-2" />
-                {documentError}
-              </div>
+              <Alert className="mb-4 bg-destructive/10">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{documentError}</AlertDescription>
+              </Alert>
             )}
-            
             <div className="whitespace-pre-wrap font-mono text-sm bg-[#050505] p-4 rounded-md border border-gray-700">
               {optimizedText}
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {jobMatchAnalysis && (
-        <div className="mt-6">
-          <h3 className="text-lg font-semibold mb-2">Job Match Analysis</h3>
-          <div className="bg-[#050505] p-4 rounded-md border border-gray-700">
-            <div className="mb-4">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-sm text-gray-400">Overall Match Score</span>
-                <span className="text-sm font-medium text-[#B4916C]">{jobMatchAnalysis.score}%</span>
-              </div>
-              <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-[#B4916C] transition-all duration-300 ease-in-out" 
-                  style={{ width: `${jobMatchAnalysis.score}%` }}
-                />
-              </div>
-            </div>
-            
-            <div className="mb-4">
-              <h4 className="text-md font-medium mb-2">Key Recommendations</h4>
-              <ul className="list-disc list-inside space-y-1 text-sm text-gray-300">
-                {jobMatchAnalysis.recommendations.map((rec, index) => (
-                  <li key={index}>{rec}</li>
-                ))}
-              </ul>
-            </div>
-            
-            <div className="mb-4">
-              <h4 className="text-md font-medium mb-2">Matched Keywords</h4>
-              <div className="flex flex-wrap gap-2">
-                {jobMatchAnalysis.matchedKeywords.map((keyword, index) => (
-                  <span 
-                    key={index} 
-                    className="px-2 py-1 text-xs rounded-full bg-green-900/30 text-green-300 border border-green-800"
-                  >
-                    {keyword.keyword} ({Math.round(keyword.relevance * 100)}%)
-                  </span>
-                ))}
-              </div>
-            </div>
-            
-            <div>
-              <h4 className="text-md font-medium mb-2">Missing Keywords</h4>
-              <div className="flex flex-wrap gap-2">
-                {jobMatchAnalysis.missingKeywords.map((keyword, index) => (
-                  <span 
-                    key={index} 
-                    className="px-2 py-1 text-xs rounded-full bg-red-900/30 text-red-300 border border-red-800"
-                  >
-                    {keyword.keyword} ({Math.round(keyword.importance * 100)}%)
-                  </span>
-                ))}
-              </div>
             </div>
           </div>
         </div>
