@@ -1703,6 +1703,82 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
     day: 'numeric'
   });
   
+  // Parse content into sections if structuredCV is not provided
+  let sections: any = {};
+  if (!structuredCV) {
+    // Split content by section headers
+    const sectionRegex = /^([A-Z][A-Z\s]+):\s*$/gm;
+    const lines = content.split('\n');
+    let currentSection = '';
+    let sectionContent: string[] = [];
+    
+    // Define section order
+    const sectionOrder = ['PROFILE', 'SKILLS', 'TECHNICAL SKILLS', 'PROFESSIONAL SKILLS', 'EXPERIENCE', 'EDUCATION', 'ACHIEVEMENTS', 'CAREER GOALS', 'LANGUAGES', 'REFERENCES'];
+    
+    // Initialize sections object
+    sectionOrder.forEach(section => {
+      sections[section] = [];
+    });
+    
+    // Extract header (first few lines)
+    let headerLines: string[] = [];
+    let i = 0;
+    while (i < lines.length && headerLines.length < 3) {
+      const line = lines[i].trim();
+      if (line && !line.match(sectionRegex)) {
+        headerLines.push(line);
+      } else {
+        break;
+      }
+      i++;
+    }
+    
+    // Process remaining lines
+    for (; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      // Check if this is a section header
+      const sectionMatch = line.match(/^([A-Z][A-Z\s]+):?\s*$/);
+      if (sectionMatch) {
+        currentSection = sectionMatch[1].trim();
+        continue;
+      }
+      
+      // Add content to current section
+      if (currentSection && sections[currentSection] !== undefined) {
+        sections[currentSection].push(line);
+      }
+    }
+  } else {
+    // Use the provided structuredCV
+    sections = {
+      'PROFILE': structuredCV.profile ? [structuredCV.profile] : [],
+      'SKILLS': [],
+      'TECHNICAL SKILLS': structuredCV.skills?.technical || [],
+      'PROFESSIONAL SKILLS': structuredCV.skills?.professional || [],
+      'EXPERIENCE': structuredCV.experience || [],
+      'EDUCATION': structuredCV.education || [],
+      'ACHIEVEMENTS': structuredCV.achievements || [],
+      'CAREER GOALS': structuredCV.goals || [],
+      'LANGUAGES': structuredCV.languages || []
+    };
+  }
+  
+  // Section icons (using Unicode characters)
+  const sectionIcons = {
+    'PROFILE': '👤',
+    'SKILLS': '🔧',
+    'TECHNICAL SKILLS': '💻',
+    'PROFESSIONAL SKILLS': '📊',
+    'EXPERIENCE': '💼',
+    'EDUCATION': '🎓',
+    'ACHIEVEMENTS': '🏆',
+    'CAREER GOALS': '🎯',
+    'LANGUAGES': '🌐',
+    'REFERENCES': '📋'
+  };
+  
   // Create document
   const doc = new Document({
     sections: [{
@@ -1760,18 +1836,63 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
                 new TextRun({
                   text: contactInfo.location,
                   style: 'ContactInfo'
+                }),
+                ...(contactInfo.linkedin || contactInfo.website ? [
+                  new TextRun({
+                    text: ' | ',
+                    style: 'ContactSeparator'
+                  })
+                ] : [])
+              ] : []),
+              ...(contactInfo.linkedin ? [
+                new TextRun({
+                  text: contactInfo.linkedin,
+                  style: 'ContactInfo'
+                }),
+                ...(contactInfo.website ? [
+                  new TextRun({
+                    text: ' | ',
+                    style: 'ContactSeparator'
+                  })
+                ] : [])
+              ] : []),
+              ...(contactInfo.website ? [
+                new TextRun({
+                  text: contactInfo.website,
+                  style: 'ContactInfo'
                 })
               ] : [])
             ]
           })
         ] : []),
         
+        // Add a horizontal line after header
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: '',
+              size: 16
+            })
+          ],
+          border: {
+            bottom: {
+              color: brandColor,
+              space: 1,
+              style: BorderStyle.SINGLE,
+              size: 8
+            }
+          },
+          spacing: {
+            after: 300
+          }
+        }),
+        
         // Profile section
-        ...(structuredCV?.profile ? [
+        ...(sections['PROFILE'] && sections['PROFILE'].length > 0 ? [
           new Paragraph({
             children: [
               new TextRun({
-                text: 'Profile',
+                text: `${sectionIcons['PROFILE']} Profile`,
                 size: 28,
                 bold: true,
                 color: brandColor
@@ -1780,23 +1901,34 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
             spacing: {
               before: 400,
               after: 200
+            },
+            border: {
+              bottom: {
+                color: brandColor,
+                space: 1,
+                style: BorderStyle.SINGLE,
+                size: 6
+              }
             }
           }),
-          new Paragraph({
-            text: structuredCV.profile,
-            spacing: {
-              before: 100,
-              after: 200
-            }
-          })
+          ...sections['PROFILE'].map((paragraph: string) => 
+            new Paragraph({
+              text: paragraph,
+              spacing: {
+                before: 100,
+                after: 100
+              }
+            })
+          )
         ] : []),
         
         // Skills section
-        ...(structuredCV?.skills ? [
+        ...((sections['TECHNICAL SKILLS'] && sections['TECHNICAL SKILLS'].length > 0) || 
+           (sections['PROFESSIONAL SKILLS'] && sections['PROFESSIONAL SKILLS'].length > 0) ? [
           new Paragraph({
             children: [
               new TextRun({
-                text: 'Skills',
+                text: `${sectionIcons['SKILLS']} Skills`,
                 size: 28,
                 bold: true,
                 color: brandColor
@@ -1805,10 +1937,18 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
             spacing: {
               before: 400,
               after: 200
+            },
+            border: {
+              bottom: {
+                color: brandColor,
+                space: 1,
+                style: BorderStyle.SINGLE,
+                size: 6
+              }
             }
           }),
           // Technical Skills
-          ...(structuredCV.skills.technical.length > 0 ? [
+          ...(sections['TECHNICAL SKILLS'] && sections['TECHNICAL SKILLS'].length > 0 ? [
             new Paragraph({
               children: [
                 new TextRun({
@@ -1822,7 +1962,7 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
                 after: 100
               }
             }),
-            ...structuredCV.skills.technical.map(skill => 
+            ...sections['TECHNICAL SKILLS'].map((skill: string) => 
               new Paragraph({
                 children: [
                   new TextRun({
@@ -1845,7 +1985,7 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
             )
           ] : []),
           // Professional Skills
-          ...(structuredCV.skills.professional.length > 0 ? [
+          ...(sections['PROFESSIONAL SKILLS'] && sections['PROFESSIONAL SKILLS'].length > 0 ? [
             new Paragraph({
               children: [
                 new TextRun({
@@ -1859,7 +1999,7 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
                 after: 100
               }
             }),
-            ...structuredCV.skills.professional.map(skill => 
+            ...sections['PROFESSIONAL SKILLS'].map((skill: string) => 
               new Paragraph({
                 children: [
                   new TextRun({
@@ -1884,11 +2024,11 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
         ] : []),
         
         // Experience section
-        ...(structuredCV?.experience ? [
+        ...(sections['EXPERIENCE'] && sections['EXPERIENCE'].length > 0 ? [
           new Paragraph({
             children: [
               new TextRun({
-                text: 'Experience',
+                text: `${sectionIcons['EXPERIENCE']} Experience`,
                 size: 28,
                 bold: true,
                 color: brandColor
@@ -1897,45 +2037,69 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
             spacing: {
               before: 400,
               after: 200
+            },
+            border: {
+              bottom: {
+                color: brandColor,
+                space: 1,
+                style: BorderStyle.SINGLE,
+                size: 6
+              }
             }
           }),
-          ...structuredCV.experience.map(exp => [
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: exp.title || '',
-                  bold: true,
-                  size: 24
+          ...(Array.isArray(sections['EXPERIENCE']) && sections['EXPERIENCE'].length > 0 ? 
+            (structuredCV ? 
+              // If we have structured experience data
+              structuredCV.experience.map(exp => [
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: exp.title || '',
+                      bold: true,
+                      size: 24
+                    })
+                  ],
+                  spacing: {
+                    before: 200,
+                    after: 80
+                  }
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: `${exp.startDate || ''} - ${exp.endDate || 'Present'}`,
+                      italics: true,
+                      size: 22,
+                      color: '666666'
+                    })
+                  ],
+                  spacing: {
+                    before: 80,
+                    after: 80
+                  }
                 })
-              ],
-              spacing: {
-                before: 200,
-                after: 80
-              }
-            }),
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: `${exp.startDate || ''} - ${exp.endDate || 'Present'}`,
-                  italics: true,
-                  size: 22,
-                  color: '666666'
+              ]).flat() 
+              : 
+              // If we have unstructured experience data
+              sections['EXPERIENCE'].map(line => 
+                new Paragraph({
+                  text: line,
+                  spacing: {
+                    before: 100,
+                    after: 100
+                  }
                 })
-              ],
-              spacing: {
-                before: 80,
-                after: 80
-              }
-            })
-          ]).flat()
+              )
+            ) : []
+          )
         ] : []),
         
         // Education section
-        ...(structuredCV?.education ? [
+        ...(sections['EDUCATION'] && sections['EDUCATION'].length > 0 ? [
           new Paragraph({
             children: [
               new TextRun({
-                text: 'Education',
+                text: `${sectionIcons['EDUCATION']} Education`,
                 size: 28,
                 bold: true,
                 color: brandColor
@@ -1944,56 +2108,80 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
             spacing: {
               before: 400,
               after: 200
+            },
+            border: {
+              bottom: {
+                color: brandColor,
+                space: 1,
+                style: BorderStyle.SINGLE,
+                size: 6
+              }
             }
           }),
-          ...structuredCV.education.map(edu => [
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: edu.degree,
-                  bold: true,
-                  size: 24
+          ...(Array.isArray(sections['EDUCATION']) && sections['EDUCATION'].length > 0 ? 
+            (structuredCV && structuredCV.education ? 
+              // If we have structured education data
+              structuredCV.education.map(edu => [
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: edu.degree,
+                      bold: true,
+                      size: 24
+                    }),
+                    ...(edu.institution ? [
+                      new TextRun({
+                        text: `, ${edu.institution}`,
+                        size: 24
+                      })
+                    ] : [])
+                  ],
+                  spacing: {
+                    before: 200,
+                    after: 80
+                  }
                 }),
-                ...(edu.institution ? [
-                  new TextRun({
-                    text: `, ${edu.institution}`,
-                    size: 24
+                ...(edu.year || edu.gpa ? [
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: [
+                          edu.year,
+                          edu.gpa ? `GPA: ${edu.gpa}` : null
+                        ].filter(Boolean).join(', '),
+                        italics: true,
+                        size: 22,
+                        color: '666666'
+                      })
+                    ],
+                    spacing: {
+                      before: 80,
+                      after: 80
+                    }
                   })
                 ] : [])
-              ],
-              spacing: {
-                before: 200,
-                after: 80
-              }
-            }),
-            ...(edu.year || edu.gpa ? [
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: [
-                      edu.year,
-                      edu.gpa ? `GPA: ${edu.gpa}` : null
-                    ].filter(Boolean).join(', '),
-                    italics: true,
-                    size: 22,
-                    color: '666666'
-                  })
-                ],
-                spacing: {
-                  before: 80,
-                  after: 80
-                }
-              })
-            ] : [])
-          ]).flat()
+              ]).flat() 
+              : 
+              // If we have unstructured education data
+              sections['EDUCATION'].map(line => 
+                new Paragraph({
+                  text: line,
+                  spacing: {
+                    before: 100,
+                    after: 100
+                  }
+                })
+              )
+            ) : []
+          )
         ] : []),
         
         // Achievements section
-        ...(structuredCV?.achievements ? [
+        ...(sections['ACHIEVEMENTS'] && sections['ACHIEVEMENTS'].length > 0 ? [
           new Paragraph({
             children: [
               new TextRun({
-                text: 'Achievements',
+                text: `${sectionIcons['ACHIEVEMENTS']} Achievements`,
                 size: 28,
                 bold: true,
                 color: brandColor
@@ -2002,9 +2190,17 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
             spacing: {
               before: 400,
               after: 200
+            },
+            border: {
+              bottom: {
+                color: brandColor,
+                space: 1,
+                style: BorderStyle.SINGLE,
+                size: 6
+              }
             }
           }),
-          ...structuredCV.achievements.map(achievement => 
+          ...sections['ACHIEVEMENTS'].map((achievement: string) => 
             new Paragraph({
               children: [
                 new TextRun({
@@ -2013,7 +2209,9 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
                   color: brandColor
                 }),
                 new TextRun({
-                  text: achievement
+                  text: achievement,
+                  // Make achievements with numbers/percentages bold to highlight quantifiable results
+                  ...(achievement.match(/\d+%|\d+\s*[kKmMbB]|\$\d+/) ? { bold: true } : {})
                 })
               ],
               spacing: {
@@ -2025,7 +2223,125 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
               }
             })
           )
-        ] : [])
+        ] : []),
+        
+        // Career Goals section
+        ...(sections['CAREER GOALS'] && sections['CAREER GOALS'].length > 0 ? [
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `${sectionIcons['CAREER GOALS']} Career Goals`,
+                size: 28,
+                bold: true,
+                color: brandColor
+              })
+            ],
+            spacing: {
+              before: 400,
+              after: 200
+            },
+            border: {
+              bottom: {
+                color: brandColor,
+                space: 1,
+                style: BorderStyle.SINGLE,
+                size: 6
+              }
+            }
+          }),
+          ...sections['CAREER GOALS'].map((goal: string) => 
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: '• ',
+                  bold: true,
+                  color: brandColor
+                }),
+                new TextRun({
+                  text: goal
+                })
+              ],
+              spacing: {
+                before: 120,
+                after: 120
+              },
+              indent: {
+                left: 360
+              }
+            })
+          )
+        ] : []),
+        
+        // Languages section
+        ...(sections['LANGUAGES'] && sections['LANGUAGES'].length > 0 ? [
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `${sectionIcons['LANGUAGES']} Languages`,
+                size: 28,
+                bold: true,
+                color: brandColor
+              })
+            ],
+            spacing: {
+              before: 400,
+              after: 200
+            },
+            border: {
+              bottom: {
+                color: brandColor,
+                space: 1,
+                style: BorderStyle.SINGLE,
+                size: 6
+              }
+            }
+          }),
+          ...sections['LANGUAGES'].map((language: string) => 
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: '• ',
+                  bold: true,
+                  color: brandColor
+                }),
+                new TextRun({
+                  text: language
+                })
+              ],
+              spacing: {
+                before: 120,
+                after: 120
+              },
+              indent: {
+                left: 360
+              }
+            })
+          )
+        ] : []),
+        
+        // Footer with date
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `${name} | ${currentDate}`,
+              size: 18,
+              color: '666666'
+            })
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: {
+            before: 400
+          },
+          border: {
+            top: {
+              color: brandColor,
+              space: 1,
+              style: BorderStyle.SINGLE,
+              size: 6
+            }
+          },
+          pageBreakBefore: true
+        })
       ]
     }],
     styles: {
@@ -2066,6 +2382,62 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
           run: {
             size: 20,
             color: brandColor
+          }
+        },
+        {
+          id: 'SectionHeader',
+          name: 'Section Header',
+          basedOn: 'Normal',
+          next: 'Normal',
+          run: {
+            size: 28,
+            bold: true,
+            color: brandColor
+          },
+          paragraph: {
+            spacing: {
+              before: 400,
+              after: 200
+            },
+            border: {
+              bottom: {
+                color: brandColor,
+                space: 1,
+                style: BorderStyle.SINGLE,
+                size: 6
+              }
+            }
+          }
+        },
+        {
+          id: 'SubsectionHeader',
+          name: 'Subsection Header',
+          basedOn: 'Normal',
+          next: 'Normal',
+          run: {
+            size: 24,
+            bold: true
+          },
+          paragraph: {
+            spacing: {
+              before: 200,
+              after: 100
+            }
+          }
+        },
+        {
+          id: 'BulletPoint',
+          name: 'Bullet Point',
+          basedOn: 'Normal',
+          next: 'Normal',
+          paragraph: {
+            spacing: {
+              before: 120,
+              after: 120
+            },
+            indent: {
+              left: 360
+            }
           }
         }
       ]
@@ -2253,121 +2625,125 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     const education = extractEducationData(originalText);
     const optimizedEducation = education.length > 0 ? optimizeEducation(education, jobDescription, jobKeywords) : [];
     
-    // Create optimized text
-    let optimizedText = originalText;
+    // Extract name and contact info for header
+    const name = extractName(originalText);
+    const contactInfo = extractContactInfo(originalText);
     
-    // Replace or add profile section
-    if (profile && optimizedProfileText) {
-      const profileRegex = new RegExp(`(Profile|Summary|About Me|Professional Summary)[:\\s]+(.*?)(?=\\n\\s*\\n|\\n(?:[A-Z][a-z]+\\s*(?:&\\s*)?)+:|\\n\\s*$)`, 'is');
-      const profileMatch = originalText.match(profileRegex);
-      
-      if (profileMatch) {
-        // Replace existing profile
-        optimizedText = optimizedText.replace(profileRegex, `$1:\n${optimizedProfileText}`);
-      } else {
-        // Add profile at the beginning
-        optimizedText = `Profile:\n${optimizedProfileText}\n\n${optimizedText}`;
-      }
+    // Create a well-structured optimized text with clear section headers
+    let optimizedText = '';
+    
+    // Add header section (name and contact info)
+    optimizedText += `${name}\n`;
+    
+    // Add contact info if available
+    const contactLines = [];
+    if (contactInfo.email) contactLines.push(contactInfo.email);
+    if (contactInfo.phone) contactLines.push(contactInfo.phone);
+    if (contactInfo.location) contactLines.push(contactInfo.location);
+    if (contactInfo.linkedin) contactLines.push(contactInfo.linkedin);
+    if (contactInfo.website) contactLines.push(contactInfo.website);
+    
+    if (contactLines.length > 0) {
+      optimizedText += `${contactLines.join(' | ')}\n`;
     }
     
-    // Replace or add skills section
-    if (optimizedSkillsData.technical.length > 0 || optimizedSkillsData.professional.length > 0) {
-      const skillsRegex = new RegExp(`(Skills|Technical Skills|Professional Skills)[:\\s]+(.*?)(?=\\n\\s*\\n|\\n(?:[A-Z][a-z]+\\s*(?:&\\s*)?)+:|\\n\\s*$)`, 'is');
-      const skillsMatch = originalText.match(skillsRegex);
-      
-      const formattedTechnicalSkills = optimizedSkillsData.technical.map(skill => `• ${skill}`).join('\n');
-      const formattedProfessionalSkills = optimizedSkillsData.professional.map(skill => `• ${skill}`).join('\n');
-      
-      let formattedSkills = '';
-      
-      if (optimizedSkillsData.technical.length > 0 && optimizedSkillsData.professional.length > 0) {
-        formattedSkills = `Technical Skills:\n${formattedTechnicalSkills}\n\nProfessional Skills:\n${formattedProfessionalSkills}`;
-      } else if (optimizedSkillsData.technical.length > 0) {
-        formattedSkills = `Technical Skills:\n${formattedTechnicalSkills}`;
-      } else {
-        formattedSkills = `Professional Skills:\n${formattedProfessionalSkills}`;
-      }
-      
-      if (skillsMatch) {
-        // Replace existing skills
-        optimizedText = optimizedText.replace(skillsRegex, `Skills:\n${formattedSkills}`);
-      } else {
-        // Add skills after profile or at the beginning
-        const profileEnd = optimizedText.match(/Profile:.*?\n\s*\n/s);
-        if (profileEnd) {
-          const insertPosition = profileEnd.index! + profileEnd[0].length;
-          optimizedText = optimizedText.substring(0, insertPosition) + `Skills:\n${formattedSkills}\n\n` + optimizedText.substring(insertPosition);
-        } else {
-          optimizedText = `Skills:\n${formattedSkills}\n\n${optimizedText}`;
+    optimizedText += '\n';
+    
+    // Add profile section with clear header
+    optimizedText += `PROFILE:\n${optimizedProfileText}\n\n`;
+    
+    // Add skills section with clear header and subsections
+    optimizedText += `SKILLS:\n`;
+    
+    if (optimizedSkillsData.technical.length > 0) {
+      optimizedText += `Technical Skills:\n`;
+      optimizedSkillsData.technical.forEach(skill => {
+        optimizedText += `• ${skill}\n`;
+      });
+      optimizedText += '\n';
+    }
+    
+    if (optimizedSkillsData.professional.length > 0) {
+      optimizedText += `Professional Skills:\n`;
+      optimizedSkillsData.professional.forEach(skill => {
+        optimizedText += `• ${skill}\n`;
+      });
+      optimizedText += '\n';
+    }
+    
+    // Add experience section if available in original text
+    const experienceEntries = extractExperienceData(originalText);
+    if (experienceEntries.length > 0) {
+      optimizedText += `EXPERIENCE:\n`;
+      experienceEntries.forEach(exp => {
+        if (exp.title) optimizedText += `${exp.title}\n`;
+        if (exp.startDate || exp.endDate) {
+          const dateRange = `${exp.startDate || ''} - ${exp.endDate || 'Present'}`;
+          optimizedText += `${dateRange}\n`;
         }
-      }
+        optimizedText += '\n';
+      });
     }
     
-    // Replace or add achievements section
-    if (optimizedAchievements.length > 0) {
-      const achievementsRegex = new RegExp(`(Achievements|Accomplishments|Key Achievements)[:\\s]+(.*?)(?=\\n\\s*\\n|\\n(?:[A-Z][a-z]+\\s*(?:&\\s*)?)+:|\\n\\s*$)`, 'is');
-      const achievementsMatch = originalText.match(achievementsRegex);
-      
-      const formattedAchievements = optimizedAchievements.map(achievement => `• ${achievement}`).join('\n');
-      
-      if (achievementsMatch) {
-        // Replace existing achievements
-        optimizedText = optimizedText.replace(achievementsRegex, `Achievements:\n${formattedAchievements}`);
-      } else {
-        // Add achievements after skills or profile
-        const skillsEnd = optimizedText.match(/Skills:.*?\n\s*\n/s);
-        const profileEnd = optimizedText.match(/Profile:.*?\n\s*\n/s);
+    // Add education section with clear header
+    if (optimizedEducation.length > 0) {
+      optimizedText += `EDUCATION:\n`;
+      optimizedEducation.forEach(edu => {
+        let eduLine = edu.degree;
+        if (edu.institution) eduLine += `, ${edu.institution}`;
+        optimizedText += `${eduLine}\n`;
         
-        if (skillsEnd) {
-          const insertPosition = skillsEnd.index! + skillsEnd[0].length;
-          optimizedText = optimizedText.substring(0, insertPosition) + `Achievements:\n${formattedAchievements}\n\n` + optimizedText.substring(insertPosition);
-        } else if (profileEnd) {
-          const insertPosition = profileEnd.index! + profileEnd[0].length;
-          optimizedText = optimizedText.substring(0, insertPosition) + `Achievements:\n${formattedAchievements}\n\n` + optimizedText.substring(insertPosition);
-        } else {
-          // Add after experience section if it exists
-          const experienceEnd = optimizedText.match(/Experience:.*?\n\s*\n/s);
-          if (experienceEnd) {
-            const insertPosition = experienceEnd.index! + experienceEnd[0].length;
-            optimizedText = optimizedText.substring(0, insertPosition) + `Achievements:\n${formattedAchievements}\n\n` + optimizedText.substring(insertPosition);
-          } else {
-            // Add at the end
-            optimizedText = `${optimizedText}\n\nAchievements:\n${formattedAchievements}`;
-          }
+        let details = [];
+        if (edu.year) details.push(edu.year);
+        if (edu.gpa) details.push(`GPA: ${edu.gpa}`);
+        
+        if (details.length > 0) {
+          optimizedText += `${details.join(', ')}\n`;
         }
-      }
+        
+        if (edu.relevantCourses && edu.relevantCourses.length > 0) {
+          optimizedText += `Relevant Courses:\n`;
+          edu.relevantCourses.forEach(course => {
+            optimizedText += `• ${course}\n`;
+          });
+        }
+        
+        if (edu.achievements && edu.achievements.length > 0) {
+          optimizedText += `Achievements:\n`;
+          edu.achievements.forEach(achievement => {
+            optimizedText += `• ${achievement}\n`;
+          });
+        }
+        
+        optimizedText += '\n';
+      });
     }
     
-    // Replace or add goals section if present in original
+    // Add achievements section with clear header
+    if (optimizedAchievements.length > 0) {
+      optimizedText += `ACHIEVEMENTS:\n`;
+      optimizedAchievements.forEach(achievement => {
+        optimizedText += `• ${achievement}\n`;
+      });
+      optimizedText += '\n';
+    }
+    
+    // Add goals section with clear header if present in original
     if (optimizedGoals.length > 0) {
-      const goalsRegex = new RegExp(`(Career Goals|Objectives|Professional Goals)[:\\s]+(.*?)(?=\\n\\s*\\n|\\n(?:[A-Z][a-z]+\\s*(?:&\\s*)?)+:|\\n\\s*$)`, 'is');
-      const goalsMatch = originalText.match(goalsRegex);
-      
-      const formattedGoals = optimizedGoals.map(goal => `• ${goal}`).join('\n');
-      
-      if (goalsMatch) {
-        // Replace existing goals
-        optimizedText = optimizedText.replace(goalsRegex, `Career Goals:\n${formattedGoals}`);
-      } else if (goals.length > 0) {
-        // Only add if original had goals
-        optimizedText = `${optimizedText}\n\nCareer Goals:\n${formattedGoals}`;
-      }
+      optimizedText += `CAREER GOALS:\n`;
+      optimizedGoals.forEach(goal => {
+        optimizedText += `• ${goal}\n`;
+      });
+      optimizedText += '\n';
     }
     
-    // Replace or add languages section if present in original
+    // Add languages section with clear header if present in original
     if (optimizedLanguages.length > 0) {
-      const languagesRegex = new RegExp(`(Languages|Language Skills|Language Proficiency)[:\\s]+(.*?)(?=\\n\\s*\\n|\\n(?:[A-Z][a-z]+\\s*(?:&\\s*)?)+:|\\n\\s*$)`, 'is');
-      const languagesMatch = originalText.match(languagesRegex);
-      
-      const formattedLanguages = optimizedLanguages.map(language => `• ${language}`).join('\n');
-      
-      if (languagesMatch) {
-        // Replace existing languages
-        optimizedText = optimizedText.replace(languagesRegex, `Languages:\n${formattedLanguages}`);
-      } else if (languages.length > 0) {
-        // Only add if original had languages
-        optimizedText = `${optimizedText}\n\nLanguages:\n${formattedLanguages}`;
-      }
+      optimizedText += `LANGUAGES:\n`;
+      optimizedLanguages.forEach(language => {
+        optimizedText += `• ${language}\n`;
+      });
+      optimizedText += '\n';
     }
     
     return optimizedText;
@@ -2398,53 +2774,134 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       
       console.log(`Generating document for CV ID: ${selectedCVId}`);
       
-      const response = await fetch('/api/cv/generate-docx', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          cvId: selectedCVId,
-          optimizedText: optimizedText
-        }),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        let errorMessage = 'Failed to generate DOCX file via API';
-        
+      try {
+        // First, try to generate the document locally for better formatting
         try {
-          const errorData = JSON.parse(errorText);
-          errorMessage = errorData.error || errorMessage;
-        } catch (e) {
-          console.error("Error parsing error response:", e);
+          console.log("Attempting local document generation for better formatting...");
+          
+          // Generate structured CV data from optimized text
+          const structuredCV = generateStructuredCV(optimizedText, jobDescription);
+          
+          // Generate the document with enhanced formatting
+          const doc = await generateOptimizedDocument(optimizedText, cvName, structuredCV.contactInfo, structuredCV);
+          
+          // Convert to blob
+          const blob = await Packer.toBlob(doc);
+          
+          // Save the file
+          saveAs(blob, `${cvName}.docx`);
+          
+          console.log("Local document generation successful");
+          setIsGeneratingDocument(false);
+          return;
+        } catch (localGenError) {
+          console.warn("Local document generation failed, falling back to API method:", localGenError);
         }
         
-        throw new Error(errorMessage);
+        // Method 1: Try using the POST API to get base64 data
+        const response = await fetch('/api/cv/generate-docx', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            cvId: selectedCVId,
+            optimizedText: optimizedText
+          }),
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          let errorMessage = 'Failed to generate DOCX file via API';
+          
+          try {
+            const errorData = JSON.parse(errorText);
+            errorMessage = errorData.error || errorMessage;
+          } catch (e) {
+            console.error("Error parsing error response:", e);
+          }
+          
+          throw new Error(errorMessage);
+        }
+        
+        const data = await response.json();
+        console.log("Document generation API response received");
+        
+        if (!data.success || !data.docxBase64) {
+          console.error("API response missing docxBase64 data:", data);
+          throw new Error('Failed to generate DOCX file: No data received from server');
+        }
+        
+        console.log(`Received base64 data of length: ${data.docxBase64.length}`);
+        
+        try {
+          // Method 1a: Try using data URL approach first
+          const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${data.docxBase64}`;
+          const downloadLink = document.createElement('a');
+          downloadLink.href = linkSource;
+          downloadLink.download = `${cvName}.docx`;
+          
+          // Append to the document, click, and remove
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          document.body.removeChild(downloadLink);
+          
+          console.log("Download completed using data URL approach");
+        } catch (downloadError) {
+          console.warn("Data URL download failed, trying file-saver approach:", downloadError);
+          
+          // Method 1b: Fallback to file-saver approach
+          try {
+            // Convert base64 to blob
+            const byteCharacters = atob(data.docxBase64);
+            const byteNumbers = new Array(byteCharacters.length);
+            
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+            
+            // Use file-saver to save the blob
+            saveAs(blob, `${cvName}.docx`);
+            
+            console.log("Download completed using file-saver approach");
+          } catch (fileSaverError) {
+            console.error("Both download methods failed, trying direct download:", fileSaverError);
+            throw fileSaverError; // Propagate to try the next method
+          }
+        }
+      } catch (apiError) {
+        console.warn("API-based download methods failed, trying direct download:", apiError);
+        
+        // Method 2: Direct download using GET request
+        try {
+          console.log("Attempting direct download via GET request");
+          
+          // Create a hidden iframe to trigger the download
+          const iframe = document.createElement('iframe');
+          iframe.style.display = 'none';
+          document.body.appendChild(iframe);
+          
+          // Set the iframe source to the download URL
+          iframe.src = `/api/cv/download-optimized-docx?cvId=${selectedCVId}`;
+          
+          // Remove the iframe after a delay
+          setTimeout(() => {
+            document.body.removeChild(iframe);
+          }, 5000);
+          
+          console.log("Direct download initiated");
+          
+          // Show a message to the user
+          setDocumentError("If the download doesn't start automatically, please check your browser's download manager or try again.");
+        } catch (directDownloadError) {
+          console.error("All download methods failed:", directDownloadError);
+          throw new Error("Failed to download document: All download methods failed");
+        }
       }
       
-      const data = await response.json();
-      console.log("Document generation API response received");
-      
-      if (!data.success || !data.docxBase64) {
-        console.error("API response missing docxBase64 data:", data);
-        throw new Error('Failed to generate DOCX file: No data received from server');
-      }
-      
-      console.log(`Received base64 data of length: ${data.docxBase64.length}`);
-      
-      // Create a download link for the DOCX file using data URL
-      const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${data.docxBase64}`;
-      const downloadLink = document.createElement('a');
-      downloadLink.href = linkSource;
-      downloadLink.download = `${cvName}-optimized.docx`;
-      
-      // Append to the document, click, and remove
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-      document.body.removeChild(downloadLink);
-      
-      console.log("Download completed");
       setIsGeneratingDocument(false);
     } catch (error) {
       console.error('Error generating document:', error);
