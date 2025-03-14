@@ -3930,84 +3930,87 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       
       console.log(`Generating document for CV ID: ${selectedCVId}`);
       
+      // First, try to generate the document locally for better formatting
       try {
-        // First, try to generate the document locally for better formatting
-        try {
-          console.log("Attempting local document generation for better formatting...");
-          
-          // Generate structured CV data from optimized text
-          const structuredCV = generateStructuredCV(optimizedText, jobDescription);
-          
-          // Further enhance the structured data for better document formatting
-          const enhancedStructuredCV = {
-            ...structuredCV,
-            education: structuredCV.education.map(edu => {
-              // Parse relevant courses if they're in string format
-              let relevantCourses: string[] = [];
-              if (edu.relevantCourses) {
-                if (typeof edu.relevantCourses === 'string') {
-                  relevantCourses = (edu.relevantCourses as string).split(',').map((course: string) => course.trim());
-                } else if (Array.isArray(edu.relevantCourses)) {
-                  relevantCourses = edu.relevantCourses;
-                }
-              }
-              
-              // Parse achievements if they're in string format
-              let achievements: string[] = [];
-              if (edu.achievements) {
-                if (typeof edu.achievements === 'string') {
-                  achievements = (edu.achievements as string).split(/[•\-*]\s*/).filter(Boolean).map((achievement: string) => achievement.trim());
-                } else if (Array.isArray(edu.achievements)) {
-                  achievements = edu.achievements;
-                }
-              }
-              
-              return {
-                ...edu,
-                relevantCourses,
-                achievements
-              };
-            }),
-            achievements: structuredCV.achievements.map(achievement => {
-              // Highlight quantifiable achievements
-              const hasQuantifiableResults = /\d+%|\d+\s*(?:million|thousand|hundred|k|m|b|billion|x|times)|\$\d+|increased|improved|reduced|saved|generated|delivered|achieved/i.test(achievement);
-              return achievement;
-            }),
-            languages: structuredCV.languages.map(language => {
-              // Ensure consistent formatting for languages
-              const parts = language.split(/[:-]/).map(part => part.trim());
-              if (parts.length === 2) {
-                return `${parts[0]} - ${parts[1]}`;
-              }
-              return language;
-            })
-          };
-          
-          // Generate the document with enhanced formatting
-          const doc = await generateOptimizedDocument(optimizedText, cvName, enhancedStructuredCV.contactInfo, enhancedStructuredCV);
-          
-          // Convert to blob
-          const blob = await Packer.toBlob(doc);
-          
-          // Save the file
-          saveAs(blob, `${cvName}.docx`);
-          
-          console.log("Local document generation successful");
-          setIsGeneratingDocument(false);
-          return;
-        } catch (localGenError) {
-          console.warn("Local document generation failed, falling back to API method:", localGenError);
-        }
+        console.log("Attempting local document generation for better formatting...");
         
-        // Method 1: Try using the POST API to get base64 data
-        const response = await fetch('/api/cv/generate-docx', {
+        // Generate structured CV data from optimized text
+        const structuredCV = generateStructuredCV(optimizedText, jobDescription);
+        
+        // Further enhance the structured data for better document formatting
+        const enhancedStructuredCV = {
+          ...structuredCV,
+          education: structuredCV.education.map(edu => {
+            // Parse relevant courses if they're in string format
+            let relevantCourses: string[] = [];
+            if (edu.relevantCourses) {
+              if (typeof edu.relevantCourses === 'string') {
+                relevantCourses = (edu.relevantCourses as string).split(',').map((course: string) => course.trim());
+              } else if (Array.isArray(edu.relevantCourses)) {
+                relevantCourses = edu.relevantCourses;
+              }
+            }
+            
+            // Parse achievements if they're in string format
+            let achievements: string[] = [];
+            if (edu.achievements) {
+              if (typeof edu.achievements === 'string') {
+                achievements = (edu.achievements as string).split(/[•\-*]\s*/).filter(Boolean).map((achievement: string) => achievement.trim());
+              } else if (Array.isArray(edu.achievements)) {
+                achievements = edu.achievements;
+              }
+            }
+            
+            return {
+              ...edu,
+              relevantCourses,
+              achievements
+            };
+          }),
+          achievements: structuredCV.achievements.map(achievement => {
+            // Highlight quantifiable achievements
+            const hasQuantifiableResults = /\d+%|\d+\s*(?:million|thousand|hundred|k|m|b|billion|x|times)|\$\d+|increased|improved|reduced|saved|generated|delivered|achieved/i.test(achievement);
+            return achievement;
+          }),
+          languages: structuredCV.languages.map(language => {
+            // Ensure consistent formatting for languages
+            const parts = language.split(/[:-]/).map(part => part.trim());
+            if (parts.length === 2) {
+              return `${parts[0]} - ${parts[1]}`;
+            }
+            return language;
+          })
+        };
+        
+        // Generate the document with enhanced formatting
+        const doc = await generateOptimizedDocument(optimizedText, cvName, enhancedStructuredCV.contactInfo, enhancedStructuredCV);
+        
+        // Convert to blob
+        const blob = await Packer.toBlob(doc);
+        
+        // Save the file
+        saveAs(blob, `${cvName}.docx`);
+        
+        console.log("Local document generation successful");
+        setIsGeneratingDocument(false);
+        return;
+      } catch (localGenError) {
+        console.warn("Local document generation failed, falling back to API method:", localGenError);
+      }
+      
+      // Method 1: Try using the POST API to get base64 data
+      try {
+        console.log("Attempting API-based document generation...");
+        
+        const response = await fetch('/api/cv/generate-enhanced-docx', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             cvId: selectedCVId,
-            optimizedText: optimizedText
+            optimizedText: optimizedText,
+            forceRefresh: true
           }),
         });
         
@@ -4048,6 +4051,8 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           document.body.removeChild(downloadLink);
           
           console.log("Download completed using data URL approach");
+          setIsGeneratingDocument(false);
+          return;
         } catch (downloadError) {
           console.warn("Data URL download failed, trying file-saver approach:", downloadError);
           
@@ -4068,6 +4073,8 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
             saveAs(blob, `${cvName}.docx`);
             
             console.log("Download completed using file-saver approach");
+            setIsGeneratingDocument(false);
+            return;
           } catch (fileSaverError) {
             console.error("Both download methods failed, trying direct download:", fileSaverError);
             throw fileSaverError; // Propagate to try the next method
