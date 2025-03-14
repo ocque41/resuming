@@ -1,13 +1,68 @@
 "use client";
 
+import { useState } from "react";
 import { Navbar } from "@/components/ui/navbar";
 import { Article, ArticleTitle, ArticleContent } from "@/components/ui/article";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { Calendar, Clock, ArrowRight } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Calendar, Clock, ArrowRight, Tag } from "lucide-react";
+
+// Sample blog post data with categories - reduced to 3 articles
+const blogPosts = [
+  {
+    id: 1,
+    title: "10 CV Mistakes That Are Costing You Interviews",
+    excerpt: "Learn about the common CV mistakes that recruiters flag as red flags and how to avoid them to increase your interview chances.",
+    content: "In today's competitive job market, your CV is often the first impression a potential employer has of you. Making even small mistakes can cost you the opportunity to interview for your dream job. This article explores the most common CV mistakes and provides actionable advice on how to fix them.",
+    date: "May 28, 2025",
+    readTime: "3 min read",
+    image: "/blog/post-1.jpg",
+    fallbackImage: "https://images.unsplash.com/photo-1499750310107-5fef28a66643",
+    slug: "cv-mistakes",
+    category: "CV Tips"
+  },
+  {
+    id: 2,
+    title: "The Future of Work: Skills That Will Matter in 2026",
+    excerpt: "Explore the emerging skills and competencies that employers will be looking for in the next year and how to develop them.",
+    content: "The workplace is evolving at an unprecedented pace, driven by technological advancements, changing economic landscapes, and shifting social priorities. To stay competitive in this dynamic environment, professionals need to continuously adapt and develop new skills.",
+    date: "May 15, 2025",
+    readTime: "4 min read",
+    image: "/blog/post-2.jpg",
+    fallbackImage: "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40",
+    slug: "future-skills",
+    category: "Career Advice"
+  },
+  {
+    id: 3,
+    title: "How to Optimize Your LinkedIn Profile for Job Searches",
+    excerpt: "A comprehensive guide to making your LinkedIn profile stand out to recruiters and algorithms in today's competitive job market.",
+    content: "LinkedIn has become an essential platform for professional networking and job hunting. With over 740 million users worldwide, standing out from the crowd requires strategic optimization of your profile. This guide provides step-by-step instructions to enhance your LinkedIn presence.",
+    date: "May 3, 2025",
+    readTime: "6 min read",
+    image: "/blog/post-3.jpg",
+    fallbackImage: "https://images.unsplash.com/photo-1551434678-e076c223a692",
+    slug: "linkedin-optimization",
+    category: "Job Search"
+  }
+];
+
+// Get unique categories
+const categories = ["All", ...new Set(blogPosts.map(post => post.category))];
 
 export default function BlogPage() {
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Filter posts based on category and search query
+  const filteredPosts = blogPosts.filter(post => {
+    const matchesCategory = selectedCategory === "All" || post.category === selectedCategory;
+    const matchesSearch = post.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          post.excerpt.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
   // Animation variants
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -33,6 +88,9 @@ export default function BlogPage() {
     },
   };
 
+  // Featured post is the first one
+  const featuredPost = blogPosts[0];
+
   return (
     <div className="flex flex-col bg-[#050505] min-h-screen">
       {/* Navbar */}
@@ -57,351 +115,134 @@ export default function BlogPage() {
         </div>
       </motion.section>
 
-      {/* Featured Article */}
-      <motion.section 
-        className="py-12 px-4"
+      {/* Category Pills */}
+      <motion.div 
+        className="flex flex-wrap justify-center gap-2 mb-12 px-4"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.2, duration: 0.8 }}
+        transition={{ delay: 0.3, duration: 0.5 }}
       >
-        <div className="max-w-6xl mx-auto">
-          <motion.div 
-            className="bg-[#0A0A0A] rounded-xl overflow-hidden shadow-xl"
-            whileHover={{ scale: 1.01 }}
-            transition={{ duration: 0.3 }}
+        {categories.map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setSelectedCategory(cat)}
+            className={`px-4 py-1 rounded-full text-sm transition-colors ${
+              selectedCategory === cat
+                ? "bg-[#E8DCC4] text-black"
+                : "bg-[#1A1A1A] text-gray-300 hover:bg-[#252525]"
+            }`}
           >
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="h-64 md:h-auto relative overflow-hidden">
-                <motion.img 
-                  src="/blog/featured-post.jpg" 
-                  alt="Featured post" 
+            {cat}
+          </button>
+        ))}
+      </motion.div>
+
+      {/* Main Content Area - OpenAI Style Layout */}
+      <div className="max-w-7xl mx-auto px-4 pb-24">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Featured Article - Takes full width on mobile, 8 columns on desktop */}
+          <motion.div 
+            className="lg:col-span-8"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.8 }}
+          >
+            <div className="bg-[#0A0A0A] rounded-xl overflow-hidden shadow-xl mb-8">
+              <div className="h-[300px] md:h-[400px] overflow-hidden">
+                <img 
+                  src={featuredPost.image} 
+                  alt={featuredPost.title} 
                   className="w-full h-full object-cover"
-                  initial={{ scale: 1.1 }}
-                  animate={{ scale: 1 }}
-                  transition={{ duration: 1.5 }}
                   onError={(e) => {
-                    e.currentTarget.src = "https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d";
+                    e.currentTarget.src = featuredPost.fallbackImage;
                   }}
                 />
               </div>
-              <div className="p-8 flex flex-col justify-center">
+              <div className="p-8">
                 <div className="flex items-center text-sm text-gray-400 mb-4">
                   <Calendar className="w-4 h-4 mr-2" />
-                  <span>June 12, 2025</span>
+                  <span>{featuredPost.date}</span>
                   <span className="mx-2">•</span>
                   <Clock className="w-4 h-4 mr-2" />
-                  <span>5 min read</span>
+                  <span>{featuredPost.readTime}</span>
+                  <span className="mx-2">•</span>
+                  <span className="bg-[#1A1A1A] text-gray-300 px-2 py-1 rounded text-xs">
+                    {featuredPost.category}
+                  </span>
                 </div>
                 <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">
-                  How AI is Revolutionizing the Job Application Process
+                  {featuredPost.title}
                 </h2>
                 <p className="text-gray-300 mb-6">
-                  Discover how artificial intelligence is transforming the way candidates apply for jobs and how employers screen applications, making the process more efficient and effective for everyone involved.
+                  {featuredPost.excerpt}
+                </p>
+                <p className="text-gray-300 mb-6">
+                  {featuredPost.content}
                 </p>
                 <Button
                   asChild
                   variant="outline"
-                  className="self-start border border-[#E8DCC4] text-[#E8DCC4] hover:bg-[#E8DCC4] hover:text-black transition-colors"
+                  className="border border-[#E8DCC4] text-[#E8DCC4] hover:bg-[#E8DCC4] hover:text-black transition-colors"
                 >
-                  <Link href="/blog/ai-revolutionizing-job-applications" className="flex items-center">
-                    Read more <ArrowRight className="ml-2 w-4 h-4" />
+                  <Link href={`/blog/${featuredPost.slug}`} className="flex items-center">
+                    Read more <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
                   </Link>
                 </Button>
               </div>
             </div>
           </motion.div>
-        </div>
-      </motion.section>
 
-      {/* Blog Posts Grid */}
-      <section className="py-16 px-4">
-        <div className="max-w-6xl mx-auto">
-          <motion.h2 
-            className="text-3xl font-bold text-white mb-12"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5 }}
-          >
-            Latest Articles
-          </motion.h2>
-          
+          {/* Side Articles - Takes full width on mobile, 4 columns on desktop */}
           <motion.div 
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
+            className="lg:col-span-4"
             variants={containerVariants}
             initial="hidden"
             animate="visible"
           >
-            {/* Blog Post 1 */}
-            <motion.div 
-              className="bg-[#0A0A0A] rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow"
-              variants={itemVariants}
-              whileHover={{ y: -5 }}
-              transition={{ duration: 0.3 }}
-            >
-              <div className="h-48 overflow-hidden">
-                <img 
-                  src="/blog/post-1.jpg" 
-                  alt="Blog post" 
-                  className="w-full h-full object-cover transition-transform hover:scale-105 duration-500"
-                  onError={(e) => {
-                    e.currentTarget.src = "https://images.unsplash.com/photo-1499750310107-5fef28a66643";
-                  }}
-                />
-              </div>
-              <div className="p-6">
-                <div className="flex items-center text-sm text-gray-400 mb-3">
-                  <Calendar className="w-4 h-4 mr-2" />
-                  <span>May 28, 2025</span>
-                  <span className="mx-2">•</span>
-                  <Clock className="w-4 h-4 mr-2" />
-                  <span>3 min read</span>
-                </div>
-                <h3 className="text-xl font-bold text-white mb-3">
-                  10 CV Mistakes That Are Costing You Interviews
-                </h3>
-                <p className="text-gray-300 mb-4">
-                  Learn about the common CV mistakes that recruiters flag as red flags and how to avoid them to increase your interview chances.
-                </p>
-                <Link href="/blog/cv-mistakes" className="text-[#E8DCC4] hover:text-white flex items-center group">
-                  Read more <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
-                </Link>
-              </div>
-            </motion.div>
-
-            {/* Blog Post 2 */}
-            <motion.div 
-              className="bg-[#0A0A0A] rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow"
-              variants={itemVariants}
-              whileHover={{ y: -5 }}
-              transition={{ duration: 0.3 }}
-            >
-              <div className="h-48 overflow-hidden">
-                <img 
-                  src="/blog/post-2.jpg" 
-                  alt="Blog post" 
-                  className="w-full h-full object-cover transition-transform hover:scale-105 duration-500"
-                  onError={(e) => {
-                    e.currentTarget.src = "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40";
-                  }}
-                />
-              </div>
-              <div className="p-6">
-                <div className="flex items-center text-sm text-gray-400 mb-3">
-                  <Calendar className="w-4 h-4 mr-2" />
-                  <span>May 15, 2025</span>
-                  <span className="mx-2">•</span>
-                  <Clock className="w-4 h-4 mr-2" />
-                  <span>4 min read</span>
-                </div>
-                <h3 className="text-xl font-bold text-white mb-3">
-                  The Future of Work: Skills That Will Matter in 2026
-                </h3>
-                <p className="text-gray-300 mb-4">
-                  Explore the emerging skills and competencies that employers will be looking for in the next year and how to develop them.
-                </p>
-                <Link href="/blog/future-skills" className="text-[#E8DCC4] hover:text-white flex items-center group">
-                  Read more <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
-                </Link>
-              </div>
-            </motion.div>
-
-            {/* Blog Post 3 */}
-            <motion.div 
-              className="bg-[#0A0A0A] rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow"
-              variants={itemVariants}
-              whileHover={{ y: -5 }}
-              transition={{ duration: 0.3 }}
-            >
-              <div className="h-48 overflow-hidden">
-                <img 
-                  src="/blog/post-3.jpg" 
-                  alt="Blog post" 
-                  className="w-full h-full object-cover transition-transform hover:scale-105 duration-500"
-                  onError={(e) => {
-                    e.currentTarget.src = "https://images.unsplash.com/photo-1551434678-e076c223a692";
-                  }}
-                />
-              </div>
-              <div className="p-6">
-                <div className="flex items-center text-sm text-gray-400 mb-3">
-                  <Calendar className="w-4 h-4 mr-2" />
-                  <span>May 3, 2025</span>
-                  <span className="mx-2">•</span>
-                  <Clock className="w-4 h-4 mr-2" />
-                  <span>6 min read</span>
-                </div>
-                <h3 className="text-xl font-bold text-white mb-3">
-                  How to Optimize Your LinkedIn Profile for Job Searches
-                </h3>
-                <p className="text-gray-300 mb-4">
-                  A comprehensive guide to making your LinkedIn profile stand out to recruiters and algorithms in today's competitive job market.
-                </p>
-                <Link href="/blog/linkedin-optimization" className="text-[#E8DCC4] hover:text-white flex items-center group">
-                  Read more <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
-                </Link>
-              </div>
-            </motion.div>
-
-            {/* Blog Post 4 */}
-            <motion.div 
-              className="bg-[#0A0A0A] rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow"
-              variants={itemVariants}
-              whileHover={{ y: -5 }}
-              transition={{ duration: 0.3 }}
-            >
-              <div className="h-48 overflow-hidden">
-                <img 
-                  src="/blog/post-4.jpg" 
-                  alt="Blog post" 
-                  className="w-full h-full object-cover transition-transform hover:scale-105 duration-500"
-                  onError={(e) => {
-                    e.currentTarget.src = "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2";
-                  }}
-                />
-              </div>
-              <div className="p-6">
-                <div className="flex items-center text-sm text-gray-400 mb-3">
-                  <Calendar className="w-4 h-4 mr-2" />
-                  <span>April 22, 2025</span>
-                  <span className="mx-2">•</span>
-                  <Clock className="w-4 h-4 mr-2" />
-                  <span>5 min read</span>
-                </div>
-                <h3 className="text-xl font-bold text-white mb-3">
-                  Mastering the Virtual Interview: Tips from Hiring Managers
-                </h3>
-                <p className="text-gray-300 mb-4">
-                  Insider advice from hiring managers on how to prepare for and excel in virtual interviews in the post-pandemic job market.
-                </p>
-                <Link href="/blog/virtual-interview-tips" className="text-[#E8DCC4] hover:text-white flex items-center group">
-                  Read more <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
-                </Link>
-              </div>
-            </motion.div>
-
-            {/* Blog Post 5 */}
-            <motion.div 
-              className="bg-[#0A0A0A] rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow"
-              variants={itemVariants}
-              whileHover={{ y: -5 }}
-              transition={{ duration: 0.3 }}
-            >
-              <div className="h-48 overflow-hidden">
-                <img 
-                  src="/blog/post-5.jpg" 
-                  alt="Blog post" 
-                  className="w-full h-full object-cover transition-transform hover:scale-105 duration-500"
-                  onError={(e) => {
-                    e.currentTarget.src = "https://images.unsplash.com/photo-1522202176988-66273c2fd55f";
-                  }}
-                />
-              </div>
-              <div className="p-6">
-                <div className="flex items-center text-sm text-gray-400 mb-3">
-                  <Calendar className="w-4 h-4 mr-2" />
-                  <span>April 10, 2025</span>
-                  <span className="mx-2">•</span>
-                  <Clock className="w-4 h-4 mr-2" />
-                  <span>4 min read</span>
-                </div>
-                <h3 className="text-xl font-bold text-white mb-3">
-                  Career Switching in 2025: A Strategic Approach
-                </h3>
-                <p className="text-gray-300 mb-4">
-                  Practical strategies for professionals looking to pivot their careers in today's rapidly evolving job landscape.
-                </p>
-                <Link href="/blog/career-switching" className="text-[#E8DCC4] hover:text-white flex items-center group">
-                  Read more <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
-                </Link>
-              </div>
-            </motion.div>
-
-            {/* Blog Post 6 */}
-            <motion.div 
-              className="bg-[#0A0A0A] rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow"
-              variants={itemVariants}
-              whileHover={{ y: -5 }}
-              transition={{ duration: 0.3 }}
-            >
-              <div className="h-48 overflow-hidden">
-                <img 
-                  src="/blog/post-6.jpg" 
-                  alt="Blog post" 
-                  className="w-full h-full object-cover transition-transform hover:scale-105 duration-500"
-                  onError={(e) => {
-                    e.currentTarget.src = "https://images.unsplash.com/photo-1552664730-d307ca884978";
-                  }}
-                />
-              </div>
-              <div className="p-6">
-                <div className="flex items-center text-sm text-gray-400 mb-3">
-                  <Calendar className="w-4 h-4 mr-2" />
-                  <span>March 28, 2025</span>
-                  <span className="mx-2">•</span>
-                  <Clock className="w-4 h-4 mr-2" />
-                  <span>7 min read</span>
-                </div>
-                <h3 className="text-xl font-bold text-white mb-3">
-                  Salary Negotiation Tactics That Actually Work
-                </h3>
-                <p className="text-gray-300 mb-4">
-                  Evidence-based approaches to negotiating your salary and benefits package that can significantly increase your compensation.
-                </p>
-                <Link href="/blog/salary-negotiation" className="text-[#E8DCC4] hover:text-white flex items-center group">
-                  Read more <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
-                </Link>
-              </div>
-            </motion.div>
-          </motion.div>
-          
-          {/* Load More Button */}
-          <motion.div 
-            className="mt-12 text-center"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8, duration: 0.5 }}
-          >
-            <Button
-              variant="outline"
-              className="border border-[#E8DCC4] text-[#E8DCC4] hover:bg-[#E8DCC4] hover:text-black transition-colors px-8 py-2"
-            >
-              Load More Articles
-            </Button>
+            <h3 className="text-xl font-bold text-white mb-6">More Articles</h3>
+            <div className="space-y-6">
+              {blogPosts.slice(1).map((post) => (
+                <motion.div 
+                  key={post.id}
+                  className="bg-[#0A0A0A] rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow"
+                  variants={itemVariants}
+                  whileHover={{ y: -5 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <div className="h-40 overflow-hidden">
+                    <img 
+                      src={post.image} 
+                      alt={post.title} 
+                      className="w-full h-full object-cover transition-transform hover:scale-105 duration-500"
+                      onError={(e) => {
+                        e.currentTarget.src = post.fallbackImage;
+                      }}
+                    />
+                  </div>
+                  <div className="p-4">
+                    <div className="flex items-center text-xs text-gray-400 mb-2">
+                      <Calendar className="w-3 h-3 mr-1" />
+                      <span>{post.date}</span>
+                      <span className="mx-1">•</span>
+                      <Clock className="w-3 h-3 mr-1" />
+                      <span>{post.readTime}</span>
+                    </div>
+                    <h3 className="text-lg font-bold text-white mb-2">
+                      {post.title}
+                    </h3>
+                    <p className="text-gray-300 text-sm mb-3 line-clamp-2">
+                      {post.excerpt}
+                    </p>
+                    <Link href={`/blog/${post.slug}`} className="text-[#E8DCC4] hover:text-white text-sm flex items-center group">
+                      Read more <ArrowRight className="ml-1 w-3 h-3 transition-transform group-hover:translate-x-1" />
+                    </Link>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
           </motion.div>
         </div>
-      </section>
-
-      {/* Newsletter Section with animation */}
-      <motion.section 
-        className="py-16 px-4 bg-[#0A0A0A]"
-        initial={{ opacity: 0 }}
-        whileInView={{ opacity: 1 }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.8 }}
-      >
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl font-bold text-white mb-4">Stay Updated</h2>
-          <p className="text-gray-300 mb-8 max-w-2xl mx-auto">
-            Subscribe to our newsletter to receive the latest career insights, CV optimization tips, and exclusive content directly to your inbox.
-          </p>
-          <motion.div 
-            className="flex flex-col sm:flex-row gap-4 justify-center max-w-lg mx-auto"
-            initial={{ y: 20, opacity: 0 }}
-            whileInView={{ y: 0, opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.2, duration: 0.5 }}
-          >
-            <input
-              type="email"
-              placeholder="Your email address"
-              className="px-4 py-3 bg-[#1A1A1A] text-white border border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-[#E8DCC4] flex-grow"
-            />
-            <Button className="bg-[#E8DCC4] text-black hover:bg-[#FAF6ED]/90 transition px-6">
-              Subscribe
-            </Button>
-          </motion.div>
-        </div>
-      </motion.section>
+      </div>
 
       {/* Footer */}
       <footer className="bg-[#050505] text-[#E8DCC4] py-12">
