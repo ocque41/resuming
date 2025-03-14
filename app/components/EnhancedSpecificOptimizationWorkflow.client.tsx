@@ -1,7 +1,7 @@
 /* use client */
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle, Table, TableRow, TableCell, WidthType, Header, Footer } from 'docx';
 import { saveAs } from 'file-saver';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle } from "lucide-react";
 import { analyzeCVContent, optimizeCVForJob } from '@/lib/services/mistral.service';
 import { useToast } from "@/hooks/use-toast";
+import JobMatchDetailedAnalysis from './JobMatchDetailedAnalysis';
 
 // Type definitions
 interface KeywordMatch {
@@ -2734,7 +2735,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       optimizedText += `ACHIEVEMENTS:\n`;
       optimizedAchievements.forEach(achievement => {
         // Check if achievement contains quantifiable results
-        const hasQuantifiableResults = /\d+%|\d+\s*(?:million|thousand|hundred|k|m|b|billion|x|times)|\$\d+|increased|improved|reduced|saved|generated|delivered|achieved/i.test(achievement);
+        const hasQuantifiableResults = /\d+%|\d+\s*(?:million|thousand|hundred|k|m|b|billion|x|times)|\$\d+|increased|improved|reduced|saved|generated/i.test(achievement);
         
         if (hasQuantifiableResults) {
           // Use a star symbol for achievements with metrics to make them stand out
@@ -3889,64 +3890,3 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     </div>
   );
 } 
-
-// Job Match Detailed Analysis Component
-const JobMatchDetailedAnalysis = ({ jobMatchAnalysis }: { jobMatchAnalysis: JobMatchAnalysis }) => {
-  const [activeTab, setActiveTab] = useState('keywords');
-  
-  return (
-    <div className="mt-6">
-      <div className="border-b border-gray-700 mb-4">
-        <ul className="flex flex-wrap -mb-px">
-          <li className="mr-2">
-            <button 
-              className={`inline-block py-2 px-4 border-b-2 ${activeTab === 'keywords' ? 'border-[#B4916C] text-[#B4916C]' : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'}`}
-              onClick={() => setActiveTab('keywords')}
-            >
-              Keywords
-            </button>
-          </li>
-          <li className="mr-2">
-            <button 
-              className={`inline-block py-2 px-4 border-b-2 ${activeTab === 'skillGap' ? 'border-[#B4916C] text-[#B4916C]' : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'}`}
-              onClick={() => setActiveTab('skillGap')}
-            >
-              Skill Gap
-            </button>
-          </li>
-          <li className="mr-2">
-            <button 
-              className={`inline-block py-2 px-4 border-b-2 ${activeTab === 'sections' ? 'border-[#B4916C] text-[#B4916C]' : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'}`}
-              onClick={() => setActiveTab('sections')}
-            >
-              Section Analysis
-            </button>
-          </li>
-          <li>
-            <button 
-              className={`inline-block py-2 px-4 border-b-2 ${activeTab === 'recommendations' ? 'border-[#B4916C] text-[#B4916C]' : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'}`}
-              onClick={() => setActiveTab('recommendations')}
-            >
-              Recommendations
-            </button>
-          </li>
-        </ul>
-      </div>
-      
-      {/* Keywords Tab */}
-      {activeTab === 'keywords' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Matched Keywords */}
-          <div className="border border-gray-700 rounded-md p-4">
-            <h4 className="text-lg font-medium mb-3 flex items-center">
-              <span className="w-6 h-6 rounded-full bg-green-500/20 text-green-500 flex items-center justify-center mr-2">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                </svg>
-              </span>
-              Matched Keywords ({jobMatchAnalysis.matchedKeywords.length})
-            </h4>
-            
-            {jobMatchAnalysis.matchedKeywords.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {jobMatchAnalysis.matchedKeywords
