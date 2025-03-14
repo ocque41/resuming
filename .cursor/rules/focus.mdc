@@ -12,11 +12,15 @@ globs:
 this system is a completelly new functionality that does not has to do anything with the general for that reason do not edit the general optimize cv to match both general and specific, create a new function for the specific with a lookalike functionality to the general but DO NOT conflict the two they are separate functions and one serves a completelly different purpose to the other--DONE
 
 - the system base is complete lets move on to enhancing the content showing in the optimized cv:
-    - sections to extract and optimize content based on.
+    - sections to extract and optimize content based on so the sections has optimize content of original data.
         - Header
+            contact
         - Profile
+            brief about me section
         - Achievements
+            3 bullet points of the best achievements acomplished through out the entire user career
         - Goals
+            3 bullet points of what the user wants to acomplish at the company it is applying to
         - Languages
         - Skills
         - Education
