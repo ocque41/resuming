@@ -12,15 +12,73 @@ import { Calendar, Clock, ArrowRight, Tag } from "lucide-react";
 const blogPosts = [
   {
     id: 1,
-    title: "10 CV Mistakes That Are Costing You Interviews",
-    excerpt: "Learn about the common CV mistakes that recruiters flag as red flags and how to avoid them to increase your interview chances.",
-    content: "In today's competitive job market, your CV is often the first impression a potential employer has of you. Making even small mistakes can cost you the opportunity to interview for your dream job. This article explores the most common CV mistakes and provides actionable advice on how to fix them.",
-    date: "May 28, 2025",
-    readTime: "3 min read",
-    image: "/blog/post-1.jpg",
-    fallbackImage: "https://images.unsplash.com/photo-1499750310107-5fef28a66643",
-    slug: "cv-mistakes",
-    category: "CV Tips"
+    title: "The Jobs Playground",
+    excerpt: "Explore all AI possibilities tailored for generating, editing and improving paper ready documents. Discover how our platform revolutionizes your career journey.",
+    content: `In today's competitive job market, having the right tools at your disposal can make all the difference in your career journey. The Jobs Playground is your all-in-one solution for document creation, optimization, and career advancement.
+
+Our platform offers a comprehensive suite of AI-powered tools designed to streamline your professional documentation needs and enhance your job search experience. Let's explore the key features that make The Jobs Playground an essential resource for professionals at any stage of their career.
+
+## CV Collection and Management
+
+Organize all your professional documents in one secure location. Our platform allows you to:
+- Store multiple versions of your CV for different industries and positions
+- Track document versions and changes over time
+- Access your documents from anywhere, on any device
+- Share your documents securely with potential employers
+
+## CV Optimization
+
+Stand out from the crowd with our AI-powered CV optimization tools:
+- Receive personalized recommendations to enhance your CV's impact
+- Identify and fix common CV mistakes that could be costing you interviews
+- Optimize keyword placement for better ATS (Applicant Tracking System) performance
+- Get industry-specific suggestions tailored to your target roles
+
+## Document Generation
+
+Create professional-quality documents in minutes:
+- Generate tailored CVs for specific job applications
+- Create compelling cover letters that complement your CV
+- Develop professional portfolios to showcase your work
+- Design presentation-ready documents for any professional purpose
+
+## Document Analysis
+
+Gain valuable insights through our advanced document analysis:
+- Receive detailed feedback on your document's strengths and weaknesses
+- Compare your CV against industry standards and best practices
+- Identify skill gaps and opportunities for professional development
+- Get readability scores and suggestions for improved clarity
+
+## Job Opportunities
+
+Find your next career move with our integrated job search tools:
+- Discover job opportunities matched to your skills and experience
+- Receive personalized job recommendations based on your profile
+- Track application status and manage your job search efficiently
+- Connect with potential employers directly through our platform
+
+## Use Cases
+
+The Jobs Playground is designed to support professionals across various scenarios:
+
+- **Career Advancement**: Upgrade your CV to reflect your general career vision and goals
+- **Targeted Applications**: Tailor your CV for specific job opportunities in seconds
+- **Document Creation**: Generate any professional document for any task
+- **Content Editing**: Edit existing documents to enhance their impact and effectiveness
+- **Deep Analysis**: Run comprehensive analysis on any document for valuable insights
+- **Job Matching**: Apply to positions with our intelligent job matching system
+- **Visual Decision Making**: Utilize our List and Map views for easier decision-making processes
+
+Whether you're a recent graduate entering the job market, a professional looking to change careers, or an executive aiming for advancement, The Jobs Playground provides the tools and resources you need to succeed in today's competitive landscape.
+
+Start exploring the possibilities today and transform your career journey with the power of AI-driven document optimization and job search tools.`,
+    date: "June 1, 2025",
+    readTime: "7 min read",
+    image: "/articles/1.webp",
+    fallbackImage: "https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d",
+    slug: "jobs-playground",
+    category: "Platform Overview"
   },
   {
     id: 2,
@@ -112,87 +170,81 @@ export default function BlogPage() {
               Insights, guides, and expert advice to help you optimize your career journey and make the most of your professional potential.
             </ArticleContent>
           </Article>
+          
+          {/* Category Pills */}
+          <div className="flex flex-wrap justify-center gap-2 mt-10">
+            {categories.map((category) => (
+              <motion.button
+                key={category}
+                onClick={() => setSelectedCategory(category)}
+                className={`px-4 py-2 rounded-full text-sm transition-colors ${
+                  selectedCategory === category
+                    ? "bg-[#E8DCC4] text-black font-medium"
+                    : "bg-[#1A1A1A] text-gray-300 hover:bg-[#252525]"
+                }`}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                {category}
+              </motion.button>
+            ))}
+          </div>
         </div>
       </motion.section>
 
-      {/* Category Pills */}
-      <motion.div 
-        className="flex flex-wrap justify-center gap-2 mb-12 px-4"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.3, duration: 0.5 }}
-      >
-        {categories.map((cat) => (
-          <button
-            key={cat}
-            onClick={() => setSelectedCategory(cat)}
-            className={`px-4 py-1 rounded-full text-sm transition-colors ${
-              selectedCategory === cat
-                ? "bg-[#E8DCC4] text-black"
-                : "bg-[#1A1A1A] text-gray-300 hover:bg-[#252525]"
-            }`}
-          >
-            {cat}
-          </button>
-        ))}
-      </motion.div>
-
-      {/* Main Content Area - OpenAI Style Layout */}
-      <div className="max-w-7xl mx-auto px-4 pb-24">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Featured Article - Takes full width on mobile, 8 columns on desktop */}
+      {/* Main Content Area with Featured Article and Side Articles */}
+      <div className="px-4 pb-16">
+        <div className="max-w-6xl mx-auto grid lg:grid-cols-12 gap-8">
+          {/* Featured Article - Takes 8 columns on desktop, full width on mobile */}
           <motion.div 
             className="lg:col-span-8"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.8 }}
           >
-            <div className="bg-[#0A0A0A] rounded-xl overflow-hidden shadow-xl mb-8">
-              <div className="h-[300px] md:h-[400px] overflow-hidden">
+            <div className="bg-[#0A0A0A] rounded-xl overflow-hidden shadow-xl">
+              <div className="relative h-80 md:h-96 overflow-hidden">
                 <img 
-                  src={featuredPost.image} 
-                  alt={featuredPost.title} 
-                  className="w-full h-full object-cover"
+                  src={blogPosts[0].image} 
+                  alt={blogPosts[0].title} 
+                  className="w-full h-full object-cover transition-transform hover:scale-105 duration-700"
                   onError={(e) => {
-                    e.currentTarget.src = featuredPost.fallbackImage;
+                    e.currentTarget.src = blogPosts[0].fallbackImage;
                   }}
                 />
-              </div>
-              <div className="p-8">
-                <div className="flex items-center text-sm text-gray-400 mb-4">
-                  <Calendar className="w-4 h-4 mr-2" />
-                  <span>{featuredPost.date}</span>
-                  <span className="mx-2">•</span>
-                  <Clock className="w-4 h-4 mr-2" />
-                  <span>{featuredPost.readTime}</span>
-                  <span className="mx-2">•</span>
-                  <span className="bg-[#1A1A1A] text-gray-300 px-2 py-1 rounded text-xs">
-                    {featuredPost.category}
+                <div className="absolute top-4 left-4">
+                  <span className="bg-[#E8DCC4] text-black px-3 py-1 rounded-full text-sm font-medium">
+                    {blogPosts[0].category}
                   </span>
                 </div>
+              </div>
+              <div className="p-6 md:p-8">
+                <div className="flex items-center text-sm text-gray-400 mb-4">
+                  <Calendar className="w-4 h-4 mr-2" />
+                  <span>{blogPosts[0].date}</span>
+                  <span className="mx-2">•</span>
+                  <Clock className="w-4 h-4 mr-2" />
+                  <span>{blogPosts[0].readTime}</span>
+                </div>
                 <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">
-                  {featuredPost.title}
+                  {blogPosts[0].title}
                 </h2>
-                <p className="text-gray-300 mb-6">
-                  {featuredPost.excerpt}
+                <p className="text-gray-300 mb-6 text-lg leading-relaxed">
+                  {blogPosts[0].excerpt}
                 </p>
-                <p className="text-gray-300 mb-6">
-                  {featuredPost.content}
-                </p>
-                <Button
-                  asChild
-                  variant="outline"
-                  className="border border-[#E8DCC4] text-[#E8DCC4] hover:bg-[#E8DCC4] hover:text-black transition-colors"
-                >
-                  <Link href={`/blog/${featuredPost.slug}`} className="flex items-center">
-                    Read more <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
+                <div className="text-gray-300 mb-6 line-clamp-4 leading-relaxed">
+                  {blogPosts[0].content.split('\n\n')[0]}
+                </div>
+                <div className="flex justify-between items-center">
+                  <Link href={`/blog/${blogPosts[0].slug}`} className="inline-flex items-center bg-[#E8DCC4] text-black px-4 py-2 rounded-md hover:bg-[#FAF6ED]/90 transition group">
+                    Read full article <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
                   </Link>
-                </Button>
+                </div>
               </div>
             </div>
           </motion.div>
 
-          {/* Side Articles - Takes full width on mobile, 4 columns on desktop */}
+          {/* Side Articles - Takes 4 columns on desktop, full width on mobile */}
           <motion.div 
             className="lg:col-span-4"
             variants={containerVariants}
