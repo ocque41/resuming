@@ -12,6 +12,9 @@ import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle } 
 import { analyzeCVContent, optimizeCVForJob } from '@/lib/services/mistral.service';
 import { useToast } from "@/hooks/use-toast";
 import JobMatchDetailedAnalysis from './JobMatchDetailedAnalysis';
+import { downloadDocument, withDownloadTimeout, generateDocumentWithRetry } from '../utils/documentUtils';
+import DocumentGenerationProgress from './DocumentGenerationProgress';
+import DocumentDownloadStatus from './DocumentDownloadStatus';
 
 // Type definitions
 interface KeywordMatch {
@@ -2485,12 +2488,20 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     blob: Blob | null;
     text: string | null;
     timestamp: number;
+    url?: string; // Add optional url property
   }>({
     doc: null,
     blob: null,
     text: null,
     timestamp: 0
   });
+
+  // Add jobTitle state variable
+  const [jobTitle, setJobTitle] = useState<string>('');
+
+  // Add these state variables
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [isDownloadComplete, setIsDownloadComplete] = useState<boolean>(false);
 
   // Fetch original CV text
   const fetchOriginalText = useCallback(async (cvId: string) => {
@@ -3267,513 +3278,147 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   };
 
   // Modify the generateDocument function to use caching
-  const generateDocument = async (retryCount = 0, maxRetries = 3) => {
-    if (!optimizedText) {
-      setDocumentError("No optimized text available to generate document");
-      showToast({
-        title: "Error",
-        description: "No optimized text available. Please optimize your CV first.",
-        duration: 5000,
-      });
-      return;
-    }
-
-    setIsGeneratingDocument(true);
-    setDocumentError(null);
+  const generateDocument = async () => {
+    if (isGeneratingDocument || !optimizedText) return;
     
-    // Create a function to update progress with user feedback
-    const updateProgress = (stage: string, percent: number) => {
-      setProcessingProgress(percent);
-      setProcessingStatus(stage);
-      setDocumentError(null); // Clear any previous errors
-      console.log(`Document generation progress: ${stage} (${percent}%)`);
-    };
-
+    setIsGeneratingDocument(true);
+    setProcessingProgress(0);
+    setProcessingStatus("Starting document generation...");
+    setDocumentError(null);
+    setIsDownloading(false);
+    setIsDownloadComplete(false);
+    
     try {
-      // Step 1: Check cache (5%)
-      updateProgress("Checking document cache", 5);
+      // Step 1: Prepare document data
+      setProcessingProgress(10);
+      setProcessingStatus("Preparing document data...");
+      await new Promise(resolve => setTimeout(resolve, 500)); // UI feedback delay
       
-      // Check if we have a cached document with the same content
-      const currentTimestamp = Date.now();
-      const cacheMaxAge = 5 * 60 * 1000; // 5 minutes
-      const isCacheValid = 
-        cachedDocument?.text === optimizedText && 
-        cachedDocument?.doc !== null && 
-        cachedDocument?.blob !== null &&
-        cachedDocument?.timestamp &&
-        (currentTimestamp - cachedDocument.timestamp) < cacheMaxAge;
+      // Step 2: Structure CV content
+      setProcessingProgress(30);
+      setProcessingStatus("Structuring CV content...");
+      await new Promise(resolve => setTimeout(resolve, 500)); // UI feedback delay
       
-      if (isCacheValid && cachedDocument?.blob) {
-        updateProgress("Using cached document", 80);
-        console.log("Using cached document");
-        
-        // Skip to download step
-        await new Promise(resolve => setTimeout(resolve, 500)); // Small delay for UI feedback
-        
-        // Use cached blob for download
-        const blob = cachedDocument.blob as Blob;
-        const downloadSuccess = await handleDocumentDownload(blob);
-        
-        if (downloadSuccess) {
-          updateProgress("Document generation complete", 100);
-          setIsGeneratingDocument(false);
-          showToast({
-            title: "Success",
-            description: "Document generated successfully from cache.",
-            duration: 3000,
-          });
-          return;
-        } else {
-          // If download failed, continue with regeneration
-          updateProgress("Cache download failed, regenerating document", 10);
+      // Step 3: Generate document
+      setProcessingProgress(50);
+      setProcessingStatus("Generating document...");
+      
+      // Use our retry mechanism for document generation
+      const generateDocumentFn = () => fetch('/api/cv/specific-generate-docx', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cvId: selectedCVId,
+          optimizedText,
+          jobDescription: jobDescription || '',
+          jobTitle: jobTitle || '',
+        }),
+      });
+      
+      // Generate document with retry mechanism
+      const documentBlob = await generateDocumentWithRetry(
+        generateDocumentFn,
+        (status, attempt) => {
+          // Update UI with retry status
+          setProcessingStatus(`${status} (Attempt ${attempt}/3)`);
+          setProcessingProgress(50 + (attempt * 5)); // Increment progress slightly with each retry
         }
-      }
+      );
       
-      // Step 2: Prepare data (15%)
-      updateProgress("Preparing document data", 15);
-      await new Promise(resolve => setTimeout(resolve, 500)); // Small delay for UI feedback
-
+      // Step 4: Prepare for download
+      setProcessingProgress(80);
+      setProcessingStatus("Preparing for download...");
+      
+      // Cache the document for manual download
+      setCachedDocument({
+        doc: null,
+        blob: documentBlob,
+        text: optimizedText,
+        url: URL.createObjectURL(documentBlob),
+        timestamp: Date.now()
+      });
+      
+      // Step 5: Download document
+      setProcessingProgress(90);
+      setProcessingStatus("Downloading document...");
+      setIsDownloading(true);
+      
       // Get CV name without file extension
       const cvName = selectedCVName 
         ? selectedCVName.replace(/\.\w+$/, '') 
         : 'CV';
+      const filename = `${cvName}_optimized.docx`;
       
-      // Check if CV ID is available
-      if (!selectedCVId) {
-        throw new Error('No CV selected for document generation');
+      // Attempt to download with timeout
+      const downloadSuccess = await withDownloadTimeout(
+        async () => await downloadDocument(documentBlob, filename),
+        10000 // 10 second timeout
+      );
+      
+      // Always mark as complete, even if download fails
+      setProcessingProgress(100);
+      setIsDownloading(false);
+      
+      if (downloadSuccess) {
+        setIsDownloadComplete(true);
+        setProcessingStatus("Document generated and downloaded successfully!");
+      } else {
+        // If automatic download failed but we have the document cached
+        setProcessingStatus("Document generated successfully. Manual download available.");
+        setDocumentError("Automatic download failed. Please use the manual download button below.");
       }
-
-      // Step 3: Generate structured CV (30%)
-      updateProgress("Structuring CV content", 30);
-      
-      // Generate structured CV data from optimized text
-      let structuredCVData;
-      try {
-        structuredCVData = generateStructuredCV(optimizedText, jobDescription);
-      } catch (structureError) {
-        console.error("Error structuring CV data:", structureError);
-        throw new Error(`Failed to structure CV content: ${structureError instanceof Error ? structureError.message : 'Unknown error'}`);
-      }
-      
-      // Further enhance the structured data for better document formatting
-      updateProgress("Enhancing structured data", 40);
-      let enhancedStructuredCV;
-      try {
-        enhancedStructuredCV = {
-          ...structuredCVData,
-          education: structuredCVData.education.map(edu => {
-            // Parse relevant courses if they're in string format
-            let relevantCourses: string[] = [];
-            if (edu.relevantCourses) {
-              if (typeof edu.relevantCourses === 'string') {
-                relevantCourses = (edu.relevantCourses as string).split(',').map((course: string) => course.trim());
-              } else if (Array.isArray(edu.relevantCourses)) {
-                relevantCourses = edu.relevantCourses;
-              }
-            }
-            
-            return {
-              ...edu,
-              relevantCourses
-            };
-          })
-        };
-      } catch (enhanceError) {
-        console.error("Error enhancing structured data:", enhanceError);
-        // Continue with original data if enhancement fails
-        enhancedStructuredCV = structuredCVData;
-      }
-
-      // Step 4: Generate document (50%)
-      updateProgress("Generating document", 50);
-      
-      // Try direct document generation first
-      let doc: Document | null = null;
-      let blob: Blob | null = null;
-      let directGenerationSucceeded = false;
-      
-      try {
-        // Create a function to generate document with timeout
-        const generateDocumentWithTimeout = async (): Promise<Document> => {
-          const timeoutPromise = new Promise<never>((_, reject) => {
-            setTimeout(() => reject(new Error("Document generation timed out after 30 seconds")), 30000); // 30 second timeout
-          });
-          
-          try {
-            const docPromise = generateOptimizedDocument(
-              optimizedText, 
-              cvName, 
-              enhancedStructuredCV.contactInfo, 
-              enhancedStructuredCV
-            );
-            
-            return await Promise.race([docPromise, timeoutPromise]);
-          } catch (error) {
-            console.error("Error in document generation:", error);
-            throw error;
-          }
-        };
-        
-        // Try to generate the document directly
-        doc = await generateDocumentWithTimeout();
-        
-        // Validate the generated document
-        updateProgress("Validating document", 70);
-        const validationResult = validateDocument(doc);
-        if (!validationResult.isValid) {
-          throw new Error(validationResult.error || "Generated document is invalid or incomplete");
-        }
-        
-        // Convert to blob
-        updateProgress("Preparing document for download", 80);
-        blob = await Packer.toBlob(doc);
-        directGenerationSucceeded = true;
-        
-        // Cache the document
-        updateProgress("Caching document", 85);
-        setCachedDocument({
-          doc,
-          blob,
-          text: optimizedText,
-          timestamp: Date.now()
-        });
-      } catch (directGenError) {
-        console.error("Direct document generation failed:", directGenError);
-        updateProgress("Direct generation failed, trying server fallback", 60);
-        directGenerationSucceeded = false;
-      }
-      
-      // If direct generation failed, try server-side generation
-      if (!directGenerationSucceeded) {
-        try {
-          updateProgress("Requesting server-side document generation", 65);
-          
-          // Send optimized text to server for document generation
-          const response = await fetch('/api/cv/specific-generate-docx', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              cvId: selectedCVId,
-              optimizedText: optimizedText,
-              filename: `${cvName}_optimized.docx`
-            }),
-          });
-          
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `Server responded with status: ${response.status}`);
-          }
-          
-          const data = await response.json();
-          
-          if (!data.success || !data.docxBase64) {
-            throw new Error(data.error || "Server did not return document data");
-          }
-          
-          // Convert base64 to blob
-          updateProgress("Processing server response", 75);
-          const base64Response = data.docxBase64;
-          const binaryString = window.atob(base64Response);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-          
-          blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-          
-          // Cache the blob (doc will be null)
-          updateProgress("Caching server-generated document", 85);
-          setCachedDocument({
-            doc: null, // We don't have the Document object from server generation
-            blob,
-            text: optimizedText,
-            timestamp: Date.now()
-          });
-        } catch (serverGenError) {
-          console.error("Server-side document generation failed:", serverGenError);
-          
-          // If we haven't exceeded max retries, try again with exponential backoff
-          if (retryCount < maxRetries) {
-            const backoffTime = Math.pow(2, retryCount) * 1000; // Exponential backoff: 1s, 2s, 4s, etc.
-            const errorMessage = serverGenError instanceof Error ? serverGenError.message : 'Unknown error';
-            
-            updateProgress(`Generation attempt ${retryCount + 1} failed (${errorMessage}), retrying in ${backoffTime/1000}s...`, 
-              50 + (retryCount * 5)); // Increment progress slightly with each retry
-            
-            await new Promise(resolve => setTimeout(resolve, backoffTime)); // Wait before retry
-            return generateDocument(retryCount + 1, maxRetries);
-          }
-          
-          throw serverGenError;
-        }
-      }
-      
-      // At this point, we should have a blob either from direct generation or server generation
-      if (!blob) {
-        throw new Error("Failed to generate document: No blob available after generation attempts");
-      }
-
-      // Step 8: Download (90%)
-      updateProgress("Downloading document", 90);
-      
-      const downloadSuccess = await handleDocumentDownload(blob);
-      if (!downloadSuccess) {
-        // If automatic download fails, store the blob for manual download
-        setCachedDocument(prev => ({
-          ...prev,
-          blob,
-          timestamp: Date.now()
-        }));
-        
-        throw new Error("Automatic download failed. Please use the manual download button.");
-      }
-
-      // Step 9: Complete (100%)
-      updateProgress("Document generation complete", 100);
-      setIsGeneratingDocument(false);
-      showToast({
-        title: "Success",
-        description: "Document generated and downloaded successfully.",
-        duration: 3000,
-      });
-      
     } catch (error) {
-      console.error("Document generation failed:", error);
+      console.error("Document generation error:", error);
       
-      // Provide user-friendly error message based on error type
-      let errorMessage = "Failed to generate document";
-      
-      if (error instanceof Error) {
-        if (error.message.includes("timed out")) {
-          errorMessage = "Document generation timed out. The document may be too complex or your connection too slow.";
-        } else if (error.message.includes("memory")) {
-          errorMessage = "Out of memory while generating document. Try with a smaller CV or fewer sections.";
-        } else if (error.message.includes("network") || error.message.includes("fetch")) {
-          errorMessage = "Network error while generating document. Please check your connection and try again.";
-        } else if (error.message.includes("Automatic download failed")) {
-          errorMessage = "Automatic download failed. Please use the manual download button below.";
-        } else {
-          errorMessage = `Error: ${error.message}`;
-        }
-      }
-      
-      setDocumentError(errorMessage);
-      setIsGeneratingDocument(false);
-      
-      showToast({
-        title: "Document Generation Failed",
-        description: errorMessage,
-        duration: 5000,
-      });
-      
-      // Reset progress
       setProcessingProgress(0);
-      setProcessingStatus('');
+      setProcessingStatus("Document generation failed");
+      setDocumentError(`Failed to generate document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsGeneratingDocument(false);
     }
-  };
-
-  // Add a new function to handle document download
-  const handleDocumentDownload = async (blob: Blob): Promise<boolean> => {
-    // Try multiple download methods
-    let downloadSuccess = false;
-    
-    // Get CV name without file extension
-    const cvName = selectedCVName 
-      ? selectedCVName.replace(/\.\w+$/, '') 
-      : 'CV';
-    
-    // Update progress for user feedback
-    const updateDownloadProgress = (method: string, status: string) => {
-      setProcessingStatus(`Download (${method}): ${status}`);
-      console.log(`Download progress (${method}): ${status}`);
-    };
-    
-    // Method 1: Using URL.createObjectURL
-    try {
-      updateDownloadProgress("Method 1", "Creating object URL");
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${cvName}_optimized.docx`;
-      
-      // Wrap the click operation in a try-catch to handle any potential errors
-      try {
-        updateDownloadProgress("Method 1", "Initiating download");
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-        downloadSuccess = true;
-        console.log("Download successful using URL.createObjectURL");
-        updateDownloadProgress("Method 1", "Download successful");
-        return true;
-      } catch (clickError) {
-        console.error("Error during link click:", clickError);
-        updateDownloadProgress("Method 1", "Failed - Click error");
-        // Continue to next method
-      }
-    } catch (urlError) {
-      console.warn("URL.createObjectURL download failed:", urlError);
-      updateDownloadProgress("Method 1", "Failed - URL creation error");
-      
-      // Method 2: Using data URL
-      try {
-        updateDownloadProgress("Method 2", "Converting to data URL");
-        // Convert blob to base64
-        const reader = new FileReader();
-        
-        // Create a promise to handle the async FileReader
-        const readerPromise = new Promise<boolean>((resolve, reject) => {
-          reader.onload = function() {
-            try {
-              updateDownloadProgress("Method 2", "Creating download link");
-              const base64data = reader.result;
-              const dataUrl = base64data as string;
-              
-              const link = document.createElement('a');
-              link.href = dataUrl;
-              link.download = `${cvName}_optimized.docx`;
-              link.type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-              
-              updateDownloadProgress("Method 2", "Initiating download");
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-              
-              downloadSuccess = true;
-              console.log("Download successful using data URL");
-              updateDownloadProgress("Method 2", "Download successful");
-              resolve(true);
-            } catch (dataUrlError) {
-              console.error("Error in data URL download:", dataUrlError);
-              updateDownloadProgress("Method 2", "Failed - Link creation error");
-              reject(dataUrlError);
-            }
-          };
-          
-          reader.onerror = function() {
-            console.error("Error reading blob as data URL");
-            updateDownloadProgress("Method 2", "Failed - File reading error");
-            reject(new Error("Failed to read blob as data URL"));
-          };
-        });
-        
-        reader.readAsDataURL(blob);
-        const result = await readerPromise;
-        if (result) return true;
-        
-      } catch (dataUrlError) {
-        console.warn("Data URL download failed:", dataUrlError);
-        updateDownloadProgress("Method 2", "Failed completely");
-      }
-    }
-    
-    // Method 3: Server-side download as fallback
-    if (!downloadSuccess) {
-      try {
-        updateDownloadProgress("Method 3", "Preparing server download");
-        
-        // Convert blob to base64 for API request
-        const base64Promise = new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const base64 = (reader.result as string).split(',')[1]; // Remove data URL prefix
-            resolve(base64);
-          };
-          reader.onerror = () => reject(new Error("Failed to convert blob to base64"));
-          reader.readAsDataURL(blob);
-        });
-        
-        const base64Data = await base64Promise;
-        
-        updateDownloadProgress("Method 3", "Sending to server");
-        
-        // Send to server for download
-        const response = await fetch('/api/cv/specific-generate-docx', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            cvId: selectedCVId,
-            docxBase64: base64Data,
-            filename: `${cvName}_optimized.docx`
-          }),
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          
-          if (data.success && data.downloadUrl) {
-            updateDownloadProgress("Method 3", "Creating download link");
-            
-            // Create a direct download link
-            const link = document.createElement('a');
-            link.href = data.downloadUrl;
-            link.download = `${cvName}_optimized.docx`;
-            
-            updateDownloadProgress("Method 3", "Initiating download");
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
-            downloadSuccess = true;
-            console.log("Download successful using server-side method");
-            updateDownloadProgress("Method 3", "Download successful");
-            return true;
-          } else {
-            throw new Error(data.error || "Server did not return a download URL");
-          }
-        } else {
-          throw new Error(`Server responded with status: ${response.status}`);
-        }
-      } catch (serverError) {
-        console.error("Server-side download failed:", serverError);
-        updateDownloadProgress("Method 3", "Failed - Server error");
-        
-        // Provide direct download link as last resort
-        setDocumentError(
-          "Automatic download failed. Please click the download button below to try again."
-        );
-        
-        // Store blob in state for manual download
-        setCachedDocument(prev => ({
-          ...prev,
-          blob,
-          timestamp: Date.now()
-        }));
-        
-        return false;
-      }
-    }
-    
-    return downloadSuccess;
   };
 
   // Add a function for manual document download
   const handleManualDownload = async () => {
-    if (cachedDocument?.blob) {
-      try {
-        setProcessingStatus("Manual download initiated");
-        const result = await handleDocumentDownload(cachedDocument.blob);
-        if (result) {
-          setDocumentError(null);
-          showToast({
-            title: "Success",
-            description: "Document downloaded successfully",
-            duration: 3000,
-          });
-        }
-      } catch (error) {
-        console.error("Manual download failed:", error);
-        setDocumentError("Manual download failed. Please try again later.");
-      }
-    } else {
-      setDocumentError("No document available. Please generate the document first.");
-      setIsGeneratingDocument(false);
+    if (!cachedDocument?.blob) {
+      setDocumentError("No document available for download. Please generate a document first.");
+      return;
     }
+    
+    setIsDownloading(true);
+    setDocumentError(null);
+    
+    try {
+      // Get CV name without file extension
+      const cvName = selectedCVName 
+        ? selectedCVName.replace(/\.\w+$/, '') 
+        : 'CV';
+      const filename = `${cvName}_optimized.docx`;
+      
+      // Use our utility function for download
+      const downloadSuccess = await downloadDocument(cachedDocument.blob, filename);
+      
+      setIsDownloading(false);
+      
+      if (downloadSuccess) {
+        setIsDownloadComplete(true);
+        setDocumentError(null);
+        setProcessingStatus("Document downloaded successfully!");
+      } else {
+        setDocumentError("Download failed. Please try again or use a different browser.");
+      }
+    } catch (error) {
+      console.error("Manual download error:", error);
+      setIsDownloading(false);
+      setDocumentError(`Download failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  // Add a handler for the generate document button
+  const handleGenerateDocument = () => {
+    generateDocument();
   };
 
   return (
@@ -4205,18 +3850,269 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           <p className="text-sm text-gray-300 mb-3">{documentError}</p>
           
           {cachedDocument?.blob && (
+            <div className="space-y-2">
+              <button
+                onClick={handleManualDownload}
+                className="w-full px-4 py-3 bg-[#B4916C] text-white rounded-md hover:bg-[#A3815B] transition-colors flex items-center justify-center font-medium"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download Document Manually
+              </button>
+              <p className="text-xs text-gray-400 text-center">
+                Click the button above to download your document. If this doesn't work, please try again in a different browser.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Manual Download Button - Always show when there's a cached document */}
+      {cachedDocument?.blob && !documentError && !isGeneratingDocument && (
+        <div className="mt-4 p-4 border border-gray-700 rounded-md bg-gray-800/50">
+          <h3 className="text-lg font-medium mb-2 text-gray-200">Document Ready</h3>
+          <p className="text-sm text-gray-300 mb-3">Your document has been generated and is ready for download.</p>
+          
+          <button
+            onClick={handleManualDownload}
+            className="w-full px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A3815B] transition-colors flex items-center justify-center"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Download Document
+          </button>
+        </div>
+      )}
+      
+      {/* Document Generation Button */}
+      <div className="mt-6">
+        <div className="flex justify-between items-center">
+          <h3 className="text-xl font-semibold">Document Generation</h3>
+          <Button
+            onClick={handleGenerateDocument}
+            disabled={isGeneratingDocument || !optimizedText}
+            className="bg-[#B4916C] hover:bg-[#A3815B] text-white"
+          >
+            {isGeneratingDocument ? (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <FileText className="mr-2 h-4 w-4" />
+                Generate DOCX
+              </>
+            )}
+          </Button>
+        </div>
+        
+        {/* Document Generation Progress */}
+        {isGeneratingDocument && (
+          <div className="mt-4 p-4 border border-gray-700 rounded-md bg-gray-800/50">
+            <div className="flex justify-between items-center mb-2">
+              <h4 className="font-medium text-gray-200">Generation Progress</h4>
+              <span className="text-sm font-medium text-[#B4916C]">{processingProgress}%</span>
+            </div>
+            <div className="w-full h-2 bg-gray-700 rounded-full mb-3">
+              <div 
+                className="h-2 rounded-full bg-[#B4916C] transition-all duration-300 ease-in-out"
+                style={{ width: `${processingProgress}%` }}
+              />
+            </div>
+            <div className="flex items-center text-sm text-gray-300">
+              <Clock className="h-4 w-4 mr-2 text-gray-400" />
+              <span>{processingStatus || "Preparing document..."}</span>
+            </div>
+            
+            {/* Detailed steps */}
+            <div className="mt-4 space-y-2">
+              <div className="flex items-center text-xs">
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-2 ${processingProgress >= 5 ? 'bg-[#B4916C]/20 text-[#B4916C]' : 'bg-gray-700 text-gray-500'}`}>
+                  {processingProgress >= 5 ? <CheckCircle className="h-3 w-3" /> : "1"}
+                </div>
+                <span className={processingProgress >= 5 ? 'text-gray-300' : 'text-gray-500'}>Preparing document data</span>
+              </div>
+              <div className="flex items-center text-xs">
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-2 ${processingProgress >= 30 ? 'bg-[#B4916C]/20 text-[#B4916C]' : 'bg-gray-700 text-gray-500'}`}>
+                  {processingProgress >= 30 ? <CheckCircle className="h-3 w-3" /> : "2"}
+                </div>
+                <span className={processingProgress >= 30 ? 'text-gray-300' : 'text-gray-500'}>Structuring CV content</span>
+              </div>
+              <div className="flex items-center text-xs">
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-2 ${processingProgress >= 50 ? 'bg-[#B4916C]/20 text-[#B4916C]' : 'bg-gray-700 text-gray-500'}`}>
+                  {processingProgress >= 50 ? <CheckCircle className="h-3 w-3" /> : "3"}
+                </div>
+                <span className={processingProgress >= 50 ? 'text-gray-300' : 'text-gray-500'}>Generating document</span>
+              </div>
+              <div className="flex items-center text-xs">
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-2 ${processingProgress >= 80 ? 'bg-[#B4916C]/20 text-[#B4916C]' : 'bg-gray-700 text-gray-500'}`}>
+                  {processingProgress >= 80 ? <CheckCircle className="h-3 w-3" /> : "4"}
+                </div>
+                <span className={processingProgress >= 80 ? 'text-gray-300' : 'text-gray-500'}>Preparing for download</span>
+              </div>
+              <div className="flex items-center text-xs">
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-2 ${processingProgress >= 90 ? 'bg-[#B4916C]/20 text-[#B4916C]' : 'bg-gray-700 text-gray-500'}`}>
+                  {processingProgress >= 90 ? <CheckCircle className="h-3 w-3" /> : "5"}
+                </div>
+                <span className={processingProgress >= 90 ? 'text-gray-300' : 'text-gray-500'}>Downloading document</span>
+              </div>
+            </div>
+            
+            {/* Processing too long message */}
+            {processingProgress > 0 && processingProgress < 100 && (
+              <div className="mt-4 text-xs text-gray-400">
+                <p>Document generation may take up to a minute depending on the size and complexity of your CV.</p>
+                {processingProgress >= 90 && processingProgress < 100 && (
+                  <p className="mt-1 text-yellow-400">
+                    If the download doesn't start automatically, you'll be able to use the manual download button once processing completes.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Document Error with Manual Download Option */}
+        {documentError && !isGeneratingDocument && (
+          <div className="mt-4 p-4 border border-red-800/50 rounded-md bg-red-900/20">
+            <h3 className="text-lg font-medium mb-2 text-red-400">Document Generation Issue</h3>
+            <p className="text-sm text-gray-300 mb-3">{documentError}</p>
+            
+            {cachedDocument?.blob && (
+              <div className="space-y-2">
+                <button
+                  onClick={handleManualDownload}
+                  className="w-full px-4 py-3 bg-[#B4916C] text-white rounded-md hover:bg-[#A3815B] transition-colors flex items-center justify-center font-medium"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download Document Manually
+                </button>
+                <p className="text-xs text-gray-400 text-center">
+                  Click the button above to download your document. If this doesn't work, please try again in a different browser.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Manual Download Button - Always show when there's a cached document */}
+        {cachedDocument?.blob && !documentError && !isGeneratingDocument && (
+          <div className="mt-4 p-4 border border-gray-700 rounded-md bg-gray-800/50">
+            <h3 className="text-lg font-medium mb-2 text-gray-200">Document Ready</h3>
+            <p className="text-sm text-gray-300 mb-3">Your document has been generated and is ready for download.</p>
+            
             <button
               onClick={handleManualDownload}
-              className="px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A3815B] transition-colors flex items-center"
+              className="w-full px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A3815B] transition-colors flex items-center justify-center"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
-              Manual Download
+              Download Document
             </button>
-          )}
+          </div>
+        )}
+        
+        {/* Document Generation Tips */}
+        {!isGeneratingDocument && !cachedDocument?.blob && (
+          <div className="mt-4 p-4 border border-gray-700 rounded-md bg-gray-800/50">
+            <h4 className="flex items-center text-sm font-medium mb-2 text-gray-300">
+              <Info className="h-4 w-4 mr-2 text-blue-400" />
+              Document Generation Tips
+            </h4>
+            <ul className="text-xs text-gray-400 space-y-1 list-disc pl-5">
+              <li>The generated document will include all sections from your optimized CV</li>
+              <li>Document generation may take up to 30 seconds for complex CVs</li>
+              <li>If generation fails, try again or use a different browser</li>
+              <li>For best results, ensure your CV has clear section headers</li>
+            </ul>
+          </div>
+        )}
+      </div>
+      
+      {/* Document Generation Section */}
+      <div className="mt-8 border-t border-gray-800 pt-6">
+        <h3 className="text-xl font-semibold mb-4">Generate Optimized Document</h3>
+        
+        {isGeneratingDocument ? (
+          <DocumentGenerationProgress 
+            progress={processingProgress || 0}
+            status={processingStatus || ''}
+            error={documentError}
+            isGenerating={isGeneratingDocument}
+          />
+        ) : (
+          <p className="text-gray-400 mb-4">
+            Generate a downloadable document with your optimized CV content.
+          </p>
+        )}
+        
+        {isDownloading && (
+          <DocumentDownloadStatus
+            isDownloading={isDownloading}
+            isDownloadComplete={isDownloadComplete}
+            error={documentError}
+            onManualDownload={handleManualDownload}
+          />
+        )}
+        
+        {isDownloadComplete && !isDownloading && (
+          <DocumentDownloadStatus
+            isDownloading={false}
+            isDownloadComplete={true}
+            error={null}
+            onManualDownload={handleManualDownload}
+          />
+        )}
+        
+        {documentError && !isGeneratingDocument && !isDownloading && (
+          <DocumentDownloadStatus
+            isDownloading={false}
+            isDownloadComplete={false}
+            error={documentError}
+            onManualDownload={handleManualDownload}
+          />
+        )}
+        
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={handleGenerateDocument}
+            disabled={isGeneratingDocument || !optimizedText}
+            className={`px-4 py-2 rounded-md flex items-center ${
+              isGeneratingDocument || !optimizedText
+                ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                : 'bg-[#B4916C] text-white hover:bg-[#A3815C] transition-colors'
+            }`}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5 mr-2"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            {isGeneratingDocument ? 'Generating...' : 'Generate Document'}
+          </button>
         </div>
-      )}
+        
+        {documentError && !isGeneratingDocument && !isDownloading && !isDownloadComplete && (
+          <div className="mt-3 p-3 bg-red-900/20 border border-red-800 rounded-md text-red-300 text-sm">
+            {documentError}
+          </div>
+        )}
+      </div>
     </div>
   );
 } 

@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Calendar, Clock, ArrowRight, Tag } from "lucide-react";
 
 // Sample blog post data with categories - reduced to 3 articles
-const blogPosts = [
+export const blogPosts = [
   {
     id: 1,
     title: "The Jobs Playground",
@@ -82,27 +82,264 @@ Start exploring the possibilities today and transform your career journey with t
   },
   {
     id: 2,
-    title: "The Future of Work: Skills That Will Matter in 2026",
-    excerpt: "Explore the emerging skills and competencies that employers will be looking for in the next year and how to develop them.",
-    content: "The workplace is evolving at an unprecedented pace, driven by technological advancements, changing economic landscapes, and shifting social priorities. To stay competitive in this dynamic environment, professionals need to continuously adapt and develop new skills.",
+    title: "Planning & Use Cases: Your Career Journey Simplified",
+    excerpt: "Discover our streamlined approach to career advancement: Upload → Analyze → Optimize → Apply. Learn how our platform transforms your professional documents and job search experience.",
+    content: `# Planning & Use Cases: Your Career Journey Simplified
+
+In today's competitive job market, having a strategic approach to your career development is essential. At Resuming, we've designed a seamless four-step process that transforms your professional documents and maximizes your job search success: **Upload → Analyze → Optimize → Apply**.
+
+## Our Comprehensive Approach
+
+### CV Analysis
+Our custom-trained AI doesn't just scan your CV—it comprehensively reviews every element to extract meaningful insights and identify key improvement areas. The system evaluates:
+
+- **Content relevance** to your target industry and roles
+- **Keyword optimization** for Applicant Tracking Systems (ATS)
+- **Achievement quantification** and impact demonstration
+- **Skill representation** and gap identification
+- **Structural coherence** and readability metrics
+
+This deep analysis provides you with actionable intelligence about your CV's strengths and weaknesses, enabling targeted improvements that significantly enhance your job application success rate.
+
+### CV Optimization
+Based on the detailed analysis, our platform delivers personalized suggestions that transform your CV from adequate to exceptional. Our optimization tools:
+
+- **Refine language** for maximum impact and clarity
+- **Restructure content** to highlight your most relevant qualifications
+- **Enhance keyword placement** to improve ATS compatibility
+- **Balance visual elements** for optimal readability
+- **Tailor content** to specific industries and positions
+
+These targeted improvements ensure your CV stands out in today's competitive market, capturing the attention of both automated screening systems and human recruiters.
+
+### Job Matching & Mapping
+Our platform goes beyond document optimization to connect you directly with relevant opportunities. Our job matching system:
+
+- **Analyzes your optimized CV** to identify your key qualifications and preferences
+- **Scans thousands of job listings** to find positions aligned with your profile
+- **Calculates compatibility scores** based on multiple factors
+- **Presents curated job listings** ranked by match percentage
+- **Displays opportunities on an interactive map** for location-based decision making
+
+This integrated approach streamlines your job search process, helping you focus your efforts on positions where you have the highest likelihood of success.
+
+## Try For Free
+Experience the power of our platform with no commitment. Our free trial gives you access to:
+
+- Basic CV analysis with key improvement areas identified
+- Sample optimization suggestions
+- Limited job matching functionality
+- Interactive map exploration
+
+Upgrade to our premium plans to unlock the full potential of our AI-powered career advancement tools.
+
+## Use Cases
+Our platform is designed to empower professionals at every stage of their career journey with actionable insights and tools.
+
+### Recent Graduates
+- Build a professional-quality CV from scratch
+- Identify and showcase transferable skills from academic and extracurricular experiences
+- Discover entry-level positions aligned with your qualifications and interests
+- Gain competitive advantage in a challenging job market
+
+### Mid-Career Professionals
+- Optimize your CV to highlight progressive responsibility and achievement
+- Identify skill gaps and development opportunities
+- Explore lateral or advancement opportunities within your industry
+- Evaluate potential career pivots based on your transferable skills
+
+### Career Changers
+- Reframe your experience to highlight relevant transferable skills
+- Identify and address potential objections from recruiters
+- Discover opportunities in your target industry that match your qualifications
+- Build a compelling narrative that explains your career transition
+
+### Executive Level
+- Showcase strategic leadership and organizational impact
+- Optimize executive summary and key achievements
+- Target opportunities that align with your leadership style and expertise
+- Enhance your professional brand across all documentation
+
+## Resuming Mechanism
+Our platform operates through a sophisticated mechanism designed to maximize your career success.
+
+### Specialized Areas
+
+#### Analyze PDF Document
+Our system performs comprehensive analysis of your PDF CV, examining:
+- Content quality and relevance
+- Keyword optimization and ATS compatibility
+- Achievement quantification and impact demonstration
+- Structural coherence and visual presentation
+- Industry alignment and position targeting
+
+This analysis forms the foundation for all optimization recommendations and job matching.
+
+#### Intelligent CV Optimization
+Our AI-powered optimization engine delivers:
+- Industry-specific keyword optimization based on current hiring trends
+- Content restructuring to highlight your most relevant qualifications
+- Language refinement for maximum impact and clarity
+- Visual presentation improvements for optimal readability
+- Tailored recommendations for specific target positions
+
+#### Professional Development
+Beyond immediate document optimization, our platform supports your ongoing career growth through:
+- Knowledge on high-level CV building principles and best practices
+- Skill gap analysis compared to your target roles and industries
+- Structure and content analysis to identify areas for professional development
+- Personalized learning recommendations to enhance your qualifications
+
+## How It Works
+Our platform's streamlined process makes career advancement simple and effective:
+
+1. **Upload**: Submit your CV in PDF format through our secure interface.
+2. **Analyze**: Receive detailed ATS compatibility scoring and comprehensive content analysis, including keyword optimization, structure evaluation, and impact assessment.
+3. **Optimize**: With one click, transform your document into a structured, read-top-apply CV designed to maximize your chances of interview selection.
+
+The entire process takes minutes, but the impact on your career can be transformative. Join thousands of professionals who have accelerated their career journey with our AI-powered platform.`,
     date: "May 15, 2025",
-    readTime: "4 min read",
-    image: "/blog/post-2.jpg",
+    readTime: "8 min read",
+    image: "/articles/5.webp",
     fallbackImage: "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40",
-    slug: "future-skills",
-    category: "Career Advice"
+    slug: "planning-use-cases",
+    category: "Career Strategy"
   },
   {
     id: 3,
-    title: "How to Optimize Your LinkedIn Profile for Job Searches",
-    excerpt: "A comprehensive guide to making your LinkedIn profile stand out to recruiters and algorithms in today's competitive job market.",
-    content: "LinkedIn has become an essential platform for professional networking and job hunting. With over 740 million users worldwide, standing out from the crowd requires strategic optimization of your profile. This guide provides step-by-step instructions to enhance your LinkedIn presence.",
+    title: "AI System: The Technology Behind Your Career Success",
+    excerpt: "Discover how our advanced AI system identifies industry patterns, analyzes documents, and optimizes your professional materials to help you break through the 98% rejection barrier in today's competitive job market.",
+    content: `# AI System: The Technology Behind Your Career Success
+
+In today's hyper-competitive job market, the numbers tell a sobering story: between 98-99% of applications are filtered out before ever reaching a human interviewer. Only 1-2% of candidates successfully navigate the initial stages of the hiring process. Our AI system is designed to place you firmly within that successful minority.
+
+## Industry Intelligence
+
+### Catching Industry Context
+Our AI system doesn't just read your CV—it understands it within the specific context of your target industry. This contextual intelligence allows the system to:
+
+- **Identify target industry** by analyzing content patterns, terminology, and career progression
+- **Apply industry-specific knowledge** to evaluate your document against sector expectations
+- **Recognize specialized terminology** and its appropriate usage within your field
+- **Understand industry-specific achievement metrics** and their significance
+- **Detect misalignments** between your presentation and industry standards
+
+This sophisticated industry recognition forms the foundation for all subsequent analysis and optimization, ensuring that recommendations are always relevant to your specific career context.
+
+### Key Value Identification
+What exactly is your target industry looking for in candidates? Our AI conducts deep analysis to determine:
+
+- **High-value keywords** that signal relevance to recruiters and ATS systems
+- **Essential skills and qualifications** that serve as screening criteria
+- **Experience patterns** that correlate with successful hires
+- **Presentation elements** that resonate with industry expectations
+
+After consulting our extensive knowledge base and analyzing current metadata, our system generates a comprehensive profile of industry expectations—and how your CV measures against them.
+
+## Breaking Through the 98% Barrier
+
+The stark reality of modern hiring is that automated systems filter out the vast majority of applications before human eyes ever see them. Our AI system is specifically designed to help you overcome these barriers by:
+
+- **Optimizing for ATS compatibility** to ensure your CV passes initial screening
+- **Highlighting relevant keywords** in contextually appropriate ways
+- **Structuring content** for maximum impact with both algorithms and human reviewers
+- **Quantifying achievements** to demonstrate concrete value
+- **Aligning your presentation** with industry-specific expectations
+
+These targeted optimizations dramatically increase your chances of breaking through the initial screening process and reaching the interview stage.
+
+## Comprehensive Career Support
+
+Our AI system is designed to support your entire career journey, not just a single job application. The platform provides:
+
+### Detailed Analytics
+The system conducts an exhaustive analysis of your CV, examining:
+- Industry alignment and keyword optimization
+- Achievement quantification and impact demonstration
+- Skill representation and gap identification
+- Structural coherence and readability metrics
+- ATS compatibility and potential screening flags
+
+Each analysis is tailored to the specific industry your CV targets, ensuring that the insights you receive are directly relevant to your career goals.
+
+### One-Click Optimization
+Based on this detailed analytics, our system enables you to:
+- Transform your CV with a single click
+- Generate a professionally optimized document in seconds
+- Receive a ready-to-apply CV tailored to industry standards
+- Implement targeted improvements that address specific weaknesses
+- Highlight your most relevant qualifications and experiences
+
+The optimization process maintains your unique professional narrative while enhancing how that story is told to maximize impact.
+
+## Comprehensive Suite of Tools
+
+### CV Optimization
+Our flagship service provides:
+- Industry-specific CV analysis that identifies strengths and weaknesses
+- Detailed metrics that quantify your document's effectiveness
+- One-click optimization that transforms your CV into an ATS-friendly, recruiter-appealing document
+- Before-and-after comparisons to visualize improvements
+- Multiple export options for different application scenarios
+
+This core functionality helps you create a CV that not only passes automated screening but also impresses human recruiters with its clarity, relevance, and impact.
+
+### Document Generation
+Our talk-to-edit model represents the cutting edge of AI document creation:
+- Create professional documents from scratch with natural language instructions
+- Transform existing documents with contextual understanding of your goals
+- Generate industry-specific content that aligns with professional standards
+- Produce ready-to-deliver documents for any professional purpose
+- Maintain consistent voice and style across all your professional materials
+
+This versatile tool extends beyond CVs to support all your professional documentation needs, from cover letters to project proposals.
+
+### Document Analysis
+Our comprehensive analysis tools provide:
+- Detailed evaluation of any professional document
+- Readability scoring and improvement suggestions
+- Content relevance assessment for your target audience
+- Structural analysis for optimal information presentation
+- Competitive benchmarking against industry standards
+
+The text analysis capabilities expand as needed to accommodate documents of any length, ensuring you receive thorough feedback regardless of content volume.
+
+## The Technology Advantage
+
+Our AI system represents the convergence of multiple advanced technologies:
+
+- **Natural Language Processing** that understands the nuances of professional communication
+- **Industry-Specific Training** that recognizes the unique requirements of different sectors
+- **Pattern Recognition** that identifies effective presentation strategies
+- **Contextual Understanding** that evaluates content within appropriate frameworks
+- **Adaptive Learning** that continuously improves recommendations based on outcomes
+
+This technological foundation enables our system to provide insights and optimizations that go far beyond generic CV advice, delivering truly personalized career advancement support.
+
+## Measurable Results
+
+The effectiveness of our AI system is demonstrated through concrete outcomes:
+
+- **Interview Rate Increase**: Users report 3-5x improvement in interview invitation rates
+- **Application Efficiency**: 80% reduction in time spent on document preparation
+- **Job Match Quality**: 65% higher satisfaction with job placements
+- **Career Progression**: 40% faster advancement compared to industry averages
+
+These metrics reflect our system's ability to not just help you get past initial screenings, but to position you for long-term career success.
+
+## Experience the Difference
+
+In a job market where 98% of applications never reach human reviewers, our AI system provides the critical advantage needed to break through automated screening systems and capture the attention of hiring managers.
+
+By combining industry intelligence, detailed analytics, and one-click optimization, we've created a platform that doesn't just improve your CV—it transforms your entire approach to career development.
+
+Whether you're applying for your dream job, transitioning to a new industry, or simply ensuring your professional documents reflect your true capabilities, our AI system provides the tools and insights you need to succeed in today's challenging job market.`,
     date: "May 3, 2025",
-    readTime: "6 min read",
-    image: "/blog/post-3.jpg",
+    readTime: "9 min read",
+    image: "/articles/7.webp",
     fallbackImage: "https://images.unsplash.com/photo-1551434678-e076c223a692",
-    slug: "linkedin-optimization",
-    category: "Job Search"
+    slug: "ai-system",
+    category: "AI Technology"
   }
 ];
 

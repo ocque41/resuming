@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const { cvId, optimizedText, docxBase64, filename } = body || {};
+    const { cvId, optimizedText, docxBase64, filename, jobDescription, jobTitle } = body || {};
 
     // Handle the case where client is sending a pre-generated DOCX
     if (docxBase64) {
@@ -37,12 +37,11 @@ export async function POST(request: NextRequest) {
       
       try {
         // Create a download URL for the pre-generated DOCX
-        // In a real implementation, you might want to store this temporarily
-        // and provide a token-based URL for security
+        const downloadUrl = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${docxBase64}`;
         
         return NextResponse.json({
           success: true,
-          downloadUrl: `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${docxBase64}`
+          downloadUrl
         });
       } catch (error) {
         logger.error('Error creating download URL:', error instanceof Error ? error.message : String(error));
@@ -64,6 +63,7 @@ export async function POST(request: NextRequest) {
     // If optimized text wasn't provided, fetch it from the database
     if (!cvText) {
       try {
+        logger.info(`Fetching CV data for ID: ${cvId}`);
         // Get all CVs for the user
         const cvs = await getCVsForUser(user.id);
         
@@ -85,6 +85,7 @@ export async function POST(request: NextRequest) {
         }
 
         cvText = cvRecord.rawText;
+        logger.info(`Successfully retrieved CV text for ID: ${cvId}`);
       } catch (dbError) {
         logger.error('Database error:', dbError instanceof Error ? dbError.message : String(dbError));
         return NextResponse.json(
@@ -94,11 +95,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate the DOCX file
+    // Generate the DOCX file with timeout protection
     let docxBuffer;
     try {
       logger.info(`Generating DOCX for CV ID: ${cvId}`);
-      docxBuffer = await generateSpecificDocx(cvText);
+      
+      // Create a promise that will reject after a timeout
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Document generation timed out after 30 seconds')), 30000);
+      });
+      
+      // Create a promise for the document generation
+      const generatePromise = generateSpecificDocx(cvText, jobTitle, jobDescription);
+      
+      // Race the promises
+      docxBuffer = await Promise.race([generatePromise, timeoutPromise]) as Buffer;
+      
       logger.info(`DOCX generation successful for CV ID: ${cvId}`);
     } catch (genError) {
       logger.error('Error generating DOCX:', genError instanceof Error ? genError.message : String(genError));
@@ -114,11 +126,15 @@ export async function POST(request: NextRequest) {
 
     // Convert buffer to base64 for response
     const base64Data = docxBuffer.toString('base64');
+    
+    // Create a download URL
+    const downloadUrl = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${base64Data}`;
 
-    // Return the base64 data
+    // Return the base64 data and download URL
     return NextResponse.json({
       success: true,
       docxBase64: base64Data,
+      downloadUrl
     });
   } catch (error) {
     logger.error('Error in specific-generate-docx:', error instanceof Error ? error.message : String(error));
@@ -135,12 +151,18 @@ export async function POST(request: NextRequest) {
 /**
  * Generate a DOCX document from CV text specifically for the specific optimization workflow
  */
-async function generateSpecificDocx(cvText: string): Promise<Buffer> {
+async function generateSpecificDocx(
+  cvText: string, 
+  jobTitle?: string, 
+  jobDescription?: string
+): Promise<Buffer> {
   if (!cvText) {
     throw new Error('CV text is required');
   }
 
   try {
+    logger.info('Starting document generation process');
+    
     // Parse the CV text into sections
     const sections = parseOptimizedText(cvText);
     
@@ -174,9 +196,9 @@ async function generateSpecificDocx(cvText: string): Promise<Buffer> {
           }
         },
         children: [
-          // Title
+          // Title with job title if available
           new Paragraph({
-            text: 'Optimized CV',
+            text: jobTitle ? `Optimized CV for ${jobTitle}` : 'Optimized CV',
             heading: HeadingLevel.HEADING_1,
             spacing: {
               after: 200
@@ -313,7 +335,7 @@ async function generateSpecificDocx(cvText: string): Promise<Buffer> {
             return paragraphs;
           }),
           
-          // Add footer
+          // Add footer with date
           new Paragraph({
             children: [
               new TextRun({
@@ -339,8 +361,16 @@ async function generateSpecificDocx(cvText: string): Promise<Buffer> {
       }]
     });
 
-    // Generate buffer
-    return await Packer.toBuffer(doc);
+    // Generate buffer with a try-catch to handle any errors
+    try {
+      logger.info('Packing document to buffer');
+      const buffer = await Packer.toBuffer(doc);
+      logger.info('Document successfully packed to buffer');
+      return buffer;
+    } catch (packError) {
+      logger.error('Error packing document to buffer:', packError instanceof Error ? packError.message : String(packError));
+      throw new Error(`Failed to pack document to buffer: ${packError instanceof Error ? packError.message : 'Unknown error'}`);
+    }
   } catch (error) {
     logger.error('Error generating specific DOCX:', error instanceof Error ? error.message : String(error));
     throw new Error(`Failed to generate specific DOCX: ${error instanceof Error ? error.message : String(error)}`);
