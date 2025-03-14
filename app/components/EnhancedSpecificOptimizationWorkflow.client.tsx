@@ -1710,7 +1710,11 @@ const extractLanguages = (text: string): string[] => {
 };
 
 // Function to optimize achievements based on job description
-const optimizeAchievements = (achievements: string[], jobDescription: string, jobKeywords: string[]): string[] => {
+const optimizeAchievements = (
+  achievements: string[],
+  jobDescription: string,
+  jobKeywords: string[]
+): string[] => {
   if (achievements.length === 0) return [];
   
   // Score achievements based on relevance to job description
@@ -1750,7 +1754,11 @@ const optimizeAchievements = (achievements: string[], jobDescription: string, jo
 };
 
 // Function to optimize goals based on job description
-const optimizeGoals = (goals: string[], jobDescription: string, jobKeywords: string[]): string[] => {
+const optimizeGoals = (
+  goals: string[],
+  jobDescription: string,
+  jobKeywords: string[]
+): string[] => {
   if (goals.length === 0) return [];
   
   // Score goals based on relevance to job description
@@ -1764,14 +1772,19 @@ const optimizeGoals = (goals: string[], jobDescription: string, jobKeywords: str
       }
     });
     
-    // Check for alignment with common job objectives
-    if (/growth|advancement|development|learning|contribute|impact|value|success/i.test(goal)) {
+    // Check for quantifiable results
+    if (/\d+%|\d+ percent|increased|decreased|reduced|improved|saved|generated/i.test(goal)) {
+      score += 3;
+    }
+    
+    // Check for leadership indicators
+    if (/led|managed|supervised|directed|coordinated|spearheaded|initiated/i.test(goal)) {
       score += 2;
     }
     
-    // Check for specificity
-    if (/specific|particular|certain|definite|precise/i.test(goal)) {
-      score += 1;
+    // Check for innovation indicators
+    if (/developed|created|designed|implemented|launched|established|pioneered/i.test(goal)) {
+      score += 2;
     }
     
     return { goal, score };
@@ -1782,185 +1795,6 @@ const optimizeGoals = (goals: string[], jobDescription: string, jobKeywords: str
   
   // Return top goals (max 3)
   return scoredGoals.slice(0, 3).map(item => item.goal);
-};
-
-// Function to optimize languages based on job description
-const optimizeLanguages = (languages: string[], jobDescription: string): string[] => {
-  if (languages.length === 0) return [];
-  
-  // Extract language requirements from job description
-  const languageRequirements: string[] = [];
-  const languagePatterns = [
-    /(?:language requirements|language skills|fluent in|proficient in)[:\s]+([^.]+)/gi,
-    /(?:ability to speak|ability to write|ability to communicate in)[:\s]+([^.]+)/gi
-  ];
-  
-  languagePatterns.forEach(pattern => {
-    const matches = [...jobDescription.matchAll(pattern)];
-    matches.forEach(match => {
-      if (match[1]) {
-        // Split by common separators and add to requirements
-        match[1].split(/[,;]|\band\b/).forEach(lang => {
-          const trimmedLang = lang.trim();
-          if (trimmedLang && !languageRequirements.includes(trimmedLang)) {
-            languageRequirements.push(trimmedLang);
-          }
-        });
-      }
-    });
-  });
-  
-  // Score languages based on relevance to job description
-  const scoredLanguages = languages.map(language => {
-    let score = 0;
-    
-    // Check for exact matches with requirements
-    languageRequirements.forEach(req => {
-      if (language.toLowerCase().includes(req.toLowerCase()) || 
-          req.toLowerCase().includes(language.toLowerCase())) {
-        score += 3;
-      }
-    });
-    
-    // Check for proficiency level
-    if (/native|fluent|proficient|advanced|business/i.test(language)) {
-      score += 2;
-    } else if (/intermediate/i.test(language)) {
-      score += 1;
-    }
-    
-    // English is almost always valuable
-    if (/english/i.test(language)) {
-      score += 2;
-    }
-    
-    return { language, score };
-  });
-  
-  // Sort by score (highest first)
-  scoredLanguages.sort((a, b) => b.score - a.score);
-  
-  // Return all languages, prioritized by relevance
-  return scoredLanguages.map(item => item.language);
-};
-
-// Function to optimize skills based on job description
-const optimizeSkills = (
-  technicalSkills: string[],
-  professionalSkills: string[],
-  jobDescription: string,
-  jobKeywords: string[]
-): SkillsData => {
-  // Extract technical skill requirements from job description
-  const technicalRequirements: string[] = [];
-  const technicalPatterns = [
-    /(?:technical skills|technical requirements|technical qualifications)[:\s]+([^.]+)/gi,
-    /(?:proficient in|experience with|knowledge of|familiarity with)[:\s]+([^.]+)/gi,
-    /(?:technologies|tools|platforms|software|programming languages)[:\s]+([^.]+)/gi
-  ];
-  
-  technicalPatterns.forEach(pattern => {
-    const matches = [...jobDescription.matchAll(pattern)];
-    matches.forEach(match => {
-      if (match[1]) {
-        // Split by common separators and add to requirements
-        match[1].split(/[,;]|\band\b/).forEach(skill => {
-          const trimmedSkill = skill.trim();
-          if (trimmedSkill && !technicalRequirements.includes(trimmedSkill)) {
-            technicalRequirements.push(trimmedSkill);
-          }
-        });
-      }
-    });
-  });
-  
-  // Extract professional skill requirements from job description
-  const professionalRequirements: string[] = [];
-  const professionalPatterns = [
-    /(?:soft skills|interpersonal skills|communication skills)[:\s]+([^.]+)/gi,
-    /(?:ability to|capable of|skilled in)[:\s]+([^.]+)/gi,
-    /(?:team player|team work|collaborate|communicate)[:\s]+([^.]+)/gi
-  ];
-  
-  professionalPatterns.forEach(pattern => {
-    const matches = [...jobDescription.matchAll(pattern)];
-    matches.forEach(match => {
-      if (match[1]) {
-        // Split by common separators and add to requirements
-        match[1].split(/[,;]|\band\b/).forEach(skill => {
-          const trimmedSkill = skill.trim();
-          if (trimmedSkill && !professionalRequirements.includes(trimmedSkill)) {
-            professionalRequirements.push(trimmedSkill);
-          }
-        });
-      }
-    });
-  });
-  
-  // Optimize technical skills - start with original CV skills
-  let optimizedTechnical = [...technicalSkills];
-  
-  // Add missing technical skills from requirements
-  technicalRequirements.forEach(req => {
-    const hasMatchingSkill = optimizedTechnical.some(skill => 
-      skill.toLowerCase().includes(req.toLowerCase()) || 
-      req.toLowerCase().includes(skill.toLowerCase())
-    );
-    
-    if (!hasMatchingSkill) {
-      optimizedTechnical.push(req);
-    }
-  });
-  
-  // Optimize professional skills - start with original CV skills
-  let optimizedProfessional = [...professionalSkills];
-  
-  // Add missing professional skills from requirements
-  professionalRequirements.forEach(req => {
-    const hasMatchingSkill = optimizedProfessional.some(skill => 
-      skill.toLowerCase().includes(req.toLowerCase()) || 
-      req.toLowerCase().includes(skill.toLowerCase())
-    );
-    
-    if (!hasMatchingSkill) {
-      optimizedProfessional.push(req);
-    }
-  });
-  
-  // Sort skills by relevance to job description
-  optimizedTechnical.sort((a, b) => {
-    const aRelevance = jobKeywords.filter(keyword => 
-      a.toLowerCase().includes(keyword.toLowerCase())
-    ).length;
-    
-    const bRelevance = jobKeywords.filter(keyword => 
-      b.toLowerCase().includes(keyword.toLowerCase())
-    ).length;
-    
-    return bRelevance - aRelevance;
-  });
-  
-  optimizedProfessional.sort((a, b) => {
-    const aRelevance = jobKeywords.filter(keyword => 
-      a.toLowerCase().includes(keyword.toLowerCase())
-    ).length;
-    
-    const bRelevance = jobKeywords.filter(keyword => 
-      b.toLowerCase().includes(keyword.toLowerCase())
-    ).length;
-    
-    return bRelevance - aRelevance;
-  });
-  
-  // Limit the number of skills to a reasonable amount
-  const maxSkills = 15;
-  optimizedTechnical = optimizedTechnical.slice(0, maxSkills);
-  optimizedProfessional = optimizedProfessional.slice(0, maxSkills);
-  
-  return {
-    technical: optimizedTechnical,
-    professional: optimizedProfessional
-  };
 };
 
 // Function to optimize education based on job description
@@ -1995,75 +1829,38 @@ const optimizeEducation = (
   });
   
   // Optimize each education entry
-  return education.map(edu => {
-    // Create a copy of the education entry to modify
-    const optimizedEdu: EducationEntry = { ...edu };
-    
-    // Check if we need to highlight relevant courses based on job keywords
-    if (edu.relevantCourses && Array.isArray(edu.relevantCourses)) {
-      // Score each course based on relevance to job description
-      const scoredCourses = edu.relevantCourses.map(course => {
-        let score = 0;
-        
-        // Check for keyword matches
-        jobKeywords.forEach(keyword => {
-          if (course.toLowerCase().includes(keyword.toLowerCase())) {
-            score += 2;
-          }
-        });
-        
-        // Check for matches with education requirements
-        educationRequirements.forEach(req => {
-          if (course.toLowerCase().includes(req.toLowerCase())) {
-            score += 3;
-          }
-        });
-        
-        return { course, score };
-      });
+  return education
+    .map(edu => {
+      // Create a copy of the education entry to modify
+      const optimizedEdu: EducationEntry = { ...edu };
       
-      // Sort by score (highest first)
-      scoredCourses.sort((a, b) => b.score - a.score);
+      // Score relevant courses based on job keywords
+      if (optimizedEdu.relevantCourses) {
+        optimizedEdu.relevantCourses = optimizedEdu.relevantCourses
+          .filter(course => {
+            const courseText = course.toLowerCase();
+            return jobKeywords.some(keyword => 
+              courseText.includes(keyword.toLowerCase())
+            );
+          })
+          .slice(0, 5); // Keep top 5 most relevant courses
+      }
       
-      // Take top courses (max 5)
-      optimizedEdu.relevantCourses = scoredCourses.slice(0, 5).map(item => item.course);
-    }
-    
-    // Check if we need to highlight achievements based on job keywords
-    if (edu.achievements && Array.isArray(edu.achievements)) {
-      // Score each achievement based on relevance to job description
-      const scoredAchievements = edu.achievements.map(achievement => {
-        let score = 0;
-        
-        // Check for keyword matches
-        jobKeywords.forEach(keyword => {
-          if (achievement.toLowerCase().includes(keyword.toLowerCase())) {
-            score += 2;
-          }
-        });
-        
-        // Check for quantifiable results
-        if (/\d+%|\d+ percent|increased|decreased|reduced|improved|saved|generated/i.test(achievement)) {
-          score += 3;
-        }
-        
-        // Check for leadership indicators
-        if (/led|managed|supervised|directed|coordinated|spearheaded|initiated/i.test(achievement)) {
-          score += 2;
-        }
-        
-        return { achievement, score };
-      });
+      // Score achievements based on job keywords
+      if (optimizedEdu.achievements) {
+        optimizedEdu.achievements = optimizedEdu.achievements
+          .filter(achievement => {
+            const achievementText = achievement.toLowerCase();
+            return jobKeywords.some(keyword => 
+              achievementText.includes(keyword.toLowerCase())
+            );
+          })
+          .slice(0, 3); // Keep top 3 most relevant achievements
+      }
       
-      // Sort by score (highest first)
-      scoredAchievements.sort((a, b) => b.score - a.score);
-      
-      // Take top achievements (max 3)
-      optimizedEdu.achievements = scoredAchievements.slice(0, 3).map(item => item.achievement);
-    }
-    
-    return optimizedEdu;
-  }).filter(edu => edu.degree.length > 0 || edu.institution.length > 0);
+      return optimizedEdu;
+    })
+    .filter(edu => edu.degree && edu.degree.length > 0);
 };
 
 const extractKeywordsFromJobDescription = (jobDescription: string): string[] => {
@@ -2099,7 +1896,10 @@ const extractKeywordsFromJobDescription = (jobDescription: string): string[] => 
   }
 };
 
-const generateOptimizedDocument = (cvText: string, jobDescription: string): string => {
+const generateOptimizedDocument = (
+  cvText: string,
+  jobDescription: string
+): string => {
   try {
     // Extract sections
     const profile = extractProfile(cvText) || [];
@@ -2121,9 +1921,16 @@ const generateOptimizedDocument = (cvText: string, jobDescription: string): stri
     const jobKeywords = extractKeywordsFromJobDescription(jobDescription);
 
     // Optimize sections
-    const optimizedSkills = optimizeSkills({ technical: technicalSkills, professional: professionalSkills }, jobDescription);
+    const optimizedSkills = optimizeSkills({ 
+      technical: technicalSkills, 
+      professional: professionalSkills 
+    }, jobDescription, jobKeywords);
     const optimizedEducation = optimizeEducation(education, jobDescription, jobKeywords, true);
-    const optimizedLanguages = optimizeLanguages(languages, jobDescription);
+    const optimizedLanguages = optimizeLanguages(
+      [], // We'll implement language extraction later
+      jobDescription,
+      jobKeywords
+    );
     const optimizedAchievements = optimizeAchievements(achievements, jobDescription);
     const optimizedGoals = optimizeGoals(goals, jobDescription);
 
@@ -2254,95 +2061,90 @@ const formatEducationEntry = (edu: EducationEntry): string => {
   return entry;
 };
 
-export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: EnhancedSpecificOptimizationWorkflowProps): JSX.Element {
-          optimizedText += `Academic Achievements:\n`;
-          edu.achievements.forEach((achievement: string) => {
-            optimizedText += `• ${achievement}\n`;
-          });
-        }
-        
-        optimizedText += '\n';
-      });
-    }
-    
-    // 9. EXPERIENCE: Add experience section at the end if available in original text
-    if (experienceEntries.length > 0) {
-      optimizedText += `EXPERIENCE:\n`;
-      experienceEntries.forEach(exp => {
-        if (exp.title) optimizedText += `${exp.title}\n`;
-        if (exp.startDate || exp.endDate) {
-          const dateRange = `${exp.startDate || ''} - ${exp.endDate || 'Present'}`;
-          optimizedText += `${dateRange}\n`;
-        }
-        optimizedText += '\n';
-      });
-    }
-    
-    return optimizedText;
-  };
+const optimizeSkills = (
+  skills: { technical: string[]; professional: string[] },
+  jobDescription: string,
+  jobKeywords: string[]
+): { technical: string[]; professional: string[] } => {
+  // Start with empty arrays if no skills provided
+  const technical = skills.technical || [];
+  const professional = skills.professional || [];
 
-  // Add download document handler
-  const handleDownloadDocument = async () => {
-    if (!optimizedText) {
-      setDocumentError("No optimized text available. Please optimize your CV first.");
-      return;
-    }
-    
-    setIsGeneratingDocument(true);
-    setDocumentError(null);
-    
-    try {
-      console.log("Starting document generation...");
-      
-      // Get CV name without file extension
-      const cvName = selectedCVName 
-        ? selectedCVName.replace(/\.\w+$/, '') 
-        : 'CV';
-      
-      // Check if CV ID is available
-      if (!selectedCVId) {
-        throw new Error('No CV selected for document generation');
-      }
-      
-      console.log(`Generating document for CV ID: ${selectedCVId}`);
-      
-      // Try multiple approaches to generate and download the document
-      let downloadSuccess = false;
-      let lastError = null;
-      
-      // Approach 1: Local document generation
-      if (!downloadSuccess) {
-        try {
-          console.log("Attempting local document generation...");
-          
-          // Generate structured CV data from optimized text
-          const structuredCV = generateStructuredCV(optimizedText, jobDescription);
-          
-          // Further enhance the structured data for better document formatting
-          const enhancedStructuredCV = {
-            ...structuredCV,
-            education: structuredCV.education.map(edu => {
-              // Parse relevant courses if they're in string format
-              let relevantCourses: string[] = [];
-              if (edu.relevantCourses) {
-                if (typeof edu.relevantCourses === 'string') {
-                  relevantCourses = (edu.relevantCourses as string).split(',').map((course: string) => course.trim());
-                } else if (Array.isArray(edu.relevantCourses)) {
-                  relevantCourses = edu.relevantCourses;
-                }
-              }
-              
-              // Parse achievements if they're in string format
-              let achievements: string[] = [];
-              if (edu.achievements) {
-                if (typeof edu.achievements === 'string') {
-                  achievements = (edu.achievements as string).split(/[•\-*]\s*/).filter(Boolean).map((achievement: string) => achievement.trim());
-                } else if (Array.isArray(edu.achievements)) {
-                  achievements = edu.achievements;
-                }
-              }
-              
-              return {
+  // Filter and sort technical skills
+  const optimizedTechnical = technical
+    .filter(skill => 
+      jobKeywords.some(keyword => 
+        skill.toLowerCase().includes(keyword.toLowerCase())
+      )
+    )
+    .slice(0, 15); // Keep top 15 skills
+
+  // Filter and sort professional skills
+  const optimizedProfessional = professional
+    .filter(skill => 
+      jobKeywords.some(keyword => 
+        skill.toLowerCase().includes(keyword.toLowerCase())
+      )
+    )
+    .slice(0, 15); // Keep top 15 skills
+
+  return {
+    technical: optimizedTechnical,
+    professional: optimizedProfessional
+  };
+};
+
+const optimizeLanguages = (
+  languages: string[],
+  jobDescription: string,
+  jobKeywords: string[]
+): string[] => {
+  if (!languages || languages.length === 0) return [];
+
+  // Filter and sort languages
+  return languages
+    .filter(language => 
+      jobKeywords.some(keyword => 
+        language.toLowerCase().includes(keyword.toLowerCase())
+      )
+    )
+    .slice(0, 5); // Keep top 5 languages
+};
+
+const optimizeAchievements = (
+  achievements: string[],
+  jobDescription: string,
+  jobKeywords: string[]
+): string[] => {
+  if (!achievements || achievements.length === 0) return [];
+
+  // Filter and sort achievements
+  return achievements
+    .filter(achievement => 
+      jobKeywords.some(keyword => 
+        achievement.toLowerCase().includes(keyword.toLowerCase())
+      )
+    )
+    .slice(0, 5); // Keep top 5 achievements
+};
+
+const optimizeGoals = (
+  goals: string[],
+  jobDescription: string,
+  jobKeywords: string[]
+): string[] => {
+  if (!goals || goals.length === 0) return [];
+
+  // Filter and sort goals
+  return goals
+    .filter(goal => 
+      jobKeywords.some(keyword => 
+        goal.toLowerCase().includes(keyword.toLowerCase())
+      )
+    )
+    .slice(0, 3); // Keep top 3 goals
+};
+
                 ...edu,
                 relevantCourses,
                 achievements
@@ -2657,6 +2459,16 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       setDocumentError(`Failed to generate document: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIsGeneratingDocument(false);
     }
+  };
+
+  // Helper function to get CV text
+  const getCVText = async (cvId: string): Promise<string> => {
+    const response = await fetch(`/api/cv/text?cvId=${cvId}`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch CV text');
+    }
+    const data = await response.json();
+    return data.text;
   };
 
   return (
