@@ -29,7 +29,30 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const { cvId, optimizedText } = body || {};
+    const { cvId, optimizedText, docxBase64, filename } = body || {};
+
+    // Handle the case where client is sending a pre-generated DOCX
+    if (docxBase64) {
+      logger.info('Client provided pre-generated DOCX, creating download URL');
+      
+      try {
+        // Create a download URL for the pre-generated DOCX
+        // In a real implementation, you might want to store this temporarily
+        // and provide a token-based URL for security
+        
+        return NextResponse.json({
+          success: true,
+          downloadUrl: `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${docxBase64}`
+        });
+      } catch (error) {
+        logger.error('Error creating download URL:', error instanceof Error ? error.message : String(error));
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Failed to create download URL',
+          details: error instanceof Error ? error.message : 'Unknown error'
+        }, { status: 500 });
+      }
+    }
 
     if (!cvId) {
       logger.error('Missing cvId parameter in specific-generate-docx request');

@@ -3220,38 +3220,48 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   // Add a function to validate document content
   const validateDocument = (doc: any): { isValid: boolean; error?: string } => {
     try {
-      // Basic validation - check if document exists
-      if (!doc) return { isValid: false, error: "Document is empty or undefined" };
+      // Check if document exists
+      if (!doc) {
+        return { isValid: false, error: "Document is null or undefined" };
+      }
       
       // Check if document has sections
       if (!doc.sections || !Array.isArray(doc.sections) || doc.sections.length === 0) {
         return { isValid: false, error: "Document has no sections" };
       }
       
-      // Check if document has children in the first section
+      // Check if first section has children
       const firstSection = doc.sections[0];
       if (!firstSection.children || !Array.isArray(firstSection.children) || firstSection.children.length === 0) {
-        return { isValid: false, error: "Document's first section has no content" };
+        return { isValid: false, error: "Document's first section has no children" };
+      }
+      
+      // Check if there are paragraphs in the children
+      const hasParagraphs = firstSection.children.some((child: any) => 
+        child && typeof child === 'object' && child.constructor && child.constructor.name === 'Paragraph'
+      );
+      
+      if (!hasParagraphs) {
+        return { isValid: false, error: "Document doesn't contain any paragraphs" };
       }
       
       // Check if document has at least some minimum content
-      let totalParagraphs = 0;
-      doc.sections.forEach((section: any) => {
-        if (section.children && Array.isArray(section.children)) {
-          totalParagraphs += section.children.length;
-        }
-      });
+      const totalChildren = doc.sections.reduce(
+        (count: number, section: any) => count + (section.children ? section.children.length : 0), 
+        0
+      );
       
-      if (totalParagraphs < 5) {
-        return { isValid: false, error: "Document has insufficient content (less than 5 paragraphs)" };
+      if (totalChildren < 5) {
+        return { isValid: false, error: "Document has insufficient content (less than 5 elements)" };
       }
       
+      // Document passed all validation checks
       return { isValid: true };
     } catch (error) {
-      console.error("Document validation error:", error);
+      console.error("Error validating document:", error);
       return { 
         isValid: false, 
-        error: error instanceof Error ? `Validation error: ${error.message}` : "Unknown validation error" 
+        error: `Document validation error: ${error instanceof Error ? error.message : 'Unknown error'}`
       };
     }
   };
@@ -3377,83 +3387,147 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       // Step 4: Generate document (50%)
       updateProgress("Generating document", 50);
       
-      // Create a function to generate document with timeout
-      const generateDocumentWithTimeout = async (): Promise<Document> => {
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error("Document generation timed out after 30 seconds")), 30000); // 30 second timeout (increased from 20)
-        });
-        
-        try {
-          const docPromise = generateOptimizedDocument(
-            optimizedText, 
-            cvName, 
-            enhancedStructuredCV.contactInfo, 
-            enhancedStructuredCV
-          );
-          
-          return await Promise.race([docPromise, timeoutPromise]);
-        } catch (error) {
-          console.error("Error in document generation:", error);
-          throw error;
-        }
-      };
+      // Try direct document generation first
+      let doc: Document | null = null;
+      let blob: Blob | null = null;
+      let directGenerationSucceeded = false;
       
-      let doc: Document;
       try {
+        // Create a function to generate document with timeout
+        const generateDocumentWithTimeout = async (): Promise<Document> => {
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error("Document generation timed out after 30 seconds")), 30000); // 30 second timeout
+          });
+          
+          try {
+            const docPromise = generateOptimizedDocument(
+              optimizedText, 
+              cvName, 
+              enhancedStructuredCV.contactInfo, 
+              enhancedStructuredCV
+            );
+            
+            return await Promise.race([docPromise, timeoutPromise]);
+          } catch (error) {
+            console.error("Error in document generation:", error);
+            throw error;
+          }
+        };
+        
+        // Try to generate the document directly
         doc = await generateDocumentWithTimeout();
-      } catch (docGenError) {
-        console.error("Document generation error:", docGenError);
         
-        // If we haven't exceeded max retries, try again with exponential backoff
-        if (retryCount < maxRetries) {
-          const backoffTime = Math.pow(2, retryCount) * 1000; // Exponential backoff: 1s, 2s, 4s, etc.
-          const errorMessage = docGenError instanceof Error ? docGenError.message : 'Unknown error';
-          
-          updateProgress(`Generation attempt ${retryCount + 1} failed (${errorMessage}), retrying in ${backoffTime/1000}s...`, 
-            50 + (retryCount * 5)); // Increment progress slightly with each retry
-          
-          await new Promise(resolve => setTimeout(resolve, backoffTime)); // Wait before retry
-          return generateDocument(retryCount + 1, maxRetries);
+        // Validate the generated document
+        updateProgress("Validating document", 70);
+        const validationResult = validateDocument(doc);
+        if (!validationResult.isValid) {
+          throw new Error(validationResult.error || "Generated document is invalid or incomplete");
         }
         
-        throw docGenError;
-      }
-
-      // Step 5: Validate document (70%)
-      updateProgress("Validating document", 70);
-      
-      // Validate the generated document
-      const validationResult = validateDocument(doc);
-      if (!validationResult.isValid) {
-        throw new Error(validationResult.error || "Generated document is invalid or incomplete");
-      }
-
-      // Step 6: Convert to blob (80%)
-      updateProgress("Preparing document for download", 80);
-      
-      let blob: Blob;
-      try {
+        // Convert to blob
+        updateProgress("Preparing document for download", 80);
         blob = await Packer.toBlob(doc);
-      } catch (packError) {
-        console.error("Error packing document to blob:", packError);
-        throw new Error(`Failed to prepare document for download: ${packError instanceof Error ? packError.message : 'Unknown error'}`);
+        directGenerationSucceeded = true;
+        
+        // Cache the document
+        updateProgress("Caching document", 85);
+        setCachedDocument({
+          doc,
+          blob,
+          text: optimizedText,
+          timestamp: Date.now()
+        });
+      } catch (directGenError) {
+        console.error("Direct document generation failed:", directGenError);
+        updateProgress("Direct generation failed, trying server fallback", 60);
+        directGenerationSucceeded = false;
       }
       
-      // Step 7: Cache the document (85%)
-      updateProgress("Caching document", 85);
-      setCachedDocument({
-        doc,
-        blob,
-        text: optimizedText,
-        timestamp: Date.now()
-      });
+      // If direct generation failed, try server-side generation
+      if (!directGenerationSucceeded) {
+        try {
+          updateProgress("Requesting server-side document generation", 65);
+          
+          // Send optimized text to server for document generation
+          const response = await fetch('/api/cv/specific-generate-docx', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              cvId: selectedCVId,
+              optimizedText: optimizedText,
+              filename: `${cvName}_optimized.docx`
+            }),
+          });
+          
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Server responded with status: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          
+          if (!data.success || !data.docxBase64) {
+            throw new Error(data.error || "Server did not return document data");
+          }
+          
+          // Convert base64 to blob
+          updateProgress("Processing server response", 75);
+          const base64Response = data.docxBase64;
+          const binaryString = window.atob(base64Response);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          
+          blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+          
+          // Cache the blob (doc will be null)
+          updateProgress("Caching server-generated document", 85);
+          setCachedDocument({
+            doc: null, // We don't have the Document object from server generation
+            blob,
+            text: optimizedText,
+            timestamp: Date.now()
+          });
+        } catch (serverGenError) {
+          console.error("Server-side document generation failed:", serverGenError);
+          
+          // If we haven't exceeded max retries, try again with exponential backoff
+          if (retryCount < maxRetries) {
+            const backoffTime = Math.pow(2, retryCount) * 1000; // Exponential backoff: 1s, 2s, 4s, etc.
+            const errorMessage = serverGenError instanceof Error ? serverGenError.message : 'Unknown error';
+            
+            updateProgress(`Generation attempt ${retryCount + 1} failed (${errorMessage}), retrying in ${backoffTime/1000}s...`, 
+              50 + (retryCount * 5)); // Increment progress slightly with each retry
+            
+            await new Promise(resolve => setTimeout(resolve, backoffTime)); // Wait before retry
+            return generateDocument(retryCount + 1, maxRetries);
+          }
+          
+          throw serverGenError;
+        }
+      }
+      
+      // At this point, we should have a blob either from direct generation or server generation
+      if (!blob) {
+        throw new Error("Failed to generate document: No blob available after generation attempts");
+      }
 
       // Step 8: Download (90%)
       updateProgress("Downloading document", 90);
       
       const downloadSuccess = await handleDocumentDownload(blob);
       if (!downloadSuccess) {
-        throw new Error("Failed to download document after multiple attempts");
+        // If automatic download fails, store the blob for manual download
+        setCachedDocument(prev => ({
+          ...prev,
+          blob,
+          timestamp: Date.now()
+        }));
+        
+        throw new Error("Automatic download failed. Please use the manual download button.");
       }
 
       // Step 9: Complete (100%)
@@ -3478,6 +3552,8 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           errorMessage = "Out of memory while generating document. Try with a smaller CV or fewer sections.";
         } else if (error.message.includes("network") || error.message.includes("fetch")) {
           errorMessage = "Network error while generating document. Please check your connection and try again.";
+        } else if (error.message.includes("Automatic download failed")) {
+          errorMessage = "Automatic download failed. Please use the manual download button below.";
         } else {
           errorMessage = `Error: ${error.message}`;
         }
