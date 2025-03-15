@@ -1,6 +1,7 @@
 import { logger } from '@/lib/utils/logger';
 import OpenAI from 'openai';
 import Mistral from '@mistralai/mistralai';
+import { retryWithExponentialBackoff } from '@/lib/utils/apiRateLimiter';
 
 /**
  * Simple cache to store embeddings and avoid redundant API calls
@@ -391,42 +392,60 @@ export class MistralRAGService {
    * @returns Embedding vector
    */
   private async createEmbedding(text: string): Promise<number[]> {
+    // Check cache first
+    const cacheKey = this.generateCacheKey(text);
+    if (this.embeddingCache[cacheKey] && 
+        Date.now() - this.embeddingCache[cacheKey].timestamp < this.cacheTTL) {
+      return this.embeddingCache[cacheKey].embedding;
+    }
+    
     try {
-      // Check cache first
-      const cacheKey = `${this.embeddingModel}:${text.substring(0, 100)}`;
-      const now = Date.now();
-      
-      // Return cached embedding if available and not expired
-      if (this.embeddingCache[cacheKey] && 
-          now - this.embeddingCache[cacheKey].timestamp < this.cacheTTL) {
-        return this.embeddingCache[cacheKey].embedding;
+      if (this.useMistral && this.mistralClient) {
+        // Use Mistral embeddings with rate limiting and retries
+        const response = await retryWithExponentialBackoff(
+          async () => {
+            return await this.mistralClient!.embeddings({
+              model: this.mistralEmbeddingModel,
+              input: text
+            });
+          },
+          { service: 'mistral', maxRetries: 3 }
+        );
+        
+        const embedding = response.data[0].embedding;
+        
+        // Cache the embedding
+        this.embeddingCache[cacheKey] = {
+          embedding,
+          timestamp: Date.now()
+        };
+        
+        return embedding;
+      } else {
+        // Use OpenAI embeddings with rate limiting and retries
+        const response = await retryWithExponentialBackoff(
+          async () => {
+            return await this.openaiClient.embeddings.create({
+              model: this.embeddingModel,
+              input: text
+            });
+          },
+          { service: 'openai', maxRetries: 3 }
+        );
+        
+        const embedding = response.data[0].embedding;
+        
+        // Cache the embedding
+        this.embeddingCache[cacheKey] = {
+          embedding,
+          timestamp: Date.now()
+        };
+        
+        return embedding;
       }
-      
-      // Create embedding using OpenAI API
-      const response = await this.openaiClient.embeddings.create({
-        model: this.embeddingModel,
-        input: text
-      });
-      
-      // Ensure we have a valid embedding
-      if (!response.data || !response.data[0] || !response.data[0].embedding) {
-        throw new Error('Failed to generate embedding: Invalid response format');
-      }
-      
-      const embedding = response.data[0].embedding;
-      
-      // Cache the embedding
-      this.embeddingCache[cacheKey] = {
-        embedding,
-        timestamp: now
-      };
-      
-      return embedding;
     } catch (error) {
-      // Fix error type handling for logger
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error creating embedding: ${errorMessage}`);
-      throw error;
+      logger.error('Error creating embedding:', error instanceof Error ? error.message : String(error));
+      throw new Error(`Failed to create embedding: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -472,46 +491,79 @@ export class MistralRAGService {
    */
   public async generateResponse(query: string, useSystemPrompt?: boolean | string): Promise<string> {
     try {
-      // Get relevant chunks for the query
-      const chunks = await this.retrieveRelevantChunks(query);
-      
-      // If no chunks are found, fall back to direct response
-      if (chunks.length === 0) {
-        logger.warn('No relevant chunks found for query, falling back to direct response');
-        return this.generateDirectResponse(query, typeof useSystemPrompt === 'string' ? useSystemPrompt : undefined);
+      // If useSystemPrompt is a string, use it directly
+      if (typeof useSystemPrompt === 'string') {
+        return await this.generateDirectResponse(query, useSystemPrompt);
       }
+      
+      // If no RAG is requested, generate a direct response
+      if (useSystemPrompt === false || this.chunks.length === 0) {
+        return await this.generateDirectResponse(query);
+      }
+      
+      // Retrieve relevant chunks
+      const relevantChunks = await this.retrieveRelevantChunks(query);
       
       // Combine chunks into context
-      const context = chunks.join('\n\n');
+      const context = relevantChunks.join('\n\n');
       
-      // Determine the system prompt
-      let systemPromptText = 'You are a helpful assistant that answers questions based on the provided CV information.';
-      if (typeof useSystemPrompt === 'string') {
-        systemPromptText = useSystemPrompt;
-      }
-      
-      // Generate response with context using OpenAI
-      const response = await this.openaiClient.chat.completions.create({
-        model: this.openaiGenerationModel,
-        messages: [
-          {
-            role: 'system',
-            content: systemPromptText
+      // Generate response with context
+      if (this.useMistral && this.mistralClient) {
+        // Use Mistral for generation with rate limiting and retries
+        const response = await retryWithExponentialBackoff(
+          async () => {
+            return await this.mistralClient!.chat({
+              model: this.mistralGenerationModel,
+              messages: [
+                {
+                  role: 'system',
+                  content: `You are an AI assistant analyzing a CV. Use the following CV context to answer the question. 
+                  If the information is not in the context, say so honestly.
+                  
+                  CV Context:
+                  ${context}`
+                },
+                {
+                  role: 'user',
+                  content: query
+                }
+              ]
+            });
           },
-          {
-            role: 'user',
-            content: `Use the following CV information to respond to the query:\n\n${context}\n\nQuery: ${query}`
-          }
-        ]
-      });
-      
-      const generatedResponse = response.choices[0]?.message?.content || 'No response generated';
-      // Remove any '*Developed *' or '*Implemented *' prefixes from the response
-      const cleanedResponse = generatedResponse.replace(/^\*(?:Developed|Implemented)\s*\*?/, '').trim();
-      return cleanedResponse;
+          { service: 'mistral', maxRetries: 3 }
+        );
+        
+        return response.choices[0].message.content || '';
+      } else {
+        // Use OpenAI for generation with rate limiting and retries
+        const response = await retryWithExponentialBackoff(
+          async () => {
+            return await this.openaiClient.chat.completions.create({
+              model: this.openaiGenerationModel,
+              messages: [
+                {
+                  role: 'system',
+                  content: `You are an AI assistant analyzing a CV. Use the following CV context to answer the question. 
+                  If the information is not in the context, say so honestly.
+                  
+                  CV Context:
+                  ${context}`
+                },
+                {
+                  role: 'user',
+                  content: query
+                }
+              ]
+            });
+          },
+          { service: 'openai', maxRetries: 3 }
+        );
+        
+        return response.choices[0].message.content || '';
+      }
     } catch (error) {
-      logger.error(`Error generating response: ${error instanceof Error ? error.message : String(error)}`);
-      return 'Error generating response. Please try again.';
+      logger.error('Error generating response:', error instanceof Error ? error.message : String(error));
+      throw new Error(`Failed to generate response: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -523,32 +575,56 @@ export class MistralRAGService {
    */
   private async generateDirectResponse(query: string, systemPrompt?: string): Promise<string> {
     try {
+      const defaultSystemPrompt = `You are an AI assistant analyzing a CV. Answer the question based on your knowledge about CVs and job applications.`;
+      
       if (this.useMistral && this.mistralClient) {
-        const response = await this.mistralClient.chat({
-          model: this.mistralGenerationModel,
-          messages: [
-            ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
-            { role: 'user' as const, content: query }
-          ],
-          temperature: 0.7,
-          maxTokens: 2000
-        });
+        // Use Mistral for direct response with rate limiting and retries
+        const response = await retryWithExponentialBackoff(
+          async () => {
+            return await this.mistralClient!.chat({
+              model: this.mistralGenerationModel,
+              messages: [
+                {
+                  role: 'system',
+                  content: systemPrompt || defaultSystemPrompt
+                },
+                {
+                  role: 'user',
+                  content: query
+                }
+              ]
+            });
+          },
+          { service: 'mistral', maxRetries: 3 }
+        );
+        
         return response.choices[0].message.content || '';
       } else {
-        const response = await this.openaiClient.chat.completions.create({
-          model: this.openaiGenerationModel,
-          messages: [
-            ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
-            { role: 'user' as const, content: query }
-          ],
-          temperature: 0.7,
-          max_tokens: 2000
-        });
+        // Use OpenAI for direct response with rate limiting and retries
+        const response = await retryWithExponentialBackoff(
+          async () => {
+            return await this.openaiClient.chat.completions.create({
+              model: this.openaiGenerationModel,
+              messages: [
+                {
+                  role: 'system',
+                  content: systemPrompt || defaultSystemPrompt
+                },
+                {
+                  role: 'user',
+                  content: query
+                }
+              ]
+            });
+          },
+          { service: 'openai', maxRetries: 3 }
+        );
+        
         return response.choices[0].message.content || '';
       }
     } catch (error) {
-      logger.error(`Error generating direct response: ${error instanceof Error ? error.message : String(error)}`);
-      throw error;
+      logger.error('Error generating direct response:', error instanceof Error ? error.message : String(error));
+      throw new Error(`Failed to generate direct response: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -599,121 +675,123 @@ export class MistralRAGService {
    */
   public async analyzeCVFormat(): Promise<{ strengths: string[], weaknesses: string[], recommendations: string[] }> {
     try {
-      logger.info('Analyzing CV format with RAG service');
-      
-      // Initialize with default values to ensure we always have something to return
-      const defaultResult = {
-        strengths: ['Clear section organization', 'Consistent formatting', 'Professional layout'],
-        weaknesses: ['Could improve visual hierarchy', 'Consider adding more white space', 'Ensure consistent alignment'],
-        recommendations: ['Use bullet points for achievements', 'Add more white space between sections', 'Ensure consistent date formatting']
-      };
-      
-      // If no chunks are available, return default values
-      if (!this.chunks || this.chunks.length === 0) {
-        logger.warn('No chunks available for CV format analysis, returning default values');
-        return defaultResult;
+      if (!this.originalCVText) {
+        throw new Error('No CV text has been processed');
       }
       
-      // Get relevant chunks for format analysis
-      const query = 'CV format, layout, structure, organization, visual presentation';
-      const relevantChunks = await this.retrieveRelevantChunks(query, 3);
+      // Generate the prompt for CV format analysis
+      const prompt = `Analyze the format and structure of the following CV. Identify strengths, weaknesses, and provide recommendations for improvement.
       
-      if (relevantChunks.length === 0) {
-        logger.warn('No relevant chunks found for CV format analysis, returning default values');
-        return defaultResult;
+      CV:
+      ${this.originalCVText}
+      
+      Return your analysis as a JSON object with the following structure:
+      {
+        "strengths": ["strength1", "strength2", ...],
+        "weaknesses": ["weakness1", "weakness2", ...],
+        "recommendations": ["recommendation1", "recommendation2", ...]
       }
       
-      // Prepare the prompt for format analysis
-      const prompt = `
-        Analyze the format and layout of this CV/resume. Focus on the visual structure, organization, and presentation.
-        
-        CV content:
-        ${relevantChunks.join('\n\n')}
-        
-        Provide a detailed analysis with:
-        1. Three specific format strengths
-        2. Three specific format weaknesses
-        3. Three specific recommendations for improving the format
-        
-        Return your analysis as a JSON object with these keys:
-        - strengths: array of 3 format strengths
-        - weaknesses: array of 3 format weaknesses
-        - recommendations: array of 3 format recommendations
-        
-        Do not include markdown formatting or code blocks in your response. Return only the raw JSON object.
-      `;
+      Return ONLY the JSON object without any additional text or explanation.`;
       
-      // Generate the analysis
-      const response = await this.generateResponse(prompt, true);
+      let response;
       
-      // Parse the response
-      let result;
+      if (this.useMistral && this.mistralClient) {
+        // Use Mistral for CV format analysis with rate limiting and retries
+        response = await retryWithExponentialBackoff(
+          async () => {
+            return await this.mistralClient!.chat({
+              model: this.mistralGenerationModel,
+              messages: [
+                {
+                  role: 'system',
+                  content: 'You are a CV format analysis expert. Analyze the CV format and structure, then return a JSON object with strengths, weaknesses, and recommendations.'
+                },
+                {
+                  role: 'user',
+                  content: prompt
+                }
+              ]
+            });
+          },
+          { service: 'mistral', maxRetries: 3 }
+        );
+      } else {
+        // Use OpenAI for CV format analysis with rate limiting and retries
+        response = await retryWithExponentialBackoff(
+          async () => {
+            return await this.openaiClient.chat.completions.create({
+              model: this.openaiGenerationModel,
+              messages: [
+                {
+                  role: 'system',
+                  content: 'You are a CV format analysis expert. Analyze the CV format and structure, then return a JSON object with strengths, weaknesses, and recommendations.'
+                },
+                {
+                  role: 'user',
+                  content: prompt
+                }
+              ]
+            });
+          },
+          { service: 'openai', maxRetries: 3 }
+        );
+      }
+      
+      const content = this.useMistral && this.mistralClient 
+        ? response.choices[0].message.content || ''
+        : response.choices[0].message.content || '';
+      
+      // Try to parse the response as JSON
       try {
-        // Try to extract JSON from markdown code blocks if present
-        const cleanedResponse = this.extractJsonFromMarkdown(response);
+        // First try to extract JSON from markdown if needed
+        const jsonContent = this.extractJsonFromMarkdown(content);
+        const result = JSON.parse(jsonContent);
         
-        // Try to parse as JSON
-        result = JSON.parse(cleanedResponse);
-        
-        // Validate the result structure
+        // Validate the structure
         if (!result.strengths || !result.weaknesses || !result.recommendations) {
-          throw new Error('Invalid response format');
+          throw new Error('Invalid response structure');
         }
         
-        // Ensure arrays have at least 3 items
-        if (result.strengths.length < 3 || result.weaknesses.length < 3 || result.recommendations.length < 3) {
-          logger.warn('Format analysis results have fewer than 3 items in some categories, adding default values');
-          
-          // Merge with default values, prioritizing the new results
-          result.strengths = [...result.strengths, ...defaultResult.strengths].slice(0, 3);
-          result.weaknesses = [...result.weaknesses, ...defaultResult.weaknesses].slice(0, 3);
-          result.recommendations = [...result.recommendations, ...defaultResult.recommendations].slice(0, 3);
-        }
-        
-        // Remove duplicates
-        result.strengths = [...new Set(result.strengths)];
-        result.weaknesses = [...new Set(result.weaknesses)];
-        result.recommendations = [...new Set(result.recommendations)];
+        logger.info('Format analysis complete:', {
+          strengths: result.strengths.length,
+          weaknesses: result.weaknesses.length,
+          recommendations: result.recommendations.length
+        });
         
         return result;
       } catch (parseError) {
-        logger.error(`Error parsing CV format analysis response: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+        logger.error('Error parsing CV format analysis:', parseError instanceof Error ? parseError.message : String(parseError));
         
-        // Try to extract information using regex if JSON parsing fails
-        const strengthsMatch = response.match(/strengths:?\s*\[(.*?)\]/s);
-        const weaknessesMatch = response.match(/weaknesses:?\s*\[(.*?)\]/s);
-        const recommendationsMatch = response.match(/recommendations:?\s*\[(.*?)\]/s);
+        // Try to extract information using regex
+        const strengths = this.extractStrengthsWithRegex(content);
+        const weaknesses = this.extractWeaknessesWithRegex(content);
+        const recommendations = this.extractRecommendationsWithRegex(content);
         
-        const extractedResult = {
-          strengths: strengthsMatch ? this.parseArrayItems(strengthsMatch[1]) : [],
-          weaknesses: weaknessesMatch ? this.parseArrayItems(weaknessesMatch[1]) : [],
-          recommendations: recommendationsMatch ? this.parseArrayItems(recommendationsMatch[1]) : []
+        if (strengths.length > 0 || weaknesses.length > 0 || recommendations.length > 0) {
+          logger.info('Used regex extraction for CV format analysis');
+          return {
+            strengths,
+            weaknesses,
+            recommendations
+          };
+        }
+        
+        // Return default values if regex extraction fails
+        return {
+          strengths: ['Clear structure', 'Includes essential sections', 'Appropriate length'],
+          weaknesses: ['Could improve formatting', 'Some sections could be more detailed', 'Consider adding more keywords'],
+          recommendations: ['Enhance visual hierarchy', 'Add more specific achievements', 'Quantify accomplishments where possible']
         };
-        
-        // Merge with default values if extraction failed or is incomplete
-        if (extractedResult.strengths.length === 0) extractedResult.strengths = defaultResult.strengths;
-        if (extractedResult.weaknesses.length === 0) extractedResult.weaknesses = defaultResult.weaknesses;
-        if (extractedResult.recommendations.length === 0) extractedResult.recommendations = defaultResult.recommendations;
-        
-        // Ensure arrays have at least 3 items
-        if (extractedResult.strengths.length < 3) {
-          extractedResult.strengths = [...extractedResult.strengths, ...defaultResult.strengths].slice(0, 3);
-        }
-        if (extractedResult.weaknesses.length < 3) {
-          extractedResult.weaknesses = [...extractedResult.weaknesses, ...defaultResult.weaknesses].slice(0, 3);
-        }
-        if (extractedResult.recommendations.length < 3) {
-          extractedResult.recommendations = [...extractedResult.recommendations, ...defaultResult.recommendations].slice(0, 3);
-        }
-        
-        return extractedResult;
       }
     } catch (error) {
-      logger.error(`Error in CV format analysis: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error('Error analyzing CV format:', error instanceof Error ? error.message : String(error));
+      
+      // Return default values on error
       return {
-        strengths: ['Clear section organization', 'Consistent formatting', 'Professional layout'],
-        weaknesses: ['Could improve visual hierarchy', 'Consider adding more white space', 'Ensure consistent alignment'],
-        recommendations: ['Use bullet points for achievements', 'Add more white space between sections', 'Ensure consistent date formatting']
+        strengths: ['Clear structure', 'Includes essential sections', 'Appropriate length'],
+        weaknesses: ['Could improve formatting', 'Some sections could be more detailed', 'Consider adding more keywords'],
+        recommendations: ['Enhance visual hierarchy', 'Add more specific achievements', 'Quantify accomplishments where possible']
       };
     }
   }
@@ -1553,5 +1631,48 @@ Example response format:
     }
     
     return result;
+  }
+
+  /**
+   * Generate a cache key for embedding
+   */
+  private generateCacheKey(text: string): string {
+    return `${this.embeddingModel}:${text.substring(0, 100)}`;
+  }
+
+  /**
+   * Extract strengths from text using regex
+   */
+  private extractStrengthsWithRegex(text: string): string[] {
+    const strengthsRegex = /strengths["'\s:]+\[(.*?)\]/is;
+    const match = text.match(strengthsRegex);
+    if (match && match[1]) {
+      return this.parseArrayItems(match[1]);
+    }
+    return ['Clear structure', 'Includes essential sections', 'Appropriate length'];
+  }
+
+  /**
+   * Extract weaknesses from text using regex
+   */
+  private extractWeaknessesWithRegex(text: string): string[] {
+    const weaknessesRegex = /weaknesses["'\s:]+\[(.*?)\]/is;
+    const match = text.match(weaknessesRegex);
+    if (match && match[1]) {
+      return this.parseArrayItems(match[1]);
+    }
+    return ['Could improve formatting', 'Some sections could be more detailed', 'Consider adding more keywords'];
+  }
+
+  /**
+   * Extract recommendations from text using regex
+   */
+  private extractRecommendationsWithRegex(text: string): string[] {
+    const recommendationsRegex = /recommendations["'\s:]+\[(.*?)\]/is;
+    const match = text.match(recommendationsRegex);
+    if (match && match[1]) {
+      return this.parseArrayItems(match[1]);
+    }
+    return ['Enhance visual hierarchy', 'Add more specific achievements', 'Quantify accomplishments where possible'];
   }
 } 
