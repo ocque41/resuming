@@ -9,8 +9,8 @@ import { motion } from "framer-motion";
 import { Calendar, Clock, ArrowLeft, Tag } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 
-// Import the blog posts data from the main blog page
-import { blogPosts } from "../page";
+// Import the blog posts data from the data file
+import { blogPosts } from "../data";
 
 export default function BlogPostPage() {
   const params = useParams();
