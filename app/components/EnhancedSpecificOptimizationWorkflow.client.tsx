@@ -2578,12 +2578,48 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       return;
     }
     
-    // Set processing state
+    // Utility function to fetch with timeout
+    const fetchWithTimeout = async (url: string, options: RequestInit, timeout = 60000): Promise<Response> => {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeout);
+      
+      try {
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal
+        });
+        clearTimeout(id);
+        return response;
+      } catch (error) {
+        clearTimeout(id);
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new Error('Request timed out. Please try again.');
+        }
+        throw error;
+      }
+    };
+    
+    // Reset states
     setIsProcessing(true);
     setIsProcessed(false);
     setProcessingProgress(0);
     setProcessingStatus("Starting job-specific optimization...");
     setError(null);
+    setProcessingTooLong(false);
+    
+    // Set a timeout to detect if the process is taking too long
+    const processingTimeout = setTimeout(() => {
+      if (isProcessing) {
+        setProcessingTooLong(true);
+        setProcessingStatus(prevStatus => 
+          prevStatus ? 
+            (prevStatus.includes("taking longer") 
+              ? prevStatus 
+              : `${prevStatus} (This is taking longer than usual, but please wait...)`)
+            : "Processing is taking longer than usual, please wait..."
+        );
+      }
+    }, 30000); // 30 seconds
     
     try {
       console.log(`Processing CV: ${selectedCVName} (ID: ${selectedCVId}) for specific job`);
@@ -2593,9 +2629,14 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       setProcessingStatus("Fetching CV data...");
       
       if (!originalText) {
-        const cvText = await fetchOriginalText(selectedCVId);
-        if (!cvText) {
-          throw new Error("Failed to fetch CV text");
+        try {
+          const cvText = await fetchOriginalText(selectedCVId);
+          if (!cvText) {
+            throw new Error("Failed to fetch CV text");
+          }
+        } catch (fetchError) {
+          console.error("Error fetching CV text:", fetchError);
+          throw new Error(`Failed to fetch CV text: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`);
         }
       }
       
@@ -2603,9 +2644,10 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       setProcessingProgress(30);
       setProcessingStatus("Analyzing CV content...");
       
+      let analysisData;
       try {
         // Call the Mistral AI service to analyze the CV
-        const response = await fetch('/api/cv/analyze', {
+        const response = await fetchWithTimeout('/api/cv/analyze', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -2614,21 +2656,48 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
             cvText: originalText,
             jobDescription: jobDescription
           }),
-        });
+        }, 45000); // 45 second timeout
         
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-          throw new Error(errorData.error || `Server responded with status: ${response.status}`);
+          const errorMessage = errorData.error || errorData.details || `Server responded with status: ${response.status}`;
+          console.error("CV analysis API error:", errorMessage);
+          
+          // If we get a 401 error, it's likely an authentication issue
+          if (response.status === 401) {
+            throw new Error(`Authentication failed: ${errorMessage}. Please check your API key configuration.`);
+          }
+          
+          throw new Error(errorMessage);
         }
         
-        const analysisData = await response.json();
+        analysisData = await response.json();
+        if (!analysisData.success) {
+          throw new Error(analysisData.error || "Analysis failed with unknown error");
+        }
         
-        // Step 3: Optimize CV for job
-        setProcessingProgress(60);
-        setProcessingStatus("Optimizing CV for job description...");
+      } catch (analysisError) {
+        console.error("CV analysis error:", analysisError);
         
+        // If Mistral AI fails, fall back to local processing
+        console.log("Falling back to local processing due to analysis error");
+        setProcessingProgress(40);
+        setProcessingStatus("Using fallback optimization method...");
+        
+        // Simulate API call for job-specific optimization with local functions
+        clearTimeout(processingTimeout);
+        simulateProcessing();
+        return; // Exit early as we're using the fallback
+      }
+      
+      // Step 3: Optimize CV for job
+      setProcessingProgress(60);
+      setProcessingStatus("Optimizing CV for job description...");
+      
+      let optimizationData;
+      try {
         // Call the Mistral AI service to optimize the CV
-        const optimizeResponse = await fetch('/api/cv/optimize', {
+        const optimizeResponse = await fetchWithTimeout('/api/cv/optimize', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -2636,59 +2705,96 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           body: JSON.stringify({
             cvText: originalText,
             jobDescription: jobDescription,
-            analysis: analysisData
+            analysis: analysisData.analysis
           }),
-        });
+        }, 45000); // 45 second timeout
         
         if (!optimizeResponse.ok) {
           const errorData = await optimizeResponse.json().catch(() => ({ error: 'Unknown error' }));
-          throw new Error(errorData.error || `Server responded with status: ${optimizeResponse.status}`);
+          const errorMessage = errorData.error || errorData.details || `Server responded with status: ${optimizeResponse.status}`;
+          console.error("CV optimization API error:", errorMessage);
+          throw new Error(errorMessage);
         }
         
-        const optimizationData = await optimizeResponse.json();
-        
-        // Step 4: Generate job match analysis
-        setProcessingProgress(80);
-        setProcessingStatus("Generating job match analysis...");
-        
-        // Use the local analyzeJobMatch function as a fallback
-        const jobMatch = analyzeJobMatch(optimizationData.optimizedContent || originalText, jobDescription);
-        
-        // Step 5: Complete processing
-        setProcessingProgress(100);
-        setProcessingStatus("Optimization complete!");
-        
-        // Set optimized text and job match analysis
-        setOptimizedText(optimizationData.optimizedContent || originalText);
-        setJobMatchAnalysis(optimizationData.matchAnalysis || jobMatch);
-        
-        // Set processing state
-        setIsProcessed(true);
-        setIsProcessing(false);
-        
-        // Extract job title from job description if not already set
-        if (!jobTitle) {
-          const jobTitleMatch = jobDescription.match(/^(.+?)(?:\n|\.)/);
-          const extractedJobTitle = jobTitleMatch ? jobTitleMatch[1].trim() : 'Position';
-          setJobTitle(extractedJobTitle);
+        optimizationData = await optimizeResponse.json();
+        if (!optimizationData.success) {
+          throw new Error(optimizationData.error || "Optimization failed with unknown error");
         }
-      } catch (apiError) {
-        console.error("API error:", apiError);
         
-        // Fallback to local processing if API fails
+      } catch (optimizationError) {
+        console.error("CV optimization error:", optimizationError);
+        
+        // If Mistral AI fails, fall back to local processing
+        console.log("Falling back to local processing due to optimization error");
         setProcessingProgress(40);
         setProcessingStatus("Using fallback optimization method...");
         
         // Simulate API call for job-specific optimization with local functions
+        clearTimeout(processingTimeout);
         simulateProcessing();
+        return; // Exit early as we're using the fallback
       }
+      
+      // Step 4: Generate job match analysis
+      setProcessingProgress(80);
+      setProcessingStatus("Generating job match analysis...");
+      
+      // Use the local analyzeJobMatch function as a fallback if needed
+      const jobMatch = optimizationData.matchAnalysis || analyzeJobMatch(optimizationData.optimizedContent || originalText, jobDescription);
+      
+      // Step 5: Complete processing
+      setProcessingProgress(100);
+      setProcessingStatus("Optimization complete!");
+      
+      // Set optimized text and job match analysis
+      setOptimizedText(optimizationData.optimizedContent || generateOptimizedText(originalText, jobDescription));
+      setJobMatchAnalysis(jobMatch);
+      
+      // Set processing state
+      setIsProcessed(true);
+      setIsProcessing(false);
+      
+      // Extract job title from job description if not already set
+      if (!jobTitle) {
+        const jobTitleMatch = jobDescription.match(/^(.+?)(?:\n|\.)/);
+        const extractedJobTitle = jobTitleMatch ? jobTitleMatch[1].trim() : 'Position';
+        setJobTitle(extractedJobTitle);
+      }
+      
+      // Clear the timeout as processing is complete
+      clearTimeout(processingTimeout);
+      
     } catch (error) {
       console.error("Error optimizing CV for job:", error);
+      
+      // Clear the timeout as processing has errored
+      clearTimeout(processingTimeout);
+      
+      // Set error state
       setError(error instanceof Error ? error.message : "An unknown error occurred during optimization");
-      setIsProcessing(false);
-      setProcessingProgress(0);
+      
+      // If we're at a high progress percentage but encountered an error, 
+      // we should still try to show something to the user
+      if (processingProgress > 80) {
+        // Generate fallback content
+        const fallbackText = generateOptimizedText(originalText || '', jobDescription);
+        setOptimizedText(fallbackText);
+        
+        // Generate job match analysis on the fallback content
+        const fallbackAnalysis = analyzeJobMatch(fallbackText, jobDescription);
+        setJobMatchAnalysis(fallbackAnalysis);
+        
+        // Mark as processed but with error
+        setIsProcessed(true);
+        setProcessingStatus("Completed with errors. Using fallback optimization.");
+      } else {
+        // Reset processing state
+        setIsProcessing(false);
+        setProcessingProgress(0);
+        setProcessingStatus("Optimization failed. Please try again.");
+      }
     }
-  }, [selectedCVId, selectedCVName, jobDescription, originalText, fetchOriginalText, jobTitle]);
+  }, [selectedCVId, selectedCVName, jobDescription, originalText, fetchOriginalText, jobTitle, isProcessing]);
   
   // Simulate processing with progress updates
   const simulateProcessing = () => {
@@ -2778,9 +2884,12 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   };
   
   // Generate optimized text based on job description
-  const generateOptimizedText = (originalText: string, jobDescription: string): string => {
+  const generateOptimizedText = (originalText: string | null, jobDescription: string): string => {
     // This is a placeholder for the actual AI-powered optimization
     // In a real implementation, this would call an API to optimize the CV
+    
+    // Use empty string if originalText is null
+    const cvText = originalText || '';
     
     // Extract job title from job description (first line or first sentence)
     const jobTitleMatch = jobDescription.match(/^(.+?)(?:\n|\.)/);
@@ -2807,30 +2916,25 @@ GOALS:
 • To build strong relationships with colleagues and stakeholders to foster a collaborative work environment
 
 SKILLS:
-${extractKeywords(originalText).filter(keyword => 
+${extractKeywords(cvText).filter(keyword => 
   extractKeywords(jobDescription, true).includes(keyword)
 ).slice(0, 10).map(skill => `• ${skill}`).join('\n')}
 
 EDUCATION:
-${extractEducationData(originalText).map(edu => 
+${extractEducationData(cvText).map(edu => 
   `• ${edu.degree}, ${edu.institution || 'Institution'}${edu.year ? `, ${edu.year}` : ''}`
 ).join('\n')}
 
 EXPERIENCE:
-${extractExperienceData(originalText).map(exp => 
+${extractExperienceData(cvText).map(exp => 
   `• ${exp.title || 'Professional'}${exp.startDate && exp.endDate ? ` (${exp.startDate} - ${exp.endDate})` : ''}`
 ).join('\n')}
 
 LANGUAGES:
-${extractLanguages(originalText).map(lang => `• ${lang}`).join('\n')}
+${extractLanguages(cvText).map(lang => `• ${lang}`).join('\n')}
 `;
-
-    // In a real implementation, we would use the Mistral AI service to optimize the CV
-    // For example:
-    // const optimizedResult = await optimizeCVForJob(originalText, jobDescription);
-    // return optimizedResult.optimizedContent;
     
-    return optimizedContent.trim();
+    return optimizedContent;
   };
 
   const showToast = useCallback(({ title, description, duration }: { title: string; description: string; duration: number }) => {
@@ -3479,6 +3583,23 @@ ${extractLanguages(originalText).map(lang => `• ${lang}`).join('\n')}
     generateDocument();
   };
 
+  // Reset the optimization process
+  const resetOptimization = useCallback(() => {
+    setIsProcessing(false);
+    setIsProcessed(false);
+    setProcessingProgress(0);
+    setProcessingStatus("");
+    setError(null);
+    setProcessingTooLong(false);
+    setOptimizedText("");
+    setJobMatchAnalysis(null);
+    setCachedDocument({ doc: null, blob: null, text: null, timestamp: Date.now() });
+    setIsGeneratingDocument(false);
+    setIsDownloading(false);
+    setIsDownloadComplete(false);
+    setDocumentError(null);
+  }, []);
+
   return (
     <div className="w-full max-w-6xl mx-auto">
       {/* File selection */}
@@ -3862,6 +3983,25 @@ ${extractLanguages(originalText).map(lang => `• ${lang}`).join('\n')}
             <li>If generation fails, try again or use a different browser</li>
             <li>For best results, ensure your CV has clear section headers</li>
           </ul>
+        </div>
+      )}
+
+      {/* Reset Button - Show when there's an error or process is stuck */}
+      {(error || processingTooLong) && (
+        <div className="mt-4">
+          <Button
+            onClick={resetOptimization}
+            variant="outline"
+            className="w-full border-red-700 text-red-500 hover:bg-red-900/20"
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Reset and Try Again
+          </Button>
+          <p className="text-xs text-gray-400 mt-2 text-center">
+            {error ? 
+              "An error occurred during optimization. Click above to reset and try again." : 
+              "The process seems to be taking too long. You can reset and try again."}
+          </p>
         </div>
       )}
     </div>
