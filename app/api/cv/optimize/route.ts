@@ -8,7 +8,7 @@ import {
   isOpenAIAvailable 
 } from '@/lib/services/openai.service';
 import { logger } from '@/lib/logger';
-import { storePartialResults, clearPartialResults } from './partial-results/route';
+import { storePartialResults, clearPartialResults } from '@/app/utils/partialResultsCache';
 
 // Constants for text chunking
 const MAX_CV_LENGTH = 6000; // Maximum CV length before chunking

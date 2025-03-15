@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { logger } from '@/lib/logger';
+import { getPartialResults } from '@/app/utils/partialResultsCache';
 
 // Define a session type
 interface UserSession {
@@ -10,10 +11,6 @@ interface UserSession {
     email?: string;
   };
 }
-
-// In-memory cache for partial results
-// In a production environment, this should be replaced with Redis or another distributed cache
-const partialResultsCache: Record<string, any> = {};
 
 export async function POST(req: NextRequest) {
   try {
@@ -31,12 +28,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'CV ID is required' }, { status: 400 });
     }
 
-    // Generate a unique key for this optimization request
+    // Get partial results from cache
     const userId = session.user.id;
-    const cacheKey = `${userId}:${cvId}:${jobDescription.substring(0, 50)}`;
-
-    // Check if we have partial results for this request
-    const partialResults = partialResultsCache[cacheKey];
+    const partialResults = getPartialResults(userId, cvId, jobDescription);
 
     if (!partialResults) {
       return NextResponse.json({ 
@@ -58,21 +52,4 @@ export async function POST(req: NextRequest) {
       details: errorMessage
     }, { status: 500 });
   }
-}
-
-// Helper function to store partial results (called from the optimization endpoint)
-export function storePartialResults(userId: string, cvId: string, jobDescription: string, results: any) {
-  const cacheKey = `${userId}:${cvId}:${jobDescription.substring(0, 50)}`;
-  partialResultsCache[cacheKey] = results;
-  
-  // Set an expiration for the cache entry (30 minutes)
-  setTimeout(() => {
-    delete partialResultsCache[cacheKey];
-  }, 30 * 60 * 1000);
-}
-
-// Helper function to clear partial results (called when optimization completes)
-export function clearPartialResults(userId: string, cvId: string, jobDescription: string) {
-  const cacheKey = `${userId}:${cvId}:${jobDescription.substring(0, 50)}`;
-  delete partialResultsCache[cacheKey];
 } 
