@@ -3791,8 +3791,9 @@ ${extractLanguages(originalText).map(lang => `• ${lang}`).join('\n')}
         />
       )}
       
-      {/* Document Error with Manual Download Option */}
-      {documentError && !isGeneratingDocument && (
+      {/* Document Generation Progress Display */}
+      {isGeneratingDocument && (
+        <div className="mt-4 p-4 border border-gray-700 rounded-md bg-gray-800/50">
           <p className="text-sm text-gray-400 mb-2">
             Please wait while we generate your optimized document. This may take a few moments.
           </p>
