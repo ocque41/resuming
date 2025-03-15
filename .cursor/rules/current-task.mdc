@@ -1,5 +1,5 @@
 ---
-description: the current task we are implementing and the only thing we should focus on
+description: General CV optimization system
 globs: 
 ---
 *I am building an advanced CV optimization system within my Next.js application on the [page.tsx](mdc:app/(dashboard)/dashboard/optimize/page.tsx). The system must follow the detailed workflow outlined below, with every single step calling the OpenAI Chat-GPT Model 4o to act as an intelligent agent responsible for generating, analyzing, and optimizing all content and data.*

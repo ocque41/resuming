@@ -1,126 +1,85 @@
 'use client';
 
 import React from 'react';
-import { CheckCircle, Circle, Clock, AlertCircle } from 'lucide-react';
+import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import { Clock, RefreshCw } from "lucide-react";
 
 interface DocumentGenerationProgressProps {
+  isGenerating: boolean;
   progress: number;
   status: string;
-  error: string | null;
-  isGenerating: boolean;
+  processingTooLong: boolean;
+  onRetry: () => void;
+  onCancel?: () => void;
 }
 
-const DocumentGenerationProgress: React.FC<DocumentGenerationProgressProps> = ({
+export default function DocumentGenerationProgress({
+  isGenerating,
   progress,
   status,
-  error,
-  isGenerating
-}) => {
-  // Define the steps in the document generation process
-  const steps = [
-    { name: 'Preparing document data', threshold: 10 },
-    { name: 'Structuring CV content', threshold: 30 },
-    { name: 'Generating document', threshold: 50 },
-    { name: 'Preparing for download', threshold: 80 },
-    { name: 'Downloading document', threshold: 90 },
-    { name: 'Complete', threshold: 100 }
-  ];
-
-  // Determine the current step based on progress
-  const currentStepIndex = steps.findIndex(step => progress < step.threshold);
-  const activeStep = currentStepIndex === -1 ? steps.length - 1 : currentStepIndex - 1;
+  processingTooLong,
+  onRetry,
+  onCancel
+}: DocumentGenerationProgressProps) {
+  if (!isGenerating && progress === 0) {
+    return null;
+  }
 
   return (
-    <div className="w-full bg-[#0D0D0D] border border-gray-800 rounded-lg p-4 mb-4">
+    <div className="mt-6 p-4 bg-[#0D0D0D] border border-gray-800 rounded-lg">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-lg font-medium text-white">Document Generation</h3>
-        <span className="text-sm font-medium text-white">{progress}%</span>
+        <span className={`px-2 py-1 text-xs rounded-full ${
+          progress === 100 
+            ? 'bg-green-500/20 text-green-500' 
+            : 'bg-[#B4916C]/20 text-[#B4916C]'
+        }`}>
+          {progress === 100 ? 'Complete' : `${Math.round(progress)}%`}
+        </span>
       </div>
       
-      {/* Progress bar */}
-      <div className="w-full h-2 bg-gray-800 rounded-full mb-4 overflow-hidden">
-        <div 
-          className="h-full transition-all duration-300 ease-in-out rounded-full"
-          style={{ 
-            width: `${progress}%`,
-            backgroundColor: error ? '#ef4444' : progress === 100 ? '#22c55e' : '#B4916C'
-          }}
-        />
+      <Progress 
+        value={progress} 
+        className="h-2 mb-4" 
+      />
+      
+      <div className="text-sm text-gray-300">
+        {status}
       </div>
       
-      {/* Status message */}
-      <p className="text-sm text-gray-300 mb-4">
-        {error ? (
-          <span className="text-red-400 flex items-center">
-            <AlertCircle className="w-4 h-4 mr-1" />
-            {error}
-          </span>
-        ) : (
-          status || 'Preparing document...'
-        )}
-      </p>
-      
-      {/* Steps list */}
-      <div className="space-y-3">
-        {steps.map((step, index) => {
-          // Determine step status
-          let StepIcon;
-          let textColor;
-          let lineColor;
-          
-          if (index < activeStep) {
-            // Completed step
-            StepIcon = CheckCircle;
-            textColor = 'text-green-500';
-            lineColor = 'border-green-500';
-          } else if (index === activeStep) {
-            // Current step
-            StepIcon = isGenerating ? Clock : CheckCircle;
-            textColor = isGenerating ? 'text-[#B4916C]' : 'text-green-500';
-            lineColor = isGenerating ? 'border-[#B4916C]' : 'border-green-500';
-          } else {
-            // Future step
-            StepIcon = Circle;
-            textColor = 'text-gray-500';
-            lineColor = 'border-gray-700';
-          }
-          
-          return (
-            <div key={step.name} className="flex items-start">
-              <div className="flex-shrink-0 mr-2">
-                <StepIcon className={`w-5 h-5 ${textColor}`} />
-              </div>
-              
-              <div className="flex-1">
-                <p className={`text-sm font-medium ${textColor}`}>{step.name}</p>
-                
-                {/* Only show connecting line if not the last step */}
-                {index < steps.length - 1 && (
-                  <div className={`ml-2 mt-1 h-6 border-l ${lineColor}`} />
-                )}
-              </div>
-              
-              <div className="flex-shrink-0 ml-2">
-                <span className={`text-xs ${textColor}`}>{step.threshold}%</span>
-              </div>
+      {processingTooLong && (
+        <div className="mt-4 p-3 bg-amber-900/30 border border-amber-800/50 rounded-md flex items-start">
+          <Clock className="w-5 h-5 text-amber-500 mr-2 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-amber-300 font-medium">This is taking longer than expected</p>
+            <p className="text-amber-200/70 text-sm mt-1">
+              Document generation can take up to 2 minutes for complex CVs. You can wait or try again.
+            </p>
+            <div className="mt-3 flex space-x-3">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="bg-amber-800/50 hover:bg-amber-700/50 border-amber-700/50"
+                onClick={onRetry}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
+              {onCancel && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="hover:bg-amber-900/50 text-amber-300"
+                  onClick={onCancel}
+                >
+                  Cancel
+                </Button>
+              )}
             </div>
-          );
-        })}
-      </div>
-      
-      {/* Tips for users */}
-      {isGenerating && (
-        <div className="mt-4 p-3 bg-gray-800/50 rounded-md">
-          <h4 className="text-sm font-medium text-white mb-1">Document Generation Tips</h4>
-          <ul className="text-xs text-gray-400 list-disc pl-4 space-y-1">
-            <li>Document generation typically takes 15-30 seconds</li>
-            <li>Please don't refresh the page during generation</li>
-            <li>If download doesn't start automatically, use the manual download button</li>
-          </ul>
+          </div>
         </div>
       )}
     </div>
   );
-};
-
-export default DocumentGenerationProgress; 
+} 

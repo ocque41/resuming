@@ -3277,7 +3277,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     }
   };
 
-  // Modify the generateDocument function to use caching
+  // Modify the generateDocument function to use caching and add fallback mechanisms
   const generateDocument = async () => {
     if (isGeneratingDocument || !optimizedText) return;
     
@@ -3318,14 +3318,139 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       });
       
       // Generate document with retry mechanism
-      const documentBlob = await generateDocumentWithRetry(
-        generateDocumentFn,
-        (status, attempt) => {
-          // Update UI with retry status
-          setProcessingStatus(`${status} (Attempt ${attempt}/3)`);
-          setProcessingProgress(50 + (attempt * 5)); // Increment progress slightly with each retry
+      let documentBlob: Blob;
+      try {
+        documentBlob = await generateDocumentWithRetry(
+          generateDocumentFn,
+          (status, attempt) => {
+            // Update UI with retry status
+            setProcessingStatus(`${status} (Attempt ${attempt}/3)`);
+            setProcessingProgress(50 + (attempt * 5)); // Increment progress slightly with each retry
+          }
+        );
+      } catch (retryError) {
+        console.error("Document generation failed after retries:", retryError);
+        setProcessingStatus("Trying alternative document generation method...");
+        
+        // Fallback: Try to generate the document client-side
+        try {
+          setProcessingProgress(60);
+          
+          // Create a simple document structure
+          const doc = new Document({
+            sections: [{
+              properties: {
+                page: {
+                  margin: {
+                    top: 1000,
+                    right: 1000,
+                    bottom: 1000,
+                    left: 1000
+                  }
+                }
+              },
+              children: [
+                // Title with job title if available
+                new Paragraph({
+                  text: jobTitle ? `Optimized CV for ${jobTitle}` : 'Optimized CV',
+                  heading: HeadingLevel.HEADING_1,
+                  spacing: {
+                    after: 200
+                  },
+                  alignment: AlignmentType.CENTER,
+                }),
+                
+                // Add a horizontal line after header
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: '',
+                      size: 16
+                    })
+                  ],
+                  border: {
+                    bottom: {
+                      color: 'B4916C',
+                      space: 1,
+                      style: BorderStyle.SINGLE,
+                      size: 8
+                    }
+                  },
+                  spacing: {
+                    after: 300
+                  }
+                }),
+                
+                // Add the optimized content
+                new Paragraph({
+                  text: "PROFILE",
+                  heading: HeadingLevel.HEADING_2,
+                  // color property is not valid for IParagraphOptions, use children with TextRun instead
+                  spacing: {
+                    before: 400,
+                    after: 200
+                  },
+                  children: [
+                    new TextRun({
+                      text: "PROFILE",
+                      color: 'B4916C',
+                      bold: true,
+                      size: 28
+                    })
+                  ]
+                }),
+                
+                // Split the optimized text into paragraphs
+                ...optimizedText.split('\n\n').map(paragraph => 
+                  new Paragraph({
+                    text: paragraph,
+                    spacing: {
+                      before: 200,
+                      after: 200
+                    }
+                  })
+                ),
+                
+                // Add footer
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: `Optimized CV | ${new Date().toLocaleDateString()}`,
+                      size: 20,
+                      color: '666666'
+                    })
+                  ],
+                  spacing: {
+                    before: 400
+                  },
+                  alignment: AlignmentType.CENTER,
+                  border: {
+                    top: {
+                      color: 'B4916C',
+                      space: 1,
+                      style: BorderStyle.SINGLE,
+                      size: 6
+                    }
+                  }
+                })
+              ]
+            }]
+          });
+          
+          setProcessingProgress(70);
+          setProcessingStatus("Generating document locally...");
+          
+          // Generate the document blob
+          const blob = await Packer.toBlob(doc);
+          documentBlob = blob;
+          
+          setProcessingProgress(80);
+          setProcessingStatus("Document generated locally successfully!");
+        } catch (fallbackError) {
+          console.error("Fallback document generation failed:", fallbackError);
+          throw new Error(`Document generation failed: ${retryError instanceof Error ? retryError.message : String(retryError)}. Fallback also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
         }
-      );
+      }
       
       // Step 4: Prepare for download
       setProcessingProgress(80);
@@ -3418,6 +3543,20 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
 
   // Add a handler for the generate document button
   const handleGenerateDocument = () => {
+    generateDocument();
+  };
+
+  // Add a function to retry document generation
+  const handleRetryGeneration = () => {
+    // Reset document generation state
+    setIsGeneratingDocument(false);
+    setProcessingProgress(0);
+    setProcessingStatus("");
+    setDocumentError(null);
+    setIsDownloading(false);
+    setIsDownloadComplete(false);
+    
+    // Start document generation again
     generateDocument();
   };
 
@@ -3519,40 +3658,32 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
                 </div>
                 
                 {/* Document Generation Progress */}
-                {isGeneratingDocument && (
+                {(isGeneratingDocument || processingProgress > 0) && (
                   <DocumentGenerationProgress 
+                    isGenerating={isGeneratingDocument}
                     progress={processingProgress || 0}
                     status={processingStatus || ''}
-                    error={documentError}
-                    isGenerating={isGeneratingDocument}
+                    processingTooLong={processingTooLong}
+                    onRetry={handleRetryGeneration}
+                    onCancel={() => {
+                      setIsGeneratingDocument(false);
+                      setProcessingProgress(0);
+                      setProcessingStatus("");
+                    }}
                   />
                 )}
                 
                 {/* Document Download Status */}
-                {isDownloading && (
+                {(isDownloading || isDownloadComplete || documentError) && (
                   <DocumentDownloadStatus
+                    isGeneratingDocument={isGeneratingDocument}
                     isDownloading={isDownloading}
                     isDownloadComplete={isDownloadComplete}
-                    error={documentError}
+                    documentError={documentError}
+                    processingStatus={processingStatus}
+                    processingProgress={processingProgress}
                     onManualDownload={handleManualDownload}
-                  />
-                )}
-                
-                {isDownloadComplete && !isDownloading && (
-                  <DocumentDownloadStatus
-                    isDownloading={false}
-                    isDownloadComplete={true}
-                    error={null}
-                    onManualDownload={handleManualDownload}
-                  />
-                )}
-                
-                {documentError && !isGeneratingDocument && !isDownloading && (
-                  <DocumentDownloadStatus
-                    isDownloading={false}
-                    isDownloadComplete={false}
-                    error={documentError}
-                    onManualDownload={handleManualDownload}
+                    onRetry={handleRetryGeneration}
                   />
                 )}
                 

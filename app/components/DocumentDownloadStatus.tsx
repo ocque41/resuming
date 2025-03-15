@@ -1,83 +1,105 @@
 'use client';
 
 import React from 'react';
-import { Download, CheckCircle, AlertCircle } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle, Download, RefreshCw } from "lucide-react";
 
 interface DocumentDownloadStatusProps {
+  isGeneratingDocument: boolean;
   isDownloading: boolean;
   isDownloadComplete: boolean;
-  error: string | null;
+  documentError: string | null;
+  processingStatus: string;
+  processingProgress: number;
   onManualDownload: () => void;
+  onRetry: () => void;
 }
 
-const DocumentDownloadStatus: React.FC<DocumentDownloadStatusProps> = ({
+export default function DocumentDownloadStatus({
+  isGeneratingDocument,
   isDownloading,
   isDownloadComplete,
-  error,
-  onManualDownload
-}) => {
+  documentError,
+  processingStatus,
+  processingProgress,
+  onManualDownload,
+  onRetry
+}: DocumentDownloadStatusProps) {
   return (
-    <div className="w-full bg-[#0D0D0D] border border-gray-800 rounded-lg p-4 mb-4">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-lg font-medium text-white">Document Download</h3>
-        {isDownloadComplete && !error && (
-          <span className="px-2 py-1 text-xs rounded-full bg-green-500/20 text-green-500">
-            Complete
-          </span>
-        )}
-        {error && (
-          <span className="px-2 py-1 text-xs rounded-full bg-red-500/20 text-red-500">
-            Failed
-          </span>
-        )}
-        {isDownloading && !isDownloadComplete && !error && (
-          <span className="px-2 py-1 text-xs rounded-full bg-[#B4916C]/20 text-[#B4916C]">
-            In Progress
-          </span>
-        )}
-      </div>
-      
-      <div className="flex items-center space-x-4">
-        {isDownloadComplete && !error ? (
-          <div className="flex items-center text-green-500">
-            <CheckCircle className="w-5 h-5 mr-2" />
-            <span>Document downloaded successfully</span>
-          </div>
-        ) : error ? (
-          <div className="flex items-center text-red-400">
-            <AlertCircle className="w-5 h-5 mr-2" />
-            <span>{error}</span>
-          </div>
-        ) : (
-          <div className="flex items-center text-[#B4916C]">
-            <div className="animate-spin w-5 h-5 mr-2 border-2 border-[#B4916C] border-t-transparent rounded-full" />
-            <span>Downloading document...</span>
-          </div>
-        )}
-      </div>
-      
-      {(error || isDownloadComplete) && (
-        <button
-          onClick={onManualDownload}
-          className="mt-4 px-4 py-2 bg-[#B4916C] hover:bg-[#A3815C] text-white rounded-md flex items-center transition-colors"
-        >
-          <Download className="w-4 h-4 mr-2" />
-          {error ? 'Try Manual Download' : 'Download Again'}
-        </button>
+    <div className="mt-4 space-y-4">
+      {/* Show error message if there's an error */}
+      {documentError && (
+        <Alert variant="destructive" className="bg-red-900 border-red-800">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="ml-2">
+            {documentError}
+            {documentError.includes('download failed') && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="ml-4 bg-red-800 hover:bg-red-700 border-red-700"
+                onClick={onManualDownload}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Manual Download
+              </Button>
+            )}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="ml-4 bg-red-800 hover:bg-red-700 border-red-700"
+              onClick={onRetry}
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
       
-      {error && (
-        <div className="mt-3 text-xs text-gray-400">
-          <p>If automatic download failed, you can:</p>
-          <ul className="list-disc pl-5 mt-1">
-            <li>Try the manual download button above</li>
-            <li>Check if your browser is blocking downloads</li>
-            <li>Try using a different browser</li>
-          </ul>
+      {/* Show success message if download is complete */}
+      {isDownloadComplete && !documentError && (
+        <Alert className="bg-green-900 border-green-800 text-white">
+          <AlertDescription className="ml-2">
+            Document downloaded successfully! If you need to download it again, click the button below.
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="ml-4 bg-green-800 hover:bg-green-700 border-green-700"
+              onClick={onManualDownload}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download Again
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      
+      {/* Show manual download button if document is generated but not downloaded */}
+      {!isDownloading && !isDownloadComplete && processingProgress === 100 && !documentError && (
+        <Alert className="bg-amber-900 border-amber-800 text-white">
+          <AlertDescription className="ml-2">
+            Document generated successfully but wasn't downloaded automatically. Click the button below to download it.
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="ml-4 bg-amber-800 hover:bg-amber-700 border-amber-700"
+              onClick={onManualDownload}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download Document
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      
+      {/* Show processing status */}
+      {(isGeneratingDocument || isDownloading) && (
+        <div className="text-sm text-gray-300 animate-pulse">
+          {processingStatus}
         </div>
       )}
     </div>
   );
-};
-
-export default DocumentDownloadStatus; 
+} 
