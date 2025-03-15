@@ -273,13 +273,13 @@ export default function BlogPage() {
         <div className="container mx-auto px-4 text-center">
           <p className="text-gray-400 mb-6">© 2025 Resuming. All rights reserved.</p>
           <div className="flex justify-center space-x-6">
-            <a href="#" className="text-gray-400 hover:text-[#B4916C] transition-colors">
+            <a href="https://chromad.vercel.app/docs/products/resuming/terms-of-service" className="text-gray-400 hover:text-[#B4916C] transition-colors">
               Terms
             </a>
-            <a href="#" className="text-gray-400 hover:text-[#B4916C] transition-colors">
+            <a href="https://chromad.vercel.app/docs/products/resuming/privacy-policy" className="text-gray-400 hover:text-[#B4916C] transition-colors">
               Privacy
             </a>
-            <a href="#" className="text-gray-400 hover:text-[#B4916C] transition-colors">
+            <a href="https://chromad.vercel.app/" className="text-gray-400 hover:text-[#B4916C] transition-colors">
               Contact
             </a>
           </div>
