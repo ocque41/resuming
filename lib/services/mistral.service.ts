@@ -150,6 +150,7 @@ export interface CVAnalysisResult {
   };
   achievements: string[];
   profile: string;
+  languages: string[];
 }
 
 export async function analyzeCVContent(cvText: string): Promise<CVAnalysisResult> {
@@ -182,17 +183,22 @@ export async function analyzeCVContent(cvText: string): Promise<CVAnalysisResult
     return await retryWithBackoff(async () => {
       const client = getMistralClient();
       
-      const prompt = `Analyze the following CV and extract structured information. Format the response as JSON with the following structure:
-      {
-        "experience": [{"title": string, "company": string, "dates": string, "responsibilities": string[]}],
-        "education": [{"degree": string, "field": string, "institution": string, "year": string}],
-        "skills": {"technical": string[], "professional": string[]},
-        "achievements": string[],
-        "profile": string
-      }
+      const prompt = `Analyze the following CV and extract structured information. 
 
-      CV Text:
-      ${cvText}`;
+IMPORTANT: Pay special attention to the EDUCATION, EXPERIENCE, and LANGUAGES sections. These sections must be accurately identified and preserved in your analysis.
+
+Format the response as JSON with the following structure:
+{
+  "experience": [{"title": string, "company": string, "dates": string, "responsibilities": string[]}],
+  "education": [{"degree": string, "field": string, "institution": string, "year": string}],
+  "skills": {"technical": string[], "professional": string[]},
+  "achievements": string[],
+  "profile": string,
+  "languages": string[]
+}
+
+CV Text:
+${cvText}`;
 
       logger.info('Sending CV analysis request to Mistral AI');
       
@@ -296,23 +302,27 @@ export async function optimizeCVForJob(cvText: string, jobDescription: string): 
     return await retryWithBackoff(async () => {
       const client = getMistralClient();
       
-      const prompt = `Optimize the following CV for the given job description. Provide:
-      1. Optimized CV content with relevant keywords and phrases
-      2. Match score (0-100)
-      3. List of recommendations for improvement
+      const prompt = `Optimize the following CV for the given job description. 
 
-      CV Text:
-      ${cvText}
+IMPORTANT: You MUST preserve the existing EDUCATION, EXPERIENCE, and LANGUAGES sections exactly as they appear in the original CV. Do not remove or modify these sections - only enhance other sections.
 
-      Job Description:
-      ${jobDescription}
+Provide:
+1. Optimized CV content with relevant keywords and phrases
+2. Match score (0-100)
+3. List of recommendations for improvement
 
-      Format the response as JSON with the following structure:
-      {
-        "optimizedContent": string,
-        "matchScore": number,
-        "recommendations": string[]
-      }`;
+CV Text:
+${cvText}
+
+Job Description:
+${jobDescription}
+
+Format the response as JSON with the following structure:
+{
+  "optimizedContent": string,
+  "matchScore": number,
+  "recommendations": string[]
+}`;
 
       logger.info('Sending CV optimization request to Mistral AI');
       

@@ -104,49 +104,52 @@ export async function optimizeCVWithGPT4o(
       throw new Error('OpenAI service is not available. Please check your API key configuration.');
     }
 
+    // Check API key
+    if (!apiKey || apiKey.trim() === '') {
+      throw new Error('OpenAI API key is not configured');
+    }
+
     // Check cache first
-    const cachedResult = getCachedCVOptimization(cvText, jobDescription);
+    const cachedResult = getCachedCombinedResult(cvText, jobDescription);
     if (cachedResult) {
-      logger.info('Using cached CV optimization result from GPT-4o');
+      logger.info('Using cached CV optimization result from OpenAI');
       return cachedResult;
     }
 
-    logger.info('Starting CV optimization with GPT-4o based on Mistral analysis');
+    logger.info('No cached optimization found, requesting from OpenAI');
+
+    const client = new OpenAI({ apiKey });
     
-    // Create a system message that instructs GPT-4o on how to optimize the CV
-    const systemMessage = `
-You are an expert CV optimizer. Your task is to optimize a CV for a specific job description.
-You have been provided with:
-1. The original CV text
-2. The job description
-3. An analysis of the CV by Mistral AI
+    const prompt = `Optimize the following CV for the given job description. 
 
-Your goal is to create an optimized version of the CV that:
-- Highlights relevant skills and experience for the job
-- Incorporates keywords from the job description
-- Maintains the original structure and formatting of the CV
-- Improves the overall match score
+IMPORTANT: You MUST preserve the existing EDUCATION, EXPERIENCE, and LANGUAGES sections exactly as they appear in the original CV. Do not remove or modify these sections - only enhance other sections.
 
-Please provide:
-1. The optimized CV content
-2. A match score (0-100) indicating how well the optimized CV matches the job description
-3. A list of recommendations for further improvement
-4. A detailed match analysis with:
-   - Matched keywords with relevance, frequency, and placement
-   - Missing keywords with importance and suggested placement
-   - Skill gap analysis
-   - Dimensional scores (skills match, experience match, education match, etc.)
-   - Section-by-section analysis with scores and feedback
+Use the provided CV analysis to understand the candidate's background and tailor the optimization accordingly.
 
-Format your response as JSON with the following structure:
+Provide:
+1. Optimized CV content with relevant keywords and phrases
+2. Match score (0-100)
+3. List of recommendations for improvement
+4. Detailed job match analysis
+
+CV Text:
+${cvText}
+
+Job Description:
+${jobDescription}
+
+CV Analysis:
+${JSON.stringify(mistralAnalysis, null, 2)}
+
+Format the response as JSON with the following structure:
 {
-  "optimizedContent": string,
+  "optimizedContent": string, // The optimized CV text with EDUCATION, EXPERIENCE, and LANGUAGES sections preserved
   "matchScore": number,
   "recommendations": string[],
   "matchAnalysis": {
     "score": number,
-    "matchedKeywords": [{ "keyword": string, "relevance": number, "frequency": number, "placement": string }],
-    "missingKeywords": [{ "keyword": string, "importance": number, "suggestedPlacement": string }],
+    "matchedKeywords": [{"keyword": string, "relevance": number, "frequency": number, "placement": string}],
+    "missingKeywords": [{"keyword": string, "importance": number, "suggestedPlacement": string}],
     "recommendations": string[],
     "skillGap": string,
     "dimensionalScores": {
@@ -162,41 +165,33 @@ Format your response as JSON with the following structure:
     "detailedAnalysis": string,
     "improvementPotential": number,
     "sectionAnalysis": {
-      "profile": { "score": number, "feedback": string },
-      "skills": { "score": number, "feedback": string },
-      "experience": { "score": number, "feedback": string },
-      "education": { "score": number, "feedback": string },
-      "achievements": { "score": number, "feedback": string }
+      "profile": {"score": number, "feedback": string},
+      "skills": {"score": number, "feedback": string},
+      "experience": {"score": number, "feedback": string},
+      "education": {"score": number, "feedback": string},
+      "achievements": {"score": number, "feedback": string}
     }
   }
-}
-`;
+}`;
 
-    // Create a user message with the CV, job description, and Mistral analysis
-    const userMessage = `
-Original CV:
-${cvText}
-
-Job Description:
-${jobDescription}
-
-Mistral Analysis:
-${JSON.stringify(mistralAnalysis, null, 2)}
-`;
-
-    // Call GPT-4o with a timeout
+    logger.info('Sending CV optimization request to OpenAI');
+    
+    // Use a shorter timeout for the API call to ensure we can retry if needed
     const response = await withTimeout(
-      openai.chat.completions.create({
+      client.chat.completions.create({
         model: 'gpt-4o',
         messages: [
-          { role: 'system', content: systemMessage },
-          { role: 'user', content: userMessage }
+          {
+            role: 'user',
+            content: prompt
+          }
         ],
         temperature: 0.2,
+        max_tokens: 4000,
         response_format: { type: 'json_object' }
       }),
       60000, // 60 second timeout
-      'GPT-4o CV optimization'
+      'CV optimization with GPT-4o'
     );
 
     if (!response || !response.choices || response.choices.length === 0) {
@@ -210,18 +205,18 @@ ${JSON.stringify(mistralAnalysis, null, 2)}
 
     try {
       const result = JSON.parse(content);
-      logger.info('Successfully parsed GPT-4o CV optimization result');
+      logger.info('Successfully parsed CV optimization result from OpenAI');
       
       // Cache the result
-      cacheCVOptimization(cvText, jobDescription, result);
+      cacheCombinedResult(cvText, jobDescription, result);
       
       return result;
     } catch (parseError) {
-      logger.error('Failed to parse GPT-4o response:', parseError instanceof Error ? parseError.message : String(parseError));
+      logger.error('Failed to parse OpenAI response:', parseError instanceof Error ? parseError.message : String(parseError));
       throw new Error('Failed to parse CV optimization result');
     }
   } catch (error) {
-    logger.error('Error optimizing CV with GPT-4o:', error instanceof Error ? error.message : String(error));
+    logger.error('Error optimizing CV with OpenAI:', error instanceof Error ? error.message : String(error));
     
     // Provide more specific error messages based on error type
     if (error instanceof Error) {
@@ -236,7 +231,7 @@ ${JSON.stringify(mistralAnalysis, null, 2)}
       }
     }
     
-    throw new Error('Failed to optimize CV with GPT-4o');
+    throw new Error('Failed to optimize CV with OpenAI');
   }
 }
 
@@ -293,48 +288,47 @@ export async function optimizeCVWithGPT4oFallback(
       throw new Error('OpenAI service is not available. Please check your API key configuration.');
     }
 
+    // Check API key
+    if (!apiKey || apiKey.trim() === '') {
+      throw new Error('OpenAI API key is not configured');
+    }
+
     // Check cache first
-    const cachedResult = getCachedCVOptimization(cvText, jobDescription);
+    const cachedResult = getCachedCombinedResult(cvText, jobDescription);
     if (cachedResult) {
-      logger.info('Using cached CV optimization result from GPT-4o fallback');
+      logger.info('Using cached CV optimization result from OpenAI');
       return cachedResult;
     }
 
-    logger.info('Starting CV optimization with GPT-4o (fallback mode without Mistral analysis)');
+    logger.info('No cached optimization found, requesting from OpenAI');
+
+    const client = new OpenAI({ apiKey });
     
-    // Create a system message that instructs GPT-4o on how to optimize the CV
-    const systemMessage = `
-You are an expert CV optimizer. Your task is to optimize a CV for a specific job description.
-You have been provided with:
-1. The original CV text
-2. The job description
+    const prompt = `Optimize the following CV for the given job description. 
 
-Your goal is to create an optimized version of the CV that:
-- Highlights relevant skills and experience for the job
-- Incorporates keywords from the job description
-- Maintains the original structure and formatting of the CV
-- Improves the overall match score
+IMPORTANT: You MUST preserve the existing EDUCATION, EXPERIENCE, and LANGUAGES sections exactly as they appear in the original CV. Do not remove or modify these sections - only enhance other sections.
 
-Please provide:
-1. The optimized CV content
-2. A match score (0-100) indicating how well the optimized CV matches the job description
-3. A list of recommendations for further improvement
-4. A detailed match analysis with:
-   - Matched keywords with relevance, frequency, and placement
-   - Missing keywords with importance and suggested placement
-   - Skill gap analysis
-   - Dimensional scores (skills match, experience match, education match, etc.)
-   - Section-by-section analysis with scores and feedback
+Provide:
+1. Optimized CV content with relevant keywords and phrases
+2. Match score (0-100)
+3. List of recommendations for improvement
+4. Detailed job match analysis
 
-Format your response as JSON with the following structure:
+CV Text:
+${cvText}
+
+Job Description:
+${jobDescription}
+
+Format the response as JSON with the following structure:
 {
-  "optimizedContent": string,
+  "optimizedContent": string, // The optimized CV text with EDUCATION, EXPERIENCE, and LANGUAGES sections preserved
   "matchScore": number,
   "recommendations": string[],
   "matchAnalysis": {
     "score": number,
-    "matchedKeywords": [{ "keyword": string, "relevance": number, "frequency": number, "placement": string }],
-    "missingKeywords": [{ "keyword": string, "importance": number, "suggestedPlacement": string }],
+    "matchedKeywords": [{"keyword": string, "relevance": number, "frequency": number, "placement": string}],
+    "missingKeywords": [{"keyword": string, "importance": number, "suggestedPlacement": string}],
     "recommendations": string[],
     "skillGap": string,
     "dimensionalScores": {
@@ -350,38 +344,33 @@ Format your response as JSON with the following structure:
     "detailedAnalysis": string,
     "improvementPotential": number,
     "sectionAnalysis": {
-      "profile": { "score": number, "feedback": string },
-      "skills": { "score": number, "feedback": string },
-      "experience": { "score": number, "feedback": string },
-      "education": { "score": number, "feedback": string },
-      "achievements": { "score": number, "feedback": string }
+      "profile": {"score": number, "feedback": string},
+      "skills": {"score": number, "feedback": string},
+      "experience": {"score": number, "feedback": string},
+      "education": {"score": number, "feedback": string},
+      "achievements": {"score": number, "feedback": string}
     }
   }
-}
-`;
+}`;
 
-    // Create a user message with the CV and job description
-    const userMessage = `
-Original CV:
-${cvText}
-
-Job Description:
-${jobDescription}
-`;
-
-    // Call GPT-4o with a timeout
+    logger.info('Sending CV optimization request to OpenAI (fallback method)');
+    
+    // Use a shorter timeout for the API call to ensure we can retry if needed
     const response = await withTimeout(
-      openai.chat.completions.create({
+      client.chat.completions.create({
         model: 'gpt-4o',
         messages: [
-          { role: 'system', content: systemMessage },
-          { role: 'user', content: userMessage }
+          {
+            role: 'user',
+            content: prompt
+          }
         ],
         temperature: 0.2,
+        max_tokens: 4000,
         response_format: { type: 'json_object' }
       }),
       60000, // 60 second timeout
-      'GPT-4o CV optimization (fallback)'
+      'CV optimization with GPT-4o (fallback)'
     );
 
     if (!response || !response.choices || response.choices.length === 0) {
@@ -395,18 +384,18 @@ ${jobDescription}
 
     try {
       const result = JSON.parse(content);
-      logger.info('Successfully parsed GPT-4o CV optimization result (fallback mode)');
+      logger.info('Successfully parsed CV optimization result from OpenAI');
       
       // Cache the result
-      cacheCVOptimization(cvText, jobDescription, result);
+      cacheCombinedResult(cvText, jobDescription, result);
       
       return result;
     } catch (parseError) {
-      logger.error('Failed to parse GPT-4o response:', parseError instanceof Error ? parseError.message : String(parseError));
+      logger.error('Failed to parse OpenAI response:', parseError instanceof Error ? parseError.message : String(parseError));
       throw new Error('Failed to parse CV optimization result');
     }
   } catch (error) {
-    logger.error('Error optimizing CV with GPT-4o (fallback):', error instanceof Error ? error.message : String(error));
+    logger.error('Error optimizing CV with OpenAI (fallback):', error instanceof Error ? error.message : String(error));
     
     // Provide more specific error messages based on error type
     if (error instanceof Error) {
@@ -421,7 +410,7 @@ ${jobDescription}
       }
     }
     
-    throw new Error('Failed to optimize CV with GPT-4o (fallback mode)');
+    throw new Error('Failed to optimize CV with OpenAI (fallback)');
   }
 }
 
@@ -480,43 +469,42 @@ export async function analyzeAndOptimizeCVWithGPT4o(
       throw new Error('OpenAI service is not available. Please check your API key configuration.');
     }
 
+    // Check API key
+    if (!apiKey || apiKey.trim() === '') {
+      throw new Error('OpenAI API key is not configured');
+    }
+
     // Check cache first
     const cachedResult = getCachedCombinedResult(cvText, jobDescription);
     if (cachedResult) {
-      logger.info('Using cached combined CV analysis and optimization result');
+      logger.info('Using cached CV combined analysis and optimization result from OpenAI');
       return cachedResult;
     }
 
-    logger.info('Starting combined CV analysis and optimization with GPT-4o');
+    logger.info('No cached combined result found, requesting from OpenAI');
+
+    const client = new OpenAI({ apiKey });
     
-    // Create a system message that instructs GPT-4o on how to analyze and optimize the CV
-    const systemMessage = `
-You are an expert CV analyzer and optimizer. Your task is to analyze a CV and optimize it for a specific job description.
-You have been provided with:
-1. The original CV text
-2. The job description
+    const prompt = `Analyze and optimize the following CV for the given job description. 
 
-Your goal is to:
-1. First analyze the CV to extract structured information
-2. Then create an optimized version of the CV that:
-   - Highlights relevant skills and experience for the job
-   - Incorporates keywords from the job description
-   - Maintains the original structure and formatting of the CV
-   - Improves the overall match score
+IMPORTANT: You MUST preserve the existing EDUCATION, EXPERIENCE, and LANGUAGES sections exactly as they appear in the original CV. Do not remove or modify these sections - only enhance other sections.
 
-Please provide:
-1. A structured analysis of the CV
-2. The optimized CV content
-3. A match score (0-100) indicating how well the optimized CV matches the job description
-4. A list of recommendations for further improvement
-5. A detailed match analysis with:
-   - Matched keywords with relevance, frequency, and placement
-   - Missing keywords with importance and suggested placement
-   - Skill gap analysis
-   - Dimensional scores (skills match, experience match, education match, etc.)
-   - Section-by-section analysis with scores and feedback
+First, analyze the CV to extract structured information. Then, optimize the CV for the job description.
 
-Format your response as JSON with the following structure:
+Provide:
+1. CV analysis with structured information
+2. Optimized CV content with relevant keywords and phrases
+3. Match score (0-100)
+4. List of recommendations for improvement
+5. Detailed job match analysis
+
+CV Text:
+${cvText}
+
+Job Description:
+${jobDescription}
+
+Format the response as JSON with the following structure:
 {
   "cvAnalysis": {
     "experience": [{"title": string, "company": string, "dates": string, "responsibilities": string[]}],
@@ -525,13 +513,13 @@ Format your response as JSON with the following structure:
     "achievements": string[],
     "profile": string
   },
-  "optimizedContent": string,
+  "optimizedContent": string, // The optimized CV text with EDUCATION, EXPERIENCE, and LANGUAGES sections preserved
   "matchScore": number,
   "recommendations": string[],
   "matchAnalysis": {
     "score": number,
-    "matchedKeywords": [{ "keyword": string, "relevance": number, "frequency": number, "placement": string }],
-    "missingKeywords": [{ "keyword": string, "importance": number, "suggestedPlacement": string }],
+    "matchedKeywords": [{"keyword": string, "relevance": number, "frequency": number, "placement": string}],
+    "missingKeywords": [{"keyword": string, "importance": number, "suggestedPlacement": string}],
     "recommendations": string[],
     "skillGap": string,
     "dimensionalScores": {
@@ -547,38 +535,33 @@ Format your response as JSON with the following structure:
     "detailedAnalysis": string,
     "improvementPotential": number,
     "sectionAnalysis": {
-      "profile": { "score": number, "feedback": string },
-      "skills": { "score": number, "feedback": string },
-      "experience": { "score": number, "feedback": string },
-      "education": { "score": number, "feedback": string },
-      "achievements": { "score": number, "feedback": string }
+      "profile": {"score": number, "feedback": string},
+      "skills": {"score": number, "feedback": string},
+      "experience": {"score": number, "feedback": string},
+      "education": {"score": number, "feedback": string},
+      "achievements": {"score": number, "feedback": string}
     }
   }
-}
-`;
+}`;
 
-    // Create a user message with the CV and job description
-    const userMessage = `
-Original CV:
-${cvText}
-
-Job Description:
-${jobDescription}
-`;
-
-    // Call GPT-4o with a timeout
+    logger.info('Sending combined CV analysis and optimization request to OpenAI');
+    
+    // Use a shorter timeout for the API call to ensure we can retry if needed
     const response = await withTimeout(
-      openai.chat.completions.create({
+      client.chat.completions.create({
         model: 'gpt-4o',
         messages: [
-          { role: 'system', content: systemMessage },
-          { role: 'user', content: userMessage }
+          {
+            role: 'user',
+            content: prompt
+          }
         ],
         temperature: 0.2,
+        max_tokens: 4000,
         response_format: { type: 'json_object' }
       }),
-      90000, // 90 second timeout (longer timeout for combined operation)
-      'GPT-4o CV analysis and optimization'
+      60000, // 60 second timeout
+      'Combined CV analysis and optimization with GPT-4o'
     );
 
     if (!response || !response.choices || response.choices.length === 0) {
@@ -592,18 +575,18 @@ ${jobDescription}
 
     try {
       const result = JSON.parse(content);
-      logger.info('Successfully parsed GPT-4o combined CV analysis and optimization result');
+      logger.info('Successfully parsed combined CV analysis and optimization result from OpenAI');
       
       // Cache the result
       cacheCombinedResult(cvText, jobDescription, result);
       
       return result;
     } catch (parseError) {
-      logger.error('Failed to parse GPT-4o response:', parseError instanceof Error ? parseError.message : String(parseError));
-      throw new Error('Failed to parse CV analysis and optimization result');
+      logger.error('Failed to parse OpenAI response:', parseError instanceof Error ? parseError.message : String(parseError));
+      throw new Error('Failed to parse combined CV analysis and optimization result');
     }
   } catch (error) {
-    logger.error('Error in combined CV analysis and optimization with GPT-4o:', error instanceof Error ? error.message : String(error));
+    logger.error('Error in combined CV analysis and optimization with OpenAI:', error instanceof Error ? error.message : String(error));
     
     // Provide more specific error messages based on error type
     if (error instanceof Error) {
@@ -618,6 +601,6 @@ ${jobDescription}
       }
     }
     
-    throw new Error('Failed to analyze and optimize CV with GPT-4o');
+    throw new Error('Failed to analyze and optimize CV with OpenAI');
   }
 } 

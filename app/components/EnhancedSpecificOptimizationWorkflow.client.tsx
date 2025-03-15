@@ -2491,8 +2491,8 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
 
 export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: EnhancedSpecificOptimizationWorkflowProps): JSX.Element {
   const { toast } = useToast();
-  const [selectedCVId, setSelectedCVId] = useState<string>('');
-  const [selectedCVName, setSelectedCVName] = useState<string>('');
+  const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
+  const [selectedCVName, setSelectedCVName] = useState<string | null>(null);
   const [originalText, setOriginalText] = useState<string | null>(null);
   const [optimizedText, setOptimizedText] = useState<string | null>(null);
   const [jobDescription, setJobDescription] = useState<string>('');
@@ -2503,12 +2503,18 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   const [jobMatchAnalysis, setJobMatchAnalysis] = useState<JobMatchAnalysis | null>(null);
   const [isGeneratingDocument, setIsGeneratingDocument] = useState<boolean>(false);
   
+  // Add missing state variables
+  const [recommendations, setRecommendations] = useState<string[]>([]);
+  const [matchScore, setMatchScore] = useState<number>(0);
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [isDownloadComplete, setIsDownloadComplete] = useState<boolean>(false);
+  
   // Processing state variables
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isProcessed, setIsProcessed] = useState<boolean>(false);
   const [processingProgress, setProcessingProgress] = useState<number>(0);
   const [processingStatus, setProcessingStatus] = useState<string>('');
-  const [activeTab, setActiveTab] = useState('jobDescription');
+  const [activeTab, setActiveTab] = useState<string>('jobDescription');
   const [processingTooLong, setProcessingTooLong] = useState<boolean>(false);
   const [activeAnalysisTab, setActiveAnalysisTab] = useState('keywords');
   
@@ -2530,22 +2536,22 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
 
   // Add jobTitle state variable
   const [jobTitle, setJobTitle] = useState<string>('');
-
-  // Add these state variables
-  const [isDownloading, setIsDownloading] = useState<boolean>(false);
-  const [isDownloadComplete, setIsDownloadComplete] = useState<boolean>(false);
-
-  // Circuit breaker state
+  
+  // Add service availability state variables
   const [mistralServiceAvailable, setMistralServiceAvailable] = useState<boolean>(true);
   const [mistralFailureCount, setMistralFailureCount] = useState<number>(0);
-  const MAX_FAILURES = 3; // After this many failures, switch to local processing
-
-  // State for OpenAI service availability
   const [openAIAvailable, setOpenAIAvailable] = useState<boolean>(true);
+  
+  // Constants
+  const MAX_FAILURES = 3; // After this many failures, switch to local processing
 
   // Refs for tracking intervals and timeouts
   const processingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const documentTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const documentGenerationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ... existing code ...
 
   // Function to handle Mistral service failure
   const handleMistralFailure = useCallback((error: Error) => {
@@ -2616,62 +2622,84 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   
   // Process the CV for specific job
   const processCV = async () => {
-    // Validate selected CV and job description
-    if (!selectedCVId && !originalText) {
-      setError("Please select a CV first");
-      return;
-    }
-    
-    if (!jobDescription) {
-      setError("Please enter a job description");
-      return;
-    }
-    
-    // Set processing state
-    setIsProcessing(true);
-    setIsProcessed(false);
-    setProcessingProgress(0);
-    setProcessingStatus("Starting optimization...");
-    setError(null);
-    setJobMatchAnalysis(null);
-    
     try {
-      console.log(`Processing CV: ${selectedCVName} (ID: ${selectedCVId}), with job description`);
-      
-      // Step 1: Fetch original CV text if not already loaded
+      setIsProcessing(true);
+      setProcessingStatus('Starting CV optimization...');
       setProcessingProgress(10);
-      setProcessingStatus("Fetching CV content...");
+      setError(null);
       
-      let cvText = originalText;
-      if (!cvText) {
-        try {
-          const response = await fetch(`/api/cv/get-text?cvId=${selectedCVId}`);
-          if (response.ok) {
-            const data = await response.json();
-            if (data.success && data.text) {
-              cvText = data.text;
-              setOriginalText(data.text);
-            } else {
-              throw new Error(data.error || "Failed to fetch CV text");
-            }
-          } else {
-            throw new Error(`Server responded with status: ${response.status}`);
-          }
-        } catch (fetchError) {
-          console.error("Error fetching CV text:", fetchError);
-          setError(`Failed to fetch CV text: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`);
-          setIsProcessing(false);
-          return;
-        }
+      // Validate inputs
+      if (!selectedCVId) {
+        setError('Please select a CV to optimize');
+        setIsProcessing(false);
+        return;
       }
       
-      // Step 2: Analyze and optimize CV using the dual-AI approach (Mistral + GPT-4o)
+      if (!jobDescription || jobDescription.trim() === '') {
+        setError('Please enter a job description');
+        setIsProcessing(false);
+        return;
+      }
+      
+      // Fetch CV content
+      setProcessingStatus('Fetching CV content...');
       setProcessingProgress(20);
-      setProcessingStatus("Analyzing CV with AI...");
+      
+      const cvResponse = await fetch(`/api/cv/get-text?cvId=${selectedCVId}`);
+      if (!cvResponse.ok) {
+        throw new Error(`Failed to fetch CV content: ${cvResponse.statusText}`);
+      }
+      
+      const cvData = await cvResponse.json();
+      const cvText = cvData.text || '';
+      
+      if (!cvText || cvText.trim() === '') {
+        throw new Error('CV text is empty');
+      }
+      
+      // Store original text
+      setOriginalText(cvText);
+      
+      // Extract sections from the original CV
+      const educationSection = extractEducationSection(cvText);
+      const experienceSection = extractExperienceSection(cvText);
+      const languagesSection = extractLanguagesSection(cvText);
+      
+      // Analyze and optimize CV
+      setProcessingStatus('Analyzing and optimizing CV...');
+      setProcessingProgress(40);
+      
+      // Check if Mistral service is available
+      let mistralAvailable = true;
+      let openAIAvailable = true;
       
       try {
-        // Call the optimize API endpoint that uses both Mistral and GPT-4o
-        const response = await fetch('/api/cv/optimize', {
+        const mistralCheckResponse = await fetch('/api/cv/analyze', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ cvText: cvText.substring(0, 100) }), // Just send a small sample to check
+        });
+        
+        if (!mistralCheckResponse.ok) {
+          const errorData = await mistralCheckResponse.json();
+          if (errorData.serviceUnavailable) {
+            mistralAvailable = false;
+            setMistralServiceAvailable(false);
+            console.warn('Mistral service is unavailable, will use OpenAI fallback');
+          }
+        }
+      } catch (error) {
+        mistralAvailable = false;
+        setMistralServiceAvailable(false);
+        console.warn('Error checking Mistral service:', error);
+      }
+      
+      // Optimize CV using the appropriate service
+      let optimizationResponse;
+      try {
+        optimizationResponse = await fetch('/api/cv/optimize', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -2679,327 +2707,149 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           body: JSON.stringify({
             cvText,
             jobDescription,
+            preserveSections: {
+              education: true,
+              experience: true,
+              languages: true
+            }
           }),
         });
         
-        // Check for HTTP errors
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-          
-          // Handle specific error cases
-          if (response.status === 503) {
-            // Service unavailable - check if it's Mistral or OpenAI
-            const errorMessage = errorData.error || 'Service unavailable';
-            const isMistralUnavailable = errorMessage.includes('Mistral');
-            const isOpenAIUnavailable = errorMessage.includes('OpenAI');
-            
-            if (isMistralUnavailable && isOpenAIUnavailable) {
-              // Both services unavailable
-              setError("Both AI services are currently unavailable. Please try again later.");
-              console.warn("Both Mistral and OpenAI services are unavailable");
-              setMistralServiceAvailable(false);
+        if (!optimizationResponse.ok) {
+          const errorData = await optimizationResponse.json();
+          if (errorData.serviceUnavailable) {
+            if (errorData.details && errorData.details.includes('OpenAI')) {
+              openAIAvailable = false;
               setOpenAIAvailable(false);
-            } else if (isMistralUnavailable) {
-              // Only Mistral unavailable - we can still proceed with OpenAI fallback
-              console.warn("Mistral AI service is unavailable, using OpenAI fallback");
-              setMistralServiceAvailable(false);
-              setProcessingStatus("Using OpenAI for optimization (Mistral unavailable)...");
-            } else if (isOpenAIUnavailable) {
-              // OpenAI unavailable - we can't proceed
-              setError("OpenAI service is currently unavailable. Please try again later.");
-              console.warn("OpenAI service is unavailable");
-              setOpenAIAvailable(false);
-              setIsProcessing(false);
-              return;
+              throw new Error('OpenAI service is unavailable');
+            } else if (mistralFailureCount < 2) {
+              // Increment Mistral failure count and retry
+              setMistralFailureCount(prev => prev + 1);
+              throw new Error('Mistral service temporarily unavailable, retrying...');
+            } else {
+              throw new Error('AI services are unavailable. Please try again later.');
             }
-          } else if (response.status === 401) {
-            // Authentication failed
-            setError("Authentication failed. Please sign in again.");
-            setIsProcessing(false);
-            return;
           } else {
-            // Other errors
-            throw new Error(errorData.error || `Server responded with status: ${response.status}`);
+            throw new Error(errorData.error || 'Failed to optimize CV');
           }
         }
-        
-        // Parse the response
-        const data = await response.json();
-        
-        if (!data.success) {
-          throw new Error(data.error || "Failed to optimize CV");
-        }
-        
-        // Step 3: Process the optimization result
-        setProcessingProgress(70);
-        setProcessingStatus("Processing optimization results...");
-        
-        // Set optimized text and job match analysis
-        setOptimizedText(data.optimizedContent);
-        
-        // Use the detailed match analysis from GPT-4o
-        setJobMatchAnalysis(data.matchAnalysis);
-        
-        // Step 4: Complete processing
-        setProcessingProgress(100);
-        setProcessingStatus("Optimization complete!");
-        
-        // Set processing state
-        setIsProcessed(true);
+      } catch (optimizationError: unknown) {
+        console.error('Error during optimization:', optimizationError);
+        setError(`Optimization failed: ${optimizationError instanceof Error ? optimizationError.message : 'Unknown error'}`);
         setIsProcessing(false);
-        
-        // Extract job title from job description if not already set
-        if (!jobTitle) {
-          const jobTitleMatch = jobDescription.match(/^(.+?)(?:\n|\.)/);
-          if (jobTitleMatch && jobTitleMatch[1]) {
-            setJobTitle(jobTitleMatch[1].trim());
-          }
-        }
-      } catch (optimizeError) {
-        console.error("Error optimizing CV:", optimizeError);
-        
-        // Fallback to local processing if API fails
-        setProcessingStatus("API optimization failed. Falling back to local processing...");
-        console.warn("Falling back to local optimization due to API error");
-        
-        // Use local optimization as fallback
-        setProcessingProgress(50);
-        setProcessingStatus("Optimizing locally...");
-        
-        // Generate optimized text using local function
-        const optimizedContent = generateOptimizedText(cvText || '', jobDescription);
-        setOptimizedText(optimizedContent);
-        
-        // Generate a fallback analysis
-        const fallbackAnalysis = analyzeJobMatch(cvText || '', jobDescription);
-        setJobMatchAnalysis(fallbackAnalysis);
-        
-        // Complete processing
-        setProcessingProgress(100);
-        setProcessingStatus("Local optimization complete!");
-        setIsProcessed(true);
-        setIsProcessing(false);
+        return;
       }
-    } catch (error) {
-      console.error("Error processing CV:", error);
+      
+      // Process optimization results
+      setProcessingStatus('Processing optimization results...');
+      setProcessingProgress(70);
+      
+      const optimizationData = await optimizationResponse.json();
+      
+      if (!optimizationData.success) {
+        throw new Error(optimizationData.error || 'Failed to optimize CV');
+      }
+      
+      let optimizedContent = optimizationData.optimizedContent || '';
+      
+      // Ensure the preserved sections are included in the optimized content
+      if (optimizedContent) {
+        // Check if the sections are present in the optimized content
+        const hasEducation = /EDUCATION/i.test(optimizedContent);
+        const hasExperience = /EXPERIENCE/i.test(optimizedContent);
+        const hasLanguages = /LANGUAGES/i.test(optimizedContent);
+        
+        // If any section is missing, reinsert it from the original CV
+        if (!hasEducation && educationSection) {
+          optimizedContent = insertSectionInOptimizedContent(optimizedContent, 'EDUCATION', educationSection);
+        }
+        
+        if (!hasExperience && experienceSection) {
+          optimizedContent = insertSectionInOptimizedContent(optimizedContent, 'EXPERIENCE', experienceSection);
+        }
+        
+        if (!hasLanguages && languagesSection) {
+          optimizedContent = insertSectionInOptimizedContent(optimizedContent, 'LANGUAGES', languagesSection);
+        }
+      }
+      
+      // Update state with optimization results
+      setOptimizedText(optimizedContent);
+      setJobMatchAnalysis(optimizationData.matchAnalysis || null);
+      setRecommendations(optimizationData.recommendations || []);
+      setMatchScore(optimizationData.matchScore || 0);
+      
+      // Complete processing
+      setProcessingStatus('Optimization complete!');
+      setProcessingProgress(100);
+      setIsProcessing(false);
+      setIsProcessed(true);
+      setActiveTab('optimizedCV');
+      
+    } catch (error: unknown) {
+      console.error('Error processing CV:', error);
       setError(`Failed to process CV: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIsProcessing(false);
     }
   };
-  
-  // Simulate processing with progress updates
-  const simulateProcessing = () => {
-    logger.info("Starting local fallback processing");
-    
-    // Clear any existing intervals to prevent multiple simulations
-    if (processingIntervalRef.current) {
-      clearInterval(processingIntervalRef.current);
-      processingIntervalRef.current = null;
-    }
-    
-    let progress = 0;
-    const startTime = Date.now();
-    
-    // Set initial status
-    setProcessingStatus("Using local optimization (fallback mode)...");
-    
-    // Create a more deterministic and reliable progress simulation
-    processingIntervalRef.current = setInterval(() => {
-      // Calculate elapsed time
-      const elapsedSeconds = (Date.now() - startTime) / 1000;
-      
-      // More predictable progress calculation
-      // Ensures we reach 100% within 30 seconds max
-      if (elapsedSeconds < 5) {
-        // First 5 seconds: go to 30%
-        progress = Math.min(30, elapsedSeconds * 6);
-      } else if (elapsedSeconds < 15) {
-        // Next 10 seconds: go from 30% to 70%
-        progress = Math.min(70, 30 + (elapsedSeconds - 5) * 4);
-      } else if (elapsedSeconds < 25) {
-        // Next 10 seconds: go from 70% to 95%
-        progress = Math.min(95, 70 + (elapsedSeconds - 15) * 2.5);
-        } else {
-        // Final 5 seconds: go from 95% to 100%
-        progress = Math.min(100, 95 + (elapsedSeconds - 25));
-      }
-      
-      // Ensure we complete within 30 seconds max
-      if (elapsedSeconds > 30) {
-        progress = 100;
-      }
-      
-      // Update progress
-      setProcessingProgress(Math.floor(progress));
-      
-      // More detailed status messages based on progress
-      if (progress < 15) {
-        setProcessingStatus("Analyzing job description and requirements (local mode)...");
-      } else if (progress < 30) {
-        setProcessingStatus("Extracting key skills and qualifications (local mode)...");
-      } else if (progress < 45) {
-        setProcessingStatus("Analyzing CV content and structure (local mode)...");
-      } else if (progress < 60) {
-        setProcessingStatus("Matching CV content to job requirements (local mode)...");
-      } else if (progress < 75) {
-        setProcessingStatus("Optimizing CV sections and formatting (local mode)...");
-      } else if (progress < 85) {
-        setProcessingStatus("Enhancing content relevance (local mode)...");
-      } else if (progress < 95) {
-        setProcessingStatus("Finalizing optimizations (local mode)...");
-      } else {
-        setProcessingStatus("Completing final adjustments (local mode)...");
-      }
-      
-      // Complete the process when we reach 100%
-      if (progress >= 100) {
-        if (processingIntervalRef.current) {
-          clearInterval(processingIntervalRef.current);
-          processingIntervalRef.current = null;
-        }
-        
-        try {
-          logger.info("Local fallback processing complete, generating optimized content");
-  
-  // Generate optimized text based on job description
-          const optimizedText = generateOptimizedText(originalText || '', jobDescription);
-          setOptimizedText(optimizedText);
-          
-          // Generate structured CV
-          const structuredCV = generateStructuredCV(optimizedText, jobDescription);
-          
-          // Generate job match analysis on the optimized content
-          const analysis = analyzeJobMatch(optimizedText, jobDescription);
-          setJobMatchAnalysis(analysis);
-          
-          // Complete processing
-          setIsProcessing(false);
-          setIsProcessed(true);
-          setProcessingStatus("Optimization complete (using local processing)");
-          setActiveTab('optimizedCV');
-          
-          logger.info("Local fallback processing successfully completed");
-        } catch (error) {
-          logger.error("Error in local fallback processing:", error instanceof Error ? error.message : String(error));
-          
-          // Even if there's an error, try to show something
-          setError("Error in local processing. Showing partial results.");
-          setIsProcessing(false);
-          setIsProcessed(true);
-          
-          // Generate a simple fallback if everything else fails
-          const simpleOptimizedText = `
-PROFILE:
-Professional with experience in relevant fields seeking a position that matches my skills and qualifications.
 
-SKILLS:
-• Communication
-• Problem Solving
-• Teamwork
-• Adaptability
-• Time Management
-
-EXPERIENCE:
-• Previous relevant positions with demonstrated success
-• Collaborated with teams to achieve goals
-• Implemented solutions to improve processes
-
-EDUCATION:
-• Relevant degree or certification
-`;
-          
-          setOptimizedText(simpleOptimizedText);
-          setJobMatchAnalysis({
-            score: 65,
-            matchedKeywords: [],
-            missingKeywords: [],
-            recommendations: ["Consider adding more specific skills related to the job description"],
-            skillGap: "Some skills from the job description may be missing from your CV",
-            dimensionalScores: {
-              skillsMatch: 0.65,
-              experienceMatch: 0.65,
-              educationMatch: 0.65,
-              industryFit: 0.65,
-              overallCompatibility: 0.65,
-              keywordDensity: 0.65,
-              formatCompatibility: 0.65,
-              contentRelevance: 0.65
-            },
-            detailedAnalysis: "This is a fallback analysis due to processing errors.",
-            improvementPotential: 35,
-            sectionAnalysis: {
-              profile: { score: 0.65, feedback: "Consider enhancing your profile section" },
-              skills: { score: 0.65, feedback: "Add more relevant skills" },
-              experience: { score: 0.65, feedback: "Highlight relevant experience" },
-              education: { score: 0.65, feedback: "Emphasize relevant education" },
-              achievements: { score: 0.65, feedback: "Add specific achievements" }
-            }
-          });
-        }
-      }
-    }, 500);
-    
-    // Return a cleanup function
-    return () => {
-      if (processingIntervalRef.current) {
-        clearInterval(processingIntervalRef.current);
-        processingIntervalRef.current = null;
-      }
-    };
+  // Helper function to extract the EDUCATION section from the CV
+  const extractEducationSection = (cvText: string): string | null => {
+    const educationRegex = /(?:^|\n)(?:EDUCATION|ACADEMIC|QUALIFICATIONS|ACADEMIC QUALIFICATIONS|EDUCATIONAL BACKGROUND|DEGREES?)(?:[:.\-]|\s*\n)([\s\S]*?)(?=\n(?:EXPERIENCE|WORK|EMPLOYMENT|PROFESSIONAL EXPERIENCE|CAREER|WORK HISTORY|JOB HISTORY|SKILLS|LANGUAGES|ACHIEVEMENTS|GOALS|REFERENCES|CONTACT|$))/i;
+    const match = cvText.match(educationRegex);
+    return match ? match[1].trim() : null;
   };
-  
-  // Generate optimized text based on job description
-  const generateOptimizedText = (originalText: string | null, jobDescription: string): string => {
-    // This is a placeholder for the actual AI-powered optimization
-    // In a real implementation, this would call an API to optimize the CV
+
+  // Helper function to extract the EXPERIENCE section from the CV
+  const extractExperienceSection = (cvText: string): string | null => {
+    const experienceRegex = /(?:^|\n)(?:EXPERIENCE|WORK|EMPLOYMENT|PROFESSIONAL EXPERIENCE|CAREER|WORK HISTORY|JOB HISTORY)(?:[:.\-]|\s*\n)([\s\S]*?)(?=\n(?:EDUCATION|ACADEMIC|QUALIFICATIONS|SKILLS|LANGUAGES|ACHIEVEMENTS|GOALS|REFERENCES|CONTACT|$))/i;
+    const match = cvText.match(experienceRegex);
+    return match ? match[1].trim() : null;
+  };
+
+  // Helper function to extract the LANGUAGES section from the CV
+  const extractLanguagesSection = (cvText: string): string | null => {
+    const languagesRegex = /(?:^|\n)(?:LANGUAGES?|LANGUAGE PROFICIENCY|LANGUAGE SKILLS|SPOKEN LANGUAGES?)(?:[:.\-]|\s*\n)([\s\S]*?)(?=\n(?:EDUCATION|EXPERIENCE|WORK|EMPLOYMENT|SKILLS|ACHIEVEMENTS|GOALS|REFERENCES|CONTACT|$))/i;
+    const match = cvText.match(languagesRegex);
+    return match ? match[1].trim() : null;
+  };
+
+  // Helper function to insert a section into the optimized content
+  const insertSectionInOptimizedContent = (optimizedContent: string, sectionName: string, sectionContent: string): string => {
+    // Determine where to insert the section
+    // Common section order: PROFILE, SKILLS, EXPERIENCE, EDUCATION, LANGUAGES, ACHIEVEMENTS, GOALS, REFERENCES
+    const sectionOrder = ['PROFILE', 'SKILLS', 'EXPERIENCE', 'EDUCATION', 'LANGUAGES', 'ACHIEVEMENTS', 'GOALS', 'REFERENCES'];
+    const sectionIndex = sectionOrder.indexOf(sectionName);
     
-    // Use empty string if originalText is null
-    const cvText = originalText || '';
-    
-    // Extract job title from job description (first line or first sentence)
-    const jobTitleMatch = jobDescription.match(/^(.+?)(?:\n|\.)/);
-    const extractedJobTitle = jobTitleMatch ? jobTitleMatch[1].trim() : 'Position';
-    
-    // Set job title if it's not already set
-    if (!jobTitle) {
-      setJobTitle(extractedJobTitle);
+    if (sectionIndex === -1) {
+      // If section is not in our standard order, append it at the end
+      return `${optimizedContent.trim()}\n\n${sectionName}:\n${sectionContent}`;
     }
     
-    // Create a structured format for the optimized CV
-    const optimizedContent = `
-PROFILE:
-Experienced professional with a strong background in ${extractKeywords(jobDescription, true).slice(0, 3).join(', ')}. Proven track record of delivering results in ${extractKeywords(jobDescription, true).slice(3, 6).join(', ')}. Seeking to leverage my skills and experience to excel as a ${extractedJobTitle}.
-
-ACHIEVEMENTS:
-• Successfully implemented solutions that increased efficiency by 30% in previous roles
-• Recognized for outstanding performance and dedication to excellence
-• Collaborated effectively with cross-functional teams to achieve organizational goals
-
-GOALS:
-• To contribute my expertise in ${extractKeywords(jobDescription, true).slice(0, 2).join(' and ')} to help achieve company objectives
-• To continuously develop my skills and knowledge in ${extractKeywords(jobDescription, true).slice(2, 4).join(' and ')}
-• To build strong relationships with colleagues and stakeholders to foster a collaborative work environment
-
-SKILLS:
-${extractKeywords(cvText).filter(keyword => 
-  extractKeywords(jobDescription, true).includes(keyword)
-).slice(0, 10).map(skill => `• ${skill}`).join('\n')}
-
-EDUCATION:
-${extractEducationData(cvText).map(edu => 
-  `• ${edu.degree}, ${edu.institution || 'Institution'}${edu.year ? `, ${edu.year}` : ''}`
-).join('\n')}
-
-EXPERIENCE:
-${extractExperienceData(cvText).map(exp => 
-  `• ${exp.title || 'Professional'}${exp.startDate && exp.endDate ? ` (${exp.startDate} - ${exp.endDate})` : ''}`
-).join('\n')}
-
-LANGUAGES:
-${extractLanguages(cvText).map(lang => `• ${lang}`).join('\n')}
-`;
+    // Try to find the section that should come after this one
+    let insertAfterSection = null;
+    for (let i = sectionIndex - 1; i >= 0; i--) {
+      const prevSection = sectionOrder[i];
+      if (new RegExp(`\\b${prevSection}\\b`, 'i').test(optimizedContent)) {
+        insertAfterSection = prevSection;
+        break;
+      }
+    }
     
-    return optimizedContent;
+    // If we found a section to insert after
+    if (insertAfterSection) {
+      const regex = new RegExp(`(\\b${insertAfterSection}[:\\s\\S]*?)(\\n\\n|$)`, 'i');
+      const match = optimizedContent.match(regex);
+      if (match && match.index !== undefined) {
+        const insertPosition = match.index + match[0].length;
+        return optimizedContent.substring(0, insertPosition) + 
+               `\n\n${sectionName}:\n${sectionContent}` + 
+               optimizedContent.substring(insertPosition);
+      }
+    }
+    
+    // If we couldn't find a good insertion point, just append it
+    return `${optimizedContent.trim()}\n\n${sectionName}:\n${sectionContent}`;
   };
 
   const showToast = useCallback(({ title, description, duration }: { title: string; description: string; duration: number }) => {
