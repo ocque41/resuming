@@ -43,15 +43,6 @@ export default function HomePage() {
 
       {/* Hero Section */}
       <section className="relative flex-1 flex items-center justify-center">
-        {/* Background image with better opacity control */}
-        <div 
-          className="absolute inset-0 bg-cover bg-center" 
-          style={{ 
-            backgroundImage: "url('/11.webp')", 
-            opacity: 0.3
-          }}
-        ></div>
-        
         <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-center h-full py-4">
           <div className="max-h-full overflow-auto no-scrollbar flex flex-col items-center">
             {/* Badge above title */}
@@ -73,7 +64,7 @@ export default function HomePage() {
                 <Button
                   asChild
                   size="lg"
-                  className="bg-[#FFFFFF] text-black px-6 sm:px-8 py-3 sm:py-4 rounded-md hover:bg-[#B4916C]/90 transition w-full sm:w-auto"
+                  className="bg-[#050505] text-[white] px-6 sm:px-8 py-3 sm:py-4 rounded-md hover:bg-[#B4916C]/90 transition w-full sm:w-auto"
                 >
                   <Link href="/sign-up">Try For Free</Link>
                 </Button>
@@ -81,20 +72,20 @@ export default function HomePage() {
                   asChild
                   variant="outline"
                   size="lg"
-                  className="border border-[#050505] text-white px-6 sm:px-8 py-3 sm:py-4 rounded-md hover:bg-[#B4916C] transition w-full sm:w-auto"
+                  className="border border-white text-[#050505] px-6 sm:px-8 py-3 sm:py-4 rounded-md hover:bg-[#0c0a08] transition w-full sm:w-auto"
                 >
                   <Link href="/pricing">Learn More</Link>
                 </Button>
               </div>
             </Article>
             
-            {/* Dashboard Preview Image - Responsive sizing */}
-            <div className="mt-6 sm:mt-8 w-full max-w-4xl px-4">
-              <div className="rounded-lg overflow-hidden shadow-2xl">
+            {/* Hero Image - Fully responsive with standard img tag */}
+            <div className="mt-6 sm:mt-8 w-full max-w-4xl px-4 flex justify-center">
+              <div className="w-full max-w-3xl rounded-lg overflow-hidden shadow-2xl">
                 <img 
-                  src="/mockups/mockup8.png" 
-                  alt="CV Optimizer Dashboard Preview" 
-                  className="w-full h-auto object-cover transform hover:scale-105 transition-transform duration-500"
+                  src="/11.webp" 
+                  alt="CV Optimizer Hero" 
+                  className="w-full h-auto max-h-[50vh] object-contain transform hover:scale-105 transition-transform duration-500"
                 />
               </div>
             </div>

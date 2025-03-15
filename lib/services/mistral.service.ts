@@ -25,6 +25,70 @@ try {
   logger.error('Mistral AI client initialization failed:', error instanceof Error ? error.message : String(error));
 }
 
+// Retry function with exponential backoff
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  retries = 3,
+  initialDelay = 1000,
+  maxDelay = 10000
+): Promise<T> {
+  let lastError: Error | null = null;
+  let delay = initialDelay;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      if (attempt > 0) {
+        logger.info(`Retry attempt ${attempt}/${retries} after ${delay}ms delay`);
+      }
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      // Don't retry on authentication errors
+      if (lastError.message.includes('401') || lastError.message.includes('403')) {
+        logger.error(`Authentication error, not retrying: ${lastError.message}`);
+        throw lastError;
+      }
+      
+      if (attempt === retries) {
+        logger.error(`All ${retries} retry attempts failed: ${lastError.message}`);
+        throw lastError;
+      }
+      
+      // Log the error but continue with retry
+      logger.warn(`Attempt ${attempt + 1} failed: ${lastError.message}. Retrying in ${delay}ms...`);
+      
+      // Wait before next attempt
+      await new Promise(resolve => setTimeout(resolve, delay));
+      
+      // Exponential backoff with jitter
+      delay = Math.min(delay * 2, maxDelay) * (0.8 + Math.random() * 0.4);
+    }
+  }
+
+  // This should never happen due to the throw in the loop
+  throw lastError || new Error('Retry failed for unknown reason');
+}
+
+// Timeout wrapper for promises
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operationName: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(`${operationName} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    promise
+      .then(result => {
+        clearTimeout(timeoutId);
+        resolve(result);
+      })
+      .catch(error => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+}
+
 export interface CVAnalysisResult {
   experience: Array<{
     title: string;
@@ -58,50 +122,59 @@ export async function analyzeCVContent(cvText: string): Promise<CVAnalysisResult
       throw new Error('Mistral API key is not configured');
     }
 
-    const client = getMistralClient();
+    return await retryWithBackoff(async () => {
+      const client = getMistralClient();
+      
+      const prompt = `Analyze the following CV and extract structured information. Format the response as JSON with the following structure:
+      {
+        "experience": [{"title": string, "company": string, "dates": string, "responsibilities": string[]}],
+        "education": [{"degree": string, "field": string, "institution": string, "year": string}],
+        "skills": {"technical": string[], "professional": string[]},
+        "achievements": string[],
+        "profile": string
+      }
+
+      CV Text:
+      ${cvText}`;
+
+      logger.info('Sending CV analysis request to Mistral AI');
+      
+      // Use a shorter timeout for the API call to ensure we can retry if needed
+      const response = await withTimeout(
+        client.chat({
+          model: 'mistral-large-latest',
+          messages: [
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.1,
+          maxTokens: 2000
+        }),
+        30000, // 30 second timeout
+        'CV analysis'
+      );
+
+      if (!response || !response.choices || response.choices.length === 0) {
+        throw new Error('Empty response from Mistral AI');
+      }
+
+      const content = response.choices[0].message.content;
+      if (!content) {
+        throw new Error('Empty content in Mistral AI response');
+      }
+
+      try {
+        const result = JSON.parse(content);
+        logger.info('Successfully parsed CV analysis result from Mistral AI');
+        return result;
+      } catch (parseError) {
+        logger.error('Failed to parse Mistral AI response:', parseError instanceof Error ? parseError.message : String(parseError));
+        throw new Error('Failed to parse CV analysis result');
+      }
+    }, 3, 2000, 10000); // 3 retries, starting with 2s delay, max 10s delay
     
-    const prompt = `Analyze the following CV and extract structured information. Format the response as JSON with the following structure:
-    {
-      "experience": [{"title": string, "company": string, "dates": string, "responsibilities": string[]}],
-      "education": [{"degree": string, "field": string, "institution": string, "year": string}],
-      "skills": {"technical": string[], "professional": string[]},
-      "achievements": string[],
-      "profile": string
-    }
-
-    CV Text:
-    ${cvText}`;
-
-    logger.info('Sending CV analysis request to Mistral AI');
-    const response = await client.chat({
-      model: 'mistral-large-latest',
-      messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      temperature: 0.1,
-      maxTokens: 2000
-    });
-
-    if (!response || !response.choices || response.choices.length === 0) {
-      throw new Error('Empty response from Mistral AI');
-    }
-
-    const content = response.choices[0].message.content;
-    if (!content) {
-      throw new Error('Empty content in Mistral AI response');
-    }
-
-    try {
-      const result = JSON.parse(content);
-      logger.info('Successfully parsed CV analysis result from Mistral AI');
-      return result;
-    } catch (parseError) {
-      logger.error('Failed to parse Mistral AI response:', parseError instanceof Error ? parseError.message : String(parseError));
-      throw new Error('Failed to parse CV analysis result');
-    }
   } catch (error) {
     logger.error('Error analyzing CV with Mistral AI:', error instanceof Error ? error.message : String(error));
     
@@ -142,56 +215,65 @@ export async function optimizeCVForJob(cvText: string, jobDescription: string): 
       throw new Error('Mistral API key is not configured');
     }
 
-    const client = getMistralClient();
+    return await retryWithBackoff(async () => {
+      const client = getMistralClient();
+      
+      const prompt = `Optimize the following CV for the given job description. Provide:
+      1. Optimized CV content with relevant keywords and phrases
+      2. Match score (0-100)
+      3. List of recommendations for improvement
+
+      CV Text:
+      ${cvText}
+
+      Job Description:
+      ${jobDescription}
+
+      Format the response as JSON with the following structure:
+      {
+        "optimizedContent": string,
+        "matchScore": number,
+        "recommendations": string[]
+      }`;
+
+      logger.info('Sending CV optimization request to Mistral AI');
+      
+      // Use a shorter timeout for the API call to ensure we can retry if needed
+      const response = await withTimeout(
+        client.chat({
+          model: 'mistral-large-latest',
+          messages: [
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.2,
+          maxTokens: 3000
+        }),
+        30000, // 30 second timeout
+        'CV optimization'
+      );
+
+      if (!response || !response.choices || response.choices.length === 0) {
+        throw new Error('Empty response from Mistral AI');
+      }
+
+      const content = response.choices[0].message.content;
+      if (!content) {
+        throw new Error('Empty content in Mistral AI response');
+      }
+
+      try {
+        const result = JSON.parse(content);
+        logger.info('Successfully parsed CV optimization result from Mistral AI');
+        return result;
+      } catch (parseError) {
+        logger.error('Failed to parse Mistral AI response:', parseError instanceof Error ? parseError.message : String(parseError));
+        throw new Error('Failed to parse CV optimization result');
+      }
+    }, 3, 2000, 10000); // 3 retries, starting with 2s delay, max 10s delay
     
-    const prompt = `Optimize the following CV for the given job description. Provide:
-    1. Optimized CV content with relevant keywords and phrases
-    2. Match score (0-100)
-    3. List of recommendations for improvement
-
-    CV Text:
-    ${cvText}
-
-    Job Description:
-    ${jobDescription}
-
-    Format the response as JSON with the following structure:
-    {
-      "optimizedContent": string,
-      "matchScore": number,
-      "recommendations": string[]
-    }`;
-
-    logger.info('Sending CV optimization request to Mistral AI');
-    const response = await client.chat({
-      model: 'mistral-large-latest',
-      messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      temperature: 0.2,
-      maxTokens: 3000
-    });
-
-    if (!response || !response.choices || response.choices.length === 0) {
-      throw new Error('Empty response from Mistral AI');
-    }
-
-    const content = response.choices[0].message.content;
-    if (!content) {
-      throw new Error('Empty content in Mistral AI response');
-    }
-
-    try {
-      const result = JSON.parse(content);
-      logger.info('Successfully parsed CV optimization result from Mistral AI');
-      return result;
-    } catch (parseError) {
-      logger.error('Failed to parse Mistral AI response:', parseError instanceof Error ? parseError.message : String(parseError));
-      throw new Error('Failed to parse CV optimization result');
-    }
   } catch (error) {
     logger.error('Error optimizing CV with Mistral AI:', error instanceof Error ? error.message : String(error));
     

@@ -2530,6 +2530,42 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [isDownloadComplete, setIsDownloadComplete] = useState<boolean>(false);
 
+  // Circuit breaker state
+  const [mistralServiceAvailable, setMistralServiceAvailable] = useState(true);
+  const [mistralFailureCount, setMistralFailureCount] = useState(0);
+  const MAX_FAILURES = 3; // After this many failures, switch to local processing
+
+  // Function to handle Mistral service failure
+  const handleMistralFailure = useCallback((error: Error) => {
+    setMistralFailureCount(prev => {
+      const newCount = prev + 1;
+      if (newCount >= MAX_FAILURES) {
+        logger.warn(`Mistral service failed ${newCount} times, switching to local processing`);
+        setMistralServiceAvailable(false);
+      }
+      return newCount;
+    });
+    
+    // Log the error
+    console.error("Mistral service error:", error);
+    logger.error(`Mistral service error: ${error.message}`);
+    
+    return error;
+  }, []);
+
+  // Reset circuit breaker after some time
+  useEffect(() => {
+    if (!mistralServiceAvailable) {
+      const timer = setTimeout(() => {
+        logger.info("Resetting Mistral service availability");
+        setMistralServiceAvailable(true);
+        setMistralFailureCount(0);
+      }, 5 * 60 * 1000); // 5 minutes
+      
+      return () => clearTimeout(timer);
+    }
+  }, [mistralServiceAvailable]);
+
   // Fetch original CV text
   const fetchOriginalText = useCallback(async (cvId: string) => {
     try {
@@ -2640,6 +2676,16 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         }
       }
       
+      // Check if Mistral service is available or if we should use local processing
+      if (!mistralServiceAvailable) {
+        logger.info("Mistral service is marked as unavailable, using local processing");
+        setProcessingProgress(20);
+        setProcessingStatus("Using local optimization (Mistral service unavailable)...");
+        clearTimeout(processingTimeout);
+        simulateProcessing();
+        return;
+      }
+      
       // Step 2: Analyze CV content
       setProcessingProgress(30);
       setProcessingStatus("Analyzing CV content...");
@@ -2677,10 +2723,11 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         }
         
       } catch (analysisError) {
-        console.error("CV analysis error:", analysisError);
+        // Handle Mistral service failure
+        handleMistralFailure(analysisError instanceof Error ? analysisError : new Error(String(analysisError)));
         
         // If Mistral AI fails, fall back to local processing
-        console.log("Falling back to local processing due to analysis error");
+        logger.info("Falling back to local processing due to analysis error");
         setProcessingProgress(40);
         setProcessingStatus("Using fallback optimization method...");
         
@@ -2721,11 +2768,15 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           throw new Error(optimizationData.error || "Optimization failed with unknown error");
         }
         
+        // Reset failure count on success
+        setMistralFailureCount(0);
+        
       } catch (optimizationError) {
-        console.error("CV optimization error:", optimizationError);
+        // Handle Mistral service failure
+        handleMistralFailure(optimizationError instanceof Error ? optimizationError : new Error(String(optimizationError)));
         
         // If Mistral AI fails, fall back to local processing
-        console.log("Falling back to local processing due to optimization error");
+        logger.info("Falling back to local processing due to optimization error");
         setProcessingProgress(40);
         setProcessingStatus("Using fallback optimization method...");
         
@@ -2794,7 +2845,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         setProcessingStatus("Optimization failed. Please try again.");
       }
     }
-  }, [selectedCVId, selectedCVName, jobDescription, originalText, fetchOriginalText, jobTitle, isProcessing]);
+  }, [selectedCVId, selectedCVName, jobDescription, originalText, fetchOriginalText, jobTitle, isProcessing, mistralServiceAvailable, handleMistralFailure]);
   
   // Simulate processing with progress updates
   const simulateProcessing = () => {
