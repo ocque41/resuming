@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { ArrowRight, Check, AlertCircle, ArrowUpRight, ArrowDownRight, Sparkles } from "lucide-react";
+import { ArrowRight, Check, AlertCircle, TrendingUp, TrendingDown, Star } from "lucide-react";
 import { diffWords } from 'diff';
 
 interface ComparativeAnalysisProps {
@@ -152,7 +152,7 @@ const ComparativeAnalysis: React.FC<ComparativeAnalysisProps> = ({
             <CardHeader className="pb-2">
               <CardTitle className="text-lg capitalize flex items-center justify-between">
                 {section}
-                <Badge variant={data.score > 0.7 ? "success" : data.score > 0.5 ? "warning" : "destructive"}>
+                <Badge variant={data.score > 0.7 ? "default" : data.score > 0.5 ? "secondary" : "destructive"}>
                   {Math.round(data.score * 100)}%
                 </Badge>
               </CardTitle>
@@ -233,13 +233,13 @@ const ComparativeAnalysis: React.FC<ComparativeAnalysisProps> = ({
     
     const scores = matchAnalysis.dimensionalScores;
     const dimensions = [
-      { name: 'Skills Match', value: scores.skillsMatch, icon: <Sparkles className="w-4 h-4" /> },
-      { name: 'Experience Match', value: scores.experienceMatch, icon: <ArrowUpRight className="w-4 h-4" /> },
-      { name: 'Education Match', value: scores.educationMatch, icon: <ArrowUpRight className="w-4 h-4" /> },
-      { name: 'Industry Fit', value: scores.industryFit, icon: <ArrowUpRight className="w-4 h-4" /> },
-      { name: 'Keyword Density', value: scores.keywordDensity, icon: <ArrowUpRight className="w-4 h-4" /> },
-      { name: 'Format Compatibility', value: scores.formatCompatibility, icon: <ArrowUpRight className="w-4 h-4" /> },
-      { name: 'Content Relevance', value: scores.contentRelevance, icon: <ArrowUpRight className="w-4 h-4" /> },
+      { name: 'Skills Match', value: scores.skillsMatch, icon: <Star className="w-4 h-4" /> },
+      { name: 'Experience Match', value: scores.experienceMatch, icon: <TrendingUp className="w-4 h-4" /> },
+      { name: 'Education Match', value: scores.educationMatch, icon: <TrendingUp className="w-4 h-4" /> },
+      { name: 'Industry Fit', value: scores.industryFit, icon: <TrendingUp className="w-4 h-4" /> },
+      { name: 'Keyword Density', value: scores.keywordDensity, icon: <TrendingUp className="w-4 h-4" /> },
+      { name: 'Format Compatibility', value: scores.formatCompatibility, icon: <TrendingUp className="w-4 h-4" /> },
+      { name: 'Content Relevance', value: scores.contentRelevance, icon: <TrendingUp className="w-4 h-4" /> },
     ];
     
     return (
@@ -252,7 +252,7 @@ const ComparativeAnalysis: React.FC<ComparativeAnalysisProps> = ({
                 <span className="text-sm font-medium flex items-center gap-1">
                   {dim.icon} {dim.name}
                 </span>
-                <Badge variant={dim.value > 0.7 ? "success" : dim.value > 0.5 ? "warning" : "destructive"}>
+                <Badge variant={dim.value > 0.7 ? "default" : dim.value > 0.5 ? "secondary" : "destructive"}>
                   {Math.round(dim.value * 100)}%
                 </Badge>
               </div>
