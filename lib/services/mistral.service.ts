@@ -110,6 +110,26 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operationName: s
   });
 }
 
+// Helper function to extract JSON from markdown code blocks
+function extractJsonFromMarkdown(content: string): string {
+  try {
+    // Check if the content is wrapped in a markdown code block
+    const jsonBlockRegex = /```(?:json)?\s*\n([\s\S]*?)\n```/;
+    const match = content.match(jsonBlockRegex);
+    
+    if (match && match[1]) {
+      logger.info('Extracted JSON from markdown code block');
+      return match[1].trim();
+    }
+    
+    // If no code block is found, return the original content
+    return content;
+  } catch (error) {
+    logger.warn('Error extracting JSON from markdown:', error instanceof Error ? error.message : String(error));
+    return content;
+  }
+}
+
 export interface CVAnalysisResult {
   experience: Array<{
     title: string;
@@ -193,26 +213,13 @@ export async function analyzeCVContent(cvText: string): Promise<CVAnalysisResult
       }
 
       try {
-        // Extract JSON from the response, handling markdown code blocks
-        let jsonContent = content;
-        
-        // Check if the response contains a markdown code block
-        const jsonRegex = /```(?:json)?\s*(\{[\s\S]*?\})\s*```/;
-        const match = content.match(jsonRegex);
-        
-        if (match && match[1]) {
-          // Extract the JSON content from the code block
-          jsonContent = match[1];
-          logger.info('Extracted JSON from markdown code block');
-        }
-        
-        // Try to parse the JSON
+        // Extract JSON from markdown if needed
+        const jsonContent = extractJsonFromMarkdown(content);
         const result = JSON.parse(jsonContent);
         logger.info('Successfully parsed CV analysis result from Mistral AI');
         return result;
       } catch (parseError) {
         logger.error('Failed to parse Mistral AI response:', parseError instanceof Error ? parseError.message : String(parseError));
-        logger.error('Raw response content:', content);
         throw new Error('Failed to parse CV analysis result');
       }
     }, 3, 2000, 10000); // 3 retries, starting with 2s delay, max 10s delay
@@ -313,26 +320,13 @@ export async function optimizeCVForJob(cvText: string, jobDescription: string): 
       }
 
       try {
-        // Extract JSON from the response, handling markdown code blocks
-        let jsonContent = content;
-        
-        // Check if the response contains a markdown code block
-        const jsonRegex = /```(?:json)?\s*(\{[\s\S]*?\})\s*```/;
-        const match = content.match(jsonRegex);
-        
-        if (match && match[1]) {
-          // Extract the JSON content from the code block
-          jsonContent = match[1];
-          logger.info('Extracted JSON from markdown code block');
-        }
-        
-        // Try to parse the JSON
+        // Extract JSON from markdown if needed
+        const jsonContent = extractJsonFromMarkdown(content);
         const result = JSON.parse(jsonContent);
         logger.info('Successfully parsed CV optimization result from Mistral AI');
         return result;
       } catch (parseError) {
         logger.error('Failed to parse Mistral AI response:', parseError instanceof Error ? parseError.message : String(parseError));
-        logger.error('Raw response content:', content);
         throw new Error('Failed to parse CV optimization result');
       }
     }, 3, 2000, 10000); // 3 retries, starting with 2s delay, max 10s delay

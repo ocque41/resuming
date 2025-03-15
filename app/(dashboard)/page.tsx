@@ -66,7 +66,7 @@ export default function HomePage() {
   return (
     <PageTransition>
       <div 
-        className="flex flex-col bg-[#050505] overflow-hidden"
+        className="flex flex-col bg-[#050505] overflow-hidden font-borna"
         style={{ height: viewportHeight }}
       >
         {/* Navbar with enhanced visibility */}
@@ -95,13 +95,13 @@ export default function HomePage() {
               
               <Article className="text-center max-w-3xl mx-auto">
                 <motion.div variants={fadeInUp}>
-                  <ArticleTitle className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold text-white">
+                  <ArticleTitle className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold text-white font-safiro">
                     The Jobs Playground
                   </ArticleTitle>
                 </motion.div>
                 
                 <motion.div variants={fadeInUp}>
-                  <ArticleContent className="mt-2 sm:mt-3 md:mt-4 text-base sm:text-lg md:text-xl lg:text-2xl text-gray-300">
+                  <ArticleContent className="mt-2 sm:mt-3 md:mt-4 text-base sm:text-lg md:text-xl lg:text-2xl text-gray-300 font-borna">
                     AI-powered CV Analysis &amp; Optimization unlocking exclusive career opportunities.
                   </ArticleContent>
                 </motion.div>
@@ -113,7 +113,7 @@ export default function HomePage() {
                   <Button
                     asChild
                     size="lg"
-                    className="bg-[#FFFFFF] text-[#050505] px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 rounded-md hover:bg-[#B4916C]/90 transition w-full sm:w-auto text-sm sm:text-base"
+                    className="bg-[#FFFFFF] text-[#050505] px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 rounded-md hover:bg-[#B4916C]/90 transition w-full sm:w-auto text-sm sm:text-base font-borna"
                   >
                     <Link href="/sign-up">Try For Free</Link>
                   </Button>
@@ -121,7 +121,7 @@ export default function HomePage() {
                     asChild
                     variant="outline"
                     size="lg"
-                    className="border border-white text-white px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 rounded-md hover:bg-[#B4916C] transition w-full sm:w-auto text-sm sm:text-base"
+                    className="border border-white text-white px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 rounded-md hover:bg-[#B4916C] transition w-full sm:w-auto text-sm sm:text-base font-borna"
                   >
                     <Link href="/pricing">Learn More</Link>
                   </Button>

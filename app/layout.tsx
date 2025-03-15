@@ -60,12 +60,18 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
+// Define the fonts
 const manrope = Manrope({ subsets: ['latin'] });
 const safiroFont = localFont({
-  src: './fonts/Safiro-Medium.otf', // make sure this file exists relative to layout.tsx
+  src: './fonts/Safiro-Medium.otf',
+  variable: '--font-safiro',
   display: 'swap',
 });
-
+const bornaFont = localFont({
+  src: './fonts/Borna-Medium.otf',
+  variable: '--font-borna',
+  display: 'swap',
+});
 const inter = Inter({ subsets: ["latin"] });
 
 export default function RootLayout({
@@ -79,7 +85,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${manrope.className} ${safiroFont.className} ${inter.className}`}
+      className={`${manrope.className} ${safiroFont.variable} ${bornaFont.variable} ${inter.className}`}
     >
       <head>
         <link
@@ -99,9 +105,9 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-[100dvh] bg-black">
+      <body className="min-h-[100dvh] bg-[#050505] font-borna">
         <I18nProvider>
-          <ThemeProvider defaultTheme="light" storageKey="app-theme">
+          <ThemeProvider defaultTheme="dark" storageKey="app-theme">
             <UserProvider userPromise={userPromise}>
               <main className="flex-grow">{children}</main>
             </UserProvider>
