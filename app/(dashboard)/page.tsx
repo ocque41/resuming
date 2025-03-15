@@ -1,6 +1,5 @@
 "use client";
 
-import { Navbar } from "@/components/ui/navbar";
 import { Badge } from "@/components/ui/badge";
 import { Article, ArticleTitle, ArticleContent } from "@/components/ui/article";
 import { Button } from "@/components/ui/button";
@@ -8,6 +7,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { PageTransition } from "@/components/ui/page-transition";
+import { MobileNavbar } from "@/components/ui/mobile-navbar";
 
 // Animation variants
 const fadeIn = {
@@ -40,6 +40,8 @@ const staggerContainer = {
 export default function HomePage() {
   // State to track viewport height for mobile browsers
   const [viewportHeight, setViewportHeight] = useState("100vh");
+  // State to track if we're on mobile
+  const [isMobile, setIsMobile] = useState(false);
 
   // Handle viewport height for mobile browsers and prevent scrolling
   useEffect(() => {
@@ -49,6 +51,7 @@ export default function HomePage() {
     // Set viewport height correctly for mobile browsers
     const updateHeight = () => {
       setViewportHeight(`${window.innerHeight}px`);
+      setIsMobile(window.innerWidth < 640);
     };
     
     // Initial update
@@ -69,13 +72,11 @@ export default function HomePage() {
         className="flex flex-col bg-[#050505] overflow-hidden font-borna"
         style={{ height: viewportHeight }}
       >
-        {/* Navbar with enhanced visibility */}
-        <div className="sticky top-0 z-50 w-full bg-[#050505] shadow-md">
-          <Navbar />
-        </div>
+        {/* Use the MobileNavbar component */}
+        <MobileNavbar />
 
         {/* Hero Section - With more space for navbar */}
-        <section className="relative flex-1 flex items-center justify-center pt-6 sm:pt-4 md:pt-0 mt-2">
+        <section className="relative flex-1 flex items-center justify-center pt-16 sm:pt-8 md:pt-4">
           <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-center h-full py-4 sm:py-6 md:py-8">
             <motion.div 
               className="max-h-full overflow-auto no-scrollbar flex flex-col items-center"
@@ -85,11 +86,11 @@ export default function HomePage() {
             >
               {/* Badge above title */}
               <motion.div 
-                className="mb-3 sm:mb-4 md:mb-6 mt-0"
+                className="mb-3 sm:mb-4 md:mb-6 mt-4 sm:mt-0"
                 variants={fadeInUp}
               >
                 <Link href="https://chromad.vercel.app/docs/products/resuming">
-                  <Badge className="bg-[#B4916C] text-white">Documentation</Badge>
+                  <Badge className="bg-[#1a1a1a] text-white glass-effect">Documentation</Badge>
                 </Link>
               </motion.div>
               
@@ -113,7 +114,7 @@ export default function HomePage() {
                   <Button
                     asChild
                     size="lg"
-                    className="bg-[#FFFFFF] text-[#050505] px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 rounded-md hover:bg-[#B4916C]/90 transition w-full sm:w-auto text-sm sm:text-base font-borna"
+                    className="bg-white text-[#050505] px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 rounded-md hover:bg-white/90 transition w-full sm:w-auto text-sm sm:text-base font-borna"
                   >
                     <Link href="/sign-up">Try For Free</Link>
                   </Button>
@@ -121,7 +122,7 @@ export default function HomePage() {
                     asChild
                     variant="outline"
                     size="lg"
-                    className="border border-white text-white px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 rounded-md hover:bg-[#B4916C] transition w-full sm:w-auto text-sm sm:text-base font-borna"
+                    className="border border-white/20 text-white px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 rounded-md hover:bg-white/10 transition w-full sm:w-auto text-sm sm:text-base font-borna glass-effect"
                   >
                     <Link href="/pricing">Learn More</Link>
                   </Button>
@@ -146,6 +147,17 @@ export default function HomePage() {
             </motion.div>
           </div>
         </section>
+
+        {/* Mobile navbar visibility fix */}
+        {isMobile && (
+          <style jsx global>{`
+            nav {
+              display: block !important;
+              visibility: visible !important;
+              opacity: 1 !important;
+            }
+          `}</style>
+        )}
 
         {/* Custom CSS for hiding scrollbars */}
         <style jsx global>{`

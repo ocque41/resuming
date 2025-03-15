@@ -1,0 +1,342 @@
+import React, { useState, useEffect } from 'react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { ArrowRight, Check, AlertCircle, TrendingUp, Star } from "lucide-react";
+import { diffWords } from 'diff';
+import styles from './ComparativeAnalysis.module.css';
+
+interface ComparativeAnalysisProps {
+  originalText: string;
+  optimizedText: string;
+  matchAnalysis: {
+    score: number;
+    matchedKeywords: Array<{ keyword: string; relevance: number; frequency: number; placement: string }>;
+    missingKeywords: Array<{ keyword: string; importance: number; suggestedPlacement: string }>;
+    recommendations: string[];
+    skillGap: string;
+    dimensionalScores: {
+      skillsMatch: number;
+      experienceMatch: number;
+      educationMatch: number;
+      industryFit: number;
+      overallCompatibility: number;
+      keywordDensity: number;
+      formatCompatibility: number;
+      contentRelevance: number;
+    };
+    detailedAnalysis: string;
+    improvementPotential: number;
+    sectionAnalysis: {
+      profile: { score: number; feedback: string };
+      skills: { score: number; feedback: string };
+      experience: { score: number; feedback: string };
+      education: { score: number; feedback: string };
+      achievements: { score: number; feedback: string };
+    };
+  };
+}
+
+const ComparativeAnalysis: React.FC<ComparativeAnalysisProps> = ({
+  originalText,
+  optimizedText,
+  matchAnalysis
+}) => {
+  const [differences, setDifferences] = useState<any[]>([]);
+  const [keywordHighlights, setKeywordHighlights] = useState<{ [key: string]: string }>({});
+  const [sectionScores, setSectionScores] = useState<{ [key: string]: number }>({});
+
+  // Calculate differences between original and optimized text
+  useEffect(() => {
+    if (originalText && optimizedText) {
+      const diff = diffWords(originalText, optimizedText);
+      setDifferences(diff);
+    }
+  }, [originalText, optimizedText]);
+
+  // Extract keywords for highlighting
+  useEffect(() => {
+    if (matchAnalysis?.matchedKeywords) {
+      const highlights: { [key: string]: string } = {};
+      matchAnalysis.matchedKeywords.forEach(kw => {
+        // Determine color based on relevance
+        let colorClass = styles.keywordHighlightYellow;
+        if (kw.relevance > 0.7) colorClass = styles.keywordHighlightGreen;
+        else if (kw.relevance < 0.4) colorClass = styles.keywordHighlightOrange;
+        
+        highlights[kw.keyword.toLowerCase()] = colorClass;
+      });
+      setKeywordHighlights(highlights);
+    }
+  }, [matchAnalysis]);
+
+  // Extract section scores
+  useEffect(() => {
+    if (matchAnalysis?.sectionAnalysis) {
+      const scores: { [key: string]: number } = {};
+      Object.entries(matchAnalysis.sectionAnalysis).forEach(([section, data]) => {
+        scores[section] = data.score * 100;
+      });
+      setSectionScores(scores);
+    }
+  }, [matchAnalysis]);
+
+  // Helper function to highlight keywords in text
+  const highlightKeywords = (text: string) => {
+    if (!text) return '';
+    
+    let result = text;
+    const keywords = Object.keys(keywordHighlights).sort((a, b) => b.length - a.length);
+    
+    for (const keyword of keywords) {
+      const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+      result = result.replace(regex, (match) => 
+        `<span class="${styles.keywordHighlight} ${keywordHighlights[keyword.toLowerCase()]}">${match}</span>`
+      );
+    }
+    
+    return result;
+  };
+
+  // Helper function to render the diff view
+  const renderDiff = () => {
+    return (
+      <div className={styles.diffContainer}>
+        {differences.map((part, index) => {
+          const className = part.added 
+            ? styles.added
+            : part.removed 
+              ? styles.removed
+              : '';
+          
+          return (
+            <span key={index} className={className}>
+              {part.value}
+            </span>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Helper function to render the side-by-side view
+  const renderSideBySide = () => {
+    return (
+      <div className={styles.sideContainer}>
+        <div className={styles.sidePanel}>
+          <h3 className={styles.sidePanelTitle}>Original CV</h3>
+          <div 
+            className="whitespace-pre-wrap" 
+            dangerouslySetInnerHTML={{ __html: highlightKeywords(originalText) }} 
+          />
+        </div>
+        <div className={styles.sidePanel}>
+          <h3 className={styles.sidePanelTitle}>Optimized CV</h3>
+          <div 
+            className="whitespace-pre-wrap" 
+            dangerouslySetInnerHTML={{ __html: highlightKeywords(optimizedText) }} 
+          />
+        </div>
+      </div>
+    );
+  };
+
+  // Helper function to get badge variant based on score
+  const getBadgeVariant = (score: number) => {
+    if (score > 0.7) return "outline";
+    if (score > 0.5) return "secondary";
+    return "destructive";
+  };
+
+  // Helper function to render section improvements
+  const renderSectionImprovements = () => {
+    if (!matchAnalysis?.sectionAnalysis) return null;
+    
+    return (
+      <div className={styles.sectionGrid}>
+        {Object.entries(matchAnalysis.sectionAnalysis).map(([section, data]) => (
+          <Card key={section} className="bg-gray-900 border-gray-800">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg capitalize flex items-center justify-between">
+                {section}
+                <Badge variant={getBadgeVariant(data.score)}>
+                  {Math.round(data.score * 100)}%
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-400">{data.feedback}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  };
+
+  // Helper function to render keyword analysis
+  const renderKeywordAnalysis = () => {
+    if (!matchAnalysis?.matchedKeywords && !matchAnalysis?.missingKeywords) return null;
+    
+    return (
+      <div className={styles.keywordGrid}>
+        <Card className="bg-gray-900 border-gray-800">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center">
+              <Check className="w-5 h-5 mr-2 text-green-500" />
+              Matched Keywords
+            </CardTitle>
+            <CardDescription>
+              Keywords from the job description found in your CV
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {matchAnalysis?.matchedKeywords?.map((kw, i) => (
+                <Badge 
+                  key={i} 
+                  variant="outline" 
+                  className="flex items-center gap-1 bg-green-500/10 border-green-500/20"
+                >
+                  {kw.keyword}
+                  <span className="text-xs opacity-70">({Math.round(kw.relevance * 100)}%)</span>
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-gray-900 border-gray-800">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center">
+              <AlertCircle className="w-5 h-5 mr-2 text-amber-500" />
+              Missing Keywords
+            </CardTitle>
+            <CardDescription>
+              Important keywords from the job description missing in your CV
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {matchAnalysis?.missingKeywords?.map((kw, i) => (
+                <Badge 
+                  key={i} 
+                  variant="outline" 
+                  className="flex items-center gap-1 bg-amber-500/10 border-amber-500/20"
+                >
+                  {kw.keyword}
+                  <span className="text-xs opacity-70">({Math.round(kw.importance * 100)}%)</span>
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
+  // Helper function to render dimensional scores
+  const renderDimensionalScores = () => {
+    if (!matchAnalysis?.dimensionalScores) return null;
+    
+    const scores = matchAnalysis.dimensionalScores;
+    const dimensions = [
+      { name: 'Skills Match', value: scores.skillsMatch, icon: <Star className="w-4 h-4" /> },
+      { name: 'Experience Match', value: scores.experienceMatch, icon: <TrendingUp className="w-4 h-4" /> },
+      { name: 'Education Match', value: scores.educationMatch, icon: <TrendingUp className="w-4 h-4" /> },
+      { name: 'Industry Fit', value: scores.industryFit, icon: <TrendingUp className="w-4 h-4" /> },
+      { name: 'Keyword Density', value: scores.keywordDensity, icon: <TrendingUp className="w-4 h-4" /> },
+      { name: 'Format Compatibility', value: scores.formatCompatibility, icon: <TrendingUp className="w-4 h-4" /> },
+      { name: 'Content Relevance', value: scores.contentRelevance, icon: <TrendingUp className="w-4 h-4" /> },
+    ];
+    
+    return (
+      <div className="mt-6">
+        <h3 className="text-lg font-medium mb-4">Dimensional Analysis</h3>
+        <div className={styles.dimensionalGrid}>
+          {dimensions.map((dim) => (
+            <div key={dim.name} className={styles.dimensionItem}>
+              <div className={styles.dimensionHeader}>
+                <span className={styles.dimensionTitle}>
+                  {dim.icon} {dim.name}
+                </span>
+                <Badge variant={getBadgeVariant(dim.value)}>
+                  {Math.round(dim.value * 100)}%
+                </Badge>
+              </div>
+              <div className={styles.progressBar}>
+                <div 
+                  className={`${styles.progressFill} ${
+                    dim.value > 0.7 
+                      ? styles.progressFillGreen 
+                      : dim.value > 0.5 
+                        ? styles.progressFillYellow 
+                        : styles.progressFillRed
+                  }`}
+                  style={{ width: `${Math.round(dim.value * 100)}%` }}
+                ></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold">Comparative Analysis</h2>
+      
+      <Tabs defaultValue="side-by-side" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="side-by-side">Side by Side</TabsTrigger>
+          <TabsTrigger value="diff">Diff View</TabsTrigger>
+          <TabsTrigger value="analysis">Detailed Analysis</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="side-by-side" className="mt-4">
+          {renderSideBySide()}
+        </TabsContent>
+        
+        <TabsContent value="diff" className="mt-4">
+          <div className="p-4 bg-gray-900 rounded-md">
+            {renderDiff()}
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="analysis" className="mt-4">
+          <div className="space-y-6">
+            {renderDimensionalScores()}
+            {renderSectionImprovements()}
+            {renderKeywordAnalysis()}
+            
+            {matchAnalysis?.recommendations && (
+              <div className={styles.recommendationList}>
+                <h3 className="text-lg font-medium mb-4">Recommendations</h3>
+                <ul className="space-y-2">
+                  {matchAnalysis.recommendations.map((rec, i) => (
+                    <li key={i} className={styles.recommendationItem}>
+                      <ArrowRight className={styles.recommendationIcon} />
+                      <span>{rec}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
+            {matchAnalysis?.skillGap && (
+              <div className={styles.skillGapContainer}>
+                <h3 className={styles.skillGapTitle}>Skill Gap Analysis</h3>
+                <div className={styles.skillGapContent}>
+                  <p className="whitespace-pre-wrap">{matchAnalysis.skillGap}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+};
+
+export default ComparativeAnalysis; 

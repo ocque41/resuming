@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser } from '@/lib/db/queries.server';
 import { analyzeCVContent, isMistralAvailable } from '@/lib/services/mistral.service';
-import { optimizeCVWithGPT4o, optimizeCVWithGPT4oFallback, isOpenAIAvailable } from '@/lib/services/openai.service';
+import { 
+  optimizeCVWithGPT4o, 
+  optimizeCVWithGPT4oFallback, 
+  analyzeAndOptimizeCVWithGPT4o,
+  isOpenAIAvailable 
+} from '@/lib/services/openai.service';
 import { logger } from '@/lib/logger';
 
 /**
@@ -58,6 +63,40 @@ export async function POST(request: NextRequest) {
 
     // Optimization process
     try {
+      // If Mistral is not available but OpenAI is, use the combined function for efficiency
+      if (!mistralAvailable && openaiAvailable) {
+        try {
+          logger.info('Using combined CV analysis and optimization with GPT-4o (Mistral unavailable)');
+          const combinedResult = await analyzeAndOptimizeCVWithGPT4o(cvText, jobDescription);
+          
+          logger.info('Combined CV analysis and optimization completed successfully with GPT-4o');
+          
+          return NextResponse.json({
+            success: true,
+            optimizedContent: combinedResult.optimizedContent,
+            matchAnalysis: combinedResult.matchAnalysis,
+            recommendations: combinedResult.recommendations,
+            matchScore: combinedResult.matchScore,
+            cvAnalysis: combinedResult.cvAnalysis
+          });
+        } catch (combinedError) {
+          logger.error('Error in combined CV analysis and optimization with GPT-4o:', 
+            combinedError instanceof Error ? combinedError.message : String(combinedError));
+          
+          // Fall back to the regular fallback function if the combined approach fails
+          logger.info('Falling back to standard GPT-4o fallback');
+          const fallbackResult = await optimizeCVWithGPT4oFallback(cvText, jobDescription);
+          
+          return NextResponse.json({
+            success: true,
+            optimizedContent: fallbackResult.optimizedContent,
+            matchAnalysis: fallbackResult.matchAnalysis,
+            recommendations: fallbackResult.recommendations,
+            matchScore: fallbackResult.matchScore
+          });
+        }
+      }
+      
       // Step 1: Analyze CV with Mistral if available
       let cvAnalysis;
       if (mistralAvailable) {
@@ -68,8 +107,39 @@ export async function POST(request: NextRequest) {
         } catch (mistralError) {
           logger.error('Error analyzing CV with Mistral AI:', mistralError instanceof Error ? mistralError.message : String(mistralError));
           
-          // If Mistral fails but OpenAI is available, we can still proceed with OpenAI fallback
-          if (!openaiAvailable) {
+          // If Mistral fails but OpenAI is available, we can use the combined function
+          if (openaiAvailable) {
+            logger.info('Mistral analysis failed, using combined GPT-4o approach');
+            try {
+              const combinedResult = await analyzeAndOptimizeCVWithGPT4o(cvText, jobDescription);
+              
+              logger.info('Combined CV analysis and optimization completed successfully with GPT-4o');
+              
+              return NextResponse.json({
+                success: true,
+                optimizedContent: combinedResult.optimizedContent,
+                matchAnalysis: combinedResult.matchAnalysis,
+                recommendations: combinedResult.recommendations,
+                matchScore: combinedResult.matchScore,
+                cvAnalysis: combinedResult.cvAnalysis
+              });
+            } catch (combinedError) {
+              logger.error('Error in combined CV analysis and optimization with GPT-4o:', 
+                combinedError instanceof Error ? combinedError.message : String(combinedError));
+              
+              // Fall back to the regular fallback function if the combined approach fails
+              logger.info('Falling back to standard GPT-4o fallback');
+              const fallbackResult = await optimizeCVWithGPT4oFallback(cvText, jobDescription);
+              
+              return NextResponse.json({
+                success: true,
+                optimizedContent: fallbackResult.optimizedContent,
+                matchAnalysis: fallbackResult.matchAnalysis,
+                recommendations: fallbackResult.recommendations,
+                matchScore: fallbackResult.matchScore
+              });
+            }
+          } else {
             return NextResponse.json(
               { 
                 success: false, 
@@ -107,7 +177,8 @@ export async function POST(request: NextRequest) {
             optimizedContent: optimizationResult.optimizedContent,
             matchAnalysis: optimizationResult.matchAnalysis,
             recommendations: optimizationResult.recommendations,
-            matchScore: optimizationResult.matchScore
+            matchScore: optimizationResult.matchScore,
+            cvAnalysis: cvAnalysis
           });
         } catch (openaiError) {
           logger.error('Error optimizing CV with GPT-4o:', openaiError instanceof Error ? openaiError.message : String(openaiError));

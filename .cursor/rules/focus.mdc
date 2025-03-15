@@ -5,30 +5,5 @@ globs:
 # - Optimize the content and design of the optimized cv result document.
 (all flags --DONE means they are fixed or implemented and we shall no worry about anymore)(everthing that has flags " -- " is top number one priority to focus on while implementing)
 
+
 # - do not go implement a bunch of things without permision only focus on this priority focus
-
-- CURRENT FOCUS: MAKING THE SPECIFIC/OPTIMIZE CV BASED ON JOB DESCRIPTION PERFECT.
-
-- currently the specific/optimize cv is getting stuck between 95% and 99% and it does not completes, lets add more time for it to think better and have more time to optimize the cv perfectly--DONE
-
-- the document result (DOCX) is sometimes not generating and sometimes it is generating and the user is able to download it, lets add a more robust document generation system to improve it and add more error handling for the user to know what is happening
-
-- lets improve the job matching system for the user to have more insight letting them see if the job is for them or not
-
-- the system base is complete lets move on to enhancing the content showing in the optimized cv:
-    - sections to extract and optimize content based on so the sections has optimize content of original data.
-        - Header
-            contact
-        - Profile
-            brief about me section
-        - one sentance summary of quick scope of the role
-        - Achievements
-            3 bullet points of the best achievements acomplished through out the entire user career
-        - Goals
-            3 bullet points of what the user wants to acomplish at the company it is applying to
-        - Languages
-        - Skills
-        - Education
-
---reminder the general tab system functionlity is the best in the world, please please do not touch it for any any reason, the specific tab should work completelly separate with completelly new systems, desings and functionality almost like a new page but copy the UI of the general tab and copy the document desing generation.
-do not touch anything of the general tab or we will just try again reverting the implementation please

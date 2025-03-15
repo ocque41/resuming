@@ -6,13 +6,13 @@ export default {
   darkMode: ["class"],
   presets: [
     franken({
-      // You can override the preset palette if needed.
+      // Override the preset palette to match our brand colors
       customPalette: {
         ".uk-theme-default": {
           "--background": "#050505",
           "--foreground": "#ffffff",
-          "--primary": "#E8DCC4",
-          "--border": "#E8DCC4",
+          "--primary": "#ffffff",
+          "--border": "#1a1a1a",
         },
       },
     })
@@ -73,6 +73,13 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Direct color references for convenience
+        brand: {
+          bg: "#050505",
+          text: "#FFFFFF",
+          muted: "#1a1a1a",
+          hover: "rgba(255, 255, 255, 0.1)",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -92,6 +99,15 @@ export default {
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+      },
+      // Add backdrop blur utilities
+      backdropBlur: {
+        xs: '2px',
+        sm: '4px',
+        md: '8px',
+        lg: '12px',
+        xl: '16px',
+        '2xl': '24px',
       },
     },
   },

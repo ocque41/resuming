@@ -1,5 +1,6 @@
 import MistralClient from '@mistralai/mistralai';
 import { logger } from '@/lib/logger';
+import { cacheCVAnalysis, getCachedCVAnalysis, cacheCVOptimization, getCachedCVOptimization } from './cache.service';
 
 // Validate API key presence
 const apiKey = process.env.MISTRAL_API_KEY || '';
@@ -169,6 +170,15 @@ export async function analyzeCVContent(cvText: string): Promise<CVAnalysisResult
       throw new Error('Mistral API key is not configured');
     }
 
+    // Check cache first
+    const cachedResult = getCachedCVAnalysis(cvText);
+    if (cachedResult) {
+      logger.info('Using cached CV analysis result');
+      return cachedResult;
+    }
+
+    logger.info('No cached analysis found, requesting from Mistral AI');
+
     return await retryWithBackoff(async () => {
       const client = getMistralClient();
       
@@ -217,6 +227,10 @@ export async function analyzeCVContent(cvText: string): Promise<CVAnalysisResult
         const jsonContent = extractJsonFromMarkdown(content);
         const result = JSON.parse(jsonContent);
         logger.info('Successfully parsed CV analysis result from Mistral AI');
+        
+        // Cache the result
+        cacheCVAnalysis(cvText, result);
+        
         return result;
       } catch (parseError) {
         logger.error('Failed to parse Mistral AI response:', parseError instanceof Error ? parseError.message : String(parseError));
@@ -269,6 +283,15 @@ export async function optimizeCVForJob(cvText: string, jobDescription: string): 
     if (!apiKey || apiKey.trim() === '') {
       throw new Error('Mistral API key is not configured');
     }
+
+    // Check cache first
+    const cachedResult = getCachedCVOptimization(cvText, jobDescription);
+    if (cachedResult) {
+      logger.info('Using cached CV optimization result');
+      return cachedResult;
+    }
+
+    logger.info('No cached optimization found, requesting from Mistral AI');
 
     return await retryWithBackoff(async () => {
       const client = getMistralClient();
@@ -324,6 +347,10 @@ export async function optimizeCVForJob(cvText: string, jobDescription: string): 
         const jsonContent = extractJsonFromMarkdown(content);
         const result = JSON.parse(jsonContent);
         logger.info('Successfully parsed CV optimization result from Mistral AI');
+        
+        // Cache the result
+        cacheCVOptimization(cvText, jobDescription, result);
+        
         return result;
       } catch (parseError) {
         logger.error('Failed to parse Mistral AI response:', parseError instanceof Error ? parseError.message : String(parseError));

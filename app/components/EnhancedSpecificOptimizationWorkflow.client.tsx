@@ -14,6 +14,7 @@ import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle } 
 import { analyzeCVContent, optimizeCVForJob } from '@/lib/services/mistral.service';
 import { useToast } from "@/hooks/use-toast";
 import JobMatchDetailedAnalysis from './JobMatchDetailedAnalysis';
+import ComparativeAnalysis from './ComparativeAnalysis';
 import { downloadDocument, withDownloadTimeout, generateDocumentWithRetry } from '../utils/documentUtils';
 import DocumentGenerationProgress from './DocumentGenerationProgress';
 import DocumentDownloadStatus from './DocumentDownloadStatus';
@@ -3811,47 +3812,19 @@ ${extractLanguages(cvText).map(lang => `• ${lang}`).join('\n')}
                   />
                 )}
                 
-                {/* Overall Score Section */}
-                <div className="flex flex-col md:flex-row items-start gap-6 mt-4">
-                  <div className="w-full md:w-1/3 bg-[#050505] rounded-lg p-4 border border-gray-800">
-                    <h4 className="text-lg font-medium mb-3">Overall Match</h4>
-                    <div className="flex flex-col items-center">
-                      <div className="flex items-baseline">
-                        <span className="text-4xl font-bold" style={{ 
-                          color: 
-                            jobMatchAnalysis.score >= 80 ? 'rgb(34, 197, 94)' : 
-                            jobMatchAnalysis.score >= 60 ? 'rgb(234, 179, 8)' : 
-                            'rgb(239, 68, 68)'
-                        }}>
-                          {jobMatchAnalysis.score}%
-                        </span>
-                        <div className="w-16 h-16 relative">
-                          <svg viewBox="0 0 36 36" className="w-full h-full">
-                            <path
-                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                              fill="none"
-                              stroke="#444"
-                              strokeWidth="2"
-                              strokeDasharray="100, 100"
-                            />
-                            <path
-                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                              fill="none"
-                              stroke={
-                                jobMatchAnalysis.score >= 80 ? 'rgb(34, 197, 94)' : 
-                                jobMatchAnalysis.score >= 60 ? 'rgb(234, 179, 8)' : 
-                                'rgb(239, 68, 68)'
-                              }
-                              strokeWidth="2"
-                              strokeDasharray={`${jobMatchAnalysis.score}, 100`}
-                            />
-                          </svg>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                {/* Overall Score Section - Removed */}
               </div>
+            </div>
+          )}
+
+          {/* Comparative Analysis */}
+          {jobMatchAnalysis && originalText && optimizedText && (
+            <div className="mt-8">
+              <ComparativeAnalysis 
+                originalText={originalText}
+                optimizedText={optimizedText}
+                matchAnalysis={jobMatchAnalysis}
+              />
             </div>
           )}
 

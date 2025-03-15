@@ -71,6 +71,7 @@
     "cmdk": "^1.0.0",
     "cross-fetch": "^4.1.0",
     "date-fns": "^3.6.0",
+    "diff": "^7.0.0",
     "docx": "^9.2.0",
     "docx-pdf": "^0.0.1",
     "dotenv": "^16.3.1",
@@ -129,6 +130,7 @@
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
+    "@types/diff": "^7.0.1",
     "@types/formidable": "^3.4.5",
     "@types/jest": "^29.5.14",
     "@types/next-auth": "^3.13.0",

@@ -1,8 +1,0 @@
----
-description: lets focucs on the current-task rule
-globs: 
----
-you need to feel more free to implement as much things as you one per iteration because I am not seeing mayor changes every time I prompt to you but also keep implementation minimalistic because I also feel you get confused in the many files you have created that we do not use or we do not use or previouslly used, etc... 
-
-always follow current instructions for the current implementation on [current-task.mdc](mdc:.cursor/rules/current-task.mdc)
-this file will be changing as we progress on the development of the app please take care of focus and distractions professionally, mayor consideration is speed and dificultness, do not stress.
