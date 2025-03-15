@@ -2699,6 +2699,13 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       // Optimize CV using the appropriate service
       let optimizationResponse;
       try {
+        setProcessingStatus('Optimizing CV for job match...');
+        setProcessingProgress(60);
+        
+        // Add a timeout for the optimization request
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minute timeout
+        
         optimizationResponse = await fetch('/api/cv/optimize', {
           method: 'POST',
           headers: {
@@ -2713,16 +2720,31 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
               languages: true
             }
           }),
+          signal: controller.signal
         });
         
+        clearTimeout(timeoutId);
+        
         if (!optimizationResponse.ok) {
-          const errorData = await optimizationResponse.json();
+          // Handle different error status codes
+          if (optimizationResponse.status === 504) {
+            throw new Error('The optimization request timed out. Your CV may be too complex or the service is currently overloaded. Please try again with a shorter CV or try later.');
+          }
+          
+          let errorData;
+          try {
+            errorData = await optimizationResponse.json();
+          } catch (jsonError) {
+            // If we can't parse the JSON, use the status text
+            throw new Error(`Optimization failed: ${optimizationResponse.statusText || 'Server error'}`);
+          }
+          
           if (errorData.serviceUnavailable) {
             if (errorData.details && errorData.details.includes('OpenAI')) {
               openAIAvailable = false;
               setOpenAIAvailable(false);
-              throw new Error('OpenAI service is unavailable');
-            } else if (mistralFailureCount < 2) {
+              throw new Error('OpenAI service is unavailable. Please try again later.');
+            } else if (mistralFailureCount < MAX_FAILURES) {
               // Increment Mistral failure count and retry
               setMistralFailureCount(prev => prev + 1);
               throw new Error('Mistral service temporarily unavailable, retrying...');
@@ -2734,8 +2756,14 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           }
         }
       } catch (optimizationError: unknown) {
-        console.error('Error during optimization:', optimizationError);
-        setError(`Optimization failed: ${optimizationError instanceof Error ? optimizationError.message : 'Unknown error'}`);
+        // Check if it's an AbortError (timeout)
+        if (optimizationError instanceof Error && optimizationError.name === 'AbortError') {
+          console.error('Optimization request timed out');
+          setError('The optimization request timed out. Your CV may be too complex or the service is currently overloaded. Please try again with a shorter CV or try later.');
+        } else {
+          console.error('Error during optimization:', optimizationError);
+          setError(`Optimization failed: ${optimizationError instanceof Error ? optimizationError.message : 'Unknown error'}`);
+        }
         setIsProcessing(false);
         return;
       }
@@ -2744,7 +2772,15 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       setProcessingStatus('Processing optimization results...');
       setProcessingProgress(70);
       
-      const optimizationData = await optimizationResponse.json();
+      let optimizationData;
+      try {
+        optimizationData = await optimizationResponse.json();
+      } catch (jsonError) {
+        console.error('Error parsing optimization response:', jsonError);
+        setError('Failed to parse optimization results. The server returned an invalid response.');
+        setIsProcessing(false);
+        return;
+      }
       
       if (!optimizationData.success) {
         throw new Error(optimizationData.error || 'Failed to optimize CV');
@@ -2788,7 +2824,24 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       
     } catch (error: unknown) {
       console.error('Error processing CV:', error);
-      setError(`Failed to process CV: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Create a user-friendly error message
+      let errorMessage = 'Failed to process CV';
+      
+      if (error instanceof Error) {
+        // Check for specific error types
+        if (error.message.includes('timeout') || error.message.includes('timed out')) {
+          errorMessage = 'The optimization request timed out. Your CV may be too complex or the service is currently overloaded. Please try again with a shorter CV or try later.';
+        } else if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your internet connection and try again.';
+        } else if (error.message.includes('service') || error.message.includes('unavailable')) {
+          errorMessage = 'AI services are temporarily unavailable. Please try again later.';
+        } else {
+          errorMessage = `Failed to process CV: ${error.message}`;
+        }
+      }
+      
+      setError(errorMessage);
       setIsProcessing(false);
     }
   };

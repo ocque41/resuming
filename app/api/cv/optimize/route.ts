@@ -10,6 +10,61 @@ import {
 import { logger } from '@/lib/logger';
 
 /**
+ * Helper function to format error responses
+ */
+function formatErrorResponse(error: unknown, statusCode: number = 500) {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  
+  // Check for specific error types
+  const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('timed out');
+  const isRateLimit = errorMessage.includes('429') || errorMessage.includes('rate limit');
+  const isServerError = errorMessage.includes('500') || errorMessage.includes('502') || 
+                        errorMessage.includes('503') || errorMessage.includes('504');
+  const isParseError = errorMessage.includes('parse') || errorMessage.includes('JSON');
+  
+  // Determine appropriate status code
+  let responseStatus = statusCode;
+  if (isTimeout) {
+    responseStatus = 504; // Gateway Timeout
+  } else if (isRateLimit) {
+    responseStatus = 429; // Too Many Requests
+  } else if (isServerError) {
+    responseStatus = 503; // Service Unavailable
+  } else if (isParseError) {
+    responseStatus = 422; // Unprocessable Entity
+  }
+  
+  // Log the error with appropriate level
+  if (responseStatus >= 500) {
+    logger.error('CV optimization error:', errorMessage);
+  } else {
+    logger.warn('CV optimization issue:', errorMessage);
+  }
+  
+  // Create user-friendly error message
+  let userMessage = 'Failed to optimize CV content';
+  if (isTimeout) {
+    userMessage = 'The optimization request timed out. Your CV may be too complex or the service is currently overloaded. Please try again with a shorter CV or try later.';
+  } else if (isRateLimit) {
+    userMessage = 'Rate limit exceeded. Please try again later.';
+  } else if (isServerError) {
+    userMessage = 'The AI service is currently experiencing issues. Please try again later.';
+  } else if (isParseError) {
+    userMessage = 'Failed to process the AI response. Please try again.';
+  }
+  
+  return {
+    response: NextResponse.json({ 
+      success: false, 
+      error: userMessage,
+      details: errorMessage,
+      serviceUnavailable: isServerError || isTimeout || isRateLimit
+    }, { status: responseStatus }),
+    logged: true
+  };
+}
+
+/**
  * API endpoint for optimizing CV content for a specific job using Mistral AI for analysis and GPT-4o for optimization
  */
 export async function POST(request: NextRequest) {
@@ -34,7 +89,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const { cvText, jobDescription, analysis } = body || {};
+    const { cvText, jobDescription, analysis, preserveSections } = body || {};
 
     // Validate input
     if (!cvText) {
@@ -51,185 +106,83 @@ export async function POST(request: NextRequest) {
     const mistralAvailable = isMistralAvailable();
     const openaiAvailable = isOpenAIAvailable();
 
+    // Log the request details
+    logger.info('CV optimization request received', { 
+      textLength: cvText.length,
+      jobDescriptionLength: jobDescription.length,
+      mistralAvailable,
+      openaiAvailable,
+      preserveSections: !!preserveSections
+    });
+
+    // If both services are unavailable, return error
     if (!mistralAvailable && !openaiAvailable) {
-      logger.error('Both Mistral AI and OpenAI services are not available');
+      logger.error('Both Mistral and OpenAI services are unavailable');
       return NextResponse.json({ 
         success: false, 
-        error: 'AI services are not available',
-        details: 'Both Mistral AI and OpenAI services are not properly configured. Please check your API keys.',
+        error: 'AI services are unavailable',
+        details: 'Both Mistral and OpenAI services are not properly configured. Please check your API keys.',
         serviceUnavailable: true
       }, { status: 503 });
     }
 
-    // Optimization process
-    try {
-      // If Mistral is not available but OpenAI is, use the combined function for efficiency
-      if (!mistralAvailable && openaiAvailable) {
-        try {
-          logger.info('Using combined CV analysis and optimization with GPT-4o (Mistral unavailable)');
-          const combinedResult = await analyzeAndOptimizeCVWithGPT4o(cvText, jobDescription);
-          
-          logger.info('Combined CV analysis and optimization completed successfully with GPT-4o');
-          
-          return NextResponse.json({
-            success: true,
-            optimizedContent: combinedResult.optimizedContent,
-            matchAnalysis: combinedResult.matchAnalysis,
-            recommendations: combinedResult.recommendations,
-            matchScore: combinedResult.matchScore,
-            cvAnalysis: combinedResult.cvAnalysis
-          });
-        } catch (combinedError) {
-          logger.error('Error in combined CV analysis and optimization with GPT-4o:', 
-            combinedError instanceof Error ? combinedError.message : String(combinedError));
-          
-          // Fall back to the regular fallback function if the combined approach fails
-          logger.info('Falling back to standard GPT-4o fallback');
-          const fallbackResult = await optimizeCVWithGPT4oFallback(cvText, jobDescription);
-          
-          return NextResponse.json({
-            success: true,
-            optimizedContent: fallbackResult.optimizedContent,
-            matchAnalysis: fallbackResult.matchAnalysis,
-            recommendations: fallbackResult.recommendations,
-            matchScore: fallbackResult.matchScore
-          });
-        }
+    // If Mistral is available and no analysis was provided, get analysis first
+    let cvAnalysis = analysis;
+    if (mistralAvailable && !cvAnalysis) {
+      try {
+        logger.info('Analyzing CV content with Mistral AI');
+        cvAnalysis = await analyzeCVContent(cvText);
+        logger.info('CV analysis completed successfully with Mistral AI');
+      } catch (mistralError) {
+        logger.error('Error analyzing CV with Mistral AI:', mistralError instanceof Error ? mistralError.message : String(mistralError));
+        
+        // Continue without Mistral analysis
+        logger.info('Continuing without Mistral analysis');
       }
-      
-      // Step 1: Analyze CV with Mistral if available
-      let cvAnalysis;
-      if (mistralAvailable) {
-        try {
-          logger.info('Analyzing CV content with Mistral AI');
-          cvAnalysis = await analyzeCVContent(cvText);
-          logger.info('CV analysis completed successfully with Mistral AI');
-        } catch (mistralError) {
-          logger.error('Error analyzing CV with Mistral AI:', mistralError instanceof Error ? mistralError.message : String(mistralError));
-          
-          // If Mistral fails but OpenAI is available, we can use the combined function
-          if (openaiAvailable) {
-            logger.info('Mistral analysis failed, using combined GPT-4o approach');
-            try {
-              const combinedResult = await analyzeAndOptimizeCVWithGPT4o(cvText, jobDescription);
-              
-              logger.info('Combined CV analysis and optimization completed successfully with GPT-4o');
-              
-              return NextResponse.json({
-                success: true,
-                optimizedContent: combinedResult.optimizedContent,
-                matchAnalysis: combinedResult.matchAnalysis,
-                recommendations: combinedResult.recommendations,
-                matchScore: combinedResult.matchScore,
-                cvAnalysis: combinedResult.cvAnalysis
-              });
-            } catch (combinedError) {
-              logger.error('Error in combined CV analysis and optimization with GPT-4o:', 
-                combinedError instanceof Error ? combinedError.message : String(combinedError));
-              
-              // Fall back to the regular fallback function if the combined approach fails
-              logger.info('Falling back to standard GPT-4o fallback');
-              const fallbackResult = await optimizeCVWithGPT4oFallback(cvText, jobDescription);
-              
-              return NextResponse.json({
-                success: true,
-                optimizedContent: fallbackResult.optimizedContent,
-                matchAnalysis: fallbackResult.matchAnalysis,
-                recommendations: fallbackResult.recommendations,
-                matchScore: fallbackResult.matchScore
-              });
-            }
-          } else {
-            return NextResponse.json(
-              { 
-                success: false, 
-                error: 'Failed to analyze CV content',
-                details: mistralError instanceof Error ? mistralError.message : 'Unknown error',
-                serviceUnavailable: true
-              },
-              { status: 503 }
-            );
-          }
-        }
-      } else {
-        logger.warn('Mistral AI service is not available, skipping CV analysis step');
-      }
+    }
 
-      // Step 2: Optimize CV with GPT-4o
-      if (openaiAvailable) {
-        try {
-          logger.info('Optimizing CV content with GPT-4o');
-          
-          let optimizationResult;
-          if (cvAnalysis) {
-            // Use Mistral analysis with GPT-4o
-            optimizationResult = await optimizeCVWithGPT4o(cvText, jobDescription, cvAnalysis);
-          } else {
-            // Use GPT-4o fallback without Mistral analysis
-            logger.info('Using GPT-4o fallback without Mistral analysis');
-            optimizationResult = await optimizeCVWithGPT4oFallback(cvText, jobDescription);
-          }
-          
-          logger.info('CV optimization completed successfully with GPT-4o');
-          
-          return NextResponse.json({
-            success: true,
-            optimizedContent: optimizationResult.optimizedContent,
-            matchAnalysis: optimizationResult.matchAnalysis,
-            recommendations: optimizationResult.recommendations,
-            matchScore: optimizationResult.matchScore,
-            cvAnalysis: cvAnalysis
-          });
-        } catch (openaiError) {
-          logger.error('Error optimizing CV with GPT-4o:', openaiError instanceof Error ? openaiError.message : String(openaiError));
-          
-          return NextResponse.json(
-            { 
-              success: false, 
-              error: 'Failed to optimize CV content with GPT-4o',
-              details: openaiError instanceof Error ? openaiError.message : 'Unknown error',
-              serviceUnavailable: true
-            },
-            { status: 503 }
-          );
+    // If OpenAI is available, use it for optimization
+    if (openaiAvailable) {
+      try {
+        logger.info('Optimizing CV content with GPT-4o');
+        
+        let optimizationResult;
+        if (cvAnalysis) {
+          // Use Mistral analysis with GPT-4o
+          optimizationResult = await optimizeCVWithGPT4o(cvText, jobDescription, cvAnalysis);
+        } else {
+          // Use GPT-4o fallback without Mistral analysis
+          logger.info('Using GPT-4o fallback without Mistral analysis');
+          optimizationResult = await optimizeCVWithGPT4oFallback(cvText, jobDescription);
         }
-      } else {
-        logger.error('OpenAI service is not available');
-        return NextResponse.json({ 
-          success: false, 
-          error: 'OpenAI service is not available',
-          details: 'The OpenAI service is not properly configured. Please check your API key.',
-          serviceUnavailable: true
-        }, { status: 503 });
+        
+        logger.info('CV optimization completed successfully with GPT-4o');
+        
+        return NextResponse.json({
+          success: true,
+          optimizedContent: optimizationResult.optimizedContent,
+          matchAnalysis: optimizationResult.matchAnalysis,
+          recommendations: optimizationResult.recommendations,
+          matchScore: optimizationResult.matchScore,
+          cvAnalysis: cvAnalysis
+        });
+      } catch (openaiError) {
+        // Use the helper function to format the error response
+        const { response } = formatErrorResponse(openaiError, 503);
+        return response;
       }
-    } catch (optimizationError) {
-      logger.error('Error in CV optimization process:', optimizationError instanceof Error ? optimizationError.message : String(optimizationError));
-      
-      // Check if the error is related to service unavailability
-      const errorMessage = optimizationError instanceof Error ? optimizationError.message : String(optimizationError);
-      const isServiceUnavailable = 
-        errorMessage.includes('not available') || 
-        errorMessage.includes('not configured') || 
-        errorMessage.includes('Authentication failed');
-      
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Failed to optimize CV content',
-          details: errorMessage,
-          serviceUnavailable: isServiceUnavailable
-        },
-        { status: isServiceUnavailable ? 503 : 500 }
-      );
+    } else {
+      logger.error('OpenAI service is not available');
+      return NextResponse.json({ 
+        success: false, 
+        error: 'OpenAI service is not available',
+        details: 'The OpenAI service is not properly configured. Please check your API key.',
+        serviceUnavailable: true
+      }, { status: 503 });
     }
   } catch (error) {
-    logger.error('Error in CV optimize endpoint:', error instanceof Error ? error.message : String(error));
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'An unknown error occurred' 
-      },
-      { status: 500 }
-    );
+    // Use the helper function to format the error response
+    const { response } = formatErrorResponse(error);
+    return response;
   }
 } 

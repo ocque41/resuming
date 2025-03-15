@@ -31,7 +31,7 @@ export default async function PricingPage() {
         <div className="max-w-5xl mx-auto space-y-16">
           <section className="space-y-8">
             <h2 className="text-6xl font-bold text-white animate-fade-in">
-              Plans and Pricing
+              Product Plans
             </h2>
             <p className="text-xl text-white font-semibold animate-fade-in-up mt-4">
               Enjoy a 1 day free trial to see if you found your solution
