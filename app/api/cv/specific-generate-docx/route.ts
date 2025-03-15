@@ -358,7 +358,11 @@ async function generateSpecificDocx(
             ...sectionOrder.flatMap(sectionName => {
               try {
                 const content = sections[sectionName];
-                if (!content || (Array.isArray(content) && content.length === 0)) {
+                // Skip empty sections or sections with only placeholder content
+                if (!content || 
+                    (Array.isArray(content) && content.length === 0) || 
+                    (typeof content === 'string' && content.trim() === '') ||
+                    (typeof content === 'string' && content.includes('[This') && content.includes('needs to be completed]'))) {
                   return [];
                 }
                 
@@ -392,13 +396,159 @@ async function generateSpecificDocx(
                   );
                 }
                 
-                // Add section content
+                // Add section content with improved formatting
                 if (typeof content === 'string') {
-                  // Split by lines and add each line as a paragraph
-                  const lines = content.split('\n').filter(line => line.trim());
-                  
-                  for (const line of lines) {
-                    try {
+                  // Special handling for EDUCATION section
+                  if (sectionName === 'EDUCATION') {
+                    // Try to identify education entries
+                    const educationEntries = content.split(/\n{2,}/).filter(entry => entry.trim());
+                    
+                    if (educationEntries.length > 0) {
+                      for (const entry of educationEntries) {
+                        // Format each education entry
+                        const lines = entry.split('\n').filter(line => line.trim());
+                        
+                        // First line is likely the degree/institution
+                        if (lines.length > 0) {
+                          paragraphs.push(
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: lines[0],
+                                  bold: true
+                                })
+                              ],
+                              spacing: {
+                                before: 200,
+                                after: 120
+                              }
+                            })
+                          );
+                          
+                          // Remaining lines are details
+                          for (let i = 1; i < lines.length; i++) {
+                            paragraphs.push(
+                              new Paragraph({
+                                text: lines[i],
+                                spacing: {
+                                  before: 80,
+                                  after: 80
+                                },
+                                indent: {
+                                  left: 240
+                                }
+                              })
+                            );
+                          }
+                        }
+                      }
+                    } else {
+                      // Fallback to regular line processing
+                      const lines = content.split('\n').filter(line => line.trim());
+                      for (const line of lines) {
+                        paragraphs.push(
+                          new Paragraph({
+                            text: line,
+                            spacing: {
+                              before: 120,
+                              after: 120
+                            }
+                          })
+                        );
+                      }
+                    }
+                  }
+                  // Special handling for EXPERIENCE section
+                  else if (sectionName === 'EXPERIENCE') {
+                    // Try to identify experience entries
+                    const experienceEntries = content.split(/\n{2,}/).filter(entry => entry.trim());
+                    
+                    if (experienceEntries.length > 0) {
+                      for (const entry of experienceEntries) {
+                        // Format each experience entry
+                        const lines = entry.split('\n').filter(line => line.trim());
+                        
+                        // First line is likely the job title/company
+                        if (lines.length > 0) {
+                          paragraphs.push(
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: lines[0],
+                                  bold: true
+                                })
+                              ],
+                              spacing: {
+                                before: 200,
+                                after: 120
+                              }
+                            })
+                          );
+                          
+                          // Remaining lines are details
+                          for (let i = 1; i < lines.length; i++) {
+                            // Check if line is a bullet point or responsibility
+                            if (lines[i].trim().startsWith('•') || lines[i].trim().startsWith('-') || lines[i].trim().startsWith('*')) {
+                              paragraphs.push(
+                                new Paragraph({
+                                  children: [
+                                    new TextRun({
+                                      text: '• ',
+                                      bold: true,
+                                      color: 'B4916C'
+                                    }),
+                                    new TextRun({
+                                      text: lines[i].replace(/^[•\-*]\s*/, '')
+                                    })
+                                  ],
+                                  spacing: {
+                                    before: 80,
+                                    after: 80
+                                  },
+                                  indent: {
+                                    left: 360
+                                  }
+                                })
+                              );
+                            } else {
+                              paragraphs.push(
+                                new Paragraph({
+                                  text: lines[i],
+                                  spacing: {
+                                    before: 80,
+                                    after: 80
+                                  },
+                                  indent: {
+                                    left: 240
+                                  }
+                                })
+                              );
+                            }
+                          }
+                        }
+                      }
+                    } else {
+                      // Fallback to regular line processing
+                      const lines = content.split('\n').filter(line => line.trim());
+                      for (const line of lines) {
+                        paragraphs.push(
+                          new Paragraph({
+                            text: line,
+                            spacing: {
+                              before: 120,
+                              after: 120
+                            }
+                          })
+                        );
+                      }
+                    }
+                  }
+                  // Special handling for LANGUAGES section
+                  else if (sectionName === 'LANGUAGES') {
+                    // Try to identify language entries
+                    const lines = content.split('\n').filter(line => line.trim());
+                    
+                    for (const line of lines) {
                       // Check if line is a bullet point
                       if (line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*')) {
                         paragraphs.push(
@@ -418,11 +568,89 @@ async function generateSpecificDocx(
                               after: 120
                             },
                             indent: {
-                              left: 360
+                              left: 240
                             }
                           })
                         );
                       } else {
+                        // Try to identify language and proficiency
+                        const languageMatch = line.match(/^([A-Za-z\s]+)(?:\s*[-:]\s*|\s+)(.*)/);
+                        if (languageMatch) {
+                          paragraphs.push(
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: languageMatch[1].trim(),
+                                  bold: true
+                                }),
+                                new TextRun({
+                                  text: `: ${languageMatch[2].trim()}`
+                                })
+                              ],
+                              spacing: {
+                                before: 120,
+                                after: 120
+                              }
+                            })
+                          );
+                        } else {
+                          paragraphs.push(
+                            new Paragraph({
+                              text: line,
+                              spacing: {
+                                before: 120,
+                                after: 120
+                              }
+                            })
+                          );
+                        }
+                      }
+                    }
+                  }
+                  // Default handling for other sections
+                  else {
+                    // Split by lines and add each line as a paragraph
+                    const lines = content.split('\n').filter(line => line.trim());
+                    
+                    for (const line of lines) {
+                      try {
+                        // Check if line is a bullet point
+                        if (line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*')) {
+                          paragraphs.push(
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: '• ',
+                                  bold: true,
+                                  color: 'B4916C'
+                                }),
+                                new TextRun({
+                                  text: line.replace(/^[•\-*]\s*/, '')
+                                })
+                              ],
+                              spacing: {
+                                before: 120,
+                                after: 120
+                              },
+                              indent: {
+                                left: 360
+                              }
+                            })
+                          );
+                        } else {
+                          paragraphs.push(
+                            new Paragraph({
+                              text: line,
+                              spacing: {
+                                before: 120,
+                                after: 120
+                              }
+                            })
+                          );
+                        }
+                      } catch (lineError) {
+                        logger.warn(`Error processing line in section ${sectionName}:`, lineError instanceof Error ? lineError.message : String(lineError));
+                        // Add a simple paragraph as fallback
                         paragraphs.push(
                           new Paragraph({
                             text: line,
@@ -433,18 +661,6 @@ async function generateSpecificDocx(
                           })
                         );
                       }
-                    } catch (lineError) {
-                      logger.warn(`Error processing line in section ${sectionName}:`, lineError instanceof Error ? lineError.message : String(lineError));
-                      // Add a simple paragraph as fallback
-                      paragraphs.push(
-                        new Paragraph({
-                          text: line,
-                          spacing: {
-                            before: 120,
-                            after: 120
-                          }
-                        })
-                      );
                     }
                   }
                 } else if (Array.isArray(content)) {
@@ -616,10 +832,10 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
       { regex: /^(PROFILE|SUMMARY|ABOUT|ABOUT ME|PROFESSIONAL SUMMARY)[:.\-]?/i, name: 'PROFILE' },
       { regex: /^(ACHIEVEMENTS|ACCOMPLISHMENTS|KEY ACHIEVEMENTS)[:.\-]?/i, name: 'ACHIEVEMENTS' },
       { regex: /^(GOALS|CAREER GOALS|OBJECTIVES|CAREER OBJECTIVES)[:.\-]?/i, name: 'GOALS' },
-      { regex: /^(LANGUAGES|LANGUAGE PROFICIENCY|LANGUAGE SKILLS)[:.\-]?/i, name: 'LANGUAGES' },
+      { regex: /^(LANGUAGES?|LANGUAGE PROFICIENCY|LANGUAGE SKILLS|SPOKEN LANGUAGES?)[:.\-]?/i, name: 'LANGUAGES' },
       { regex: /^(SKILLS|TECHNICAL SKILLS|PROFESSIONAL SKILLS|KEY SKILLS|CORE SKILLS|COMPETENCIES)[:.\-]?/i, name: 'SKILLS' },
-      { regex: /^(EDUCATION|ACADEMIC BACKGROUND|QUALIFICATIONS|ACADEMIC QUALIFICATIONS)[:.\-]?/i, name: 'EDUCATION' },
-      { regex: /^(EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY|PROFESSIONAL EXPERIENCE|CAREER HISTORY)[:.\-]?/i, name: 'EXPERIENCE' },
+      { regex: /^(EDUCATION|ACADEMIC|QUALIFICATIONS|ACADEMIC QUALIFICATIONS|EDUCATIONAL BACKGROUND|DEGREES?)[:.\-]?/i, name: 'EDUCATION' },
+      { regex: /^(EXPERIENCE|WORK|EMPLOYMENT|PROFESSIONAL EXPERIENCE|CAREER|WORK HISTORY|JOB HISTORY)[:.\-]?/i, name: 'EXPERIENCE' },
       { regex: /^(REFERENCES|REFEREES)[:.\-]?/i, name: 'REFERENCES' }
     ];
     
@@ -710,35 +926,97 @@ function intelligentParsing(text: string): Record<string, string | string[]> {
       sections['PROFILE'] = paragraphs[1];
     }
     
-    // Look for experience indicators
+    // Look for experience indicators with more flexible patterns
     const experienceParagraphs = paragraphs.filter(p => 
-      /experience|work|career|job|position|employment/i.test(p) && 
-      /20\d\d|19\d\d|january|february|march|april|may|june|july|august|september|october|november|december/i.test(p)
+      /experience|work|career|job|position|employment|company|role|responsibilities/i.test(p) && 
+      (/20\d\d|19\d\d|january|february|march|april|may|june|july|august|september|october|november|december|present|current/i.test(p) ||
+       /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i.test(p))
     );
     
     if (experienceParagraphs.length > 0) {
       sections['EXPERIENCE'] = experienceParagraphs.join('\n\n');
+    } else {
+      // If no clear experience section, look for paragraphs that might contain job titles
+      const potentialExperienceParagraphs = paragraphs.filter(p => 
+        /manager|engineer|developer|analyst|specialist|coordinator|director|assistant|supervisor|lead/i.test(p) &&
+        /20\d\d|19\d\d/i.test(p) &&
+        p.length > 100 // Likely a substantial paragraph about work
+      );
+      
+      if (potentialExperienceParagraphs.length > 0) {
+        sections['EXPERIENCE'] = potentialExperienceParagraphs.join('\n\n');
+      }
     }
     
-    // Look for education indicators
+    // Look for education indicators with more flexible patterns
     const educationParagraphs = paragraphs.filter(p => 
-      /education|degree|university|college|school|bachelor|master|phd|diploma/i.test(p) && 
+      /education|degree|university|college|school|bachelor|master|phd|diploma|certification|graduate|undergraduate|major|minor/i.test(p) && 
       !/work|experience/i.test(p.split('\n')[0])
     );
     
     if (educationParagraphs.length > 0) {
       sections['EDUCATION'] = educationParagraphs.join('\n\n');
+    } else {
+      // If no clear education section, look for paragraphs that might contain education info
+      const potentialEducationParagraphs = paragraphs.filter(p => 
+        /university|college|school|academy|institute/i.test(p) &&
+        /20\d\d|19\d\d/i.test(p) &&
+        !/work|experience|job|career/i.test(p)
+      );
+      
+      if (potentialEducationParagraphs.length > 0) {
+        sections['EDUCATION'] = potentialEducationParagraphs.join('\n\n');
+      }
     }
     
-    // Look for skills indicators
+    // Look for language indicators
+    const languageParagraphs = paragraphs.filter(p => 
+      /languages?|fluent|native|proficient|beginner|intermediate|advanced|speaker|spoken/i.test(p) && 
+      /english|spanish|french|german|italian|chinese|japanese|russian|arabic|portuguese|dutch|swedish|norwegian|danish|finnish|polish|czech|slovak|hungarian|romanian|bulgarian|greek|turkish|korean|vietnamese|thai|indonesian|malay|hindi|urdu|bengali|punjabi|tamil|telugu|kannada|malayalam|marathi|gujarati|hebrew|swahili/i.test(p) &&
+      p.length < 300 // Language sections are usually short
+    );
+    
+    if (languageParagraphs.length > 0) {
+      sections['LANGUAGES'] = languageParagraphs.join('\n\n');
+    }
+    
+    // Look for skills indicators with more flexible patterns
     const skillsParagraphs = paragraphs.filter(p => 
-      /skills|proficient|proficiency|competent|competency|expertise|expert in/i.test(p) && 
-      p.split('\n').length < 10 && // Skills sections are usually shorter
+      /skills|proficient|proficiency|competent|competency|expertise|expert in|familiar with|knowledge of|experienced in/i.test(p) && 
+      p.split('\n').length < 15 && // Skills sections are usually shorter
       !/work|experience|education/i.test(p.split('\n')[0])
     );
     
     if (skillsParagraphs.length > 0) {
       sections['SKILLS'] = skillsParagraphs.join('\n\n');
+    }
+    
+    // Ensure we have the essential sections with at least placeholder content
+    const essentialSections = ['EDUCATION', 'EXPERIENCE', 'LANGUAGES', 'SKILLS'];
+    for (const section of essentialSections) {
+      if (!sections[section]) {
+        // Look for any paragraph that might contain relevant content
+        for (const paragraph of paragraphs) {
+          if (section === 'EDUCATION' && /degree|university|college|school|education/i.test(paragraph)) {
+            sections[section] = paragraph;
+            break;
+          } else if (section === 'EXPERIENCE' && /work|job|career|position|company|employer/i.test(paragraph)) {
+            sections[section] = paragraph;
+            break;
+          } else if (section === 'LANGUAGES' && /language|speak|fluent|native/i.test(paragraph)) {
+            sections[section] = paragraph;
+            break;
+          } else if (section === 'SKILLS' && /skill|proficient|knowledge|expertise/i.test(paragraph)) {
+            sections[section] = paragraph;
+            break;
+          }
+        }
+        
+        // If still no content, add a placeholder that indicates the section needs to be filled
+        if (!sections[section]) {
+          sections[section] = `[This ${section.toLowerCase()} section needs to be completed]`;
+        }
+      }
     }
     
     logger.info(`Intelligent parsing found ${Object.keys(sections).length} sections`);
