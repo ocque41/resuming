@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/ui/navbar";
 import { Button } from "@/components/ui/button";
@@ -14,9 +14,9 @@ import ReactMarkdown from 'react-markdown';
 import { blogPosts } from "../data";
 
 export default function BlogPostPage() {
-  const params = useParams();
+  const pathname = usePathname();
   const router = useRouter();
-  const slug = params?.slug as string;
+  const slug = pathname?.split('/').pop() || '';
   const [post, setPost] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [relatedPosts, setRelatedPosts] = useState<any[]>([]);
