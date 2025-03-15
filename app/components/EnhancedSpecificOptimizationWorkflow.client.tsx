@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle } from "lucide-react";
+import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle, AlertTriangle } from "lucide-react";
 import { analyzeCVContent, optimizeCVForJob } from '@/lib/services/mistral.service';
 import { useToast } from "@/hooks/use-toast";
 import JobMatchDetailedAnalysis from './JobMatchDetailedAnalysis';
@@ -27,6 +27,8 @@ import {
   fetchWithRetry
 } from '../utils/cvHelpers';
 import { Packer } from 'docx';
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Type definitions
 interface KeywordMatch {
@@ -2553,6 +2555,9 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   const [partialResults, setPartialResults] = useState<string | null>(null);
   const [showPartialResults, setShowPartialResults] = useState<boolean>(false);
   
+  // Add state for simplified process option
+  const [useSimplifiedProcess, setUseSimplifiedProcess] = useState<boolean>(false);
+  
   // Add refs for timeouts
   const optimizationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const documentTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -2565,6 +2570,9 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     if (!selectedCVId || !jobDescription) return;
     
     try {
+      // Track the last progress value to detect if we're stuck
+      const lastProgress = processingProgress;
+      
       const response = await fetchWithRetry(`/api/cv/optimize/partial-results`, {
         method: 'POST',
         headers: {
@@ -2580,19 +2588,57 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         const data = await response.json();
         if (data.success && data.partialResults) {
           setPartialResults(data.partialResults.optimizedContent);
-          setProcessingProgress(data.partialResults.progress || 0);
           
-          // If we've been processing for more than 2 minutes, show partial results option
+          // Update progress
+          const newProgress = data.partialResults.progress || 0;
+          setProcessingProgress(newProgress);
+          
+          // If progress hasn't changed for a while, show partial results option
           const processingTime = Date.now() - startTime;
-          if (processingTime > 120000 && data.partialResults.progress > 30) {
+          const isProgressStuck = newProgress === lastProgress && newProgress > 0 && processingTime > 60000;
+          
+          if (processingTime > 120000 && newProgress > 30) {
+            // If processing for more than 2 minutes and progress > 30%, show partial results
             setShowPartialResults(true);
             setProcessingStatus('Optimization is taking longer than expected. You can use partial results if needed.');
             setProcessingTooLong(true);
+          } else if (isProgressStuck && newProgress > 10) {
+            // If progress is stuck but we have at least 10% progress, show partial results
+            setShowPartialResults(true);
+            setProcessingStatus('Optimization progress seems to be stuck. You can use partial results or reset and try again.');
+            setProcessingTooLong(true);
+          } else if (newProgress < 10 && processingTime > 90000) {
+            // If still under 10% after 90 seconds, show a warning
+            setProcessingStatus('Optimization is taking longer than expected. Please wait or reset and try again.');
+            setProcessingTooLong(true);
+          }
+          
+          // Update polling frequency based on progress state
+          if (isProgressStuck) {
+            // If progress is stuck, poll more frequently
+            if (pollingIntervalRef.current) {
+              clearInterval(pollingIntervalRef.current);
+            }
+            pollingIntervalRef.current = setInterval(() => {
+              pollForPartialResults(startTime);
+            }, 5000); // Poll every 5 seconds when stuck
+          }
+        }
+      } else {
+        // Handle non-OK responses
+        console.error('Error polling for partial results:', response.status, response.statusText);
+        
+        // If we get a 401 or 403, there might be an authentication issue
+        if (response.status === 401 || response.status === 403) {
+          setError('Authentication error. Please refresh the page and try again.');
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
           }
         }
       }
     } catch (error) {
       console.error('Error polling for partial results:', error);
+      // Don't stop polling on network errors, just log them
     }
   };
   
@@ -2802,22 +2848,94 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       // Record start time for partial results polling
       const startTime = Date.now();
       
-      // Set up polling for partial results
-      const pollingInterval = setInterval(() => {
+      // Clear any existing polling interval
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+      
+      // Set up polling for partial results - start with 10 seconds, will adjust dynamically
+      pollingIntervalRef.current = setInterval(() => {
         pollForPartialResults(startTime);
-      }, 15000); // Poll every 15 seconds
+      }, 10000); // Poll every 10 seconds initially
       
       // Validate inputs
       if (!selectedCVId) {
         setError('Please select a CV to optimize');
         setIsProcessing(false);
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+        }
         return;
       }
       
       if (!jobDescription || jobDescription.trim() === '') {
         setError('Please enter a job description');
         setIsProcessing(false);
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+        }
         return;
+      }
+      
+      // Start the optimization process
+      try {
+        const response = await fetchWithRetry(`/api/cv/optimize`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            cvId: selectedCVId,
+            jobDescription,
+            useSimplifiedProcess, // Include the simplified process option
+          }),
+        });
+        
+        // Clear polling interval as we have the final result
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+        }
+        
+        if (response.ok) {
+          const result = await response.json();
+          
+          // Update state with optimization results
+          setOptimizedText(result.optimizedContent);
+          setRecommendations(result.recommendations || []);
+          setMatchScore(result.matchScore || 0);
+          setJobMatchAnalysis(result.matchAnalysis || null);
+          setStructuredCV(result.cvAnalysis || null);
+          
+          // Update processing state
+          setIsProcessed(true);
+          setIsProcessing(false);
+          setProcessingProgress(100);
+          setProcessingStatus('Optimization complete!');
+          
+          // Generate document
+          generateDocument();
+        } else {
+          // Handle error responses
+          const errorData = await response.json();
+          setError(errorData.error || 'Failed to optimize CV');
+          setIsProcessing(false);
+          
+          // If we have partial results, offer to use them
+          if (partialResults) {
+            setShowPartialResults(true);
+            setProcessingStatus('Optimization failed, but partial results are available.');
+          }
+        }
+      } catch (error) {
+        console.error("Error optimizing CV:", error);
+        setError("An error occurred while optimizing the CV.");
+        setIsProcessing(false);
+        
+        // If we have partial results, offer to use them
+        if (partialResults) {
+          setShowPartialResults(true);
+          setProcessingStatus('Optimization failed, but partial results are available.');
+        }
       }
       
       // Generate the document - this function handles all state management internally
@@ -2829,11 +2947,18 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           clearTimeout(documentTimeoutRef.current);
           documentTimeoutRef.current = null;
         }
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
       };
     } catch (error) {
       console.error("Error processing CV:", error);
       setError("An error occurred while processing the CV.");
       setIsProcessing(false);
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
     }
   };
 
@@ -2855,6 +2980,103 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   };
 
   // ... existing code ...
+
+  // Add this component after the existing imports
+  const PartialResultsDisplay = ({ 
+    partialResults, 
+    processingProgress, 
+    onUsePartialResults, 
+    onContinueWaiting 
+  }: { 
+    partialResults: string | null; 
+    processingProgress: number; 
+    onUsePartialResults: () => void; 
+    onContinueWaiting: () => void; 
+  }) => {
+    if (!partialResults) return null;
+    
+    return (
+      <div className="mb-6 p-4 border border-amber-700 bg-amber-900/20 rounded-md">
+        <div className="flex items-center mb-2">
+          <AlertTriangle className="w-4 h-4 mr-2 text-amber-500" />
+          <span className="text-amber-300 font-medium">Optimization is taking longer than expected</span>
+        </div>
+        <p className="mb-4 text-sm">
+          We have partial results ({processingProgress}% complete) that you can use now, or you can continue waiting for the full optimization.
+        </p>
+        <div className="flex space-x-3">
+          <Button 
+            onClick={onUsePartialResults}
+            variant="outline" 
+            className="border-amber-600 text-amber-300 hover:bg-amber-900/30"
+          >
+            <CheckCircle className="mr-2 h-4 w-4" />
+            Use Partial Results
+          </Button>
+          <Button 
+            onClick={onContinueWaiting}
+            variant="outline" 
+            className="border-gray-600 text-gray-300 hover:bg-gray-900/30"
+          >
+            <Clock className="mr-2 h-4 w-4" />
+            Continue Waiting
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  // Add this function to the EnhancedSpecificOptimizationWorkflow component
+  /**
+   * Handle using partial results
+   */
+  const handleUsePartialResults = () => {
+    if (!partialResults) {
+      toast({
+        title: "No partial results available",
+        description: "Please wait for partial results to become available.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    // Update state with partial results
+    setOptimizedText(partialResults);
+    setRecommendations(["This is a partial optimization. Some sections may not be fully optimized."]);
+    setMatchScore(Math.max(50, processingProgress)); // Set a score based on progress
+    
+    // Update processing state
+    setIsProcessed(true);
+    setIsProcessing(false);
+    setProcessingProgress(100);
+    setProcessingStatus('Partial optimization complete');
+    setShowPartialResults(false);
+    
+    // Clear polling interval
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    
+    // Generate document with partial results
+    generateDocument();
+    
+    toast({
+      title: "Using partial results",
+      description: "The document has been generated with the partial optimization results.",
+    });
+  };
+
+  /**
+   * Handle continuing to wait for full results
+   */
+  const handleContinueWaiting = () => {
+    setShowPartialResults(false);
+    toast({
+      title: "Continuing optimization",
+      description: "We'll continue the optimization process. This may take a few more minutes.",
+    });
+  };
 
   return (
     <div className="w-full max-w-7xl mx-auto p-4 space-y-8">
@@ -2879,20 +3101,51 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         />
       </div>
 
-      {/* Process button */}
-      <div className="mb-6">
-        <button
-          onClick={processCV}
-          disabled={isProcessing || !selectedCVId || !jobDescription.trim()}
-          className={`w-full py-3 rounded-md font-semibold transition-colors duration-200 ${
-            isProcessing || !selectedCVId || !jobDescription.trim()
-              ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-              : 'bg-[#B4916C] text-white hover:bg-[#A37F5C]'
-          }`}
+      {/* Optimize CV Button */}
+      <div className="flex items-center mb-4">
+        <Checkbox
+          id="useSimplifiedProcess"
+          checked={useSimplifiedProcess}
+          onCheckedChange={(checked) => setUseSimplifiedProcess(checked === true)}
+        />
+        <label
+          htmlFor="useSimplifiedProcess"
+          className="ml-2 text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
         >
-          {isProcessing ? 'Processing...' : 'Optimize CV for Job'}
-        </button>
+          Use simplified process (faster but less detailed)
+        </label>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Info className="h-4 w-4 ml-2 text-gray-400" />
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="max-w-xs">
+                The simplified process is faster and uses less resources, but may provide less detailed optimization. 
+                Recommended for very large CVs or when the standard process is too slow.
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
+
+      <Button
+        onClick={processCV}
+        disabled={!selectedCVId || !jobDescription || isProcessing}
+        className="w-full"
+      >
+        {isProcessing ? (
+          <>
+            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+            Optimizing...
+          </>
+        ) : (
+          <>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Optimize CV
+          </>
+        )}
+      </Button>
 
       {/* Processing status */}
       {isProcessing && (
@@ -3231,6 +3484,15 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
               "The process seems to be taking too long. You can reset and try again."}
           </p>
         </div>
+      )}
+
+      {isProcessing && showPartialResults && (
+        <PartialResultsDisplay
+          partialResults={partialResults}
+          processingProgress={processingProgress}
+          onUsePartialResults={handleUsePartialResults}
+          onContinueWaiting={handleContinueWaiting}
+        />
       )}
     </div>
   );
