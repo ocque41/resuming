@@ -1,9 +1,8 @@
 /* use client */
 'use client';
 
-import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle, Table, TableRow, TableCell, WidthType, Header, Footer } from 'docx';
-import { saveAs } from 'file-saver';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle } from 'docx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -20,6 +19,14 @@ import DocumentGenerationProgress from './DocumentGenerationProgress';
 import DocumentDownloadStatus from './DocumentDownloadStatus';
 import { logger } from '@/lib/logger';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  extractEducationSection, 
+  extractExperienceSection, 
+  extractLanguagesSection, 
+  insertSectionInOptimizedContent,
+  fetchWithRetry
+} from '../utils/cvHelpers';
+import { Packer } from 'docx';
 
 // Type definitions
 interface KeywordMatch {
@@ -2542,48 +2549,210 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   const [mistralFailureCount, setMistralFailureCount] = useState<number>(0);
   const [openAIAvailable, setOpenAIAvailable] = useState<boolean>(true);
   
-  // Constants
-  const MAX_FAILURES = 3; // After this many failures, switch to local processing
-
-  // Refs for tracking intervals and timeouts
-  const processingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Add state for partial results
+  const [partialResults, setPartialResults] = useState<string | null>(null);
+  const [showPartialResults, setShowPartialResults] = useState<boolean>(false);
+  
+  // Add refs for timeouts
+  const optimizationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const documentTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const documentGenerationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // ... existing code ...
-
-  // Function to handle Mistral service failure
-  const handleMistralFailure = useCallback((error: Error) => {
-    setMistralFailureCount(prev => {
-      const newCount = prev + 1;
-      if (newCount >= MAX_FAILURES) {
-        logger.warn(`Mistral service failed ${newCount} times, switching to local processing`);
-        setMistralServiceAvailable(false);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  /**
+   * Poll for partial results during optimization
+   */
+  const pollForPartialResults = async (startTime: number) => {
+    if (!selectedCVId || !jobDescription) return;
+    
+    try {
+      const response = await fetchWithRetry(`/api/cv/optimize/partial-results`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cvId: selectedCVId,
+          jobDescription
+        }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.partialResults) {
+          setPartialResults(data.partialResults.optimizedContent);
+          setProcessingProgress(data.partialResults.progress || 0);
+          
+          // If we've been processing for more than 2 minutes, show partial results option
+          const processingTime = Date.now() - startTime;
+          if (processingTime > 120000 && data.partialResults.progress > 30) {
+            setShowPartialResults(true);
+            setProcessingStatus('Optimization is taking longer than expected. You can use partial results if needed.');
+            setProcessingTooLong(true);
+          }
+        }
       }
-      return newCount;
+    } catch (error) {
+      console.error('Error polling for partial results:', error);
+    }
+  };
+  
+  /**
+   * Generate document from optimized text
+   */
+  const generateDocument = async () => {
+    if (!optimizedText || isGeneratingDocument) return;
+    
+    setIsGeneratingDocument(true);
+    setDocumentError(null);
+    setProcessingStatus('Generating document...');
+    setProcessingProgress(0);
+    
+    // Set up progress tracking
+    const progressInterval = setInterval(() => {
+      setProcessingProgress((prev) => {
+        if (prev >= 90) return prev;
+        return prev + 10;
+      });
+    }, 500);
+    
+    try {
+      // Check if we have a cached document with the same text
+      if (cachedDocument.text === optimizedText && cachedDocument.blob) {
+        setProcessingProgress(100);
+        setProcessingStatus('Document ready!');
+        setIsGeneratingDocument(false);
+        clearInterval(progressInterval);
+        return;
+      }
+      
+      // Generate the document
+      const doc = await generateOptimizedDocument(
+        optimizedText,
+        selectedCVName || 'CV',
+        structuredCV?.contactInfo,
+        structuredCV || undefined
+      );
+      
+      // Convert to blob
+      const blob = await Packer.toBlob(doc);
+      const url = URL.createObjectURL(blob);
+      
+      // Cache the document
+      setCachedDocument({
+        doc,
+        blob,
+        text: optimizedText,
+        timestamp: Date.now(),
+        url
+      });
+      
+      setProcessingProgress(100);
+      setProcessingStatus('Document ready!');
+    } catch (error) {
+      console.error('Error generating document:', error);
+      setDocumentError(`Failed to generate document: ${error instanceof Error ? error.message : String(error)}`);
+      setProcessingStatus('Document generation failed');
+    } finally {
+      setIsGeneratingDocument(false);
+      clearInterval(progressInterval);
+    }
+  };
+  
+  /**
+   * Handle generate document button click
+   */
+  const handleGenerateDocument = () => {
+    if (!optimizedText || isGeneratingDocument) return;
+    
+    toast({
+      title: "Generating document",
+      description: "Please wait while we prepare your document...",
     });
     
-    // Log the error
-    console.error("Mistral service error:", error);
-    logger.error(`Mistral service error: ${error.message}`);
+    generateDocument();
+  };
+  
+  /**
+   * Handle manual download button click
+   */
+  const handleManualDownload = async () => {
+    if (!optimizedText || isGeneratingDocument) return;
     
-    return error;
-  }, []);
-
-  // Reset circuit breaker after some time
-  useEffect(() => {
-    if (!mistralServiceAvailable) {
-      const timer = setTimeout(() => {
-        logger.info("Resetting Mistral service availability");
-        setMistralServiceAvailable(true);
-        setMistralFailureCount(0);
-      }, 5 * 60 * 1000); // 5 minutes
-      
-      return () => clearTimeout(timer);
+    setIsDownloading(true);
+    setProcessingStatus('Preparing download...');
+    
+    try {
+      // If we have a cached document, use it
+      if (cachedDocument.text === optimizedText && cachedDocument.blob) {
+        await downloadDocument(cachedDocument.blob, `${selectedCVName || 'CV'}_Optimized.docx`);
+        setIsDownloadComplete(true);
+        setProcessingStatus('Download complete!');
+        toast({
+          title: "Download successful",
+          description: "Your optimized CV has been downloaded.",
+        });
+      } else {
+        // Generate and download
+        await generateDocument();
+        if (cachedDocument.blob) {
+          await downloadDocument(cachedDocument.blob, `${selectedCVName || 'CV'}_Optimized.docx`);
+          setIsDownloadComplete(true);
+          setProcessingStatus('Download complete!');
+          toast({
+            title: "Download successful",
+            description: "Your optimized CV has been downloaded.",
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error downloading document:', error);
+      setDocumentError(`Failed to download document: ${error instanceof Error ? error.message : String(error)}`);
+      setProcessingStatus('Download failed');
+      toast({
+        title: "Download failed",
+        description: "There was an error downloading your document. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloading(false);
     }
-  }, [mistralServiceAvailable]);
-
+  };
+  
+  /**
+   * Reset the optimization process
+   */
+  const resetOptimization = () => {
+    setOptimizedText(null);
+    setJobMatchAnalysis(null);
+    setRecommendations([]);
+    setMatchScore(0);
+    setIsProcessed(false);
+    setIsProcessing(false);
+    setProcessingProgress(0);
+    setProcessingStatus('');
+    setError(null);
+    setDocumentError(null);
+    setPartialResults(null);
+    setShowPartialResults(false);
+    setProcessingTooLong(false);
+    
+    // Clear timeouts
+    if (optimizationTimeoutRef.current) {
+      clearTimeout(optimizationTimeoutRef.current);
+      optimizationTimeoutRef.current = null;
+    }
+    
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    
+    toast({
+      title: "Reset complete",
+      description: "You can start a new optimization.",
+    });
+  };
+  
   // Fetch original CV text
   const fetchOriginalText = useCallback(async (cvId: string) => {
     try {
@@ -2627,6 +2796,16 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       setProcessingStatus('Starting CV optimization...');
       setProcessingProgress(10);
       setError(null);
+      setPartialResults(null);
+      setShowPartialResults(false);
+      
+      // Record start time for partial results polling
+      const startTime = Date.now();
+      
+      // Set up polling for partial results
+      const pollingInterval = setInterval(() => {
+        pollForPartialResults(startTime);
+      }, 15000); // Poll every 15 seconds
       
       // Validate inputs
       if (!selectedCVId) {
@@ -2641,955 +2820,44 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         return;
       }
       
-      // Fetch CV content
-      setProcessingStatus('Fetching CV content...');
-      setProcessingProgress(20);
+      // Generate the document - this function handles all state management internally
+      generateDocument();
       
-      const cvResponse = await fetch(`/api/cv/get-text?cvId=${selectedCVId}`);
-      if (!cvResponse.ok) {
-        throw new Error(`Failed to fetch CV content: ${cvResponse.statusText}`);
-      }
-      
-      const cvData = await cvResponse.json();
-      const cvText = cvData.text || '';
-      
-      if (!cvText || cvText.trim() === '') {
-        throw new Error('CV text is empty');
-      }
-      
-      // Store original text
-      setOriginalText(cvText);
-      
-      // Extract sections from the original CV
-      const educationSection = extractEducationSection(cvText);
-      const experienceSection = extractExperienceSection(cvText);
-      const languagesSection = extractLanguagesSection(cvText);
-      
-      // Analyze and optimize CV
-      setProcessingStatus('Analyzing and optimizing CV...');
-      setProcessingProgress(40);
-      
-      // Check if Mistral service is available
-      let mistralAvailable = true;
-      let openAIAvailable = true;
-      
-      try {
-        const mistralCheckResponse = await fetch('/api/cv/analyze', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ cvText: cvText.substring(0, 100) }), // Just send a small sample to check
-        });
-        
-        if (!mistralCheckResponse.ok) {
-          const errorData = await mistralCheckResponse.json();
-          if (errorData.serviceUnavailable) {
-            mistralAvailable = false;
-            setMistralServiceAvailable(false);
-            console.warn('Mistral service is unavailable, will use OpenAI fallback');
-          }
+      // Clear the timeout when component unmounts or when the function is called again
+      return () => {
+        if (documentTimeoutRef.current) {
+          clearTimeout(documentTimeoutRef.current);
+          documentTimeoutRef.current = null;
         }
-      } catch (error) {
-        mistralAvailable = false;
-        setMistralServiceAvailable(false);
-        console.warn('Error checking Mistral service:', error);
-      }
-      
-      // Optimize CV using the appropriate service
-      let optimizationResponse;
-      try {
-        setProcessingStatus('Optimizing CV for job match...');
-        setProcessingProgress(60);
-        
-        // Add a timeout for the optimization request
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minute timeout
-        
-        optimizationResponse = await fetch('/api/cv/optimize', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            cvText,
-            jobDescription,
-            preserveSections: {
-              education: true,
-              experience: true,
-              languages: true
-            }
-          }),
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!optimizationResponse.ok) {
-          // Handle different error status codes
-          if (optimizationResponse.status === 504) {
-            throw new Error('The optimization request timed out. Your CV may be too complex or the service is currently overloaded. Please try again with a shorter CV or try later.');
-          }
-          
-          let errorData;
-          try {
-            errorData = await optimizationResponse.json();
-          } catch (jsonError) {
-            // If we can't parse the JSON, use the status text
-            throw new Error(`Optimization failed: ${optimizationResponse.statusText || 'Server error'}`);
-          }
-          
-          if (errorData.serviceUnavailable) {
-            if (errorData.details && errorData.details.includes('OpenAI')) {
-              openAIAvailable = false;
-              setOpenAIAvailable(false);
-              throw new Error('OpenAI service is unavailable. Please try again later.');
-            } else if (mistralFailureCount < MAX_FAILURES) {
-              // Increment Mistral failure count and retry
-              setMistralFailureCount(prev => prev + 1);
-              throw new Error('Mistral service temporarily unavailable, retrying...');
-            } else {
-              throw new Error('AI services are unavailable. Please try again later.');
-            }
-          } else {
-            throw new Error(errorData.error || 'Failed to optimize CV');
-          }
-        }
-      } catch (optimizationError: unknown) {
-        // Check if it's an AbortError (timeout)
-        if (optimizationError instanceof Error && optimizationError.name === 'AbortError') {
-          console.error('Optimization request timed out');
-          setError('The optimization request timed out. Your CV may be too complex or the service is currently overloaded. Please try again with a shorter CV or try later.');
-        } else {
-          console.error('Error during optimization:', optimizationError);
-          setError(`Optimization failed: ${optimizationError instanceof Error ? optimizationError.message : 'Unknown error'}`);
-        }
-        setIsProcessing(false);
-        return;
-      }
-      
-      // Process optimization results
-      setProcessingStatus('Processing optimization results...');
-      setProcessingProgress(70);
-      
-      let optimizationData;
-      try {
-        optimizationData = await optimizationResponse.json();
-      } catch (jsonError) {
-        console.error('Error parsing optimization response:', jsonError);
-        setError('Failed to parse optimization results. The server returned an invalid response.');
-        setIsProcessing(false);
-        return;
-      }
-      
-      if (!optimizationData.success) {
-        throw new Error(optimizationData.error || 'Failed to optimize CV');
-      }
-      
-      let optimizedContent = optimizationData.optimizedContent || '';
-      
-      // Ensure the preserved sections are included in the optimized content
-      if (optimizedContent) {
-        // Check if the sections are present in the optimized content
-        const hasEducation = /EDUCATION/i.test(optimizedContent);
-        const hasExperience = /EXPERIENCE/i.test(optimizedContent);
-        const hasLanguages = /LANGUAGES/i.test(optimizedContent);
-        
-        // If any section is missing, reinsert it from the original CV
-        if (!hasEducation && educationSection) {
-          optimizedContent = insertSectionInOptimizedContent(optimizedContent, 'EDUCATION', educationSection);
-        }
-        
-        if (!hasExperience && experienceSection) {
-          optimizedContent = insertSectionInOptimizedContent(optimizedContent, 'EXPERIENCE', experienceSection);
-        }
-        
-        if (!hasLanguages && languagesSection) {
-          optimizedContent = insertSectionInOptimizedContent(optimizedContent, 'LANGUAGES', languagesSection);
-        }
-      }
-      
-      // Update state with optimization results
-      setOptimizedText(optimizedContent);
-      setJobMatchAnalysis(optimizationData.matchAnalysis || null);
-      setRecommendations(optimizationData.recommendations || []);
-      setMatchScore(optimizationData.matchScore || 0);
-      
-      // Complete processing
-      setProcessingStatus('Optimization complete!');
-      setProcessingProgress(100);
-      setIsProcessing(false);
-      setIsProcessed(true);
-      setActiveTab('optimizedCV');
-      
-    } catch (error: unknown) {
-      console.error('Error processing CV:', error);
-      
-      // Create a user-friendly error message
-      let errorMessage = 'Failed to process CV';
-      
-      if (error instanceof Error) {
-        // Check for specific error types
-        if (error.message.includes('timeout') || error.message.includes('timed out')) {
-          errorMessage = 'The optimization request timed out. Your CV may be too complex or the service is currently overloaded. Please try again with a shorter CV or try later.';
-        } else if (error.message.includes('network') || error.message.includes('fetch')) {
-          errorMessage = 'Network error. Please check your internet connection and try again.';
-        } else if (error.message.includes('service') || error.message.includes('unavailable')) {
-          errorMessage = 'AI services are temporarily unavailable. Please try again later.';
-        } else {
-          errorMessage = `Failed to process CV: ${error.message}`;
-        }
-      }
-      
-      setError(errorMessage);
-      setIsProcessing(false);
-    }
-  };
-
-  // Helper function to extract the EDUCATION section from the CV
-  const extractEducationSection = (cvText: string): string | null => {
-    const educationRegex = /(?:^|\n)(?:EDUCATION|ACADEMIC|QUALIFICATIONS|ACADEMIC QUALIFICATIONS|EDUCATIONAL BACKGROUND|DEGREES?)(?:[:.\-]|\s*\n)([\s\S]*?)(?=\n(?:EXPERIENCE|WORK|EMPLOYMENT|PROFESSIONAL EXPERIENCE|CAREER|WORK HISTORY|JOB HISTORY|SKILLS|LANGUAGES|ACHIEVEMENTS|GOALS|REFERENCES|CONTACT|$))/i;
-    const match = cvText.match(educationRegex);
-    return match ? match[1].trim() : null;
-  };
-
-  // Helper function to extract the EXPERIENCE section from the CV
-  const extractExperienceSection = (cvText: string): string | null => {
-    const experienceRegex = /(?:^|\n)(?:EXPERIENCE|WORK|EMPLOYMENT|PROFESSIONAL EXPERIENCE|CAREER|WORK HISTORY|JOB HISTORY)(?:[:.\-]|\s*\n)([\s\S]*?)(?=\n(?:EDUCATION|ACADEMIC|QUALIFICATIONS|SKILLS|LANGUAGES|ACHIEVEMENTS|GOALS|REFERENCES|CONTACT|$))/i;
-    const match = cvText.match(experienceRegex);
-    return match ? match[1].trim() : null;
-  };
-
-  // Helper function to extract the LANGUAGES section from the CV
-  const extractLanguagesSection = (cvText: string): string | null => {
-    const languagesRegex = /(?:^|\n)(?:LANGUAGES?|LANGUAGE PROFICIENCY|LANGUAGE SKILLS|SPOKEN LANGUAGES?)(?:[:.\-]|\s*\n)([\s\S]*?)(?=\n(?:EDUCATION|EXPERIENCE|WORK|EMPLOYMENT|SKILLS|ACHIEVEMENTS|GOALS|REFERENCES|CONTACT|$))/i;
-    const match = cvText.match(languagesRegex);
-    return match ? match[1].trim() : null;
-  };
-
-  // Helper function to insert a section into the optimized content
-  const insertSectionInOptimizedContent = (optimizedContent: string, sectionName: string, sectionContent: string): string => {
-    // Determine where to insert the section
-    // Common section order: PROFILE, SKILLS, EXPERIENCE, EDUCATION, LANGUAGES, ACHIEVEMENTS, GOALS, REFERENCES
-    const sectionOrder = ['PROFILE', 'SKILLS', 'EXPERIENCE', 'EDUCATION', 'LANGUAGES', 'ACHIEVEMENTS', 'GOALS', 'REFERENCES'];
-    const sectionIndex = sectionOrder.indexOf(sectionName);
-    
-    if (sectionIndex === -1) {
-      // If section is not in our standard order, append it at the end
-      return `${optimizedContent.trim()}\n\n${sectionName}:\n${sectionContent}`;
-    }
-    
-    // Try to find the section that should come after this one
-    let insertAfterSection = null;
-    for (let i = sectionIndex - 1; i >= 0; i--) {
-      const prevSection = sectionOrder[i];
-      if (new RegExp(`\\b${prevSection}\\b`, 'i').test(optimizedContent)) {
-        insertAfterSection = prevSection;
-        break;
-      }
-    }
-    
-    // If we found a section to insert after
-    if (insertAfterSection) {
-      const regex = new RegExp(`(\\b${insertAfterSection}[:\\s\\S]*?)(\\n\\n|$)`, 'i');
-      const match = optimizedContent.match(regex);
-      if (match && match.index !== undefined) {
-        const insertPosition = match.index + match[0].length;
-        return optimizedContent.substring(0, insertPosition) + 
-               `\n\n${sectionName}:\n${sectionContent}` + 
-               optimizedContent.substring(insertPosition);
-      }
-    }
-    
-    // If we couldn't find a good insertion point, just append it
-    return `${optimizedContent.trim()}\n\n${sectionName}:\n${sectionContent}`;
-  };
-
-  const showToast = useCallback(({ title, description, duration }: { title: string; description: string; duration: number }) => {
-    toast({
-      title,
-      description,
-      duration,
-    });
-  }, [toast]);
-
-  // Add download document handler
-  const handleDownloadDocument = async () => {
-    if (!optimizedText) {
-      setDocumentError("No optimized text available. Please optimize your CV first.");
-      return;
-    }
-    
-    setIsGeneratingDocument(true);
-    setDocumentError(null);
-    
-    try {
-      console.log("Starting document generation...");
-      
-      // Get CV name without file extension
-      const cvName = selectedCVName 
-        ? selectedCVName.replace(/\.\w+$/, '') 
-        : 'CV';
-      
-      // Check if CV ID is available
-      if (!selectedCVId) {
-        throw new Error('No CV selected for document generation');
-      }
-      
-      console.log(`Generating document for CV ID: ${selectedCVId}`);
-      
-      // Try multiple approaches to generate and download the document
-      let downloadSuccess = false;
-      let lastError = null;
-      
-      // Approach 1: Local document generation
-      if (!downloadSuccess) {
-        try {
-          console.log("Attempting local document generation...");
-          
-          // Generate structured CV data from optimized text
-          const structuredCV = generateStructuredCV(optimizedText, jobDescription);
-          
-          // Further enhance the structured data for better document formatting
-          const enhancedStructuredCV = {
-            ...structuredCV,
-            education: structuredCV.education.map(edu => {
-              // Parse relevant courses if they're in string format
-              let relevantCourses: string[] = [];
-              if (edu.relevantCourses) {
-                if (typeof edu.relevantCourses === 'string') {
-                  relevantCourses = (edu.relevantCourses as string).split(',').map((course: string) => course.trim());
-                } else if (Array.isArray(edu.relevantCourses)) {
-                  relevantCourses = edu.relevantCourses;
-                }
-              }
-              
-              // Parse achievements if they're in string format
-              let achievements: string[] = [];
-              if (edu.achievements) {
-                if (typeof edu.achievements === 'string') {
-                  achievements = (edu.achievements as string).split(/[•\-*]\s*/).filter(Boolean).map((achievement: string) => achievement.trim());
-                } else if (Array.isArray(edu.achievements)) {
-                  achievements = edu.achievements;
-                }
-              }
-              
-              return {
-                ...edu,
-                relevantCourses,
-                achievements
-              };
-            }),
-            achievements: structuredCV.achievements.map(achievement => {
-              // Highlight quantifiable achievements
-              const hasQuantifiableResults = /\d+%|\d+\s*(?:million|thousand|hundred|k|m|b|billion|x|times)|\$\d+|increased|improved|reduced|saved|generated|delivered|achieved/i.test(achievement);
-              return achievement;
-            }),
-            languages: structuredCV.languages.map(language => {
-              // Ensure consistent formatting for languages
-              const parts = language.split(/[:-]/).map(part => part.trim());
-              if (parts.length === 2) {
-                return `${parts[0]} - ${parts[1]}`;
-              }
-              return language;
-            })
-          };
-          
-          // Generate the document with enhanced formatting
-          const doc = await generateOptimizedDocument(optimizedText, cvName, enhancedStructuredCV.contactInfo, enhancedStructuredCV);
-          
-          // Convert to blob
-          const blob = await Packer.toBlob(doc);
-          
-          // Save the file using file-saver
-          saveAs(new Blob([blob]), `${cvName}.docx`);
-          
-          console.log("Local document generation successful");
-          downloadSuccess = true;
-        } catch (localGenError) {
-          console.warn("Local document generation failed:", localGenError);
-          lastError = localGenError;
-        }
-      }
-      
-      // Approach 2: API-based document generation with base64 encoding
-      if (!downloadSuccess) {
-        try {
-          console.log("Attempting API-based document generation...");
-          
-          // Try specific API endpoint first
-          try {
-            const specificResponse = await fetch('/api/cv/specific-generate-docx', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                cvId: selectedCVId,
-                optimizedText: optimizedText
-              }),
-            });
-            
-            if (specificResponse.ok) {
-              const specificData = await specificResponse.json();
-              
-              if (specificData.success && specificData.docxBase64) {
-                console.log(`Received specific API base64 data of length: ${specificData.docxBase64.length}`);
-                
-                try {
-                  // Try using data URL approach
-                  const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${specificData.docxBase64}`;
-                  const downloadLink = document.createElement('a');
-                  downloadLink.href = linkSource;
-                  downloadLink.download = `${cvName}.docx`;
-                  
-                  // Append to the document, click, and remove
-                  document.body.appendChild(downloadLink);
-                  downloadLink.click();
-                  document.body.removeChild(downloadLink);
-                  
-                  console.log("Specific API download completed using data URL approach");
-                  downloadSuccess = true;
-                } catch (dataUrlError) {
-                  console.warn("Data URL download failed, trying file-saver approach:", dataUrlError);
-                  
-                  // Fallback to file-saver approach
-                  try {
-                    // Convert base64 to blob
-                    const byteCharacters = atob(specificData.docxBase64);
-                    const byteNumbers = new Array(byteCharacters.length);
-                    
-                    for (let i = 0; i < byteCharacters.length; i++) {
-                      byteNumbers[i] = byteCharacters.charCodeAt(i);
-                    }
-                    
-                    const byteArray = new Uint8Array(byteNumbers);
-                    const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-                    
-                    // Use file-saver to save the blob
-                    saveAs(blob, `${cvName}.docx`);
-                    
-                    console.log("Specific API download completed using file-saver approach");
-                    downloadSuccess = true;
-                  } catch (fileSaverError) {
-                    console.error("Both download methods failed for specific API:", fileSaverError);
-                    lastError = fileSaverError;
-                  }
-                }
-              } else {
-                console.warn("Specific API response missing docxBase64 data:", specificData);
-                lastError = new Error('Specific API response missing docxBase64 data');
-              }
-            } else {
-              console.warn("Specific API request failed, trying enhanced API");
-              lastError = new Error('Specific API request failed');
-            }
-          } catch (specificApiError) {
-            console.warn("Specific API error:", specificApiError);
-            lastError = specificApiError;
-          }
-          
-          // If specific API failed, try the enhanced DOCX generation API
-          if (!downloadSuccess) {
-            try {
-              const enhancedResponse = await fetch('/api/cv/generate-enhanced-docx', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  cvId: selectedCVId,
-                  optimizedText: optimizedText,
-                  forceRefresh: true
-                }),
-              });
-              
-              if (enhancedResponse.ok) {
-                const enhancedData = await enhancedResponse.json();
-                
-                if (enhancedData.success && enhancedData.docxBase64) {
-                  console.log(`Received enhanced base64 data of length: ${enhancedData.docxBase64.length}`);
-                  
-                  try {
-                    // Try using data URL approach
-                    const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${enhancedData.docxBase64}`;
-                    const downloadLink = document.createElement('a');
-                    downloadLink.href = linkSource;
-                    downloadLink.download = `${cvName}.docx`;
-                    
-                    // Append to the document, click, and remove
-                    document.body.appendChild(downloadLink);
-                    downloadLink.click();
-                    document.body.removeChild(downloadLink);
-                    
-                    console.log("Enhanced API download completed using data URL approach");
-                    downloadSuccess = true;
-                  } catch (dataUrlError) {
-                    console.warn("Data URL download failed, trying file-saver approach:", dataUrlError);
-                    
-                    // Fallback to file-saver approach
-                    try {
-                      // Convert base64 to blob
-                      const byteCharacters = atob(enhancedData.docxBase64);
-                      const byteNumbers = new Array(byteCharacters.length);
-                      
-                      for (let i = 0; i < byteCharacters.length; i++) {
-                        byteNumbers[i] = byteCharacters.charCodeAt(i);
-                      }
-                      
-                      const byteArray = new Uint8Array(byteNumbers);
-                      const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-                      
-                      // Use file-saver to save the blob
-                      saveAs(blob, `${cvName}.docx`);
-                      
-                      console.log("Enhanced API download completed using file-saver approach");
-                      downloadSuccess = true;
-                    } catch (fileSaverError) {
-                      console.error("Both download methods failed for enhanced API:", fileSaverError);
-                      lastError = fileSaverError;
-                    }
-                  }
-                } else {
-                  console.warn("Enhanced API response missing docxBase64 data:", enhancedData);
-                  lastError = new Error('Enhanced API response missing docxBase64 data');
-                }
-              } else {
-                const errorText = await enhancedResponse.text();
-                console.error("Enhanced API request failed:", errorText);
-                lastError = new Error(`Enhanced API request failed: ${errorText}`);
-              }
-            } catch (enhancedApiError) {
-              console.warn("Enhanced API error:", enhancedApiError);
-              lastError = enhancedApiError;
-            }
-          }
-          
-          // If both specific and enhanced APIs failed, try the standard API
-          if (!downloadSuccess) {
-            try {
-              console.log("Trying standard API as last resort");
-              
-              // Fall back to standard API
-              const response = await fetch('/api/cv/generate-docx', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  cvId: selectedCVId,
-                  optimizedText: optimizedText
-                }),
-              });
-              
-              if (response.ok) {
-                const data = await response.json();
-                
-                if (data.success && data.docxBase64) {
-                  console.log(`Received standard base64 data of length: ${data.docxBase64.length}`);
-                  
-                  try {
-                    // Try using data URL approach
-                    const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${data.docxBase64}`;
-                    const downloadLink = document.createElement('a');
-                    downloadLink.href = linkSource;
-                    downloadLink.download = `${cvName}.docx`;
-                    
-                    // Append to the document, click, and remove
-                    document.body.appendChild(downloadLink);
-                    downloadLink.click();
-                    document.body.removeChild(downloadLink);
-                    
-                    console.log("Standard API download completed using data URL approach");
-                    downloadSuccess = true;
-                  } catch (dataUrlError) {
-                    console.warn("Data URL download failed, trying file-saver approach:", dataUrlError);
-                    
-                    // Fallback to file-saver approach
-                    try {
-                      // Convert base64 to blob
-                      const byteCharacters = atob(data.docxBase64);
-                      const byteNumbers = new Array(byteCharacters.length);
-                      
-                      for (let i = 0; i < byteCharacters.length; i++) {
-                        byteNumbers[i] = byteCharacters.charCodeAt(i);
-                      }
-                      
-                      const byteArray = new Uint8Array(byteNumbers);
-                      const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-                      
-                      // Use file-saver to save the blob
-                      saveAs(blob, `${cvName}.docx`);
-                      
-                      console.log("Standard API download completed using file-saver approach");
-                      downloadSuccess = true;
-                    } catch (fileSaverError) {
-                      console.error("Both download methods failed for standard API:", fileSaverError);
-                      lastError = fileSaverError;
-                    }
-                  }
-                } else {
-                  console.warn("Standard API response missing docxBase64 data:", data);
-                  lastError = new Error('Standard API response missing docxBase64 data');
-                }
-              } else {
-                const errorText = await response.text();
-                console.error("Standard API request failed:", errorText);
-                lastError = new Error(`Standard API request failed: ${errorText}`);
-              }
-            } catch (standardApiError) {
-              console.warn("Standard API error:", standardApiError);
-              lastError = standardApiError;
-            }
-          }
-        } catch (apiError) {
-          console.warn("All API-based download methods failed:", apiError);
-          lastError = apiError;
-        }
-      }
-      
-      // Approach 3: Direct download using GET request
-      if (!downloadSuccess) {
-        try {
-          console.log("Attempting direct download via GET request");
-          
-          // Create a hidden iframe to trigger the download
-          const iframe = document.createElement('iframe');
-          iframe.style.display = 'none';
-          document.body.appendChild(iframe);
-          
-          // Set the iframe source to the download URL with a timestamp to prevent caching
-          const timestamp = new Date().getTime();
-          iframe.src = `/api/cv/download-optimized-docx?cvId=${selectedCVId}&t=${timestamp}`;
-          
-          // Remove the iframe after a delay
-          setTimeout(() => {
-            document.body.removeChild(iframe);
-          }, 5000);
-          
-          console.log("Direct download initiated");
-          
-          // Show a message to the user
-          setDocumentError("If the download doesn't start automatically, please check your browser's download manager or try again.");
-          downloadSuccess = true;
-        } catch (directDownloadError) {
-          console.error("Direct download method failed:", directDownloadError);
-          lastError = directDownloadError;
-        }
-      }
-      
-      // If all approaches failed, throw an error
-      if (!downloadSuccess) {
-        throw new Error(lastError instanceof Error ? lastError.message : "All download methods failed");
-      }
-      
-      setIsGeneratingDocument(false);
-    } catch (error) {
-      console.error('Error generating document:', error);
-      setDocumentError(`Failed to generate document: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      setIsGeneratingDocument(false);
-    }
-  };
-
-  // Add a function to validate document content
-  const validateDocument = (doc: any): { isValid: boolean; error?: string } => {
-    try {
-      // Check if document exists
-      if (!doc) {
-        return { isValid: false, error: "Document is null or undefined" };
-      }
-      
-      // Check if document has sections
-      if (!doc.sections || !Array.isArray(doc.sections) || doc.sections.length === 0) {
-        return { isValid: false, error: "Document has no sections" };
-      }
-      
-      // Check if first section has children
-      const firstSection = doc.sections[0];
-      if (!firstSection.children || !Array.isArray(firstSection.children) || firstSection.children.length === 0) {
-        return { isValid: false, error: "Document's first section has no children" };
-      }
-      
-      // Check if there are paragraphs in the children
-      const hasParagraphs = firstSection.children.some((child: any) => 
-        child && typeof child === 'object' && child.constructor && child.constructor.name === 'Paragraph'
-      );
-      
-      if (!hasParagraphs) {
-        return { isValid: false, error: "Document doesn't contain any paragraphs" };
-      }
-      
-      // Check if document has at least some minimum content
-      const totalChildren = doc.sections.reduce(
-        (count: number, section: any) => count + (section.children ? section.children.length : 0), 
-        0
-      );
-      
-      if (totalChildren < 5) {
-        return { isValid: false, error: "Document has insufficient content (less than 5 elements)" };
-      }
-      
-      // Document passed all validation checks
-      return { isValid: true };
-    } catch (error) {
-      console.error("Error validating document:", error);
-      return { 
-        isValid: false, 
-        error: `Document validation error: ${error instanceof Error ? error.message : 'Unknown error'}`
       };
+    } catch (error) {
+      console.error("Error processing CV:", error);
+      setError("An error occurred while processing the CV.");
+      setIsProcessing(false);
     }
   };
 
-  // Modify the generateDocument function to use caching and add fallback mechanisms
-  const generateDocument = async () => {
-    if (isGeneratingDocument || !optimizedText) {
-      console.log("Cannot generate document: already generating or no optimized text");
-      return;
-    }
-    
-    setIsGeneratingDocument(true);
-    setProcessingProgress(0);
-    setProcessingStatus("Starting document generation...");
-    setDocumentError(null);
-    setIsDownloading(false);
-    setIsDownloadComplete(false);
-    
-    try {
-      // Step 1: Prepare document data
-      setProcessingProgress(10);
-      setProcessingStatus("Preparing document data...");
-      await new Promise(resolve => setTimeout(resolve, 500)); // UI feedback delay
-      
-      // Step 2: Structure CV content
-      setProcessingProgress(30);
-      setProcessingStatus("Structuring CV content...");
-      await new Promise(resolve => setTimeout(resolve, 500)); // UI feedback delay
-      
-      // Step 3: Generate document
-      setProcessingProgress(50);
-      setProcessingStatus("Generating document...");
-      
-      // Log the parameters being sent to the API
-      console.log("Sending to API:", {
-        cvId: selectedCVId,
-        optimizedTextLength: optimizedText ? optimizedText.length : 0,
-        jobDescriptionLength: jobDescription ? jobDescription.length : 0,
-        jobTitle: jobTitle || ''
-      });
-      
-      // Use our retry mechanism for document generation
-      const generateDocumentFn = () => fetch('/api/cv/specific-generate-docx', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          cvId: selectedCVId,
-          optimizedText,
-          jobDescription: jobDescription || '',
-          jobTitle: jobTitle || '',
-        }),
-      });
-      
-      // Generate document with retry mechanism
-      let response;
-      try {
-        response = await generateDocumentFn();
-        
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-          throw new Error(errorData.error || `Server responded with status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        if (!data.success) {
-          throw new Error(data.error || 'Failed to generate document');
-        }
-      
-      // Step 4: Prepare for download
-      setProcessingProgress(80);
-      setProcessingStatus("Preparing for download...");
-        
-        // If we have a download URL, create a blob from it
-        if (data.downloadUrl) {
-          // Extract the base64 data from the data URL
-          const base64Data = data.downloadUrl.split(',')[1];
-          
-          // Convert base64 to blob
-          const binaryString = window.atob(base64Data);
-          const bytes = new Uint8Array(binaryString.length);
-          
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-          
-          const documentBlob = new Blob([bytes], { 
-            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
-          });
-      
-      // Cache the document for manual download
-      setCachedDocument({
-        doc: null,
-        blob: documentBlob,
-        text: optimizedText,
-        url: URL.createObjectURL(documentBlob),
-        timestamp: Date.now()
-      });
-          
-      
-      // Step 5: Download document
-      setProcessingProgress(90);
-      setProcessingStatus("Downloading document...");
-      setIsDownloading(true);
-      
-      // Get CV name without file extension
-      const cvName = selectedCVName 
-        ? selectedCVName.replace(/\.\w+$/, '') 
-        : 'CV';
-      const filename = `${cvName}_optimized.docx`;
-      
-      // Attempt to download with timeout
-      const downloadSuccess = await withDownloadTimeout(
-        async () => await downloadDocument(documentBlob, filename),
-        10000 // 10 second timeout
-      );
-      
-      // Always mark as complete, even if download fails
-      setProcessingProgress(100);
-      setIsDownloading(false);
-      
-      if (downloadSuccess) {
-        setIsDownloadComplete(true);
-        setProcessingStatus("Document generated and downloaded successfully!");
-      } else {
-        // If automatic download failed but we have the document cached
-        setProcessingStatus("Document generated successfully. Manual download available.");
-        setDocumentError("Automatic download failed. Please use the manual download button below.");
-          }
-        } else {
-          throw new Error('No download URL received from server');
-        }
-      } catch (error) {
-        console.error("Error generating document:", error);
-        throw error;
-      }
-    } catch (error) {
-      console.error("Document generation error:", error);
-      
-      setProcessingProgress(0);
-      setProcessingStatus("Document generation failed");
-      setDocumentError(`Failed to generate document: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      
-      // Show a more user-friendly error message
+  // ... existing code ...
+
+  // Update the handleRetryGeneration function to use the generateDocument function
+  const handleRetryGeneration = () => {
+    if (!optimizedText) {
       toast({
-        title: "Document Generation Failed",
-        description: "We couldn't generate your document. Please try again or contact support if the problem persists.",
+        title: "No optimized content",
+        description: "Please optimize your CV first before generating a document.",
         variant: "destructive"
       });
-    } finally {
-      setIsGeneratingDocument(false);
-    }
-  };
-
-  // Add a function for manual document download
-  const handleManualDownload = async () => {
-    if (!cachedDocument?.blob) {
-      setDocumentError("No document available for download. Please generate a document first.");
       return;
     }
-    
-    setIsDownloading(true);
-    setDocumentError(null);
-    
-    try {
-      // Get CV name without file extension
-      const cvName = selectedCVName 
-        ? selectedCVName.replace(/\.\w+$/, '') 
-        : 'CV';
-      const filename = `${cvName}_optimized.docx`;
-      
-      // Use our utility function for download
-      const downloadSuccess = await downloadDocument(cachedDocument.blob, filename);
-      
-      setIsDownloading(false);
-      
-      if (downloadSuccess) {
-        setIsDownloadComplete(true);
-        setDocumentError(null);
-        setProcessingStatus("Document downloaded successfully!");
-      } else {
-        setDocumentError("Download failed. Please try again or use a different browser.");
-      }
-    } catch (error) {
-      console.error("Manual download error:", error);
-      setIsDownloading(false);
-      setDocumentError(`Download failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  };
-
-  // Add a handler for the generate document button
-  const handleGenerateDocument = () => {
-    if (!optimizedText) {
-      setDocumentError("No optimized content available to generate document.");
-      return;
-    }
-
-    if (isGeneratingDocument) {
-      return;
-    }
-
-    // Set a timeout to detect if processing is taking too long
-    const processingTimeout = setTimeout(() => {
-      setProcessingTooLong(true);
-    }, 30000); // 30 seconds
-
-    // Generate the document - this function handles all state management internally
-    generateDocument();
-    
-    // Clear the timeout when component unmounts or when the function is called again
-    return () => {
-      clearTimeout(processingTimeout);
-    };
-  };
-
-  // Add a function to retry document generation
-  const handleRetryGeneration = () => {
-    // Reset document generation state
-    setIsGeneratingDocument(false);
-    setProcessingProgress(0);
-    setProcessingStatus("");
-    setDocumentError(null);
-    setIsDownloading(false);
-    setIsDownloadComplete(false);
     
     // Start document generation again
     generateDocument();
   };
 
-  // Reset the optimization process
-  const resetOptimization = useCallback(() => {
-    setIsProcessing(false);
-    setIsProcessed(false);
-    setProcessingProgress(0);
-    setProcessingStatus("");
-    setError(null);
-    setProcessingTooLong(false);
-    setOptimizedText("");
-    setJobMatchAnalysis(null);
-    setCachedDocument({ doc: null, blob: null, text: null, timestamp: Date.now() });
-    setIsGeneratingDocument(false);
-    setIsDownloading(false);
-    setIsDownloadComplete(false);
-    setDocumentError(null);
-  }, []);
-
-  // Add state variables for document generation
-  const [docxBase64, setDocxBase64] = useState<string | null>(null);
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  // ... existing code ...
 
   return (
-    <div className="w-full max-w-6xl mx-auto">
+    <div className="w-full max-w-7xl mx-auto p-4 space-y-8">
       {/* File selection */}
       <div className="mb-6">
         <h3 className="text-lg font-semibold mb-2">Select CV</h3>
@@ -3737,7 +3005,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
               <h3 className="text-xl font-semibold">Optimized CV</h3>
               <div className="flex gap-2">
                 <button
-                  onClick={handleDownloadDocument}
+                  onClick={handleManualDownload}
                   className="flex items-center px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A37F5C] transition-colors"
                   disabled={!optimizedText || isGeneratingDocument}
                 >

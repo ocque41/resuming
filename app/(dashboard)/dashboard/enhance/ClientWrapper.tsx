@@ -20,10 +20,10 @@ interface DocumentData {
 // Create a fallback component with brand styling
 function EnhancePageFallback() {
   return (
-    <div className="h-full flex items-center justify-center bg-black text-white">
+    <div className="h-full flex items-center justify-center bg-[#050505] text-white">
       <div className="text-center">
-        <div className="w-16 h-16 border-t-4 border-white border-solid rounded-full animate-spin mx-auto mb-4"></div>
-        <p className="text-white font-medium">Loading document interface...</p>
+        <div className="w-16 h-16 border-t-4 border-[#B4916C] border-solid rounded-full animate-spin mx-auto mb-6"></div>
+        <p className="text-white font-borna text-lg">Loading document interface...</p>
       </div>
     </div>
   );

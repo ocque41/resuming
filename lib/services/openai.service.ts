@@ -235,7 +235,7 @@ Format the response as JSON with the following structure:
         max_tokens: 4000,
         response_format: { type: 'json_object' }
       }),
-      120000, // Increase to 120 second timeout for complex CVs
+      240000, // Increase to 240 second timeout (4 minutes) for complex CVs
       'CV optimization with GPT-4o'
     );
 
@@ -422,7 +422,7 @@ Format the response as JSON with the following structure:
         max_tokens: 4000,
         response_format: { type: 'json_object' }
       }),
-      120000, // Increase to 120 second timeout for complex CVs
+      240000, // Increase to 240 second timeout (4 minutes) for complex CVs
       'CV optimization with GPT-4o (fallback)'
     );
 
@@ -621,7 +621,7 @@ Format the response as JSON with the following structure:
         max_tokens: 4000,
         response_format: { type: 'json_object' }
       }),
-      120000, // Increase to 120 second timeout for complex CVs
+      240000, // Increase to 240 second timeout (4 minutes) for complex CVs
       'Combined CV analysis and optimization with GPT-4o'
     );
 
