@@ -2860,8 +2860,8 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         
         try {
           logger.info("Local fallback processing complete, generating optimized content");
-          
-          // Generate optimized text based on job description
+  
+  // Generate optimized text based on job description
           const optimizedText = generateOptimizedText(originalText || '', jobDescription);
           setOptimizedText(optimizedText);
           

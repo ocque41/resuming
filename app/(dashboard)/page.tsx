@@ -90,7 +90,7 @@ export default function HomePage() {
                 variants={fadeInUp}
               >
                 <Link href="https://chromad.vercel.app/docs/products/resuming">
-                  <Badge className="bg-[#1a1a1a] text-white glass-effect">Documentation</Badge>
+                  <Badge className="bg-[#B4916C] text-white">Documentation</Badge>
                 </Link>
               </motion.div>
               
@@ -114,7 +114,7 @@ export default function HomePage() {
                   <Button
                     asChild
                     size="lg"
-                    className="bg-white text-[#050505] px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 rounded-md hover:bg-white/90 transition w-full sm:w-auto text-sm sm:text-base font-borna"
+                    className="bg-[#FFFFFF] text-[#050505] px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 rounded-md hover:bg-[#B4916C]/90 transition w-full sm:w-auto text-sm sm:text-base font-borna"
                   >
                     <Link href="/sign-up">Try For Free</Link>
                   </Button>
@@ -122,7 +122,7 @@ export default function HomePage() {
                     asChild
                     variant="outline"
                     size="lg"
-                    className="border border-white/20 text-white px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 rounded-md hover:bg-white/10 transition w-full sm:w-auto text-sm sm:text-base font-borna glass-effect"
+                    className="border border-white text-white px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 rounded-md hover:bg-[#B4916C] transition w-full sm:w-auto text-sm sm:text-base font-borna"
                   >
                     <Link href="/pricing">Learn More</Link>
                   </Button>
