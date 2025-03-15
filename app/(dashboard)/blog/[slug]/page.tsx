@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/ui/navbar";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
