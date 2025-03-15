@@ -84,13 +84,12 @@ export default function HomePage() {
               initial="hidden"
               animate="visible"
             >
-              {/* Badge above title */}
               <motion.div 
-                className="mb-3 sm:mb-4 md:mb-6 mt-4 sm:mt-0"
+                className="mb-4 sm:mb-6 md:mb-8 mt-4 sm:mt-0"
                 variants={fadeInUp}
               >
                 <Link href="https://chromad.vercel.app/docs/products/resuming">
-                  <Badge className="bg-[#B4916C] text-white">Documentation</Badge>
+                  <Badge className="bg-[#1a1a1a] text-white glass-effect">Documentation</Badge>
                 </Link>
               </motion.div>
               
@@ -114,7 +113,7 @@ export default function HomePage() {
                   <Button
                     asChild
                     size="lg"
-                    className="bg-[#FFFFFF] text-[#050505] px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 rounded-md hover:bg-[#B4916C]/90 transition w-full sm:w-auto text-sm sm:text-base font-borna"
+                    className="bg-white text-[#050505] px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 rounded-md hover:bg-white/90 transition w-full sm:w-auto text-sm sm:text-base font-borna"
                   >
                     <Link href="/sign-up">Try For Free</Link>
                   </Button>
@@ -122,7 +121,7 @@ export default function HomePage() {
                     asChild
                     variant="outline"
                     size="lg"
-                    className="border border-white text-white px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 rounded-md hover:bg-[#B4916C] transition w-full sm:w-auto text-sm sm:text-base font-borna"
+                    className="border border-white/20 text-white px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 rounded-md hover:bg-white/10 transition w-full sm:w-auto text-sm sm:text-base font-borna glass-effect"
                   >
                     <Link href="/pricing">Learn More</Link>
                   </Button>
@@ -148,25 +147,26 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Mobile navbar visibility fix */}
-        {isMobile && (
-          <style jsx global>{`
+        {/* Combined styles for mobile navbar and scrollbar */}
+        <style jsx global>{`
+          /* Mobile navbar visibility fix */
+          @media (max-width: 640px) {
             nav {
               display: block !important;
               visibility: visible !important;
               opacity: 1 !important;
             }
-          `}</style>
-        )}
-
-        {/* Custom CSS for hiding scrollbars */}
-        <style jsx global>{`
+          }
+          
+          /* Hide scrollbar for Chrome, Safari and Opera */
+          .no-scrollbar::-webkit-scrollbar {
+            display: none;
+          }
+          
+          /* Hide scrollbar for IE, Edge and Firefox */
           .no-scrollbar {
             -ms-overflow-style: none;  /* IE and Edge */
             scrollbar-width: none;  /* Firefox */
-          }
-          .no-scrollbar::-webkit-scrollbar {
-            display: none;  /* Chrome, Safari and Opera */
           }
         `}</style>
       </div>
