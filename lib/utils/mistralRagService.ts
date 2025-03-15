@@ -639,6 +639,8 @@ export class MistralRAGService {
         - strengths: array of 3 format strengths
         - weaknesses: array of 3 format weaknesses
         - recommendations: array of 3 format recommendations
+        
+        Do not include markdown formatting or code blocks in your response. Return only the raw JSON object.
       `;
       
       // Generate the analysis
@@ -647,8 +649,11 @@ export class MistralRAGService {
       // Parse the response
       let result;
       try {
-        // Try to parse as JSON first
-        result = JSON.parse(response);
+        // Try to extract JSON from markdown code blocks if present
+        const cleanedResponse = this.extractJsonFromMarkdown(response);
+        
+        // Try to parse as JSON
+        result = JSON.parse(cleanedResponse);
         
         // Validate the result structure
         if (!result.strengths || !result.weaknesses || !result.recommendations) {
@@ -701,23 +706,33 @@ export class MistralRAGService {
           extractedResult.recommendations = [...extractedResult.recommendations, ...defaultResult.recommendations].slice(0, 3);
         }
         
-        // Remove duplicates
-        extractedResult.strengths = [...new Set(extractedResult.strengths)];
-        extractedResult.weaknesses = [...new Set(extractedResult.weaknesses)];
-        extractedResult.recommendations = [...new Set(extractedResult.recommendations)];
-        
         return extractedResult;
       }
     } catch (error) {
-      logger.error(`Error analyzing CV format: ${error instanceof Error ? error.message : String(error)}`);
-      
-      // Return default values on error
+      logger.error(`Error in CV format analysis: ${error instanceof Error ? error.message : String(error)}`);
       return {
         strengths: ['Clear section organization', 'Consistent formatting', 'Professional layout'],
         weaknesses: ['Could improve visual hierarchy', 'Consider adding more white space', 'Ensure consistent alignment'],
         recommendations: ['Use bullet points for achievements', 'Add more white space between sections', 'Ensure consistent date formatting']
       };
     }
+  }
+  
+  /**
+   * Helper function to extract JSON from markdown code blocks
+   */
+  private extractJsonFromMarkdown(text: string): string {
+    // Check if the text contains a markdown code block
+    const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)```/;
+    const match = text.match(codeBlockRegex);
+    
+    if (match && match[1]) {
+      // Return the content inside the code block
+      return match[1].trim();
+    }
+    
+    // If no code block is found, return the original text
+    return text.trim();
   }
 
   /**

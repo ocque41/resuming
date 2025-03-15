@@ -9,6 +9,9 @@ import {
 } from '@/lib/services/openai.service';
 import { logger } from '@/lib/logger';
 import { storePartialResults, clearPartialResults } from '@/app/utils/partialResultsCache';
+import { db } from '@/lib/db/drizzle';
+import { cvs } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 
 // Constants for text chunking
 const MAX_CV_LENGTH = 6000; // Maximum CV length before chunking
@@ -189,100 +192,131 @@ async function optimizeWithChunking(
 }
 
 /**
+ * Fetches CV text from the database using the CV ID
+ */
+async function fetchCVText(cvId: string): Promise<string> {
+  try {
+    const cv = await db.query.cvs.findFirst({
+      where: eq(cvs.id, parseInt(cvId)),
+      columns: {
+        rawText: true
+      }
+    });
+
+    if (!cv || !cv.rawText) {
+      throw new Error(`CV with ID ${cvId} not found or has no content`);
+    }
+
+    return cv.rawText;
+  } catch (error) {
+    logger.error(`Error fetching CV text for ID ${cvId}:`, error instanceof Error ? error.message : String(error));
+    throw new Error(`Failed to retrieve CV text: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
  * API endpoint for optimizing CV content for a specific job using Mistral AI for analysis and GPT-4o for optimization
  */
 export async function POST(req: NextRequest) {
   try {
-    // Get the user from the session
+    // Check authentication
     const user = await getUser();
     if (!user) {
+      logger.warn('Unauthorized access attempt to optimize endpoint');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Parse request body
     const body = await req.json();
-    const { cvText, jobDescription, preserveSections = {}, cvId } = body;
+    const { cvId, jobDescription, includeKeywords = false, cvText, preserveSections = {} } = body;
 
-    if (!cvText || !jobDescription) {
-      return NextResponse.json({ error: 'CV text and job description are required' }, { status: 400 });
+    if (!cvId) {
+      return NextResponse.json({ error: 'CV ID is required' }, { status: 400 });
     }
 
-    // Clear any existing partial results
-    if (cvId) {
-      clearPartialResults(user.id.toString(), cvId, jobDescription);
-    }
+    // Clear any existing partial results for this CV
+    const userId = user.id.toString();
+    clearPartialResults(userId, cvId, jobDescription);
 
     // Check if AI services are available
-    const mistralAvailable = isMistralAvailable();
-    const openaiAvailable = isOpenAIAvailable();
-
-    // Log the request details
-    logger.info('CV optimization request received', { 
-      textLength: cvText.length,
-      jobDescriptionLength: jobDescription.length,
-      mistralAvailable,
-      openaiAvailable,
-      preserveSections: !!preserveSections
-    });
-
-    // If both services are unavailable, return error
+    const mistralAvailable = await isMistralAvailable();
+    const openaiAvailable = await isOpenAIAvailable();
+    
     if (!mistralAvailable && !openaiAvailable) {
-      logger.error('Both Mistral and OpenAI services are unavailable');
-      return NextResponse.json({ 
-        success: false, 
-        error: 'AI services are unavailable',
-        details: 'Both Mistral and OpenAI services are not properly configured. Please check your API keys.',
-        serviceUnavailable: true
-      }, { status: 503 });
+      logger.error('AI services are not available');
+      return NextResponse.json({ error: 'AI services are not available' }, { status: 503 });
     }
 
-    // If Mistral is available and no analysis was provided, get analysis first
-    let cvAnalysis = null;
-    if (mistralAvailable) {
-      try {
-        logger.info('Analyzing CV content with Mistral AI');
-        cvAnalysis = await analyzeCVContent(cvText);
-        logger.info('CV analysis completed successfully with Mistral AI');
-      } catch (mistralError) {
-        logger.error('Error analyzing CV with Mistral AI:', mistralError instanceof Error ? mistralError.message : String(mistralError));
-        
-        // Continue without Mistral analysis
-        logger.info('Continuing without Mistral analysis');
-      }
-    }
+    // Log request details
+    logger.info(`Optimizing CV ${cvId} for user ${userId}`);
 
-    // Optimize the CV
-    let optimizationResult;
     try {
-      optimizationResult = await optimizeWithChunking(
-        cvText, 
+      // Get CV text if not provided
+      let actualCvText = cvText;
+      if (!actualCvText) {
+        // Here you would fetch the CV text from the database using cvId
+        // This is a placeholder - implement the actual CV text retrieval
+        logger.info(`Fetching CV text for CV ID ${cvId}`);
+        actualCvText = await fetchCVText(cvId);
+      }
+
+      // Get CV analysis if Mistral is available
+      let cvAnalysis = null;
+      if (mistralAvailable && actualCvText) {
+        try {
+          logger.info('Analyzing CV content with Mistral AI');
+          cvAnalysis = await analyzeCVContent(actualCvText);
+          logger.info('CV analysis completed successfully with Mistral AI');
+        } catch (mistralError) {
+          logger.error('Error analyzing CV with Mistral AI:', mistralError instanceof Error ? mistralError.message : String(mistralError));
+          logger.info('Continuing without Mistral analysis');
+        }
+      }
+
+      // Optimize CV
+      const result = await optimizeWithChunking(
+        actualCvText, 
         jobDescription, 
-        cvAnalysis, 
+        cvAnalysis,
         openaiAvailable,
         preserveSections,
-        user.id.toString(),
+        userId,
         cvId
       );
+      
+      return NextResponse.json(result);
     } catch (error) {
-      return formatErrorResponse(error).response;
+      // Handle specific error types
+      if (error instanceof Error) {
+        logger.error(`CV optimization error: ${error.message}`);
+        
+        // Check for rate limit errors
+        if (error.message.includes('rate limit') || error.message.includes('429')) {
+          return NextResponse.json({ 
+            error: 'Rate limit exceeded. Please try again later.',
+            details: error.message
+          }, { status: 429 });
+        }
+        
+        // Check for JSON parsing errors
+        if (error.message.includes('Unexpected token') || error.message.includes('JSON')) {
+          logger.error('JSON parsing error in CV optimization:', error.message);
+          return NextResponse.json({ 
+            error: 'Error processing AI response. Please try again.',
+            details: 'The system encountered an error while processing the AI response.'
+          }, { status: 500 });
+        }
+      }
+      
+      // Generic error response
+      return NextResponse.json({ 
+        error: 'Failed to optimize CV',
+        details: error instanceof Error ? error.message : String(error)
+      }, { status: 500 });
     }
-
-    // Clear partial results as we now have the full result
-    if (cvId) {
-      clearPartialResults(user.id.toString(), cvId, jobDescription);
-    }
-
-    return NextResponse.json({
-      success: true,
-      optimizedContent: optimizationResult.optimizedContent,
-      matchAnalysis: optimizationResult.matchAnalysis,
-      recommendations: optimizationResult.recommendations,
-      matchScore: optimizationResult.matchScore,
-      cvAnalysis: cvAnalysis
-    });
   } catch (error) {
-    // Use the helper function to format the error response
-    const { response } = formatErrorResponse(error);
-    return response;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('Error in optimize endpoint:', errorMessage);
+    return NextResponse.json({ error: 'Internal server error', details: errorMessage }, { status: 500 });
   }
 } 

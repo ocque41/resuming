@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { getUser } from '@/lib/db/queries.server';
 import { logger } from '@/lib/logger';
 import { getPartialResults } from '@/app/utils/partialResultsCache';
 
@@ -14,9 +14,10 @@ interface UserSession {
 
 export async function POST(req: NextRequest) {
   try {
-    // Check authentication
-    const session = await getServerSession() as UserSession | null;
-    if (!session?.user) {
+    // Check authentication using the same method as the optimize route
+    const user = await getUser();
+    if (!user) {
+      logger.warn('Unauthorized access attempt to partial-results endpoint');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -29,11 +30,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Get partial results from cache
-    const userId = session.user.id;
+    const userId = user.id.toString();
     const partialResults = getPartialResults(userId, cvId, jobDescription);
 
     if (!partialResults) {
       return NextResponse.json({ 
+        success: false,
         message: 'No partial results available yet',
         partialResults: null
       });
@@ -41,6 +43,7 @@ export async function POST(req: NextRequest) {
 
     // Return the partial results
     return NextResponse.json({ 
+      success: true,
       message: 'Partial results retrieved successfully',
       partialResults
     });
@@ -48,6 +51,7 @@ export async function POST(req: NextRequest) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('Error retrieving partial results:', errorMessage);
     return NextResponse.json({ 
+      success: false,
       error: 'Failed to retrieve partial results',
       details: errorMessage
     }, { status: 500 });
