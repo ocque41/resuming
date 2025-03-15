@@ -66,7 +66,7 @@ Whether you're a recent graduate entering the job market, a professional looking
     image: "/articles/1.webp",
     fallbackImage: "https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d",
     slug: "jobs-playground",
-    category: "Platform Overview"
+    category:""
   },
   {
     id: 2,

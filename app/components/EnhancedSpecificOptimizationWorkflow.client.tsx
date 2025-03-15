@@ -3495,260 +3495,107 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           {jobMatchAnalysis && (
             <div className="mt-8 space-y-6">
               <div className="bg-[#0D0D0D] rounded-lg p-6 border border-[#1D1D1D]">
-                <h3 className="text-xl font-semibold mb-4">Job Match Analysis</h3>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-semibold">Job Match Analysis</h3>
+                  
+                  {/* Add Generate DOCX button here */}
+                  <Button
+                    onClick={handleGenerateDocument}
+                    disabled={isGeneratingDocument || !optimizedText}
+                    className="bg-[#B4916C] hover:bg-[#A3815B] text-white"
+                  >
+                    {isGeneratingDocument ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="mr-2 h-4 w-4" />
+                        Generate DOCX
+                      </>
+                    )}
+                  </Button>
+                </div>
+                
+                {/* Document Generation Progress */}
+                {isGeneratingDocument && (
+                  <DocumentGenerationProgress 
+                    progress={processingProgress || 0}
+                    status={processingStatus || ''}
+                    error={documentError}
+                    isGenerating={isGeneratingDocument}
+                  />
+                )}
+                
+                {/* Document Download Status */}
+                {isDownloading && (
+                  <DocumentDownloadStatus
+                    isDownloading={isDownloading}
+                    isDownloadComplete={isDownloadComplete}
+                    error={documentError}
+                    onManualDownload={handleManualDownload}
+                  />
+                )}
+                
+                {isDownloadComplete && !isDownloading && (
+                  <DocumentDownloadStatus
+                    isDownloading={false}
+                    isDownloadComplete={true}
+                    error={null}
+                    onManualDownload={handleManualDownload}
+                  />
+                )}
+                
+                {documentError && !isGeneratingDocument && !isDownloading && (
+                  <DocumentDownloadStatus
+                    isDownloading={false}
+                    isDownloadComplete={false}
+                    error={documentError}
+                    onManualDownload={handleManualDownload}
+                  />
+                )}
                 
                 {/* Overall Score Section */}
-                <div className="flex flex-col md:flex-row items-center mb-8">
-                  <div className="w-36 h-36 rounded-full flex items-center justify-center relative mb-4 md:mb-0 md:mr-6">
-                    <div 
-                      className="absolute inset-0 rounded-full" 
-                      style={{ 
-                        background: `conic-gradient(${
-                          jobMatchAnalysis.score >= 80 ? '#22c55e' : 
-                          jobMatchAnalysis.score >= 60 ? '#eab308' : 
-                          '#ef4444'
-                        } ${jobMatchAnalysis.score}%, transparent 0)`,
-                        transform: 'rotate(-90deg)'
-                      }}
-                    ></div>
-                    <div className="w-28 h-28 rounded-full bg-[#0D0D0D] flex items-center justify-center z-10">
-                      <span className="text-3xl font-bold" style={{ 
-                        color: jobMatchAnalysis.score >= 80 ? '#22c55e' : 
-                              jobMatchAnalysis.score >= 60 ? '#eab308' : 
-                              '#ef4444' 
-                      }}>{jobMatchAnalysis.score}%</span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex-1">
-                    <h4 className="text-lg font-medium mb-2">Match Assessment</h4>
-                    
-                    {/* Job Fit Assessment */}
-                    <div className="mb-4 p-3 rounded-md" style={{ 
-                      backgroundColor: jobMatchAnalysis.score >= 80 ? 'rgba(34, 197, 94, 0.1)' : 
-                                       jobMatchAnalysis.score >= 60 ? 'rgba(234, 179, 8, 0.1)' : 
-                                       'rgba(239, 68, 68, 0.1)',
-                      borderLeft: `4px solid ${
-                        jobMatchAnalysis.score >= 80 ? 'rgb(34, 197, 94)' : 
-                        jobMatchAnalysis.score >= 60 ? 'rgb(234, 179, 8)' : 
-                        'rgb(239, 68, 68)'
-                      }`
-                    }}>
-                      <div className="flex justify-between items-center mb-2">
-                        <h5 className="font-medium">
-                          {jobMatchAnalysis.score >= 80 ? (
-                            <span className="text-green-400">Strong Match</span>
-                          ) : jobMatchAnalysis.score >= 60 ? (
-                            <span className="text-yellow-400">Moderate Match</span>
-                          ) : (
-                            <span className="text-red-400">Low Match</span>
-                          )}
-                        </h5>
-                        <div className="flex items-center">
-                          <span className="text-xl font-bold mr-2" style={{ 
-                            color: jobMatchAnalysis.score >= 80 ? 'rgb(34, 197, 94)' : 
-                                  jobMatchAnalysis.score >= 60 ? 'rgb(234, 179, 8)' : 
-                                  'rgb(239, 68, 68)'
-                          }}>
-                            {jobMatchAnalysis.score}%
-                          </span>
-                          <div className="w-16 h-16 relative">
-                            <svg viewBox="0 0 36 36" className="w-full h-full">
-                              <path
-                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                fill="none"
-                                stroke="#444"
-                                strokeWidth="2"
-                                strokeDasharray="100, 100"
-                              />
-                              <path
-                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                fill="none"
-                                stroke={
-                                  jobMatchAnalysis.score >= 80 ? 'rgb(34, 197, 94)' : 
-                                  jobMatchAnalysis.score >= 60 ? 'rgb(234, 179, 8)' : 
-                                  'rgb(239, 68, 68)'
-                                }
-                                strokeWidth="2"
-                                strokeDasharray={`${jobMatchAnalysis.score}, 100`}
-                              />
-                            </svg>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <p className="text-base mb-3">
-                        {jobMatchAnalysis.score >= 80 ? 
-                          "Your CV is well-aligned with this job. You appear to be a strong candidate based on your skills and experience." : 
-                         jobMatchAnalysis.score >= 60 ? 
-                          "Your CV is somewhat aligned with this job. With some targeted improvements, you could strengthen your candidacy." : 
-                          "Your CV is not well-aligned with this job. Consider if this role matches your experience or if significant CV updates are needed."}
-                      </p>
-                      
-                      <div className="grid grid-cols-2 gap-3 mt-4">
-                        <div className="flex flex-col">
-                          <span className="text-sm text-gray-400 mb-1">Skills Match</span>
-                          <div className="flex items-center">
-                            <div className="w-full bg-gray-700 h-2 rounded-full mr-2">
-                              <div 
-                                className="h-full rounded-full" 
-                                style={{ 
-                                  width: `${jobMatchAnalysis.dimensionalScores.skillsMatch}%`,
-                                  backgroundColor: 
-                                    jobMatchAnalysis.dimensionalScores.skillsMatch >= 80 ? 'rgb(34, 197, 94)' : 
-                                    jobMatchAnalysis.dimensionalScores.skillsMatch >= 60 ? 'rgb(234, 179, 8)' : 
-                                    'rgb(239, 68, 68)'
-                                }}
-                              ></div>
-                            </div>
-                            <span className="text-sm">{jobMatchAnalysis.dimensionalScores.skillsMatch}%</span>
-                          </div>
-                        </div>
-                        
-                        <div className="flex flex-col">
-                          <span className="text-sm text-gray-400 mb-1">Experience Match</span>
-                          <div className="flex items-center">
-                            <div className="w-full bg-gray-700 h-2 rounded-full mr-2">
-                              <div 
-                                className="h-full rounded-full" 
-                                style={{ 
-                                  width: `${jobMatchAnalysis.dimensionalScores.experienceMatch}%`,
-                                  backgroundColor: 
-                                    jobMatchAnalysis.dimensionalScores.experienceMatch >= 80 ? 'rgb(34, 197, 94)' : 
-                                    jobMatchAnalysis.dimensionalScores.experienceMatch >= 60 ? 'rgb(234, 179, 8)' : 
-                                    'rgb(239, 68, 68)'
-                                }}
-                              ></div>
-                            </div>
-                            <span className="text-sm">{jobMatchAnalysis.dimensionalScores.experienceMatch}%</span>
-                          </div>
-                        </div>
-                        
-                        <div className="flex flex-col">
-                          <span className="text-sm text-gray-400 mb-1">Education Match</span>
-                          <div className="flex items-center">
-                            <div className="w-full bg-gray-700 h-2 rounded-full mr-2">
-                              <div 
-                                className="h-full rounded-full" 
-                                style={{ 
-                                  width: `${jobMatchAnalysis.dimensionalScores.educationMatch}%`,
-                                  backgroundColor: 
-                                    jobMatchAnalysis.dimensionalScores.educationMatch >= 80 ? 'rgb(34, 197, 94)' : 
-                                    jobMatchAnalysis.dimensionalScores.educationMatch >= 60 ? 'rgb(234, 179, 8)' : 
-                                    'rgb(239, 68, 68)'
-                                }}
-                              ></div>
-                            </div>
-                            <span className="text-sm">{jobMatchAnalysis.dimensionalScores.educationMatch}%</span>
-                          </div>
-                        </div>
-                        
-                        <div className="flex flex-col">
-                          <span className="text-sm text-gray-400 mb-1">Industry Fit</span>
-                          <div className="flex items-center">
-                            <div className="w-full bg-gray-700 h-2 rounded-full mr-2">
-                              <div 
-                                className="h-full rounded-full" 
-                                style={{ 
-                                  width: `${jobMatchAnalysis.dimensionalScores.industryFit}%`,
-                                  backgroundColor: 
-                                    jobMatchAnalysis.dimensionalScores.industryFit >= 80 ? 'rgb(34, 197, 94)' : 
-                                    jobMatchAnalysis.dimensionalScores.industryFit >= 60 ? 'rgb(234, 179, 8)' : 
-                                    'rgb(239, 68, 68)'
-                                }}
-                              ></div>
-                            </div>
-                            <span className="text-sm">{jobMatchAnalysis.dimensionalScores.industryFit}%</span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="mt-4 text-sm">
-                        <div className="flex items-center">
-                          <span className="w-3 h-3 rounded-full mr-2" style={{ 
-                            backgroundColor: jobMatchAnalysis.improvementPotential >= 30 ? 'rgb(34, 197, 94)' : 
-                                           jobMatchAnalysis.improvementPotential >= 15 ? 'rgb(234, 179, 8)' : 
-                                           'rgb(239, 68, 68)'
-                          }}></span>
-                          <span>
-                            {jobMatchAnalysis.improvementPotential >= 30 ? 
-                              "High potential for improvement with targeted changes" : 
-                             jobMatchAnalysis.improvementPotential >= 15 ? 
-                              "Moderate potential for improvement" : 
-                              "Limited potential for improvement without significant changes"}
-                          </span>
+                <div className="flex flex-col md:flex-row items-start gap-6 mt-4">
+                  <div className="w-full md:w-1/3 bg-[#050505] rounded-lg p-4 border border-gray-800">
+                    <h4 className="text-lg font-medium mb-3">Overall Match</h4>
+                    <div className="flex flex-col items-center">
+                      <div className="flex items-baseline">
+                        <span className="text-4xl font-bold" style={{ 
+                          color: 
+                            jobMatchAnalysis.score >= 80 ? 'rgb(34, 197, 94)' : 
+                            jobMatchAnalysis.score >= 60 ? 'rgb(234, 179, 8)' : 
+                            'rgb(239, 68, 68)'
+                        }}>
+                          {jobMatchAnalysis.score}%
+                        </span>
+                        <div className="w-16 h-16 relative">
+                          <svg viewBox="0 0 36 36" className="w-full h-full">
+                            <path
+                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                              fill="none"
+                              stroke="#444"
+                              strokeWidth="2"
+                              strokeDasharray="100, 100"
+                            />
+                            <path
+                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                              fill="none"
+                              stroke={
+                                jobMatchAnalysis.score >= 80 ? 'rgb(34, 197, 94)' : 
+                                jobMatchAnalysis.score >= 60 ? 'rgb(234, 179, 8)' : 
+                                'rgb(239, 68, 68)'
+                              }
+                              strokeWidth="2"
+                              strokeDasharray={`${jobMatchAnalysis.score}, 100`}
+                            />
+                          </svg>
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
-                
-                {/* Career Fit Indicator */}
-                <div className="mb-4 p-4 border border-gray-700 rounded-md">
-                  <h4 className="text-lg font-medium mb-3">Career Path Alignment</h4>
-                  
-                  <div className="flex items-center mb-3">
-                    <div className="relative w-full h-8 bg-gray-700 rounded-full overflow-hidden">
-                      <div className="absolute top-0 left-0 h-full flex">
-                        <div 
-                          className="h-full bg-red-500" 
-                          style={{ width: '33.33%' }}
-                        ></div>
-                        <div 
-                          className="h-full bg-yellow-500" 
-                          style={{ width: '33.33%' }}
-                        ></div>
-                        <div 
-                          className="h-full bg-green-500" 
-                          style={{ width: '33.33%' }}
-                        ></div>
-                      </div>
-                      
-                      {/* Position marker based on overall score */}
-                      <div 
-                        className="absolute top-0 w-4 h-8 bg-white rounded-full transform -translate-x-1/2"
-                        style={{ 
-                          left: `${jobMatchAnalysis.score}%`,
-                          boxShadow: '0 0 0 2px black, 0 0 0 4px white'
-                        }}
-                      ></div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex justify-between text-xs text-gray-400 mb-4">
-                    <span>Career Change</span>
-                    <span>Career Shift</span>
-                    <span>Career Growth</span>
-                  </div>
-                  
-                  <div className="text-sm">
-                    <p className="mb-2">
-                      {jobMatchAnalysis.score >= 80 ? 
-                        "This job represents a natural progression in your career path. Your experience and skills align well with the requirements." : 
-                       jobMatchAnalysis.score >= 60 ? 
-                        "This job represents a moderate shift in your career path. You have some transferable skills, but may need to develop in certain areas." : 
-                        "This job represents a significant change from your current career path. Consider if this aligns with your long-term goals."}
-                    </p>
-                    
-                    <div className="mt-3 flex items-start">
-                      <div className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center mt-0.5 mr-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                      <p className="text-xs text-gray-300">
-                        {jobMatchAnalysis.score >= 80 ? 
-                          "Focus on highlighting your directly relevant experience and achievements in your application." : 
-                         jobMatchAnalysis.score >= 60 ? 
-                          "Emphasize your transferable skills and demonstrate how your background prepares you for this role." : 
-                          "Consider addressing the career change directly in your cover letter and highlight transferable skills."}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Enhanced Analysis Section with Tabs */}
-                <JobMatchDetailedAnalysis jobMatchAnalysis={jobMatchAnalysis} />
               </div>
             </div>
           )}
@@ -3886,233 +3733,21 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         </div>
       )}
       
-      {/* Document Generation Button */}
-      <div className="mt-6">
-        <div className="flex justify-between items-center">
-          <h3 className="text-xl font-semibold">Document Generation</h3>
-          <Button
-            onClick={handleGenerateDocument}
-            disabled={isGeneratingDocument || !optimizedText}
-            className="bg-[#B4916C] hover:bg-[#A3815B] text-white"
-          >
-            {isGeneratingDocument ? (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <FileText className="mr-2 h-4 w-4" />
-                Generate DOCX
-              </>
-            )}
-          </Button>
+      {/* Document Generation Tips */}
+      {!isGeneratingDocument && !cachedDocument?.blob && (
+        <div className="mt-4 p-4 border border-gray-700 rounded-md bg-gray-800/50">
+          <h4 className="flex items-center text-sm font-medium mb-2 text-gray-300">
+            <Info className="h-4 w-4 mr-2 text-blue-400" />
+            Document Generation Tips
+          </h4>
+          <ul className="text-xs text-gray-400 space-y-1 list-disc pl-5">
+            <li>The generated document will include all sections from your optimized CV</li>
+            <li>Document generation may take up to 30 seconds for complex CVs</li>
+            <li>If generation fails, try again or use a different browser</li>
+            <li>For best results, ensure your CV has clear section headers</li>
+          </ul>
         </div>
-        
-        {/* Document Generation Progress */}
-        {isGeneratingDocument && (
-          <div className="mt-4 p-4 border border-gray-700 rounded-md bg-gray-800/50">
-            <div className="flex justify-between items-center mb-2">
-              <h4 className="font-medium text-gray-200">Generation Progress</h4>
-              <span className="text-sm font-medium text-[#B4916C]">{processingProgress}%</span>
-            </div>
-            <div className="w-full h-2 bg-gray-700 rounded-full mb-3">
-              <div 
-                className="h-2 rounded-full bg-[#B4916C] transition-all duration-300 ease-in-out"
-                style={{ width: `${processingProgress}%` }}
-              />
-            </div>
-            <div className="flex items-center text-sm text-gray-300">
-              <Clock className="h-4 w-4 mr-2 text-gray-400" />
-              <span>{processingStatus || "Preparing document..."}</span>
-            </div>
-            
-            {/* Detailed steps */}
-            <div className="mt-4 space-y-2">
-              <div className="flex items-center text-xs">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-2 ${processingProgress >= 5 ? 'bg-[#B4916C]/20 text-[#B4916C]' : 'bg-gray-700 text-gray-500'}`}>
-                  {processingProgress >= 5 ? <CheckCircle className="h-3 w-3" /> : "1"}
-                </div>
-                <span className={processingProgress >= 5 ? 'text-gray-300' : 'text-gray-500'}>Preparing document data</span>
-              </div>
-              <div className="flex items-center text-xs">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-2 ${processingProgress >= 30 ? 'bg-[#B4916C]/20 text-[#B4916C]' : 'bg-gray-700 text-gray-500'}`}>
-                  {processingProgress >= 30 ? <CheckCircle className="h-3 w-3" /> : "2"}
-                </div>
-                <span className={processingProgress >= 30 ? 'text-gray-300' : 'text-gray-500'}>Structuring CV content</span>
-              </div>
-              <div className="flex items-center text-xs">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-2 ${processingProgress >= 50 ? 'bg-[#B4916C]/20 text-[#B4916C]' : 'bg-gray-700 text-gray-500'}`}>
-                  {processingProgress >= 50 ? <CheckCircle className="h-3 w-3" /> : "3"}
-                </div>
-                <span className={processingProgress >= 50 ? 'text-gray-300' : 'text-gray-500'}>Generating document</span>
-              </div>
-              <div className="flex items-center text-xs">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-2 ${processingProgress >= 80 ? 'bg-[#B4916C]/20 text-[#B4916C]' : 'bg-gray-700 text-gray-500'}`}>
-                  {processingProgress >= 80 ? <CheckCircle className="h-3 w-3" /> : "4"}
-                </div>
-                <span className={processingProgress >= 80 ? 'text-gray-300' : 'text-gray-500'}>Preparing for download</span>
-              </div>
-              <div className="flex items-center text-xs">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-2 ${processingProgress >= 90 ? 'bg-[#B4916C]/20 text-[#B4916C]' : 'bg-gray-700 text-gray-500'}`}>
-                  {processingProgress >= 90 ? <CheckCircle className="h-3 w-3" /> : "5"}
-                </div>
-                <span className={processingProgress >= 90 ? 'text-gray-300' : 'text-gray-500'}>Downloading document</span>
-              </div>
-            </div>
-            
-            {/* Processing too long message */}
-            {processingProgress > 0 && processingProgress < 100 && (
-              <div className="mt-4 text-xs text-gray-400">
-                <p>Document generation may take up to a minute depending on the size and complexity of your CV.</p>
-                {processingProgress >= 90 && processingProgress < 100 && (
-                  <p className="mt-1 text-yellow-400">
-                    If the download doesn't start automatically, you'll be able to use the manual download button once processing completes.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-        
-        {/* Document Error with Manual Download Option */}
-        {documentError && !isGeneratingDocument && (
-          <div className="mt-4 p-4 border border-red-800/50 rounded-md bg-red-900/20">
-            <h3 className="text-lg font-medium mb-2 text-red-400">Document Generation Issue</h3>
-            <p className="text-sm text-gray-300 mb-3">{documentError}</p>
-            
-            {cachedDocument?.blob && (
-              <div className="space-y-2">
-                <button
-                  onClick={handleManualDownload}
-                  className="w-full px-4 py-3 bg-[#B4916C] text-white rounded-md hover:bg-[#A3815B] transition-colors flex items-center justify-center font-medium"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  Download Document Manually
-                </button>
-                <p className="text-xs text-gray-400 text-center">
-                  Click the button above to download your document. If this doesn't work, please try again in a different browser.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-        
-        {/* Manual Download Button - Always show when there's a cached document */}
-        {cachedDocument?.blob && !documentError && !isGeneratingDocument && (
-          <div className="mt-4 p-4 border border-gray-700 rounded-md bg-gray-800/50">
-            <h3 className="text-lg font-medium mb-2 text-gray-200">Document Ready</h3>
-            <p className="text-sm text-gray-300 mb-3">Your document has been generated and is ready for download.</p>
-            
-            <button
-              onClick={handleManualDownload}
-              className="w-full px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A3815B] transition-colors flex items-center justify-center"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              Download Document
-            </button>
-          </div>
-        )}
-        
-        {/* Document Generation Tips */}
-        {!isGeneratingDocument && !cachedDocument?.blob && (
-          <div className="mt-4 p-4 border border-gray-700 rounded-md bg-gray-800/50">
-            <h4 className="flex items-center text-sm font-medium mb-2 text-gray-300">
-              <Info className="h-4 w-4 mr-2 text-blue-400" />
-              Document Generation Tips
-            </h4>
-            <ul className="text-xs text-gray-400 space-y-1 list-disc pl-5">
-              <li>The generated document will include all sections from your optimized CV</li>
-              <li>Document generation may take up to 30 seconds for complex CVs</li>
-              <li>If generation fails, try again or use a different browser</li>
-              <li>For best results, ensure your CV has clear section headers</li>
-            </ul>
-          </div>
-        )}
-      </div>
-      
-      {/* Document Generation Section */}
-      <div className="mt-8 border-t border-gray-800 pt-6">
-        <h3 className="text-xl font-semibold mb-4">Generate Optimized Document</h3>
-        
-        {isGeneratingDocument ? (
-          <DocumentGenerationProgress 
-            progress={processingProgress || 0}
-            status={processingStatus || ''}
-            error={documentError}
-            isGenerating={isGeneratingDocument}
-          />
-        ) : (
-          <p className="text-gray-400 mb-4">
-            Generate a downloadable document with your optimized CV content.
-          </p>
-        )}
-        
-        {isDownloading && (
-          <DocumentDownloadStatus
-            isDownloading={isDownloading}
-            isDownloadComplete={isDownloadComplete}
-            error={documentError}
-            onManualDownload={handleManualDownload}
-          />
-        )}
-        
-        {isDownloadComplete && !isDownloading && (
-          <DocumentDownloadStatus
-            isDownloading={false}
-            isDownloadComplete={true}
-            error={null}
-            onManualDownload={handleManualDownload}
-          />
-        )}
-        
-        {documentError && !isGeneratingDocument && !isDownloading && (
-          <DocumentDownloadStatus
-            isDownloading={false}
-            isDownloadComplete={false}
-            error={documentError}
-            onManualDownload={handleManualDownload}
-          />
-        )}
-        
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={handleGenerateDocument}
-            disabled={isGeneratingDocument || !optimizedText}
-            className={`px-4 py-2 rounded-md flex items-center ${
-              isGeneratingDocument || !optimizedText
-                ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                : 'bg-[#B4916C] text-white hover:bg-[#A3815C] transition-colors'
-            }`}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5 mr-2"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-            {isGeneratingDocument ? 'Generating...' : 'Generate Document'}
-          </button>
-        </div>
-        
-        {documentError && !isGeneratingDocument && !isDownloading && !isDownloadComplete && (
-          <div className="mt-3 p-3 bg-red-900/20 border border-red-800 rounded-md text-red-300 text-sm">
-            {documentError}
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 } 
