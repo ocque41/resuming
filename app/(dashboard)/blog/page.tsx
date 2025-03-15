@@ -24,6 +24,7 @@ export default function BlogPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [currentPlaceholder, setCurrentPlaceholder] = useState(searchPlaceholders[0]);
+  const [inputWidth, setInputWidth] = useState("300px"); // Default width
   
   // Filter posts based on search term
   const filteredPosts = searchTerm === "" 
@@ -34,18 +35,45 @@ export default function BlogPage() {
         post.category.toLowerCase().includes(searchTerm.toLowerCase())
       );
 
-  // Animate through placeholder text
+  // Animate through placeholder text and adjust width
   useEffect(() => {
     const interval = setInterval(() => {
       setPlaceholderIndex(prevIndex => {
         const nextIndex = (prevIndex + 1) % searchPlaceholders.length;
         setCurrentPlaceholder(searchPlaceholders[nextIndex]);
+        
+        // Calculate approximate width based on text length
+        // Base width + character count * approximate character width
+        const baseWidth = 60; // For padding, icon, etc.
+        const charWidth = 8; // Approximate width per character in pixels
+        const textWidth = searchPlaceholders[nextIndex].length * charWidth;
+        const newWidth = Math.max(300, baseWidth + textWidth); // Minimum 300px
+        
+        setInputWidth(`${newWidth}px`);
         return nextIndex;
       });
     }, 3000);
     
     return () => clearInterval(interval);
   }, []);
+
+  // Adjust width when typing
+  useEffect(() => {
+    if (searchTerm) {
+      const baseWidth = 60;
+      const charWidth = 8;
+      const textWidth = searchTerm.length * charWidth;
+      const newWidth = Math.max(300, baseWidth + textWidth); // Minimum 300px
+      setInputWidth(`${newWidth}px`);
+    } else {
+      // When empty, use the current placeholder width
+      const baseWidth = 60;
+      const charWidth = 8;
+      const textWidth = currentPlaceholder.length * charWidth;
+      const newWidth = Math.max(300, baseWidth + textWidth);
+      setInputWidth(`${newWidth}px`);
+    }
+  }, [searchTerm, currentPlaceholder]);
 
   return (
     <div className="flex flex-col bg-[#050505] min-h-screen">
@@ -60,12 +88,17 @@ export default function BlogPage() {
         {/* Animated Search Bar */}
         <div className="flex justify-center mb-12">
           <motion.div 
-            className="relative w-full max-w-md"
+            className="relative"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
+            style={{ width: inputWidth }}
           >
-            <div className="relative">
+            <motion.div 
+              className="relative"
+              animate={{ width: inputWidth }}
+              transition={{ duration: 0.5, ease: "easeInOut" }}
+            >
               <input
                 type="text"
                 value={searchTerm}
@@ -86,7 +119,7 @@ export default function BlogPage() {
                 </motion.span>
               </AnimatePresence>
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            </div>
+            </motion.div>
           </motion.div>
         </div>
         
