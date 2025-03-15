@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle } from "lucide-react";
 import { analyzeCVContent, optimizeCVForJob } from '@/lib/services/mistral.service';
 import { useToast } from "@/hooks/use-toast";
@@ -16,6 +18,7 @@ import { downloadDocument, withDownloadTimeout, generateDocumentWithRetry } from
 import DocumentGenerationProgress from './DocumentGenerationProgress';
 import DocumentDownloadStatus from './DocumentDownloadStatus';
 import { logger } from '@/lib/logger';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // Type definitions
 interface KeywordMatch {
@@ -2714,6 +2717,13 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           const errorMessage = errorData.error || errorData.details || `Server responded with status: ${response.status}`;
           console.error("CV analysis API error:", errorMessage);
           
+          // Check if the error is related to service unavailability
+          if (response.status === 503 || errorData.serviceUnavailable) {
+            logger.warn("Mistral AI service is unavailable, using local processing");
+            setMistralServiceAvailable(false);
+            throw new Error(`Mistral AI service unavailable: ${errorMessage}`);
+          }
+          
           // If we get a 401 error, it's likely an authentication issue
           if (response.status === 401) {
             throw new Error(`Authentication failed: ${errorMessage}. Please check your API key configuration.`);
@@ -2765,6 +2775,14 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           const errorData = await optimizeResponse.json().catch(() => ({ error: 'Unknown error' }));
           const errorMessage = errorData.error || errorData.details || `Server responded with status: ${optimizeResponse.status}`;
           console.error("CV optimization API error:", errorMessage);
+          
+          // Check if the error is related to service unavailability
+          if (optimizeResponse.status === 503 || errorData.serviceUnavailable) {
+            logger.warn("Mistral AI service is unavailable, using local processing");
+            setMistralServiceAvailable(false);
+            throw new Error(`Mistral AI service unavailable: ${errorMessage}`);
+          }
+          
           throw new Error(errorMessage);
         }
         
@@ -3692,12 +3710,27 @@ ${extractLanguages(cvText).map(lang => `• ${lang}`).join('\n')}
 
   // Add a handler for the generate document button
   const handleGenerateDocument = () => {
-    if (isGeneratingDocument || !optimizedText) {
+    if (!optimizedText) {
+      setDocumentError("No optimized content available to generate document.");
       return;
     }
-    
-    // Start document generation
+
+    if (isGeneratingDocument) {
+      return;
+    }
+
+    // Set a timeout to detect if processing is taking too long
+    const processingTimeout = setTimeout(() => {
+      setProcessingTooLong(true);
+    }, 30000); // 30 seconds
+
+    // Generate the document - this function handles all state management internally
     generateDocument();
+    
+    // Clear the timeout when component unmounts or when the function is called again
+    return () => {
+      clearTimeout(processingTimeout);
+    };
   };
 
   // Add a function to retry document generation
@@ -3730,6 +3763,10 @@ ${extractLanguages(cvText).map(lang => `• ${lang}`).join('\n')}
     setIsDownloadComplete(false);
     setDocumentError(null);
   }, []);
+
+  // Add state variables for document generation
+  const [docxBase64, setDocxBase64] = useState<string | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
   return (
     <div className="w-full max-w-6xl mx-auto">

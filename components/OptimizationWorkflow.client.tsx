@@ -359,8 +359,13 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
   
   // Format CVs for EnhancedSpecificOptimizationWorkflow
   const formattedCvsForSpecific = cvs.map(cv => {
-    const [name, id] = cv.split('|');
-    return { id, name };
+    try {
+      const [name, id] = cv.split('|');
+      return { id, name };
+    } catch (error) {
+      console.error("Error formatting CV for specific optimization:", error);
+      return { id: "", name: "Unknown CV" };
+    }
   });
 
   return (

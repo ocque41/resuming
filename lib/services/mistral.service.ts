@@ -3,27 +3,48 @@ import { logger } from '@/lib/logger';
 
 // Validate API key presence
 const apiKey = process.env.MISTRAL_API_KEY || '';
-if (!apiKey) {
+let mistralClientInitialized = false;
+
+if (!apiKey || apiKey.trim() === '') {
   logger.error('MISTRAL_API_KEY is not set in environment variables');
+} else {
+  logger.info('MISTRAL_API_KEY is configured');
 }
 
 // Initialize Mistral client with better error handling
 const getMistralClient = () => {
+  if (!apiKey || apiKey.trim() === '') {
+    logger.error('Cannot initialize Mistral client: API key is missing');
+    throw new Error('Mistral API key is not configured');
+  }
+  
   try {
-    return new MistralClient(apiKey);
+    const client = new MistralClient(apiKey);
+    mistralClientInitialized = true;
+    return client;
   } catch (error) {
+    mistralClientInitialized = false;
     logger.error('Failed to initialize Mistral client:', error instanceof Error ? error.message : String(error));
     throw new Error('Failed to initialize Mistral AI client');
   }
 };
 
-// Validate client on startup
+// Validate client on startup - but don't throw errors to prevent app from crashing
 try {
-  getMistralClient();
-  logger.info('Mistral AI client initialized successfully');
+  if (apiKey && apiKey.trim() !== '') {
+    getMistralClient();
+    logger.info('Mistral AI client initialized successfully');
+  } else {
+    mistralClientInitialized = false;
+    logger.warn('Mistral AI client not initialized due to missing API key');
+  }
 } catch (error) {
+  mistralClientInitialized = false;
   logger.error('Mistral AI client initialization failed:', error instanceof Error ? error.message : String(error));
 }
+
+// Export the initialization status for other components to check
+export const isMistralAvailable = () => mistralClientInitialized;
 
 // Retry function with exponential backoff
 async function retryWithBackoff<T>(
@@ -117,8 +138,14 @@ export async function analyzeCVContent(cvText: string): Promise<CVAnalysisResult
       throw new Error('Invalid CV text provided');
     }
 
+    // Check if Mistral is available
+    if (!mistralClientInitialized) {
+      logger.error('Mistral AI service is not available');
+      throw new Error('Mistral AI service is not available. Please check your API key configuration.');
+    }
+
     // Check API key
-    if (!apiKey) {
+    if (!apiKey || apiKey.trim() === '') {
       throw new Error('Mistral API key is not configured');
     }
 
@@ -210,8 +237,14 @@ export async function optimizeCVForJob(cvText: string, jobDescription: string): 
       throw new Error('Invalid job description provided');
     }
 
+    // Check if Mistral is available
+    if (!mistralClientInitialized) {
+      logger.error('Mistral AI service is not available');
+      throw new Error('Mistral AI service is not available. Please check your API key configuration.');
+    }
+
     // Check API key
-    if (!apiKey) {
+    if (!apiKey || apiKey.trim() === '') {
       throw new Error('Mistral API key is not configured');
     }
 

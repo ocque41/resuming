@@ -42,29 +42,29 @@ export default function HomePage() {
       <Navbar />
 
       {/* Hero Section */}
-      <section className="relative flex-1 flex items-center justify-center">
-        <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-center h-full py-4">
+      <section className="relative flex-1 flex items-center justify-center pt-8 sm:pt-4 md:pt-0">
+        <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-center h-full py-4 sm:py-6 md:py-8">
           <div className="max-h-full overflow-auto no-scrollbar flex flex-col items-center">
             {/* Badge above title */}
-            <div className="mb-4 sm:mb-6">
+            <div className="mb-3 sm:mb-4 md:mb-6 mt-0">
               <Link href="https://chromad.vercel.app/docs/products/resuming">
-                <Badge className="bg-[#050505] text-white">Documentation</Badge>
+                <Badge className="bg-[#FFFFFF] text-[#050505]">Documentation</Badge>
               </Link>
             </div>
             
             <Article className="text-center max-w-3xl mx-auto">
-              <ArticleTitle className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-white">
+              <ArticleTitle className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold text-white">
                 The Jobs Playground
               </ArticleTitle>
-              <ArticleContent className="mt-2 sm:mt-4 text-lg sm:text-xl md:text-2xl text-gray-300">
+              <ArticleContent className="mt-2 sm:mt-3 md:mt-4 text-base sm:text-lg md:text-xl lg:text-2xl text-gray-300">
                 AI-powered CV Analysis &amp; Optimization unlocking exclusive career opportunities.
               </ArticleContent>
               
-              <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row gap-4 items-center justify-center">
+              <div className="mt-4 sm:mt-5 md:mt-6 lg:mt-8 flex flex-col sm:flex-row gap-3 sm:gap-4 items-center justify-center">
                 <Button
                   asChild
                   size="lg"
-                  className="bg-[#050505] text-[white] px-6 sm:px-8 py-3 sm:py-4 rounded-md hover:bg-[#B4916C]/90 transition w-full sm:w-auto"
+                  className="bg-[#FFFFFF] text-[#050505] px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 rounded-md hover:bg-[#090909]/90 transition w-full sm:w-auto text-sm sm:text-base"
                 >
                   <Link href="/sign-up">Try For Free</Link>
                 </Button>
@@ -72,20 +72,20 @@ export default function HomePage() {
                   asChild
                   variant="outline"
                   size="lg"
-                  className="border border-white text-[#050505] px-6 sm:px-8 py-3 sm:py-4 rounded-md hover:bg-[#0c0a08] transition w-full sm:w-auto"
+                  className="border border-white text-white px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 rounded-md hover:bg-[#090909] transition w-full sm:w-auto text-sm sm:text-base"
                 >
                   <Link href="/pricing">Learn More</Link>
                 </Button>
               </div>
             </Article>
             
-            {/* Hero Image - Fully responsive with standard img tag */}
-            <div className="mt-6 sm:mt-8 w-full max-w-4xl px-4 flex justify-center">
-              <div className="w-full max-w-3xl rounded-lg overflow-hidden shadow-2xl">
+            {/* Hero Image - Fully responsive with standard img tag and rounded corners */}
+            <div className="mt-4 sm:mt-5 md:mt-6 lg:mt-8 w-full max-w-4xl px-4 flex justify-center">
+              <div className="w-full max-w-3xl rounded-xl overflow-hidden shadow-2xl">
                 <img 
                   src="/11.webp" 
                   alt="CV Optimizer Hero" 
-                  className="w-full h-auto max-h-[50vh] object-contain transform hover:scale-105 transition-transform duration-500"
+                  className="w-full h-auto max-h-[35vh] sm:max-h-[40vh] md:max-h-[45vh] lg:max-h-[50vh] object-contain transform hover:scale-105 transition-transform duration-500 rounded-xl"
                 />
               </div>
             </div>

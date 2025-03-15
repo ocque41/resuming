@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser } from '@/lib/db/queries.server';
-import { optimizeCVForJob } from '@/lib/services/mistral.service';
+import { optimizeCVForJob, isMistralAvailable } from '@/lib/services/mistral.service';
 import { logger } from '@/lib/logger';
 
 /**
@@ -39,6 +39,17 @@ export async function POST(request: NextRequest) {
     if (!jobDescription) {
       logger.error('Missing jobDescription parameter in optimize request');
       return NextResponse.json({ success: false, error: 'Job description is required' }, { status: 400 });
+    }
+
+    // Check if Mistral service is available
+    if (!isMistralAvailable()) {
+      logger.error('Mistral AI service is not available');
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Mistral AI service is not available',
+        details: 'The Mistral AI service is not properly configured. Please check your API key.',
+        serviceUnavailable: true
+      }, { status: 503 });
     }
 
     // Optimize CV content using Mistral AI
@@ -82,13 +93,22 @@ export async function POST(request: NextRequest) {
       });
     } catch (optimizationError) {
       logger.error('Error optimizing CV:', optimizationError instanceof Error ? optimizationError.message : String(optimizationError));
+      
+      // Check if the error is related to service unavailability
+      const errorMessage = optimizationError instanceof Error ? optimizationError.message : String(optimizationError);
+      const isServiceUnavailable = 
+        errorMessage.includes('not available') || 
+        errorMessage.includes('not configured') || 
+        errorMessage.includes('Authentication failed');
+      
       return NextResponse.json(
         { 
           success: false, 
           error: 'Failed to optimize CV content',
-          details: optimizationError instanceof Error ? optimizationError.message : 'Unknown error'
+          details: errorMessage,
+          serviceUnavailable: isServiceUnavailable
         },
-        { status: 500 }
+        { status: isServiceUnavailable ? 503 : 500 }
       );
     }
   } catch (error) {
