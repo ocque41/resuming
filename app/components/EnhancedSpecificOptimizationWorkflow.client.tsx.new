@@ -1,17 +1,6 @@
-"use client";
-
 import { useState } from 'react';
 
-interface CV {
-  id: string;
-  name: string;
-}
-
-interface EnhancedSpecificOptimizationWorkflowProps {
-  cvs: CV[];
-}
-
-export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: EnhancedSpecificOptimizationWorkflowProps) {
+export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }) {
   const [selectedCVId, setSelectedCVId] = useState('');
   const [selectedCVName, setSelectedCVName] = useState('');
   const [originalText, setOriginalText] = useState(null);

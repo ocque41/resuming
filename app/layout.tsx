@@ -6,10 +6,53 @@ import { UserProvider } from '@/lib/auth';
 import { getUser } from '@/lib/db/queries.server';
 import { ThemeProvider } from 'app/theme-provider';
 import { I18nProvider } from '@/components/i18n-provider';
+import { Inter } from "next/font/google";
 
 export const metadata: Metadata = {
-  title: 'Resuming',
-  description: 'Transform your career with our AI-powered CV optimization platform',
+  title: 'CV Optimizer - AI-powered CV Analysis & Optimization',
+  description: 'AI-powered CV Analysis & Optimization unlocking exclusive career opportunities.',
+  keywords: 'CV, resume, job search, career, AI, optimization, analysis',
+  authors: [{ name: 'CV Optimizer Team' }],
+  creator: 'CV Optimizer',
+  publisher: 'CV Optimizer',
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  metadataBase: new URL('https://cvoptimizer.com'), // Replace with your actual domain
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    title: 'CV Optimizer - AI-powered CV Analysis & Optimization',
+    description: 'AI-powered CV Analysis & Optimization unlocking exclusive career opportunities.',
+    url: 'https://cvoptimizer.com', // Replace with your actual domain
+    siteName: 'CV Optimizer',
+    images: [
+      {
+        url: '/9.webp', // Using the same image as the hero
+        width: 1200,
+        height: 630,
+        alt: 'CV Optimizer - AI-powered CV Analysis & Optimization',
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'CV Optimizer - AI-powered CV Analysis & Optimization',
+    description: 'AI-powered CV Analysis & Optimization unlocking exclusive career opportunities.',
+    images: ['/9.webp'], // Using the same image as the hero
+    creator: '@cvoptimizer', // Replace with your actual Twitter handle
+  },
+  icons: {
+    icon: '/Screenshot 2025-03-04 230224.png',
+    apple: '/Screenshot 2025-03-04 230224.png',
+    shortcut: '/Screenshot 2025-03-04 230224.png',
+  },
+  manifest: '/manifest.json', // You'll need to create this file for PWA support
 };
 
 export const viewport: Viewport = {
@@ -23,6 +66,8 @@ const safiroFont = localFont({
   display: 'swap',
 });
 
+const inter = Inter({ subsets: ["latin"] });
+
 export default function RootLayout({
   children,
 }: {
@@ -34,7 +79,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${manrope.className} ${safiroFont.className}`}
+      className={`${manrope.className} ${safiroFont.className} ${inter.className}`}
     >
       <head>
         <link

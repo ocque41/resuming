@@ -193,11 +193,26 @@ export async function analyzeCVContent(cvText: string): Promise<CVAnalysisResult
       }
 
       try {
-        const result = JSON.parse(content);
+        // Extract JSON from the response, handling markdown code blocks
+        let jsonContent = content;
+        
+        // Check if the response contains a markdown code block
+        const jsonRegex = /```(?:json)?\s*(\{[\s\S]*?\})\s*```/;
+        const match = content.match(jsonRegex);
+        
+        if (match && match[1]) {
+          // Extract the JSON content from the code block
+          jsonContent = match[1];
+          logger.info('Extracted JSON from markdown code block');
+        }
+        
+        // Try to parse the JSON
+        const result = JSON.parse(jsonContent);
         logger.info('Successfully parsed CV analysis result from Mistral AI');
         return result;
       } catch (parseError) {
         logger.error('Failed to parse Mistral AI response:', parseError instanceof Error ? parseError.message : String(parseError));
+        logger.error('Raw response content:', content);
         throw new Error('Failed to parse CV analysis result');
       }
     }, 3, 2000, 10000); // 3 retries, starting with 2s delay, max 10s delay
@@ -298,11 +313,26 @@ export async function optimizeCVForJob(cvText: string, jobDescription: string): 
       }
 
       try {
-        const result = JSON.parse(content);
+        // Extract JSON from the response, handling markdown code blocks
+        let jsonContent = content;
+        
+        // Check if the response contains a markdown code block
+        const jsonRegex = /```(?:json)?\s*(\{[\s\S]*?\})\s*```/;
+        const match = content.match(jsonRegex);
+        
+        if (match && match[1]) {
+          // Extract the JSON content from the code block
+          jsonContent = match[1];
+          logger.info('Extracted JSON from markdown code block');
+        }
+        
+        // Try to parse the JSON
+        const result = JSON.parse(jsonContent);
         logger.info('Successfully parsed CV optimization result from Mistral AI');
         return result;
       } catch (parseError) {
         logger.error('Failed to parse Mistral AI response:', parseError instanceof Error ? parseError.message : String(parseError));
+        logger.error('Raw response content:', content);
         throw new Error('Failed to parse CV optimization result');
       }
     }, 3, 2000, 10000); // 3 retries, starting with 2s delay, max 10s delay

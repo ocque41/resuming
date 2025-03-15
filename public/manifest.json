@@ -1,0 +1,21 @@
+{
+  "name": "CV Optimizer",
+  "short_name": "CV Optimizer",
+  "description": "AI-powered CV Analysis & Optimization unlocking exclusive career opportunities.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#B4916C",
+  "icons": [
+    {
+      "src": "/Screenshot 2025-03-04 230224.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/Screenshot 2025-03-04 230224.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+} 
