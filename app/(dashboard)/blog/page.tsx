@@ -1,239 +1,255 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Navbar } from "@/components/ui/navbar";
 import { Article, ArticleTitle, ArticleContent } from "@/components/ui/article";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Calendar, Clock, ArrowRight, Tag } from "lucide-react";
+import { Calendar, Clock, ArrowRight, Search } from "lucide-react";
 
 // Import blog posts from the data file
 import { blogPosts } from "./data";
 
-// Get unique categories
-const categories = ["All", ...new Set(blogPosts.map(post => post.category))];
+// Search placeholder suggestions
+const searchPlaceholders = [
+  "Search for CV optimization tips...",
+  "Explore career advancement strategies...",
+  "Discover AI-powered tools...",
+  "Find document analysis techniques...",
+  "Learn about job matching features..."
+];
 
 export default function BlogPage() {
-  const [selectedCategory, setSelectedCategory] = useState("All");
-  const [searchQuery, setSearchQuery] = useState("");
-
-  // Filter posts based on selected category
-  const filteredPosts = selectedCategory === "All" 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [currentPlaceholder, setCurrentPlaceholder] = useState(searchPlaceholders[0]);
+  
+  // Filter posts based on search term
+  const filteredPosts = searchTerm === "" 
     ? blogPosts 
-    : blogPosts.filter(post => post.category === selectedCategory);
+    : blogPosts.filter(post => 
+        post.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        post.excerpt.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        post.category.toLowerCase().includes(searchTerm.toLowerCase())
+      );
 
-  // Animation variants
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1,
-        delayChildren: 0.3,
-      },
-    },
-  };
-
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1,
-      transition: {
-        type: "spring",
-        stiffness: 80,
-        damping: 15,
-      },
-    },
-  };
-
-  // Featured post is the first one
-  const featuredPost = blogPosts[0];
+  // Animate through placeholder text
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPlaceholderIndex(prevIndex => {
+        const nextIndex = (prevIndex + 1) % searchPlaceholders.length;
+        setCurrentPlaceholder(searchPlaceholders[nextIndex]);
+        return nextIndex;
+      });
+    }, 3000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="flex flex-col bg-[#050505] min-h-screen">
-      {/* Navbar */}
       <Navbar />
-
-      {/* Blog Header Section */}
-      <motion.section 
-        className="pt-24 pb-16 px-4"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-      >
-        <div className="max-w-6xl mx-auto">
-          <Article>
-            <ArticleTitle className="text-4xl md:text-5xl font-bold text-white text-center mb-6">
-              Resuming Blog
-            </ArticleTitle>
-            <ArticleContent className="text-xl text-gray-300 text-center max-w-3xl mx-auto">
-              Insights, guides, and expert advice to help you optimize your career journey and make the most of your professional potential.
-            </ArticleContent>
-          </Article>
-          
-          {/* Category Pills */}
-          <div className="flex flex-wrap justify-center gap-2 mt-10">
-            {categories.map((category) => (
-              <motion.button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
-                className={`px-4 py-2 rounded-full text-sm transition-colors ${
-                  selectedCategory === category
-                    ? "bg-[#E8DCC4] text-black font-medium"
-                    : "bg-[#1A1A1A] text-gray-300 hover:bg-[#252525]"
-                }`}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                {category}
-              </motion.button>
-            ))}
-          </div>
-        </div>
-      </motion.section>
-
-      {/* Main Content Area with Featured Article and Side Articles */}
-      <div className="px-4 pb-16">
-        <div className="max-w-6xl mx-auto grid lg:grid-cols-12 gap-8">
-          {/* Featured Article - Takes 8 columns on desktop, full width on mobile */}
+      
+      <div className="container mx-auto px-4 pt-24 pb-16">
+        <h1 className="text-4xl md:text-5xl font-bold text-white mb-8 text-center">Blogs & Articles</h1>
+        <p className="text-gray-300 text-center max-w-2xl mx-auto mb-12">
+          Explore our latest insights, tips, and strategies for optimizing your career journey and making the most of our AI-powered tools.
+        </p>
+        
+        {/* Animated Search Bar */}
+        <div className="flex justify-center mb-12">
           <motion.div 
-            className="lg:col-span-8"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.8 }}
+            className="relative w-full max-w-md"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
           >
-            <div className="bg-[#0A0A0A] rounded-xl overflow-hidden shadow-xl">
-              <div className="relative h-80 md:h-96 overflow-hidden">
-                <img 
-                  src={blogPosts[0].image} 
-                  alt={blogPosts[0].title} 
-                  className="w-full h-full object-cover transition-transform hover:scale-105 duration-700"
-                  onError={(e) => {
-                    e.currentTarget.src = blogPosts[0].fallbackImage;
-                  }}
-                />
-                <div className="absolute top-4 left-4">
-                  <span className="bg-[#E8DCC4] text-black px-3 py-1 rounded-full text-sm font-medium">
-                    {blogPosts[0].category}
-                  </span>
-                </div>
-              </div>
-              <div className="p-6 md:p-8">
-                <div className="flex items-center text-sm text-gray-400 mb-4">
-                  <Calendar className="w-4 h-4 mr-2" />
-                  <span>{blogPosts[0].date}</span>
-                  <span className="mx-2">•</span>
-                  <Clock className="w-4 h-4 mr-2" />
-                  <span>{blogPosts[0].readTime}</span>
-                </div>
-                <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">
-                  {blogPosts[0].title}
-                </h2>
-                <p className="text-gray-300 mb-6 text-lg leading-relaxed">
-                  {blogPosts[0].excerpt}
-                </p>
-                <div className="text-gray-300 mb-6 line-clamp-4 leading-relaxed">
-                  {blogPosts[0].content.split('\n\n')[0]}
-                </div>
-                <div className="flex justify-between items-center">
-                  <Link href={`/blog/${blogPosts[0].slug}`} className="inline-flex items-center bg-[#E8DCC4] text-black px-4 py-2 rounded-md hover:bg-[#FAF6ED]/90 transition group">
-                    Read full article <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
-                  </Link>
-                </div>
-              </div>
+            <div className="relative">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-[#1A1A1A] text-white border border-[#333333] rounded-full py-3 px-5 pl-12 focus:outline-none focus:ring-2 focus:ring-[#B4916C] transition-all"
+                placeholder={currentPlaceholder}
+              />
+              <AnimatePresence mode="wait">
+                <motion.span
+                  key={currentPlaceholder}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.5 }}
+                  className="absolute inset-0 pointer-events-none"
+                >
+                  {/* This span is just for the animation */}
+                </motion.span>
+              </AnimatePresence>
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             </div>
           </motion.div>
-
-          {/* Side Articles - Takes 4 columns on desktop, full width on mobile */}
-          <motion.div 
-            className="lg:col-span-4"
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-          >
-            <h3 className="text-xl font-bold text-white mb-6">More Articles</h3>
-            <div className="space-y-6">
-              {blogPosts.slice(1).map((post) => (
+        </div>
+        
+        {/* Featured Article */}
+        {filteredPosts.length > 0 && (
+          <div className="grid md:grid-cols-3 gap-8 mb-16">
+            <div className="md:col-span-2">
+              <Link href={`/blog/${filteredPosts[0].slug}`}>
                 <motion.div 
-                  key={post.id}
-                  className="bg-[#0A0A0A] rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow"
-                  variants={itemVariants}
-                  whileHover={{ y: -5 }}
+                  className="group relative h-[400px] rounded-lg overflow-hidden"
+                  whileHover={{ scale: 1.02 }}
                   transition={{ duration: 0.3 }}
                 >
-                  <div className="h-40 overflow-hidden">
-                    <img 
-                      src={post.image} 
-                      alt={post.title} 
-                      className="w-full h-full object-cover transition-transform hover:scale-105 duration-500"
-                      onError={(e) => {
-                        e.currentTarget.src = post.fallbackImage;
-                      }}
-                    />
-                  </div>
-                  <div className="p-4">
-                    <div className="flex items-center text-xs text-gray-400 mb-2">
-                      <Calendar className="w-3 h-3 mr-1" />
-                      <span>{post.date}</span>
-                      <span className="mx-1">•</span>
-                      <Clock className="w-3 h-3 mr-1" />
-                      <span>{post.readTime}</span>
-                    </div>
-                    <h3 className="text-lg font-bold text-white mb-2">
-                      {post.title}
-                    </h3>
-                    <p className="text-gray-300 text-sm mb-3 line-clamp-2">
-                      {post.excerpt}
+                  <div className="absolute inset-0 bg-black/50 z-10"></div>
+                  <img 
+                    src={filteredPosts[0].image} 
+                    alt={filteredPosts[0].title} 
+                    className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-500"
+                    onError={(e) => {
+                      e.currentTarget.src = filteredPosts[0].fallbackImage;
+                    }}
+                  />
+                  <div className="absolute inset-0 z-20 flex flex-col justify-end p-6">
+                    <span className="inline-block bg-[#1A1A1A]/80 text-[#B4916C] px-3 py-1 rounded text-sm mb-4">
+                      {filteredPosts[0].category}
+                    </span>
+                    <h2 className="text-2xl md:text-3xl font-bold text-white mb-3 group-hover:text-[#B4916C] transition-colors">
+                      {filteredPosts[0].title}
+                    </h2>
+                    <p className="text-gray-300 mb-4">
+                      {filteredPosts[0].excerpt}
                     </p>
-                    <Link href={`/blog/${post.slug}`} className="text-[#E8DCC4] hover:text-white text-sm flex items-center group">
-                      Read more <ArrowRight className="ml-1 w-3 h-3 transition-transform group-hover:translate-x-1" />
-                    </Link>
+                    <div className="flex items-center text-sm text-gray-400">
+                      <Calendar className="w-4 h-4 mr-2" />
+                      <span>{filteredPosts[0].date}</span>
+                      <span className="mx-3">•</span>
+                      <Clock className="w-4 h-4 mr-2" />
+                      <span>{filteredPosts[0].readTime}</span>
+                    </div>
                   </div>
                 </motion.div>
+              </Link>
+            </div>
+            
+            {/* Side Articles */}
+            <div className="space-y-6">
+              {filteredPosts.slice(1, 3).map((post) => (
+                <Link href={`/blog/${post.slug}`} key={post.id}>
+                  <motion.div 
+                    className="group flex flex-col h-[190px] bg-[#0A0A0A] rounded-lg overflow-hidden border border-[#1A1A1A] hover:border-[#B4916C] transition-colors"
+                    whileHover={{ y: -5 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <div className="relative h-24 overflow-hidden">
+                      <img 
+                        src={post.image} 
+                        alt={post.title} 
+                        className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-500"
+                        onError={(e) => {
+                          e.currentTarget.src = post.fallbackImage;
+                        }}
+                      />
+                    </div>
+                    <div className="p-4 flex-1 flex flex-col">
+                      <span className="text-xs text-[#B4916C] mb-1">{post.category}</span>
+                      <h3 className="text-white font-semibold mb-1 line-clamp-1 group-hover:text-[#B4916C] transition-colors">
+                        {post.title}
+                      </h3>
+                      <div className="flex items-center text-xs text-gray-400 mt-auto">
+                        <Calendar className="w-3 h-3 mr-1" />
+                        <span>{post.date}</span>
+                        <span className="mx-2">•</span>
+                        <Clock className="w-3 h-3 mr-1" />
+                        <span>{post.readTime}</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                </Link>
               ))}
             </div>
-          </motion.div>
-        </div>
+          </div>
+        )}
+        
+        {/* More Articles */}
+        {filteredPosts.length > 3 && (
+          <div>
+            <h2 className="text-2xl font-bold text-white mb-8">More Articles</h2>
+            <div className="grid md:grid-cols-3 gap-6">
+              {filteredPosts.slice(3).map((post) => (
+                <Link href={`/blog/${post.slug}`} key={post.id}>
+                  <motion.div 
+                    className="group bg-[#0A0A0A] rounded-lg overflow-hidden border border-[#1A1A1A] hover:border-[#B4916C] transition-colors"
+                    whileHover={{ y: -5 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <div className="h-48 overflow-hidden">
+                      <img 
+                        src={post.image} 
+                        alt={post.title} 
+                        className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-500"
+                        onError={(e) => {
+                          e.currentTarget.src = post.fallbackImage;
+                        }}
+                      />
+                    </div>
+                    <div className="p-6">
+                      <span className="inline-block text-[#B4916C] text-sm mb-2">{post.category}</span>
+                      <h3 className="text-xl font-bold text-white mb-3 group-hover:text-[#B4916C] transition-colors">
+                        {post.title}
+                      </h3>
+                      <p className="text-gray-300 mb-4 line-clamp-2">
+                        {post.excerpt}
+                      </p>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center text-sm text-gray-400">
+                          <Calendar className="w-4 h-4 mr-2" />
+                          <span>{post.date}</span>
+                          <span className="mx-3">•</span>
+                          <Clock className="w-4 h-4 mr-2" />
+                          <span>{post.readTime}</span>
+                        </div>
+                        <span className="text-[#B4916C] flex items-center group-hover:translate-x-1 transition-transform">
+                          Read more <ArrowRight className="ml-1 w-4 h-4" />
+                        </span>
+                      </div>
+                    </div>
+                  </motion.div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {/* No Results */}
+        {filteredPosts.length === 0 && (
+          <div className="text-center py-16">
+            <h2 className="text-2xl font-bold text-white mb-4">No articles found</h2>
+            <p className="text-gray-300 mb-8">Try adjusting your search terms or browse all our articles.</p>
+            <Button 
+              onClick={() => setSearchTerm("")}
+              className="bg-[#B4916C] text-white hover:bg-[#B4916C]/90 transition"
+            >
+              View All Articles
+            </Button>
+          </div>
+        )}
       </div>
-
+      
       {/* Footer */}
-      <footer className="bg-[#050505] text-[#E8DCC4] py-12">
+      <footer className="bg-[#050505] border-t border-[#1A1A1A] py-12">
         <div className="container mx-auto px-4 text-center">
-          <div className="flex justify-center space-x-6 mb-6">
-            <a
-              href="https://x.com/chromadai"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[#E8DCC4] hover:text-white transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" className="fill-current">
-                <path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H1.474l8.6-9.83L0 1.154h7.594l5.243 6.932L18.901 1.153Z" />
-              </svg>
+          <p className="text-gray-400 mb-6">© 2025 Resuming. All rights reserved.</p>
+          <div className="flex justify-center space-x-6">
+            <a href="#" className="text-gray-400 hover:text-[#B4916C] transition-colors">
+              Terms
             </a>
-            <a
-              href="https://linkedin.com/company/resuming"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[#E8DCC4] hover:text-white transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" className="fill-current">
-                <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5Zm-11 19h-3v-11h3v11Zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.784 1.764-1.75 1.764Z" />
-              </svg>
+            <a href="#" className="text-gray-400 hover:text-[#B4916C] transition-colors">
+              Privacy
             </a>
-            <a
-              href="https://www.instagram.com/resuming_ai/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[#E8DCC4] hover:text-white transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" className="fill-current">
-                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.148 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.148-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069Zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.197-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.948-.073Zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162Zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4Zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44Z" />
-              </svg>
+            <a href="#" className="text-gray-400 hover:text-[#B4916C] transition-colors">
+              Contact
             </a>
           </div>
-          <p className="text-sm opacity-70">© 2025 Resuming. All rights reserved.</p>
         </div>
       </footer>
     </div>
