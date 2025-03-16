@@ -16,14 +16,14 @@ export interface Task {
 // Queue configuration
 const queueConfig = {
   mistral: {
-    concurrency: 1, // Only 1 concurrent Mistral task
-    minInterval: 2000, // Minimum 2 seconds between tasks
-    maxQueueSize: 50, // Maximum queue size
+    concurrency: 1, // Keep at 1 concurrent Mistral task due to strict rate limits
+    minInterval: 3500, // Increase to 3.5 seconds between tasks to be safer
+    maxQueueSize: 30, // Reduce max queue size to prevent backlog
   },
   openai: {
-    concurrency: 3, // Increase to 3 concurrent OpenAI tasks
-    minInterval: 1000, // Minimum 1 second between tasks
-    maxQueueSize: 100, // Maximum queue size
+    concurrency: 4, // Increase to 4 concurrent OpenAI tasks
+    minInterval: 800, // Reduce to 800ms between tasks
+    maxQueueSize: 150, // Increase max queue size
   },
   general: {
     concurrency: 5, // 5 concurrent general tasks
@@ -292,26 +292,26 @@ if (process.env.NODE_ENV === 'production') {
   // In production, be more conservative with API calls
   configureQueue('mistral', {
     concurrency: 1,
-    minInterval: 3000, // 3 seconds between calls
-    maxQueueSize: 100
+    minInterval: 3500, // 3.5 seconds between calls
+    maxQueueSize: 30
   });
   
   configureQueue('openai', {
-    concurrency: 3,
-    minInterval: 1200, // 1.2 seconds between calls
+    concurrency: 4,
+    minInterval: 800, // 0.8 seconds between calls
     maxQueueSize: 150
   });
 } else if (process.env.NODE_ENV === 'development') {
   // In development, we can be a bit more aggressive
   configureQueue('mistral', {
     concurrency: 1,
-    minInterval: 2000, // 2 seconds between calls
-    maxQueueSize: 50
+    minInterval: 3000, // 3 seconds between calls
+    maxQueueSize: 30
   });
   
   configureQueue('openai', {
-    concurrency: 3,
-    minInterval: 1000, // 1 second between calls
-    maxQueueSize: 100
+    concurrency: 4,
+    minInterval: 800, // 0.8 seconds between calls
+    maxQueueSize: 150
   });
 } 

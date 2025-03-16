@@ -8,17 +8,19 @@ interface PartialResult {
   progress: number;
   timestamp: number;
   lastUpdated: number;
+  retryCount?: number; // Track retry attempts
+  error?: string; // Store any error messages
 }
 
 // In-memory cache for partial results
 // In a production environment, this should be replaced with Redis or another distributed cache
 const partialResultsCache: Record<string, PartialResult> = {};
 
-// Cache cleanup interval (every 5 minutes)
-const CACHE_CLEANUP_INTERVAL = 5 * 60 * 1000;
+// Cache cleanup interval (every 3 minutes - reduced from 5)
+const CACHE_CLEANUP_INTERVAL = 3 * 60 * 1000;
 
-// Cache entry expiration (30 minutes)
-const CACHE_EXPIRATION = 30 * 60 * 1000;
+// Cache entry expiration (60 minutes - increased from 30)
+const CACHE_EXPIRATION = 60 * 60 * 1000;
 
 // Set up periodic cache cleanup
 if (typeof setInterval !== 'undefined') {
@@ -39,6 +41,7 @@ export function storePartialResults(
     matchScore: number;
     recommendations: string[];
     progress: number;
+    error?: string;
   }
 ) {
   const cacheKey = generateCacheKey(userId, cvId, jobDescription);
@@ -46,12 +49,15 @@ export function storePartialResults(
   
   // If entry already exists, update it
   if (partialResultsCache[cacheKey]) {
-    // Only update if the new progress is higher
-    if (results.progress > partialResultsCache[cacheKey].progress) {
+    const currentEntry = partialResultsCache[cacheKey];
+    
+    // Only update if the new progress is higher or if there was an error
+    if (results.progress > currentEntry.progress || results.error) {
       partialResultsCache[cacheKey] = {
         ...results,
-        timestamp: partialResultsCache[cacheKey].timestamp, // Keep original timestamp
-        lastUpdated: now
+        timestamp: currentEntry.timestamp, // Keep original timestamp
+        lastUpdated: now,
+        retryCount: currentEntry.retryCount || 0 // Preserve retry count
       };
       logger.debug(`Updated partial results for ${cacheKey}, progress: ${results.progress}%`);
     }
@@ -60,9 +66,57 @@ export function storePartialResults(
     partialResultsCache[cacheKey] = {
       ...results,
       timestamp: now,
-      lastUpdated: now
+      lastUpdated: now,
+      retryCount: 0
     };
     logger.debug(`Stored new partial results for ${cacheKey}, progress: ${results.progress}%`);
+  }
+}
+
+/**
+ * Helper function to increment retry count for partial results
+ */
+export function incrementRetryCount(userId: string, cvId: string, jobDescription: string): number {
+  const cacheKey = generateCacheKey(userId, cvId, jobDescription);
+  if (partialResultsCache[cacheKey]) {
+    const retryCount = (partialResultsCache[cacheKey].retryCount || 0) + 1;
+    partialResultsCache[cacheKey].retryCount = retryCount;
+    partialResultsCache[cacheKey].lastUpdated = Date.now();
+    logger.debug(`Incremented retry count for ${cacheKey} to ${retryCount}`);
+    return retryCount;
+  }
+  return 0;
+}
+
+/**
+ * Helper function to store error in partial results
+ */
+export function storePartialResultsError(
+  userId: string, 
+  cvId: string, 
+  jobDescription: string, 
+  error: string
+) {
+  const cacheKey = generateCacheKey(userId, cvId, jobDescription);
+  const now = Date.now();
+  
+  if (partialResultsCache[cacheKey]) {
+    partialResultsCache[cacheKey].error = error;
+    partialResultsCache[cacheKey].lastUpdated = now;
+    logger.debug(`Stored error in partial results for ${cacheKey}: ${error}`);
+  } else {
+    // Create new entry with error
+    partialResultsCache[cacheKey] = {
+      optimizedContent: '',
+      matchScore: 0,
+      recommendations: [],
+      progress: 0,
+      timestamp: now,
+      lastUpdated: now,
+      retryCount: 0,
+      error
+    };
+    logger.debug(`Created new partial results with error for ${cacheKey}: ${error}`);
   }
 }
 
@@ -82,7 +136,14 @@ export function clearPartialResults(userId: string, cvId: string, jobDescription
  */
 export function getPartialResults(userId: string, cvId: string, jobDescription: string): PartialResult | null {
   const cacheKey = generateCacheKey(userId, cvId, jobDescription);
-  return partialResultsCache[cacheKey] || null;
+  const result = partialResultsCache[cacheKey];
+  
+  if (result) {
+    // Update last accessed time
+    result.lastUpdated = Date.now();
+  }
+  
+  return result || null;
 }
 
 /**

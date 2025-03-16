@@ -73,18 +73,18 @@ export function shouldThrottle(service: 'mistral' | 'openai'): boolean {
   updateSlidingWindow(service);
   
   // More aggressive throttling for Mistral compared to OpenAI
-  const limitThreshold = service === 'mistral' ? 0.6 : 0.7; // Lower threshold for Mistral (60% vs 70%)
+  const limitThreshold = service === 'mistral' ? 0.5 : 0.7; // Lower threshold for Mistral (50% vs 70%)
   const isApproachingLimit = tracker.calls >= tracker.limit * limitThreshold;
   
   // Check if we need to enforce minimum time between calls
   // More aggressive for Mistral
-  const minTimeBetweenCalls = service === 'mistral' ? 1500 : 1000; // 1.5s for Mistral, 1s for OpenAI
+  const minTimeBetweenCalls = service === 'mistral' ? 2000 : 1000; // 2s for Mistral, 1s for OpenAI
   const timeSinceLastCall = now - tracker.lastCallTime;
   const needsTimeBuffer = timeSinceLastCall < minTimeBetweenCalls;
   
   // Check if we've made too many calls in the sliding window
   // More aggressive for Mistral
-  const windowThreshold = service === 'mistral' ? 0.7 : 0.8; // 70% vs 80%
+  const windowThreshold = service === 'mistral' ? 0.6 : 0.8; // 60% vs 80%
   const tooManyCalls = tracker.callsInWindow.length >= tracker.limit * windowThreshold;
   
   // Log throttling decisions for debugging
@@ -156,24 +156,24 @@ function calculateThrottleDelay(service: 'mistral' | 'openai'): number {
   
   // Add time if we're approaching the rate limit
   const usageRatio = tracker.calls / tracker.limit;
-  if (usageRatio > 0.7) {
+  if (usageRatio > 0.5) {
     // Exponentially increase delay as we approach the limit
-    delay += Math.pow(usageRatio - 0.7, 2) * 10000; // Up to 10 seconds additional delay
+    delay += Math.pow(usageRatio - 0.5, 2) * 15000; // Up to 15 seconds additional delay
   }
   
   // Add time based on sliding window
   const windowUsageRatio = tracker.callsInWindow.length / tracker.limit;
-  if (windowUsageRatio > 0.7) {
+  if (windowUsageRatio > 0.5) {
     // Exponentially increase delay as we approach the limit in the sliding window
-    delay += Math.pow(windowUsageRatio - 0.7, 2) * 10000; // Up to 10 seconds additional delay
+    delay += Math.pow(windowUsageRatio - 0.5, 2) * 15000; // Up to 15 seconds additional delay
   }
   
   // Add jitter to prevent thundering herd
   delay *= (0.8 + Math.random() * 0.4); // 80% to 120% of calculated delay
   
-  // For Mistral, ensure a minimum delay of 2 seconds when we're over 50% capacity
-  if (service === 'mistral' && (usageRatio > 0.5 || windowUsageRatio > 0.5)) {
-    delay = Math.max(delay, 2000);
+  // For Mistral, ensure a minimum delay of 3 seconds when we're over 40% capacity
+  if (service === 'mistral' && (usageRatio > 0.4 || windowUsageRatio > 0.4)) {
+    delay = Math.max(delay, 3000);
   }
   
   return Math.round(delay);
@@ -233,7 +233,8 @@ export async function retryWithExponentialBackoff<T>(
         } catch (fallbackError) {
           logger.error(`Fallback for ${service} API failed:`, 
             fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
-          // If fallback fails, continue with original function
+          // If fallback fails, continue with original function but with a delay
+          await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
       
@@ -244,9 +245,10 @@ export async function retryWithExponentialBackoff<T>(
           
           // If we should throttle, add a delay before proceeding
           if (shouldThrottle(service)) {
-            // If we have a fallback and this is Mistral, use fallback after first throttle
-            if (fallbackFn && service === 'mistral' && retries > 0) {
-              logger.info(`Using fallback for ${service} API due to throttling after ${retries} retries`);
+            // If we have a fallback and this is Mistral, use fallback immediately
+            // This is more aggressive than before - we don't wait for retries
+            if (fallbackFn && service === 'mistral') {
+              logger.info(`Using fallback for ${service} API due to throttling`);
               return await fallbackFn();
             }
             
@@ -272,9 +274,9 @@ export async function retryWithExponentialBackoff<T>(
           
           const isRetryableError = status !== null && retryStatusCodes.includes(status);
           
-          // For Mistral, use fallback more aggressively
-          if (fallbackFn && service === 'mistral' && (isRateLimitError || retries >= 1)) {
-            logger.warn(`${service} API failed with ${isRateLimitError ? 'rate limit' : 'error'}, using fallback immediately`);
+          // For Mistral, use fallback more aggressively - immediately on any error
+          if (fallbackFn && service === 'mistral') {
+            logger.warn(`${service} API failed, using fallback immediately`);
             try {
               return await fallbackFn();
             } catch (fallbackError) {
@@ -289,8 +291,8 @@ export async function retryWithExponentialBackoff<T>(
           
           // If we've hit max retries or it's not a retryable error, try fallback or throw
           if (retries >= maxRetries || (!isRateLimitError && !isRetryableError)) {
-            // If we have a fallback function and this is a rate limit error, try the fallback
-            if (fallbackFn && (isRateLimitError || retries >= maxRetries)) {
+            // If we have a fallback function, try the fallback
+            if (fallbackFn) {
               logger.warn(`${service} API failed after ${retries} retries, using fallback`);
               return await fallbackFn();
             }

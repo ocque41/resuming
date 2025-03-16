@@ -12,11 +12,11 @@ interface CacheEntry<T> {
 
 // Cache configuration
 const CACHE_EXPIRY = {
-  CV_ANALYSIS: 24 * 60 * 60 * 1000, // 24 hours
-  CV_OPTIMIZATION: 12 * 60 * 60 * 1000, // 12 hours
-  COMBINED: 12 * 60 * 60 * 1000, // 12 hours
-  EMBEDDING: 7 * 24 * 60 * 60 * 1000, // 7 days for embeddings
-  PARTIAL_RESULTS: 30 * 60 * 1000, // 30 minutes for partial results
+  CV_ANALYSIS: 48 * 60 * 60 * 1000, // 48 hours (increased from 24)
+  CV_OPTIMIZATION: 24 * 60 * 60 * 1000, // 24 hours (increased from 12)
+  COMBINED: 24 * 60 * 60 * 1000, // 24 hours (increased from 12)
+  EMBEDDING: 14 * 24 * 60 * 60 * 1000, // 14 days for embeddings (increased from 7)
+  PARTIAL_RESULTS: 60 * 60 * 1000, // 60 minutes for partial results (increased from 30)
 };
 
 // In-memory cache storage
@@ -58,6 +58,40 @@ export function cacheStore<T>(
   expiryMs: number = CACHE_EXPIRY.CV_ANALYSIS,
   source: string = 'default'
 ): void {
+  // Don't cache null or undefined data
+  if (data === null || data === undefined) {
+    logger.debug(`Skipping cache for null/undefined data with key: ${key}`);
+    return;
+  }
+  
+  // For arrays, don't cache empty arrays
+  if (Array.isArray(data) && data.length === 0) {
+    logger.debug(`Skipping cache for empty array with key: ${key}`);
+    return;
+  }
+  
+  // For objects, check if it's empty or has meaningful content
+  if (typeof data === 'object' && !Array.isArray(data) && data !== null) {
+    const keys = Object.keys(data);
+    if (keys.length === 0) {
+      logger.debug(`Skipping cache for empty object with key: ${key}`);
+      return;
+    }
+    
+    // Check if all values are null/undefined/empty
+    const allEmpty = keys.every(k => {
+      const val = (data as any)[k];
+      return val === null || val === undefined || 
+        (Array.isArray(val) && val.length === 0) ||
+        (typeof val === 'string' && val.trim() === '');
+    });
+    
+    if (allEmpty) {
+      logger.debug(`Skipping cache for object with all empty values with key: ${key}`);
+      return;
+    }
+  }
+  
   const now = Date.now();
   memoryCache[key] = {
     data,
@@ -250,6 +284,6 @@ export function getCachedPartialResults(userId: string, cvId: string, jobDescrip
 
 // Set up periodic cache cleanup
 if (typeof window === 'undefined') { // Only run on server
-  setInterval(clearExpiredCache, 15 * 60 * 1000); // Clean up every 15 minutes
-  logger.info('Cache cleanup scheduled every 15 minutes');
+  setInterval(clearExpiredCache, 10 * 60 * 1000); // Clean up every 10 minutes (reduced from 15)
+  logger.info('Cache cleanup scheduled every 10 minutes');
 } 

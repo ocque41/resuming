@@ -8,7 +8,8 @@ import {
   isOpenAIAvailable 
 } from '@/lib/services/openai.service';
 import { logger } from '@/lib/logger';
-import { storePartialResults, clearPartialResults, getPartialResults } from '@/app/utils/partialResultsCache';
+import { getCVsForUser } from '@/lib/db/queries.server';
+import { storePartialResults, clearPartialResults, getPartialResults, storePartialResultsError } from '@/app/utils/partialResultsCache';
 import { db } from '@/lib/db/drizzle';
 import { cvs } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -421,7 +422,8 @@ export async function POST(req: NextRequest) {
       includeKeywords = false, 
       cvText, 
       preserveSections = {},
-      useSimplifiedProcess = false // New parameter to request simplified processing
+      useSimplifiedProcess = false, // Parameter to request simplified processing
+      maxRetries = 2 // New parameter to control retry attempts
     } = body;
 
     if (!cvId) {
@@ -446,86 +448,117 @@ export async function POST(req: NextRequest) {
     
     if (!mistralAvailable && !openaiAvailable) {
       logger.error('AI services are not available');
+      storePartialResultsError(userId, cvId, jobDescription, 'AI services are not available');
       return NextResponse.json({ error: 'AI services are not available' }, { status: 503 });
     }
 
     // Log request details
     logger.info(`Optimizing CV ${cvId} for user ${userId}`);
 
+    // Set up a timeout to ensure we return something even if the process hangs
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('Optimization timed out after 2 minutes'));
+      }, 120000); // 2 minute timeout
+    });
+
     try {
       // Get CV text if not provided
       let actualCvText = cvText;
       if (!actualCvText) {
-        // Here you would fetch the CV text from the database using cvId
-        // This is a placeholder - implement the actual CV text retrieval
-        logger.info(`Fetching CV text for CV ID ${cvId}`);
-        actualCvText = await fetchCVText(cvId);
-        
-        // Update progress after fetching CV text
-        storePartialResults(userId, cvId, jobDescription, {
-          optimizedContent: "CV text retrieved, starting analysis...",
-          matchScore: 0,
-          recommendations: ["Optimization in progress..."],
-          progress: 10
-        });
+        try {
+          // Fetch the CV text from the database using cvId
+          logger.info(`Fetching CV text for CV ID ${cvId}`);
+          actualCvText = await fetchCVText(cvId);
+          
+          // Update progress after fetching CV text
+          storePartialResults(userId, cvId, jobDescription, {
+            optimizedContent: "CV text retrieved, starting analysis...",
+            matchScore: 0,
+            recommendations: ["Optimization in progress..."],
+            progress: 10
+          });
+        } catch (fetchError) {
+          logger.error(`Error fetching CV text: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`);
+          storePartialResultsError(userId, cvId, jobDescription, 'Failed to retrieve CV text');
+          throw new Error(`Failed to retrieve CV text: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`);
+        }
       }
       
       // Check if we should use the simplified process
       // This can be explicitly requested or automatically determined based on CV size
       const shouldUseSimplifiedProcess = useSimplifiedProcess || 
-                                        actualCvText.length > MAX_CV_LENGTH * 2 || 
-                                        jobDescription.length > MAX_JOB_DESCRIPTION_LENGTH * 2;
+                                        actualCvText.length > MAX_CV_LENGTH * 1.5 || // Reduced threshold from 2x to 1.5x
+                                        jobDescription.length > MAX_JOB_DESCRIPTION_LENGTH * 1.5;
       
       let result;
-      if (shouldUseSimplifiedProcess) {
-        // Use the simplified process for very large CVs or when explicitly requested
-        result = await simplifiedOptimization(
-          actualCvText,
-          jobDescription,
-          userId,
-          cvId
-        );
-      } else {
-        // Get CV analysis if Mistral is available
-        let cvAnalysis = null;
-        if (mistralAvailable) {
-          try {
-            logger.info('Analyzing CV content with Mistral AI');
-            cvAnalysis = await analyzeCVContent(actualCvText);
-            logger.info('CV analysis completed successfully with Mistral AI');
-            
-            // Update progress after CV analysis
+      
+      // Use Promise.race to handle timeout
+      result = await Promise.race([
+        (async () => {
+          if (shouldUseSimplifiedProcess) {
+            // Use the simplified process for very large CVs or when explicitly requested
+            logger.info('Using simplified optimization process');
             storePartialResults(userId, cvId, jobDescription, {
-              optimizedContent: "CV analysis complete, starting optimization...",
+              optimizedContent: "Using simplified optimization process...",
               matchScore: 0,
-              recommendations: ["Optimization in progress..."],
-              progress: 20
-            });
-          } catch (mistralError) {
-            logger.error('Error analyzing CV with Mistral AI:', mistralError instanceof Error ? mistralError.message : String(mistralError));
-            logger.info('Continuing without Mistral analysis');
-            
-            // Update progress, noting the analysis error
-            storePartialResults(userId, cvId, jobDescription, {
-              optimizedContent: "CV analysis failed, continuing with optimization...",
-              matchScore: 0,
-              recommendations: ["CV analysis failed, but optimization will continue."],
+              recommendations: ["Using simplified optimization for better reliability..."],
               progress: 15
             });
-          }
-        }
+            
+            return await simplifiedOptimization(
+              actualCvText,
+              jobDescription,
+              userId,
+              cvId
+            );
+          } else {
+            // Get CV analysis if Mistral is available
+            let cvAnalysis = null;
+            if (mistralAvailable) {
+              try {
+                logger.info('Analyzing CV content with Mistral AI');
+                cvAnalysis = await analyzeCVContent(actualCvText, {
+                  useOpenAIFallback: true, // Always enable fallback
+                  priority: 5 // Higher priority for analysis
+                });
+                logger.info('CV analysis completed successfully with Mistral AI');
+                
+                // Update progress after CV analysis
+                storePartialResults(userId, cvId, jobDescription, {
+                  optimizedContent: "CV analysis complete, starting optimization...",
+                  matchScore: 0,
+                  recommendations: ["Optimization in progress..."],
+                  progress: 30 // Increased from 20 to reflect more progress
+                });
+              } catch (mistralError) {
+                logger.error('Error analyzing CV with Mistral AI:', mistralError instanceof Error ? mistralError.message : String(mistralError));
+                logger.info('Continuing without Mistral analysis');
+                
+                // Update progress, noting the analysis error
+                storePartialResults(userId, cvId, jobDescription, {
+                  optimizedContent: "CV analysis failed, continuing with optimization...",
+                  matchScore: 0,
+                  recommendations: ["CV analysis failed, but optimization will continue."],
+                  progress: 20
+                });
+              }
+            }
 
-        // Optimize CV using the standard process
-        result = await optimizeWithChunking(
-          actualCvText, 
-          jobDescription, 
-          cvAnalysis,
-          openaiAvailable,
-          preserveSections,
-          userId,
-          cvId
-        );
-      }
+            // Optimize CV using the standard process
+            return await optimizeWithChunking(
+              actualCvText, 
+              jobDescription, 
+              cvAnalysis,
+              openaiAvailable,
+              preserveSections,
+              userId,
+              cvId
+            );
+          }
+        })(),
+        timeoutPromise
+      ]);
       
       // Clear partial results as we now have the full result
       clearPartialResults(userId, cvId, jobDescription);
@@ -536,11 +569,37 @@ export async function POST(req: NextRequest) {
       if (error instanceof Error) {
         logger.error(`CV optimization error: ${error.message}`);
         
+        // Store the error in partial results
+        storePartialResultsError(userId, cvId, jobDescription, error.message);
+        
+        // Check for timeout errors
+        if (error.message.includes('timed out')) {
+          // Check if we have partial results to return
+          const partialResults = getPartialResults(userId, cvId, jobDescription);
+          if (partialResults && partialResults.optimizedContent && partialResults.progress > 20) {
+            // If we have substantial partial results, return them with a warning
+            logger.info('Returning partial results due to timeout');
+            return NextResponse.json({ 
+              optimizedContent: partialResults.optimizedContent,
+              matchScore: partialResults.matchScore || 0,
+              recommendations: [...(partialResults.recommendations || []), "Optimization was incomplete due to timeout."],
+              partial: true,
+              error: 'Optimization timed out. Returning partial results.',
+              progress: partialResults.progress
+            }, { status: 200 }); // Return 200 with partial results
+          }
+          
+          return NextResponse.json({ 
+            error: 'Optimization timed out. Please try again with a simpler request.',
+            details: error.message
+          }, { status: 408 });
+        }
+        
         // Check for rate limit errors
         if (error.message.includes('rate limit') || error.message.includes('429')) {
           // Check if we have partial results to return
           const partialResults = getPartialResults(userId, cvId, jobDescription);
-          if (partialResults && partialResults.optimizedContent && partialResults.progress > 30) {
+          if (partialResults && partialResults.optimizedContent && partialResults.progress > 20) {
             // If we have substantial partial results, return them with a warning
             logger.info('Returning partial results due to rate limit error');
             return NextResponse.json({ 
@@ -563,7 +622,7 @@ export async function POST(req: NextRequest) {
         if (error.message.includes('Unexpected token') || error.message.includes('JSON')) {
           // Check if we have partial results to return
           const partialResults = getPartialResults(userId, cvId, jobDescription);
-          if (partialResults && partialResults.optimizedContent && partialResults.progress > 30) {
+          if (partialResults && partialResults.optimizedContent && partialResults.progress > 20) {
             // If we have substantial partial results, return them with a warning
             logger.info('Returning partial results due to JSON parsing error');
             return NextResponse.json({ 
