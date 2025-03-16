@@ -47,7 +47,11 @@ const circuitBreakers = {
     lastFailure: 0,
     isOpen: false,
     resetTimeout: 30000, // 30 seconds timeout before trying again
-    failureThreshold: 3  // Number of failures before opening circuit
+    failureThreshold: 5,  // Increased threshold to be more lenient - Number of failures before opening circuit
+    consecutiveFailures: 0, // Track consecutive failures
+    totalFailures: 0, // Track total failures
+    totalSuccesses: 0, // Track total successes
+    lastSuccess: 0 // Track last successful call
   }
 };
 
@@ -58,28 +62,54 @@ function isCircuitOpen(service: 'openai'): boolean {
   // If circuit is open (too many failures), check if reset timeout has passed
   if (breaker.isOpen) {
     if (Date.now() - breaker.lastFailure > breaker.resetTimeout) {
-      // Reset the circuit breaker
+      // Reset the circuit breaker - but keep the failure counter in half-open state
       breaker.isOpen = false;
-      breaker.failures = 0;
-      logger.info(`Circuit breaker for ${service} reset after ${breaker.resetTimeout}ms timeout`);
-      return false; // Circuit is now closed
+      breaker.consecutiveFailures = Math.floor(breaker.consecutiveFailures / 2); // Reduce but not eliminate failures
+      logger.info(`Circuit breaker for ${service} reset after ${breaker.resetTimeout}ms timeout (half-open state with ${breaker.consecutiveFailures} failures remaining)`);
+      return false; // Circuit is now closed (in half-open state)
     }
+    logger.warn(`Circuit breaker for ${service} is still open after ${Date.now() - breaker.lastFailure}ms (reset after ${breaker.resetTimeout}ms)`);
     return true; // Circuit is still open
   }
   
   return false; // Circuit is closed
 }
 
+// Add function to record API success for circuit breaker
+function recordApiSuccess(service: 'openai'): void {
+  const breaker = circuitBreakers[service];
+  breaker.lastSuccess = Date.now();
+  breaker.totalSuccesses++;
+  
+  // Only reset consecutive failures if we've had a real success
+  breaker.consecutiveFailures = 0;
+  
+  // If we were in a half-open state, log that we're fully closed now
+  if (breaker.failures > 0) {
+    logger.info(`Circuit breaker for ${service} fully closed after successful API call`);
+    breaker.failures = 0;
+  }
+}
+
 // Add function to record failures for circuit breaker
 function recordApiFailure(service: 'openai'): void {
   const breaker = circuitBreakers[service];
   breaker.failures++;
+  breaker.totalFailures++;
+  breaker.consecutiveFailures++;
   breaker.lastFailure = Date.now();
   
-  // If too many failures, open the circuit
-  if (breaker.failures >= breaker.failureThreshold) {
-    breaker.isOpen = true;
-    logger.warn(`Circuit breaker for ${service} opened after ${breaker.failures} failures. Will retry after ${breaker.resetTimeout}ms`);
+  logger.warn(`API call to ${service} failed. Consecutive failures: ${breaker.consecutiveFailures}, Total failures: ${breaker.totalFailures}`);
+  
+  // If too many consecutive failures, open the circuit
+  if (breaker.consecutiveFailures >= breaker.failureThreshold) {
+    if (!breaker.isOpen) {
+      breaker.isOpen = true;
+      logger.warn(`Circuit breaker for ${service} opened after ${breaker.consecutiveFailures} consecutive failures. Will retry after ${breaker.resetTimeout}ms`);
+    } else {
+      // If already open, extend the timeout
+      logger.warn(`Circuit breaker for ${service} remains open after another failure. Total consecutive failures: ${breaker.consecutiveFailures}`);
+    }
   }
 }
 
@@ -87,15 +117,25 @@ function recordApiFailure(service: 'openai'): void {
 export function getCircuitStatus(service: 'openai'): { 
   isOpen: boolean; 
   failures: number; 
-  lastFailure: number; 
+  consecutiveFailures: number;
+  totalFailures: number;
+  totalSuccesses: number;
+  lastFailure: number;
+  lastSuccess: number;
   timeSinceLastFailure: number;
+  timeSinceLastSuccess: number;
 } {
   const breaker = circuitBreakers[service];
   return {
     isOpen: breaker.isOpen,
     failures: breaker.failures,
+    consecutiveFailures: breaker.consecutiveFailures,
+    totalFailures: breaker.totalFailures,
+    totalSuccesses: breaker.totalSuccesses,
     lastFailure: breaker.lastFailure,
-    timeSinceLastFailure: Date.now() - breaker.lastFailure
+    lastSuccess: breaker.lastSuccess,
+    timeSinceLastFailure: breaker.lastFailure ? Date.now() - breaker.lastFailure : -1,
+    timeSinceLastSuccess: breaker.lastSuccess ? Date.now() - breaker.lastSuccess : -1
   };
 }
 
@@ -265,7 +305,7 @@ export async function retryWithExponentialBackoff<T>(
         return await options.fallbackFn();
       } catch (fallbackError) {
         logger.error(`Fallback function failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
-        throw new Error(`Service ${service} is unavailable and fallback failed`);
+        throw new Error(`Service ${service} is unavailable due to multiple failures and fallback failed`);
       }
     }
     throw new Error(`Service ${service} is currently unavailable due to multiple failures`);
@@ -290,13 +330,20 @@ export async function retryWithExponentialBackoff<T>(
 
         // Execute the function
         const result = await fn();
+        
+        // Record success for circuit breaker
+        recordApiSuccess(service);
+        
         return result;
       } catch (error) {
+        // Format the error message
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        
         // Record failure for circuit breaker
         recordApiFailure(service);
         
         // Log the error
-        logger.error(`API call to ${service} failed:`, error instanceof Error ? error.message : String(error));
+        logger.error(`API call to ${service} failed: ${errorMessage}`);
 
         // Check if we've reached the max retries
         if (retries >= maxRetries) {
@@ -304,13 +351,44 @@ export async function retryWithExponentialBackoff<T>(
           throw error;
         }
 
-        // Check if the error is retryable
-        const statusCode = error instanceof Error && 'status' in error 
-          ? (error as any).status 
-          : error instanceof Response 
-            ? error.status 
-            : undefined;
-        const isRetryable = !statusCode || retryStatusCodes.includes(statusCode);
+        // Determine if the error is retryable
+        let statusCode: number | undefined;
+        
+        // Extract status code from various error types
+        if (error instanceof Error) {
+          if ('status' in error) {
+            statusCode = (error as any).status;
+          } else if ('statusCode' in error) {
+            statusCode = (error as any).statusCode;
+          } else if ('code' in error) {
+            // Try to convert error codes like 'ECONNREFUSED' to HTTP status
+            const code = (error as any).code;
+            if (code === 'ECONNREFUSED' || code === 'ETIMEDOUT' || code === 'ESOCKETTIMEDOUT') {
+              statusCode = 503; // Service Unavailable
+            } else if (code === 'ECONNRESET') {
+              statusCode = 500; // Internal Server Error
+            }
+          }
+        }
+        
+        // Also check for response property that might contain status
+        if (!statusCode && error instanceof Error && 'response' in error) {
+          const response = (error as any).response;
+          if (response && typeof response === 'object' && 'status' in response) {
+            statusCode = response.status;
+          }
+        }
+        
+        // Default to checking if error contains text that suggests it's retryable
+        const isTextRetryable = errorMessage.includes('rate limit') || 
+                                errorMessage.includes('timeout') || 
+                                errorMessage.includes('throttled') || 
+                                errorMessage.includes('capacity') ||
+                                errorMessage.includes('overloaded') ||
+                                errorMessage.includes('busy') ||
+                                errorMessage.includes('retry');
+        
+        const isRetryable = isTextRetryable || !statusCode || retryStatusCodes.includes(statusCode);
 
         if (!isRetryable) {
           logger.error(`Non-retryable error (status ${statusCode}) for ${service} API call`);

@@ -316,7 +316,8 @@ export async function analyzeAndOptimizeWithGPT4o(
       throw new Error('OpenAI client is not available');
     }
 
-    // Create a abort controller for timeout
+    // Create a abort controller for timeout - increasing timeout to 60 seconds
+    const API_TIMEOUT_MS = 60000; // 60 seconds timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort();
@@ -327,92 +328,128 @@ export async function analyzeAndOptimizeWithGPT4o(
     const apiCallStartTime = Date.now();
     logger.info('Making OpenAI API call for CV optimization (10% progress)...');
     
-    const response = await retryWithExponentialBackoff(
-      async () => {
-        const completion = await client.chat.completions.create({
-          model: 'gpt-4o',
-          messages: [
-            {
-              role: 'system',
-              content: `You are an expert CV optimization assistant. Your task is to analyze and optimize the CV content based on the job description provided.
-              
-              Return a JSON object with the following format:
+    try {
+      const response = await retryWithExponentialBackoff(
+        async () => {
+          logger.debug(`Sending request to OpenAI API with ${cvText.length} chars CV text and ${jobDescription.length} chars job description`);
+          
+          const completion = await client.chat.completions.create({
+            model: 'gpt-4o',
+            messages: [
               {
-                "optimizedContent": "The optimized CV content",
-                "matchScore": A number between 0 and 100 representing how well the CV matches the job description
+                role: 'system',
+                content: `You are an expert CV optimization assistant. Your task is to analyze and optimize the CV content based on the job description provided.
+                
+                Return a JSON object with the following format:
+                {
+                  "optimizedContent": "The optimized CV content",
+                  "matchScore": A number between 0 and 100 representing how well the CV matches the job description
+                }
+                
+                Focus on making the content more relevant to the job description, highlighting key skills and experiences, and improving clarity and readability.`
+              },
+              {
+                role: 'user',
+                content: `Here is my CV:\n\n${cvText}\n\nHere is the job description:\n\n${jobDescription || "Optimize this CV for general professional standards and clarity."}\n\nPlease optimize my CV for this job.`
               }
-              
-              Focus on making the content more relevant to the job description, highlighting key skills and experiences, and improving clarity and readability.`
-            },
-            {
-              role: 'user',
-              content: `Here is my CV:\n\n${cvText}\n\nHere is the job description:\n\n${jobDescription}\n\nPlease optimize my CV for this job.`
-            }
-          ],
-          temperature: 0.7,
-          response_format: { type: 'json_object' }
-        }, {
-          signal: controller.signal
-        });
-        
-        // Calculate API call duration
-        metrics.apiCallDuration = Date.now() - apiCallStartTime;
-        logger.info(`OpenAI API call completed in ${metrics.apiCallDuration}ms (50% progress)`);
-        
-        return completion;
-      },
-      { 
-        service: 'openai',
-        initialDelayMs: 1000,
-        maxRetries: 2,
-        priority: 1,
-        taskId: 'cv-optimization'
+            ],
+            temperature: 0.7,
+            response_format: { type: 'json_object' }
+          }, {
+            signal: controller.signal
+          });
+          
+          logger.debug('Received response from OpenAI API');
+          
+          // Calculate API call duration
+          metrics.apiCallDuration = Date.now() - apiCallStartTime;
+          logger.info(`OpenAI API call completed in ${metrics.apiCallDuration}ms (50% progress)`);
+          
+          return completion;
+        },
+        { 
+          service: 'openai',
+          initialDelayMs: 1000,
+          maxRetries: 2,
+          priority: 1,
+          taskId: 'cv-optimization'
+        }
+      );
+      
+      // Clear the timeout since we got a response
+      clearTimeout(timeoutId);
+      
+      // Parse the response
+      const parseStartTime = Date.now();
+      logger.info('Parsing optimization response (75% progress)...');
+      
+      const responseContent = response.choices[0]?.message?.content;
+      if (!responseContent) {
+        throw new Error('No content in response from OpenAI');
       }
-    );
-    
-    // Clear the timeout
-    clearTimeout(timeoutId);
-    
-    // Parse the response
-    const parseStartTime = Date.now();
-    logger.info('Parsing optimization response (75% progress)...');
-    
-    const responseContent = response.choices[0]?.message?.content;
-    if (!responseContent) {
-      throw new Error('No content in response from OpenAI');
+      
+      logger.debug(`Received raw content: ${responseContent.substring(0, 100)}...`);
+      
+      let jsonData;
+      try {
+        jsonData = JSON.parse(responseContent);
+        logger.debug('Successfully parsed JSON response');
+      } catch (parseError) {
+        logger.error(`Error parsing JSON response: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+        logger.debug(`Raw response content: ${responseContent}`);
+        throw new Error(`Failed to parse OpenAI response as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+      }
+      
+      // Calculate parsing duration
+      metrics.parsingDuration = Date.now() - parseStartTime;
+      logger.info(`Response parsing completed in ${metrics.parsingDuration}ms (90% progress)`);
+      
+      // Calculate total duration
+      metrics.totalDuration = Date.now() - metrics.startTime;
+      
+      // Validate the response contains expected fields
+      if (!jsonData.optimizedContent || typeof jsonData.matchScore !== 'number') {
+        logger.error(`Invalid response format from OpenAI. Missing required fields. Response: ${JSON.stringify(jsonData)}`);
+        throw new Error('Invalid response format from OpenAI. Missing required fields.');
+      }
+      
+      // Return the result with empty values for backward compatibility
+      const result = {
+        optimizedContent: jsonData.optimizedContent,
+        matchScore: jsonData.matchScore,
+        recommendations: [],
+        cvAnalysis: {
+          industry: '',
+          language: '',
+          sections: [],
+          skills: [],
+          strengths: [],
+          weaknesses: [],
+          missingKeywords: [],
+          formattingIssues: [],
+          structuralIssues: []
+        }
+      };
+      
+      // Log completion with performance metrics
+      logger.info(`CV optimization completed in ${metrics.totalDuration}ms (API: ${metrics.apiCallDuration}ms, Parsing: ${metrics.parsingDuration}ms) (100% progress)`);
+      
+      return result;
+    } catch (apiError) {
+      // Make sure to clear the timeout in case of error
+      clearTimeout(timeoutId);
+      
+      // Log detailed error information
+      logger.error(`API call error: ${apiError instanceof Error ? apiError.message : String(apiError)}`);
+      
+      if (apiError instanceof Error && apiError.name === 'AbortError') {
+        logger.error('API call was aborted due to timeout');
+        throw new Error(`OpenAI API call timed out after ${API_TIMEOUT_MS}ms`);
+      }
+      
+      // Re-throw the error to be handled by the outer catch block
+      throw apiError;
     }
-    
-    const jsonData = JSON.parse(responseContent);
-    
-    // Calculate parsing duration
-    metrics.parsingDuration = Date.now() - parseStartTime;
-    logger.info(`Response parsing completed in ${metrics.parsingDuration}ms (90% progress)`);
-    
-    // Calculate total duration
-    metrics.totalDuration = Date.now() - metrics.startTime;
-    
-    // Return the result with empty values for backward compatibility
-    const result = {
-      optimizedContent: jsonData.optimizedContent,
-      matchScore: jsonData.matchScore,
-      recommendations: [],
-      cvAnalysis: {
-        industry: '',
-        language: '',
-        sections: [],
-        skills: [],
-        strengths: [],
-        weaknesses: [],
-        missingKeywords: [],
-        formattingIssues: [],
-        structuralIssues: []
-      }
-    };
-    
-    // Log completion with performance metrics
-    logger.info(`CV optimization completed in ${metrics.totalDuration}ms (API: ${metrics.apiCallDuration}ms, Parsing: ${metrics.parsingDuration}ms) (100% progress)`);
-    
-    return result;
   } catch (error) {
     // Calculate duration until error
     const durationUntilError = Date.now() - metrics.startTime;
