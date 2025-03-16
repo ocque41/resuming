@@ -22,7 +22,8 @@ export async function runOptimizeStage(
   jobDescription: string,
   cvText: string,
   currentState: OptimizationState,
-  preserveSections: Record<string, boolean> = {}
+  preserveSections: Record<string, boolean> = {},
+  options: { aiService?: 'auto' | 'openai' | 'mistral' } = {}
 ): Promise<OptimizationState> {
   try {
     // Check if we have completed the analysis stage
@@ -35,7 +36,7 @@ export async function runOptimizeStage(
     let state = updateStage(currentState, OptimizationStage.OPTIMIZE_STARTED);
     
     // Initialize the MistralRAGService if needed for analysis results
-    const ragService = new MistralRAGService();
+    const ragService = new MistralRAGService(options.aiService || 'auto');
     await ragService.processCVDocument(cvText);
     
     // Run the optimization steps in sequence

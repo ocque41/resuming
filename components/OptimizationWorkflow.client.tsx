@@ -226,7 +226,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
     });
   };
 
-  const handleOptimizeCV = async (cvId: string, cvName: string, jobDesc: string) => {
+  const handleOptimizeCV = async (cvId: string, cvName: string, jobDesc: string, aiService: 'auto' | 'openai' | 'mistral') => {
     setSelectedCVId(cvId);
     setSelectedCVName(cvName);
     setJobDescription(jobDesc);
@@ -247,7 +247,8 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
           cvId,
           jobDescription: jobDesc,
           includeKeywords: true,
-          documentFormat: 'markdown'
+          documentFormat: 'markdown',
+          aiService
         }),
       });
       
@@ -349,6 +350,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
   const GeneralOptimizationCard = () => {
     const [localJobDescription, setLocalJobDescription] = useState<string>("");
     const [selectedCV, setSelectedCV] = useState<string | null>(null);
+    const [selectedAIService, setSelectedAIService] = useState<string>("auto");
     
     const handleCVSelect = (value: string) => {
       setSelectedCV(value);
@@ -360,7 +362,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
     const handleOptimize = () => {
       if (selectedCV) {
         const [name, id] = selectedCV.split('|');
-        handleOptimizeCV(id, name, localJobDescription);
+        handleOptimizeCV(id, name, localJobDescription, selectedAIService as 'auto' | 'openai' | 'mistral');
       }
     };
     
@@ -408,6 +410,29 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
             />
           </div>
           
+          <div className="space-y-2">
+            <Label htmlFor="ai-service">AI Service</Label>
+            <Select 
+              value={selectedAIService} 
+              onValueChange={setSelectedAIService}
+              disabled={isProcessing}
+            >
+              <SelectTrigger id="ai-service">
+                <SelectValue placeholder="Select AI Service" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Auto (Use both services)</SelectItem>
+                <SelectItem value="openai">OpenAI Only</SelectItem>
+                <SelectItem value="mistral">Mistral Only</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-gray-500">
+              {selectedAIService === 'auto' && 'Uses both AI services for optimal results.'}
+              {selectedAIService === 'openai' && 'Uses only OpenAI. More reliable but may be slower.'}
+              {selectedAIService === 'mistral' && 'Uses only Mistral. Faster but may have occasional errors.'}
+            </p>
+          </div>
+          
           <Button 
             onClick={handleOptimize} 
             disabled={!selectedCV || isProcessing}
@@ -424,6 +449,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
   const SpecificJobOptimizationCard = () => {
     const [localJobDescription, setLocalJobDescription] = useState<string>("");
     const [selectedCV, setSelectedCV] = useState<string | null>(null);
+    const [selectedAIService, setSelectedAIService] = useState<string>("auto");
     
     const handleCVSelect = (value: string) => {
       setSelectedCV(value);
@@ -435,7 +461,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
     const handleOptimize = () => {
       if (selectedCV && localJobDescription) {
         const [name, id] = selectedCV.split('|');
-        handleOptimizeCV(id, name, localJobDescription);
+        handleOptimizeCV(id, name, localJobDescription, selectedAIService as 'auto' | 'openai' | 'mistral');
       }
     };
     
@@ -481,6 +507,29 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
               className="min-h-[150px]"
               disabled={isProcessing}
             />
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="ai-service-specific">AI Service</Label>
+            <Select 
+              value={selectedAIService} 
+              onValueChange={setSelectedAIService}
+              disabled={isProcessing}
+            >
+              <SelectTrigger id="ai-service-specific">
+                <SelectValue placeholder="Select AI Service" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Auto (Use both services)</SelectItem>
+                <SelectItem value="openai">OpenAI Only</SelectItem>
+                <SelectItem value="mistral">Mistral Only</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-gray-500">
+              {selectedAIService === 'auto' && 'Uses both AI services for optimal results.'}
+              {selectedAIService === 'openai' && 'Uses only OpenAI. More reliable but may be slower.'}
+              {selectedAIService === 'mistral' && 'Uses only Mistral. Faster but may have occasional errors.'}
+            </p>
           </div>
           
           <Button 

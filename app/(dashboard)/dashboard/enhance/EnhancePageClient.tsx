@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Paperclip, Send, ArrowLeft, Loader2 } from 'lucide-react';
+import { Paperclip, Send, ArrowLeft, Loader2, Globe, FileText, Link as LinkIcon, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 
 interface ChatMessage {
@@ -224,6 +224,7 @@ export default function EnhancePageClient({ documentsData: initialDocumentsData 
   // Add state for chat loading and errors
   const [isMessageSending, setIsMessageSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [conversationStarted, setConversationStarted] = useState(false);
   
   // Update the handleSendRequest function to include loading states and error handling
   const handleSendRequest = async () => {
@@ -249,34 +250,17 @@ export default function EnhancePageClient({ documentsData: initialDocumentsData 
     const query = searchQuery;
     setSearchQuery('');
     
+    // Set conversation started to true
+    setConversationStarted(true);
+    
     // Set loading state
     setIsMessageSending(true);
     
     try {
-      // In a real implementation, this would be an API call to your backend
-      // For now, we'll simulate a delay and then add a mock response
+      // Simulate a delay for the response
       await new Promise(resolve => setTimeout(resolve, 1500));
       
-      // This is where you would call your AI service
-      // const response = await fetch('/api/chat', {
-      //   method: 'POST',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //   },
-      //   body: JSON.stringify({
-      //     message: query,
-      //     documentId: selectedDocument?.id || null,
-      //   }),
-      // });
-      // 
-      // if (!response.ok) {
-      //   throw new Error(`Error: ${response.status}`);
-      // }
-      // 
-      // const data = await response.json();
-      // const assistantMessage = data.message;
-      
-      // Simulate a successful response
+      // Simulate a response
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         content: selectedDocument 
@@ -289,7 +273,7 @@ export default function EnhancePageClient({ documentsData: initialDocumentsData 
       setChatMessages(prevMessages => [...prevMessages, assistantMessage]);
     } catch (error) {
       console.error("Error sending message:", error);
-      setChatError("Failed to get a response. Please try again.");
+      setChatError("Failed to send message. Please try again.");
       
       // Add an error message to the chat
       const errorMessage: ChatMessage = {
@@ -305,147 +289,216 @@ export default function EnhancePageClient({ documentsData: initialDocumentsData 
     }
   };
 
+  // Example suggested queries
+  const suggestedQueries = [
+    { icon: <Globe className="w-4 h-4" />, text: "Why is Nvidia growing rapidly?" },
+    { icon: <Globe className="w-4 h-4" />, text: "What is OpenAI o1?" },
+    { icon: <FileText className="w-4 h-4" />, text: "Tell me about a video that explains Cursor" },
+    { icon: <LinkIcon className="w-4 h-4" />, text: "Summary: https://arxiv.org/pdf/2407.16833" },
+  ];
+
+  const chatInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  
+  // Update the useEffect to use the correct ref based on conversation state
+  useEffect(() => {
+    if (conversationStarted) {
+      chatInputRef.current?.focus();
+    } else {
+      searchInputRef.current?.focus();
+    }
+  }, [conversationStarted]);
+
   return (
-    <div className="flex flex-col h-screen bg-[#050505] text-white">
-      {/* Fixed Header with Back Button */}
+    <div className="flex flex-col items-center justify-start min-h-screen bg-[#050505] text-white p-4 pt-14 sm:pt-20">
+      {/* Back Button */}
       <motion.div 
-        className="fixed top-0 left-0 right-0 z-10 bg-[#050505] border-b border-[#333333] p-4 flex items-center"
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
+        className="fixed top-4 left-4 z-10"
+        initial={{ opacity: 0, x: -10 }}
+        animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.3 }}
       >
         <Link href="/dashboard" className="flex items-center text-white hover:text-[#B4916C] transition-colors">
-          <ArrowLeft className="w-5 h-5 mr-2" />
-          <span className="font-borna text-sm">Back to Dashboard</span>
+          <ArrowLeft className="w-5 h-5 mr-1" />
+          <span className="font-borna text-sm hidden sm:inline">Back</span>
         </Link>
-        
-        {selectedDocument && (
-          <div className="ml-auto flex items-center">
-            <span className="text-sm font-borna text-gray-400 mr-2">Editing:</span>
-            <span className="text-sm font-borna text-white truncate max-w-[150px]">{selectedDocument.name}</span>
-          </div>
-        )}
       </motion.div>
       
-      {/* Main Content Area with Proper Padding for Fixed Header */}
-      <div className="flex-1 overflow-hidden flex flex-col pt-16 pb-20">
-        {/* Title Section */}
+      {!conversationStarted ? (
         <motion.div 
-          className="text-center py-4 sm:py-6"
-          initial={{ opacity: 0, y: -20 }}
+          className="w-full max-w-3xl mx-auto flex flex-col items-center"
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
+          transition={{ duration: 0.5 }}
         >
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold font-safiro text-white">
-            {selectedDocument ? `Enhancing: ${selectedDocument.name}` : "Document Assistant"}
+          {/* Logo */}
+          <div className="w-16 h-16 bg-[#1A1A1A] rounded-full flex items-center justify-center mb-6">
+            <div className="flex">
+              <div className="w-2 h-2 bg-white rounded-full mr-1"></div>
+              <div className="w-2 h-2 bg-white rounded-full"></div>
+            </div>
+          </div>
+          
+          {/* Title */}
+          <h1 className="text-4xl sm:text-5xl font-bold mb-16 font-safiro text-white text-center">
+            Discover Smarter Search
           </h1>
-          <p className="text-gray-400 font-borna text-sm sm:text-base mt-2">
-            {selectedDocument 
-              ? "Ask questions or request edits for your document" 
-              : "Upload a document or start a conversation"}
-          </p>
-        </motion.div>
-        
-        {/* Chat Messages - Scrollable Area */}
-        <motion.div 
-          className="flex-1 overflow-y-auto px-4 pb-4"
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-        >
-          {chatMessages.length > 0 ? (
-            <div className="space-y-4">
-              {chatMessages.map((message) => (
-                <motion.div
-                  key={message.id}
-                  className={`p-3 sm:p-4 rounded-lg border ${
-                    message.role === "user" 
-                      ? "bg-[#1A1A1A] border-[#333333] ml-auto mr-0 max-w-[80%]" 
-                      : "bg-[#2A2A2A] border-[#444444] ml-0 mr-auto max-w-[80%]"
-                  }`}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <div className="flex justify-between items-start mb-1">
-                    <h3 className="font-borna text-white text-sm">
-                      {message.role === "user" ? "You" : "Assistant"}
-                    </h3>
-                    <span className="text-xs text-gray-500 font-borna ml-2">
-                      {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-200 font-borna whitespace-pre-wrap">
-                    {message.content}
-                  </p>
-                </motion.div>
-              ))}
-              <div ref={chatEndRef} />
-            </div>
-          ) : (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-center p-4 text-gray-400 font-borna">
-                No messages yet. Start a conversation!
-              </div>
-            </div>
-          )}
-        </motion.div>
-      </div>
-      
-      {/* Add error message display in the chat area */}
-      {chatError && (
-        <div className="bg-red-900/20 border border-red-800 text-red-200 p-2 rounded-md text-sm font-borna mb-4 mx-auto">
-          {chatError}
-          <button 
-            onClick={() => setChatError(null)}
-            className="ml-2 underline text-red-300 hover:text-red-100"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
-      
-      {/* Fixed Input Area at Bottom */}
-      <motion.div 
-        className="fixed bottom-0 left-0 right-0 bg-[#050505] border-t border-[#333333] p-4"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-      >
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-[#1A1A1A] rounded-lg border border-[#333333] p-2 sm:p-3">
-            <div className="flex items-end">
-              <div className="flex-1">
-                <textarea
-                  placeholder={placeholders[placeholderIndex]}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                      e.preventDefault();
-                      handleSendRequest();
-                    }
-                  }}
-                  className="bg-transparent text-white text-sm sm:text-base p-2 outline-none w-full min-h-[40px] max-h-[120px] resize-none font-borna"
-                  rows={1}
-                />
-              </div>
-              
-              <div className="flex space-x-2 ml-2">
-                {/* Document Selection Button */}
+          
+          {/* Search Input */}
+          <div className="w-full relative mb-8">
+            <div className="relative flex items-center w-full">
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder="Ask a question..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSendRequest();
+                  }
+                }}
+                className="w-full bg-[#1A1A1A] border border-[#333333] rounded-lg py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#B4916C] font-borna"
+              />
+              <div className="absolute right-2 flex space-x-2">
                 <div className="relative">
-                  <button
+                  <button 
+                    className="bg-[#2A2A2A] hover:bg-[#3A3A3A] p-2 rounded-md transition-colors flex items-center"
                     onClick={(e) => {
                       e.stopPropagation();
                       setIsDocumentsDropdownOpen(!isDocumentsDropdownOpen);
                     }}
-                    className="bg-[#2A2A2A] hover:bg-[#3A3A3A] p-2 rounded-full border border-[#444444] transition-colors"
-                    title={selectedDocument ? selectedDocument.name : "Select document"}
                   >
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" fill="currentColor"/>
-                      <path d="M14 17H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" fill="currentColor"/>
-                    </svg>
+                    <span className="mr-1 text-sm hidden sm:inline font-borna">Speed</span>
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+                </div>
+                <button 
+                  className="bg-[#2A2A2A] hover:bg-[#3A3A3A] p-2 rounded-md text-white font-borna text-sm flex items-center"
+                  onClick={handleSendRequest}
+                >
+                  <Globe className="w-4 h-4 mr-1" />
+                  <span>Search</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          {/* Suggested Queries */}
+          <div className="w-full">
+            {suggestedQueries.map((query, index) => (
+              <motion.div
+                key={index}
+                className="flex items-center mb-4 text-gray-300 hover:text-white cursor-pointer"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.1 * index }}
+                onClick={() => {
+                  setSearchQuery(query.text);
+                  setTimeout(() => {
+                    handleSendRequest();
+                  }, 100);
+                }}
+              >
+                <div className="mr-2 text-gray-500">→</div>
+                <div className="mr-2">{query.icon}</div>
+                <span className="font-borna">{query.text}</span>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      ) : (
+        <motion.div 
+          className="w-full max-w-3xl mx-auto flex flex-col"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          {/* Chat Messages */}
+          <div className="flex-1 overflow-y-auto mb-6">
+            {chatMessages.map((message, index) => (
+              <motion.div
+                key={message.id}
+                className={`mb-6 ${message.role === "user" ? "ml-auto" : "mr-auto"}`}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: index * 0.1 }}
+              >
+                <div className={`${message.role === "user" ? "ml-auto" : "mr-auto"} max-w-[85%] sm:max-w-[75%]`}>
+                  <div className={`p-3 sm:p-4 rounded-lg ${
+                    message.role === "user" 
+                      ? "bg-[#1A1A1A] text-white" 
+                      : "bg-[#2A2A2A] text-white"
+                  }`}>
+                    <p className="whitespace-pre-wrap font-borna text-sm sm:text-base">{message.content}</p>
+                  </div>
+                  <div className={`text-xs text-gray-500 mt-1 font-borna ${
+                    message.role === "user" ? "text-right" : "text-left"
+                  }`}>
+                    {message.role === "user" ? "You" : "Assistant"} • {
+                      new Date(message.timestamp).toLocaleTimeString([], { 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                      })
+                    }
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+            
+            {/* Loading indicator */}
+            {isMessageSending && (
+              <motion.div
+                className="mb-6"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <div className="flex justify-start">
+                  <div className="max-w-[85%] sm:max-w-[75%]">
+                    <div className="p-3 sm:p-4 rounded-lg bg-[#2A2A2A] text-white">
+                      <div className="flex items-center space-x-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-[#B4916C]" />
+                        <p className="text-sm text-gray-300 font-borna">Thinking...</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+            
+            <div ref={chatEndRef} />
+          </div>
+          
+          {/* Input Area */}
+          <div className="sticky bottom-0 bg-[#050505] pt-4">
+            <div className="relative flex items-center w-full">
+              <input
+                ref={chatInputRef}
+                type="text"
+                placeholder="Ask a follow-up question..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSendRequest();
+                  }
+                }}
+                className="w-full bg-[#1A1A1A] border border-[#333333] rounded-lg py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#B4916C] font-borna"
+              />
+              
+              <div className="absolute right-2 flex space-x-2">
+                {/* Document Selection Button */}
+                <div className="relative">
+                  <button 
+                    className="bg-[#2A2A2A] hover:bg-[#3A3A3A] p-2 rounded-md transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsDocumentsDropdownOpen(!isDocumentsDropdownOpen);
+                    }}
+                    title="Select document"
+                  >
+                    <Paperclip className="w-5 h-5" />
                   </button>
                   
                   {isDocumentsDropdownOpen && (
@@ -456,80 +509,60 @@ export default function EnhancePageClient({ documentsData: initialDocumentsData 
                       <div className="p-2 border-b border-[#333333] flex justify-between items-center">
                         <h3 className="font-borna text-sm text-white">Your Documents</h3>
                         <button 
-                          onClick={fetchDocuments} 
+                          onClick={() => fileInputRef.current?.click()}
                           className="text-xs text-[#B4916C] hover:text-[#A3805B] transition-colors"
-                          disabled={isLoadingDocuments}
                         >
-                          Refresh
+                          Upload
                         </button>
                       </div>
-                      
-                      {documentError && (
-                        <div className="p-3 text-red-400 text-xs font-borna">
-                          {documentError}
-                          <button 
-                            onClick={fetchDocuments}
-                            className="ml-2 underline"
-                          >
-                            Retry
-                          </button>
-                        </div>
-                      )}
-                      
-                      {isLoadingDocuments ? (
-                        <div className="p-4 flex justify-center">
-                          <Loader2 className="w-5 h-5 animate-spin text-[#B4916C]" />
-                        </div>
-                      ) : (
-                        <ul className="max-h-[200px] overflow-y-auto">
-                          <li 
-                            className="px-4 py-2 hover:bg-[#2A2A2A] cursor-pointer text-gray-400 border-b border-[#333333] font-borna"
-                            onClick={() => {
-                              setSelectedDocument(null);
-                              setIsDocumentsDropdownOpen(false);
-                            }}
-                          >
-                            No document (general chat)
-                          </li>
-                          {documentsData.length > 0 ? (
-                            documentsData.map((doc) => (
-                              <li 
-                                key={doc.id}
-                                className={`px-4 py-2 hover:bg-[#2A2A2A] cursor-pointer font-borna ${selectedDocument?.id === doc.id ? 'bg-[#2A2A2A]' : ''}`}
-                                onClick={() => {
-                                  setSelectedDocument(doc);
-                                  setIsDocumentsDropdownOpen(false);
-                                  
-                                  // Add a system message about the document selection
-                                  const systemMessage: ChatMessage = {
-                                    id: Date.now().toString(),
-                                    content: `Now working with "${doc.name}". You can ask questions or request edits for this document.`,
-                                    role: "assistant",
-                                    timestamp: new Date().toISOString()
-                                  };
-                                  
-                                  setChatMessages(prev => [...prev, systemMessage]);
-                                }}
-                              >
-                                <div className="flex justify-between items-center">
-                                  <span className="truncate max-w-[150px]">{doc.name}</span>
-                                  <span className="text-xs text-gray-500">{new Date(doc.createdAt).toLocaleDateString()}</span>
-                                </div>
-                                <div className="text-xs text-gray-500">Type: {doc.type}</div>
-                              </li>
-                            ))
-                          ) : (
-                            <li className="px-4 py-3 text-gray-500 font-borna text-sm">
-                              No documents found. Upload one to get started.
+                      <ul className="max-h-[200px] overflow-y-auto">
+                        <li 
+                          className="px-4 py-2 hover:bg-[#2A2A2A] cursor-pointer text-gray-400 border-b border-[#333333] font-borna"
+                          onClick={() => {
+                            setSelectedDocument(null);
+                            setIsDocumentsDropdownOpen(false);
+                          }}
+                        >
+                          No document (general chat)
+                        </li>
+                        {documentsData.length > 0 ? (
+                          documentsData.map((doc) => (
+                            <li 
+                              key={doc.id}
+                              className={`px-4 py-2 hover:bg-[#2A2A2A] cursor-pointer font-borna ${selectedDocument?.id === doc.id ? 'bg-[#2A2A2A]' : ''}`}
+                              onClick={() => {
+                                setSelectedDocument(doc);
+                                setIsDocumentsDropdownOpen(false);
+                                
+                                // Add a system message about the document selection
+                                const systemMessage: ChatMessage = {
+                                  id: Date.now().toString(),
+                                  content: `Now working with "${doc.name}". You can ask questions or request edits for this document.`,
+                                  role: "assistant",
+                                  timestamp: new Date().toISOString()
+                                };
+                                
+                                setChatMessages(prev => [...prev, systemMessage]);
+                              }}
+                            >
+                              <div className="flex justify-between items-center">
+                                <span className="truncate max-w-[150px]">{doc.name}</span>
+                                <span className="text-xs text-gray-500">{new Date(doc.createdAt).toLocaleDateString()}</span>
+                              </div>
+                              <div className="text-xs text-gray-500">Type: {doc.type}</div>
                             </li>
-                          )}
-                        </ul>
-                      )}
+                          ))
+                        ) : (
+                          <li className="px-4 py-3 text-gray-500 font-borna text-sm">
+                            No documents found. Upload one to get started.
+                          </li>
+                        )}
+                      </ul>
                     </div>
                   )}
                 </div>
                 
-                {/* Upload Button */}
+                {/* Upload Button - Hidden but accessible via the dropdown */}
                 <input 
                   type="file" 
                   ref={fileInputRef}
@@ -537,24 +570,16 @@ export default function EnhancePageClient({ documentsData: initialDocumentsData 
                   className="hidden"
                   accept=".doc,.docx,.pdf,.txt"
                 />
-                <button 
-                  className="bg-[#2A2A2A] hover:bg-[#3A3A3A] p-2 rounded-full border border-[#444444] transition-colors"
-                  onClick={() => fileInputRef.current?.click()}
-                  title="Upload a document"
-                >
-                  <Paperclip className="w-5 h-5" />
-                </button>
                 
-                {/* Update the Send button to show loading state */}
+                {/* Send Button */}
                 <button 
-                  className={`p-2 rounded-full transition-colors flex items-center justify-center ${
+                  className={`p-2 rounded-md transition-colors ${
                     searchQuery.trim() && !isMessageSending
-                      ? "bg-[#B4916C] hover:bg-[#A3805B]" 
+                      ? "bg-[#B4916C] hover:bg-[#A3805B] text-white" 
                       : "bg-[#2A2A2A] text-gray-500 cursor-not-allowed"
                   }`}
                   onClick={handleSendRequest}
                   disabled={!searchQuery.trim() || isMessageSending}
-                  title="Send message"
                 >
                   {isMessageSending ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -564,21 +589,18 @@ export default function EnhancePageClient({ documentsData: initialDocumentsData 
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      </motion.div>
-      
-      {/* Add a loading indicator for the last message if it's still being processed */}
-      {isMessageSending && (
-        <motion.div
-          className="p-3 sm:p-4 rounded-lg border bg-[#2A2A2A] border-[#444444] ml-0 mr-auto max-w-[80%]"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <div className="flex items-center space-x-2">
-            <Loader2 className="w-4 h-4 animate-spin text-[#B4916C]" />
-            <p className="text-sm text-gray-300 font-borna">Thinking...</p>
+            
+            {chatError && (
+              <div className="mt-2 text-red-400 text-sm font-borna">
+                {chatError}
+                <button 
+                  onClick={() => setChatError(null)}
+                  className="ml-2 underline"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
           </div>
         </motion.div>
       )}

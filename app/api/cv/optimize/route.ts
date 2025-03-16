@@ -95,7 +95,8 @@ export async function POST(req: NextRequest) {
       preserveSections,
       useSimplifiedProcess,
       maxRetries,
-      documentFormat
+      documentFormat,
+      aiService
     } = body;
 
     // Validate input
@@ -106,6 +107,11 @@ export async function POST(req: NextRequest) {
 
     // Log the request
     logger.info(`Optimize request received for CV ${cvId} from user ${user.id}`);
+    
+    // Log AI service preference if specified
+    if (aiService) {
+      logger.info(`Using ${aiService} AI service for CV ${cvId}`);
+    }
     
     // Clear any existing partial results
     clearPartialResults(user.id.toString(), cvId.toString(), jobDescription);
@@ -177,7 +183,8 @@ export async function POST(req: NextRequest) {
         preserveSections,
         documentFormat: documentFormat || 'markdown',
         maxRetries: maxRetries || 2,
-        useSimplifiedProcess: shouldUseSimplifiedProcess
+        useSimplifiedProcess: shouldUseSimplifiedProcess,
+        aiService: aiService as 'auto' | 'openai' | 'mistral' || 'auto'
       }
     );
     

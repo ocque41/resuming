@@ -15,7 +15,8 @@ export async function runAnalyzeStage(
   userId: string,
   cvId: string,
   jobDescription: string,
-  cvText: string
+  cvText: string,
+  options: { aiService?: 'auto' | 'openai' | 'mistral' } = {}
 ): Promise<OptimizationState> {
   logger.info(`Starting analyze stage for CV ${cvId}`);
   
@@ -31,8 +32,8 @@ export async function runAnalyzeStage(
     lastUpdated: Date.now()
   };
   
-  // Initialize RAG service
-  const ragService = new MistralRAGService();
+  // Initialize RAG service with preferred AI service
+  const ragService = new MistralRAGService(options.aiService || 'auto');
   
   // Update state to indicate analysis has started
   state = updateStage(state, OptimizationStage.ANALYZE_STARTED);

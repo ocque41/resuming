@@ -18,12 +18,13 @@ export async function runGenerateStage(
   jobDescription: string,
   cvText: string,
   currentState: OptimizationState,
-  documentFormat: string = 'markdown'
+  documentFormat: string = 'markdown',
+  options: { aiService?: 'auto' | 'openai' | 'mistral' } = {}
 ): Promise<OptimizationState> {
   logger.info(`Starting generate stage for CV ${cvId}`);
   
-  // Initialize RAG service
-  const ragService = new MistralRAGService();
+  // Initialize RAG service with preferred AI service
+  const ragService = new MistralRAGService(options.aiService || 'auto');
   
   // Update state to indicate generation has started
   let state = updateStage(currentState, OptimizationStage.GENERATE_STARTED);

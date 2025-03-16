@@ -142,14 +142,20 @@ export class MistralRAGService {
   /**
    * Initialize the MistralRAG service
    */
-  constructor() {
+  constructor(preferredService: 'auto' | 'openai' | 'mistral' = 'auto') {
     try {
-      // Try to initialize Mistral client if API key is available
+      // Try to initialize Mistral client if API key is available and not explicitly using OpenAI
       const mistralApiKey = process.env.MISTRAL_API_KEY;
-      if (mistralApiKey) {
+      
+      // If OpenAI is explicitly preferred, don't even try Mistral
+      if (preferredService === 'openai') {
+        logger.info('OpenAI service explicitly requested, skipping Mistral initialization');
+        this.useMistral = false;
+      } else if (mistralApiKey) {
         try {
           this.mistralClient = new Mistral(mistralApiKey);
-          this.useMistral = true;
+          // Only use Mistral if it's explicitly preferred or auto
+          this.useMistral = preferredService === 'mistral' || preferredService === 'auto';
           logger.info('Successfully initialized Mistral client');
         } catch (mistralError) {
           logger.error(`Failed to initialize Mistral client: ${mistralError instanceof Error ? mistralError.message : String(mistralError)}`);
@@ -172,7 +178,7 @@ export class MistralRAGService {
       // Initialize embedding cache
       this.embeddingCache = {};
       
-      logger.info('MistralRAG service initialized successfully');
+      logger.info(`MistralRAG service initialized successfully with ${this.useMistral ? 'Mistral' : 'OpenAI'} as primary service`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`Error initializing MistralRAG service: ${errorMessage}`);
