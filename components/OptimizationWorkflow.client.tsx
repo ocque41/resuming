@@ -47,6 +47,8 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
   // Lighter polling mechanism with backoff
   const [statusPollingInterval, setStatusPollingInterval] = useState<number>(1000);
   const [statusPollingEnabled, setStatusPollingEnabled] = useState<boolean>(false);
+  const [statusCheckErrorCount, setStatusCheckErrorCount] = useState<number>(0);
+  const [startTime, setStartTime] = useState<number>(Date.now());
   
   // In the component state, add a new state variable to track if processing is taking too long
   const [processingTooLong, setProcessingTooLong] = useState<boolean>(false);
@@ -84,7 +86,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
     let pollingTimeout: NodeJS.Timeout | null = null;
     
     const checkStatus = async () => {
-      if (!selectedCVId || !isProcessing) return;
+      if (!selectedCVId || !jobDescription) return;
       
       try {
         const response = await fetch('/api/cv/optimize/partial-results', {
@@ -94,70 +96,155 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
           },
           body: JSON.stringify({
             cvId: selectedCVId,
-            jobDescription
+            jobDescription: jobDescription
           }),
+          // Set a reasonable timeout for status checks
+          signal: AbortSignal.timeout(5000)
         });
         
         if (!response.ok) {
-          throw new Error(`Error ${response.status}: ${response.statusText}`);
+          // If we get a 404, it means no results yet - not an error
+          if (response.status === 404) {
+            return;
+          }
+          
+          // For other errors, log but don't display to user unless it persists
+          console.error(`Error checking status: ${response.status} ${response.statusText}`);
+          
+          // Increment error count but continue polling
+          setStatusCheckErrorCount(prev => prev + 1);
+          
+          // Only show error to user if we've had multiple consecutive errors
+          if (statusCheckErrorCount > 3) {
+            setWarning(`Warning: Having trouble checking optimization status. The process may still be running.`);
+          }
+          
+          return;
         }
+        
+        // Reset error count on successful response
+        setStatusCheckErrorCount(0);
         
         const data = await response.json();
         
         if (data.success) {
+          // Update progress
           setProcessingProgress(data.progress || 0);
           
-          // Update optimization state if available
+          // If we have an optimization state, update it
           if (data.optimizationState) {
             setOptimizationState(data.optimizationState);
           }
           
-          // Update status message based on progress
-          if (data.progress < 30) {
-            setProcessingStatus("Analyzing CV content...");
-          } else if (data.progress < 70) {
-            setProcessingStatus("Optimizing CV content...");
-          } else if (data.progress < 100) {
-            setProcessingStatus("Generating optimized document...");
-          } else {
-            setProcessingStatus("Optimization complete!");
-            setIsProcessing(false);
-            setOptimizedContent(data.partialResults?.optimizedContent || '');
-            setMatchScore(data.partialResults?.matchScore || 0);
-            setRecommendations(data.partialResults?.recommendations || []);
-            
-            // Show success message
-            showToast({
-              title: "Optimization Complete",
-              description: "Your CV has been successfully optimized!",
-              duration: 5000,
-            });
-            
-            // Stop polling
-            return;
-          }
-          
-          // Check for errors but with partial results
-          if (data.partialResults?.error) {
-            // If we have optimized content, show a warning instead of an error
+          // If we have partial results, update the UI
+          if (data.partialResults) {
+            // Update content if available
             if (data.partialResults.optimizedContent) {
-              setWarning(`Warning: ${data.partialResults.error}`);
               setOptimizedContent(data.partialResults.optimizedContent);
-              setMatchScore(data.partialResults.matchScore || 0);
-              setRecommendations(data.partialResults.recommendations || []);
-            } else {
-              setError(`Error: ${data.partialResults.error}`);
+            }
+            
+            // Update match score if available
+            if (data.partialResults.matchScore !== undefined) {
+              setMatchScore(data.partialResults.matchScore);
+            }
+            
+            // Update recommendations if available
+            if (data.partialResults.recommendations) {
+              setRecommendations(data.partialResults.recommendations);
+            }
+            
+            // Check for errors in partial results
+            if (data.partialResults.error) {
+              // If we have partial results with content but also an error,
+              // show as a warning instead of an error so the user can still use the results
+              if (data.partialResults.optimizedContent) {
+                setWarning(`Warning: ${data.partialResults.error}`);
+              } else {
+                setError(`Error: ${data.partialResults.error}`);
+                setIsProcessing(false);
+                setStatusPollingEnabled(false);
+              }
+            }
+            
+            // If progress is 100%, optimization is complete
+            if (data.progress >= 100) {
               setIsProcessing(false);
-              return;
+              setStatusPollingEnabled(false);
+              setProcessingStatus("Optimization complete!");
+              
+              // Show success message
+              showToast({
+                title: "Optimization Complete",
+                description: "Your CV has been successfully optimized!",
+                duration: 5000,
+              });
+            } else {
+              // Update status message based on progress
+              if (data.progress < 30) {
+                setProcessingStatus("Analyzing your CV...");
+              } else if (data.progress < 60) {
+                setProcessingStatus("Optimizing content...");
+              } else if (data.progress < 90) {
+                setProcessingStatus("Finalizing optimization...");
+              } else {
+                setProcessingStatus("Almost done...");
+              }
+              
+              // Adjust polling interval based on progress
+              // Slower polling at the beginning, faster as we approach completion
+              if (data.progress < 20) {
+                setStatusPollingInterval(3000); // 3 seconds
+              } else if (data.progress < 80) {
+                setStatusPollingInterval(2000); // 2 seconds
+              } else {
+                setStatusPollingInterval(1000); // 1 second
+              }
             }
           }
-        } else {
-          throw new Error(data.error || 'Unknown error');
+        } else if (data.error) {
+          console.error('Error in partial results:', data.error);
+          
+          // Only set error if we don't have any partial results
+          if (!optimizedContent) {
+            setError(`Error: ${data.error}`);
+            setIsProcessing(false);
+            setStatusPollingEnabled(false);
+          } else {
+            // If we have partial results, show as warning instead
+            setWarning(`Warning: ${data.error}`);
+            
+            // If we've been polling for a while with partial results, consider it done
+            if (Date.now() - startTime > 60000) { // 1 minute
+              setIsProcessing(false);
+              setStatusPollingEnabled(false);
+              setProcessingStatus("Optimization partially complete");
+            }
+          }
         }
       } catch (error) {
-        console.error('Error checking status:', error);
-        setError(`Error checking optimization status: ${error instanceof Error ? error.message : String(error)}`);
-        // Don't stop processing on status check errors, just try again
+        console.error('Error checking optimization status:', error);
+        
+        // Increment error count
+        setStatusCheckErrorCount(prev => prev + 1);
+        
+        // Only show error to user if we've had multiple consecutive errors
+        if (statusCheckErrorCount > 3) {
+          // If we already have partial results, show as warning instead of error
+          if (optimizedContent) {
+            setWarning(`Warning: Unable to check for further updates. Using available results.`);
+            
+            // If we've been polling for a while with partial results, consider it done
+            if (Date.now() - startTime > 60000) { // 1 minute
+              setIsProcessing(false);
+              setStatusPollingEnabled(false);
+              setProcessingStatus("Optimization partially complete");
+            }
+          } else {
+            setError(`Error checking status: ${error instanceof Error ? error.message : String(error)}`);
+            setIsProcessing(false);
+            setStatusPollingEnabled(false);
+          }
+        }
       }
     };
     
@@ -215,9 +302,11 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
     setProcessingStatus("Starting optimization process...");
     setProcessingProgress(0);
     setOptimizationState(null);
+    setStatusCheckErrorCount(0);
+    setStartTime(Date.now());
     
     try {
-      // Start the optimization process
+      // Start the optimization process but don't wait for it to complete
       const response = await fetch('/api/cv/optimize', {
         method: 'POST',
         headers: {
@@ -229,6 +318,8 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
           includeKeywords: true,
           documentFormat: 'markdown'
         }),
+        // Set a short timeout just for the initial request
+        signal: AbortSignal.timeout(10000) // 10 seconds timeout for initial request
       });
       
       if (!response.ok) {
@@ -242,64 +333,15 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
         }
       }
       
-      // Try to parse the response as JSON
-      let data;
-      try {
-        data = await response.json();
-      } catch (jsonError) {
-        throw new Error(`Failed to parse response: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
-      }
+      // Start polling for results immediately
+      setStatusPollingEnabled(true);
+      setStatusPollingInterval(1000); // Start with 1 second interval
       
-      // Check if the optimization was successful
-      if (data.success) {
-        // If we have results, update the UI
-        if (data.result) {
-          setOptimizedContent(data.result.optimizedContent || '');
-          setMatchScore(data.result.matchScore || 0);
-          setRecommendations(data.result.recommendations || []);
-          setProcessingProgress(data.result.progress || 100);
-          
-          // If we have an optimization state, update it
-          if (data.result.state) {
-            setOptimizationState(data.result.state);
-          }
-          
-          // If this is a partial result, show a warning
-          if (data.isPartial) {
-            setWarning(`Warning: ${data.message || 'Partial results returned'}`);
-          }
-          
-          // If we have an error but still got results, show a warning
-          if (data.result.error) {
-            setWarning(`Warning: ${data.result.error}`);
-          }
-          
-          // If we have complete results, stop processing
-          if (data.result.progress >= 100 && !data.isPartial) {
-            setIsProcessing(false);
-            setProcessingStatus("Optimization complete!");
-            
-            // Show success message
-            showToast({
-              title: "Optimization Complete",
-              description: "Your CV has been successfully optimized!",
-              duration: 5000,
-            });
-          } else {
-            // Otherwise, continue polling for updates
-            setIsProcessing(true);
-            setProcessingStatus("Processing...");
-          }
-        } else {
-          // If we don't have results, something went wrong
-          throw new Error('No results returned');
-        }
-      } else {
-        // If the optimization failed, show an error
-        throw new Error(data.error || data.message || 'Optimization failed');
-      }
+      // Show a message to the user
+      setProcessingStatus("Optimization in progress. This may take a minute...");
+      
     } catch (error) {
-      console.error('Error optimizing CV:', error);
+      console.error('Error starting CV optimization:', error);
       
       // Set error message based on the type of error
       let errorMessage = error instanceof Error ? error.message : String(error);
@@ -308,7 +350,12 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
       if (errorMessage.includes('rate limit') || errorMessage.includes('too many requests')) {
         errorMessage = 'The AI service is currently experiencing high demand. Please try again in a few minutes.';
       } else if (errorMessage.includes('timeout') || errorMessage.includes('504')) {
-        errorMessage = 'The optimization process timed out. This may be due to server load or the complexity of your CV. Please try again.';
+        errorMessage = 'The server is taking longer than expected to respond. The optimization is still running in the background. Please wait while we check for results.';
+        
+        // Even if the initial request times out, we can still try polling for results
+        setStatusPollingEnabled(true);
+        setStatusPollingInterval(2000); // Start with 2 second interval
+        return; // Continue processing
       } else if (errorMessage.includes('OpenAI')) {
         errorMessage = 'There was an issue with the AI service. Please try again later.';
       }

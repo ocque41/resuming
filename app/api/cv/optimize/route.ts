@@ -65,6 +65,50 @@ async function fetchCVText(cvId: string): Promise<string> {
 }
 
 /**
+ * Start the optimization process in the background
+ * This function doesn't wait for the process to complete
+ */
+async function startOptimizationProcess(
+  userId: string,
+  cvId: string,
+  jobDescription: string,
+  textToOptimize: string,
+  options: any
+) {
+  try {
+    // Store initial progress update
+    storePartialResults(userId, cvId, jobDescription, {
+      optimizedContent: '',
+      matchScore: 0,
+      recommendations: [],
+      progress: 5,
+      state: {
+        stage: OptimizationStage.NOT_STARTED,
+        progress: 5
+      }
+    });
+    
+    // Start the optimization process without awaiting it
+    optimizeCV(userId, cvId, jobDescription, textToOptimize, options)
+      .then(result => {
+        logger.info(`Background optimization completed for CV ${cvId}`);
+      })
+      .catch(error => {
+        logger.error(`Background optimization error for CV ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
+        storePartialResultsError(userId, cvId, jobDescription, 
+          `Optimization failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    
+    return true;
+  } catch (error) {
+    logger.error(`Error starting background optimization: ${error instanceof Error ? error.message : String(error)}`);
+    storePartialResultsError(userId, cvId, jobDescription, 
+      `Failed to start optimization: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  }
+}
+
+/**
  * API endpoint for optimizing a CV
  */
 export async function POST(req: NextRequest) {
@@ -142,14 +186,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Set a timeout for the optimization process
-    const timeoutMs = 120000; // 2 minutes
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Optimization timed out')), timeoutMs);
-    });
-    
-    // Run the optimization process with timeout
-    const optimizationPromise = optimizeCV(
+    // Start the optimization process in the background
+    const started = await startOptimizationProcess(
       user.id.toString(),
       cvId.toString(),
       jobDescription,
@@ -160,79 +198,17 @@ export async function POST(req: NextRequest) {
       }
     );
     
-    // Wait for either the optimization to complete or the timeout
-    try {
-      const result = await Promise.race([optimizationPromise, timeoutPromise])
-        .catch(error => {
-          logger.error(`Optimization error or timeout: ${error instanceof Error ? error.message : String(error)}`);
-          
-          // Check if we have partial results
-          const partialResults = getPartialResults(user.id.toString(), cvId.toString(), jobDescription);
-          
-          // If we have substantial partial results, return them
-          if (partialResults && partialResults.progress > 30) {
-            logger.info(`Returning partial results for CV ${cvId} with progress ${partialResults.progress}%`);
-            return {
-              success: true,
-              message: 'Partial optimization results available',
-              result: partialResults,
-              isPartial: true
-            };
-          }
-          
-          // Otherwise, store the error and return failure
-          storePartialResultsError(user.id.toString(), cvId.toString(), jobDescription, 
-            error instanceof Error ? error.message : String(error));
-          
-          throw error;
-        });
-      
-      // Return the result
-      return NextResponse.json(result);
-    } catch (error) {
-      // Handle specific error types
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      
-      // Check for JSON parsing errors
-      if (errorMessage.includes('Unexpected token') || errorMessage.includes('not valid JSON')) {
-        logger.error(`JSON parsing error during optimization: ${errorMessage}`);
-        
-        // Check if we have partial results
-        const partialResults = getPartialResults(user.id.toString(), cvId.toString(), jobDescription);
-        
-        if (partialResults && partialResults.progress > 0) {
-          logger.info(`Returning partial results despite JSON error for CV ${cvId}`);
-          return NextResponse.json({
-            success: true,
-            message: 'Partial optimization results available (API error occurred)',
-            result: partialResults,
-            isPartial: true,
-            error: 'An API error occurred during optimization, but partial results are available'
-          });
-        }
-      }
-      
-      // Handle timeout errors
-      if (errorMessage.includes('timed out') || errorMessage.includes('timeout')) {
-        logger.error(`Optimization timed out for CV ${cvId}`);
-        
-        // Check if we have partial results
-        const partialResults = getPartialResults(user.id.toString(), cvId.toString(), jobDescription);
-        
-        if (partialResults && partialResults.progress > 0) {
-          logger.info(`Returning partial results after timeout for CV ${cvId}`);
-          return NextResponse.json({
-            success: true,
-            message: 'Partial optimization results available (timeout occurred)',
-            result: partialResults,
-            isPartial: true,
-            error: 'The optimization process timed out, but partial results are available'
-          });
-        }
-      }
-      
-      return formatErrorResponse(error);
+    if (!started) {
+      return formatErrorResponse('Failed to start optimization process', 500);
     }
+    
+    // Return a quick response to the client
+    return NextResponse.json({
+      success: true,
+      message: 'Optimization process started',
+      status: 'processing',
+      progress: 5
+    });
   } catch (error) {
     return formatErrorResponse(error);
   }
