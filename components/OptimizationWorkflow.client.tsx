@@ -145,9 +145,15 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
             pollingTimeout = setTimeout(checkStatus, newInterval);
           }
         } else if (data.error) {
-          setError(data.error);
-          setIsProcessing(false);
-          setStatusPollingEnabled(false);
+          // If there's an error but we have partial results, show a warning instead of stopping
+          if (data.optimizationState?.results?.optimizedContent) {
+            setError(`Warning: ${data.error} - Continuing with partial results.`);
+            // Continue polling to get any further updates
+          } else {
+            setError(data.error);
+            setIsProcessing(false);
+            setStatusPollingEnabled(false);
+          }
         }
       } catch (error) {
         console.error("Error checking status:", error);
@@ -246,8 +252,29 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
       }
     } catch (error) {
       console.error("Error optimizing CV:", error);
-      setError(error instanceof Error ? error.message : String(error));
+      
+      // Provide more user-friendly error messages
+      let errorMessage = error instanceof Error ? error.message : String(error);
+      
+      if (errorMessage.includes('tee is not a function')) {
+        errorMessage = "There's a temporary issue with the AI service. The system will try to continue with available features.";
+      } else if (errorMessage.includes('Mistral') || errorMessage.includes('OpenAI')) {
+        errorMessage = "There's a temporary issue with the AI service. Please try again in a few minutes.";
+      } else if (errorMessage.includes('timeout') || errorMessage.includes('504')) {
+        errorMessage = "The request timed out. This might be due to high server load or a complex CV. Please try again.";
+      }
+      
+      setError(errorMessage);
       setIsProcessing(false);
+      
+      // If the error is related to service availability, suggest trying again later
+      if (errorMessage.includes('service') || errorMessage.includes('AI')) {
+        showToast({
+          title: "Service Issue",
+          description: "We're experiencing some issues with our AI services. Please try again later.",
+          duration: 5000,
+        });
+      }
     }
   };
 

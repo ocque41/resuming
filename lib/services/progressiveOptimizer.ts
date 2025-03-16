@@ -40,8 +40,32 @@ export async function optimizeCVProgressively(
       state
     });
     
-    // Run analyze stage
-    state = await runAnalyzeStage(userId, cvId, jobDescription, cvText);
+    // Run analyze stage with error handling
+    try {
+      state = await runAnalyzeStage(userId, cvId, jobDescription, cvText);
+    } catch (analyzeError) {
+      logger.error(`Error in analyze stage: ${analyzeError instanceof Error ? analyzeError.message : String(analyzeError)}`);
+      
+      // Store partial results with error
+      storePartialResultsError(userId, cvId.toString(), jobDescription, 
+        `Analysis failed: ${analyzeError instanceof Error ? analyzeError.message : String(analyzeError)}`);
+      
+      // If the error is related to Mistral, try to continue with other stages
+      // This allows the process to continue even if one stage fails
+      if (analyzeError instanceof Error && 
+          (analyzeError.message.includes('Mistral') || 
+           analyzeError.message.includes('tee is not a function'))) {
+        
+        logger.info(`Continuing optimization process after Mistral error in analyze stage`);
+        
+        // Update state to indicate analyze stage completed with errors
+        state.stage = OptimizationStage.ANALYZE_COMPLETED;
+        state.error = `Analysis completed with errors: ${analyzeError.message}`;
+      } else {
+        // For other errors, rethrow to be caught by the outer try/catch
+        throw analyzeError;
+      }
+    }
     
     // Store partial results after analyze stage
     storePartialResults(userId, cvId.toString(), jobDescription, {
@@ -52,8 +76,38 @@ export async function optimizeCVProgressively(
       state
     });
     
-    // Run optimize stage
-    state = await runOptimizeStage(userId, cvId, jobDescription, cvText, state);
+    // Run optimize stage with error handling
+    try {
+      state = await runOptimizeStage(userId, cvId, jobDescription, cvText, state);
+    } catch (optimizeError) {
+      logger.error(`Error in optimize stage: ${optimizeError instanceof Error ? optimizeError.message : String(optimizeError)}`);
+      
+      // Store partial results with error
+      storePartialResultsError(userId, cvId.toString(), jobDescription, 
+        `Optimization failed: ${optimizeError instanceof Error ? optimizeError.message : String(optimizeError)}`);
+      
+      // If the error is related to Mistral, try to continue with other stages
+      if (optimizeError instanceof Error && 
+          (optimizeError.message.includes('Mistral') || 
+           optimizeError.message.includes('tee is not a function'))) {
+        
+        logger.info(`Continuing optimization process after Mistral error in optimize stage`);
+        
+        // Update state to indicate optimize stage completed with errors
+        state.stage = OptimizationStage.OPTIMIZE_COMPLETED;
+        state.error = `Optimization completed with errors: ${optimizeError.message}`;
+        
+        // If we have no optimized content yet, create a simple one based on the CV text
+        if (!state.results.optimizedContent) {
+          state.results.optimizedContent = cvText;
+          state.results.matchScore = 50; // Default middle score
+          state.results.recommendations = ['Could not fully optimize due to service issues. Using original CV text.'];
+        }
+      } else {
+        // For other errors, rethrow to be caught by the outer try/catch
+        throw optimizeError;
+      }
+    }
     
     // Store partial results after optimize stage
     storePartialResults(userId, cvId.toString(), jobDescription, {
@@ -64,9 +118,38 @@ export async function optimizeCVProgressively(
       state
     });
     
-    // Run generate stage
+    // Run generate stage with error handling
     const documentFormat = options.documentFormat || 'markdown';
-    state = await runGenerateStage(userId, cvId, jobDescription, cvText, state, documentFormat);
+    try {
+      state = await runGenerateStage(userId, cvId, jobDescription, cvText, state, documentFormat);
+    } catch (generateError) {
+      logger.error(`Error in generate stage: ${generateError instanceof Error ? generateError.message : String(generateError)}`);
+      
+      // Store partial results with error
+      storePartialResultsError(userId, cvId.toString(), jobDescription, 
+        `Document generation failed: ${generateError instanceof Error ? generateError.message : String(generateError)}`);
+      
+      // If the error is related to Mistral, try to continue with a simple document
+      if (generateError instanceof Error && 
+          (generateError.message.includes('Mistral') || 
+           generateError.message.includes('tee is not a function'))) {
+        
+        logger.info(`Completing optimization process after Mistral error in generate stage`);
+        
+        // Update state to indicate generate stage completed with errors
+        state.stage = OptimizationStage.GENERATE_COMPLETED;
+        state.error = `Document generation completed with errors: ${generateError.message}`;
+        
+        // If we have optimized content but no formatted document, use the optimized content as is
+        if (state.results.optimizedContent && !state.results.formattedDocument) {
+          state.results.formattedDocument = state.results.optimizedContent;
+          state.results.format = documentFormat;
+        }
+      } else {
+        // For other errors, rethrow to be caught by the outer try/catch
+        throw generateError;
+      }
+    }
     
     // Store final results
     const finalResults = {

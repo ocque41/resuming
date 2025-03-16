@@ -122,20 +122,21 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if AI services are available
-    const openaiAvailable = await isOpenAIAvailable();
     const mistralAvailable = await isMistralAvailable();
-    
-    if (!openaiAvailable && !mistralAvailable) {
-      const error = 'Both OpenAI and Mistral AI services are not available';
-      logger.error(error);
-      storePartialResultsError(user.id.toString(), cvId.toString(), jobDescription, error);
-      return NextResponse.json({ 
-        success: false, 
-        error,
-        serviceUnavailable: true
-      }, { status: 503 });
+    const openaiAvailable = await isOpenAIAvailable();
+
+    if (!mistralAvailable) {
+      logger.warn('Mistral service is unavailable, will attempt to use OpenAI fallback');
     }
-    
+
+    if (!openaiAvailable && !mistralAvailable) {
+      logger.error('Both Mistral and OpenAI services are unavailable');
+      return formatErrorResponse(
+        'AI services are currently unavailable. Please try again later.',
+        503
+      );
+    }
+
     // Determine if we should use simplified process
     const shouldUseSimplifiedProcess = useSimplifiedProcess || 
       (textToOptimize.length > 10000 && jobDescription.length > 2000);

@@ -158,10 +158,18 @@ export default function ProgressiveOptimizationStatus({
         />
         
         {optimizationState?.error && (
-          <div className="mb-4 p-3 bg-red-900/30 border border-red-800 rounded-md flex items-start">
-            <AlertCircle className="w-5 h-5 text-red-500 mr-2 flex-shrink-0 mt-0.5" />
-            <div className="text-red-300 text-sm">
-              {optimizationState.error}
+          <div className="mt-4 p-3 bg-red-900/30 border border-red-800/50 rounded-md">
+            <div className="flex items-start">
+              <AlertCircle className="w-5 h-5 text-red-500 mr-2 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-red-300 font-medium">Error during optimization</p>
+                <p className="text-red-200/70 text-sm mt-1">
+                  {optimizationState.error}
+                </p>
+                <p className="text-amber-200/70 text-sm mt-2">
+                  The system will attempt to continue with available results.
+                </p>
+              </div>
             </div>
           </div>
         )}

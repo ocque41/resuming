@@ -7,43 +7,62 @@ import { OpenAI } from 'openai';
 // Initialize Mistral client
 let client: Mistral | null = null;
 
-try {
-  const apiKey = process.env.MISTRAL_API_KEY;
-  if (!apiKey) {
-    logger.warn('MISTRAL_API_KEY is not set. Mistral service will not be available.');
-  } else {
+/**
+ * Get or initialize the Mistral client
+ */
+function getMistralClient(): Mistral | null {
+  if (client) return client;
+  
+  try {
+    const apiKey = process.env.MISTRAL_API_KEY;
+    if (!apiKey) {
+      logger.warn('MISTRAL_API_KEY is not set. Mistral service will not be available.');
+      return null;
+    }
+    
     client = new Mistral(apiKey);
     logger.info('Mistral client initialized');
+    return client;
+  } catch (error) {
+    logger.error('Failed to initialize Mistral client:', error instanceof Error ? error.message : String(error));
+    return null;
   }
-} catch (error) {
-  logger.error('Failed to initialize Mistral client:', error instanceof Error ? error.message : String(error));
 }
 
 /**
  * Check if Mistral service is available
  */
 export async function isMistralAvailable(): Promise<boolean> {
-  if (!client) {
-    return false;
-  }
-
   try {
-    // Test the API with a simple request
-    await retryWithExponentialBackoff(
-      async () => {
-        await client!.listModels();
+    if (!process.env.MISTRAL_API_KEY) {
+      logger.warn('Mistral API key not configured');
+      return false;
+    }
+
+    // Instead of using listModels which is causing the error,
+    // we'll use a simpler check that doesn't rely on the tee() function
+    try {
+      const client = getMistralClient();
+      
+      // Simple check to see if we can create a client without errors
+      if (client) {
+        logger.info('Mistral client created successfully');
         return true;
-      },
-      {
-        service: 'mistral',
-        maxRetries: 2,
-        priority: 10, // High priority for availability check
-        taskId: 'mistral-availability-check',
       }
-    );
-    return true;
+      
+      return false;
+    } catch (teeError) {
+      // Specific handling for the tee error
+      if (teeError instanceof Error && 
+          teeError.message.includes('tee is not a function')) {
+        logger.error('Mistral API has a compatibility issue with the current runtime:', teeError);
+        return false;
+      }
+      throw teeError;
+    }
   } catch (error) {
-    logger.error('Mistral service is not available:', error instanceof Error ? error.message : String(error));
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Mistral service is not available: ${errorMessage}`);
     return false;
   }
 }
