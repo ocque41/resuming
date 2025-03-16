@@ -308,7 +308,9 @@ function processQueue(service: 'openai' | 'general'): void {
       const timeSinceLastTask = now - lastTaskTimes[service];
       if (timeSinceLastTask < queueConfig[service].minInterval) {
         // Wait for the minimum interval
-        setTimeout(processNextTask, queueConfig[service].minInterval - timeSinceLastTask);
+        const waitTime = queueConfig[service].minInterval - timeSinceLastTask;
+        logger.debug(`Throttling ${service} queue for ${waitTime}ms due to rate limit`);
+        setTimeout(processNextTask, waitTime);
         return;
       }
       
@@ -483,4 +485,10 @@ export const __lastTaskTimes = lastTaskTimes;
 export const __taskDurations = taskDurations;
 export const __taskTimeouts = taskTimeouts;
 export const __isProcessing = isProcessing;
-export const __idleTimers = idleTimers; 
+export const __idleTimers = idleTimers;
+
+// Add function to reset the task queue throttling
+export function resetThrottling(service: 'openai' | 'general'): void {
+  lastTaskTimes[service] = 0;
+  logger.info(`Reset throttling for ${service} queue`);
+} 

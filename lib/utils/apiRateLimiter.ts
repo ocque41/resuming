@@ -51,7 +51,9 @@ const circuitBreakers = {
     consecutiveFailures: 0, // Track consecutive failures
     totalFailures: 0, // Track total failures
     totalSuccesses: 0, // Track total successes
-    lastSuccess: 0 // Track last successful call
+    lastSuccess: 0, // Track last successful call
+    timeoutFailures: 0, // Track timeout-specific failures
+    lastTimeoutFailure: 0 // Track when the last timeout occurred
   }
 };
 
@@ -92,14 +94,21 @@ function recordApiSuccess(service: 'openai'): void {
 }
 
 // Add function to record failures for circuit breaker
-function recordApiFailure(service: 'openai'): void {
+function recordApiFailure(service: 'openai', isTimeout: boolean = false): void {
   const breaker = circuitBreakers[service];
   breaker.failures++;
   breaker.totalFailures++;
   breaker.consecutiveFailures++;
   breaker.lastFailure = Date.now();
   
-  logger.warn(`API call to ${service} failed. Consecutive failures: ${breaker.consecutiveFailures}, Total failures: ${breaker.totalFailures}`);
+  // Track timeout-specific failures
+  if (isTimeout) {
+    breaker.timeoutFailures++;
+    breaker.lastTimeoutFailure = Date.now();
+    logger.warn(`API call to ${service} timed out. Total timeout failures: ${breaker.timeoutFailures}`);
+  } else {
+    logger.warn(`API call to ${service} failed. Consecutive failures: ${breaker.consecutiveFailures}, Total failures: ${breaker.totalFailures}`);
+  }
   
   // If too many consecutive failures, open the circuit
   if (breaker.consecutiveFailures >= breaker.failureThreshold) {
@@ -124,6 +133,9 @@ export function getCircuitStatus(service: 'openai'): {
   lastSuccess: number;
   timeSinceLastFailure: number;
   timeSinceLastSuccess: number;
+  timeoutFailures: number;
+  lastTimeoutFailure: number;
+  timeSinceLastTimeout: number;
 } {
   const breaker = circuitBreakers[service];
   return {
@@ -135,7 +147,10 @@ export function getCircuitStatus(service: 'openai'): {
     lastFailure: breaker.lastFailure,
     lastSuccess: breaker.lastSuccess,
     timeSinceLastFailure: breaker.lastFailure ? Date.now() - breaker.lastFailure : -1,
-    timeSinceLastSuccess: breaker.lastSuccess ? Date.now() - breaker.lastSuccess : -1
+    timeSinceLastSuccess: breaker.lastSuccess ? Date.now() - breaker.lastSuccess : -1,
+    timeoutFailures: breaker.timeoutFailures,
+    lastTimeoutFailure: breaker.lastTimeoutFailure,
+    timeSinceLastTimeout: breaker.lastTimeoutFailure ? Date.now() - breaker.lastTimeoutFailure : -1
   };
 }
 
@@ -348,7 +363,7 @@ export async function retryWithExponentialBackoff<T>(
         // If it's a timeout, handle it specially - don't retry timeouts
         if (isTimeoutError) {
           logger.warn(`API call to ${service} timed out. Not retrying to prevent cascading timeouts.`);
-          recordApiFailure(service);
+          recordApiFailure(service, true);
           throw error; // Don't retry timeouts
         }
                                
