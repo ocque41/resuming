@@ -2,6 +2,7 @@ import { logger } from '@/lib/utils/logger';
 import OpenAI from 'openai';
 import Mistral from '@mistralai/mistralai';
 import { retryWithExponentialBackoff } from '@/lib/utils/apiRateLimiter';
+import { cacheEmbedding, getCachedEmbedding } from '@/lib/services/cache.service';
 
 /**
  * Simple cache to store embeddings and avoid redundant API calls
@@ -392,57 +393,58 @@ export class MistralRAGService {
    * @returns Embedding vector
    */
   private async createEmbedding(text: string): Promise<number[]> {
-    // Check cache first
-    const cacheKey = this.generateCacheKey(text);
-    if (this.embeddingCache[cacheKey] && 
-        Date.now() - this.embeddingCache[cacheKey].timestamp < this.cacheTTL) {
-      return this.embeddingCache[cacheKey].embedding;
+    // Check cache first using the enhanced caching system
+    const cachedEmbedding = getCachedEmbedding(text);
+    if (cachedEmbedding) {
+      return cachedEmbedding;
     }
     
     try {
       if (this.useMistral && this.mistralClient) {
-        // Use Mistral embeddings with rate limiting and retries
-        const response = await retryWithExponentialBackoff(
-          async () => {
-            return await this.mistralClient!.embeddings({
-              model: this.mistralEmbeddingModel,
-              input: text
-            });
-          },
-          { service: 'mistral', maxRetries: 3 }
-        );
-        
-        const embedding = response.data[0].embedding;
-        
-        // Cache the embedding
-        this.embeddingCache[cacheKey] = {
-          embedding,
-          timestamp: Date.now()
-        };
-        
-        return embedding;
-      } else {
-        // Use OpenAI embeddings with rate limiting and retries
-        const response = await retryWithExponentialBackoff(
-          async () => {
-            return await this.openaiClient.embeddings.create({
-              model: this.embeddingModel,
-              input: text
-            });
-          },
-          { service: 'openai', maxRetries: 3 }
-        );
-        
-        const embedding = response.data[0].embedding;
-        
-        // Cache the embedding
-        this.embeddingCache[cacheKey] = {
-          embedding,
-          timestamp: Date.now()
-        };
-        
-        return embedding;
+        try {
+          // Use Mistral embeddings with rate limiting and retries
+          const response = await retryWithExponentialBackoff(
+            async () => {
+              return await this.mistralClient!.embeddings({
+                model: this.mistralEmbeddingModel,
+                input: text
+              });
+            },
+            { service: 'mistral', maxRetries: 2 } // Reduced retries to fail faster to OpenAI
+          );
+          
+          const embedding = response.data[0].embedding;
+          
+          // Cache the embedding with the enhanced system
+          cacheEmbedding(text, embedding, 'mistral');
+          
+          return embedding;
+        } catch (mistralError) {
+          // If Mistral fails, fallback to OpenAI
+          logger.info('Falling back to OpenAI for embeddings due to Mistral error:', 
+            mistralError instanceof Error ? mistralError.message : String(mistralError));
+          
+          // Continue to OpenAI implementation below
+        }
       }
+      
+      // Use OpenAI embeddings with rate limiting and retries
+      const response = await retryWithExponentialBackoff(
+        async () => {
+          return await this.openaiClient.embeddings.create({
+            model: this.embeddingModel,
+            input: text
+          });
+        },
+        { service: 'openai', maxRetries: 3 }
+      );
+      
+      const embedding = response.data[0].embedding;
+      
+      // Cache the embedding with the enhanced system
+      cacheEmbedding(text, embedding, 'openai');
+      
+      return embedding;
     } catch (error) {
       logger.error('Error creating embedding:', error instanceof Error ? error.message : String(error));
       throw new Error(`Failed to create embedding: ${error instanceof Error ? error.message : String(error)}`);
@@ -1594,7 +1596,7 @@ export class MistralRAGService {
         model: this.mistralGenerationModel,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.1,
-        maxTokens: 50,
+        max_tokens: 50,
       });
       
       const content = response.choices[0]?.message?.content || '';
@@ -1779,7 +1781,7 @@ export class MistralRAGService {
         model: this.openaiGenerationModel,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.1,
-        max_tokens: 50,
+        maxTokens: 50,
       });
       
       const industry = response.choices[0]?.message?.content?.trim() || 'General';
@@ -1869,7 +1871,7 @@ export class MistralRAGService {
         model: this.openaiGenerationModel,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.1,
-        max_tokens: 50,
+        maxTokens: 50,
       });
       
       const language = response.choices[0]?.message?.content?.trim() || 'English';
@@ -2112,5 +2114,34 @@ export class MistralRAGService {
     
     logger.info(`Extracted ${sections.length} sections using regex`);
     return sections;
+  }
+
+  /**
+   * Helper function to create consistent parameters for API calls
+   * @param params Base parameters
+   * @param forMistral Whether the parameters are for Mistral API
+   * @returns Parameters with correct naming conventions
+   */
+  private createApiParams(params: {
+    model: string;
+    messages: Array<{ role: string; content: string }>;
+    temperature?: number;
+    maxTokens?: number;
+    topP?: number;
+  }, forMistral: boolean): any {
+    // Clone the params to avoid modifying the original
+    const result = { ...params };
+    
+    // Handle the maxTokens/max_tokens difference
+    if ('maxTokens' in result) {
+      if (!forMistral) {
+        // For OpenAI, convert maxTokens to max_tokens
+        result.max_tokens = result.maxTokens;
+        delete result.maxTokens;
+      }
+      // For Mistral, keep maxTokens as is
+    }
+    
+    return result;
   }
 } 

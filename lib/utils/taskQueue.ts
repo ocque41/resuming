@@ -21,7 +21,7 @@ const queueConfig = {
     maxQueueSize: 50, // Maximum queue size
   },
   openai: {
-    concurrency: 2, // 2 concurrent OpenAI tasks
+    concurrency: 3, // Increase to 3 concurrent OpenAI tasks
     minInterval: 1000, // Minimum 1 second between tasks
     maxQueueSize: 100, // Maximum queue size
   },
@@ -52,6 +52,36 @@ const lastExecutionTime: Record<string, number> = {
   openai: 0,
   general: 0,
 };
+
+// Track error rates to dynamically adjust queue parameters
+const errorTracking = {
+  mistral: {
+    recentErrors: 0,
+    totalCalls: 0,
+    lastReset: Date.now(),
+  },
+  openai: {
+    recentErrors: 0,
+    totalCalls: 0,
+    lastReset: Date.now(),
+  },
+  general: {
+    recentErrors: 0,
+    totalCalls: 0,
+    lastReset: Date.now(),
+  },
+};
+
+// Reset error tracking every 5 minutes
+setInterval(() => {
+  Object.keys(errorTracking).forEach(service => {
+    const tracker = errorTracking[service as keyof typeof errorTracking];
+    tracker.recentErrors = 0;
+    tracker.totalCalls = 0;
+    tracker.lastReset = Date.now();
+  });
+  logger.debug('Reset error tracking for all services');
+}, 5 * 60 * 1000);
 
 // Generate a unique task ID
 function generateTaskId(): string {
@@ -170,9 +200,34 @@ function processQueue(service: 'mistral' | 'openai' | 'general'): void {
   // Execute the task
   logger.debug(`Executing task ${task.id} from ${service} queue`);
   
+  // Track this call
+  errorTracking[service].totalCalls++;
+
   task.execute()
     .catch(error => {
       logger.error(`Error executing task ${task.id} from ${service} queue:`, error);
+      // Track error for dynamic queue adjustment
+      errorTracking[service].recentErrors++;
+      
+      // If error rate is too high, adjust queue parameters
+      const errorRate = errorTracking[service].recentErrors / Math.max(errorTracking[service].totalCalls, 1);
+      if (errorRate > 0.3 && errorTracking[service].totalCalls > 5) {
+        // If more than 30% of calls are failing, reduce concurrency and increase interval
+        const currentConcurrency = queueConfig[service].concurrency;
+        const currentInterval = queueConfig[service].minInterval;
+        
+        if (currentConcurrency > 1) {
+          queueConfig[service].concurrency = Math.max(1, currentConcurrency - 1);
+        }
+        
+        queueConfig[service].minInterval = Math.min(10000, currentInterval * 1.5);
+        
+        logger.warn(
+          `High error rate (${(errorRate * 100).toFixed(1)}%) for ${service} API. ` +
+          `Reducing concurrency to ${queueConfig[service].concurrency} and ` +
+          `increasing interval to ${queueConfig[service].minInterval}ms`
+        );
+      }
     })
     .finally(() => {
       // Decrease active tasks count
@@ -242,8 +297,8 @@ if (process.env.NODE_ENV === 'production') {
   });
   
   configureQueue('openai', {
-    concurrency: 2,
-    minInterval: 1500, // 1.5 seconds between calls
+    concurrency: 3,
+    minInterval: 1200, // 1.2 seconds between calls
     maxQueueSize: 150
   });
 } else if (process.env.NODE_ENV === 'development') {
@@ -255,7 +310,7 @@ if (process.env.NODE_ENV === 'production') {
   });
   
   configureQueue('openai', {
-    concurrency: 2,
+    concurrency: 3,
     minInterval: 1000, // 1 second between calls
     maxQueueSize: 100
   });

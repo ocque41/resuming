@@ -1,15 +1,17 @@
 // app/api/analyze-cv/route.ts
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from "@/lib/db/drizzle";
 import { cvs } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { MistralRAGService } from "@/lib/utils/mistralRagService";
 import { logger } from "@/lib/logger";
+import { getUser } from '@/lib/db/queries.server';
+import { cachePartialResults, getCachedPartialResults } from '@/lib/services/cache.service';
 
 // Type definition for analysis result
 interface AnalysisResult {
   cvId: string;
-  userId: string | number;
+  userId: string;
   atsScore: number;
   industry: string;
   language: string;
@@ -26,187 +28,118 @@ interface AnalysisResult {
   skills: string[];
 }
 
+// Maximum time to wait for analysis before returning partial results
+const MAX_WAIT_TIME = 25000; // 25 seconds
+
 /**
  * GET /api/analyze-cv
  * Enhanced CV analysis API endpoint with proper ATS scoring
  */
 export async function GET(request: NextRequest) {
   try {
-    // Get fileName from URL params (required)
-    const searchParams = request.nextUrl.searchParams;
-    const fileName = searchParams.get("fileName");
-    const cvId = searchParams.get("cvId");
+    // Check authentication
+    const user = await getUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
 
-    // Early validations with helpful error messages
-  if (!fileName) {
-      console.error("Missing fileName parameter in analyze-cv request");
-      return new Response(JSON.stringify({ 
-        error: "Missing fileName parameter",
-        success: false 
-      }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+    // Get the CV ID from the query parameters
+    const { searchParams } = new URL(request.url);
+    const fileName = searchParams.get('fileName');
+    const cvId = searchParams.get('cvId');
+
+    if (!fileName && !cvId) {
+      return NextResponse.json({ success: false, error: 'fileName or cvId is required' }, { status: 400 });
     }
 
     if (!cvId) {
-      console.error("Missing cvId parameter in analyze-cv request");
-      return new Response(JSON.stringify({ 
-        error: "Missing cvId parameter",
-        success: false 
-      }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return NextResponse.json({ success: false, error: 'cvId is required' }, { status: 400 });
     }
 
-    console.log(`Starting CV analysis for ${fileName} (ID: ${cvId})`);
-
-    // Parse cvId to integer safely
-    let cvIdNumber: number;
-    try {
-      cvIdNumber = parseInt(cvId);
-      if (isNaN(cvIdNumber)) {
-        throw new Error(`Invalid cvId: ${cvId} is not a number`);
-      }
-    } catch (parseError) {
-      console.error(`Error parsing cvId: ${cvId}`, parseError);
-      return new Response(JSON.stringify({ 
-        error: `Invalid cvId: ${cvId} is not a valid number`,
-        success: false 
-      }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    // Fetch CV record with safety checks
-    let cv;
-    try {
-      cv = await db.query.cvs.findFirst({
-        where: eq(cvs.id, cvIdNumber)
-      });
-    } catch (dbError) {
-      console.error(`Database error fetching CV ${cvId}:`, dbError);
-      return new Response(JSON.stringify({ 
-        error: "Database error while fetching CV",
-        details: dbError instanceof Error ? dbError.message : "Unknown database error",
-        success: false
-      }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    if (!cv) {
-      console.error(`CV not found: ${cvId}`);
-      return new Response(JSON.stringify({ 
-        error: "CV not found",
-        success: false 
-      }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    // Get CV content with null check
-    const cvContent = cv.rawText || "";
-    if (!cvContent || cvContent.trim() === "") {
-      console.error(`CV content is empty for ID: ${cvId}`);
-      return new Response(JSON.stringify({ 
-        error: "Only PDF files are supported. Other file types are for applying to jobs.",
-        success: false 
-      }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    // Perform CV analysis to determine industry, language, and calculate ATS score
-    const analysis = await analyzeCV(cvId, String(cv.userId), cvContent, cv.metadata);
-    console.log(`Analysis completed for CV ${cvId} with ATS score: ${analysis.atsScore}`);
-
-    // Merge with existing metadata (if any)
-    let metadata = {};
-    if (cv.metadata) {
-      try {
-        metadata = JSON.parse(cv.metadata);
-      } catch (parseError) {
-        console.error(`Error parsing existing metadata for CV ${cvId}:`, parseError);
-        // Continue with empty metadata instead of failing
-        metadata = {};
-      }
-    }
-
-    // Create updated metadata with analysis results
-    const updatedMetadata = {
-      ...metadata,
-      atsScore: analysis.atsScore,
-      language: analysis.language,
-      industry: analysis.industry,
-      keywordAnalysis: analysis.keywords,
-      strengths: analysis.strengths,
-      weaknesses: analysis.weaknesses,
-      recommendations: analysis.recommendations,
-      formattingStrengths: analysis.formatStrengths,
-      formattingWeaknesses: analysis.formatWeaknesses,
-      formattingRecommendations: analysis.formatRecommendations,
-      skills: analysis.skills,
-      analyzedAt: new Date().toISOString(),
-      ready_for_optimization: true,
-      analysis_status: 'complete'
-    };
-
-    // Update CV record with metadata safely
-    try {
-      await db.update(cvs)
-        .set({ metadata: JSON.stringify(updatedMetadata) })
-        .where(eq(cvs.id, cvIdNumber));
+    // Start the analysis process
+    const analysisPromise = analyzeCV(cvId, String(user.id));
+    
+    // Set up a timeout to return partial results if the analysis takes too long
+    const timeoutPromise = new Promise<{ partial: boolean; message: string }>(resolve => {
+      setTimeout(() => {
+        resolve({ 
+          partial: true, 
+          message: 'Analysis is taking longer than expected. Returning partial results.' 
+        });
+      }, MAX_WAIT_TIME);
+    });
+    
+    // Race between the analysis and the timeout
+    const result = await Promise.race([analysisPromise, timeoutPromise]);
+    
+    // If we got partial results, check if we have any cached results
+    if ('partial' in result && result.partial) {
+      const partialResults = getCachedPartialResults(String(user.id), cvId, '');
       
-      console.log(`Successfully updated metadata for CV ${cvId}`);
-    } catch (updateError) {
-      console.error(`Error updating metadata for CV ${cvId}:`, updateError);
-      return new Response(JSON.stringify({ 
-        error: "Failed to update CV metadata",
-        details: updateError instanceof Error ? updateError.message : "Unknown database error",
-        success: false
-      }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
+      if (partialResults) {
+        return NextResponse.json({
+          success: true,
+          partial: true,
+          message: 'Returning partial results while analysis continues',
+          analysisResult: partialResults,
+          progress: partialResults.progress || 50
+        });
+      } else {
+        // No partial results yet, but analysis is still running
+        return NextResponse.json({
+          success: true,
+          partial: true,
+          message: 'Analysis is still in progress. Please check back in a few moments.',
+          progress: 30
+        });
+      }
     }
-
-    // Return analysis results
-    return new Response(JSON.stringify({ 
-      success: true, 
-      analysis,
-      message: "CV analyzed successfully"
-    }), {
-      headers: { "Content-Type": "application/json" },
+    
+    // If we got here, the analysis completed within the timeout
+    return NextResponse.json({
+      success: true,
+      analysisResult: result
     });
   } catch (error) {
-    // Log the detailed error
-    console.error(`Unexpected error analyzing CV:`, error);
-    
-    // Provide a user-friendly response
-    return new Response(JSON.stringify({ 
-      error: "Failed to analyze CV", 
-      details: error instanceof Error ? error.message : "Unknown error occurred",
-      success: false
-    }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    logger.error(`Error in CV analysis: ${error instanceof Error ? error.message : String(error)}`);
+    return NextResponse.json(
+      { success: false, error: error instanceof Error ? error.message : 'An unknown error occurred' },
+      { status: 500 }
+    );
   }
 }
 
 /**
  * Analyzes a CV using the RAG service
  */
-async function analyzeCV(cvId: string, userId: string, rawText: string, metadata: any): Promise<AnalysisResult> {
+async function analyzeCV(cvId: string, userId: string): Promise<AnalysisResult> {
   logger.info(`Starting CV analysis for CV ID: ${cvId}`);
   
   try {
+    // Fetch CV record with safety checks
+    let cv;
+    try {
+      cv = await db.query.cvs.findFirst({
+        where: eq(cvs.id, parseInt(cvId))
+      });
+    } catch (dbError) {
+      logger.error(`Database error fetching CV ${cvId}:`, dbError instanceof Error ? dbError.message : String(dbError));
+      throw new Error("Database error while fetching CV");
+    }
+
+    if (!cv) {
+      logger.error(`CV not found: ${cvId}`);
+      throw new Error("CV not found");
+    }
+
+    // Get CV content
+    const rawText = cv.rawText || '';
+
+    if (!rawText || rawText.trim() === "") {
+      logger.error(`CV content is empty for ID: ${cvId}`);
+      throw new Error("Only PDF files are supported. Other file types are for applying to jobs.");
+    }
+
     // Create initial analysis result object
     const analysisResult: AnalysisResult = {
       cvId,
@@ -222,7 +155,7 @@ async function analyzeCV(cvId: string, userId: string, rawText: string, metadata
       formatStrengths: [],
       formatWeaknesses: [],
       formatRecommendations: [],
-      metadata: {},
+      metadata: cv.metadata || {},
       sections: [],
       skills: []
     };
@@ -234,7 +167,7 @@ async function analyzeCV(cvId: string, userId: string, rawText: string, metadata
       logger.info(`Successfully initialized RAG service for CV ID: ${cvId}`);
     } catch (initError) {
       logger.error(`Failed to initialize RAG service for CV ID: ${cvId}: ${initError instanceof Error ? initError.message : String(initError)}`);
-      return performBasicAnalysis(cvId, userId, rawText, metadata);
+      return performBasicAnalysis(cvId, userId, rawText, analysisResult.metadata);
     }
     
     // Process the CV document with timeout protection
@@ -259,6 +192,12 @@ async function analyzeCV(cvId: string, userId: string, rawText: string, metadata
       const skills = await ragService.extractSkills();
       analysisResult.skills = skills;
       logger.info(`Extracted ${skills.length} skills for CV ID: ${cvId}`);
+      
+      // Store partial results after each major step
+      cachePartialResults(String(userId), cvId, '', {
+        ...analysisResult,
+        progress: 20
+      });
     } catch (error) {
       logger.error(`Error extracting skills for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
       analysisResult.skills = [];
@@ -270,6 +209,12 @@ async function analyzeCV(cvId: string, userId: string, rawText: string, metadata
       const keywords = await ragService.extractKeywords();
       analysisResult.keywords = keywords;
       logger.info(`Extracted ${keywords.length} keywords for CV ID: ${cvId}`);
+      
+      // Update partial results
+      cachePartialResults(String(userId), cvId, '', {
+        ...analysisResult,
+        progress: 35
+      });
     } catch (error) {
       logger.error(`Error extracting keywords for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
       analysisResult.keywords = [];
@@ -281,6 +226,12 @@ async function analyzeCV(cvId: string, userId: string, rawText: string, metadata
       const keyRequirements = await ragService.extractKeyRequirements();
       analysisResult.keyRequirements = keyRequirements;
       logger.info(`Extracted ${keyRequirements.length} key requirements for CV ID: ${cvId}`);
+      
+      // Update partial results
+      cachePartialResults(String(userId), cvId, '', {
+        ...analysisResult,
+        progress: 50
+      });
     } catch (error) {
       logger.error(`Error extracting key requirements for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
       analysisResult.keyRequirements = [];
@@ -294,6 +245,12 @@ async function analyzeCV(cvId: string, userId: string, rawText: string, metadata
       analysisResult.formatWeaknesses = formatAnalysis.weaknesses;
       analysisResult.formatRecommendations = formatAnalysis.recommendations;
       logger.info(`Format analysis complete for CV ID: ${cvId}: ${formatAnalysis.strengths.length} strengths, ${formatAnalysis.weaknesses.length} weaknesses, ${formatAnalysis.recommendations.length} recommendations`);
+      
+      // Update partial results
+      cachePartialResults(String(userId), cvId, '', {
+        ...analysisResult,
+        progress: 65
+      });
     } catch (error) {
       logger.error(`Error analyzing CV format for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
       analysisResult.formatStrengths = [];
@@ -309,6 +266,12 @@ async function analyzeCV(cvId: string, userId: string, rawText: string, metadata
       analysisResult.weaknesses = contentAnalysis.weaknesses;
       analysisResult.recommendations = contentAnalysis.recommendations;
       logger.info(`Content analysis complete for CV ID: ${cvId}: ${contentAnalysis.strengths.length} strengths, ${contentAnalysis.weaknesses.length} weaknesses, ${contentAnalysis.recommendations.length} recommendations`);
+      
+      // Update partial results
+      cachePartialResults(String(userId), cvId, '', {
+        ...analysisResult,
+        progress: 80
+      });
     } catch (error) {
       logger.error(`Error analyzing CV content for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
       analysisResult.strengths = [];
@@ -333,6 +296,12 @@ async function analyzeCV(cvId: string, userId: string, rawText: string, metadata
       const language = await ragService.detectLanguage();
       analysisResult.language = language;
       logger.info(`Detected language for CV ID: ${cvId}: ${language}`);
+      
+      // Update partial results
+      cachePartialResults(String(userId), cvId, '', {
+        ...analysisResult,
+        progress: 90
+      });
     } catch (error) {
       logger.error(`Error detecting language for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
       analysisResult.language = 'English';
@@ -386,11 +355,38 @@ async function analyzeCV(cvId: string, userId: string, rawText: string, metadata
     
     // Add metadata
     analysisResult.metadata = {
-      ...metadata,
+      ...analysisResult.metadata,
       analysisTimestamp: new Date().toISOString(),
       analysisMethod: 'rag',
       analysisComplete: true
     };
+    
+    // Final update to partial results with 100% progress
+    cachePartialResults(String(userId), cvId, '', {
+      ...analysisResult,
+      progress: 100
+    });
+    
+    // Update CV metadata in database
+    try {
+      const updatedMetadata = {
+        ...analysisResult.metadata,
+        lastAnalyzed: new Date().toISOString(),
+        atsScore: analysisResult.atsScore,
+        industry: analysisResult.industry,
+        language: analysisResult.language
+      };
+      
+      await db.update(cvs)
+        .set({ metadata: JSON.stringify(updatedMetadata) })
+        .where(eq(cvs.id, parseInt(cvId)));
+      
+      logger.info(`Successfully updated metadata for CV ${cvId}`);
+    } catch (updateError) {
+      logger.error(`Error updating metadata for CV ${cvId}:`, 
+        updateError instanceof Error ? updateError.message : String(updateError));
+      throw new Error("Failed to update CV metadata");
+    }
     
     logger.info(`CV analysis complete for CV ID: ${cvId}`);
     return analysisResult;
@@ -398,6 +394,25 @@ async function analyzeCV(cvId: string, userId: string, rawText: string, metadata
     logger.error(`Error in CV analysis for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
     // Fall back to basic analysis
     logger.info(`Falling back to basic analysis for CV ID: ${cvId}`);
+    
+    // Fetch CV record again if needed
+    let rawText = '';
+    let metadata = {};
+    
+    try {
+      const cv = await db.query.cvs.findFirst({
+        where: eq(cvs.id, parseInt(cvId))
+      });
+      
+      if (cv) {
+        rawText = cv.rawText || '';
+        metadata = cv.metadata || {};
+      }
+    } catch (dbError) {
+      logger.error(`Database error fetching CV ${cvId} for fallback:`, 
+        dbError instanceof Error ? dbError.message : String(dbError));
+    }
+    
     return performBasicAnalysis(cvId, userId, rawText, metadata);
   }
 }

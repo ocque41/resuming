@@ -72,15 +72,25 @@ export function shouldThrottle(service: 'mistral' | 'openai'): boolean {
   // Update sliding window
   updateSlidingWindow(service);
   
-  // Check if we're at 70% of the rate limit (more conservative)
-  const isApproachingLimit = tracker.calls >= tracker.limit * 0.7;
+  // More aggressive throttling for Mistral compared to OpenAI
+  const limitThreshold = service === 'mistral' ? 0.6 : 0.7; // Lower threshold for Mistral (60% vs 70%)
+  const isApproachingLimit = tracker.calls >= tracker.limit * limitThreshold;
   
   // Check if we need to enforce minimum time between calls
+  // More aggressive for Mistral
+  const minTimeBetweenCalls = service === 'mistral' ? 1500 : 1000; // 1.5s for Mistral, 1s for OpenAI
   const timeSinceLastCall = now - tracker.lastCallTime;
-  const needsTimeBuffer = timeSinceLastCall < MIN_CALL_INTERVAL[service];
+  const needsTimeBuffer = timeSinceLastCall < minTimeBetweenCalls;
   
   // Check if we've made too many calls in the sliding window
-  const tooManyCalls = tracker.callsInWindow.length >= tracker.limit * 0.8;
+  // More aggressive for Mistral
+  const windowThreshold = service === 'mistral' ? 0.7 : 0.8; // 70% vs 80%
+  const tooManyCalls = tracker.callsInWindow.length >= tracker.limit * windowThreshold;
+  
+  // Log throttling decisions for debugging
+  if (isApproachingLimit || needsTimeBuffer || tooManyCalls) {
+    logger.debug(`Throttling ${service} API: approaching limit=${isApproachingLimit}, needs buffer=${needsTimeBuffer}, too many calls=${tooManyCalls}`);
+  }
   
   return isApproachingLimit || needsTimeBuffer || tooManyCalls;
 }
@@ -214,6 +224,19 @@ export async function retryWithExponentialBackoff<T>(
       let delay = initialDelayMs;
       let lastError: Error | null = null;
       
+      // For Mistral, check if we should throttle before even attempting the call
+      // If we should throttle and have a fallback, use it immediately for better performance
+      if (service === 'mistral' && shouldThrottle(service) && fallbackFn) {
+        logger.info(`Preemptively using fallback for ${service} API due to throttling`);
+        try {
+          return await fallbackFn();
+        } catch (fallbackError) {
+          logger.error(`Fallback for ${service} API failed:`, 
+            fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
+          // If fallback fails, continue with original function
+        }
+      }
+      
       while (true) {
         try {
           // Track this API call
@@ -221,6 +244,12 @@ export async function retryWithExponentialBackoff<T>(
           
           // If we should throttle, add a delay before proceeding
           if (shouldThrottle(service)) {
+            // If we have a fallback and this is Mistral, use fallback after first throttle
+            if (fallbackFn && service === 'mistral' && retries > 0) {
+              logger.info(`Using fallback for ${service} API due to throttling after ${retries} retries`);
+              return await fallbackFn();
+            }
+            
             const throttleDelay = calculateThrottleDelay(service);
             logger.info(`Throttling ${service} API call for ${throttleDelay}ms to prevent rate limit`);
             await new Promise(resolve => setTimeout(resolve, throttleDelay));
@@ -242,6 +271,21 @@ export async function retryWithExponentialBackoff<T>(
             (error instanceof Error && error.message.includes('rate limit'));
           
           const isRetryableError = status !== null && retryStatusCodes.includes(status);
+          
+          // For Mistral, use fallback more aggressively
+          if (fallbackFn && service === 'mistral' && (isRateLimitError || retries >= 1)) {
+            logger.warn(`${service} API failed with ${isRateLimitError ? 'rate limit' : 'error'}, using fallback immediately`);
+            try {
+              return await fallbackFn();
+            } catch (fallbackError) {
+              logger.error(`Fallback for ${service} API also failed:`, 
+                fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
+              // If fallback fails and we've hit max retries, throw the original error
+              if (retries >= maxRetries) {
+                throw error;
+              }
+            }
+          }
           
           // If we've hit max retries or it's not a retryable error, try fallback or throw
           if (retries >= maxRetries || (!isRateLimitError && !isRetryableError)) {
