@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
     
     // If we got here, the analysis completed within the timeout
     return NextResponse.json({
-      success: true,
+      success: true, 
       analysisResult: result
     });
   } catch (error) {
@@ -148,7 +148,7 @@ async function analyzeCV(cvId: string, userId: string): Promise<AnalysisResult> 
       sections: result.cvAnalysis.sections || [],
       skills: [...result.cvAnalysis.skills.technical, ...result.cvAnalysis.skills.professional]
     };
-
+    
     // Ensure all arrays are populated
     ensureArraysArePopulated(analysis);
 

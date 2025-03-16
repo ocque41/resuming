@@ -77,10 +77,10 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
         }
       }
     };
-
+    
     checkForPreAnalyzedCV();
   }, [activeStep, cvs, selectedCVId]);
-
+  
   // Status polling effect
   useEffect(() => {
     let pollingTimeout: NodeJS.Timeout | null = null;
@@ -216,8 +216,8 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
             // If progress is 100%, optimization is complete
             if (data.progress >= 100) {
               console.log('Optimization complete!');
-              setIsProcessing(false);
-              setStatusPollingEnabled(false);
+            setIsProcessing(false);
+            setStatusPollingEnabled(false);
               setProcessingStatus("Optimization complete!");
               
               // Show success message
@@ -252,7 +252,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
             // If we have a message but no partial results, update the status
             setProcessingStatus(data.message);
           }
-        } else if (data.error) {
+          } else if (data.error) {
           console.error('Error in partial results:', data.error);
           
           // Only set error if we don't have any partial results
@@ -289,11 +289,11 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
               setIsProcessing(false);
               setStatusPollingEnabled(false);
               setProcessingStatus("Optimization partially complete");
-            }
-          } else {
+          }
+        } else {
             setError(`Error checking status: ${error instanceof Error ? error.message : String(error)}`);
             setIsProcessing(false);
-            setStatusPollingEnabled(false);
+          setStatusPollingEnabled(false);
           }
         }
       }
@@ -421,11 +421,11 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
       setStatusPollingEnabled(false); // Stop polling on error
       
       // Show error toast
-      showToast({
+          showToast({
         title: "Optimization Failed",
         description: errorMessage,
-        duration: 5000,
-      });
+            duration: 5000,
+          });
     }
   };
 
@@ -433,7 +433,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
     setActiveStep(value as "general" | "specific");
     setError(null);
   };
-
+  
   const handleResetProcessing = async () => {
     // Instead of just canceling, we'll restart the optimization process
     if (selectedCVId && selectedCVName && jobDescription) {
@@ -483,8 +483,8 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
         handleOptimizeCV(id, name, localJobDescription);
       }
     };
-    
-    return (
+
+  return (
       <Card>
         <CardHeader>
           <CardTitle>General CV Optimization</CardTitle>
@@ -603,13 +603,13 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
             />
           </div>
           
-          <Button 
+            <Button
             onClick={handleOptimize} 
             disabled={!selectedCV || !localJobDescription || isProcessing}
             className="w-full"
           >
             {isProcessing ? "Optimizing..." : "Optimize for This Job"}
-          </Button>
+            </Button>
         </CardContent>
       </Card>
     );
@@ -626,7 +626,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
           className={`bg-blue-600 h-3 rounded-full transition-all duration-500 ease-in-out ${isPulsing ? 'animate-pulse' : ''}`} 
           style={{ width: `${Math.max(actualValue, 5)}%` }} // Ensure at least 5% width for visibility
         ></div>
-      </div>
+        </div>
     );
   };
 

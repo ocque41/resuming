@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { cvId, optimizedText, docxBase64, filename, jobDescription, jobTitle } = body || {};
-    
+
     // Log received parameters for debugging
     logger.info(`Received request with parameters: cvId=${cvId}, jobTitle=${jobTitle || 'not provided'}, optimizedText length=${optimizedText ? optimizedText.length : 'not provided'}, docxBase64=${docxBase64 ? 'provided' : 'not provided'}`);
 
@@ -138,32 +138,32 @@ export async function POST(request: NextRequest) {
         logger.info('Fallback document created successfully');
       } catch (fallbackError) {
         logger.error('Fallback document creation failed:', fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
-        return NextResponse.json(
-          { 
-            success: false, 
-            error: 'Failed to generate DOCX document',
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Failed to generate DOCX document',
             details: `Original error: ${genError instanceof Error ? genError.message : 'Unknown error'}. Fallback error: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`
-          },
-          { status: 500 }
-        );
+        },
+        { status: 500 }
+      );
       }
     }
 
     // Convert buffer to base64 for response
     try {
-      const base64Data = docxBuffer.toString('base64');
-      
-      // Create a download URL
-      const downloadUrl = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${base64Data}`;
+    const base64Data = docxBuffer.toString('base64');
+    
+    // Create a download URL
+    const downloadUrl = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${base64Data}`;
       
       logger.info(`Successfully created download URL for DOCX, base64 length: ${base64Data.length}`);
 
-      // Return the base64 data and download URL
-      return NextResponse.json({
-        success: true,
-        docxBase64: base64Data,
-        downloadUrl
-      });
+    // Return the base64 data and download URL
+    return NextResponse.json({
+      success: true,
+      docxBase64: base64Data,
+      downloadUrl
+    });
     } catch (encodeError) {
       logger.error('Error encoding document to base64:', encodeError instanceof Error ? encodeError.message : String(encodeError));
       return NextResponse.json(
@@ -308,96 +308,96 @@ async function generateSpecificDocx(
     // Create document with error handling
     try {
       logger.info('Creating document structure');
-      
-      // Create document
-      const doc = new Document({
-        sections: [{
-          properties: {
-            page: {
-              margin: {
-                top: 1000,
-                right: 1000,
-                bottom: 1000,
-                left: 1000
-              }
+    
+    // Create document
+    const doc = new Document({
+      sections: [{
+        properties: {
+          page: {
+            margin: {
+              top: 1000,
+              right: 1000,
+              bottom: 1000,
+              left: 1000
             }
-          },
-          children: [
-            // Title with job title if available
-            new Paragraph({
-              text: jobTitle ? `Optimized CV for ${jobTitle}` : 'Optimized CV',
-              heading: HeadingLevel.HEADING_1,
-              spacing: {
-                after: 200
-              },
-              alignment: AlignmentType.CENTER,
-            }),
-            
-            // Add a horizontal line after header
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: '',
-                  size: 16
-                })
-              ],
-              border: {
-                bottom: {
-                  color: 'B4916C',
-                  space: 1,
-                  style: BorderStyle.SINGLE,
-                  size: 8
-                }
-              },
-              spacing: {
-                after: 300
+          }
+        },
+        children: [
+          // Title with job title if available
+          new Paragraph({
+            text: jobTitle ? `Optimized CV for ${jobTitle}` : 'Optimized CV',
+            heading: HeadingLevel.HEADING_1,
+            spacing: {
+              after: 200
+            },
+            alignment: AlignmentType.CENTER,
+          }),
+          
+          // Add a horizontal line after header
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: '',
+                size: 16
+              })
+            ],
+            border: {
+              bottom: {
+                color: 'B4916C',
+                space: 1,
+                style: BorderStyle.SINGLE,
+                size: 8
               }
-            }),
-            
-            // Add each section in the specified order
-            ...sectionOrder.flatMap(sectionName => {
+            },
+            spacing: {
+              after: 300
+            }
+          }),
+          
+          // Add each section in the specified order
+          ...sectionOrder.flatMap(sectionName => {
               try {
-                const content = sections[sectionName];
+            const content = sections[sectionName];
                 // Skip empty sections or sections with only placeholder content
                 if (!content || 
                     (Array.isArray(content) && content.length === 0) || 
                     (typeof content === 'string' && content.trim() === '') ||
                     (typeof content === 'string' && content.includes('[This') && content.includes('needs to be completed]'))) {
-                  return [];
-                }
-                
-                const paragraphs = [];
-                
-                // Add section header (except for Header section)
-                if (sectionName !== 'Header') {
-                  paragraphs.push(
-                    new Paragraph({
-                      children: [
-                        new TextRun({
-                          text: sectionName.toUpperCase(),
-                          size: 28,
-                          bold: true,
-                          color: 'B4916C'
-                        })
-                      ],
-                      spacing: {
-                        before: 400,
-                        after: 200
-                      },
-                      border: {
-                        bottom: {
-                          color: 'B4916C',
-                          space: 1,
-                          style: BorderStyle.SINGLE,
-                          size: 6
-                        }
-                      }
+              return [];
+            }
+            
+            const paragraphs = [];
+            
+            // Add section header (except for Header section)
+            if (sectionName !== 'Header') {
+              paragraphs.push(
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: sectionName.toUpperCase(),
+                      size: 28,
+                      bold: true,
+                      color: 'B4916C'
                     })
-                  );
-                }
-                
+                  ],
+                  spacing: {
+                    before: 400,
+                    after: 200
+                  },
+                  border: {
+                    bottom: {
+                      color: 'B4916C',
+                      space: 1,
+                      style: BorderStyle.SINGLE,
+                      size: 6
+                    }
+                  }
+                })
+              );
+            }
+            
                 // Add section content with improved formatting
-                if (typeof content === 'string') {
+            if (typeof content === 'string') {
                   // Special handling for EDUCATION section
                   if (sectionName === 'EDUCATION') {
                     // Try to identify education entries
@@ -546,28 +546,28 @@ async function generateSpecificDocx(
                   // Special handling for LANGUAGES section
                   else if (sectionName === 'LANGUAGES') {
                     // Try to identify language entries
-                    const lines = content.split('\n').filter(line => line.trim());
-                    
-                    for (const line of lines) {
-                      // Check if line is a bullet point
-                      if (line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*')) {
-                        paragraphs.push(
-                          new Paragraph({
-                            children: [
-                              new TextRun({
-                                text: '• ',
-                                bold: true,
-                                color: 'B4916C'
-                              }),
-                              new TextRun({
-                                text: line.replace(/^[•\-*]\s*/, '')
-                              })
-                            ],
-                            spacing: {
-                              before: 120,
-                              after: 120
-                            },
-                            indent: {
+              const lines = content.split('\n').filter(line => line.trim());
+              
+              for (const line of lines) {
+                // Check if line is a bullet point
+                if (line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*')) {
+                  paragraphs.push(
+                    new Paragraph({
+                      children: [
+                        new TextRun({
+                          text: '• ',
+                          bold: true,
+                          color: 'B4916C'
+                        }),
+                        new TextRun({
+                          text: line.replace(/^[•\-*]\s*/, '')
+                        })
+                      ],
+                      spacing: {
+                        before: 120,
+                        after: 120
+                      },
+                      indent: {
                               left: 240
                             }
                           })
@@ -590,19 +590,19 @@ async function generateSpecificDocx(
                               spacing: {
                                 before: 120,
                                 after: 120
-                              }
-                            })
-                          );
-                        } else {
-                          paragraphs.push(
-                            new Paragraph({
-                              text: line,
-                              spacing: {
-                                before: 120,
-                                after: 120
-                              }
-                            })
-                          );
+                      }
+                    })
+                  );
+                } else {
+                  paragraphs.push(
+                    new Paragraph({
+                      text: line,
+                      spacing: {
+                        before: 120,
+                        after: 120
+                      }
+                    })
+                  );
                         }
                       }
                     }
@@ -661,33 +661,33 @@ async function generateSpecificDocx(
                           })
                         );
                       }
-                    }
-                  }
-                } else if (Array.isArray(content)) {
-                  // Add each item as a bullet point
-                  for (const item of content) {
+                }
+              }
+            } else if (Array.isArray(content)) {
+              // Add each item as a bullet point
+              for (const item of content) {
                     try {
-                      paragraphs.push(
-                        new Paragraph({
-                          children: [
-                            new TextRun({
-                              text: '• ',
-                              bold: true,
-                              color: 'B4916C'
-                            }),
-                            new TextRun({
-                              text: item
-                            })
-                          ],
-                          spacing: {
-                            before: 120,
-                            after: 120
-                          },
-                          indent: {
-                            left: 360
-                          }
-                        })
-                      );
+                paragraphs.push(
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: '• ',
+                        bold: true,
+                        color: 'B4916C'
+                      }),
+                      new TextRun({
+                        text: item
+                      })
+                    ],
+                    spacing: {
+                      before: 120,
+                      after: 120
+                    },
+                    indent: {
+                      left: 360
+                    }
+                  })
+                );
                     } catch (itemError) {
                       logger.warn(`Error processing item in section ${sectionName}:`, itemError instanceof Error ? itemError.message : String(itemError));
                       // Add a simple paragraph as fallback
@@ -701,52 +701,52 @@ async function generateSpecificDocx(
                         })
                       );
                     }
-                  }
-                }
-                
-                return paragraphs;
+              }
+            }
+            
+            return paragraphs;
               } catch (sectionError) {
                 logger.error(`Error processing section ${sectionName}:`, sectionError instanceof Error ? sectionError.message : String(sectionError));
                 // Return an empty array to skip this section
                 return [];
               }
-            }),
-            
-            // Add footer with date
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: `Optimized CV | ${new Date().toLocaleDateString()}`,
-                  size: 20,
-                  color: '666666'
-                })
-              ],
-              spacing: {
-                before: 400
-              },
-              alignment: AlignmentType.CENTER,
-              border: {
-                top: {
-                  color: 'B4916C',
-                  space: 1,
-                  style: BorderStyle.SINGLE,
-                  size: 6
-                }
+          }),
+          
+          // Add footer with date
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `Optimized CV | ${new Date().toLocaleDateString()}`,
+                size: 20,
+                color: '666666'
+              })
+            ],
+            spacing: {
+              before: 400
+            },
+            alignment: AlignmentType.CENTER,
+            border: {
+              top: {
+                color: 'B4916C',
+                space: 1,
+                style: BorderStyle.SINGLE,
+                size: 6
               }
-            })
-          ]
-        }]
-      });
+            }
+          })
+        ]
+      }]
+    });
 
-      // Generate buffer with a try-catch to handle any errors
-      try {
-        logger.info('Packing document to buffer');
-        const buffer = await Packer.toBuffer(doc);
+    // Generate buffer with a try-catch to handle any errors
+    try {
+      logger.info('Packing document to buffer');
+      const buffer = await Packer.toBuffer(doc);
         logger.info(`Document successfully packed to buffer: ${buffer.length} bytes`);
-        return buffer;
-      } catch (packError) {
-        logger.error('Error packing document to buffer:', packError instanceof Error ? packError.message : String(packError));
-        throw new Error(`Failed to pack document to buffer: ${packError instanceof Error ? packError.message : 'Unknown error'}`);
+      return buffer;
+    } catch (packError) {
+      logger.error('Error packing document to buffer:', packError instanceof Error ? packError.message : String(packError));
+      throw new Error(`Failed to pack document to buffer: ${packError instanceof Error ? packError.message : 'Unknown error'}`);
       }
     } catch (docError) {
       logger.error('Error creating document structure:', docError instanceof Error ? docError.message : String(docError));
@@ -819,16 +819,16 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
   logger.info(`Parsing optimized text of length: ${text.length}`);
   
   try {
-    // Split text into lines
-    const lines = text.split('\n').filter(line => line.trim());
-    
+  // Split text into lines
+  const lines = text.split('\n').filter(line => line.trim());
+  
     if (lines.length === 0) {
       logger.warn('No content found in optimized text');
       return sections;
     }
     
     // Define section patterns with more variations
-    const sectionPatterns = [
+  const sectionPatterns = [
       { regex: /^(PROFILE|SUMMARY|ABOUT|ABOUT ME|PROFESSIONAL SUMMARY)[:.\-]?/i, name: 'PROFILE' },
       { regex: /^(ACHIEVEMENTS|ACCOMPLISHMENTS|KEY ACHIEVEMENTS)[:.\-]?/i, name: 'ACHIEVEMENTS' },
       { regex: /^(GOALS|CAREER GOALS|OBJECTIVES|CAREER OBJECTIVES)[:.\-]?/i, name: 'GOALS' },
@@ -837,28 +837,28 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
       { regex: /^(EDUCATION|ACADEMIC|QUALIFICATIONS|ACADEMIC QUALIFICATIONS|EDUCATIONAL BACKGROUND|DEGREES?)[:.\-]?/i, name: 'EDUCATION' },
       { regex: /^(EXPERIENCE|WORK|EMPLOYMENT|PROFESSIONAL EXPERIENCE|CAREER|WORK HISTORY|JOB HISTORY)[:.\-]?/i, name: 'EXPERIENCE' },
       { regex: /^(REFERENCES|REFEREES)[:.\-]?/i, name: 'REFERENCES' }
-    ];
-    
-    let currentSection = '';
-    let sectionContent: string[] = [];
-    
-    // Process each line
-    for (const line of lines) {
-      // Check if this line is a section header
-      let isSectionHeader = false;
-      for (const pattern of sectionPatterns) {
+  ];
+  
+  let currentSection = '';
+  let sectionContent: string[] = [];
+  
+  // Process each line
+  for (const line of lines) {
+    // Check if this line is a section header
+    let isSectionHeader = false;
+    for (const pattern of sectionPatterns) {
         if (pattern.regex.test(line)) {
-          // If we were already processing a section, save it
-          if (currentSection) {
+        // If we were already processing a section, save it
+        if (currentSection) {
             if (sectionContent.length > 0) {
-              sections[currentSection] = sectionContent.join('\n');
+          sections[currentSection] = sectionContent.join('\n');
             }
-          }
-          
-          // Start a new section
+        }
+        
+        // Start a new section
           currentSection = pattern.name;
-          sectionContent = [];
-          isSectionHeader = true;
+        sectionContent = [];
+        isSectionHeader = true;
           
           // Check if there's content after the section header on the same line
           const contentAfterHeader = line.replace(pattern.regex, '').trim();
@@ -866,30 +866,30 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
             sectionContent.push(contentAfterHeader);
           }
           
-          break;
-        }
+        break;
       }
-      
-      // If not a section header, add to current section
+    }
+    
+    // If not a section header, add to current section
       if (!isSectionHeader) {
         if (currentSection) {
-          sectionContent.push(line);
+      sectionContent.push(line);
         } else {
-          // If no section has been identified yet, this is likely header information
-          if (!sections['Header']) {
-            sections['Header'] = line;
+      // If no section has been identified yet, this is likely header information
+      if (!sections['Header']) {
+        sections['Header'] = line;
           } else if (typeof sections['Header'] === 'string') {
-            sections['Header'] += '\n' + line;
+        sections['Header'] += '\n' + line;
           }
-        }
       }
     }
-    
-    // Save the last section
-    if (currentSection && sectionContent.length > 0) {
-      sections[currentSection] = sectionContent.join('\n');
-    }
-    
+  }
+  
+  // Save the last section
+  if (currentSection && sectionContent.length > 0) {
+    sections[currentSection] = sectionContent.join('\n');
+  }
+  
     // If no sections were found, try to intelligently parse the content
     if (Object.keys(sections).length <= 1 && sections['Header']) {
       logger.warn('No standard sections found, attempting intelligent parsing');
@@ -1023,6 +1023,6 @@ function intelligentParsing(text: string): Record<string, string | string[]> {
     return sections;
   } catch (error) {
     logger.error('Error in intelligent parsing:', error instanceof Error ? error.message : String(error));
-    return sections;
+  return sections;
   }
 } 

@@ -17,7 +17,7 @@ export interface Task {
 const queueConfig = {
   openai: {
     concurrency: 4, // Allow 4 concurrent OpenAI tasks
-    minInterval: 300, // Minimum time between requests in ms (reduced from 800ms to reduce throttling delays)
+    minInterval: 100, // Minimum time between requests in ms (reduced to speed up processing)
     maxQueueSize: 100, // Maximum queue size
     timeout: 60000, // Timeout for tasks in ms
   },
@@ -291,7 +291,7 @@ export function initializeQueue(): void {
   // Configure OpenAI queue
   configureQueue('openai', {
     concurrency: 4,
-    minInterval: 300,
+    minInterval: 100,
   });
   
   // Configure general queue

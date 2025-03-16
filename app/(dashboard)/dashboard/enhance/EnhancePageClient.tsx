@@ -48,6 +48,22 @@ export default function EnhancePageClient({ documentsData: initialDocumentsData 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const chatInputRef = useRef<HTMLInputElement>(null);
   
+  // Backend Integration: fetch documents dynamically from API on mount
+  useEffect(() => {
+    async function fetchDocuments() {
+      try {
+        const response = await fetch('/api/documents');
+        if (response.ok) {
+          const data = await response.json();
+          setDocumentsData(data.documents);
+        }
+      } catch (error) {
+        console.error("Failed to fetch documents:", error);
+      }
+    }
+    fetchDocuments();
+  }, []);
+  
   // Scroll to the bottom every time new messages arrive
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -145,7 +161,7 @@ export default function EnhancePageClient({ documentsData: initialDocumentsData 
       {/* Show the search interface until a conversation starts */}
       {!conversationStarted ? (
         <motion.div 
-          className="w-full max-w-3xl mx-auto flex flex-col items-center justify-center min-h-screen"
+          className="w-full max-w-3xl mx-auto flex flex-col items-center justify-center min-h-screen px-4"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
@@ -158,7 +174,7 @@ export default function EnhancePageClient({ documentsData: initialDocumentsData 
             </div>
           </div>
           
-          {/* Title changes depending on document selection */}
+          {/* Dynamic Title */}
           <h1 className="text-4xl sm:text-5xl font-bold mb-16 font-safiro text-white text-center">
             {selectedDocument ? "Let's edit professional documents" : "Let's make professional documents"}
           </h1>
@@ -189,8 +205,11 @@ export default function EnhancePageClient({ documentsData: initialDocumentsData 
                   </button>
                   
                   {isDocumentsDropdownOpen && (
-                    <div 
-                      className="absolute bottom-full mb-2 right-0 bg-[#1A1A1A] border border-[#333333] rounded-lg shadow-lg z-10 w-64"
+                    <motion.div 
+                      className="absolute bottom-full mb-2 right-0 bg-[#1A1A1A] border border-[#333333] rounded-lg shadow-lg z-10 w-64 sm:w-80"
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3 }}
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div className="p-2 border-b border-[#333333] flex justify-between items-center">
@@ -243,7 +262,7 @@ export default function EnhancePageClient({ documentsData: initialDocumentsData 
                           </li>
                         )}
                       </ul>
-                    </div>
+                    </motion.div>
                   )}
                 </div>
                 
@@ -303,7 +322,7 @@ export default function EnhancePageClient({ documentsData: initialDocumentsData 
         </motion.div>
       ) : (
         <motion.div 
-          className="w-full max-w-3xl mx-auto flex flex-col items-center"
+          className="w-full max-w-3xl mx-auto flex flex-col items-center px-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3 }}
@@ -378,8 +397,11 @@ export default function EnhancePageClient({ documentsData: initialDocumentsData 
                   </button>
                   
                   {isDocumentsDropdownOpen && (
-                    <div 
-                      className="absolute bottom-full mb-2 right-0 bg-[#1A1A1A] border border-[#333333] rounded-lg shadow-lg z-10 w-64"
+                    <motion.div 
+                      className="absolute bottom-full mb-2 right-0 bg-[#1A1A1A] border border-[#333333] rounded-lg shadow-lg z-10 w-64 sm:w-80"
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3 }}
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div className="p-2 border-b border-[#333333] flex justify-between items-center">
@@ -432,7 +454,7 @@ export default function EnhancePageClient({ documentsData: initialDocumentsData 
                           </li>
                         )}
                       </ul>
-                    </div>
+                    </motion.div>
                   )}
                 </div>
                 
