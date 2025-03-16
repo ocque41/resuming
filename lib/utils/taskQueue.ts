@@ -4,297 +4,259 @@ import { logger } from '@/lib/logger';
  * Task queue for managing API calls to prevent rate limiting
  */
 
-// Task interface
-interface Task<T> {
+// Define a task interface
+export interface Task {
   id: string;
-  execute: () => Promise<T>;
-  resolve: (value: T) => void;
-  reject: (error: Error) => void;
+  execute: () => Promise<any>;
   priority: number;
-  addedAt: number;
-  service: 'mistral' | 'openai';
+  timestamp: number;
+  service: 'mistral' | 'openai' | 'general';
 }
 
 // Queue configuration
-interface QueueConfig {
-  concurrency: number;
-  interval: number;
-}
-
-// Default configuration
-const DEFAULT_CONFIG: QueueConfig = {
-  concurrency: 2, // Number of concurrent tasks
-  interval: 1000, // Minimum time between task executions (ms)
+const queueConfig = {
+  mistral: {
+    concurrency: 1, // Only 1 concurrent Mistral task
+    minInterval: 2000, // Minimum 2 seconds between tasks
+    maxQueueSize: 50, // Maximum queue size
+  },
+  openai: {
+    concurrency: 2, // 2 concurrent OpenAI tasks
+    minInterval: 1000, // Minimum 1 second between tasks
+    maxQueueSize: 100, // Maximum queue size
+  },
+  general: {
+    concurrency: 5, // 5 concurrent general tasks
+    minInterval: 500, // Minimum 0.5 seconds between tasks
+    maxQueueSize: 200, // Maximum queue size
+  }
 };
 
-// Queue state
-const queues: {
-  mistral: Task<any>[];
-  openai: Task<any>[];
-} = {
+// Task queues
+const taskQueues: Record<string, Task[]> = {
   mistral: [],
   openai: [],
+  general: [],
 };
 
-// Active tasks count
-const activeTasks: {
-  mistral: number;
-  openai: number;
-} = {
+// Track active tasks
+const activeTasks: Record<string, number> = {
   mistral: 0,
   openai: 0,
+  general: 0,
 };
 
-// Queue configuration
-const queueConfig: {
-  mistral: QueueConfig;
-  openai: QueueConfig;
-} = {
-  mistral: { ...DEFAULT_CONFIG },
-  openai: { ...DEFAULT_CONFIG },
-};
-
-// Last execution time
-const lastExecutionTime: {
-  mistral: number;
-  openai: number;
-} = {
+// Track last execution time
+const lastExecutionTime: Record<string, number> = {
   mistral: 0,
   openai: 0,
+  general: 0,
 };
 
-// Processing flags
-let isProcessingMistral = false;
-let isProcessingOpenAI = false;
+// Generate a unique task ID
+function generateTaskId(): string {
+  return `task_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
 
 /**
- * Add a task to the queue
+ * Add a task to the queue and process it when ready
  */
 export async function queueTask<T>(
-  service: 'mistral' | 'openai',
-  taskFn: () => Promise<T>,
+  service: 'mistral' | 'openai' | 'general',
+  execute: () => Promise<T>,
   options: {
     priority?: number;
     taskId?: string;
   } = {}
 ): Promise<T> {
-  const { priority = 0, taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 9)}` } = options;
+  const { priority = 0, taskId = generateTaskId() } = options;
   
-  logger.debug(`Adding task ${taskId} to ${service} queue with priority ${priority}`);
+  // Create a promise that will be resolved when the task completes
+  let resolveTask!: (value: T) => void;
+  let rejectTask!: (reason: any) => void;
   
-  return new Promise<T>((resolve, reject) => {
-    // Create the task
-    const task: Task<T> = {
-      id: taskId,
-      execute: taskFn,
-      resolve,
-      reject,
-      priority,
-      addedAt: Date.now(),
-      service,
-    };
-    
-    // Add to the appropriate queue
-    queues[service].push(task);
-    
-    // Sort the queue by priority (higher first) and then by added time (earlier first)
-    queues[service].sort((a, b) => {
-      if (a.priority !== b.priority) {
-        return b.priority - a.priority;
-      }
-      return a.addedAt - b.addedAt;
-    });
-    
-    // Start processing the queue if not already processing
-    if (service === 'mistral' && !isProcessingMistral) {
-      processMistralQueue();
-    } else if (service === 'openai' && !isProcessingOpenAI) {
-      processOpenAIQueue();
-    }
+  const taskPromise = new Promise<T>((resolve, reject) => {
+    resolveTask = resolve;
+    rejectTask = reject;
   });
-}
-
-/**
- * Process the Mistral queue
- */
-async function processMistralQueue(): Promise<void> {
-  if (isProcessingMistral) return;
   
-  isProcessingMistral = true;
+  // Create the task
+  const task: Task = {
+    id: taskId,
+    execute: async () => {
+      try {
+        const result = await execute();
+        resolveTask(result);
+        return result;
+      } catch (error) {
+        rejectTask(error);
+        throw error;
+      }
+    },
+    priority,
+    timestamp: Date.now(),
+    service,
+  };
   
-  try {
-    while (queues.mistral.length > 0) {
-      // Check if we can execute more tasks
-      if (activeTasks.mistral >= queueConfig.mistral.concurrency) {
-        // Wait for active tasks to complete
-        await new Promise(resolve => setTimeout(resolve, 100));
-        continue;
-      }
-      
-      // Check if we need to wait for the interval
-      const now = Date.now();
-      const timeSinceLastExecution = now - lastExecutionTime.mistral;
-      
-      if (timeSinceLastExecution < queueConfig.mistral.interval) {
-        // Wait for the interval
-        await new Promise(resolve => setTimeout(resolve, queueConfig.mistral.interval - timeSinceLastExecution));
-      }
-      
-      // Get the next task
-      const task = queues.mistral.shift();
-      if (!task) continue;
-      
-      // Update last execution time
-      lastExecutionTime.mistral = Date.now();
-      
-      // Increment active tasks
-      activeTasks.mistral++;
-      
-      // Execute the task
-      logger.debug(`Executing Mistral task ${task.id}`);
-      
-      task.execute()
-        .then(result => {
-          task.resolve(result);
-          logger.debug(`Completed Mistral task ${task.id}`);
-        })
-        .catch(error => {
-          task.reject(error);
-          logger.error(`Failed Mistral task ${task.id}:`, error instanceof Error ? error.message : String(error));
-        })
-        .finally(() => {
-          // Decrement active tasks
-          activeTasks.mistral--;
-        });
-    }
-  } finally {
-    isProcessingMistral = false;
-    
-    // If new tasks were added while processing, start processing again
-    if (queues.mistral.length > 0) {
-      processMistralQueue();
+  // Check if queue is full
+  if (taskQueues[service].length >= queueConfig[service].maxQueueSize) {
+    // If queue is full, reject low priority tasks or wait for high priority tasks
+    if (priority < 5) {
+      const error = new Error(`Task queue for ${service} is full (${taskQueues[service].length} tasks)`);
+      rejectTask(error);
+      throw error;
+    } else {
+      // For high priority tasks, wait until there's space
+      logger.warn(`High priority task waiting for queue space in ${service} queue`);
+      await new Promise(resolve => setTimeout(resolve, 5000));
     }
   }
+  
+  // Add task to queue
+  taskQueues[service].push(task);
+  
+  // Log queue status for monitoring
+  logger.debug(`Added task to ${service} queue. Queue size: ${taskQueues[service].length}, Active: ${activeTasks[service]}/${queueConfig[service].concurrency}`);
+  
+  // Process queue
+  processQueue(service);
+  
+  // Return the promise that will be resolved when the task completes
+  return taskPromise;
 }
 
 /**
- * Process the OpenAI queue
+ * Process the queue for a specific service
  */
-async function processOpenAIQueue(): Promise<void> {
-  if (isProcessingOpenAI) return;
-  
-  isProcessingOpenAI = true;
-  
-  try {
-    while (queues.openai.length > 0) {
-      // Check if we can execute more tasks
-      if (activeTasks.openai >= queueConfig.openai.concurrency) {
-        // Wait for active tasks to complete
-        await new Promise(resolve => setTimeout(resolve, 100));
-        continue;
-      }
-      
-      // Check if we need to wait for the interval
-      const now = Date.now();
-      const timeSinceLastExecution = now - lastExecutionTime.openai;
-      
-      if (timeSinceLastExecution < queueConfig.openai.interval) {
-        // Wait for the interval
-        await new Promise(resolve => setTimeout(resolve, queueConfig.openai.interval - timeSinceLastExecution));
-      }
-      
-      // Get the next task
-      const task = queues.openai.shift();
-      if (!task) continue;
-      
-      // Update last execution time
-      lastExecutionTime.openai = Date.now();
-      
-      // Increment active tasks
-      activeTasks.openai++;
-      
-      // Execute the task
-      logger.debug(`Executing OpenAI task ${task.id}`);
-      
-      task.execute()
-        .then(result => {
-          task.resolve(result);
-          logger.debug(`Completed OpenAI task ${task.id}`);
-        })
-        .catch(error => {
-          task.reject(error);
-          logger.error(`Failed OpenAI task ${task.id}:`, error instanceof Error ? error.message : String(error));
-        })
-        .finally(() => {
-          // Decrement active tasks
-          activeTasks.openai--;
-        });
-    }
-  } finally {
-    isProcessingOpenAI = false;
-    
-    // If new tasks were added while processing, start processing again
-    if (queues.openai.length > 0) {
-      processOpenAIQueue();
-    }
+function processQueue(service: 'mistral' | 'openai' | 'general'): void {
+  // If we're already at max concurrency, don't process more tasks
+  if (activeTasks[service] >= queueConfig[service].concurrency) {
+    return;
   }
+  
+  // Check if we need to wait before processing the next task
+  const now = Date.now();
+  const timeSinceLastExecution = now - lastExecutionTime[service];
+  
+  if (timeSinceLastExecution < queueConfig[service].minInterval) {
+    // Schedule processing after the minimum interval
+    setTimeout(() => processQueue(service), queueConfig[service].minInterval - timeSinceLastExecution);
+    return;
+  }
+  
+  // If there are no tasks in the queue, nothing to do
+  if (taskQueues[service].length === 0) {
+    return;
+  }
+  
+  // Sort tasks by priority (higher first) and then by timestamp (older first)
+  taskQueues[service].sort((a, b) => {
+    if (a.priority !== b.priority) {
+      return b.priority - a.priority; // Higher priority first
+    }
+    return a.timestamp - b.timestamp; // Older tasks first
+  });
+  
+  // Get the next task
+  const task = taskQueues[service].shift();
+  if (!task) return;
+  
+  // Update active tasks count
+  activeTasks[service]++;
+  
+  // Update last execution time
+  lastExecutionTime[service] = now;
+  
+  // Execute the task
+  logger.debug(`Executing task ${task.id} from ${service} queue`);
+  
+  task.execute()
+    .catch(error => {
+      logger.error(`Error executing task ${task.id} from ${service} queue:`, error);
+    })
+    .finally(() => {
+      // Decrease active tasks count
+      activeTasks[service]--;
+      
+      // Process the next task
+      // Add a small delay to prevent tight loops
+      setTimeout(() => processQueue(service), 50);
+    });
 }
 
 /**
- * Configure the queue
+ * Get the current queue status
+ */
+export function getQueueStatus(): Record<string, { queued: number; active: number; maxConcurrency: number }> {
+  return {
+    mistral: {
+      queued: taskQueues.mistral.length,
+      active: activeTasks.mistral,
+      maxConcurrency: queueConfig.mistral.concurrency,
+    },
+    openai: {
+      queued: taskQueues.openai.length,
+      active: activeTasks.openai,
+      maxConcurrency: queueConfig.openai.concurrency,
+    },
+    general: {
+      queued: taskQueues.general.length,
+      active: activeTasks.general,
+      maxConcurrency: queueConfig.general.concurrency,
+    },
+  };
+}
+
+/**
+ * Clear all tasks from a specific queue
+ */
+export function clearQueue(service: 'mistral' | 'openai' | 'general'): void {
+  const queueSize = taskQueues[service].length;
+  taskQueues[service] = [];
+  logger.info(`Cleared ${queueSize} tasks from ${service} queue`);
+}
+
+/**
+ * Configure a specific queue's settings
  */
 export function configureQueue(
-  service: 'mistral' | 'openai',
-  config: Partial<QueueConfig>
+  service: 'mistral' | 'openai' | 'general',
+  config: Partial<typeof queueConfig.mistral>
 ): void {
   queueConfig[service] = {
     ...queueConfig[service],
     ...config,
   };
   
-  logger.info(`Configured ${service} queue:`, queueConfig[service]);
-}
-
-/**
- * Get queue statistics
- */
-export function getQueueStats(): {
-  mistral: { queued: number; active: number };
-  openai: { queued: number; active: number };
-} {
-  return {
-    mistral: {
-      queued: queues.mistral.length,
-      active: activeTasks.mistral,
-    },
-    openai: {
-      queued: queues.openai.length,
-      active: activeTasks.openai,
-    },
-  };
+  logger.info(`Configured ${service} queue: concurrency=${queueConfig[service].concurrency}, minInterval=${queueConfig[service].minInterval}ms`);
 }
 
 // Configure queues based on environment
-if (process.env.MISTRAL_QUEUE_CONCURRENCY) {
+// These are just examples and can be adjusted based on your needs
+if (process.env.NODE_ENV === 'production') {
+  // In production, be more conservative with API calls
   configureQueue('mistral', {
-    concurrency: parseInt(process.env.MISTRAL_QUEUE_CONCURRENCY, 10),
+    concurrency: 1,
+    minInterval: 3000, // 3 seconds between calls
+    maxQueueSize: 100
   });
-}
-
-if (process.env.MISTRAL_QUEUE_INTERVAL) {
+  
+  configureQueue('openai', {
+    concurrency: 2,
+    minInterval: 1500, // 1.5 seconds between calls
+    maxQueueSize: 150
+  });
+} else if (process.env.NODE_ENV === 'development') {
+  // In development, we can be a bit more aggressive
   configureQueue('mistral', {
-    interval: parseInt(process.env.MISTRAL_QUEUE_INTERVAL, 10),
+    concurrency: 1,
+    minInterval: 2000, // 2 seconds between calls
+    maxQueueSize: 50
   });
-}
-
-if (process.env.OPENAI_QUEUE_CONCURRENCY) {
+  
   configureQueue('openai', {
-    concurrency: parseInt(process.env.OPENAI_QUEUE_CONCURRENCY, 10),
-  });
-}
-
-if (process.env.OPENAI_QUEUE_INTERVAL) {
-  configureQueue('openai', {
-    interval: parseInt(process.env.OPENAI_QUEUE_INTERVAL, 10),
+    concurrency: 2,
+    minInterval: 1000, // 1 second between calls
+    maxQueueSize: 100
   });
 } 

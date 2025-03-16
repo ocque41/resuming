@@ -670,964 +670,311 @@ export class MistralRAGService {
   }
 
   /**
-   * Analyze CV format and provide strengths, weaknesses, and recommendations
-   * @returns Format analysis results
+   * Analyze the CV format and provide feedback
+   * @param cvText The CV text to analyze (optional, will use originalCVText if not provided)
+   * @returns Analysis of the CV format with strengths, weaknesses, and recommendations
    */
-  public async analyzeCVFormat(): Promise<{ strengths: string[], weaknesses: string[], recommendations: string[] }> {
-    try {
-      if (!this.originalCVText) {
-        throw new Error('No CV text has been processed');
-      }
-      
-      // Generate the prompt for CV format analysis
-      const prompt = `Analyze the format and structure of the following CV. Identify strengths, weaknesses, and provide recommendations for improvement.
-      
-      CV:
-      ${this.originalCVText}
-      
-      Return your analysis as a JSON object with the following structure:
-      {
-        "strengths": ["strength1", "strength2", ...],
-        "weaknesses": ["weakness1", "weakness2", ...],
-        "recommendations": ["recommendation1", "recommendation2", ...]
-      }
-      
-      Return ONLY the JSON object without any additional text or explanation.`;
-      
-      let response;
-      
-      if (this.useMistral && this.mistralClient) {
-        // Use Mistral for CV format analysis with rate limiting and retries
-        response = await retryWithExponentialBackoff(
-          async () => {
-            return await this.mistralClient!.chat({
-              model: this.mistralGenerationModel,
-              messages: [
-                {
-                  role: 'system',
-                  content: 'You are a CV format analysis expert. Analyze the CV format and structure, then return a JSON object with strengths, weaknesses, and recommendations.'
-                },
-                {
-                  role: 'user',
-                  content: prompt
-                }
-              ]
-            });
-          },
-          { service: 'mistral', maxRetries: 3 }
-        );
-      } else {
-        // Use OpenAI for CV format analysis with rate limiting and retries
-        response = await retryWithExponentialBackoff(
-          async () => {
-            return await this.openaiClient.chat.completions.create({
-              model: this.openaiGenerationModel,
-              messages: [
-                {
-                  role: 'system',
-                  content: 'You are a CV format analysis expert. Analyze the CV format and structure, then return a JSON object with strengths, weaknesses, and recommendations.'
-                },
-                {
-                  role: 'user',
-                  content: prompt
-                }
-              ]
-            });
-          },
-          { service: 'openai', maxRetries: 3 }
-        );
-      }
-      
-      const content = this.useMistral && this.mistralClient 
-        ? response.choices[0].message.content || ''
-        : response.choices[0].message.content || '';
-      
-      // Try to parse the response as JSON
-      try {
-        // First try to extract JSON from markdown if needed
-        const jsonContent = this.extractJsonFromMarkdown(content);
-        const result = JSON.parse(jsonContent);
-        
-        // Validate the structure
-        if (!result.strengths || !result.weaknesses || !result.recommendations) {
-          throw new Error('Invalid response structure');
-        }
-        
-        logger.info('Format analysis complete:', {
-          strengths: result.strengths.length,
-          weaknesses: result.weaknesses.length,
-          recommendations: result.recommendations.length
-        });
-        
-        return result;
-      } catch (parseError) {
-        logger.error('Error parsing CV format analysis:', parseError instanceof Error ? parseError.message : String(parseError));
-        
-        // Try to extract information using regex
-        const strengths = this.extractStrengthsWithRegex(content);
-        const weaknesses = this.extractWeaknessesWithRegex(content);
-        const recommendations = this.extractRecommendationsWithRegex(content);
-        
-        if (strengths.length > 0 || weaknesses.length > 0 || recommendations.length > 0) {
-          logger.info('Used regex extraction for CV format analysis');
-          return {
-            strengths,
-            weaknesses,
-            recommendations
-          };
-        }
-        
-        // Return default values if regex extraction fails
-        return {
-          strengths: ['Clear structure', 'Includes essential sections', 'Appropriate length'],
-          weaknesses: ['Could improve formatting', 'Some sections could be more detailed', 'Consider adding more keywords'],
-          recommendations: ['Enhance visual hierarchy', 'Add more specific achievements', 'Quantify accomplishments where possible']
-        };
-      }
-    } catch (error) {
-      logger.error('Error analyzing CV format:', error instanceof Error ? error.message : String(error));
-      
-      // Return default values on error
-      return {
-        strengths: ['Clear structure', 'Includes essential sections', 'Appropriate length'],
-        weaknesses: ['Could improve formatting', 'Some sections could be more detailed', 'Consider adding more keywords'],
-        recommendations: ['Enhance visual hierarchy', 'Add more specific achievements', 'Quantify accomplishments where possible']
-      };
-    }
-  }
-  
-  /**
-   * Helper function to extract JSON from markdown code blocks
-   */
-  private extractJsonFromMarkdown(text: string): string {
-    // Check if the text contains a markdown code block
-    const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)```/;
-    const match = text.match(codeBlockRegex);
-    
-    if (match && match[1]) {
-      // Return the content inside the code block
-      return match[1].trim();
-    }
-    
-    // If no code block is found, return the original text
-    return text.trim();
-  }
-
-  /**
-   * Extract keywords from the CV
-   * @returns Array of keywords
-   */
-  public async extractKeywords(): Promise<string[]> {
-    try {
-      logger.info('Extracting keywords from CV with RAG service');
-      
-      // Default keywords to ensure we always have something to return
-      const defaultKeywords = [
-        'Professional Experience',
-        'Skills',
-        'Education',
-        'Communication',
-        'Problem Solving',
-        'Teamwork',
-        'Leadership',
-        'Project Management',
-        'Time Management',
-        'Analytical Skills'
-      ];
-      
-      // If no CV text is available, return default keywords
-      if (!this.originalCVText || this.originalCVText.trim() === '') {
-        logger.warn('No CV text available for keyword extraction, returning default keywords');
-        return defaultKeywords;
-      }
-      
-      // Use a more robust prompt for keyword extraction
-      const systemPrompt = `You are a CV keyword extraction specialist. Your task is to extract the most important and relevant keywords from the provided CV.
-      
-Focus on:
-1. Technical skills and tools
-2. Industry-specific terminology
-3. Professional qualifications
-4. Core competencies
-5. Specialized knowledge areas
-
-Extract at least 10-15 keywords that would be valuable for ATS (Applicant Tracking Systems) matching.
-Format your response as a comma-separated list of keywords ONLY, with no additional text, explanations, or formatting.
-Example: "JavaScript, Project Management, Data Analysis, Leadership, Strategic Planning, Customer Relationship Management"`;
-
-      // Use the more powerful model for better extraction
-      const response = await this.openaiClient.chat.completions.create({
-        model: 'gpt-4o',  // Use the most capable model for this critical task
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt
-          },
-          {
-            role: "user",
-            content: `Extract the most important keywords from this CV:\n\n${this.originalCVText}`
-          }
-        ],
-        temperature: 0.3,  // Lower temperature for more consistent results
-        max_tokens: 200    // Allow enough tokens for a comprehensive list
-      });
-
-      const keywordsContent = response.choices[0]?.message?.content;
-      if (!keywordsContent) {
-        logger.warn("No keywords extracted from the response, returning default keywords");
-        return defaultKeywords;
-      }
-
-      // Parse the comma-separated list
-      const keywords = keywordsContent
-        .split(',')
-        .map(keyword => keyword.trim())
-        .filter(keyword => keyword.length > 0);
-      
-      // If we got too few keywords, supplement with defaults
-      if (keywords.length < 5) {
-        logger.warn(`Only ${keywords.length} keywords extracted, supplementing with defaults`);
-        return [...keywords, ...defaultKeywords].slice(0, 15);
-      }
-      
-      logger.info(`Successfully extracted ${keywords.length} keywords from CV`);
-      return keywords;
-    } catch (error) {
-      logger.error("Error extracting keywords:", error instanceof Error ? error.message : String(error));
-      // Return default keywords on error
-      return [
-        'Professional Experience',
-        'Skills',
-        'Education',
-        'Communication',
-        'Problem Solving',
-        'Teamwork',
-        'Leadership',
-        'Project Management',
-        'Time Management',
-        'Analytical Skills'
-      ];
-    }
-  }
-
-  /**
-   * Extract key requirements from the CV
-   * @returns Array of key requirements
-   */
-  public async extractKeyRequirements(): Promise<string[]> {
-    try {
-      logger.info('Extracting key requirements from CV with RAG service');
-      
-      // Default key requirements to ensure we always have something to return
-      const defaultRequirements = [
-        'Professional experience',
-        'Relevant education',
-        'Technical skills',
-        'Communication skills',
-        'Problem-solving abilities'
-      ];
-      
-      // If no chunks are available, return default requirements
-      if (!this.chunks || this.chunks.length === 0) {
-        logger.warn('No chunks available for key requirements extraction, returning default requirements');
-        return defaultRequirements;
-      }
-      
-      // Get relevant chunks for requirements extraction
-      const query = 'key requirements qualifications experience skills';
-      const relevantChunks = await this.retrieveRelevantChunks(query, 3);
-      
-      if (relevantChunks.length === 0) {
-        logger.warn('No relevant chunks found for key requirements extraction, returning default requirements');
-        return defaultRequirements;
-      }
-      
-      // Prepare the prompt for requirements extraction
-      const prompt = `
-        Extract the key requirements or qualifications from this CV/resume.
-        Focus on the most important skills, experiences, and qualifications that the person has.
-        
-        CV content:
-        ${relevantChunks.join('\n\n')}
-        
-        Return ONLY a JSON array of 5-7 key requirements, with each requirement being a string.
-        Example: ["5+ years of software development experience", "Bachelor's degree in Computer Science", "Strong communication skills"]
-      `;
-      
-      // Generate the response
-      const response = await this.generateResponse(prompt, true);
-      
-      // Parse the response
-      try {
-        // Try to parse as JSON first
-        let requirements = JSON.parse(response);
-        
-        // Ensure it's an array
-        if (!Array.isArray(requirements)) {
-          throw new Error('Response is not an array');
-        }
-        
-        // Filter out non-string items and empty strings
-        requirements = requirements.filter(req => typeof req === 'string' && req.trim() !== '');
-        
-        // Combine with default requirements if we don't have enough
-        if (requirements.length < 3) {
-          requirements = [...requirements, ...defaultRequirements];
-        }
-        
-        // Remove duplicates
-        requirements = [...new Set(requirements)];
-        
-        // Limit to 7 requirements
-        return requirements.slice(0, 7);
-      } catch (parseError) {
-        logger.error(`Error parsing key requirements extraction response: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-        
-        // Try to extract requirements using regex if JSON parsing fails
-        const reqMatches = response.match(/"([^"]+)"/g);
-        if (reqMatches && reqMatches.length > 0) {
-          // Remove quotes and filter empty strings
-          let extractedRequirements = reqMatches
-            .map(match => match.replace(/"/g, '').trim())
-            .filter(req => req !== '');
-          
-          // Combine with default requirements if we don't have enough
-          if (extractedRequirements.length < 3) {
-            extractedRequirements = [...extractedRequirements, ...defaultRequirements];
-          }
-          
-          // Remove duplicates
-          extractedRequirements = [...new Set(extractedRequirements)];
-          
-          // Limit to 7 requirements
-          return extractedRequirements.slice(0, 7);
-        }
-        
-        // Return default requirements if extraction failed
-        return defaultRequirements;
-      }
-    } catch (error) {
-      logger.error(`Error extracting key requirements: ${error instanceof Error ? error.message : String(error)}`);
-      
-      // Return default requirements on error
-      return [
-        'Professional experience',
-        'Relevant education',
-        'Technical skills',
-        'Communication skills',
-        'Problem-solving abilities'
-      ];
-    }
-  }
-
-  /**
-   * Helper method to parse array items from a string
-   * @param arrayString String containing array items
-   * @returns Array of strings
-   */
-  private parseArrayItems(arrayString: string): string[] {
-    // Remove quotes and split by comma
-    const items = arrayString.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
-      .map(item => item.trim().replace(/^["']|["']$/g, ''))
-      .filter(item => item !== '');
-    
-    return items;
-  }
-
-  /**
-   * Extracts industry-specific skills from a CV based on the identified industry
-   * @param industry The industry for which to extract skills
-   * @returns Array of industry-specific skills
-   */
-  public async getIndustrySkills(industry: string): Promise<string[]> {
-    if (!industry || industry === "General") {
-      return [];
-    }
-    
-    const query = `Extract the most relevant skills specifically for the ${industry} industry from this CV.`;
-    
-    const systemPrompt = `You are a CV skill extractor specialized in the ${industry} industry.
-Extract only skills that are highly relevant to the ${industry} industry.
-Format your response as a simple list of skills, one per line. Do not include explanations.
-Focus on technical and specialized skills, not soft skills.`;
-    
-    const skillsText = await this.generateResponse(query, systemPrompt);
-    
-    // Parse the skills into an array
-    const skills = this.parseBulletPoints(skillsText);
-    
-    // Clean up and filter
-    return skills
-      .map(skill => skill.trim())
-      .filter(skill => skill.length > 2)
-      .slice(0, 15); // Limit to top 15 industry skills
-  }
-
-  /**
-   * Extract keyword analysis from the CV
-   * @param industry Optional industry to focus the keyword analysis
-   * @returns Object with keyword analysis
-   */
-  public async extractKeywordAnalysis(industry?: string): Promise<{[key: string]: number}> {
-    let query = 'Analyze the CV for important keywords and their frequency or importance.';
-    
-    if (industry) {
-      query = `Analyze the CV for important keywords related to the ${industry} industry and their frequency or importance.`;
-    }
-    
-    const systemPrompt = `You are a CV keyword analyzer. Extract important keywords from the CV and assign each a relevance score from 1 to 10 based on frequency and importance. Then, confirm these top keywords with GPT4o and provide a recommendation on how to enhance each keyword's effectiveness, considering the identified industry.`;
-    
-    const analysisText = await this.generateResponse(query, systemPrompt);
-    
-    // Parse the keyword analysis
-    const keywordAnalysis: {[key: string]: number} = {};
-    
-    // Try to detect if the output is in a structured format
-    const keywordLines = analysisText.split('\n');
-    
-    for (const line of keywordLines) {
-      // Try to match patterns like "keyword: 8" or "keyword - 8" or "keyword (8)"
-      const match = line.match(/([^:(-]+)(?::|-)?\s*\(?(\d+)(?:\/\d+)?\)?/);
-      
-      if (match) {
-        const keyword = match[1].trim();
-        const score = parseInt(match[2], 10);
-        
-        if (keyword && !isNaN(score)) {
-          keywordAnalysis[keyword] = score;
-        }
-      }
-    }
-    
-    // If we couldn't parse structured output, extract keywords and assign default scores
-    if (Object.keys(keywordAnalysis).length === 0) {
-      // Find words that look like keywords (could be improved with NLP)
-      const words = analysisText.match(/\b[A-Za-z][A-Za-z0-9\s]*[A-Za-z0-9]\b/g) || [];
-      
-      // Filter to likely keywords (longer than 3 letters, not common words)
-      const commonWords = new Set(['the', 'and', 'that', 'have', 'for', 'not', 'with', 'you', 'this', 'but']);
-      const potentialKeywords = words
-        .filter(word => word.length > 3 && !commonWords.has(word.toLowerCase()))
-        .slice(0, 10); // Limit to top 10
-      
-      // Assign default scores
-      potentialKeywords.forEach((keyword, index) => {
-        // Score from 8 (most important) to 5 (least important)
-        keywordAnalysis[keyword] = Math.max(5, 8 - Math.floor(index / 3));
-      });
-    }
-    
-    return keywordAnalysis;
-  }
-
-  /**
-   * Analyze the content of the CV for strengths, weaknesses, and recommendations
-   * @returns Object containing content strengths, weaknesses, and recommendations
-   */
-  public async analyzeContent(): Promise<{
+  async analyzeCVFormat(cvText?: string): Promise<{
     strengths: string[];
     weaknesses: string[];
     recommendations: string[];
   }> {
-    try {
-      // Ensure we have chunks to analyze
-      if (this.chunks.length === 0) {
-        logger.warn('No chunks available for CV content analysis, using defaults');
-        return {
-          strengths: this.getDefaultContentStrengths(),
-          weaknesses: this.getDefaultContentWeaknesses(),
-          recommendations: this.getDefaultContentRecommendations()
-        };
-      }
-
-      const query = 'Analyze the content of this CV/resume document in detail. Focus on the quality of the content, not the format.';
-      
-      const systemPrompt = `You are a professional CV/resume content analyzer. Your task is to analyze ONLY the content of the CV (not the format).
-
-Review the document for these content aspects:
-1. Quality of experience descriptions
-2. Achievement focus and quantifiable results
-3. Relevance and specificity of skills
-4. Clarity and impact of professional summary
-5. Overall content effectiveness for job applications
-
-Provide your analysis in JSON format with these three arrays:
-1. "strengths": List specific content strengths (minimum 3)
-2. "weaknesses": List specific content issues (minimum 3)
-3. "recommendations": Provide actionable recommendations to improve the content (minimum 3)
-
-Example response format:
-{
-  "strengths": ["Strong achievement focus in experience section", "Clear demonstration of technical skills", "Effective use of action verbs"],
-  "weaknesses": ["Lack of quantifiable results", "Generic skill descriptions", "Missing targeted professional summary"],
-  "recommendations": ["Add metrics and numbers to achievements", "Tailor skills to specific job targets", "Create a compelling professional summary"]
-}
-
-Keep your analysis focused only on the document's content, not its format or layout.`;
-      
-      // Generate content analysis using all CV chunks
-      // Limit context to avoid token limits
-      const context = this.chunks.slice(0, 10).join('\n\n');
-      
-      // First try to get a structured JSON response
-      try {
-        logger.info('Attempting CV content analysis with JSON response');
-        const analysisText = await this.generateDirectResponse(
-          `${query}\n\nDocument to analyze:\n${context}`, 
-          systemPrompt
-        );
-        
-        // Try to parse as JSON
-        try {
-          // First, try to extract JSON if it's embedded in other text
-          const jsonMatch = analysisText.match(/\{[\s\S]*?\}/);
-          const jsonString = jsonMatch ? jsonMatch[0] : analysisText;
-          
-          const jsonResponse = JSON.parse(jsonString);
-          
-          // Validate the JSON structure
-          if (jsonResponse.strengths && 
-              jsonResponse.weaknesses && 
-              jsonResponse.recommendations &&
-              Array.isArray(jsonResponse.strengths) &&
-              Array.isArray(jsonResponse.weaknesses) &&
-              Array.isArray(jsonResponse.recommendations)) {
-            
-            // Ensure we have at least 3 items in each category
-            const strengths = jsonResponse.strengths.length >= 3 ? 
-              jsonResponse.strengths : 
-              [...jsonResponse.strengths, ...this.getDefaultContentStrengths()].slice(0, 5);
-              
-            const weaknesses = jsonResponse.weaknesses.length >= 3 ? 
-              jsonResponse.weaknesses : 
-              [...jsonResponse.weaknesses, ...this.getDefaultContentWeaknesses()].slice(0, 5);
-              
-            const recommendations = jsonResponse.recommendations.length >= 3 ? 
-              jsonResponse.recommendations : 
-              [...jsonResponse.recommendations, ...this.getDefaultContentRecommendations()].slice(0, 5);
-            
-            logger.info(`Successfully parsed CV content analysis as JSON: ${strengths.length} strengths, ${weaknesses.length} weaknesses, ${recommendations.length} recommendations`);
-            
-            return {
-              strengths,
-              weaknesses,
-              recommendations
-            };
-          } else {
-            logger.warn('JSON response missing required arrays, falling back to text parsing');
-            throw new Error('Invalid JSON structure');
-          }
-        } catch (jsonError) {
-          // If JSON parsing fails, try to parse the text
-          logger.warn(`Failed to parse content analysis as JSON: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
-          
-          // Parse the analysis text to extract strengths, weaknesses, and recommendations
-          const sections = this.parseAnalysisSections(analysisText);
-          
-          // Ensure we have at least some items in each category
-          const strengths = sections.strengths.length > 0 ? 
-            sections.strengths : this.getDefaultContentStrengths();
-          
-          const weaknesses = sections.weaknesses.length > 0 ? 
-            sections.weaknesses : this.getDefaultContentWeaknesses();
-          
-          const recommendations = sections.recommendations.length > 0 ? 
-            sections.recommendations : this.getDefaultContentRecommendations();
-          
-          // Log the results
-          logger.info(`CV content analysis complete (text parsing): ${strengths.length} strengths, ${weaknesses.length} weaknesses, ${recommendations.length} recommendations`);
-          
-          return {
-            strengths,
-            weaknesses,
-            recommendations
-          };
-        }
-      } catch (analysisError) {
-        // If the first attempt fails, try a simpler approach
-        logger.warn(`First attempt at content analysis failed: ${analysisError instanceof Error ? analysisError.message : String(analysisError)}`);
-        
-        // Try a second attempt with a simpler prompt
-        const simpleSystemPrompt = `Analyze the CV content only. List exactly 3 strengths, 3 weaknesses, and 3 recommendations about the content. Format your response with clear headings: "Strengths:", "Weaknesses:", and "Recommendations:".`;
-        
-        try {
-          const secondAttemptText = await this.generateDirectResponse(
-            `${query}\n\nDocument to analyze:\n${context.substring(0, 3000)}`, 
-            simpleSystemPrompt
-          );
-          
-          // Parse the analysis text to extract strengths, weaknesses, and recommendations
-          const sections = this.parseAnalysisSections(secondAttemptText);
-          
-          // Ensure we have at least some items in each category
-          const strengths = sections.strengths.length > 0 ? 
-            sections.strengths : this.getDefaultContentStrengths();
-          
-          const weaknesses = sections.weaknesses.length > 0 ? 
-            sections.weaknesses : this.getDefaultContentWeaknesses();
-          
-          const recommendations = sections.recommendations.length > 0 ? 
-            sections.recommendations : this.getDefaultContentRecommendations();
-          
-          // Log the results
-          logger.info(`CV content analysis complete (second attempt): ${strengths.length} strengths, ${weaknesses.length} weaknesses, ${recommendations.length} recommendations`);
-          
-          return {
-            strengths,
-            weaknesses,
-            recommendations
-          };
-        } catch (secondError) {
-          // If both attempts fail, return defaults
-          logger.error(`Both content analysis attempts failed: ${secondError instanceof Error ? secondError.message : String(secondError)}`);
-          return {
-            strengths: this.getDefaultContentStrengths(),
-            weaknesses: this.getDefaultContentWeaknesses(),
-            recommendations: this.getDefaultContentRecommendations()
-          };
-        }
-      }
-    } catch (error) {
-      // Handle errors and return defaults
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error analyzing CV content: ${errorMessage}`);
-      
-      // Return default content analysis if analysis fails
+    logger.info('Analyzing CV format');
+    
+    // Use provided text or fall back to originalCVText
+    const textToAnalyze = cvText || this.originalCVText;
+    
+    if (!textToAnalyze) {
+      logger.warn('No CV text available for format analysis');
       return {
-        strengths: this.getDefaultContentStrengths(),
-        weaknesses: this.getDefaultContentWeaknesses(),
-        recommendations: this.getDefaultContentRecommendations()
+        strengths: ['Clear structure'],
+        weaknesses: ['Could not fully analyze the CV format'],
+        recommendations: ['Consider using a standard CV template']
       };
     }
-  }
-  
-  /**
-   * Get default content strengths when analysis fails
-   * @returns Array of default content strengths
-   */
-  private getDefaultContentStrengths(): string[] {
-    return [
-      "Clear presentation of professional experience",
-      "Includes relevant skills and qualifications",
-      "Provides educational background",
-      "Lists professional achievements",
-      "Demonstrates career progression"
-    ];
-  }
-  
-  /**
-   * Get default content weaknesses when analysis fails
-   * @returns Array of default content weaknesses
-   */
-  private getDefaultContentWeaknesses(): string[] {
-    return [
-      "Could benefit from more quantifiable achievements",
-      "May need more specific examples of skills application",
-      "Consider adding more industry-specific keywords",
-      "Professional summary could be more compelling",
-      "Experience descriptions could be more achievement-focused"
-    ];
-  }
-  
-  /**
-   * Get default content recommendations when analysis fails
-   * @returns Array of default content recommendations
-   */
-  private getDefaultContentRecommendations(): string[] {
-    return [
-      "Add measurable achievements with numbers and percentages",
-      "Include more industry-specific keywords",
-      "Ensure all experience is relevant to target positions",
-      "Create a compelling professional summary",
-      "Focus on results rather than responsibilities"
-    ];
-  }
-
-  /**
-   * Determine the industry based on CV content
-   * @returns Industry name
-   */
-  public async determineIndustry(): Promise<string> {
+    
+    // Default values in case of failure
+    const defaultAnalysis = {
+      strengths: ['Clear structure'],
+      weaknesses: ['Could not fully analyze the CV format'],
+      recommendations: ['Consider using a standard CV template']
+    };
+    
     try {
-      // Ensure we have chunks to analyze
-      if (this.chunks.length === 0) {
-        logger.warn('No chunks available for industry determination, using default');
-        return 'General';
-      }
-
-      const query = 'Determine the industry or sector this CV/resume is most relevant for.';
-      
-      const systemPrompt = `You are a professional CV/resume industry analyzer. Your task is to determine the most relevant industry or sector for this CV.
-
-Based on the skills, experience, and qualifications mentioned, identify the single most appropriate industry from this list:
-- IT & Software
-- Finance & Banking
-- Healthcare & Medical
-- Marketing & Advertising
-- Education & Training
-- Engineering & Manufacturing
-- Sales & Business Development
-- Legal & Compliance
-- Human Resources
-- Creative & Design
-- Science & Research
-- Hospitality & Tourism
-- Retail
-- Construction & Real Estate
-- Media & Communications
-- Transportation & Logistics
-- Energy & Utilities
-- Government & Public Sector
-- Non-profit & NGO
-- General Business
-
-Respond with ONLY the industry name, nothing else.`;
-      
-      // Generate industry analysis using all CV chunks
-      // Limit context to avoid token limits
-      const context = this.chunks.slice(0, 5).join('\n\n');
-      
-      try {
-        logger.info('Attempting to determine industry');
-        const industryText = await this.generateDirectResponse(
-          `${query}\n\nDocument to analyze:\n${context}`, 
-          systemPrompt
-        );
-        
-        // Clean up the response
-        const industry = industryText.trim().split('\n')[0].replace(/["\n\r]/g, '');
-        
-        logger.info(`Determined industry: ${industry}`);
-        return industry || 'General';
-      } catch (error) {
-        logger.error(`Error determining industry: ${error instanceof Error ? error.message : String(error)}`);
-        return 'General';
-      }
-    } catch (error) {
-      // Handle errors and return default
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error determining industry: ${errorMessage}`);
-      return 'General';
-    }
-  }
-
-  /**
-   * Detect the language of the CV
-   * @returns Language code or name
-   */
-  public async detectLanguage(): Promise<string> {
-    try {
-      // Ensure we have chunks to analyze
-      if (this.chunks.length === 0) {
-        logger.warn('No chunks available for language detection, using default');
-        return 'English';
-      }
-
-      const query = 'Detect the language of this CV/resume document.';
-      
-      const systemPrompt = `You are a language detection specialist. Your task is to identify the primary language used in this CV/resume.
-
-Respond with ONLY the language name in English (e.g., "English", "Spanish", "French", "German", etc.), nothing else.`;
-      
-      // Use just the first chunk for language detection
-      const context = this.chunks[0];
-      
-      try {
-        logger.info('Attempting to detect language');
-        const languageText = await this.generateDirectResponse(
-          `${query}\n\nDocument to analyze:\n${context}`, 
-          systemPrompt
-        );
-        
-        // Clean up the response
-        const language = languageText.trim().split('\n')[0].replace(/["\n\r]/g, '');
-        
-        logger.info(`Detected language: ${language}`);
-        return language || 'English';
-      } catch (error) {
-        logger.error(`Error detecting language: ${error instanceof Error ? error.message : String(error)}`);
-        return 'English';
-      }
-    } catch (error) {
-      // Handle errors and return default
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error detecting language: ${errorMessage}`);
-      return 'English';
-    }
-  }
-
-  /**
-   * Extract sections from the CV
-   * @returns Array of sections with name and content
-   */
-  public async extractSections(): Promise<Array<{ name: string; content: string }>> {
-    try {
-      // Ensure we have chunks to analyze
-      if (this.chunks.length === 0) {
-        logger.warn('No chunks available for section extraction, using defaults');
-        return this.getDefaultSections();
-      }
-
-      const query = 'Extract the main sections from this CV/resume document.';
-      
-      const systemPrompt = `You are a CV/resume section extraction specialist. Your task is to identify and extract the main sections from this document.
-
-Common CV sections include:
-- Contact Information
-- Professional Summary / Profile
-- Work Experience / Professional Experience
-- Education
-- Skills
-- Certifications
-- Projects
-- Languages
-- Interests / Hobbies
-
-For each section you identify, extract:
-1. The section name/heading
-2. The content of that section
-
-Provide your response as a JSON array of objects, each with "name" and "content" properties.
-
-Example response format:
-[
-  {
-    "name": "Contact Information",
-    "content": "John Doe\\nEmail: john@example.com\\nPhone: (123) 456-7890\\nLinkedIn: linkedin.com/in/johndoe"
-  },
-  {
-    "name": "Professional Experience",
-    "content": "Senior Developer, ABC Company\\nJan 2018 - Present\\n- Led development of company's flagship product\\n- Managed team of 5 junior developers"
-  }
-]`;
-      
-      // Generate sections using all CV chunks
-      const context = this.chunks.join('\n\n');
-      
-      try {
-        logger.info('Attempting to extract CV sections');
-        const sectionsText = await this.generateDirectResponse(
-          `${query}\n\nDocument to analyze:\n${context}`, 
-          systemPrompt
-        );
-        
-        // Try to parse as JSON
-        try {
-          // First, try to extract JSON if it's embedded in other text
-          const jsonMatch = sectionsText.match(/\[[\s\S]*\]/);
-          const jsonString = jsonMatch ? jsonMatch[0] : sectionsText;
-          
-          const jsonResponse = JSON.parse(jsonString);
-          
-          // Validate the JSON structure
-          if (Array.isArray(jsonResponse) && jsonResponse.length > 0) {
-            // Ensure each item has name and content
-            const validSections = jsonResponse.filter(item => 
-              item && typeof item === 'object' && 
-              'name' in item && typeof item.name === 'string' &&
-              'content' in item && typeof item.content === 'string'
-            );
+      // Use the improved rate limiter with fallback
+      return await retryWithExponentialBackoff(
+        async () => {
+          // Use Mistral for format analysis if available
+          if (this.mistralClient) {
+            const prompt = `
+            You are a CV format expert. Analyze the following CV and provide feedback on its format, structure, and presentation.
             
-            if (validSections.length > 0) {
-              logger.info(`Successfully extracted ${validSections.length} sections as JSON`);
-              return validSections;
-            } else {
-              logger.warn('JSON response does not contain valid sections, using defaults');
-              return this.getDefaultSections();
+            CV Text:
+            ${textToAnalyze.substring(0, 4000)} ${textToAnalyze.length > 4000 ? '...(truncated)' : ''}
+            
+            Analyze the CV format and structure, NOT the content. Focus on layout, organization, readability, and visual appeal.
+            
+            Return ONLY a JSON object with the following structure:
+            {
+              "strengths": ["strength1", "strength2", ...],
+              "weaknesses": ["weakness1", "weakness2", ...],
+              "recommendations": ["recommendation1", "recommendation2", ...]
+            }
+            
+            IMPORTANT: Return ONLY the raw JSON object. DO NOT use markdown formatting, code blocks, or any other formatting. DO NOT include any explanation or additional text before or after the JSON.
+            `;
+            
+            if (!this.mistralClient) {
+              throw new Error('Mistral client not initialized');
+            }
+            
+            const response = await this.mistralClient.chat({
+              model: this.mistralGenerationModel,
+              messages: [{ role: 'user', content: prompt }],
+              temperature: 0.1,
+              maxTokens: 2000,
+            });
+            
+            const content = response.choices[0]?.message?.content || '';
+            
+            try {
+              // First try to find JSON in markdown code blocks
+              const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || content.match(/```\s*([\s\S]*?)\s*```/);
+              let jsonContent = '';
+              
+              if (jsonMatch && jsonMatch[1]) {
+                // Found JSON in code block
+                jsonContent = jsonMatch[1].trim();
+              } else {
+                // Try to find JSON object directly
+                const jsonObjectMatch = content.match(/\{[\s\S]*\}/);
+                if (jsonObjectMatch) {
+                  jsonContent = jsonObjectMatch[0].trim();
+                } else {
+                  // Use the whole content as a last resort
+                  jsonContent = content.trim();
+                }
+              }
+              
+              // Parse the JSON response
+              const result = JSON.parse(jsonContent);
+              
+              // Validate the structure
+              if (!result.strengths || !result.weaknesses || !result.recommendations) {
+                logger.warn('Invalid CV format analysis structure, using regex extraction');
+                return this.extractFormatAnalysisWithRegex(content);
+              }
+              
+              // Ensure arrays are arrays
+              ['strengths', 'weaknesses', 'recommendations'].forEach(field => {
+                if (!Array.isArray(result[field])) {
+                  result[field] = result[field] ? [result[field]] : [];
+                }
+              });
+              
+              return result;
+            } catch (parseError) {
+              logger.error('Error parsing CV format analysis:', parseError instanceof Error ? parseError.message : String(parseError));
+              logger.debug('Raw response:', content);
+              
+              // Try to extract with regex as fallback
+              return this.extractFormatAnalysisWithRegex(content);
+            }
+          } else if (this.openaiClient) {
+            // Fallback to OpenAI if Mistral is not available
+            logger.info('Using OpenAI for CV format analysis (Mistral not available)');
+            
+            const response = await this.openaiClient.chat.completions.create({
+              model: 'gpt-4o',
+              messages: [
+                {
+                  role: 'system',
+                  content: 'You are a CV format expert. Analyze the CV and provide feedback on format, structure, and presentation.'
+                },
+                {
+                  role: 'user',
+                  content: `Analyze this CV format and structure (not content):
+                  
+                  ${textToAnalyze}
+                  
+                  Return ONLY a JSON object with: {"strengths": [...], "weaknesses": [...], "recommendations": [...]}
+                  No markdown, no explanation, just the JSON.`
+                }
+              ],
+              temperature: 0.1,
+              max_tokens: 1000,
+            });
+            
+            const content = response.choices[0]?.message?.content || '';
+            
+            try {
+              // Extract JSON from markdown if present
+              const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || content.match(/```\s*([\s\S]*?)\s*```/) || [null, content];
+              const jsonContent = jsonMatch[1] || content;
+              
+              // Parse the JSON response
+              const result = JSON.parse(jsonContent.trim());
+              
+              // Validate the structure
+              if (!result.strengths || !result.weaknesses || !result.recommendations) {
+                logger.warn('Invalid CV format analysis structure from OpenAI, using regex extraction');
+                return this.extractFormatAnalysisWithRegex(content);
+              }
+              
+              // Ensure arrays are arrays
+              ['strengths', 'weaknesses', 'recommendations'].forEach(field => {
+                if (!Array.isArray(result[field])) {
+                  result[field] = result[field] ? [result[field]] : [];
+                }
+              });
+              
+              return result;
+            } catch (parseError) {
+              logger.error('Error parsing OpenAI CV format analysis:', parseError instanceof Error ? parseError.message : String(parseError));
+              logger.debug('Raw OpenAI response:', content);
+              
+              // Try to extract with regex as fallback
+              return this.extractFormatAnalysisWithRegex(content);
             }
           } else {
-            logger.warn('JSON response is not an array or is empty, using defaults');
-            return this.getDefaultSections();
+            // No AI service available
+            logger.warn('No AI service available for CV format analysis');
+            return defaultAnalysis;
           }
-        } catch (jsonError) {
-          // If JSON parsing fails, use defaults
-          logger.warn(`Failed to parse sections as JSON: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
-          return this.getDefaultSections();
+        },
+        {
+          service: this.mistralClient ? 'mistral' : 'openai',
+          initialDelayMs: 2000,
+          maxDelayMs: 30000,
+          maxRetries: 3,
+          priority: 5,
+          taskId: `analyze-cv-format-${Date.now()}`,
+          fallbackFn: async () => {
+            // If Mistral fails but OpenAI is available, try OpenAI
+            if (!this.mistralClient && this.openaiClient) {
+              logger.info('Using OpenAI fallback for CV format analysis');
+              
+              try {
+                const response = await this.openaiClient.chat.completions.create({
+                  model: 'gpt-4o',
+                  messages: [
+                    {
+                      role: 'system',
+                      content: 'You are a CV format expert. Analyze the CV and provide feedback on format, structure, and presentation.'
+                    },
+                    {
+                      role: 'user',
+                      content: `Analyze this CV format and structure (not content):
+                      
+                      ${textToAnalyze}
+                      
+                      Return ONLY a JSON object with: {"strengths": [...], "weaknesses": [...], "recommendations": [...]}
+                      No markdown, no explanation, just the JSON.`
+                    }
+                  ],
+                  temperature: 0.1,
+                  max_tokens: 1000,
+                });
+                
+                const content = response.choices[0]?.message?.content || '';
+                
+                try {
+                  // Extract JSON from markdown if present
+                  const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || content.match(/```\s*([\s\S]*?)\s*```/) || [null, content];
+                  const jsonContent = jsonMatch[1] || content;
+                  
+                  // Parse the JSON response
+                  const result = JSON.parse(jsonContent.trim());
+                  
+                  // Validate the structure
+                  if (!result.strengths || !result.weaknesses || !result.recommendations) {
+                    return this.extractFormatAnalysisWithRegex(content);
+                  }
+                  
+                  // Ensure arrays are arrays
+                  ['strengths', 'weaknesses', 'recommendations'].forEach(field => {
+                    if (!Array.isArray(result[field])) {
+                      result[field] = result[field] ? [result[field]] : [];
+                    }
+                  });
+                  
+                  return result;
+                } catch (parseError) {
+                  return this.extractFormatAnalysisWithRegex(content);
+                }
+              } catch (error) {
+                logger.error('OpenAI fallback failed for CV format analysis:', error instanceof Error ? error.message : String(error));
+                return defaultAnalysis;
+              }
+            }
+            
+            // If all else fails, return default analysis
+            return defaultAnalysis;
+          }
         }
-      } catch (error) {
-        logger.error(`Error extracting sections: ${error instanceof Error ? error.message : String(error)}`);
-        return this.getDefaultSections();
-      }
+      );
     } catch (error) {
-      // Handle errors and return defaults
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error extracting sections: ${errorMessage}`);
-      return this.getDefaultSections();
+      logger.error('Failed to analyze CV format:', error instanceof Error ? error.message : String(error));
+      return defaultAnalysis;
     }
   }
 
   /**
-   * Get default sections when extraction fails
-   * @returns Array of default sections
+   * Extract format analysis using regex as a fallback
+   * @param content The raw response content
+   * @returns Extracted format analysis
    */
-  private getDefaultSections(): Array<{ name: string; content: string }> {
-    return [
-      { name: "Contact Information", content: "Contact details" },
-      { name: "Professional Experience", content: "Work history" },
-      { name: "Education", content: "Educational background" },
-      { name: "Skills", content: "Professional skills" }
-    ];
-  }
-
-  /**
-   * Parse bullet points from text
-   * @param text Text containing bullet points
-   * @returns Array of bullet points
-   */
-  private parseBulletPoints(text: string): string[] {
-    // Split by common bullet point markers
-    const bulletPointRegex = /(?:^|\n)(?:\s*[-•*]\s*|\s*\d+\.\s*|\s*[a-z]\)\s*|\s*[A-Z]\)\s*)(.+?)(?=(?:\n\s*[-•*]\s*|\n\s*\d+\.\s*|\n\s*[a-z]\)\s*|\n\s*[A-Z]\)\s*|$))/g;
+  private extractFormatAnalysisWithRegex(content: string): {
+    strengths: string[];
+    weaknesses: string[];
+    recommendations: string[];
+  } {
+    logger.info('Extracting CV format analysis with regex');
     
-    const bulletPoints: string[] = [];
-    let match;
-    
-    while ((match = bulletPointRegex.exec(text)) !== null) {
-      if (match[1] && match[1].trim()) {
-        bulletPoints.push(match[1].trim());
-      }
-    }
-    
-    // If no bullet points found, try splitting by newlines
-    if (bulletPoints.length === 0) {
-      return text.split(/\n+/)
-        .map(line => line.trim())
-        .filter(line => line.length > 0);
-    }
-    
-    return bulletPoints;
-  }
-
-  /**
-   * Parse analysis sections from text
-   * @param text Analysis text
-   * @returns Object with strengths, weaknesses, and recommendations
-   */
-  private parseAnalysisSections(text: string): { strengths: string[], weaknesses: string[], recommendations: string[] } {
-    // Default empty arrays
-    const result: { strengths: string[], weaknesses: string[], recommendations: string[] } = {
+    const result = {
       strengths: [] as string[],
       weaknesses: [] as string[],
       recommendations: [] as string[]
     };
     
-    // Try to extract sections using regex
-    const strengthsMatch = text.match(/(?:strengths|pros|positives|advantages)(?:\s*:|\s*\n)([\s\S]*?)(?=(?:weaknesses|cons|negatives|disadvantages|recommendations|suggestions|improvements|$))/i);
-    const weaknessesMatch = text.match(/(?:weaknesses|cons|negatives|disadvantages)(?:\s*:|\s*\n)([\s\S]*?)(?=(?:recommendations|suggestions|improvements|strengths|pros|positives|advantages|$))/i);
-    const recommendationsMatch = text.match(/(?:recommendations|suggestions|improvements)(?:\s*:|\s*\n)([\s\S]*?)(?=(?:strengths|pros|positives|advantages|weaknesses|cons|negatives|disadvantages|$))/i);
-    
     // Extract strengths
+    const strengthsMatch = content.match(/strengths["\s:]+\[(.*?)\]/is);
     if (strengthsMatch && strengthsMatch[1]) {
-      result.strengths = this.parseBulletPoints(strengthsMatch[1]);
+      result.strengths = strengthsMatch[1]
+        .split(',')
+        .map(s => s.replace(/"/g, '').trim())
+        .filter(Boolean);
     }
     
     // Extract weaknesses
+    const weaknessesMatch = content.match(/weaknesses["\s:]+\[(.*?)\]/is);
     if (weaknessesMatch && weaknessesMatch[1]) {
-      result.weaknesses = this.parseBulletPoints(weaknessesMatch[1]);
+      result.weaknesses = weaknessesMatch[1]
+        .split(',')
+        .map(s => s.replace(/"/g, '').trim())
+        .filter(Boolean);
     }
     
     // Extract recommendations
+    const recommendationsMatch = content.match(/recommendations["\s:]+\[(.*?)\]/is);
     if (recommendationsMatch && recommendationsMatch[1]) {
-      result.recommendations = this.parseBulletPoints(recommendationsMatch[1]);
+      result.recommendations = recommendationsMatch[1]
+        .split(',')
+        .map(s => s.replace(/"/g, '').trim())
+        .filter(Boolean);
+    }
+    
+    // If we couldn't extract anything, provide default values
+    if (result.strengths.length === 0) {
+      result.strengths = ['Clear structure'];
+    }
+    
+    if (result.weaknesses.length === 0) {
+      result.weaknesses = ['Could not fully analyze the CV format'];
+    }
+    
+    if (result.recommendations.length === 0) {
+      result.recommendations = ['Consider using a standard CV template'];
     }
     
     return result;
@@ -1647,7 +994,7 @@ Example response format:
     const strengthsRegex = /strengths["'\s:]+\[(.*?)\]/is;
     const match = text.match(strengthsRegex);
     if (match && match[1]) {
-      return this.parseArrayItems(match[1]);
+      return this.extractArrayFromString(match[1]);
     }
     return ['Clear structure', 'Includes essential sections', 'Appropriate length'];
   }
@@ -1659,7 +1006,7 @@ Example response format:
     const weaknessesRegex = /weaknesses["'\s:]+\[(.*?)\]/is;
     const match = text.match(weaknessesRegex);
     if (match && match[1]) {
-      return this.parseArrayItems(match[1]);
+      return this.extractArrayFromString(match[1]);
     }
     return ['Could improve formatting', 'Some sections could be more detailed', 'Consider adding more keywords'];
   }
@@ -1671,8 +1018,1099 @@ Example response format:
     const recommendationsRegex = /recommendations["'\s:]+\[(.*?)\]/is;
     const match = text.match(recommendationsRegex);
     if (match && match[1]) {
-      return this.parseArrayItems(match[1]);
+      return this.extractArrayFromString(match[1]);
     }
     return ['Enhance visual hierarchy', 'Add more specific achievements', 'Quantify accomplishments where possible'];
+  }
+
+  /**
+   * Helper method to extract array items from a string
+   */
+  private extractArrayFromString(text: string): string[] {
+    return text
+      .split(',')
+      .map(item => item.replace(/"/g, '').trim())
+      .filter(Boolean);
+  }
+
+  /**
+   * Extract keywords from the CV
+   * @returns Array of keywords
+   */
+  public async extractKeywords(): Promise<string[]> {
+    logger.info('Extracting keywords from CV');
+    
+    if (!this.originalCVText) {
+      logger.warn('No CV text available for keyword extraction');
+      return [];
+    }
+    
+    try {
+      // First try to use Mistral for keyword extraction
+      if (this.mistralClient) {
+        return await retryWithExponentialBackoff(
+          async () => {
+            const prompt = `
+            Extract the most important keywords from this CV text. Focus on skills, technologies, qualifications, and industry-specific terms.
+            
+            CV Text:
+            ${this.originalCVText.substring(0, 4000)} ${this.originalCVText.length > 4000 ? '...(truncated)' : ''}
+            
+            Return ONLY a JSON array of keywords, like this: ["keyword1", "keyword2", "keyword3"]
+            Do not include any explanation or additional text.
+            `;
+            
+            const response = await this.mistralClient!.chat({
+              model: this.mistralGenerationModel,
+              messages: [{ role: 'user', content: prompt }],
+              temperature: 0.1,
+              maxTokens: 1000,
+            });
+            
+            const content = response.choices[0]?.message?.content || '';
+            
+            try {
+              // Try to parse as JSON
+              const jsonMatch = content.match(/\[(.*?)\]/s);
+              if (jsonMatch) {
+                const jsonStr = `[${jsonMatch[1]}]`;
+                const keywords = JSON.parse(jsonStr);
+                return Array.isArray(keywords) ? keywords : [];
+              }
+              
+              // If not valid JSON, extract keywords using regex
+              const keywordRegex = /"([^"]+)"/g;
+              const matches = [...content.matchAll(keywordRegex)];
+              return matches.map(match => match[1]);
+            } catch (parseError) {
+              logger.error('Error parsing keywords response:', parseError instanceof Error ? parseError.message : String(parseError));
+              
+              // Fallback to simple extraction
+              return this.extractKeywordsWithRegex(content);
+            }
+          },
+          {
+            service: 'mistral',
+            initialDelayMs: 2000,
+            maxDelayMs: 30000,
+            maxRetries: 2,
+            priority: 5,
+            taskId: `extract-keywords-${Date.now()}`,
+            fallbackFn: async () => {
+              // Fallback to OpenAI if Mistral fails
+              if (this.openaiClient) {
+                return this.extractKeywordsWithOpenAI();
+              }
+              return this.extractKeywordsWithRegex(this.originalCVText);
+            }
+          }
+        );
+      } else if (this.openaiClient) {
+        // Use OpenAI if Mistral is not available
+        return this.extractKeywordsWithOpenAI();
+      }
+      
+      // If no AI service is available, use regex
+      return this.extractKeywordsWithRegex(this.originalCVText);
+    } catch (error) {
+      logger.error('Error extracting keywords:', error instanceof Error ? error.message : String(error));
+      return this.extractKeywordsWithRegex(this.originalCVText);
+    }
+  }
+  
+  /**
+   * Extract keywords using OpenAI
+   */
+  private async extractKeywordsWithOpenAI(): Promise<string[]> {
+    try {
+      const response = await this.openaiClient.chat.completions.create({
+        model: this.openaiGenerationModel,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a CV analysis expert. Extract the most important keywords from the CV.'
+          },
+          {
+            role: 'user',
+            content: `Extract the most important keywords from this CV text. Focus on skills, technologies, qualifications, and industry-specific terms.
+            
+            CV Text:
+            ${this.originalCVText.substring(0, 4000)} ${this.originalCVText.length > 4000 ? '...(truncated)' : ''}
+            
+            Return ONLY a JSON array of keywords, like this: ["keyword1", "keyword2", "keyword3"]
+            Do not include any explanation or additional text.`
+          }
+        ],
+        temperature: 0.1,
+        max_tokens: 1000,
+      });
+      
+      const content = response.choices[0]?.message?.content || '';
+      
+      try {
+        // Try to parse as JSON
+        const jsonMatch = content.match(/\[(.*?)\]/s);
+        if (jsonMatch) {
+          const jsonStr = `[${jsonMatch[1]}]`;
+          const keywords = JSON.parse(jsonStr);
+          return Array.isArray(keywords) ? keywords : [];
+        }
+        
+        // If not valid JSON, extract keywords using regex
+        const keywordRegex = /"([^"]+)"/g;
+        const matches = [...content.matchAll(keywordRegex)];
+        return matches.map(match => match[1]);
+      } catch (parseError) {
+        logger.error('Error parsing OpenAI keywords response:', parseError instanceof Error ? parseError.message : String(parseError));
+        return this.extractKeywordsWithRegex(content);
+      }
+    } catch (error) {
+      logger.error('Error extracting keywords with OpenAI:', error instanceof Error ? error.message : String(error));
+      return this.extractKeywordsWithRegex(this.originalCVText);
+    }
+  }
+  
+  /**
+   * Extract keywords using regex
+   */
+  private extractKeywordsWithRegex(text: string): string[] {
+    // Common skill keywords to look for
+    const commonSkills = [
+      'javascript', 'typescript', 'python', 'java', 'c#', 'c++', 'ruby', 'php', 'swift', 'kotlin',
+      'react', 'angular', 'vue', 'node', 'express', 'django', 'flask', 'spring', 'asp.net',
+      'html', 'css', 'sass', 'less', 'bootstrap', 'tailwind', 'material-ui',
+      'sql', 'mysql', 'postgresql', 'mongodb', 'firebase', 'dynamodb', 'redis',
+      'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'terraform', 'jenkins', 'github actions',
+      'git', 'jira', 'confluence', 'agile', 'scrum', 'kanban', 'waterfall',
+      'leadership', 'management', 'communication', 'teamwork', 'problem-solving',
+      'machine learning', 'ai', 'data science', 'data analysis', 'big data',
+      'marketing', 'sales', 'customer service', 'project management', 'product management',
+      'finance', 'accounting', 'hr', 'recruitment', 'training'
+    ];
+    
+    // Extract words that might be skills or keywords
+    const words = text.toLowerCase().match(/\b[a-z0-9][\w\-\.+#]+\b/g) || [];
+    
+    // Count occurrences of each word
+    const wordCounts: Record<string, number> = {};
+    words.forEach(word => {
+      if (word.length > 2) { // Ignore very short words
+        wordCounts[word] = (wordCounts[word] || 0) + 1;
+      }
+    });
+    
+    // Filter for common skills and words that appear multiple times
+    const keywords = Object.keys(wordCounts).filter(word => {
+      return commonSkills.includes(word) || wordCounts[word] >= 3;
+    });
+    
+    // Limit to top 30 keywords
+    return keywords.slice(0, 30);
+  }
+  
+  /**
+   * Extract key requirements from the CV
+   * @returns Array of key requirements
+   */
+  public async extractKeyRequirements(): Promise<string[]> {
+    logger.info('Extracting key requirements from CV');
+    
+    if (!this.originalCVText) {
+      logger.warn('No CV text available for key requirements extraction');
+      return [];
+    }
+    
+    try {
+      // First try to use Mistral for key requirements extraction
+      if (this.mistralClient) {
+        return await retryWithExponentialBackoff(
+          async () => {
+            const prompt = `
+            Analyze this CV text and identify the key requirements or qualifications that the person has.
+            Focus on education, certifications, years of experience, and specific qualifications.
+            
+            CV Text:
+            ${this.originalCVText.substring(0, 4000)} ${this.originalCVText.length > 4000 ? '...(truncated)' : ''}
+            
+            Return ONLY a JSON array of key requirements, like this: ["requirement1", "requirement2", "requirement3"]
+            Do not include any explanation or additional text.
+            `;
+            
+            const response = await this.mistralClient!.chat({
+              model: this.mistralGenerationModel,
+              messages: [{ role: 'user', content: prompt }],
+              temperature: 0.1,
+              maxTokens: 1000,
+            });
+            
+            const content = response.choices[0]?.message?.content || '';
+            
+            try {
+              // Try to parse as JSON
+              const jsonMatch = content.match(/\[(.*?)\]/s);
+              if (jsonMatch) {
+                const jsonStr = `[${jsonMatch[1]}]`;
+                const requirements = JSON.parse(jsonStr);
+                return Array.isArray(requirements) ? requirements : [];
+              }
+              
+              // If not valid JSON, extract requirements using regex
+              const requirementRegex = /"([^"]+)"/g;
+              const matches = [...content.matchAll(requirementRegex)];
+              return matches.map(match => match[1]);
+            } catch (parseError) {
+              logger.error('Error parsing key requirements response:', parseError instanceof Error ? parseError.message : String(parseError));
+              
+              // Fallback to simple extraction
+              return this.extractRequirementsWithRegex(content);
+            }
+          },
+          {
+            service: 'mistral',
+            initialDelayMs: 2000,
+            maxDelayMs: 30000,
+            maxRetries: 2,
+            priority: 5,
+            taskId: `extract-requirements-${Date.now()}`,
+            fallbackFn: async () => {
+              // Fallback to OpenAI if Mistral fails
+              if (this.openaiClient) {
+                return this.extractRequirementsWithOpenAI();
+              }
+              return this.extractRequirementsWithRegex(this.originalCVText);
+            }
+          }
+        );
+      } else if (this.openaiClient) {
+        // Use OpenAI if Mistral is not available
+        return this.extractRequirementsWithOpenAI();
+      }
+      
+      // If no AI service is available, use regex
+      return this.extractRequirementsWithRegex(this.originalCVText);
+    } catch (error) {
+      logger.error('Error extracting key requirements:', error instanceof Error ? error.message : String(error));
+      return this.extractRequirementsWithRegex(this.originalCVText);
+    }
+  }
+  
+  /**
+   * Extract key requirements using OpenAI
+   */
+  private async extractRequirementsWithOpenAI(): Promise<string[]> {
+    try {
+      const response = await this.openaiClient.chat.completions.create({
+        model: this.openaiGenerationModel,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a CV analysis expert. Extract the key requirements or qualifications from the CV.'
+          },
+          {
+            role: 'user',
+            content: `Analyze this CV text and identify the key requirements or qualifications that the person has.
+            Focus on education, certifications, years of experience, and specific qualifications.
+            
+            CV Text:
+            ${this.originalCVText.substring(0, 4000)} ${this.originalCVText.length > 4000 ? '...(truncated)' : ''}
+            
+            Return ONLY a JSON array of key requirements, like this: ["requirement1", "requirement2", "requirement3"]
+            Do not include any explanation or additional text.`
+          }
+        ],
+        temperature: 0.1,
+        max_tokens: 1000,
+      });
+      
+      const content = response.choices[0]?.message?.content || '';
+      
+      try {
+        // Try to parse as JSON
+        const jsonMatch = content.match(/\[(.*?)\]/s);
+        if (jsonMatch) {
+          const jsonStr = `[${jsonMatch[1]}]`;
+          const requirements = JSON.parse(jsonStr);
+          return Array.isArray(requirements) ? requirements : [];
+        }
+        
+        // If not valid JSON, extract requirements using regex
+        const requirementRegex = /"([^"]+)"/g;
+        const matches = [...content.matchAll(requirementRegex)];
+        return matches.map(match => match[1]);
+      } catch (parseError) {
+        logger.error('Error parsing OpenAI key requirements response:', parseError instanceof Error ? parseError.message : String(parseError));
+        return this.extractRequirementsWithRegex(this.originalCVText);
+      }
+    } catch (error) {
+      logger.error('Error extracting key requirements with OpenAI:', error instanceof Error ? error.message : String(error));
+      return this.extractRequirementsWithRegex(this.originalCVText);
+    }
+  }
+  
+  /**
+   * Extract key requirements using regex
+   */
+  private extractRequirementsWithRegex(text: string): string[] {
+    // Common requirement patterns
+    const requirementPatterns = [
+      /(?:bachelor|master|phd|doctorate|degree)['\s]+(?:in|of)['\s]+([^,.]+)/gi,
+      /(\d+)[+\s]*(?:years?|yrs?)['\s]+(?:of)?['\s]*experience/gi,
+      /certified['\s]+([^,.]+)/gi,
+      /(?:proficient|fluent)['\s]+(?:in)?['\s]*([^,.]+)/gi,
+      /knowledge['\s]+(?:of)?['\s]*([^,.]+)/gi,
+      /expertise['\s]+(?:in)?['\s]*([^,.]+)/gi
+    ];
+    
+    const requirements: string[] = [];
+    
+    // Extract requirements using patterns
+    requirementPatterns.forEach(pattern => {
+      const matches = [...text.matchAll(pattern)];
+      matches.forEach(match => {
+        if (match[0]) {
+          requirements.push(match[0].trim());
+        }
+      });
+    });
+    
+    // Look for education section
+    const educationSection = this.extractSectionContent(text, 'education');
+    if (educationSection) {
+      const degreeMatches = [...educationSection.matchAll(/(?:bachelor|master|phd|doctorate|degree|diploma)['\s]+(?:in|of)?['\s]*([^,.]+)/gi)];
+      degreeMatches.forEach(match => {
+        if (match[0]) {
+          requirements.push(match[0].trim());
+        }
+      });
+    }
+    
+    // Look for certification section
+    const certificationSection = this.extractSectionContent(text, 'certification') || 
+                                this.extractSectionContent(text, 'qualifications');
+    if (certificationSection) {
+      const certMatches = [...certificationSection.matchAll(/([A-Z0-9][A-Za-z0-9\s\-]+(?:certification|certificate|certified|qualification))/g)];
+      certMatches.forEach(match => {
+        if (match[0]) {
+          requirements.push(match[0].trim());
+        }
+      });
+    }
+    
+    // Remove duplicates and limit to top 15
+    return [...new Set(requirements)].slice(0, 15);
+  }
+  
+  /**
+   * Extract section content using regex
+   */
+  private extractSectionContent(text: string, sectionName: string): string | null {
+    const sectionRegex = new RegExp(`(?:^|\\n)(?:${sectionName})(?:[:.-]|\\s*\\n)([\\s\\S]*?)(?=\\n(?:[A-Z][A-Z\\s]+[:.-]|$))`, 'i');
+    const match = text.match(sectionRegex);
+    return match ? match[1].trim() : null;
+  }
+
+  /**
+   * Analyze the CV content and provide feedback
+   * @returns Analysis of the CV content with strengths, weaknesses, and recommendations
+   */
+  public async analyzeContent(): Promise<{
+    strengths: string[];
+    weaknesses: string[];
+    recommendations: string[];
+  }> {
+    logger.info('Analyzing CV content');
+    
+    if (!this.originalCVText) {
+      logger.warn('No CV text available for content analysis');
+      return {
+        strengths: ['Clear presentation'],
+        weaknesses: ['Could not fully analyze the CV content'],
+        recommendations: ['Add more specific achievements and quantifiable results']
+      };
+    }
+    
+    try {
+      // First try to use Mistral for content analysis
+      if (this.mistralClient) {
+        return await retryWithExponentialBackoff(
+          async () => {
+            const prompt = `
+            You are a CV content expert. Analyze the following CV and provide feedback on its content quality.
+            
+            CV Text:
+            ${this.originalCVText.substring(0, 4000)} ${this.originalCVText.length > 4000 ? '...(truncated)' : ''}
+            
+            Analyze the CV CONTENT, NOT the format. Focus on the quality of information, achievements, skills presentation, and overall impact.
+            
+            Return ONLY a JSON object with the following structure:
+            {
+              "strengths": ["strength1", "strength2", ...],
+              "weaknesses": ["weakness1", "weakness2", ...],
+              "recommendations": ["recommendation1", "recommendation2", ...]
+            }
+            
+            IMPORTANT: Return ONLY the raw JSON object. DO NOT use markdown formatting, code blocks, or any other formatting. DO NOT include any explanation or additional text before or after the JSON.
+            `;
+            
+            if (!this.mistralClient) {
+              throw new Error('Mistral client not initialized');
+            }
+            
+            const response = await this.mistralClient.chat({
+              model: this.mistralGenerationModel,
+              messages: [{ role: 'user', content: prompt }],
+              temperature: 0.1,
+              maxTokens: 2000,
+            });
+            
+            const content = response.choices[0]?.message?.content || '';
+            
+            try {
+              // First try to find JSON in markdown code blocks
+              const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || content.match(/```\s*([\s\S]*?)\s*```/);
+              let jsonContent = '';
+              
+              if (jsonMatch && jsonMatch[1]) {
+                // Found JSON in code block
+                jsonContent = jsonMatch[1].trim();
+              } else {
+                // Try to find JSON object directly
+                const jsonObjectMatch = content.match(/\{[\s\S]*\}/);
+                if (jsonObjectMatch) {
+                  jsonContent = jsonObjectMatch[0].trim();
+                } else {
+                  // Use the whole content as a last resort
+                  jsonContent = content.trim();
+                }
+              }
+              
+              // Parse the JSON response
+              const result = JSON.parse(jsonContent);
+              
+              // Validate the structure
+              if (!result.strengths || !result.weaknesses || !result.recommendations) {
+                logger.warn('Invalid CV content analysis structure, using regex extraction');
+                return this.extractContentAnalysisWithRegex(content);
+              }
+              
+              // Ensure arrays are arrays
+              ['strengths', 'weaknesses', 'recommendations'].forEach(field => {
+                if (!Array.isArray(result[field])) {
+                  result[field] = result[field] ? [result[field]] : [];
+                }
+              });
+              
+              return result;
+            } catch (parseError) {
+              logger.error('Error parsing CV content analysis:', parseError instanceof Error ? parseError.message : String(parseError));
+              logger.debug('Raw response:', content);
+              
+              // Try to extract with regex as fallback
+              return this.extractContentAnalysisWithRegex(content);
+            }
+          },
+          {
+            service: 'mistral',
+            initialDelayMs: 2000,
+            maxDelayMs: 30000,
+            maxRetries: 2,
+            priority: 5,
+            taskId: `analyze-cv-content-${Date.now()}`,
+            fallbackFn: async () => {
+              // Fallback to OpenAI if Mistral fails
+              if (this.openaiClient) {
+                return this.analyzeContentWithOpenAI();
+              }
+              return {
+                strengths: ['Clear presentation'],
+                weaknesses: ['Could not fully analyze the CV content'],
+                recommendations: ['Add more specific achievements and quantifiable results']
+              };
+            }
+          }
+        );
+      } else if (this.openaiClient) {
+        // Use OpenAI if Mistral is not available
+        return this.analyzeContentWithOpenAI();
+      }
+      
+      // If no AI service is available, return default analysis
+      return {
+        strengths: ['Clear presentation'],
+        weaknesses: ['Could not fully analyze the CV content'],
+        recommendations: ['Add more specific achievements and quantifiable results']
+      };
+    } catch (error) {
+      logger.error('Error analyzing CV content:', error instanceof Error ? error.message : String(error));
+      return {
+        strengths: ['Clear presentation'],
+        weaknesses: ['Could not fully analyze the CV content'],
+        recommendations: ['Add more specific achievements and quantifiable results']
+      };
+    }
+  }
+  
+  /**
+   * Analyze CV content using OpenAI
+   */
+  private async analyzeContentWithOpenAI(): Promise<{
+    strengths: string[];
+    weaknesses: string[];
+    recommendations: string[];
+  }> {
+    try {
+      logger.info('Analyzing CV content using OpenAI');
+      if (!this.openaiClient) {
+        throw new Error('OpenAI client not initialized');
+      }
+      
+      const prompt = `
+      Analyze the following CV/resume content (not format) and provide:
+      1. Content strengths (what's good about the content)
+      2. Content weaknesses (what could be improved)
+      3. Recommendations for improving the content
+
+      Focus on the CONTENT quality, not the format or layout.
+
+      CV Content:
+      ${this.originalCVText ? this.originalCVText.substring(0, 4000) : ''}
+
+      Return the analysis as a JSON object with the following structure:
+      {
+        "strengths": ["strength1", "strength2", ...],
+        "weaknesses": ["weakness1", "weakness2", ...],
+        "recommendations": ["recommendation1", "recommendation2", ...]
+      }
+      
+      IMPORTANT: Return ONLY the raw JSON object. DO NOT use markdown formatting, code blocks, or any other formatting. DO NOT include any explanation or additional text before or after the JSON.
+      `;
+      
+      // Check if Mistral client is available
+      if (!this.mistralClient) {
+        throw new Error('Mistral client not initialized');
+      }
+      
+      const response = await this.mistralClient.chat({
+        model: this.mistralGenerationModel,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+        maxTokens: 50,
+      });
+      
+      const content = response.choices[0]?.message?.content || '';
+      
+      try {
+        // First try to find JSON in markdown code blocks
+        const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || content.match(/```\s*([\s\S]*?)\s*```/);
+        let jsonContent = '';
+        
+        if (jsonMatch && jsonMatch[1]) {
+          // Found JSON in code block
+          jsonContent = jsonMatch[1].trim();
+        } else {
+          // Try to find JSON object directly
+          const jsonObjectMatch = content.match(/\{[\s\S]*\}/);
+          if (jsonObjectMatch) {
+            jsonContent = jsonObjectMatch[0].trim();
+          } else {
+            // Use the whole content as a last resort
+            jsonContent = content.trim();
+          }
+        }
+        
+        // Parse the JSON response
+        const result = JSON.parse(jsonContent);
+        
+        // Validate the structure
+        if (!result.strengths || !result.weaknesses || !result.recommendations) {
+          logger.warn('Invalid CV content analysis structure from OpenAI, using regex extraction');
+          return this.extractContentAnalysisWithRegex(content);
+        }
+        
+        // Ensure arrays are arrays
+        ['strengths', 'weaknesses', 'recommendations'].forEach(field => {
+          if (!Array.isArray(result[field])) {
+            result[field] = result[field] ? [result[field]] : [];
+          }
+        });
+        
+        return result;
+      } catch (parseError) {
+        logger.error('Error parsing OpenAI CV content analysis:', parseError instanceof Error ? parseError.message : String(parseError));
+        logger.debug('Raw OpenAI response:', content);
+        
+        // Try to extract with regex as fallback
+        return this.extractContentAnalysisWithRegex(content);
+      }
+    } catch (error) {
+      logger.error('Error analyzing CV content with OpenAI:', error instanceof Error ? error.message : String(error));
+      return {
+        strengths: ['Clear presentation'],
+        weaknesses: ['Could not fully analyze the CV content'],
+        recommendations: ['Add more specific achievements and quantifiable results']
+      };
+    }
+  }
+  
+  /**
+   * Extract content analysis using regex as a fallback
+   */
+  private extractContentAnalysisWithRegex(content: string): {
+    strengths: string[];
+    weaknesses: string[];
+    recommendations: string[];
+  } {
+    logger.info('Extracting CV content analysis with regex');
+    
+    const result = {
+      strengths: [] as string[],
+      weaknesses: [] as string[],
+      recommendations: [] as string[]
+    };
+    
+    // Extract strengths
+    const strengthsMatch = content.match(/strengths["\s:]+\[(.*?)\]/is);
+    if (strengthsMatch && strengthsMatch[1]) {
+      result.strengths = this.extractArrayFromString(strengthsMatch[1]);
+    }
+    
+    // Extract weaknesses
+    const weaknessesMatch = content.match(/weaknesses["\s:]+\[(.*?)\]/is);
+    if (weaknessesMatch && weaknessesMatch[1]) {
+      result.weaknesses = this.extractArrayFromString(weaknessesMatch[1]);
+    }
+    
+    // Extract recommendations
+    const recommendationsMatch = content.match(/recommendations["\s:]+\[(.*?)\]/is);
+    if (recommendationsMatch && recommendationsMatch[1]) {
+      result.recommendations = this.extractArrayFromString(recommendationsMatch[1]);
+    }
+    
+    // If we couldn't extract anything, provide default values
+    if (result.strengths.length === 0) {
+      result.strengths = ['Clear presentation'];
+    }
+    
+    if (result.weaknesses.length === 0) {
+      result.weaknesses = ['Could not fully analyze the CV content'];
+    }
+    
+    if (result.recommendations.length === 0) {
+      result.recommendations = ['Add more specific achievements and quantifiable results'];
+    }
+    
+    return result;
+  }
+
+  /**
+   * Analyzes the CV content to determine the most relevant industry
+   * Uses the originalCVText if available
+   * @returns A string representing the determined industry
+   */
+  public async determineIndustry(): Promise<string> {
+    logger.info('Determining industry from CV content');
+    
+    if (!this.originalCVText) {
+      logger.warn('No CV text available for industry determination');
+      return 'General';
+    }
+    
+    try {
+      const textToAnalyze = this.originalCVText;
+      
+      // Try with Mistral first
+      try {
+        logger.info('Attempting to determine industry using Mistral');
+        if (!this.mistralClient) {
+          throw new Error('Mistral client not initialized');
+        }
+        
+        const prompt = `
+        Analyze the following CV/resume and determine the most relevant industry sector for this professional.
+        Choose from common industry sectors like: Technology, Healthcare, Finance, Education, Marketing, 
+        Engineering, Legal, Retail, Manufacturing, Hospitality, Construction, Media, etc.
+        Return ONLY the industry name as a single string with no additional text, quotes, or formatting.
+        
+        CV Content:
+        ${textToAnalyze.substring(0, 4000)}
+        `;
+        
+        const response = await this.mistralClient.chat({
+          model: this.mistralGenerationModel,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+          maxTokens: 50,
+        });
+        
+        return response.choices[0]?.message?.content?.trim() || 'General';
+      } catch (error) {
+        logger.warn(`Failed to determine industry with Mistral: ${error instanceof Error ? error.message : String(error)}`);
+        return this.determineIndustryWithOpenAI(textToAnalyze);
+      }
+    } catch (error) {
+      logger.error(`Error determining industry: ${error instanceof Error ? error.message : String(error)}`);
+      return 'General';
+    }
+  }
+  
+  /**
+   * Fallback method to determine industry using OpenAI
+   * @param cvText The CV text to analyze
+   * @returns A string representing the determined industry
+   */
+  private async determineIndustryWithOpenAI(cvText: string): Promise<string> {
+    try {
+      logger.info('Attempting to determine industry using OpenAI');
+      if (!this.openaiClient) {
+        throw new Error('OpenAI client not initialized');
+      }
+      
+      const prompt = `
+      Analyze the following CV/resume and determine the most relevant industry sector for this professional.
+      Choose from common industry sectors like: Technology, Healthcare, Finance, Education, Marketing, 
+      Engineering, Legal, Retail, Manufacturing, Hospitality, Construction, Media, etc.
+      Return ONLY the industry name as a single string with no additional text, quotes, or formatting.
+      
+      CV Content:
+      ${cvText.substring(0, 4000)}
+      `;
+      
+      const response = await this.openaiClient.chat.completions.create({
+        model: this.openaiGenerationModel,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+        max_tokens: 50,
+      });
+      
+      const industry = response.choices[0]?.message?.content?.trim() || 'General';
+      logger.info(`Determined industry using OpenAI: ${industry}`);
+      return industry;
+    } catch (error) {
+      logger.error(`Failed to determine industry with OpenAI: ${error instanceof Error ? error.message : String(error)}`);
+      return 'General';
+    }
+  }
+
+  /**
+   * Detects the language of the CV content
+   * Uses the originalCVText if available
+   * @returns A string representing the detected language
+   */
+  public async detectLanguage(): Promise<string> {
+    logger.info('Detecting language from CV content');
+    
+    if (!this.originalCVText) {
+      logger.warn('No CV text available for language detection');
+      return 'English';
+    }
+    
+    try {
+      const textToAnalyze = this.originalCVText;
+      
+      // Try with Mistral first
+      try {
+        logger.info('Attempting to detect language using Mistral');
+        if (!this.mistralClient) {
+          throw new Error('Mistral client not initialized');
+        }
+        
+        const prompt = `
+        Analyze the following CV/resume and determine the primary language it is written in.
+        Return ONLY the language name in English (e.g., "English", "French", "German", "Spanish", etc.) 
+        with no additional text, quotes, or formatting.
+        
+        CV Content:
+        ${textToAnalyze.substring(0, 4000)}
+        `;
+        
+        const response = await this.mistralClient.chat({
+          model: this.mistralGenerationModel,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+          maxTokens: 50,
+        });
+        
+        // Clean up the response to ensure it's just the language name
+        const language = response.choices[0]?.message?.content?.trim() || 'English';
+        logger.info(`Detected language using Mistral: ${language}`);
+        return language;
+      } catch (error) {
+        logger.warn(`Failed to detect language with Mistral: ${error instanceof Error ? error.message : String(error)}`);
+        return this.detectLanguageWithOpenAI(textToAnalyze);
+      }
+    } catch (error) {
+      logger.error(`Error detecting language: ${error instanceof Error ? error.message : String(error)}`);
+      return 'English';
+    }
+  }
+  
+  /**
+   * Fallback method to detect language using OpenAI
+   * @param cvText The CV text to analyze
+   * @returns A string representing the detected language
+   */
+  private async detectLanguageWithOpenAI(cvText: string): Promise<string> {
+    try {
+      logger.info('Attempting to detect language using OpenAI');
+      if (!this.openaiClient) {
+        throw new Error('OpenAI client not initialized');
+      }
+      
+      const prompt = `
+      Analyze the following CV/resume and determine the primary language it is written in.
+      Return ONLY the language name in English (e.g., "English", "French", "German", "Spanish", etc.) 
+      with no additional text, quotes, or formatting.
+      
+      CV Content:
+      ${cvText.substring(0, 4000)}
+      `;
+      
+      const response = await this.openaiClient.chat.completions.create({
+        model: this.openaiGenerationModel,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+        max_tokens: 50,
+      });
+      
+      const language = response.choices[0]?.message?.content?.trim() || 'English';
+      logger.info(`Detected language using OpenAI: ${language}`);
+      return language;
+    } catch (error) {
+      logger.error(`Failed to detect language with OpenAI: ${error instanceof Error ? error.message : String(error)}`);
+      return 'English';
+    }
+  }
+
+  /**
+   * Extracts sections from the CV content
+   * Uses the originalCVText if available
+   * @returns An array of sections with name and content
+   */
+  public async extractSections(): Promise<Array<{ name: string; content: string }>> {
+    logger.info('Extracting sections from CV content');
+    
+    if (!this.originalCVText) {
+      logger.warn('No CV text available for section extraction');
+      return [];
+    }
+    
+    try {
+      const textToAnalyze = this.originalCVText;
+      
+      // Try with Mistral first
+      try {
+        logger.info('Attempting to extract sections using Mistral');
+        if (!this.mistralClient) {
+          throw new Error('Mistral client not initialized');
+        }
+        
+        const prompt = `
+        Analyze the following CV/resume and extract all distinct sections.
+        For each section, provide the section name and its content.
+        Common CV sections include: Summary/Profile, Experience, Education, Skills, Certifications, Languages, etc.
+        
+        Return the result as a JSON array of objects, each with "name" and "content" properties.
+        Example format:
+        [
+          {
+            "name": "Summary",
+            "content": "Experienced software engineer with 5 years..."
+          },
+          {
+            "name": "Experience",
+            "content": "Senior Developer, ABC Corp (2018-2022)..."
+          }
+        ]
+        
+        IMPORTANT: Return ONLY the raw JSON array. DO NOT use markdown formatting, code blocks, or any other formatting. DO NOT include any explanation or additional text before or after the JSON.
+        
+        CV Content:
+        ${textToAnalyze}
+        `;
+        
+        if (!this.mistralClient) {
+          throw new Error('Mistral client not initialized');
+        }
+        
+        const response = await this.mistralClient.chat({
+          model: this.mistralGenerationModel,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+          maxTokens: 4000,
+        });
+        
+        const responseText = response.choices[0]?.message?.content?.trim() || '[]';
+        
+        try {
+          // Try to parse as JSON directly
+          const cleanedJson = responseText.replace(/```json|```/g, '').trim();
+          const sections = JSON.parse(cleanedJson) as Array<{ name: string; content: string }>;
+          logger.info(`Extracted ${sections.length} sections using Mistral`);
+          return sections;
+        } catch (parseError) {
+          logger.warn(`Failed to parse Mistral response as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+          // Try to extract using regex as fallback
+          return this.extractSectionsWithRegex(textToAnalyze);
+        }
+      } catch (error) {
+        logger.warn(`Failed to extract sections with Mistral: ${error instanceof Error ? error.message : String(error)}`);
+        return this.extractSectionsWithOpenAI(textToAnalyze);
+      }
+    } catch (error) {
+      logger.error(`Error extracting sections: ${error instanceof Error ? error.message : String(error)}`);
+      return [];
+    }
+  }
+  
+  /**
+   * Fallback method to extract sections using OpenAI
+   * @param cvText The CV text to analyze
+   * @returns An array of sections with name and content
+   */
+  private async extractSectionsWithOpenAI(cvText: string): Promise<Array<{ name: string; content: string }>> {
+    try {
+      logger.info('Attempting to extract sections using OpenAI');
+      if (!this.openaiClient) {
+        throw new Error('OpenAI client not initialized');
+      }
+      
+      const prompt = `
+      Analyze the following CV/resume and extract all distinct sections.
+      For each section, provide the section name and its content.
+      Common CV sections include: Summary/Profile, Experience, Education, Skills, Certifications, Languages, etc.
+      
+      Return the result as a JSON array of objects, each with "name" and "content" properties.
+      Example format:
+      [
+        {
+          "name": "Summary",
+          "content": "Experienced software engineer with 5 years..."
+        },
+        {
+          "name": "Experience",
+          "content": "Senior Developer, ABC Corp (2018-2022)..."
+        }
+      ]
+      
+      IMPORTANT: Return ONLY the raw JSON array. DO NOT use markdown formatting, code blocks, or any other formatting. DO NOT include any explanation or additional text before or after the JSON.
+      
+      CV Content:
+      ${cvText}
+      `;
+      
+      const response = await this.openaiClient.chat.completions.create({
+        model: this.openaiGenerationModel,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+        max_tokens: 4000,
+        response_format: { type: 'json_object' }
+      });
+      
+      const responseText = response.choices[0]?.message?.content?.trim() || '{"sections":[]}';
+      
+      try {
+        // Try to parse as JSON
+        const parsed = JSON.parse(responseText);
+        const sections = Array.isArray(parsed) ? parsed : (parsed.sections || []);
+        logger.info(`Extracted ${sections.length} sections using OpenAI`);
+        return sections;
+      } catch (parseError) {
+        logger.warn(`Failed to parse OpenAI response as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+        // Try to extract using regex as fallback
+        return this.extractSectionsWithRegex(cvText);
+      }
+    } catch (error) {
+      logger.error(`Failed to extract sections with OpenAI: ${error instanceof Error ? error.message : String(error)}`);
+      return this.extractSectionsWithRegex(cvText);
+    }
+  }
+  
+  /**
+   * Fallback method to extract sections using regex patterns
+   * @param cvText The CV text to analyze
+   * @returns An array of sections with name and content
+   */
+  private extractSectionsWithRegex(cvText: string): Array<{ name: string; content: string }> {
+    logger.info('Extracting sections using regex patterns');
+    
+    const sections: Array<{ name: string; content: string }> = [];
+    const commonSectionNames = [
+      'Summary', 'Profile', 'Objective', 'Professional Summary',
+      'Experience', 'Work Experience', 'Employment History', 'Professional Experience',
+      'Education', 'Academic Background', 'Qualifications',
+      'Skills', 'Technical Skills', 'Core Competencies', 'Key Skills',
+      'Certifications', 'Certificates', 'Professional Certifications',
+      'Languages', 'Language Proficiency',
+      'Projects', 'Key Projects', 'Professional Projects',
+      'Achievements', 'Accomplishments', 'Awards',
+      'Publications', 'Research', 'Patents',
+      'Volunteer Experience', 'Community Service',
+      'References', 'Professional References'
+    ];
+    
+    // Create a regex pattern to find sections
+    const sectionPattern = new RegExp(
+      `(^|\\n)(${commonSectionNames.join('|')})[:\\s]*\\n+([\\s\\S]+?)(?=\\n(?:${commonSectionNames.join('|')})[:\\s]*\\n+|$)`,
+      'gi'
+    );
+    
+    let match;
+    while ((match = sectionPattern.exec(cvText)) !== null) {
+      const sectionName = match[2].trim();
+      const sectionContent = match[3].trim();
+      
+      if (sectionName && sectionContent) {
+        sections.push({
+          name: sectionName,
+          content: sectionContent
+        });
+      }
+    }
+    
+    // If no sections found, try a simpler approach - split by common section headers
+    if (sections.length === 0) {
+      const lines = cvText.split('\n');
+      let currentSection = '';
+      let currentContent = '';
+      
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        
+        // Check if this line could be a section header
+        const isSectionHeader = commonSectionNames.some(name => 
+          trimmedLine.toLowerCase() === name.toLowerCase() || 
+          trimmedLine.toLowerCase() === `${name.toLowerCase()}:` ||
+          trimmedLine.toLowerCase() === `${name.toLowerCase()}.`
+        );
+        
+        if (isSectionHeader) {
+          // Save previous section if it exists
+          if (currentSection && currentContent) {
+            sections.push({
+              name: currentSection,
+              content: currentContent.trim()
+            });
+          }
+          
+          // Start new section
+          currentSection = trimmedLine.replace(/[:.]$/, '').trim();
+          currentContent = '';
+        } else if (currentSection) {
+          // Add to current section content
+          currentContent += line + '\n';
+        }
+      }
+      
+      // Add the last section
+      if (currentSection && currentContent) {
+        sections.push({
+          name: currentSection,
+          content: currentContent.trim()
+        });
+      }
+    }
+    
+    logger.info(`Extracted ${sections.length} sections using regex`);
+    return sections;
   }
 } 
