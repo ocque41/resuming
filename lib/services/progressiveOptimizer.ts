@@ -97,39 +97,92 @@ export async function optimizeCVProgressively(
         aiService: options.aiService 
       });
     } catch (analyzeError) {
-      logger.error(`Error in analyze stage: ${analyzeError instanceof Error ? analyzeError.message : String(analyzeError)}`);
+      logger.warn(`Error in analyze stage: ${analyzeError instanceof Error ? analyzeError.message : String(analyzeError)}`);
       
-      // Store partial results with error
-      storePartialResultsError(userId, cvId.toString(), jobDescription, 
-        `Analysis failed: ${analyzeError instanceof Error ? analyzeError.message : String(analyzeError)}`);
-      
-      // If the error is related to Mistral, try to continue with other stages
-      // This allows the process to continue even if one stage fails
-      if (analyzeError instanceof Error && 
-          (analyzeError.message.includes('Mistral') || 
-           analyzeError.message.includes('tee is not a function'))) {
+      // If the error is related to service availability, try to continue
+      if (
+        analyzeError instanceof Error && (
+          analyzeError.message.includes('service is not available') ||
+          analyzeError.message.includes('API key') ||
+          analyzeError.message.includes('Authentication failed')
+        )
+      ) {
+        logger.info(`Continuing optimization process after service error in analyze stage`);
         
-        logger.info(`Continuing optimization process after Mistral error in analyze stage`);
-        
-        // If we're using auto mode and got a Mistral error, switch to OpenAI for the rest of the process
-        if (!options.aiService || options.aiService === 'auto') {
-          logger.info(`Switching to OpenAI-only mode after Mistral error`);
+        // If we're using auto mode and got an error, switch to OpenAI for the rest of the process
+        if (options.aiService === 'auto' || options.aiService === undefined) {
+          logger.info(`Switching to OpenAI-only mode after service error`);
           options.aiService = 'openai';
         }
         
-        // Update state to indicate analyze stage completed with errors
-        state = updateStage(state, OptimizationStage.ANALYZE_COMPLETED);
+        // Continue with the optimize stage
+        try {
+          state = await runOptimizeStage(
+            userId, 
+            cvId, 
+            jobDescription, 
+            cvText, 
+            state, 
+            options.preserveSections || {}, 
+            { aiService: options.aiService }
+          );
+        } catch (optimizeError) {
+          logger.warn(`Error in optimize stage: ${optimizeError instanceof Error ? optimizeError.message : String(optimizeError)}`);
+          
+          // If the error is related to service availability, try to continue
+          if (
+            optimizeError instanceof Error && (
+              optimizeError.message.includes('service is not available') ||
+              optimizeError.message.includes('API key') ||
+              optimizeError.message.includes('Authentication failed')
+            )
+          ) {
+            logger.info(`Continuing optimization process after service error in optimize stage`);
+            
+            // If we're using auto mode and got an error, switch to OpenAI for the rest of the process
+            if (options.aiService === undefined || (options.aiService as string) === 'auto') {
+              logger.info(`Switching to OpenAI-only mode after service error`);
+              options.aiService = 'openai';
+            }
+            
+            // Continue with the generate stage
+            try {
+              const documentFormat = options.documentFormat || 'markdown';
+              state = await runGenerateStage(
+                userId, 
+                cvId, 
+                jobDescription, 
+                cvText, 
+                state, 
+                documentFormat, 
+                { aiService: options.aiService }
+              );
+            } catch (generateError) {
+              logger.error(`Error in generate stage: ${generateError instanceof Error ? generateError.message : String(generateError)}`);
+              
+              // Store partial results with error
+              storePartialResultsError(userId, cvId.toString(), jobDescription, 
+                `Document generation failed: ${generateError instanceof Error ? generateError.message : String(generateError)}`);
+              
+              // Update state to indicate generate stage completed with errors
+              state = updateStage(state, OptimizationStage.GENERATE_COMPLETED);
+            }
+          } else {
+            // For other errors, rethrow
+            throw optimizeError;
+          }
+        }
       } else {
-        // For other errors, rethrow to stop the process
+        // For other errors, rethrow
         throw analyzeError;
       }
     }
     
     // Store partial results after analyze stage
     storePartialResults(userId, cvId.toString(), jobDescription, {
-      optimizedContent: '',
-      matchScore: 0,
-      recommendations: [],
+      optimizedContent: state.results.optimizedContent || '',
+      matchScore: state.results.matchScore || 0,
+      recommendations: state.results.recommendations || [],
       progress: 30,
       state
     });
@@ -146,29 +199,48 @@ export async function optimizeCVProgressively(
         { aiService: options.aiService }
       );
     } catch (optimizeError) {
-      logger.error(`Error in optimize stage: ${optimizeError instanceof Error ? optimizeError.message : String(optimizeError)}`);
+      logger.warn(`Error in optimize stage: ${optimizeError instanceof Error ? optimizeError.message : String(optimizeError)}`);
       
-      // Store partial results with error
-      storePartialResultsError(userId, cvId.toString(), jobDescription, 
-        `Optimization failed: ${optimizeError instanceof Error ? optimizeError.message : String(optimizeError)}`);
-      
-      // If the error is related to Mistral, try to continue with other stages
-      if (optimizeError instanceof Error && 
-          (optimizeError.message.includes('Mistral') || 
-           optimizeError.message.includes('tee is not a function'))) {
+      // If the error is related to service availability, try to continue
+      if (
+        optimizeError instanceof Error && (
+          optimizeError.message.includes('service is not available') ||
+          optimizeError.message.includes('API key') ||
+          optimizeError.message.includes('Authentication failed')
+        )
+      ) {
+        logger.info(`Continuing optimization process after service error in optimize stage`);
         
-        logger.info(`Continuing optimization process after Mistral error in optimize stage`);
-        
-        // If we're using auto mode and got a Mistral error, switch to OpenAI for the rest of the process
-        if (!options.aiService || options.aiService === 'auto') {
-          logger.info(`Switching to OpenAI-only mode after Mistral error`);
+        // If we're using auto mode and got an error, switch to OpenAI for the rest of the process
+        if (options.aiService === undefined || (options.aiService as string) === 'auto') {
+          logger.info(`Switching to OpenAI-only mode after service error`);
           options.aiService = 'openai';
         }
         
-        // Update state to indicate optimize stage completed with errors
-        state = updateStage(state, OptimizationStage.OPTIMIZE_COMPLETED);
+        // Continue with the generate stage
+        try {
+          const documentFormat = options.documentFormat || 'markdown';
+          state = await runGenerateStage(
+            userId, 
+            cvId, 
+            jobDescription, 
+            cvText, 
+            state, 
+            documentFormat, 
+            { aiService: options.aiService }
+          );
+        } catch (generateError) {
+          logger.error(`Error in generate stage: ${generateError instanceof Error ? generateError.message : String(generateError)}`);
+          
+          // Store partial results with error
+          storePartialResultsError(userId, cvId.toString(), jobDescription, 
+            `Document generation failed: ${generateError instanceof Error ? generateError.message : String(generateError)}`);
+          
+          // Update state to indicate generate stage completed with errors
+          state = updateStage(state, OptimizationStage.GENERATE_COMPLETED);
+        }
       } else {
-        // For other errors, rethrow to stop the process
+        // For other errors, rethrow
         throw optimizeError;
       }
     }

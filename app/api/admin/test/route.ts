@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { logger } from "@/lib/logger";
-import { createTestReport } from "@/lib/utils/testingUtility";
+import { runSystemTest } from "@/lib/utils/testingUtility";
 
 /**
  * Run comprehensive tests for the CV optimization system
@@ -35,12 +35,12 @@ export async function GET(request: Request) {
     const cvId = searchParams.get("cvId");
     
     // Run the tests
-    const testReport = await createTestReport();
+    const testResults = await runSystemTest();
     
     // Return the test results
     return NextResponse.json({
       success: true,
-      testReport
+      testResults
     });
     
   } catch (error) {

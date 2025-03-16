@@ -6,7 +6,7 @@ interface CacheEntry<T> {
   data: T;
   timestamp: number;
   expiresAt: number;
-  source: string; // Track where the data came from (mistral, openai, etc.)
+  source: string; // Track where the data came from (openai, etc.)
   hitCount: number; // Track how many times this entry was accessed
 }
 
@@ -205,7 +205,7 @@ export function getCacheStats(): {
 /**
  * Cache CV analysis result
  */
-export function cacheCVAnalysis(cvText: string, result: any, source: string = 'mistral'): void {
+export function cacheCVAnalysis(cvText: string, result: any, source: string = 'openai'): void {
   const key = generateCacheKey('cv-analysis', cvText);
   cacheStore(key, result, CACHE_EXPIRY.CV_ANALYSIS, source);
 }
@@ -221,7 +221,7 @@ export function getCachedCVAnalysis(cvText: string): any | null {
 /**
  * Cache CV optimization result
  */
-export function cacheCVOptimization(cvText: string, jobDescription: string, result: any, source: string = 'mistral'): void {
+export function cacheCVOptimization(cvText: string, jobDescription: string, result: any, source: string = 'openai'): void {
   const key = generateCacheKey('cv-optimization', { cv: cvText, job: jobDescription });
   cacheStore(key, result, CACHE_EXPIRY.CV_OPTIMIZATION, source);
 }

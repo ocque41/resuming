@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle, AlertTriangle } from "lucide-react";
-import { analyzeCVContent, optimizeCVForJob } from '@/lib/services/mistral.service';
+import { analyzeCVContent, optimizeCVForJob } from '@/lib/services/openai.service';
 import { useToast } from "@/hooks/use-toast";
 import JobMatchDetailedAnalysis from './JobMatchDetailedAnalysis';
 import ComparativeAnalysis from './ComparativeAnalysis';
@@ -2546,9 +2546,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   // Add jobTitle state variable
   const [jobTitle, setJobTitle] = useState<string>('');
 
-  // Add service availability state variables
-  const [mistralServiceAvailable, setMistralServiceAvailable] = useState<boolean>(true);
-  const [mistralFailureCount, setMistralFailureCount] = useState<number>(0);
+  // Add service availability state variable
   const [openAIAvailable, setOpenAIAvailable] = useState<boolean>(true);
   
   // Add state for partial results

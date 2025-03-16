@@ -5,12 +5,5 @@ globs:
 
 # everytime you have a question on implementation or process or system, etc.. acording to the tools being implemented in the application we are developing cosult this documents.
 
-- @mistral docs 
-- @mistral docs 1 
-- @mistral docs document understanding 
-- @mistral docs output generation 
-- @mistral docs basic rag 
-- @mistral docs use cases 
-- @openai cookbook about rag 
-- @openai cookbook gpt4o visual function calling
+@openai cookbook about rag @openai cookbook gpt4o visual function calling @OPENAI AGENTS SDK @OPENAI AGENTS SDK 2 @OPENAI AGENTS SDK 3 @OpenAI @OPENAI AGENTS SDK QUICKSTART @OPENAI AGENTS SDK AGENTS DOC @OPENAI AGENTS SDK RESULTS @OPENAI AGENTS SDK RUNNING AGENTS @openai cookbook prompt caching 
 

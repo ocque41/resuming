@@ -17,7 +17,8 @@ import {
 } from "@/lib/utils/abTesting";
 import { ensureModelWarmedUp } from './warmupCache';
 import { shouldProcessInParallel, processInParallel } from './parallelProcessor';
-import { MistralRAGService } from './mistralRagService';
+import { analyzeAndOptimizeWithGPT4o } from '@/lib/services/openaiOptimizer';
+import { isOpenAIAvailable } from '@/lib/services/openai.service';
 
 // Define industry-specific keywords for local analysis
 const INDUSTRY_KEYWORDS: Record<string, string[]> = {
@@ -216,11 +217,15 @@ export async function processCVWithAI(
           // Set a timeout for the analysis
           let analysisPromise;
           
-          // Try with Mistral first, then fallback to OpenAI if it fails
           try {
-            // First try with RAG-based analysis
-            logger.info(`Attempting RAG-based analysis for CV ID: ${cvId}`);
-            await updateProgress('rag_analysis_in_progress', 25);
+            // Check if OpenAI is available
+            const openaiAvailable = await isOpenAIAvailable();
+            if (!openaiAvailable) {
+              throw new Error('OpenAI service is not available');
+            }
+            
+            logger.info(`Attempting OpenAI analysis for CV ID: ${cvId}`);
+            await updateProgress('openai_analysis_in_progress', 25);
             
             // Create a promise for the analyze-cv API call
             const apiAnalysisPromise = fetch(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/analyze-cv?fileName=cv.pdf&cvId=${cvId}`)
@@ -231,10 +236,10 @@ export async function processCVWithAI(
                 return response.json();
               })
               .then(data => {
-                if (!data.success || !data.analysis) {
+                if (!data.success || !data.analysisResult) {
                   throw new Error('API returned unsuccessful response');
                 }
-                return data.analysis;
+                return data.analysisResult;
               });
             
             // Set a timeout for the API call
@@ -244,193 +249,206 @@ export async function processCVWithAI(
             
             // Race the API call against the timeout
             analysis = await Promise.race([apiAnalysisPromise, apiTimeoutPromise]);
-            logger.info(`Successfully completed RAG-based analysis for CV ID: ${cvId}`);
-          } catch (ragError) {
-            // Log the RAG error
-            logger.error(`RAG-based analysis failed for CV ID: ${cvId}: ${ragError instanceof Error ? ragError.message : String(ragError)}`);
+            logger.info(`Successfully completed OpenAI analysis for CV ID: ${cvId}`);
+          } catch (openaiError) {
+            // Log the OpenAI error
+            logger.error(`OpenAI analysis failed for CV ID: ${cvId}: ${openaiError instanceof Error ? openaiError.message : String(openaiError)}`);
             
-            // Fallback to quick analysis
-            logger.info(`Falling back to quick analysis for CV ID: ${cvId}`);
-            await updateProgress('quick_analysis_fallback', 30);
+            // Fallback to local analysis with basic enhancement
+            logger.info(`Falling back to local analysis for CV ID: ${cvId}`);
+            await updateProgress('fallback_analysis_in_progress', 30);
             
-            // Try with GPT-4o-mini first, then fallback to GPT-3.5-turbo if it fails
-            try {
-              logger.info(`Attempting analysis with GPT-4o-mini for CV ID: ${cvId}`);
-              analysisPromise = performQuickAnalysisWithModel(rawText, localAnalysis, "gpt-4o-mini");
-            } catch (gpt4Error) {
-              logger.error(`GPT-4o-mini analysis failed for CV ID: ${cvId}: ${gpt4Error instanceof Error ? gpt4Error.message : String(gpt4Error)}`);
-              logger.info(`Falling back to GPT-3.5-turbo for CV ID: ${cvId}`);
-              analysisPromise = performQuickAnalysis(rawText, localAnalysis);
-            }
-            
-            const analysisTimeoutPromise = new Promise((_, reject) => {
-              setTimeout(() => reject(new Error('Analysis timed out')), MAX_ANALYSIS_TIME);
-            });
-            
-            // Perform AI analysis with timeout
-            analysis = await Promise.race([analysisPromise, analysisTimeoutPromise]);
-          }
-          
-          // Validate analysis results
-          if (!analysis || !analysis.strengths || !analysis.weaknesses || !analysis.recommendations) {
-            logger.warn(`Analysis results incomplete for CV ID: ${cvId}, using fallback values`);
-            
-            // Create fallback analysis with default values
+            // Perform a quick local analysis
             analysis = {
-              atsScore: localAnalysis.localAtsScore || 65,
+              atsScore: localAnalysis.localAtsScore || 65, // Default score
               industry: localAnalysis.topIndustry || 'General',
               strengths: ["Clear presentation of professional experience", "Includes contact information", "Lists relevant skills"],
               weaknesses: ["Could benefit from more quantifiable achievements", "May need more specific examples of skills application", "Consider adding more industry-specific keywords"],
-              recommendations: ["Add measurable achievements with numbers and percentages", "Include more industry-specific keywords", "Ensure all experience is relevant to target positions"],
+              recommendations: [
+                'Add more quantifiable achievements',
+                'Include more industry-specific keywords',
+                'Ensure your CV is tailored to each job application'
+              ],
               formatStrengths: ["Organized structure", "Consistent formatting", "Clear section headings"],
               formatWeaknesses: ["Could improve visual hierarchy", "Consider adding more white space", "Ensure consistent alignment"],
-              formatRecommendations: ["Use bullet points for achievements", "Add more white space between sections", "Ensure consistent date formatting"]
+              formatRecommendations: [
+                'Use bullet points for achievements',
+                'Ensure consistent formatting throughout',
+                'Use a clean, professional layout'
+              ]
             };
+            
+            logger.info(`Completed fallback analysis for CV ID: ${cvId}`);
           }
           
-          // Update the metadata with analysis results
-          updatedMetadata = {
-            ...updatedMetadata,
-            ...analysis,
-            processingStatus: 'analysis_complete',
-      processingProgress: 40,
-            lastUpdated: new Date().toISOString()
-          };
-          await updateCVMetadata(cvId, updatedMetadata);
-          
           await updateProgress('analysis_complete', 40);
-          trackEvent({
-            eventType: 'checkpoint_reached',
-            cvId,
-            timestamp: new Date().toISOString(),
-            phase: 'analysis'
-          });
         }
-      } else {
-        // Use the existing analysis from cache or previous processing
-        analysis = existingAnalysis;
-        logger.info(`Using existing analysis for CV ID: ${cvId}`);
-        await updateProgress('analysis_loaded', 40);
-      }
-
-      // Phase 3: Optimization with AI
-      if (startingPhase === 'initial' || startingPhase === 'analysis' || startingPhase === 'optimization') {
-        logger.info(`Starting optimization for CV ID: ${cvId}`);
         
-        // Update status
-        await updateProgress('optimization_starting', 50);
-        await updateProgress('optimization_in_progress', 60);
+        // Store the analysis in the metadata
+        updatedMetadata = {
+          ...updatedMetadata,
+          analysis,
+          atsScore: analysis.atsScore,
+          industry: analysis.industry,
+          strengths: analysis.strengths,
+          weaknesses: analysis.weaknesses,
+          recommendations: analysis.recommendations,
+          formattingStrengths: analysis.formatStrengths,
+          formattingWeaknesses: analysis.formatWeaknesses,
+          formattingRecommendations: analysis.formatRecommendations,
+          lastUpdated: new Date().toISOString()
+        };
         
-        // Set a timeout for the optimization
-        const optimizationPromise = performQuickOptimization(rawText, analysis);
-        const optimizationTimeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Optimization timed out')), MAX_OPTIMIZATION_TIME);
+        await updateCVMetadata(cvId, updatedMetadata);
+        
+        trackEvent({
+          eventType: 'checkpoint_reached',
+          cvId,
+          timestamp: new Date().toISOString(),
+          phase: 'analysis'
         });
+      } else {
+        // Use existing analysis from metadata
+        analysis = {
+          atsScore: currentMetadata.atsScore,
+          industry: currentMetadata.industry,
+          strengths: currentMetadata.strengths,
+          weaknesses: currentMetadata.weaknesses,
+          recommendations: currentMetadata.recommendations,
+          formatStrengths: currentMetadata.formattingStrengths,
+          formatWeaknesses: currentMetadata.formattingWeaknesses,
+          formatRecommendations: currentMetadata.formattingRecommendations
+        };
+        
+        await updateProgress('using_existing_analysis', 40);
+      }
+      
+      // Phase 3: Optimize the CV with AI
+      if (startingPhase !== 'complete') {
+        await updateProgress('optimization_starting', 45);
         
         try {
-          // Optimize the text with timeout
-          enhancedText = await Promise.race([optimizationPromise, optimizationTimeoutPromise]);
+          // Check if OpenAI is available
+          const openaiAvailable = await isOpenAIAvailable();
+          if (!openaiAvailable) {
+            throw new Error('OpenAI service is not available');
+          }
           
-          // Apply any local enhancement rules
-          enhancedText = enhanceTextWithLocalRules(enhancedText as string, localAnalysis);
+          logger.info(`Starting CV optimization with OpenAI for CV ID: ${cvId}`);
+          await updateProgress('openai_optimization_in_progress', 50);
           
-          // Update status
-          updatedMetadata = {
-            ...updatedMetadata,
-            processingStatus: 'optimization_complete',
-            processingProgress: 80,
-            optimizedText: enhancedText,
-            lastUpdated: new Date().toISOString()
-          };
-          await updateCVMetadata(cvId, updatedMetadata);
-          await updateProgress('optimization_complete', 80);
-          
-          trackEvent({
-            eventType: 'checkpoint_reached',
-            cvId,
-            timestamp: new Date().toISOString(),
-            phase: 'optimization'
+          // Set a timeout for the optimization
+          const optimizationPromise = analyzeAndOptimizeWithGPT4o(rawText, "Perform optimization");
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Optimization timed out')), MAX_OPTIMIZATION_TIME);
           });
-        } catch (optimizationError) {
-          logger.error(`Optimization timed out or failed for CV ID: ${cvId}`, 
-            optimizationError instanceof Error ? optimizationError.message : String(optimizationError));
           
-          // Use enhanced text with local rules as fallback
+          // Race the optimization against the timeout
+          const optimizationResult = await Promise.race([optimizationPromise, timeoutPromise]) as {
+            optimizedContent: string;
+            matchScore: number;
+            recommendations: string[];
+            cvAnalysis: any;
+          };
+          
+          // Extract the optimized text
+          enhancedText = optimizationResult.optimizedContent;
+          
+          logger.info(`Successfully completed OpenAI optimization for CV ID: ${cvId}`);
+          await updateProgress('optimization_complete', 85);
+        } catch (error) {
+          // Log the error
+          logger.error(`OpenAI optimization failed for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
+          
+          // Fallback to local enhancement
+          logger.info(`Falling back to local enhancement for CV ID: ${cvId}`);
+          await updateProgress('fallback_optimization_in_progress', 60);
+          
+          // Enhance the text with local rules
           enhancedText = enhanceTextWithLocalRules(rawText, localAnalysis);
           
-          updatedMetadata = {
-            ...updatedMetadata,
-            processingStatus: 'optimization_fallback',
-            processingProgress: 75,
-            optimizedText: enhancedText,
-            lastUpdated: new Date().toISOString()
-          };
-          await updateCVMetadata(cvId, updatedMetadata);
-          await updateProgress('optimization_fallback', 75);
+          logger.info(`Completed fallback enhancement for CV ID: ${cvId}`);
+          await updateProgress('fallback_optimization_complete', 85);
         }
+        
+        // Store the optimized text
+        updatedMetadata = {
+          ...updatedMetadata,
+          optimized: true,
+          optimizedText: enhancedText,
+          optimizationCompleted: true,
+          optimizationCompletedAt: new Date().toISOString(),
+          lastUpdated: new Date().toISOString()
+        };
+        
+        await updateCVMetadata(cvId, updatedMetadata);
+        
+        trackEvent({
+          eventType: 'checkpoint_reached',
+          cvId,
+          timestamp: new Date().toISOString(),
+          phase: 'optimization'
+        });
       } else {
-        enhancedText = currentMetadata.optimizedText || rawText;
-        logger.info(`Using existing optimization for CV ID: ${cvId}`);
-        await updateProgress('optimization_loaded', 80);
+        // Use existing optimized text
+        enhancedText = currentMetadata.optimizedText;
+        await updateProgress('using_existing_optimization', 85);
       }
-
-      // Phase 4: Finalize
-      logger.info(`Finalizing processing for CV ID: ${cvId}`);
       
+      // Phase 4: Finalize processing
       await updateProgress('finalizing', 90);
       
+      // Calculate processing time
+      const processingEndTime = Date.now();
+      const processingTimeMs = processingEndTime - processingStartTime;
+      
+      // Update final metadata
       updatedMetadata = {
         ...updatedMetadata,
         processing: false,
         processingCompleted: true,
-        processingStatus: 'complete',
+        processingCompletedAt: new Date().toISOString(),
+        processingTime: processingTimeMs,
+        processingStatus: 'completed',
         processingProgress: 100,
-        optimized: true,
         lastUpdated: new Date().toISOString()
       };
+      
       await updateCVMetadata(cvId, updatedMetadata);
-      await updateProgress('complete', 100);
       
-      const totalDuration = Date.now() - processingStartTime;
-      
+      // Track the processing completion event
       trackEvent({
         eventType: 'process_complete',
         cvId,
         userId,
         timestamp: new Date().toISOString(),
-        duration: totalDuration
+        duration: processingTimeMs
       });
       
-      logger.info(`CV processing completed in ${totalDuration}ms for CV ID: ${cvId}`);
+      logger.info(`CV processing completed for CV ID: ${cvId} in ${processingTimeMs}ms`);
       
       return {
         success: true,
-        message: 'CV processed successfully',
-        metadata: updatedMetadata
+        cvId,
+        analysis,
+        enhancedText,
+        processingTime: processingTimeMs
       };
     } catch (error) {
-      // Ensure error is properly typed for the logger
-      const errorForLog = error instanceof Error 
-        ? error 
-        : new Error(typeof error === 'string' ? error : 'Unknown error during CV processing');
-      
-      logger.error(`Error processing CV ID: ${cvId}`, errorForLog);
-      
-      // Check if it's a timeout error
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('timed out');
+      // Handle any errors in the processing pipeline
+      logger.error(`Error in CV processing pipeline for CV ID: ${cvId}: ${error instanceof Error ? error.message : String(error)}`);
       
       // Update metadata with error information
-      const updatedErrorMetadata = {
-        ...currentMetadata,
+      updatedMetadata = {
+        ...updatedMetadata,
         processing: false,
+        processingError: true,
+        processingErrorMessage: error instanceof Error ? error.message : String(error),
         processingStatus: 'error',
-        processingError: errorMessage,
-        processingProgress: 0,
         lastUpdated: new Date().toISOString()
       };
       
-      await updateCVMetadata(cvId, updatedErrorMetadata);
+      await updateCVMetadata(cvId, updatedMetadata);
       
       // Track the error event
       trackEvent({
@@ -438,48 +456,24 @@ export async function processCVWithAI(
         cvId,
         userId,
         timestamp: new Date().toISOString(),
-        error: errorMessage || 'Unknown error',
-        duration: Date.now() - processingStartTime
+        error: error instanceof Error ? error.message : String(error)
       });
       
-      if (isTimeout) {
-        return await handleFallbackCompletion(cvId, rawText, currentMetadata);
-      }
-      
-      throw error;
-    }
-  } catch (error) {
-    // Ensure error is properly typed for the logger
-    const errorForLog = error instanceof Error 
-      ? error 
-      : new Error(typeof error === 'string' ? error : 'Unknown error in processCVWithAI');
-    
-    logger.error(`Unhandled error in processCVWithAI for CV ID: ${cvId}`, errorForLog);
-    
-    // Ensure CV metadata is updated to reflect the error
-    const errorMetadata = {
-      ...currentMetadata,
-      processing: false,
-      processingStatus: 'error',
-      processingError: error instanceof Error ? error.message : 'Unknown error',
-      processingProgress: 0,
-      lastUpdated: new Date().toISOString()
-    };
-    
-    await updateCVMetadata(cvId, errorMetadata);
-    
-    // Try fallback completion as a last resort
-    try {
-      return await handleFallbackCompletion(cvId, rawText, currentMetadata);
-    } catch (fallbackError) {
-      // If even fallback fails, return a failed result
       return {
         success: false,
-        message: 'CV processing failed completely',
-        error: error instanceof Error ? error.message : 'Unknown error',
-        metadata: errorMetadata
+        cvId,
+        error: error instanceof Error ? error.message : String(error)
       };
     }
+  } catch (outerError) {
+    // Handle any errors outside the main try/catch block
+    logger.error(`Critical error in CV processing for CV ID: ${cvId}: ${outerError instanceof Error ? outerError.message : String(outerError)}`);
+    
+    return {
+      success: false,
+      cvId,
+      error: outerError instanceof Error ? outerError.message : String(outerError)
+    };
   }
 }
 
@@ -559,428 +553,128 @@ async function handleFallbackCompletion(cvId: number, rawText: string, currentMe
 }
 
 /**
- * Perform quick analysis with a specific model
- */
-async function performQuickAnalysisWithModel(rawText: string, localAnalysis: any, model: string): Promise<any> {
-  // Prepare a very simplified prompt for quick analysis
-  const prompt = `
-    Analyze this CV quickly. Return ONLY a JSON object with:
-    - atsScore (0-100)
-    - industry (primary industry)
-    - strengths (array of 3 strengths)
-    - weaknesses (array of 3 weaknesses)
-    - recommendations (array of 3 recommendations)
-    - formatStrengths (array of 3 format strengths)
-    - formatWeaknesses (array of 3 format weaknesses)
-    - formatRecommendations (array of 3 format recommendations)
-    
-    CV text (truncated):
-    ${rawText.substring(0, 3000)}${rawText.length > 3000 ? '...' : ''}
-    
-    Local analysis suggests:
-    - Industry: ${localAnalysis.topIndustry}
-    - Local ATS score: ${localAnalysis.localAtsScore}
-  `;
-  
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-  
-  const response = await openai.chat.completions.create({
-    model: model,
-    messages: [
-      {
-        role: "system",
-        content: "You are a fast CV analyzer. Return ONLY valid JSON with the requested fields."
-      },
-      {
-        role: "user",
-        content: prompt
-      }
-    ],
-    response_format: { type: "json_object" },
-    temperature: 0.3,
-    max_tokens: 800, // Increased to accommodate more fields
-  });
-  
-  const responseText = response.choices[0]?.message?.content || "{}";
-  let analysis;
-  
-  try {
-    analysis = JSON.parse(responseText);
-  } catch (e) {
-    logger.error(`Failed to parse analysis JSON: ${e instanceof Error ? e.message : String(e)}`);
-    
-    // Fallback to local analysis
-    analysis = {
-      atsScore: localAnalysis.localAtsScore,
-      industry: localAnalysis.topIndustry,
-      strengths: ["CV structure detected", "Content available for review"],
-      weaknesses: ["Consider adding more industry-specific keywords"],
-      recommendations: ["Add more action verbs to highlight achievements"],
-      formatStrengths: ["Organized structure", "Consistent formatting"],
-      formatWeaknesses: ["Could improve visual hierarchy", "Consider adding more white space"],
-      formatRecommendations: ["Use bullet points for achievements", "Add more white space between sections"]
-    };
-  }
-  
-  return analysis;
-}
-
-/**
- * Perform quick analysis with minimal OpenAI interaction
+ * Perform quick analysis with OpenAI
  */
 async function performQuickAnalysis(rawText: string, localAnalysis: any): Promise<any> {
-  // Prepare a very simplified prompt for quick analysis
-  const prompt = `
-    Analyze this CV quickly. Return ONLY a JSON object with:
-    - atsScore (0-100)
-    - industry (primary industry)
-    - strengths (array of 3 strengths)
-    - weaknesses (array of 3 weaknesses)
-    - recommendations (array of 3 recommendations)
-    
-    CV text (truncated):
-    ${rawText.substring(0, 3000)}${rawText.length > 3000 ? '...' : ''}
-    
-    Local analysis suggests:
-    - Industry: ${localAnalysis.topIndustry}
-    - Local ATS score: ${localAnalysis.localAtsScore}
-  `;
-  
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-  
-  const response = await openai.chat.completions.create({
-    model: "gpt-3.5-turbo", // Use the fastest model
-    messages: [
-      {
-        role: "system",
-        content: "You are a fast CV analyzer. Return ONLY valid JSON with the requested fields."
-      },
-      {
-        role: "user",
-        content: prompt
-      }
-    ],
-    response_format: { type: "json_object" },
-    temperature: 0.3,
-    max_tokens: 500, // Keep response size small
-  });
-  
-  const responseText = response.choices[0]?.message?.content || "{}";
-  let analysis;
-  
   try {
-    analysis = JSON.parse(responseText);
-  } catch (e) {
-    logger.error(`Failed to parse analysis JSON: ${e instanceof Error ? e.message : String(e)}`);
+    // Check if OpenAI is available
+    const openaiAvailable = await isOpenAIAvailable();
+    if (!openaiAvailable) {
+      throw new Error('OpenAI service is not available');
+    }
     
-    // Fallback to local analysis
-    analysis = {
-      atsScore: localAnalysis.localAtsScore,
-      industry: localAnalysis.topIndustry,
-      strengths: ["CV structure detected", "Content available for review"],
-      weaknesses: ["Consider adding more industry-specific keywords"],
-      recommendations: ["Add more action verbs to highlight achievements"]
+    // Use OpenAI for analysis
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+    
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: "You are a fast CV analyzer. Return ONLY valid JSON with the requested fields."
+        },
+        {
+          role: "user",
+          content: `
+            Analyze this CV quickly. Return ONLY a JSON object with:
+            - atsScore (0-100)
+            - industry (primary industry)
+            - strengths (array of 3 strengths)
+            - weaknesses (array of 3 weaknesses)
+            - recommendations (array of 3 recommendations)
+            - formatStrengths (array of 3 format strengths)
+            - formatWeaknesses (array of 3 format weaknesses)
+            - formatRecommendations (array of 3 format recommendations)
+            
+            CV text (truncated):
+            ${rawText.substring(0, 3000)}${rawText.length > 3000 ? '...' : ''}
+            
+            Local analysis suggests:
+            - Industry: ${localAnalysis.topIndustry}
+            - Local ATS score: ${localAnalysis.localAtsScore}
+          `
+        }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.3,
+      max_tokens: 800,
+    });
+    
+    const responseText = response.choices[0]?.message?.content || "{}";
+    let analysis;
+    
+    try {
+      analysis = JSON.parse(responseText);
+    } catch (e) {
+      logger.error(`Failed to parse analysis JSON: ${e instanceof Error ? e.message : String(e)}`);
+      
+      // Return the local analysis as fallback
+      return {
+        atsScore: localAnalysis.localAtsScore || 65,
+        industry: localAnalysis.topIndustry || 'General',
+        strengths: ["Clear presentation of professional experience", "Includes contact information", "Lists relevant skills"],
+        weaknesses: ["Could benefit from more quantifiable achievements", "May need more specific examples of skills application", "Consider adding more industry-specific keywords"],
+        recommendations: [
+          'Add more quantifiable achievements',
+          'Include more industry-specific keywords',
+          'Ensure your CV is tailored to each job application'
+        ],
+        formatStrengths: ["Organized structure", "Consistent formatting", "Clear section headings"],
+        formatWeaknesses: ["Could improve visual hierarchy", "Consider adding more white space", "Ensure consistent alignment"],
+        formatRecommendations: [
+          'Use bullet points for achievements',
+          'Ensure consistent formatting throughout',
+          'Use a clean, professional layout'
+        ]
+      };
+    }
+    
+    return analysis;
+  } catch (error) {
+    logger.error(`Error in quick analysis: ${error instanceof Error ? error.message : String(error)}`);
+    
+    // Return the local analysis as fallback
+    return {
+      atsScore: localAnalysis.localAtsScore || 65,
+      industry: localAnalysis.topIndustry || 'General',
+      strengths: ["Clear presentation of professional experience", "Includes contact information", "Lists relevant skills"],
+      weaknesses: ["Could benefit from more quantifiable achievements", "May need more specific examples of skills application", "Consider adding more industry-specific keywords"],
+      recommendations: [
+        'Add more quantifiable achievements',
+        'Include more industry-specific keywords',
+        'Ensure your CV is tailored to each job application'
+      ],
+      formatStrengths: ["Organized structure", "Consistent formatting", "Clear section headings"],
+      formatWeaknesses: ["Could improve visual hierarchy", "Consider adding more white space", "Ensure consistent alignment"],
+      formatRecommendations: [
+        'Use bullet points for achievements',
+        'Ensure consistent formatting throughout',
+        'Use a clean, professional layout'
+      ]
     };
   }
-  
-  return analysis;
 }
 
 /**
- * Perform quick optimization of CV content
- * Enhanced with RAG using Mistral AI
+ * Perform quick optimization with OpenAI
  */
 async function performQuickOptimization(rawText: string, analysis: any): Promise<string> {
   try {
-    // Set a timeout for the optimization process
-    const optimizationStartTime = Date.now();
-    const OPTIMIZATION_TIMEOUT = 30000; // Increase to 30 seconds timeout
-    
-    // Log the start of optimization
-    logger.info('Starting CV optimization process');
-    
-    // Initialize the RAG service with error handling
-    logger.info('Initializing RAG service for CV optimization');
-    let ragService: MistralRAGService;
-    try {
-      ragService = new MistralRAGService();
-    } catch (initError) {
-      logger.error('Failed to initialize RAG service:', 
-        initError instanceof Error ? initError.message : String(initError));
-      // Return enhanced text with local rules as fallback
-      logger.info('Falling back to local enhancement rules due to RAG service initialization failure');
-      return enhanceTextWithLocalRules(rawText, analysis);
+    // Check if OpenAI is available
+    const openaiAvailable = await isOpenAIAvailable();
+    if (!openaiAvailable) {
+      throw new Error('OpenAI service is not available');
     }
     
-    // Process the CV document with timeout protection
-    let documentProcessed = false;
-    try {
-      logger.info('Processing CV document with RAG service');
-      // Add timeout for document processing
-      const processingPromise = ragService.processCVDocument(rawText);
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('CV document processing timed out')), 20000); // Increase to 20 seconds
-      });
-      
-      try {
-        await Promise.race([processingPromise, timeoutPromise]);
-        documentProcessed = true;
-        logger.info('Successfully processed CV document with RAG service');
-      } catch (processingError) {
-        logger.warn('Error or timeout processing CV document with RAG service, continuing with optimization', 
-          processingError instanceof Error ? processingError.message : String(processingError));
-        // Continue with optimization even if document processing fails
-      }
-    } catch (processingError) {
-      logger.warn('Error processing CV document with RAG service, falling back to direct optimization', 
-                processingError instanceof Error ? processingError.message : String(processingError));
-      // Continue with fallback optimization
-    }
-    
-    // Determine language from analysis; default to English
-    const language = analysis.language || "en";
-    
-    // Define optimization system prompt based on language
-    const systemPrompts: Record<string, string> = {
-      en: `You are a professional CV optimizer. Your task is to optimize the CV text for ATS compatibility.
-Focus on:
-1. Adding relevant keywords for the ${analysis.industry || 'specified'} industry
-2. Using action verbs for achievements
-3. Quantifying accomplishments
-4. Maintaining original structure and information
-5. Optimizing formatting for readability
-
-Key weaknesses to address:
-${analysis.weaknesses?.join(', ') || 'Improve overall ATS compatibility'}
-
-Provide ONLY the optimized CV text, no explanations.`,
-      es: `Eres un optimizador profesional de CV. Tu tarea es optimizar el texto del CV para la compatibilidad con ATS.
-Enfócate en:
-1. Agregar palabras clave relevantes para la industria de ${analysis.industry || 'especificada'}
-2. Usar verbos de acción para describir logros
-3. Cuantificar los logros con métricas
-4. Mantener la estructura e información original
-5. Optimizar el formato para mejorar la legibilidad
-
-Aspectos a mejorar:
-${analysis.weaknesses?.join(', ') || 'Mejorar la compatibilidad general con ATS'}
-
-Proporciona ÚNICAMENTE el texto optimizado del CV, sin explicaciones.`,
-      fr: `Vous êtes un optimiseur professionnel de CV. Votre tâche est d'optimiser le texte du CV pour la compatibilité ATS.
-Concentrez-vous sur :
-1. Ajouter des mots-clés pertinents pour le secteur de ${analysis.industry || 'spécifié'}
-2. Utiliser des verbes d'action pour décrire les réalisations
-3. Quantifier les accomplissements avec des métriques
-4. Maintenir la structure et les informations originales
-5. Optimiser le format pour une meilleure lisibilité
-
-Points faibles à corriger :
-${analysis.weaknesses?.join(', ') || 'Améliorer la compatibilité globale avec les ATS'}
-
-Fournissez UNIQUEMENT le texte optimisé du CV, sans explications.`,
-      de: `Sie sind ein professioneller Lebenslauf-Optimierer. Ihre Aufgabe ist es, den Lebenslauf für die ATS-Kompatibilität zu optimieren.
-Konzentrieren Sie sich auf:
-1. Hinzufügen relevanter Schlüsselwörter für die ${analysis.industry || 'angegebene'} Branche
-2. Verwendung von Aktionsverben zur Beschreibung von Erfolgen
-3. Quantifizierung der Leistungen mit Kennzahlen
-4. Beibehaltung der ursprünglichen Struktur und Information
-5. Optimierung des Formats zur Verbesserung der Lesbarkeit
-
-Zu verbessernde Punkte:
-${analysis.weaknesses?.join(', ') || 'Verbessern Sie die allgemeine ATS-Kompatibilität'}
-
-Geben Sie NUR den optimierten Text des Lebenslaufs zurück, ohne Erklärungen.`
-    };
-    
-    // Use the appropriate system prompt based on language
-    const systemPrompt = systemPrompts[language] || systemPrompts["en"];
-    
-    // Craft the optimization query
-    const optimizationQuery = `Optimize the following CV text for ATS compatibility in the ${analysis.industry || 'general'} industry:`;
-    
-    let optimizedText = '';
-    
-    // Try with RAG first with proper timeout handling
-    if (documentProcessed) {
-      logger.info('Attempting CV optimization with RAG');
-      try {
-        // Create a promise for the RAG optimization
-        const ragOptimizationPromise = ragService.generateResponse(optimizationQuery, systemPrompt);
-        
-        // Create a timeout promise
-        const ragTimeoutPromise = new Promise<string>((_, reject) => {
-          setTimeout(() => reject(new Error('RAG optimization timed out')), OPTIMIZATION_TIMEOUT);
-        });
-        
-        // Race the optimization against the timeout
-        optimizedText = await Promise.race([ragOptimizationPromise, ragTimeoutPromise]);
-        logger.info('RAG optimization returned text of length: ' + optimizedText.length);
-        
-        // Basic validation to ensure we got reasonable output
-        if (optimizedText && optimizedText.length > rawText.length * 0.5) {
-          logger.info('Successfully generated optimized CV content with RAG');
-          
-          // Check if we're taking too long overall
-          if (Date.now() - optimizationStartTime > OPTIMIZATION_TIMEOUT) {
-            logger.warn('Optimization process is taking too long, returning current result');
-            return optimizedText;
-          }
-          
-          return optimizedText;
-        } else {
-          logger.warn('Generated content too short or empty, falling back to direct optimization');
-          throw new Error('Generated content validation failed');
-        }
-      } catch (error) {
-        // Log the error and continue to fallback
-        logger.warn('RAG optimization failed or timed out, falling back to direct API call', 
-                  error instanceof Error ? error.message : String(error));
-      }
-    } else {
-      logger.info('Document not processed, skipping RAG optimization and using direct API call');
-    }
-    
-    // Fall back to direct OpenAI call if RAG fails or document wasn't processed
-    try {
-      logger.info('Attempting direct API optimization with OpenAI');
-      
-      // Initialize OpenAI client with error handling
-      let openai: OpenAI;
-      try {
-        openai = new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY,
-        });
-      } catch (openaiInitError) {
-        logger.error('Failed to initialize OpenAI client:', 
-          openaiInitError instanceof Error ? openaiInitError.message : String(openaiInitError));
-        // Return enhanced text with local rules as fallback
-        logger.info('Falling back to local enhancement rules due to OpenAI client initialization failure');
-        return enhanceTextWithLocalRules(rawText, analysis);
-      }
-
-      // Try GPT-4o-mini first for better quality
-      try {
-        logger.info('Attempting optimization with GPT-4o-mini');
-        
-        // Create a promise for the direct API optimization
-        const directOptimizationPromise = openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content: "You are a fast CV optimizer. Return ONLY the optimized CV text, no explanations."
-            },
-            {
-              role: "user",
-              content: `Quickly optimize this CV for ATS compatibility. Focus on:
-1. Adding relevant keywords for the ${analysis.industry || 'general'} industry
-2. Using action verbs for achievements
-3. Quantifying accomplishments
-4. Maintaining original structure and information
-5. Optimizing formatting for readability
-
-Return ONLY the optimized CV text, no explanations.
-
-CV text:
-${rawText.substring(0, 4000)}${rawText.length > 4000 ? '...' : ''}
-
-Key weaknesses to address:
-${analysis.weaknesses?.join(', ') || 'Improve overall ATS compatibility'}`
-            }
-          ],
-          temperature: 0.4,
-          max_tokens: 4000,
-        });
-        
-        // Create a timeout promise
-        const directTimeoutPromise = new Promise<any>((_, reject) => {
-          setTimeout(() => reject(new Error('Direct API optimization timed out')), 25000); // Increase to 25 seconds
-        });
-        
-        // Race the direct optimization against the timeout
-        const response = await Promise.race([directOptimizationPromise, directTimeoutPromise]);
-        
-        optimizedText = response.choices[0]?.message?.content || "";
-        
-        if (optimizedText && optimizedText.length > rawText.length * 0.5) {
-          logger.info('Successfully generated optimized CV content with GPT-4o-mini');
-          return optimizedText;
-        } else {
-          logger.warn('GPT-4o-mini response too short or empty, falling back to GPT-3.5-turbo');
-          throw new Error('GPT-4o-mini response validation failed');
-        }
-      } catch (gpt4oError) {
-        logger.warn('GPT-4o-mini optimization failed or timed out, falling back to GPT-3.5-turbo', 
-          gpt4oError instanceof Error ? gpt4oError.message : String(gpt4oError));
-        
-        // Fall back to GPT-3.5-turbo
-        logger.info('Attempting optimization with GPT-3.5-turbo');
-        
-        // Create a promise for the direct API optimization with GPT-3.5-turbo
-        const fallbackOptimizationPromise = openai.chat.completions.create({
-          model: "gpt-3.5-turbo",
-          messages: [
-            {
-              role: "system",
-              content: "You are a fast CV optimizer. Return ONLY the optimized CV text, no explanations."
-            },
-            {
-              role: "user",
-              content: `Quickly optimize this CV for ATS compatibility. Focus on:
-1. Adding relevant keywords for the ${analysis.industry || 'general'} industry
-2. Using action verbs for achievements
-3. Quantifying accomplishments
-4. Maintaining original structure and information
-5. Optimizing formatting for readability
-
-Return ONLY the optimized CV text, no explanations.
-
-CV text:
-${rawText.substring(0, 3000)}${rawText.length > 3000 ? '...' : ''}
-
-Key weaknesses to address:
-${analysis.weaknesses?.join(', ') || 'Improve overall ATS compatibility'}`
-            }
-          ],
-          temperature: 0.4,
-          max_tokens: 2000,
-        });
-        
-        // Create a timeout promise
-        const fallbackTimeoutPromise = new Promise<any>((_, reject) => {
-          setTimeout(() => reject(new Error('Fallback API optimization timed out')), 20000);
-        });
-        
-        // Race the fallback optimization against the timeout
-        const fallbackResponse = await Promise.race([fallbackOptimizationPromise, fallbackTimeoutPromise]);
-        
-        optimizedText = fallbackResponse.choices[0]?.message?.content || "";
-        
-        if (optimizedText && optimizedText.length > 0) {
-          logger.info('Successfully generated optimized CV content with GPT-3.5-turbo');
-          return optimizedText;
-        } else {
-          throw new Error('Empty response from GPT-3.5-turbo');
-        }
-      }
-    } catch (directApiError) {
-      logger.error('All optimization attempts failed', 
-        directApiError instanceof Error ? directApiError.message : String(directApiError));
-      
-      // Return enhanced text with local rules as final fallback
-      logger.info('Falling back to local enhancement rules as final fallback');
-      return enhanceTextWithLocalRules(rawText, analysis);
-    }
+    // Use OpenAI for optimization
+    const result = await analyzeAndOptimizeWithGPT4o(rawText, "Perform optimization");
+    return result.optimizedContent;
   } catch (error) {
-    // Handle any unexpected errors
-    logger.error('Unexpected error in performQuickOptimization:', 
-      error instanceof Error ? error.message : String(error));
+    logger.error(`Error in quick optimization: ${error instanceof Error ? error.message : String(error)}`);
     
-    // Return enhanced text with local rules as final fallback
+    // Return enhanced text with local rules as fallback
     return enhanceTextWithLocalRules(rawText, analysis);
   }
 }

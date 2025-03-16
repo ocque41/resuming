@@ -1,6 +1,5 @@
 import OpenAI from 'openai';
 import { logger } from '@/lib/logger';
-import { CVAnalysisResult } from './mistral.service';
 import { 
   cacheCVOptimization, 
   getCachedCVOptimization, 
@@ -8,6 +7,24 @@ import {
   getCachedCombinedResult 
 } from './cache.service';
 import { retryWithExponentialBackoff } from '@/lib/utils/apiRateLimiter';
+
+// Define the CVAnalysisResult interface directly here
+export interface CVAnalysisResult {
+  industry?: string;
+  language?: string;
+  sections?: Array<{ name: string; content: string }>;
+  skills: {
+    technical: string[];
+    professional: string[];
+  };
+  strengths: string[];
+  weaknesses: string[];
+  recommendations: string[];
+  atsScore?: number;
+  formatStrengths?: string[];
+  formatWeaknesses?: string[];
+  formatRecommendations?: string[];
+}
 
 // Initialize OpenAI client
 let openaiClient: OpenAI | null = null;
@@ -75,12 +92,149 @@ function safeJsonParse(content: string): any {
 }
 
 /**
- * Optimize CV with GPT-4o using Mistral analysis
+ * Analyze CV content with OpenAI
+ */
+export async function analyzeCVContent(cvText: string): Promise<{
+  cvAnalysis: CVAnalysisResult;
+}> {
+  const client = getOpenAIClient();
+  if (!client) {
+    throw new Error('OpenAI client is not available');
+  }
+
+  try {
+    logger.info('Analyzing CV content with OpenAI');
+    
+    // Use the rate limiter with exponential backoff for the chat completion
+    const response = await retryWithExponentialBackoff(
+      async () => {
+        return await client.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'system',
+              content: `You are a CV analysis expert. Analyze the provided CV and extract key information.
+              
+              Return a JSON object with the following structure:
+              {
+                "industry": "Technology", // The primary industry the CV is targeting
+                "language": "English", // The language of the CV
+                "sections": [
+                  { "name": "Profile", "content": "..." },
+                  { "name": "Experience", "content": "..." },
+                  // Other sections
+                ],
+                "skills": {
+                  "technical": ["JavaScript", "React", "Node.js"], // Technical skills
+                  "professional": ["Project Management", "Team Leadership"] // Professional/soft skills
+                },
+                "strengths": ["Clear presentation of experience", "Strong technical skills"], // CV strengths
+                "weaknesses": ["Lacks quantifiable achievements", "No clear career progression"], // CV weaknesses
+                "recommendations": ["Add more quantifiable achievements", "Clarify career progression"], // Recommendations for improvement
+                "atsScore": 75, // Estimated ATS compatibility score (0-100)
+                "formatStrengths": ["Clear section headings", "Consistent formatting"], // Format strengths
+                "formatWeaknesses": ["Dense text blocks", "Inconsistent date formats"], // Format weaknesses
+                "formatRecommendations": ["Use bullet points", "Standardize date formats"] // Format recommendations
+              }
+              
+              Do not include any explanations or additional text. Return only the JSON object.`
+            },
+            {
+              role: 'user',
+              content: `CV: ${cvText}`
+            }
+          ],
+          response_format: { type: "json_object" }
+        });
+      },
+      { service: 'openai', maxRetries: 3, priority: 1 }
+    );
+    
+    // Extract the content from the response
+    const content = response.choices[0].message.content || '';
+    
+    // Try to parse the response as JSON
+    try {
+      const result = JSON.parse(content);
+      
+      // Validate the structure
+      if (!result.skills) {
+        throw new Error('Invalid response structure: missing skills');
+      }
+      
+      logger.info('CV analysis with OpenAI completed successfully');
+      return { cvAnalysis: result };
+    } catch (parseError) {
+      logger.error('Error parsing analysis response:', parseError instanceof Error ? parseError.message : String(parseError));
+      throw new Error(`Failed to parse analysis result: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+    }
+  } catch (error) {
+    logger.error('Error analyzing CV with OpenAI:', error instanceof Error ? error.message : String(error));
+    throw new Error(`Failed to analyze CV: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * Optimize CV for a specific job with OpenAI
+ */
+export async function optimizeCVForJob(
+  cvText: string, 
+  jobDescription: string, 
+  cvAnalysis: CVAnalysisResult
+): Promise<{
+  optimizedContent: string;
+  matchScore: number;
+  recommendations: string[];
+  matchAnalysis: {
+    score: number;
+    matchedKeywords: Array<{ keyword: string; relevance: number; frequency: number; placement: string }>;
+    missingKeywords: Array<{ keyword: string; importance: number; suggestedPlacement: string }>;
+    recommendations: string[];
+    skillGap: string;
+    dimensionalScores: {
+      skillsMatch: number;
+      experienceMatch: number;
+      educationMatch: number;
+      industryFit: number;
+      overallCompatibility: number;
+      keywordDensity: number;
+      formatCompatibility: number;
+      contentRelevance: number;
+    };
+    detailedAnalysis: string;
+    improvementPotential: number;
+    sectionAnalysis: {
+      profile: { score: number; feedback: string };
+      skills: { score: number; feedback: string };
+      experience: { score: number; feedback: string };
+      education: { score: number; feedback: string };
+      achievements: { score: number; feedback: string };
+    };
+  };
+}> {
+  // Check if we have a cached result
+  const cachedResult = getCachedCVOptimization(cvText, jobDescription);
+  if (cachedResult) {
+    logger.info('Using cached CV optimization result');
+    return cachedResult;
+  }
+
+  // If no cached result, use the optimizeCVWithGPT4o function
+  const result = await optimizeCVWithGPT4o(cvText, jobDescription, cvAnalysis);
+  
+  // Cache the result
+  cacheCVOptimization(cvText, jobDescription, result, 'openai');
+  
+  return result;
+}
+
+/**
+ * Optimize CV with GPT-4o using analysis
  */
 export async function optimizeCVWithGPT4o(
   cvText: string, 
   jobDescription: string, 
-  mistralAnalysis: CVAnalysisResult
+  analysis: CVAnalysisResult
 ): Promise<{
   optimizedContent: string;
   matchScore: number;
@@ -118,7 +272,7 @@ export async function optimizeCVWithGPT4o(
   }
 
   try {
-    logger.info('Optimizing CV with GPT-4o using Mistral analysis');
+    logger.info('Optimizing CV with GPT-4o using analysis');
     
     // Use the rate limiter with exponential backoff for the chat completion
     const response = await retryWithExponentialBackoff(
@@ -172,9 +326,10 @@ export async function optimizeCVWithGPT4o(
             },
             {
               role: 'user',
-              content: `CV: ${cvText}\n\nJob Description: ${jobDescription}\n\nCV Analysis: ${JSON.stringify(mistralAnalysis)}`
+              content: `CV: ${cvText}\n\nJob Description: ${jobDescription}\n\nCV Analysis: ${JSON.stringify(analysis)}`
             }
-          ]
+          ],
+          response_format: { type: "json_object" }
         });
       },
       { service: 'openai', maxRetries: 3, priority: 1 }
@@ -185,7 +340,7 @@ export async function optimizeCVWithGPT4o(
     
     // Try to parse the response as JSON
     try {
-      const result = safeJsonParse(content);
+      const result = JSON.parse(content);
       
       // Validate the structure
       if (!result.optimizedContent || typeof result.matchScore !== 'number') {
@@ -205,7 +360,7 @@ export async function optimizeCVWithGPT4o(
 }
 
 /**
- * Optimize CV with GPT-4o fallback (without Mistral analysis)
+ * Optimize CV with GPT-4o (without prior analysis)
  */
 export async function optimizeCVWithGPT4oFallback(
   cvText: string, 
@@ -247,7 +402,7 @@ export async function optimizeCVWithGPT4oFallback(
   }
 
   try {
-    logger.info('Optimizing CV with GPT-4o fallback (without Mistral analysis)');
+    logger.info('Optimizing CV with GPT-4o (without prior analysis)');
     
     // Use the rate limiter with exponential backoff for the chat completion
     const response = await retryWithExponentialBackoff(
@@ -304,7 +459,8 @@ export async function optimizeCVWithGPT4oFallback(
               role: 'user',
               content: `CV: ${cvText}\n\nJob Description: ${jobDescription}`
             }
-          ]
+          ],
+          response_format: { type: "json_object" }
         });
       },
       { service: 'openai', maxRetries: 3, priority: 1 }
@@ -315,21 +471,21 @@ export async function optimizeCVWithGPT4oFallback(
     
     // Try to parse the response as JSON
     try {
-      const result = safeJsonParse(content);
+      const result = JSON.parse(content);
       
       // Validate the structure
       if (!result.optimizedContent || typeof result.matchScore !== 'number') {
         throw new Error('Invalid response structure');
       }
       
-      logger.info('CV optimization with GPT-4o fallback completed successfully');
+      logger.info('CV optimization with GPT-4o completed successfully');
       return result;
     } catch (parseError) {
       logger.error('Error parsing optimization response:', parseError instanceof Error ? parseError.message : String(parseError));
       throw new Error(`Failed to parse optimization result: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
     }
   } catch (error) {
-    logger.error('Error optimizing CV with GPT-4o fallback:', error instanceof Error ? error.message : String(error));
+    logger.error('Error optimizing CV with GPT-4o:', error instanceof Error ? error.message : String(error));
     throw new Error(`Failed to optimize CV: ${error instanceof Error ? error.message : String(error)}`);
   }
 }

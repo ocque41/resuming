@@ -5,8 +5,8 @@ import {
   updateStage, 
   recordOptimizationError 
 } from './progressiveOptimization';
-import { MistralRAGService } from '@/lib/utils/mistralRagService';
 import { retryWithExponentialBackoff } from '@/lib/utils/apiRateLimiter';
+import { analyzeCVContent, isOpenAIAvailable, CVAnalysisResult } from './openai.service';
 
 /**
  * Runs the analyze stage of the CV optimization process
@@ -16,7 +16,7 @@ export async function runAnalyzeStage(
   cvId: string,
   jobDescription: string,
   cvText: string,
-  options: { aiService?: 'auto' | 'openai' | 'mistral' } = {}
+  options: { aiService?: 'auto' | 'openai' } = {}
 ): Promise<OptimizationState> {
   logger.info(`Starting analyze stage for CV ${cvId}`);
   
@@ -32,39 +32,49 @@ export async function runAnalyzeStage(
     lastUpdated: Date.now()
   };
   
-  // Initialize RAG service with preferred AI service
-  const ragService = new MistralRAGService(options.aiService || 'auto');
+  // Check if OpenAI is available
+  const openaiAvailable = await isOpenAIAvailable();
+  if (!openaiAvailable) {
+    logger.error('OpenAI service is not available');
+    return recordOptimizationError(
+      userId,
+      cvId,
+      jobDescription,
+      'OpenAI service is not available',
+      OptimizationStage.ANALYZE_STARTED
+    );
+  }
   
   // Update state to indicate analysis has started
   state = updateStage(state, OptimizationStage.ANALYZE_STARTED);
   
   try {
-    // Process the CV document
-    await ragService.processCVDocument(cvText);
+    // Analyze the CV with OpenAI
+    const analysisResult = await analyzeCVContent(cvText);
     
-    // Extract skills
-    state = await extractSkillsStep(userId, cvId, jobDescription, ragService, state);
+    // Extract skills from the analysis
+    state = extractSkillsFromAnalysis(state, analysisResult.cvAnalysis);
     
-    // Extract keywords
-    state = await extractKeywordsStep(userId, cvId, jobDescription, ragService, state);
+    // Extract keywords from the analysis
+    state = extractKeywordsFromAnalysis(state, jobDescription, analysisResult.cvAnalysis);
     
     // Extract key requirements
-    state = await extractRequirementsStep(userId, cvId, jobDescription, ragService, state);
+    state = extractRequirementsFromAnalysis(state, jobDescription, analysisResult.cvAnalysis);
     
     // Analyze format
-    state = await analyzeFormatStep(userId, cvId, jobDescription, ragService, state);
+    state = analyzeFormatFromAnalysis(state, analysisResult.cvAnalysis);
     
     // Analyze content
-    state = await analyzeContentStep(userId, cvId, jobDescription, ragService, state);
+    state = analyzeContentFromAnalysis(state, analysisResult.cvAnalysis);
     
     // Determine industry
-    state = await determineIndustryStep(userId, cvId, jobDescription, ragService, state);
+    state = determineIndustryFromAnalysis(state, analysisResult.cvAnalysis);
     
     // Detect language
-    state = await detectLanguageStep(userId, cvId, jobDescription, ragService, state);
+    state = detectLanguageFromAnalysis(state, analysisResult.cvAnalysis);
     
     // Extract sections
-    state = await extractSectionsStep(userId, cvId, jobDescription, ragService, state, cvText);
+    state = extractSectionsFromAnalysis(state, cvText, analysisResult.cvAnalysis);
     
     // Mark analysis as completed
     state = updateStage(state, OptimizationStage.ANALYZE_COMPLETED);
@@ -79,341 +89,222 @@ export async function runAnalyzeStage(
 }
 
 /**
- * Extract skills from the CV
+ * Extract skills from OpenAI analysis
  */
-async function extractSkillsStep(
-  userId: string,
-  cvId: string,
-  jobDescription: string,
-  ragService: MistralRAGService,
-  currentState: OptimizationState
-): Promise<OptimizationState> {
+function extractSkillsFromAnalysis(
+  state: OptimizationState,
+  analysis: CVAnalysisResult
+): OptimizationState {
   try {
-    logger.info(`Extracting skills for CV ID: ${cvId}`);
+    // Combine technical and professional skills into a single array
+    const skills = [
+      ...(analysis.skills?.technical || []),
+      ...(analysis.skills?.professional || [])
+    ];
     
-    // Skip if we already have skills
-    if (currentState.results.skills && currentState.results.skills.length > 0) {
-      logger.info(`Skills already extracted for CV ID: ${cvId}`);
-      return currentState;
-    }
-    
-    // Extract skills
-    const skills = await ragService.extractSkills();
-    
-    logger.info(`Extracted ${skills.length} skills for CV ID: ${cvId}`);
-    
-    // Update the state with the extracted skills
-    return updateStage(
-      currentState,
-      OptimizationStage.SKILLS_EXTRACTED,
-      { skills }
-    );
+    return {
+      ...state,
+      results: {
+        ...state.results,
+        skills
+      },
+      progress: Math.min(100, state.progress + 10),
+      lastUpdated: Date.now()
+    };
   } catch (error) {
-    // Log the error but continue with the process
-    logger.error(`Error extracting skills: ${error instanceof Error ? error.message : String(error)}`);
-    return updateStage(
-      currentState,
-      OptimizationStage.SKILLS_EXTRACTED,
-      { skills: [] }
-    );
+    logger.error('Error extracting skills:', error instanceof Error ? error.message : String(error));
+    return state;
   }
 }
 
 /**
- * Extracts keywords from the CV
+ * Extract keywords from OpenAI analysis
  */
-async function extractKeywordsStep(
-  userId: string,
-  cvId: string,
+function extractKeywordsFromAnalysis(
+  state: OptimizationState,
   jobDescription: string,
-  ragService: MistralRAGService,
-  currentState: OptimizationState
-): Promise<OptimizationState> {
-  logger.info(`Extracting keywords for CV ${cvId}`);
-  
+  analysis: CVAnalysisResult
+): OptimizationState {
   try {
-    // Extract keywords using the RAG service
-    const keywords = await ragService.extractKeywords();
+    // Use skills as keywords for now
+    const keywords = [
+      ...(analysis.skills?.technical || []),
+      ...(analysis.skills?.professional || [])
+    ];
     
-    // Update the state with the extracted keywords
-    return updateStage(
-      currentState,
-      OptimizationStage.KEYWORDS_EXTRACTED,
-      { keywords }
-    );
+    return {
+      ...state,
+      results: {
+        ...state.results,
+        keywords
+      },
+      progress: Math.min(100, state.progress + 10),
+      lastUpdated: Date.now()
+    };
   } catch (error) {
-    // Log the error but continue with the process
-    logger.error(`Error extracting keywords: ${error instanceof Error ? error.message : String(error)}`);
-    return updateStage(
-      currentState,
-      OptimizationStage.KEYWORDS_EXTRACTED,
-      { keywords: [] }
-    );
+    logger.error('Error extracting keywords:', error instanceof Error ? error.message : String(error));
+    return state;
   }
 }
 
 /**
- * Extracts key requirements from the job description
+ * Extract requirements from OpenAI analysis
  */
-async function extractRequirementsStep(
-  userId: string,
-  cvId: string,
+function extractRequirementsFromAnalysis(
+  state: OptimizationState,
   jobDescription: string,
-  ragService: MistralRAGService,
-  currentState: OptimizationState
-): Promise<OptimizationState> {
-  logger.info(`Extracting key requirements for CV ${cvId}`);
-  
+  analysis: CVAnalysisResult
+): OptimizationState {
   try {
-    // Extract key requirements using the RAG service
-    const keyRequirements = await ragService.extractKeyRequirements();
+    // For now, we'll use a simple approach
+    const keyRequirements = analysis.recommendations || [];
     
-    // Update the state with the extracted key requirements
-    return updateStage(
-      currentState,
-      OptimizationStage.KEY_REQUIREMENTS_EXTRACTED,
-      { keyRequirements }
-    );
+    return {
+      ...state,
+      results: {
+        ...state.results,
+        keyRequirements
+      },
+      progress: Math.min(100, state.progress + 10),
+      lastUpdated: Date.now()
+    };
   } catch (error) {
-    // Log the error but continue with the process
-    logger.error(`Error extracting key requirements: ${error instanceof Error ? error.message : String(error)}`);
-    return updateStage(
-      currentState,
-      OptimizationStage.KEY_REQUIREMENTS_EXTRACTED,
-      { keyRequirements: [] }
-    );
+    logger.error('Error extracting requirements:', error instanceof Error ? error.message : String(error));
+    return state;
   }
 }
 
 /**
- * Analyze the CV format
+ * Analyze format from OpenAI analysis
  */
-async function analyzeFormatStep(
-  userId: string,
-  cvId: string,
-  jobDescription: string,
-  ragService: MistralRAGService,
-  currentState: OptimizationState
-): Promise<OptimizationState> {
-  logger.info(`Analyzing format for CV ${cvId}`);
-  
+function analyzeFormatFromAnalysis(
+  state: OptimizationState,
+  analysis: CVAnalysisResult
+): OptimizationState {
   try {
-    // Analyze the format using the RAG service
-    const formatAnalysis = await ragService.analyzeCVFormat();
+    const formatAnalysis = {
+      strengths: analysis.formatStrengths || [],
+      weaknesses: analysis.formatWeaknesses || [],
+      recommendations: analysis.formatRecommendations || []
+    };
     
-    // Update the state with the format analysis
-    return updateStage(
-      currentState,
-      OptimizationStage.FORMAT_ANALYZED,
-      { formatAnalysis }
-    );
+    return {
+      ...state,
+      results: {
+        ...state.results,
+        formatAnalysis
+      },
+      progress: Math.min(100, state.progress + 10),
+      lastUpdated: Date.now()
+    };
   } catch (error) {
-    // Log the error but continue with the process
-    logger.error(`Error analyzing format: ${error instanceof Error ? error.message : String(error)}`);
-    return updateStage(
-      currentState,
-      OptimizationStage.FORMAT_ANALYZED,
-      { formatAnalysis: { strengths: [], weaknesses: [], recommendations: [] } }
-    );
+    logger.error('Error analyzing format:', error instanceof Error ? error.message : String(error));
+    return state;
   }
 }
 
 /**
- * Analyzes the content of the CV
+ * Analyze content from OpenAI analysis
  */
-async function analyzeContentStep(
-  userId: string,
-  cvId: string,
-  jobDescription: string,
-  ragService: MistralRAGService,
-  currentState: OptimizationState
-): Promise<OptimizationState> {
-  logger.info(`Analyzing content for CV ${cvId}`);
-  
+function analyzeContentFromAnalysis(
+  state: OptimizationState,
+  analysis: CVAnalysisResult
+): OptimizationState {
   try {
-    // Analyze the content using the RAG service
-    const contentAnalysis = await ragService.analyzeContent();
+    const contentAnalysis = {
+      strengths: analysis.strengths || [],
+      weaknesses: analysis.weaknesses || [],
+      recommendations: analysis.recommendations || [],
+      atsScore: analysis.atsScore || 0
+    };
     
-    // Update the state with the content analysis
-    return updateStage(
-      currentState,
-      OptimizationStage.CONTENT_ANALYZED,
-      { contentAnalysis }
-    );
+    return {
+      ...state,
+      results: {
+        ...state.results,
+        contentAnalysis
+      },
+      progress: Math.min(100, state.progress + 10),
+      lastUpdated: Date.now()
+    };
   } catch (error) {
-    // Log the error but continue with the process
-    logger.error(`Error analyzing content: ${error instanceof Error ? error.message : String(error)}`);
-    return updateStage(
-      currentState,
-      OptimizationStage.CONTENT_ANALYZED,
-      { contentAnalysis: { strengths: [], weaknesses: [], recommendations: [] } }
-    );
+    logger.error('Error analyzing content:', error instanceof Error ? error.message : String(error));
+    return state;
   }
 }
 
 /**
- * Determines the industry of the CV
+ * Determine industry from OpenAI analysis
  */
-async function determineIndustryStep(
-  userId: string,
-  cvId: string,
-  jobDescription: string,
-  ragService: MistralRAGService,
-  currentState: OptimizationState
-): Promise<OptimizationState> {
-  logger.info(`Determining industry for CV ${cvId}`);
-  
+function determineIndustryFromAnalysis(
+  state: OptimizationState,
+  analysis: CVAnalysisResult
+): OptimizationState {
   try {
-    // Determine the industry using the RAG service
-    const industry = await ragService.determineIndustry();
+    const industry = analysis.industry || 'General';
     
-    // Update the state with the determined industry
-    return updateStage(
-      currentState,
-      OptimizationStage.INDUSTRY_DETERMINED,
-      { industry }
-    );
+    return {
+      ...state,
+      results: {
+        ...state.results,
+        industry
+      },
+      progress: Math.min(100, state.progress + 10),
+      lastUpdated: Date.now()
+    };
   } catch (error) {
-    // Log the error but continue with the process
-    logger.error(`Error determining industry: ${error instanceof Error ? error.message : String(error)}`);
-    return updateStage(
-      currentState,
-      OptimizationStage.INDUSTRY_DETERMINED,
-      { industry: 'Unknown' }
-    );
+    logger.error('Error determining industry:', error instanceof Error ? error.message : String(error));
+    return state;
   }
 }
 
 /**
- * Detect the language of the CV
+ * Detect language from OpenAI analysis
  */
-async function detectLanguageStep(
-  userId: string,
-  cvId: string,
-  jobDescription: string,
-  ragService: MistralRAGService,
-  currentState: OptimizationState
-): Promise<OptimizationState> {
-  logger.info(`Detecting language for CV ${cvId}`);
-  
+function detectLanguageFromAnalysis(
+  state: OptimizationState,
+  analysis: CVAnalysisResult
+): OptimizationState {
   try {
-    // Detect the language using the RAG service
-    const language = await ragService.detectLanguage();
+    const language = analysis.language || 'English';
     
-    // Update the state with the detected language
-    return updateStage(
-      currentState,
-      OptimizationStage.LANGUAGE_DETECTED,
-      { language }
-    );
+    return {
+      ...state,
+      results: {
+        ...state.results,
+        language
+      },
+      progress: Math.min(100, state.progress + 10),
+      lastUpdated: Date.now()
+    };
   } catch (error) {
-    // Log the error but continue with the process
-    logger.error(`Error detecting language: ${error instanceof Error ? error.message : String(error)}`);
-    return updateStage(
-      currentState,
-      OptimizationStage.LANGUAGE_DETECTED,
-      { language: 'English' }
-    );
+    logger.error('Error detecting language:', error instanceof Error ? error.message : String(error));
+    return state;
   }
 }
 
 /**
- * Extract sections from the CV
+ * Extract sections from OpenAI analysis
  */
-async function extractSectionsStep(
-  userId: string,
-  cvId: string,
-  jobDescription: string,
-  ragService: MistralRAGService,
-  currentState: OptimizationState,
-  cvText?: string
-): Promise<OptimizationState> {
-  logger.info(`Extracting sections for CV ${cvId}`);
-  
+function extractSectionsFromAnalysis(
+  state: OptimizationState,
+  cvText: string,
+  analysis: CVAnalysisResult
+): OptimizationState {
   try {
-    // Create a timeout promise
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Section extraction timed out')), 20000); // 20 second timeout
-    });
+    const sections = analysis.sections || [];
     
-    // Create the extraction promise
-    const extractionPromise = ragService.extractSections();
-    
-    // Race the extraction against the timeout
-    const sections = await Promise.race([extractionPromise, timeoutPromise])
-      .catch(error => {
-        logger.warn(`Section extraction failed or timed out: ${error instanceof Error ? error.message : String(error)}`);
-        
-        // Return a fallback section structure
-        if (cvText) {
-          logger.info('Using fallback section extraction with regex');
-          
-          // Try to extract sections using regex as a fallback
-          try {
-            // Simple regex to identify potential sections
-            const sectionRegex = /^(?:\s*)([\w\s&]+)(?:\s*)(?::|-)(?:\s*)/gm;
-            const matches = [...cvText.matchAll(sectionRegex)];
-            
-            if (matches.length > 0) {
-              const sections = [];
-              
-              for (let i = 0; i < matches.length; i++) {
-                const match = matches[i];
-                const sectionName = match[1].trim();
-                const startIndex = match.index! + match[0].length;
-                const endIndex = i < matches.length - 1 ? matches[i + 1].index! : cvText.length;
-                const content = cvText.substring(startIndex, endIndex).trim();
-                
-                sections.push({ name: sectionName, content });
-              }
-              
-              return sections;
-            }
-          } catch (regexError) {
-            logger.error(`Regex fallback failed: ${regexError instanceof Error ? regexError.message : String(regexError)}`);
-          }
-          
-          // If regex fails or finds no sections, return the whole text as one section
-          return [{ name: 'Content', content: cvText }];
-        }
-        
-        // If no CV text is available, return an empty array
-        return [];
-      });
-    
-    // Log the number of sections extracted
-    logger.info(`Extracted ${sections.length} sections from CV ${cvId}`);
-    
-    // Update the state with the extracted sections
-    return updateStage(
-      currentState,
-      OptimizationStage.SECTIONS_EXTRACTED,
-      { sections }
-    );
+    return {
+      ...state,
+      results: {
+        ...state.results,
+        sections
+      },
+      progress: Math.min(100, state.progress + 10),
+      lastUpdated: Date.now()
+    };
   } catch (error) {
-    // Log the error but continue with the process
-    logger.error(`Error extracting sections: ${error instanceof Error ? error.message : String(error)}`);
-    
-    // Use the CV text as a fallback
-    const fallbackContent = cvText || 'No content available';
-    
-    // Log the error in the state's message property
-    const updatedState = updateStage(
-      currentState,
-      OptimizationStage.SECTIONS_EXTRACTED,
-      { 
-        sections: [
-          { 
-            name: 'Content', 
-            content: fallbackContent 
-          }
-        ]
-      }
-    );
-    
-    // Add error message to the state
-    updatedState.error = `Section extraction failed: ${error instanceof Error ? error.message : String(error)}`;
-    
-    return updatedState;
+    logger.error('Error extracting sections:', error instanceof Error ? error.message : String(error));
+    return state;
   }
 } 

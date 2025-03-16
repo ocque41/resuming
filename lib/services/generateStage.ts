@@ -6,8 +6,7 @@ import {
   recordOptimizationError,
   hasCompletedStage
 } from './progressiveOptimization';
-import { MistralRAGService } from '@/lib/utils/mistralRagService';
-import { processCustomPromptWithGPT4o } from '@/lib/services/openai.service';
+import { processCustomPromptWithGPT4o, isOpenAIAvailable } from '@/lib/services/openai.service';
 
 /**
  * Runs the generate stage of the CV optimization process
@@ -19,19 +18,29 @@ export async function runGenerateStage(
   cvText: string,
   currentState: OptimizationState,
   documentFormat: string = 'markdown',
-  options: { aiService?: 'auto' | 'openai' | 'mistral' } = {}
+  options: { aiService?: 'auto' | 'openai' } = {}
 ): Promise<OptimizationState> {
   logger.info(`Starting generate stage for CV ${cvId}`);
   
-  // Initialize RAG service with preferred AI service
-  const ragService = new MistralRAGService(options.aiService || 'auto');
+  // Check if OpenAI is available
+  const openaiAvailable = await isOpenAIAvailable();
+  if (!openaiAvailable) {
+    logger.error('OpenAI service is not available');
+    return recordOptimizationError(
+      userId,
+      cvId,
+      jobDescription,
+      'OpenAI service is not available',
+      OptimizationStage.GENERATE_STARTED
+    );
+  }
   
   // Update state to indicate generation has started
   let state = updateStage(currentState, OptimizationStage.GENERATE_STARTED);
   
   try {
     // Generate the optimized document
-    state = await generateDocumentStep(userId, cvId, jobDescription, ragService, state, documentFormat);
+    state = await generateDocumentWithOpenAI(userId, cvId, jobDescription, state, documentFormat);
     
     // Mark generation as completed
     state = updateStage(state, OptimizationStage.GENERATE_COMPLETED);
@@ -41,110 +50,69 @@ export async function runGenerateStage(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error(`Error in generate stage for CV ${cvId}: ${errorMessage}`);
-    throw error;
+    
+    return recordOptimizationError(
+      userId,
+      cvId,
+      jobDescription,
+      errorMessage,
+      OptimizationStage.GENERATE_STARTED
+    );
   }
 }
 
 /**
- * Generates the optimized document
+ * Generates the optimized document using OpenAI
  */
-async function generateDocumentStep(
+async function generateDocumentWithOpenAI(
   userId: string,
   cvId: string,
   jobDescription: string,
-  ragService: MistralRAGService,
   currentState: OptimizationState,
   documentFormat: string
 ): Promise<OptimizationState> {
-  logger.info(`Generating optimized document for CV ${cvId} in ${documentFormat} format`);
+  logger.info(`Generating document for CV ${cvId} in ${documentFormat} format`);
   
   try {
-    // Collect all optimized sections
-    const optimizedSections = {
-      profile: currentState.results.optimizedProfile || '',
-      experience: currentState.results.optimizedExperience || [],
-      skills: currentState.results.optimizedSkills || [],
-      education: currentState.results.optimizedEducation || []
-    };
+    // Check if we have optimized content
+    if (!currentState.results.optimizedContent) {
+      throw new Error('No optimized content available for document generation');
+    }
     
-    // Get original sections for any that weren't optimized
-    const originalSections = currentState.results.sections || [];
-    
-    // Generate the document using the OpenAI service since MistralRAG doesn't have this method
-    // We'll use a simplified approach for now
+    // Format the document based on the requested format
     let formattedDocument = '';
     
-    // Add profile section
-    if (optimizedSections.profile) {
-      formattedDocument += `# Professional Profile\n\n${optimizedSections.profile}\n\n`;
-    }
-    
-    // Add experience section
-    if (optimizedSections.experience && optimizedSections.experience.length > 0) {
-      formattedDocument += `# Professional Experience\n\n`;
-      optimizedSections.experience.forEach(exp => {
-        formattedDocument += `${exp}\n\n`;
-      });
-    }
-    
-    // Add skills section
-    if (optimizedSections.skills && optimizedSections.skills.length > 0) {
-      formattedDocument += `# Skills\n\n`;
-      optimizedSections.skills.forEach(skill => {
-        formattedDocument += `- ${skill}\n`;
-      });
-      formattedDocument += '\n';
-    }
-    
-    // Add education section
-    if (optimizedSections.education && optimizedSections.education.length > 0) {
-      formattedDocument += `# Education\n\n`;
-      optimizedSections.education.forEach(edu => {
-        formattedDocument += `${edu}\n\n`;
-      });
-    }
-    
-    // Add any original sections that weren't optimized
-    const optimizedSectionNames = ['profile', 'experience', 'skills', 'education'];
-    originalSections.forEach(section => {
-      const sectionNameLower = section.name.toLowerCase();
-      const isAlreadyIncluded = optimizedSectionNames.some(name => 
-        sectionNameLower.includes(name)
-      );
+    if (documentFormat === 'markdown') {
+      // For markdown, we can use the optimized content directly
+      formattedDocument = currentState.results.optimizedContent;
+    } else {
+      // For other formats, we need to use OpenAI to format the content
+      const prompt = `
+        Format the following CV content into a professional ${documentFormat} document:
+        
+        ${currentState.results.optimizedContent}
+        
+        Return only the formatted content without any explanations.
+      `;
       
-      if (!isAlreadyIncluded) {
-        formattedDocument += `# ${section.name}\n\n${section.content}\n\n`;
-      }
-    });
+      const result = await processCustomPromptWithGPT4o(prompt);
+      formattedDocument = result.trim();
+    }
     
-    // Calculate a simple match score based on keyword matching
-    const matchScore = calculateSimpleMatchScore(formattedDocument, jobDescription);
-    
-    // Generate simple recommendations
-    const recommendations = generateSimpleRecommendations(
-      formattedDocument, 
-      jobDescription,
-      currentState.results.keyRequirements || []
-    );
-    
-    // Update the state with the generated document
-    const updatedState = updateStage(currentState, OptimizationStage.GENERATE_COMPLETED);
-    updatedState.results.formattedDocument = formattedDocument;
-    updatedState.results.format = documentFormat;
-    updatedState.results.matchScore = matchScore;
-    updatedState.results.recommendations = recommendations;
-    
-    // Also set the optimizedContent for backward compatibility
-    updatedState.results.optimizedContent = formattedDocument;
-    
-    logger.info(`Successfully generated optimized document for CV ${cvId} with match score ${matchScore}`);
-    return updatedState;
+    // Update the state with the formatted document
+    return {
+      ...currentState,
+      results: {
+        ...currentState.results,
+        formattedDocument,
+        format: documentFormat
+      },
+      progress: Math.min(100, currentState.progress + 10),
+      lastUpdated: Date.now()
+    };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error(`Error generating document for CV ${cvId}: ${errorMessage}`);
-    
-    // Return the current state without updating
-    return currentState;
+    logger.error(`Error generating document: ${error instanceof Error ? error.message : String(error)}`);
+    throw error;
   }
 }
 

@@ -95,7 +95,7 @@ export interface OptimizationOptions {
   documentFormat?: string;
   maxRetries?: number;
   useSimplifiedProcess?: boolean;
-  aiService?: 'auto' | 'openai' | 'mistral'; // Which AI service to use
+  aiService?: 'auto' | 'openai'; // Which AI service to use
 }
 
 /**
