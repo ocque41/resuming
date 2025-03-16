@@ -84,11 +84,15 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
   // Status polling effect
   useEffect(() => {
     let pollingTimeout: NodeJS.Timeout | null = null;
+    let lastProgressUpdate = Date.now();
+    let consecutiveNoUpdates = 0;
     
     const checkStatus = async () => {
       if (!selectedCVId || !jobDescription) return;
       
       try {
+        console.log(`Checking status for CV ${selectedCVId}...`);
+        
         const response = await fetch('/api/cv/optimize/partial-results', {
           method: 'POST',
           headers: {
@@ -102,12 +106,30 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
           signal: AbortSignal.timeout(5000)
         });
         
-        if (!response.ok) {
-          // If we get a 404, it means no results yet - not an error
-          if (response.status === 404) {
-            return;
+        console.log(`Status check response: ${response.status}`);
+        
+        // Handle different response statuses
+        if (response.status === 202) {
+          // 202 Accepted means the request is valid but processing is still ongoing with no results yet
+          console.log('Processing ongoing, no results yet');
+          
+          // If we haven't received an update in a while, slightly increase progress
+          // to show the system is still working
+          const timeSinceLastUpdate = Date.now() - lastProgressUpdate;
+          if (timeSinceLastUpdate > 5000) { // 5 seconds
+            consecutiveNoUpdates++;
+            
+            // Only update progress if we're below 20%
+            if ((processingProgress || 0) < 20) {
+              const newProgress = Math.min((processingProgress || 5) + 1, 20);
+              console.log(`No updates for ${timeSinceLastUpdate}ms, increasing progress to ${newProgress}%`);
+              setProcessingProgress(newProgress);
+              lastProgressUpdate = Date.now();
+            }
           }
           
+          return;
+        } else if (!response.ok) {
           // For other errors, log but don't display to user unless it persists
           console.error(`Error checking status: ${response.status} ${response.statusText}`);
           
@@ -124,12 +146,18 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
         
         // Reset error count on successful response
         setStatusCheckErrorCount(0);
+        consecutiveNoUpdates = 0;
         
         const data = await response.json();
+        console.log(`Received data with progress: ${data.progress}%`);
         
         if (data.success) {
           // Update progress
-          setProcessingProgress(data.progress || 0);
+          if (data.progress !== undefined && data.progress !== processingProgress) {
+            console.log(`Updating progress from ${processingProgress}% to ${data.progress}%`);
+            setProcessingProgress(data.progress);
+            lastProgressUpdate = Date.now();
+          }
           
           // If we have an optimization state, update it
           if (data.optimizationState) {
@@ -168,6 +196,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
             
             // If progress is 100%, optimization is complete
             if (data.progress >= 100) {
+              console.log('Optimization complete!');
               setIsProcessing(false);
               setStatusPollingEnabled(false);
               setProcessingStatus("Optimization complete!");
@@ -193,13 +222,16 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
               // Adjust polling interval based on progress
               // Slower polling at the beginning, faster as we approach completion
               if (data.progress < 20) {
-                setStatusPollingInterval(3000); // 3 seconds
-              } else if (data.progress < 80) {
                 setStatusPollingInterval(2000); // 2 seconds
+              } else if (data.progress < 80) {
+                setStatusPollingInterval(1500); // 1.5 seconds
               } else {
                 setStatusPollingInterval(1000); // 1 second
               }
             }
+          } else if (data.message) {
+            // If we have a message but no partial results, update the status
+            setProcessingStatus(data.message);
           }
         } else if (data.error) {
           console.error('Error in partial results:', data.error);
@@ -257,7 +289,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
         clearTimeout(pollingTimeout);
       }
     };
-  }, [statusPollingEnabled, statusPollingInterval, selectedCVId, isProcessing]);
+  }, [statusPollingEnabled, statusPollingInterval, selectedCVId, jobDescription, processingProgress, optimizedContent, startTime, statusCheckErrorCount, isProcessing]);
   
   // Check if processing is taking too long
   useEffect(() => {
@@ -266,7 +298,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
     if (isProcessing) {
       timeoutId = setTimeout(() => {
         setProcessingTooLong(true);
-      }, 60000); // 60 seconds
+      }, 15000); // 15 seconds instead of 60 seconds
     } else {
       setProcessingTooLong(false);
     }
@@ -300,10 +332,14 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
     setWarning(null);
     setIsProcessing(true);
     setProcessingStatus("Starting optimization process...");
-    setProcessingProgress(0);
+    setProcessingProgress(5); // Set initial progress to 5% to show something is happening
     setOptimizationState(null);
     setStatusCheckErrorCount(0);
     setStartTime(Date.now());
+    
+    // Start polling immediately
+    setStatusPollingEnabled(true);
+    setStatusPollingInterval(1000);
     
     try {
       // Start the optimization process but don't wait for it to complete
@@ -333,11 +369,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
         }
       }
       
-      // Start polling for results immediately
-      setStatusPollingEnabled(true);
-      setStatusPollingInterval(1000); // Start with 1 second interval
-      
-      // Show a message to the user
+      // Update status message after successful request
       setProcessingStatus("Optimization in progress. This may take a minute...");
       
     } catch (error) {
@@ -353,15 +385,14 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
         errorMessage = 'The server is taking longer than expected to respond. The optimization is still running in the background. Please wait while we check for results.';
         
         // Even if the initial request times out, we can still try polling for results
-        setStatusPollingEnabled(true);
-        setStatusPollingInterval(2000); // Start with 2 second interval
-        return; // Continue processing
+        return; // Continue processing with polling already enabled
       } else if (errorMessage.includes('OpenAI')) {
         errorMessage = 'There was an issue with the AI service. Please try again later.';
       }
       
       setError(`Error: ${errorMessage}`);
       setIsProcessing(false);
+      setStatusPollingEnabled(false); // Stop polling on error
       
       // Show error toast
       showToast({
@@ -378,13 +409,34 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
   };
 
   const handleResetProcessing = async () => {
-    setIsProcessing(false);
-    setStatusPollingEnabled(false);
-    setProcessingStatus(null);
-    setProcessingProgress(null);
-    setProcessingTooLong(false);
-    setError(null);
-    setOptimizationState(null);
+    // Instead of just canceling, we'll restart the optimization process
+    if (selectedCVId && selectedCVName && jobDescription) {
+      // Reset states
+      setIsProcessing(false);
+      setStatusPollingEnabled(false);
+      setProcessingStatus(null);
+      setProcessingProgress(0);
+      setProcessingTooLong(false);
+      setError(null);
+      setWarning(null);
+      setOptimizationState(null);
+      
+      // Short delay before restarting
+      setTimeout(() => {
+        // Restart the optimization process
+        handleOptimizeCV(selectedCVId, selectedCVName, jobDescription);
+      }, 500);
+    } else {
+      // If we don't have the necessary info to restart, just reset
+      setIsProcessing(false);
+      setStatusPollingEnabled(false);
+      setProcessingStatus(null);
+      setProcessingProgress(0);
+      setProcessingTooLong(false);
+      setError(null);
+      setWarning(null);
+      setOptimizationState(null);
+    }
   };
 
   // General Optimization Card Component
@@ -537,6 +589,21 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
     );
   };
 
+  // Add a pulsing animation to the progress bar when progress is low
+  const renderProgressBar = (value: number | null) => {
+    const actualValue = value || 0;
+    const isPulsing = actualValue < 20; // Pulse animation when progress is low
+    
+    return (
+      <div className="w-full bg-gray-700 rounded-full h-2.5 overflow-hidden">
+        <div 
+          className={`bg-blue-600 h-2.5 rounded-full ${isPulsing ? 'animate-pulse' : ''}`} 
+          style={{ width: `${Math.max(actualValue, 5)}%` }} // Ensure at least 5% width for visibility
+        ></div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <Tabs defaultValue="general" onValueChange={handleTabChange}>
@@ -556,6 +623,14 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
           
           {isProcessing && (
             <div className="mt-4">
+              <div className="mb-4">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium">Optimization Progress</span>
+                  <span className="text-sm">{processingProgress || 0}%</span>
+                </div>
+                {renderProgressBar(processingProgress)}
+                <p className="text-sm text-gray-400 mt-2 animate-pulse">{processingStatus || "Processing..."}</p>
+              </div>
               <ProgressiveOptimizationStatus 
                 optimizationState={optimizationState}
                 isOptimizing={isProcessing}
@@ -574,7 +649,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
                     className="bg-amber-800/50 hover:bg-amber-700/50 border-amber-700/50 mr-2"
                     onClick={handleResetProcessing}
                   >
-                    Cancel
+                    Try Again
                   </Button>
                 </div>
               </AlertDescription>
@@ -593,6 +668,14 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
           
           {isProcessing && (
             <div className="mt-4">
+              <div className="mb-4">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium">Optimization Progress</span>
+                  <span className="text-sm">{processingProgress || 0}%</span>
+                </div>
+                {renderProgressBar(processingProgress)}
+                <p className="text-sm text-gray-400 mt-2 animate-pulse">{processingStatus || "Processing..."}</p>
+              </div>
               <ProgressiveOptimizationStatus 
                 optimizationState={optimizationState}
                 isOptimizing={isProcessing}
@@ -611,7 +694,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
                     className="bg-amber-800/50 hover:bg-amber-700/50 border-amber-700/50 mr-2"
                     onClick={handleResetProcessing}
                   >
-                    Cancel
+                    Try Again
                   </Button>
                 </div>
               </AlertDescription>

@@ -205,10 +205,6 @@ export default function ProgressiveOptimizationStatus({
               )}
             </div>
           )}
-          
-          <div className="text-xs text-gray-500 mt-2">
-            Powered by OpenAI GPT-4o
-          </div>
         </div>
       </CardContent>
     </Card>

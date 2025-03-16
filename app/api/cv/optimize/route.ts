@@ -76,7 +76,7 @@ async function startOptimizationProcess(
   options: any
 ) {
   try {
-    // Store initial progress update
+    // Store initial progress update with a visible 5% progress
     storePartialResults(userId, cvId, jobDescription, {
       optimizedContent: '',
       matchScore: 0,
@@ -87,6 +87,9 @@ async function startOptimizationProcess(
         progress: 5
       }
     });
+    
+    // Log the start of the optimization process
+    logger.info(`Starting background optimization process for CV ${cvId}`);
     
     // Start the optimization process without awaiting it
     optimizeCV(userId, cvId, jobDescription, textToOptimize, options)
@@ -150,12 +153,16 @@ export async function POST(req: NextRequest) {
     // Clear any existing partial results
     clearPartialResults(user.id.toString(), cvId.toString(), jobDescription);
     
-    // Store initial progress update
+    // Store initial progress update with a visible 5% progress
     storePartialResults(user.id.toString(), cvId.toString(), jobDescription, {
       optimizedContent: '',
       matchScore: 0,
       recommendations: [],
-      progress: 0
+      progress: 5,
+      state: {
+        stage: OptimizationStage.NOT_STARTED,
+        progress: 5
+      }
     });
 
     // Get CV text if not provided
@@ -207,7 +214,8 @@ export async function POST(req: NextRequest) {
       success: true,
       message: 'Optimization process started',
       status: 'processing',
-      progress: 5
+      progress: 5,
+      stage: OptimizationStage.NOT_STARTED
     });
   } catch (error) {
     return formatErrorResponse(error);
