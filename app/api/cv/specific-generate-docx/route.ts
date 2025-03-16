@@ -31,9 +31,10 @@ export async function POST(request: NextRequest) {
 
     const { cvId, optimizedText, docxBase64, filename, jobDescription, jobTitle } = body || {};
 
-    // Log received parameters for debugging
-    logger.info(`Received request with parameters: cvId=${cvId}, jobTitle=${jobTitle || 'not provided'}, optimizedText length=${optimizedText ? optimizedText.length : 'not provided'}, docxBase64=${docxBase64 ? 'provided' : 'not provided'}`);
-
+    // Log the request details for debugging
+    logger.info(`Processing document generation request: CV ID: ${cvId}, Job Title: ${jobTitle || 'Not provided'}`);
+    logger.info(`Optimized text length: ${optimizedText ? optimizedText.length : 0} characters`);
+    
     // Handle the case where client is sending a pre-generated DOCX
     if (docxBase64) {
       logger.info('Client provided pre-generated DOCX, creating download URL');
@@ -56,9 +57,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (!cvId && !optimizedText) {
-      logger.error('Missing required parameters in specific-generate-docx request');
-      return NextResponse.json({ success: false, error: 'Either CV ID or optimized text is required' }, { status: 400 });
+    if (!cvId) {
+      logger.error('Missing cvId parameter in specific-generate-docx request');
+      return NextResponse.json({ success: false, error: 'CV ID is required' }, { status: 400 });
     }
 
     let cvText = optimizedText;
@@ -88,9 +89,9 @@ export async function POST(request: NextRequest) {
         }
 
         cvText = cvRecord.rawText;
-        logger.info(`Successfully retrieved CV text for ID: ${cvId}, text length: ${cvText.length}`);
+        logger.info(`Successfully retrieved CV text for ID: ${cvId}`);
       } catch (dbError) {
-        logger.error('Database error:', dbError instanceof Error ? dbError.message : String(dbError), dbError);
+        logger.error('Database error:', dbError instanceof Error ? dbError.message : String(dbError));
         return NextResponse.json(
           { success: false, error: 'Failed to retrieve CV data' },
           { status: 500 }
@@ -98,23 +99,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Validate CV text
-    if (!cvText || typeof cvText !== 'string' || cvText.trim().length === 0) {
-      logger.error('Invalid or empty CV text provided');
-      return NextResponse.json(
-        { success: false, error: 'Invalid or empty CV text provided' },
-        { status: 400 }
-      );
-    }
-
     // Generate the DOCX file with timeout protection
     let docxBuffer;
     try {
-      logger.info(`Generating DOCX for CV ID: ${cvId}, text length: ${cvText.length}`);
+      logger.info(`Generating DOCX for CV ID: ${cvId}`);
       
       // Create a promise that will reject after a timeout
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Document generation timed out after 60 seconds')), 60000); // Increased timeout to 60 seconds
+        setTimeout(() => reject(new Error('Document generation timed out after 30 seconds')), 30000);
       });
       
       // Create a promise for the document generation
@@ -123,40 +115,24 @@ export async function POST(request: NextRequest) {
       // Race the promises
       docxBuffer = await Promise.race([generatePromise, timeoutPromise]) as Buffer;
       
-      if (!docxBuffer || !(docxBuffer instanceof Buffer)) {
-        throw new Error('Document generation failed: Invalid buffer returned');
-      }
-      
-      logger.info(`DOCX generation successful for CV ID: ${cvId}, buffer size: ${docxBuffer.length} bytes`);
+      logger.info(`DOCX generation successful for CV ID: ${cvId}`);
     } catch (genError) {
-      logger.error('Error generating DOCX:', genError instanceof Error ? genError.message : String(genError), genError);
-      
-      // Create a simple fallback document
-      try {
-        logger.info('Attempting to create fallback document');
-        docxBuffer = await createFallbackDocument(cvText, jobTitle);
-        logger.info('Fallback document created successfully');
-      } catch (fallbackError) {
-        logger.error('Fallback document creation failed:', fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
+      logger.error('Error generating DOCX:', genError instanceof Error ? genError.message : String(genError));
       return NextResponse.json(
         { 
           success: false, 
           error: 'Failed to generate DOCX document',
-            details: `Original error: ${genError instanceof Error ? genError.message : 'Unknown error'}. Fallback error: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`
+          details: genError instanceof Error ? genError.message : 'Unknown error'
         },
         { status: 500 }
       );
-      }
     }
 
     // Convert buffer to base64 for response
-    try {
     const base64Data = docxBuffer.toString('base64');
     
     // Create a download URL
     const downloadUrl = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${base64Data}`;
-      
-      logger.info(`Successfully created download URL for DOCX, base64 length: ${base64Data.length}`);
 
     // Return the base64 data and download URL
     return NextResponse.json({
@@ -164,102 +140,15 @@ export async function POST(request: NextRequest) {
       docxBase64: base64Data,
       downloadUrl
     });
-    } catch (encodeError) {
-      logger.error('Error encoding document to base64:', encodeError instanceof Error ? encodeError.message : String(encodeError));
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Failed to encode document',
-          details: encodeError instanceof Error ? encodeError.message : 'Unknown error'
-        },
-        { status: 500 }
-      );
-    }
   } catch (error) {
-    logger.error('Error in specific-generate-docx:', error instanceof Error ? error.message : String(error), error);
+    logger.error('Error in specific-generate-docx:', error instanceof Error ? error.message : String(error));
     return NextResponse.json(
       { 
         success: false, 
-        error: error instanceof Error ? error.message : 'An unknown error occurred',
-        stack: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.stack : undefined) : undefined
+        error: error instanceof Error ? error.message : 'An unknown error occurred' 
       },
       { status: 500 }
     );
-  }
-}
-
-/**
- * Create a simple fallback document when the main generation fails
- */
-async function createFallbackDocument(cvText: string, jobTitle?: string): Promise<Buffer> {
-  try {
-    // Create a simple document
-    const doc = new Document({
-      sections: [{
-        properties: {
-          page: {
-            margin: {
-              top: 1000,
-              right: 1000,
-              bottom: 1000,
-              left: 1000
-            }
-          }
-        },
-        children: [
-          // Title
-          new Paragraph({
-            text: jobTitle ? `Optimized CV for ${jobTitle}` : 'Optimized CV',
-            heading: HeadingLevel.HEADING_1,
-            alignment: AlignmentType.CENTER,
-            spacing: {
-              after: 400
-            }
-          }),
-          
-          // Explanation
-          new Paragraph({
-            text: 'There was an issue with the advanced formatting. Here is your optimized content:',
-            spacing: {
-              before: 200,
-              after: 400
-            }
-          }),
-          
-          // Split the CV text into paragraphs for better readability
-          ...cvText.split('\n\n').filter(p => p.trim()).map(paragraph => 
-            new Paragraph({
-              text: paragraph,
-              spacing: {
-                before: 200,
-                after: 200
-              }
-            })
-          ),
-          
-          // Footer
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: `Generated on ${new Date().toLocaleDateString()}`,
-                size: 20,
-                color: '666666'
-              })
-            ],
-            spacing: {
-              before: 400
-            },
-            alignment: AlignmentType.CENTER
-          })
-        ]
-      }]
-    });
-    
-    // Generate buffer
-    return await Packer.toBuffer(doc);
-  } catch (error) {
-    logger.error('Error creating fallback document:', error instanceof Error ? error.message : String(error));
-    throw new Error(`Failed to create fallback document: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -281,14 +170,6 @@ async function generateSpecificDocx(
     // Parse the CV text into sections
     const sections = parseOptimizedText(cvText);
     
-    // Check if we have any sections
-    if (Object.keys(sections).length === 0) {
-      logger.error('No sections found in CV text');
-      throw new Error('Failed to parse CV text into sections');
-    }
-    
-    logger.info(`Parsed ${Object.keys(sections).length} sections from CV text`);
-    
     // Define section order for processing
     const sectionOrder = [
       'Header',
@@ -304,10 +185,6 @@ async function generateSpecificDocx(
       'EDUCATION',
       'EXPERIENCE'
     ];
-    
-    // Create document with error handling
-    try {
-      logger.info('Creating document structure');
     
     // Create document
     const doc = new Document({
@@ -356,13 +233,8 @@ async function generateSpecificDocx(
           
           // Add each section in the specified order
           ...sectionOrder.flatMap(sectionName => {
-              try {
             const content = sections[sectionName];
-                // Skip empty sections or sections with only placeholder content
-                if (!content || 
-                    (Array.isArray(content) && content.length === 0) || 
-                    (typeof content === 'string' && content.trim() === '') ||
-                    (typeof content === 'string' && content.includes('[This') && content.includes('needs to be completed]'))) {
+            if (!content || (Array.isArray(content) && content.length === 0)) {
               return [];
             }
             
@@ -396,156 +268,9 @@ async function generateSpecificDocx(
               );
             }
             
-                // Add section content with improved formatting
+            // Add section content
             if (typeof content === 'string') {
-                  // Special handling for EDUCATION section
-                  if (sectionName === 'EDUCATION') {
-                    // Try to identify education entries
-                    const educationEntries = content.split(/\n{2,}/).filter(entry => entry.trim());
-                    
-                    if (educationEntries.length > 0) {
-                      for (const entry of educationEntries) {
-                        // Format each education entry
-                        const lines = entry.split('\n').filter(line => line.trim());
-                        
-                        // First line is likely the degree/institution
-                        if (lines.length > 0) {
-                          paragraphs.push(
-                            new Paragraph({
-                              children: [
-                                new TextRun({
-                                  text: lines[0],
-                                  bold: true
-                                })
-                              ],
-                              spacing: {
-                                before: 200,
-                                after: 120
-                              }
-                            })
-                          );
-                          
-                          // Remaining lines are details
-                          for (let i = 1; i < lines.length; i++) {
-                            paragraphs.push(
-                              new Paragraph({
-                                text: lines[i],
-                                spacing: {
-                                  before: 80,
-                                  after: 80
-                                },
-                                indent: {
-                                  left: 240
-                                }
-                              })
-                            );
-                          }
-                        }
-                      }
-                    } else {
-                      // Fallback to regular line processing
-                      const lines = content.split('\n').filter(line => line.trim());
-                      for (const line of lines) {
-                        paragraphs.push(
-                          new Paragraph({
-                            text: line,
-                            spacing: {
-                              before: 120,
-                              after: 120
-                            }
-                          })
-                        );
-                      }
-                    }
-                  }
-                  // Special handling for EXPERIENCE section
-                  else if (sectionName === 'EXPERIENCE') {
-                    // Try to identify experience entries
-                    const experienceEntries = content.split(/\n{2,}/).filter(entry => entry.trim());
-                    
-                    if (experienceEntries.length > 0) {
-                      for (const entry of experienceEntries) {
-                        // Format each experience entry
-                        const lines = entry.split('\n').filter(line => line.trim());
-                        
-                        // First line is likely the job title/company
-                        if (lines.length > 0) {
-                          paragraphs.push(
-                            new Paragraph({
-                              children: [
-                                new TextRun({
-                                  text: lines[0],
-                                  bold: true
-                                })
-                              ],
-                              spacing: {
-                                before: 200,
-                                after: 120
-                              }
-                            })
-                          );
-                          
-                          // Remaining lines are details
-                          for (let i = 1; i < lines.length; i++) {
-                            // Check if line is a bullet point or responsibility
-                            if (lines[i].trim().startsWith('•') || lines[i].trim().startsWith('-') || lines[i].trim().startsWith('*')) {
-                              paragraphs.push(
-                                new Paragraph({
-                                  children: [
-                                    new TextRun({
-                                      text: '• ',
-                                      bold: true,
-                                      color: 'B4916C'
-                                    }),
-                                    new TextRun({
-                                      text: lines[i].replace(/^[•\-*]\s*/, '')
-                                    })
-                                  ],
-                                  spacing: {
-                                    before: 80,
-                                    after: 80
-                                  },
-                                  indent: {
-                                    left: 360
-                                  }
-                                })
-                              );
-                            } else {
-                              paragraphs.push(
-                                new Paragraph({
-                                  text: lines[i],
-                                  spacing: {
-                                    before: 80,
-                                    after: 80
-                                  },
-                                  indent: {
-                                    left: 240
-                                  }
-                                })
-                              );
-                            }
-                          }
-                        }
-                      }
-                    } else {
-                      // Fallback to regular line processing
-                      const lines = content.split('\n').filter(line => line.trim());
-                      for (const line of lines) {
-                        paragraphs.push(
-                          new Paragraph({
-                            text: line,
-                            spacing: {
-                              before: 120,
-                              after: 120
-                            }
-                          })
-                        );
-                      }
-                    }
-                  }
-                  // Special handling for LANGUAGES section
-                  else if (sectionName === 'LANGUAGES') {
-                    // Try to identify language entries
+              // Split by lines and add each line as a paragraph
               const lines = content.split('\n').filter(line => line.trim());
               
               for (const line of lines) {
@@ -568,28 +293,7 @@ async function generateSpecificDocx(
                         after: 120
                       },
                       indent: {
-                              left: 240
-                            }
-                          })
-                        );
-                      } else {
-                        // Try to identify language and proficiency
-                        const languageMatch = line.match(/^([A-Za-z\s]+)(?:\s*[-:]\s*|\s+)(.*)/);
-                        if (languageMatch) {
-                          paragraphs.push(
-                            new Paragraph({
-                              children: [
-                                new TextRun({
-                                  text: languageMatch[1].trim(),
-                                  bold: true
-                                }),
-                                new TextRun({
-                                  text: `: ${languageMatch[2].trim()}`
-                                })
-                              ],
-                              spacing: {
-                                before: 120,
-                                after: 120
+                        left: 360
                       }
                     })
                   );
@@ -603,70 +307,11 @@ async function generateSpecificDocx(
                       }
                     })
                   );
-                        }
-                      }
-                    }
-                  }
-                  // Default handling for other sections
-                  else {
-                    // Split by lines and add each line as a paragraph
-                    const lines = content.split('\n').filter(line => line.trim());
-                    
-                    for (const line of lines) {
-                      try {
-                        // Check if line is a bullet point
-                        if (line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*')) {
-                          paragraphs.push(
-                            new Paragraph({
-                              children: [
-                                new TextRun({
-                                  text: '• ',
-                                  bold: true,
-                                  color: 'B4916C'
-                                }),
-                                new TextRun({
-                                  text: line.replace(/^[•\-*]\s*/, '')
-                                })
-                              ],
-                              spacing: {
-                                before: 120,
-                                after: 120
-                              },
-                              indent: {
-                                left: 360
-                              }
-                            })
-                          );
-                        } else {
-                          paragraphs.push(
-                            new Paragraph({
-                              text: line,
-                              spacing: {
-                                before: 120,
-                                after: 120
-                              }
-                            })
-                          );
-                        }
-                      } catch (lineError) {
-                        logger.warn(`Error processing line in section ${sectionName}:`, lineError instanceof Error ? lineError.message : String(lineError));
-                        // Add a simple paragraph as fallback
-                        paragraphs.push(
-                          new Paragraph({
-                            text: line,
-                            spacing: {
-                              before: 120,
-                              after: 120
-                            }
-                          })
-                        );
-                      }
                 }
               }
             } else if (Array.isArray(content)) {
               // Add each item as a bullet point
               for (const item of content) {
-                    try {
                 paragraphs.push(
                   new Paragraph({
                     children: [
@@ -688,28 +333,10 @@ async function generateSpecificDocx(
                     }
                   })
                 );
-                    } catch (itemError) {
-                      logger.warn(`Error processing item in section ${sectionName}:`, itemError instanceof Error ? itemError.message : String(itemError));
-                      // Add a simple paragraph as fallback
-                      paragraphs.push(
-                        new Paragraph({
-                          text: String(item),
-                          spacing: {
-                            before: 120,
-                            after: 120
-                          }
-                        })
-                      );
-                    }
               }
             }
             
             return paragraphs;
-              } catch (sectionError) {
-                logger.error(`Error processing section ${sectionName}:`, sectionError instanceof Error ? sectionError.message : String(sectionError));
-                // Return an empty array to skip this section
-                return [];
-              }
           }),
           
           // Add footer with date
@@ -742,66 +369,15 @@ async function generateSpecificDocx(
     try {
       logger.info('Packing document to buffer');
       const buffer = await Packer.toBuffer(doc);
-        logger.info(`Document successfully packed to buffer: ${buffer.length} bytes`);
+      logger.info('Document successfully packed to buffer');
       return buffer;
     } catch (packError) {
       logger.error('Error packing document to buffer:', packError instanceof Error ? packError.message : String(packError));
       throw new Error(`Failed to pack document to buffer: ${packError instanceof Error ? packError.message : 'Unknown error'}`);
-      }
-    } catch (docError) {
-      logger.error('Error creating document structure:', docError instanceof Error ? docError.message : String(docError));
-      throw new Error(`Failed to create document structure: ${docError instanceof Error ? docError.message : 'Unknown error'}`);
     }
   } catch (error) {
     logger.error('Error generating specific DOCX:', error instanceof Error ? error.message : String(error));
-    
-    // Create a simple fallback document if the main generation fails
-    try {
-      logger.info('Attempting to create fallback document');
-      
-      const fallbackDoc = new Document({
-        sections: [{
-          properties: {
-            page: {
-              margin: {
-                top: 1000,
-                right: 1000,
-                bottom: 1000,
-                left: 1000
-              }
-            }
-          },
-          children: [
-            new Paragraph({
-              text: 'Optimized CV',
-              heading: HeadingLevel.HEADING_1,
-              alignment: AlignmentType.CENTER,
-            }),
-            new Paragraph({
-              text: 'There was an issue formatting the CV properly. Here is the raw content:',
-              spacing: {
-                before: 400,
-                after: 400
-              }
-            }),
-            new Paragraph({
-              text: cvText,
-              spacing: {
-                before: 200
-              }
-            })
-          ]
-        }]
-      });
-      
-      logger.info('Packing fallback document to buffer');
-      const fallbackBuffer = await Packer.toBuffer(fallbackDoc);
-      logger.info('Fallback document created successfully');
-      return fallbackBuffer;
-    } catch (fallbackError) {
-      logger.error('Fallback document creation failed:', fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
-      throw new Error(`Failed to generate document: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    throw new Error(`Failed to generate specific DOCX: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -811,32 +387,37 @@ async function generateSpecificDocx(
 function parseOptimizedText(text: string): Record<string, string | string[]> {
   const sections: Record<string, string | string[]> = {};
   
+  // Return empty sections if no text provided
   if (!text || typeof text !== 'string') {
-    logger.error('Invalid text provided to parseOptimizedText');
+    logger.warn('No valid text provided for parsing');
     return sections;
   }
   
-  logger.info(`Parsing optimized text of length: ${text.length}`);
-  
-  try {
   // Split text into lines
   const lines = text.split('\n').filter(line => line.trim());
   
-    if (lines.length === 0) {
-      logger.warn('No content found in optimized text');
-      return sections;
+  // First try to check if the text is in JSON format
+  try {
+    const parsedJson = JSON.parse(text);
+    if (typeof parsedJson === 'object' && parsedJson !== null) {
+      logger.info('Successfully parsed text as JSON');
+      return parsedJson;
     }
-    
-    // Define section patterns with more variations
+  } catch (e) {
+    // Not valid JSON, continue with regular parsing
+    logger.info('Text is not in JSON format, using standard parsing');
+  }
+  
+  // Define section patterns
   const sectionPatterns = [
-      { regex: /^(PROFILE|SUMMARY|ABOUT|ABOUT ME|PROFESSIONAL SUMMARY)[:.\-]?/i, name: 'PROFILE' },
-      { regex: /^(ACHIEVEMENTS|ACCOMPLISHMENTS|KEY ACHIEVEMENTS)[:.\-]?/i, name: 'ACHIEVEMENTS' },
-      { regex: /^(GOALS|CAREER GOALS|OBJECTIVES|CAREER OBJECTIVES)[:.\-]?/i, name: 'GOALS' },
-      { regex: /^(LANGUAGES?|LANGUAGE PROFICIENCY|LANGUAGE SKILLS|SPOKEN LANGUAGES?)[:.\-]?/i, name: 'LANGUAGES' },
-      { regex: /^(SKILLS|TECHNICAL SKILLS|PROFESSIONAL SKILLS|KEY SKILLS|CORE SKILLS|COMPETENCIES)[:.\-]?/i, name: 'SKILLS' },
-      { regex: /^(EDUCATION|ACADEMIC|QUALIFICATIONS|ACADEMIC QUALIFICATIONS|EDUCATIONAL BACKGROUND|DEGREES?)[:.\-]?/i, name: 'EDUCATION' },
-      { regex: /^(EXPERIENCE|WORK|EMPLOYMENT|PROFESSIONAL EXPERIENCE|CAREER|WORK HISTORY|JOB HISTORY)[:.\-]?/i, name: 'EXPERIENCE' },
-      { regex: /^(REFERENCES|REFEREES)[:.\-]?/i, name: 'REFERENCES' }
+    /^(PROFILE|SUMMARY)(:|\s-)/i,
+    /^(ACHIEVEMENTS|ACCOMPLISHMENTS)(:|\s-)/i,
+    /^(GOALS|CAREER GOALS)(:|\s-)/i,
+    /^(LANGUAGES|LANGUAGE PROFICIENCY)(:|\s-)/i,
+    /^(SKILLS|TECHNICAL SKILLS|PROFESSIONAL SKILLS)(:|\s-)/i,
+    /^(EDUCATION|ACADEMIC BACKGROUND)(:|\s-)/i,
+    /^(EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY)(:|\s-)/i,
+    /^(REFERENCES)(:|\s-)/i
   ];
   
   let currentSection = '';
@@ -847,40 +428,29 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     // Check if this line is a section header
     let isSectionHeader = false;
     for (const pattern of sectionPatterns) {
-        if (pattern.regex.test(line)) {
+      if (pattern.test(line)) {
         // If we were already processing a section, save it
         if (currentSection) {
-            if (sectionContent.length > 0) {
           sections[currentSection] = sectionContent.join('\n');
-            }
         }
         
-        // Start a new section
-          currentSection = pattern.name;
+        // Start a new section - extract section name without colon or dash
+        currentSection = line.replace(/(:|\s-).*/g, '').trim();
         sectionContent = [];
         isSectionHeader = true;
-          
-          // Check if there's content after the section header on the same line
-          const contentAfterHeader = line.replace(pattern.regex, '').trim();
-          if (contentAfterHeader) {
-            sectionContent.push(contentAfterHeader);
-          }
-          
         break;
       }
     }
     
     // If not a section header, add to current section
-      if (!isSectionHeader) {
-        if (currentSection) {
+    if (!isSectionHeader && currentSection) {
       sectionContent.push(line);
-        } else {
+    } else if (!isSectionHeader && !currentSection) {
       // If no section has been identified yet, this is likely header information
       if (!sections['Header']) {
         sections['Header'] = line;
-          } else if (typeof sections['Header'] === 'string') {
+      } else {
         sections['Header'] += '\n' + line;
-          }
       }
     }
   }
@@ -890,139 +460,15 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     sections[currentSection] = sectionContent.join('\n');
   }
   
-    // If no sections were found, try to intelligently parse the content
-    if (Object.keys(sections).length <= 1 && sections['Header']) {
-      logger.warn('No standard sections found, attempting intelligent parsing');
-      return intelligentParsing(text);
-    }
+  // If we couldn't parse any sections, try a simpler approach
+  if (Object.keys(sections).length <= 1) {
+    logger.warn('Few sections detected, using fallback parsing method');
     
-    logger.info(`Successfully parsed ${Object.keys(sections).length} sections from optimized text`);
-    return sections;
-  } catch (error) {
-    logger.error('Error parsing optimized text:', error instanceof Error ? error.message : String(error));
-    return sections;
+    // Handle entire text as a profile section if nothing else was detected
+    if (!sections['PROFILE'] && !sections['SUMMARY']) {
+      sections['PROFILE'] = text;
+    }
   }
-}
-
-/**
- * Attempt to intelligently parse CV text when standard section headers aren't found
- */
-function intelligentParsing(text: string): Record<string, string | string[]> {
-  const sections: Record<string, string | string[]> = {};
   
-  try {
-    // Split text into paragraphs (blocks separated by multiple newlines)
-    const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
-    
-    if (paragraphs.length === 0) {
-      return sections;
-    }
-    
-    // First paragraph is likely the header/contact info
-    sections['Header'] = paragraphs[0];
-    
-    // Second paragraph is often the profile/summary
-    if (paragraphs.length > 1) {
-      sections['PROFILE'] = paragraphs[1];
-    }
-    
-    // Look for experience indicators with more flexible patterns
-    const experienceParagraphs = paragraphs.filter(p => 
-      /experience|work|career|job|position|employment|company|role|responsibilities/i.test(p) && 
-      (/20\d\d|19\d\d|january|february|march|april|may|june|july|august|september|october|november|december|present|current/i.test(p) ||
-       /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i.test(p))
-    );
-    
-    if (experienceParagraphs.length > 0) {
-      sections['EXPERIENCE'] = experienceParagraphs.join('\n\n');
-    } else {
-      // If no clear experience section, look for paragraphs that might contain job titles
-      const potentialExperienceParagraphs = paragraphs.filter(p => 
-        /manager|engineer|developer|analyst|specialist|coordinator|director|assistant|supervisor|lead/i.test(p) &&
-        /20\d\d|19\d\d/i.test(p) &&
-        p.length > 100 // Likely a substantial paragraph about work
-      );
-      
-      if (potentialExperienceParagraphs.length > 0) {
-        sections['EXPERIENCE'] = potentialExperienceParagraphs.join('\n\n');
-      }
-    }
-    
-    // Look for education indicators with more flexible patterns
-    const educationParagraphs = paragraphs.filter(p => 
-      /education|degree|university|college|school|bachelor|master|phd|diploma|certification|graduate|undergraduate|major|minor/i.test(p) && 
-      !/work|experience/i.test(p.split('\n')[0])
-    );
-    
-    if (educationParagraphs.length > 0) {
-      sections['EDUCATION'] = educationParagraphs.join('\n\n');
-    } else {
-      // If no clear education section, look for paragraphs that might contain education info
-      const potentialEducationParagraphs = paragraphs.filter(p => 
-        /university|college|school|academy|institute/i.test(p) &&
-        /20\d\d|19\d\d/i.test(p) &&
-        !/work|experience|job|career/i.test(p)
-      );
-      
-      if (potentialEducationParagraphs.length > 0) {
-        sections['EDUCATION'] = potentialEducationParagraphs.join('\n\n');
-      }
-    }
-    
-    // Look for language indicators
-    const languageParagraphs = paragraphs.filter(p => 
-      /languages?|fluent|native|proficient|beginner|intermediate|advanced|speaker|spoken/i.test(p) && 
-      /english|spanish|french|german|italian|chinese|japanese|russian|arabic|portuguese|dutch|swedish|norwegian|danish|finnish|polish|czech|slovak|hungarian|romanian|bulgarian|greek|turkish|korean|vietnamese|thai|indonesian|malay|hindi|urdu|bengali|punjabi|tamil|telugu|kannada|malayalam|marathi|gujarati|hebrew|swahili/i.test(p) &&
-      p.length < 300 // Language sections are usually short
-    );
-    
-    if (languageParagraphs.length > 0) {
-      sections['LANGUAGES'] = languageParagraphs.join('\n\n');
-    }
-    
-    // Look for skills indicators with more flexible patterns
-    const skillsParagraphs = paragraphs.filter(p => 
-      /skills|proficient|proficiency|competent|competency|expertise|expert in|familiar with|knowledge of|experienced in/i.test(p) && 
-      p.split('\n').length < 15 && // Skills sections are usually shorter
-      !/work|experience|education/i.test(p.split('\n')[0])
-    );
-    
-    if (skillsParagraphs.length > 0) {
-      sections['SKILLS'] = skillsParagraphs.join('\n\n');
-    }
-    
-    // Ensure we have the essential sections with at least placeholder content
-    const essentialSections = ['EDUCATION', 'EXPERIENCE', 'LANGUAGES', 'SKILLS'];
-    for (const section of essentialSections) {
-      if (!sections[section]) {
-        // Look for any paragraph that might contain relevant content
-        for (const paragraph of paragraphs) {
-          if (section === 'EDUCATION' && /degree|university|college|school|education/i.test(paragraph)) {
-            sections[section] = paragraph;
-            break;
-          } else if (section === 'EXPERIENCE' && /work|job|career|position|company|employer/i.test(paragraph)) {
-            sections[section] = paragraph;
-            break;
-          } else if (section === 'LANGUAGES' && /language|speak|fluent|native/i.test(paragraph)) {
-            sections[section] = paragraph;
-            break;
-          } else if (section === 'SKILLS' && /skill|proficient|knowledge|expertise/i.test(paragraph)) {
-            sections[section] = paragraph;
-            break;
-          }
-        }
-        
-        // If still no content, add a placeholder that indicates the section needs to be filled
-        if (!sections[section]) {
-          sections[section] = `[This ${section.toLowerCase()} section needs to be completed]`;
-        }
-      }
-    }
-    
-    logger.info(`Intelligent parsing found ${Object.keys(sections).length} sections`);
-    return sections;
-  } catch (error) {
-    logger.error('Error in intelligent parsing:', error instanceof Error ? error.message : String(error));
   return sections;
-  }
 } 
