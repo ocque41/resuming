@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser } from '@/lib/db/queries.server';
-import { analyzeCVContent, isMistralAvailable } from '@/lib/services/mistral.service';
+import { isOpenAIAvailable } from '@/lib/services/openai.service';
+import { analyzeAndOptimizeWithGPT4o } from '@/lib/services/openaiOptimizer';
 import { logger } from '@/lib/logger';
 
 /**
- * API endpoint for analyzing CV content using Mistral AI
+ * API endpoint for analyzing CV content using OpenAI GPT-4o
  */
 export async function POST(request: NextRequest) {
   try {
@@ -36,27 +37,47 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'CV text is required' }, { status: 400 });
     }
 
-    // Check if Mistral service is available
-    if (!isMistralAvailable()) {
-      logger.error('Mistral AI service is not available');
+    // Check if OpenAI service is available
+    const openaiAvailable = await isOpenAIAvailable();
+    if (!openaiAvailable) {
+      logger.error('OpenAI service is not available');
       return NextResponse.json({ 
         success: false, 
-        error: 'Mistral AI service is not available',
-        details: 'The Mistral AI service is not properly configured. Please check your API key.',
+        error: 'OpenAI service is not available',
+        details: 'The OpenAI service is not properly configured. Please check your API key.',
         serviceUnavailable: true
       }, { status: 503 });
     }
 
-    // Analyze CV content using Mistral AI
+    // Analyze CV content using OpenAI GPT-4o
     try {
-      logger.info('Analyzing CV content with Mistral AI');
-      const analysisResult = await analyzeCVContent(cvText);
+      logger.info('Analyzing CV content with OpenAI GPT-4o');
       
-      logger.info('CV analysis completed successfully');
-      return NextResponse.json({
-        success: true,
-        analysis: analysisResult
-      });
+      // If job description is provided, we'll do a full analysis and optimization
+      // Otherwise, we'll just do the analysis part
+      if (jobDescription) {
+        const result = await analyzeAndOptimizeWithGPT4o(cvText, jobDescription);
+        
+        logger.info('CV analysis and optimization completed successfully');
+        return NextResponse.json({
+          success: true,
+          analysis: result.cvAnalysis,
+          optimization: {
+            optimizedContent: result.optimizedContent,
+            matchScore: result.matchScore,
+            recommendations: result.recommendations
+          }
+        });
+      } else {
+        // For analysis-only, we'll still use the same function but extract just the analysis part
+        const result = await analyzeAndOptimizeWithGPT4o(cvText, "Perform analysis only");
+        
+        logger.info('CV analysis completed successfully');
+        return NextResponse.json({
+          success: true,
+          analysis: result.cvAnalysis
+        });
+      }
     } catch (analysisError) {
       logger.error('Error analyzing CV:', analysisError instanceof Error ? analysisError.message : String(analysisError));
       

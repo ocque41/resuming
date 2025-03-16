@@ -10,56 +10,54 @@ export interface Task {
   execute: () => Promise<any>;
   priority: number;
   timestamp: number;
-  service: 'mistral' | 'openai' | 'general';
+  service: 'openai' | 'general';
 }
 
 // Queue configuration
 const queueConfig = {
-  mistral: {
-    concurrency: 1, // Keep at 1 concurrent Mistral task due to strict rate limits
-    minInterval: 3500, // Increase to 3.5 seconds between tasks to be safer
-    maxQueueSize: 30, // Reduce max queue size to prevent backlog
-  },
   openai: {
-    concurrency: 4, // Increase to 4 concurrent OpenAI tasks
-    minInterval: 800, // Reduce to 800ms between tasks
-    maxQueueSize: 150, // Increase max queue size
+    concurrency: 4, // Allow 4 concurrent OpenAI tasks
+    minInterval: 800, // Minimum time between requests in ms
+    maxQueueSize: 100, // Maximum queue size
+    timeout: 60000, // Timeout for tasks in ms
   },
   general: {
-    concurrency: 5, // 5 concurrent general tasks
-    minInterval: 500, // Minimum 0.5 seconds between tasks
-    maxQueueSize: 200, // Maximum queue size
+    concurrency: 10, // Allow 10 concurrent general tasks
+    minInterval: 0, // No minimum interval for general tasks
+    maxQueueSize: 100, // Maximum queue size
+    timeout: 60000, // Timeout for tasks in ms
   }
 };
 
 // Task queues
-const taskQueues: Record<string, Task[]> = {
-  mistral: [],
+const taskQueues: {
+  openai: Task[];
+  general: Task[];
+} = {
   openai: [],
   general: [],
 };
 
-// Track active tasks
-const activeTasks: Record<string, number> = {
-  mistral: 0,
+// Active tasks counter
+const activeTasks: {
+  openai: number;
+  general: number;
+} = {
   openai: 0,
   general: 0,
 };
 
-// Track last execution time
-const lastExecutionTime: Record<string, number> = {
-  mistral: 0,
+// Last execution time
+const lastExecutionTime: {
+  openai: number;
+  general: number;
+} = {
   openai: 0,
   general: 0,
 };
 
 // Track error rates to dynamically adjust queue parameters
 const errorTracking = {
-  mistral: {
-    recentErrors: 0,
-    totalCalls: 0,
-    lastReset: Date.now(),
-  },
   openai: {
     recentErrors: 0,
     totalCalls: 0,
@@ -85,14 +83,14 @@ setInterval(() => {
 
 // Generate a unique task ID
 function generateTaskId(): string {
-  return `task_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  return `task_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
 }
 
 /**
  * Add a task to the queue and process it when ready
  */
 export async function queueTask<T>(
-  service: 'mistral' | 'openai' | 'general',
+  service: 'openai' | 'general',
   execute: () => Promise<T>,
   options: {
     priority?: number;
@@ -158,7 +156,7 @@ export async function queueTask<T>(
 /**
  * Process the queue for a specific service
  */
-function processQueue(service: 'mistral' | 'openai' | 'general'): void {
+function processQueue(service: 'openai' | 'general'): void {
   // If we're already at max concurrency, don't process more tasks
   if (activeTasks[service] >= queueConfig[service].concurrency) {
     return;
@@ -244,11 +242,6 @@ function processQueue(service: 'mistral' | 'openai' | 'general'): void {
  */
 export function getQueueStatus(): Record<string, { queued: number; active: number; maxConcurrency: number }> {
   return {
-    mistral: {
-      queued: taskQueues.mistral.length,
-      active: activeTasks.mistral,
-      maxConcurrency: queueConfig.mistral.concurrency,
-    },
     openai: {
       queued: taskQueues.openai.length,
       active: activeTasks.openai,
@@ -265,7 +258,7 @@ export function getQueueStatus(): Record<string, { queued: number; active: numbe
 /**
  * Clear all tasks from a specific queue
  */
-export function clearQueue(service: 'mistral' | 'openai' | 'general'): void {
+export function clearQueue(service: 'openai' | 'general'): void {
   const queueSize = taskQueues[service].length;
   taskQueues[service] = [];
   logger.info(`Cleared ${queueSize} tasks from ${service} queue`);
@@ -275,43 +268,48 @@ export function clearQueue(service: 'mistral' | 'openai' | 'general'): void {
  * Configure a specific queue's settings
  */
 export function configureQueue(
-  service: 'mistral' | 'openai' | 'general',
-  config: Partial<typeof queueConfig.mistral>
+  service: 'openai' | 'general',
+  config: Partial<typeof queueConfig.openai>
 ): void {
+  if (!queueConfig[service]) {
+    logger.warn(`Invalid service: ${service}`);
+    return;
+  }
+  
+  // Update configuration
   queueConfig[service] = {
     ...queueConfig[service],
     ...config,
   };
   
+  // Log configuration
   logger.info(`Configured ${service} queue: concurrency=${queueConfig[service].concurrency}, minInterval=${queueConfig[service].minInterval}ms`);
 }
 
-// Configure queues based on environment
-// These are just examples and can be adjusted based on your needs
-if (process.env.NODE_ENV === 'production') {
-  // In production, be more conservative with API calls
-  configureQueue('mistral', {
-    concurrency: 1,
-    minInterval: 3500, // 3.5 seconds between calls
-    maxQueueSize: 30
-  });
-  
+// Initialize the queue
+export function initializeQueue(): void {
+  // Configure OpenAI queue
   configureQueue('openai', {
     concurrency: 4,
-    minInterval: 800, // 0.8 seconds between calls
-    maxQueueSize: 150
-  });
-} else if (process.env.NODE_ENV === 'development') {
-  // In development, we can be a bit more aggressive
-  configureQueue('mistral', {
-    concurrency: 1,
-    minInterval: 3000, // 3 seconds between calls
-    maxQueueSize: 30
+    minInterval: 800,
   });
   
-  configureQueue('openai', {
-    concurrency: 4,
-    minInterval: 800, // 0.8 seconds between calls
-    maxQueueSize: 150
+  // Configure general queue
+  configureQueue('general', {
+    concurrency: 10,
+    minInterval: 0,
   });
-} 
+  
+  // Log configuration
+  logger.info(`Configured openai queue: concurrency=${queueConfig.openai.concurrency}, minInterval=${queueConfig.openai.minInterval}ms`);
+  logger.info(`Configured general queue: concurrency=${queueConfig.general.concurrency}, minInterval=${queueConfig.general.minInterval}ms`);
+}
+
+// Initialize the queue
+initializeQueue();
+
+// Export the queue configuration for testing
+export const __queueConfig = queueConfig;
+export const __taskQueues = taskQueues;
+export const __activeTasks = activeTasks;
+export const __lastExecutionTime = lastExecutionTime; 

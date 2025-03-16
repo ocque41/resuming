@@ -1,9 +1,34 @@
 import { OpenAI } from 'openai';
 import { logger } from '@/lib/logger';
 import { retryWithExponentialBackoff } from '@/lib/utils/apiRateLimiter';
-import { CVAnalysisResult } from './mistral.service';
 import { OptimizationOptions, OptimizationResult, OptimizationStage, OptimizationState } from './progressiveOptimization';
 import { storePartialResults, clearPartialResults, storePartialResultsError, getPartialResults } from '@/app/utils/partialResultsCache';
+
+// Define CV analysis result interface
+export interface CVAnalysisResult {
+  experience: Array<{
+    title: string;
+    company: string;
+    dates: string;
+    responsibilities: string[];
+  }>;
+  education: Array<{
+    degree: string;
+    field: string;
+    institution: string;
+    year: string;
+  }>;
+  skills: {
+    technical: string[];
+    professional: string[];
+  };
+  achievements: string[];
+  profile: string;
+  languages: string[];
+  industry?: string;
+  language?: string;
+  sections?: Array<{ name: string; content: string }>;
+}
 
 // OpenAI client instance
 const openai = new OpenAI({
@@ -228,7 +253,7 @@ export async function optimizeCV(
 /**
  * Analyze and optimize a CV with GPT-4o
  */
-async function analyzeAndOptimizeWithGPT4o(
+export async function analyzeAndOptimizeWithGPT4o(
   cvText: string, 
   jobDescription: string
 ): Promise<{

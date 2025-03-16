@@ -3,14 +3,6 @@ import { queueTask } from './taskQueue';
 
 // Track API calls per minute for different services
 interface RateLimitTracker {
-  mistral: {
-    calls: number;
-    resetTime: number;
-    limit: number;
-    lastCallTime: number;
-    windowStart: number;
-    callsInWindow: number[];
-  };
   openai: {
     calls: number;
     resetTime: number;
@@ -23,32 +15,22 @@ interface RateLimitTracker {
 
 // Default rate limits (adjust based on your API tier)
 const DEFAULT_RATE_LIMITS = {
-  mistral: 8, // Reduced from 10 to 8 to be more conservative
   openai: 20,  // 20 requests per minute
 };
 
 // Minimum time between API calls in milliseconds
 const MIN_CALL_INTERVAL = {
-  mistral: 2000, // At least 2 seconds between Mistral API calls
   openai: 500,   // At least 0.5 seconds between OpenAI API calls
 };
 
 // Sliding window size in milliseconds (60 seconds)
 const WINDOW_SIZE = 60000;
 
-// Singleton rate limit tracker
+// Initialize rate limit tracker
 const rateLimitTracker: RateLimitTracker = {
-  mistral: {
-    calls: 0,
-    resetTime: Date.now() + 60000, // Reset after 1 minute
-    limit: DEFAULT_RATE_LIMITS.mistral,
-    lastCallTime: 0,
-    windowStart: Date.now(),
-    callsInWindow: [],
-  },
   openai: {
     calls: 0,
-    resetTime: Date.now() + 60000, // Reset after 1 minute
+    resetTime: Date.now() + 60000, // Reset every minute
     limit: DEFAULT_RATE_LIMITS.openai,
     lastCallTime: 0,
     windowStart: Date.now(),
@@ -59,7 +41,7 @@ const rateLimitTracker: RateLimitTracker = {
 /**
  * Check if we're approaching rate limits and should throttle
  */
-export function shouldThrottle(service: 'mistral' | 'openai'): boolean {
+export function shouldThrottle(service: 'openai'): boolean {
   const tracker = rateLimitTracker[service];
   const now = Date.now();
   
@@ -72,19 +54,17 @@ export function shouldThrottle(service: 'mistral' | 'openai'): boolean {
   // Update sliding window
   updateSlidingWindow(service);
   
-  // More aggressive throttling for Mistral compared to OpenAI
-  const limitThreshold = service === 'mistral' ? 0.5 : 0.7; // Lower threshold for Mistral (50% vs 70%)
+  // More aggressive throttling for OpenAI
+  const limitThreshold = 0.7; // Lower threshold for OpenAI (70%)
   const isApproachingLimit = tracker.calls >= tracker.limit * limitThreshold;
   
   // Check if we need to enforce minimum time between calls
-  // More aggressive for Mistral
-  const minTimeBetweenCalls = service === 'mistral' ? 2000 : 1000; // 2s for Mistral, 1s for OpenAI
+  const minTimeBetweenCalls = MIN_CALL_INTERVAL[service];
   const timeSinceLastCall = now - tracker.lastCallTime;
   const needsTimeBuffer = timeSinceLastCall < minTimeBetweenCalls;
   
   // Check if we've made too many calls in the sliding window
-  // More aggressive for Mistral
-  const windowThreshold = service === 'mistral' ? 0.6 : 0.8; // 60% vs 80%
+  const windowThreshold = 0.8; // 80%
   const tooManyCalls = tracker.callsInWindow.length >= tracker.limit * windowThreshold;
   
   // Log throttling decisions for debugging
@@ -98,7 +78,7 @@ export function shouldThrottle(service: 'mistral' | 'openai'): boolean {
 /**
  * Update the sliding window of API calls
  */
-function updateSlidingWindow(service: 'mistral' | 'openai'): void {
+function updateSlidingWindow(service: 'openai'): void {
   const tracker = rateLimitTracker[service];
   const now = Date.now();
   
@@ -116,7 +96,7 @@ function updateSlidingWindow(service: 'mistral' | 'openai'): void {
 /**
  * Track an API call
  */
-export function trackApiCall(service: 'mistral' | 'openai'): void {
+export function trackApiCall(service: 'openai'): void {
   const tracker = rateLimitTracker[service];
   const now = Date.now();
   
@@ -147,7 +127,7 @@ export function trackApiCall(service: 'mistral' | 'openai'): void {
 /**
  * Calculate appropriate throttle delay based on current usage
  */
-function calculateThrottleDelay(service: 'mistral' | 'openai'): number {
+function calculateThrottleDelay(service: 'openai'): number {
   const tracker = rateLimitTracker[service];
   const now = Date.now();
   
@@ -171,8 +151,8 @@ function calculateThrottleDelay(service: 'mistral' | 'openai'): number {
   // Add jitter to prevent thundering herd
   delay *= (0.8 + Math.random() * 0.4); // 80% to 120% of calculated delay
   
-  // For Mistral, ensure a minimum delay of 3 seconds when we're over 40% capacity
-  if (service === 'mistral' && (usageRatio > 0.4 || windowUsageRatio > 0.4)) {
+  // For OpenAI, ensure a minimum delay of 3 seconds when we're over 40% capacity
+  if (usageRatio > 0.4 || windowUsageRatio > 0.4) {
     delay = Math.max(delay, 3000);
   }
   
@@ -182,7 +162,7 @@ function calculateThrottleDelay(service: 'mistral' | 'openai'): number {
 /**
  * Set custom rate limits (e.g., based on API tier)
  */
-export function setRateLimit(service: 'mistral' | 'openai', limit: number): void {
+export function setRateLimit(service: 'openai', limit: number): void {
   rateLimitTracker[service].limit = limit;
   logger.info(`Set ${service} rate limit to ${limit} requests per minute`);
 }
@@ -195,7 +175,7 @@ export function setRateLimit(service: 'mistral' | 'openai', limit: number): void
 export async function retryWithExponentialBackoff<T>(
   fn: () => Promise<T>,
   options: {
-    service: 'mistral' | 'openai';
+    service: 'openai';
     initialDelayMs?: number;
     maxDelayMs?: number;
     maxRetries?: number;
@@ -224,9 +204,9 @@ export async function retryWithExponentialBackoff<T>(
       let delay = initialDelayMs;
       let lastError: Error | null = null;
       
-      // For Mistral, check if we should throttle before even attempting the call
+      // For OpenAI, check if we should throttle before even attempting the call
       // If we should throttle and have a fallback, use it immediately for better performance
-      if (service === 'mistral' && shouldThrottle(service) && fallbackFn) {
+      if (service === 'openai' && shouldThrottle(service) && fallbackFn) {
         logger.info(`Preemptively using fallback for ${service} API due to throttling`);
         try {
           return await fallbackFn();
@@ -245,9 +225,9 @@ export async function retryWithExponentialBackoff<T>(
           
           // If we should throttle, add a delay before proceeding
           if (shouldThrottle(service)) {
-            // If we have a fallback and this is Mistral, use fallback immediately
+            // If we have a fallback and this is OpenAI, use fallback immediately
             // This is more aggressive than before - we don't wait for retries
-            if (fallbackFn && service === 'mistral') {
+            if (fallbackFn && service === 'openai') {
               logger.info(`Using fallback for ${service} API due to throttling`);
               return await fallbackFn();
             }
@@ -274,8 +254,8 @@ export async function retryWithExponentialBackoff<T>(
           
           const isRetryableError = status !== null && retryStatusCodes.includes(status);
           
-          // For Mistral, use fallback more aggressively - immediately on any error
-          if (fallbackFn && service === 'mistral') {
+          // For OpenAI, use fallback more aggressively - immediately on any error
+          if (fallbackFn && service === 'openai') {
             logger.warn(`${service} API failed, using fallback immediately`);
             try {
               return await fallbackFn();
