@@ -110,14 +110,11 @@ export default function ProgressiveOptimizationStatus({
   return (
     <Card className="mt-4">
       <CardHeader>
-        <CardTitle className="flex justify-between items-center">
-          <span>Optimization Progress</span>
-          <span className="text-sm font-normal">{Math.round(progress)}%</span>
+        <CardTitle>
+          <span>Optimization Details</span>
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <Progress value={progress} className="h-2 mb-4" />
-        
         <div className="space-y-4">
           <div>
             <h3 className="text-sm font-medium mb-2">Current Status</h3>

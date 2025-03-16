@@ -124,6 +124,15 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
               const newProgress = Math.min((processingProgress || 5) + 1, 20);
               console.log(`No updates for ${timeSinceLastUpdate}ms, increasing progress to ${newProgress}%`);
               setProcessingProgress(newProgress);
+              
+              // Also update the progress in the optimization state if it exists
+              if (optimizationState) {
+                setOptimizationState({
+                  ...optimizationState,
+                  progress: newProgress
+                });
+              }
+              
               lastProgressUpdate = Date.now();
             }
           }
@@ -156,11 +165,21 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
           if (data.progress !== undefined && data.progress !== processingProgress) {
             console.log(`Updating progress from ${processingProgress}% to ${data.progress}%`);
             setProcessingProgress(data.progress);
+            
+            // Also update the progress in the optimization state if it exists
+            if (optimizationState) {
+              setOptimizationState({
+                ...optimizationState,
+                progress: data.progress
+              });
+            }
+            
             lastProgressUpdate = Date.now();
           }
           
           // If we have an optimization state, update it
           if (data.optimizationState) {
+            console.log('Updating optimization state:', data.optimizationState);
             setOptimizationState(data.optimizationState);
           }
           
@@ -333,7 +352,14 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
     setIsProcessing(true);
     setProcessingStatus("Starting optimization process...");
     setProcessingProgress(5); // Set initial progress to 5% to show something is happening
-    setOptimizationState(null);
+    
+    // Set initial optimization state
+    setOptimizationState({
+      stage: OptimizationStage.NOT_STARTED,
+      progress: 5,
+      results: {}
+    });
+    
     setStatusCheckErrorCount(0);
     setStartTime(Date.now());
     
@@ -595,9 +621,9 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
     const isPulsing = actualValue < 20; // Pulse animation when progress is low
     
     return (
-      <div className="w-full bg-gray-700 rounded-full h-2.5 overflow-hidden">
+      <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
         <div 
-          className={`bg-blue-600 h-2.5 rounded-full ${isPulsing ? 'animate-pulse' : ''}`} 
+          className={`bg-blue-600 h-3 rounded-full transition-all duration-500 ease-in-out ${isPulsing ? 'animate-pulse' : ''}`} 
           style={{ width: `${Math.max(actualValue, 5)}%` }} // Ensure at least 5% width for visibility
         ></div>
       </div>
@@ -623,13 +649,15 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
           
           {isProcessing && (
             <div className="mt-4">
-              <div className="mb-4">
+              <div className="mb-4 p-4 bg-[#0D0D0D] border border-gray-800 rounded-lg">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-medium">Optimization Progress</span>
-                  <span className="text-sm">{processingProgress || 0}%</span>
+                  <span className="text-base font-medium text-white">Optimization Progress</span>
+                  <span className="px-2 py-1 text-xs rounded-full bg-[#B4916C]/20 text-[#B4916C]">
+                    {processingProgress || 0}%
+                  </span>
                 </div>
                 {renderProgressBar(processingProgress)}
-                <p className="text-sm text-gray-400 mt-2 animate-pulse">{processingStatus || "Processing..."}</p>
+                <p className="text-sm text-gray-400 mt-3 animate-pulse">{processingStatus || "Processing..."}</p>
               </div>
               <ProgressiveOptimizationStatus 
                 optimizationState={optimizationState}
@@ -668,13 +696,15 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
           
           {isProcessing && (
             <div className="mt-4">
-              <div className="mb-4">
+              <div className="mb-4 p-4 bg-[#0D0D0D] border border-gray-800 rounded-lg">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-medium">Optimization Progress</span>
-                  <span className="text-sm">{processingProgress || 0}%</span>
+                  <span className="text-base font-medium text-white">Optimization Progress</span>
+                  <span className="px-2 py-1 text-xs rounded-full bg-[#B4916C]/20 text-[#B4916C]">
+                    {processingProgress || 0}%
+                  </span>
                 </div>
                 {renderProgressBar(processingProgress)}
-                <p className="text-sm text-gray-400 mt-2 animate-pulse">{processingStatus || "Processing..."}</p>
+                <p className="text-sm text-gray-400 mt-3 animate-pulse">{processingStatus || "Processing..."}</p>
               </div>
               <ProgressiveOptimizationStatus 
                 optimizationState={optimizationState}
