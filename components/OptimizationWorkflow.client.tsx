@@ -98,7 +98,17 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
           throw new Error(`Error fetching status: ${response.status}`);
         }
         
-        const data = await response.json();
+        // Try to parse the response as JSON
+        let data;
+        try {
+          data = await response.json();
+        } catch (jsonError) {
+          console.error("Error parsing JSON response from partial-results:", jsonError);
+          
+          // Don't stop polling on JSON parse errors, just try again later
+          pollingTimeout = setTimeout(checkStatus, statusPollingInterval * 2);
+          return;
+        }
         
         if (data.success) {
           // Update progress
@@ -149,16 +159,26 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
           if (data.optimizationState?.results?.optimizedContent) {
             setError(`Warning: ${data.error} - Continuing with partial results.`);
             // Continue polling to get any further updates
+            pollingTimeout = setTimeout(checkStatus, statusPollingInterval);
           } else {
             setError(data.error);
-            setIsProcessing(false);
-            setStatusPollingEnabled(false);
+            // Don't stop polling immediately on errors, try a few more times
+            if (statusPollingInterval < 10000) {  // If we haven't backed off too much yet
+              const newInterval = Math.min(statusPollingInterval * 2, 10000);
+              setStatusPollingInterval(newInterval);
+              pollingTimeout = setTimeout(checkStatus, newInterval);
+            } else {
+              setIsProcessing(false);
+              setStatusPollingEnabled(false);
+            }
           }
         }
       } catch (error) {
         console.error("Error checking status:", error);
-        // Don't stop polling on network errors, just try again
-        pollingTimeout = setTimeout(checkStatus, statusPollingInterval);
+        // Don't stop polling on network errors, just try again later with increased interval
+        const newInterval = Math.min(statusPollingInterval * 2, 10000);
+        setStatusPollingInterval(newInterval);
+        pollingTimeout = setTimeout(checkStatus, newInterval);
       }
     };
     
@@ -232,11 +252,25 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Error ${response.status}`);
+        // Try to parse the error response as JSON
+        try {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Error ${response.status}`);
+        } catch (jsonError) {
+          // If we can't parse the response as JSON, use the status text
+          throw new Error(`Server error (${response.status}): ${response.statusText}`);
+        }
       }
       
-      const data = await response.json();
+      // Try to parse the response as JSON
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        // Handle JSON parsing errors
+        console.error("Error parsing JSON response:", jsonError);
+        throw new Error("Invalid response from server. The optimization service may be experiencing issues.");
+      }
       
       if (data.success) {
         // If the process completed immediately (unlikely)
@@ -256,16 +290,34 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
       // Provide more user-friendly error messages
       let errorMessage = error instanceof Error ? error.message : String(error);
       
-      if (errorMessage.includes('tee is not a function')) {
+      if (errorMessage.includes('Unexpected token') || errorMessage.includes('not valid JSON')) {
+        errorMessage = "The server returned an invalid response. This is likely due to a temporary issue with the AI service. Please try again in a few minutes.";
+        
+        // Start polling for partial results anyway - they might be available
+        setStatusPollingInterval(2000);
+        setStatusPollingEnabled(true);
+      } else if (errorMessage.includes('tee is not a function')) {
         errorMessage = "There's a temporary issue with the AI service. The system will try to continue with available features.";
+        
+        // Start polling for partial results
+        setStatusPollingInterval(2000);
+        setStatusPollingEnabled(true);
       } else if (errorMessage.includes('Mistral') || errorMessage.includes('OpenAI')) {
         errorMessage = "There's a temporary issue with the AI service. Please try again in a few minutes.";
       } else if (errorMessage.includes('timeout') || errorMessage.includes('504')) {
-        errorMessage = "The request timed out. This might be due to high server load or a complex CV. Please try again.";
+        errorMessage = "The request timed out. This might be due to high server load or a complex CV. The system will try to continue with partial results if available.";
+        
+        // Start polling for partial results
+        setStatusPollingInterval(2000);
+        setStatusPollingEnabled(true);
       }
       
       setError(errorMessage);
-      setIsProcessing(false);
+      
+      // Don't stop processing completely if we're going to poll for partial results
+      if (!statusPollingEnabled) {
+        setIsProcessing(false);
+      }
       
       // If the error is related to service availability, suggest trying again later
       if (errorMessage.includes('service') || errorMessage.includes('AI')) {

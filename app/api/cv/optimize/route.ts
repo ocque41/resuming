@@ -20,7 +20,8 @@ function formatErrorResponse(error: unknown, statusCode: number = 500) {
     errorMessage.includes('not configured') || 
     errorMessage.includes('Authentication failed') ||
     errorMessage.includes('rate limit') ||
-    errorMessage.includes('too many requests');
+    errorMessage.includes('too many requests') ||
+    errorMessage.includes('tee is not a function');
   
   return NextResponse.json(
     { 
@@ -78,7 +79,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Parse request body
-    const body = await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch (parseError) {
+      logger.error(`Error parsing request body: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+      return NextResponse.json({ success: false, error: 'Invalid request format' }, { status: 400 });
+    }
+    
     const { 
       cvId, 
       jobDescription, 
@@ -122,8 +130,20 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if AI services are available
-    const mistralAvailable = await isMistralAvailable();
-    const openaiAvailable = await isOpenAIAvailable();
+    let mistralAvailable = false;
+    let openaiAvailable = false;
+    
+    try {
+      mistralAvailable = await isMistralAvailable();
+    } catch (mistralError) {
+      logger.warn(`Error checking Mistral availability: ${mistralError instanceof Error ? mistralError.message : String(mistralError)}`);
+    }
+    
+    try {
+      openaiAvailable = await isOpenAIAvailable();
+    } catch (openaiError) {
+      logger.warn(`Error checking OpenAI availability: ${openaiError instanceof Error ? openaiError.message : String(openaiError)}`);
+    }
 
     if (!mistralAvailable) {
       logger.warn('Mistral service is unavailable, will attempt to use OpenAI fallback');
@@ -162,33 +182,78 @@ export async function POST(req: NextRequest) {
     );
     
     // Wait for either the optimization to complete or the timeout
-    const result = await Promise.race([optimizationPromise, timeoutPromise])
-      .catch(error => {
-        logger.error(`Optimization error or timeout: ${error instanceof Error ? error.message : String(error)}`);
+    try {
+      const result = await Promise.race([optimizationPromise, timeoutPromise])
+        .catch(error => {
+          logger.error(`Optimization error or timeout: ${error instanceof Error ? error.message : String(error)}`);
+          
+          // Check if we have partial results
+          const partialResults = getPartialResults(user.id.toString(), cvId.toString(), jobDescription);
+          
+          // If we have substantial partial results, return them
+          if (partialResults && partialResults.progress > 30) {
+            logger.info(`Returning partial results for CV ${cvId} with progress ${partialResults.progress}%`);
+            return {
+              success: true,
+              message: 'Partial optimization results available',
+              result: partialResults,
+              isPartial: true
+            };
+          }
+          
+          // Otherwise, store the error and return failure
+          storePartialResultsError(user.id.toString(), cvId.toString(), jobDescription, 
+            error instanceof Error ? error.message : String(error));
+          
+          throw error;
+        });
+      
+      // Return the result
+      return NextResponse.json(result);
+    } catch (error) {
+      // Handle specific error types
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Check for JSON parsing errors
+      if (errorMessage.includes('Unexpected token') || errorMessage.includes('not valid JSON')) {
+        logger.error(`JSON parsing error during optimization: ${errorMessage}`);
         
         // Check if we have partial results
         const partialResults = getPartialResults(user.id.toString(), cvId.toString(), jobDescription);
         
-        // If we have substantial partial results, return them
-        if (partialResults && partialResults.progress > 30) {
-          logger.info(`Returning partial results for CV ${cvId} with progress ${partialResults.progress}%`);
-          return {
+        if (partialResults && partialResults.progress > 0) {
+          logger.info(`Returning partial results despite JSON error for CV ${cvId}`);
+          return NextResponse.json({
             success: true,
-            message: 'Partial optimization results available',
+            message: 'Partial optimization results available (API error occurred)',
             result: partialResults,
-            isPartial: true
-          };
+            isPartial: true,
+            error: 'An API error occurred during optimization, but partial results are available'
+          });
         }
+      }
+      
+      // Handle timeout errors
+      if (errorMessage.includes('timed out') || errorMessage.includes('timeout')) {
+        logger.error(`Optimization timed out for CV ${cvId}`);
         
-        // Otherwise, store the error and return failure
-        storePartialResultsError(user.id.toString(), cvId.toString(), jobDescription, 
-          error instanceof Error ? error.message : String(error));
+        // Check if we have partial results
+        const partialResults = getPartialResults(user.id.toString(), cvId.toString(), jobDescription);
         
-        throw error;
-      });
-    
-    // Return the result
-    return NextResponse.json(result);
+        if (partialResults && partialResults.progress > 0) {
+          logger.info(`Returning partial results after timeout for CV ${cvId}`);
+          return NextResponse.json({
+            success: true,
+            message: 'Partial optimization results available (timeout occurred)',
+            result: partialResults,
+            isPartial: true,
+            error: 'The optimization process timed out, but partial results are available'
+          });
+        }
+      }
+      
+      return formatErrorResponse(error);
+    }
   } catch (error) {
     return formatErrorResponse(error);
   }

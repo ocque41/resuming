@@ -1802,14 +1802,33 @@ ${cvText.substring(0, 2000)}`;
           throw new Error('Mistral client not initialized');
         }
         
-        const response = await this.mistralClient.chat({
+        // Create a timeout promise
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Mistral API timeout')), 15000); // 15 second timeout
+        });
+        
+        // Create the API call promise
+        const apiCallPromise = this.mistralClient.chat({
           model: this.mistralGenerationModel,
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.1,
           maxTokens: 4000,
         });
         
-        const responseText = response.choices[0]?.message?.content?.trim() || '[]';
+        // Race the API call against the timeout
+        const response = await Promise.race([apiCallPromise, timeoutPromise])
+          .catch(error => {
+            logger.warn(`Mistral API call failed or timed out: ${error instanceof Error ? error.message : String(error)}`);
+            throw new Error('Mistral API unavailable');
+          });
+        
+        // If we get here, the API call succeeded
+        if (!response || !response.choices || !response.choices[0]?.message?.content) {
+          logger.warn('Mistral API returned empty or invalid response');
+          throw new Error('Invalid Mistral API response');
+        }
+        
+        const responseText = response.choices[0].message.content.trim() || '[]';
         
         try {
           // Try to parse as JSON directly
@@ -1819,16 +1838,25 @@ ${cvText.substring(0, 2000)}`;
           return sections;
         } catch (parseError) {
           logger.warn(`Failed to parse Mistral response as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+          logger.debug(`Raw response: ${responseText.substring(0, 200)}...`);
           // Try to extract using regex as fallback
           return this.extractSectionsWithRegex(textToAnalyze);
         }
       } catch (error) {
         logger.warn(`Failed to extract sections with Mistral: ${error instanceof Error ? error.message : String(error)}`);
-        return this.extractSectionsWithOpenAI(textToAnalyze);
+        // Try OpenAI as fallback
+        try {
+          return await this.extractSectionsWithOpenAI(textToAnalyze);
+        } catch (openaiError) {
+          logger.warn(`OpenAI fallback also failed: ${openaiError instanceof Error ? openaiError.message : String(openaiError)}`);
+          // If both API methods fail, fall back to regex
+          return this.extractSectionsWithRegex(textToAnalyze);
         }
-      } catch (error) {
-        logger.error(`Error extracting sections: ${error instanceof Error ? error.message : String(error)}`);
-      return [];
+      }
+    } catch (error) {
+      logger.error(`Error extracting sections: ${error instanceof Error ? error.message : String(error)}`);
+      // Final fallback - return a single section with all content
+      return [{ name: 'Content', content: this.originalCVText || '' }];
     }
   }
 

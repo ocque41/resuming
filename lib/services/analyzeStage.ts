@@ -330,8 +330,55 @@ async function extractSectionsStep(
   logger.info(`Extracting sections for CV ${cvId}`);
   
   try {
-    // Extract sections using the RAG service
-    const sections = await ragService.extractSections();
+    // Create a timeout promise
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Section extraction timed out')), 20000); // 20 second timeout
+    });
+    
+    // Create the extraction promise
+    const extractionPromise = ragService.extractSections();
+    
+    // Race the extraction against the timeout
+    const sections = await Promise.race([extractionPromise, timeoutPromise])
+      .catch(error => {
+        logger.warn(`Section extraction failed or timed out: ${error instanceof Error ? error.message : String(error)}`);
+        
+        // Return a fallback section structure
+        if (cvText) {
+          logger.info('Using fallback section extraction with regex');
+          
+          // Try to extract sections using regex as a fallback
+          try {
+            // Simple regex to identify potential sections
+            const sectionRegex = /^(?:\s*)([\w\s&]+)(?:\s*)(?::|-)(?:\s*)/gm;
+            const matches = [...cvText.matchAll(sectionRegex)];
+            
+            if (matches.length > 0) {
+              const sections = [];
+              
+              for (let i = 0; i < matches.length; i++) {
+                const match = matches[i];
+                const sectionName = match[1].trim();
+                const startIndex = match.index! + match[0].length;
+                const endIndex = i < matches.length - 1 ? matches[i + 1].index! : cvText.length;
+                const content = cvText.substring(startIndex, endIndex).trim();
+                
+                sections.push({ name: sectionName, content });
+              }
+              
+              return sections;
+            }
+          } catch (regexError) {
+            logger.error(`Regex fallback failed: ${regexError instanceof Error ? regexError.message : String(regexError)}`);
+          }
+          
+          // If regex fails or finds no sections, return the whole text as one section
+          return [{ name: 'Content', content: cvText }];
+        }
+        
+        // If no CV text is available, return an empty array
+        return [];
+      });
     
     // Log the number of sections extracted
     logger.info(`Extracted ${sections.length} sections from CV ${cvId}`);
@@ -349,7 +396,8 @@ async function extractSectionsStep(
     // Use the CV text as a fallback
     const fallbackContent = cvText || 'No content available';
     
-    return updateStage(
+    // Log the error in the state's message property
+    const updatedState = updateStage(
       currentState,
       OptimizationStage.SECTIONS_EXTRACTED,
       { 
@@ -358,8 +406,13 @@ async function extractSectionsStep(
             name: 'Content', 
             content: fallbackContent 
           }
-        ] 
+        ]
       }
     );
+    
+    // Add error message to the state
+    updatedState.error = `Section extraction failed: ${error instanceof Error ? error.message : String(error)}`;
+    
+    return updatedState;
   }
 } 
