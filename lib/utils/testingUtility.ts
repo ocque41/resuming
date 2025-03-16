@@ -178,14 +178,14 @@ DevOps: AWS, Docker, Kubernetes, CI/CD
       results.push({
         component: 'OpenAI Optimizer - Skill Extraction',
         status: 'success',
-        message: `Extracted ${result.cvAnalysis.skills.technical.length + result.cvAnalysis.skills.professional.length} skills`,
+        message: `Extracted ${result.cvAnalysis.skills.length} skills`,
         timestamp: new Date().toISOString(),
       });
       
       results.push({
         component: 'OpenAI Optimizer - Skill Extraction',
         status: 'info',
-        message: `Skills: ${result.cvAnalysis.skills.technical.concat(result.cvAnalysis.skills.professional).join(', ')}`,
+        message: `Skills: ${result.cvAnalysis.skills.join(', ')}`,
         timestamp: new Date().toISOString(),
       });
       

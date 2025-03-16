@@ -30,8 +30,7 @@ export interface CVAnalysisResult {
 let openaiClient: OpenAI | null = null;
 let openaiClientInitialized = false;
 
-// Initialize OpenAI client
-const getOpenAIClient = () => {
+export const getOpenAIClient = () => {
   if (!openaiClient) {
     try {
       const apiKey = process.env.OPENAI_API_KEY;

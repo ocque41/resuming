@@ -8,7 +8,8 @@ import {
   OptimizationOptions,
   OptimizationResult,
   hasCompletedStage,
-  updateStage
+  updateStage,
+  recordOptimizationError
 } from './progressiveOptimization';
 import { 
   clearPartialResults, 
@@ -16,6 +17,10 @@ import {
   getPartialResults, 
   storePartialResultsError 
 } from '@/app/utils/partialResultsCache';
+import { analyzeAndOptimizeWithGPT4o } from './openaiOptimizer';
+import { 
+  OptimizationResults
+} from './progressiveOptimization';
 
 /**
  * Calculate progress percentage based on the current state
@@ -421,6 +426,143 @@ export async function resumeOptimization(
         progress: calculateProgress(currentState),
         error: error instanceof Error ? error.message : String(error),
         state: currentState
+      }
+    };
+  }
+}
+
+/**
+ * Enhanced optimizeCV function for better progress tracking and error handling
+ */
+export async function optimizeCV(
+  userId: string,
+  cvId: string,
+  input: string,
+  jobDescription: string,
+  options: OptimizationOptions = {}
+): Promise<OptimizationResult> {
+  const startTime = Date.now();
+  logger.info(`Starting CV optimization for user ${userId}, CV ${cvId} with options: ${JSON.stringify(options)}`);
+  
+  // Clear any previous partial results
+  await clearPartialResults(userId, cvId, jobDescription);
+  
+  // Initialize state
+  const state: OptimizationState = {
+    userId,
+    cvId,
+    jobDescription,
+    stage: OptimizationStage.NOT_STARTED,
+    progress: 0,
+    results: {},
+    timestamp: startTime,
+    lastUpdated: startTime
+  };
+  
+  try {
+    // UPDATE STAGE: NOT_STARTED -> ANALYZE_STARTED
+    updateStage(state, OptimizationStage.ANALYZE_STARTED);
+    logger.info(`Starting CV analysis for user ${userId}, CV ${cvId}`);
+    
+    try {
+      const analyzeStartTime = Date.now();
+      
+      // Optimize with OpenAI
+      const optResult = await analyzeAndOptimizeWithGPT4o(input, jobDescription);
+      
+      const analyzeDuration = Date.now() - analyzeStartTime;
+      logger.info(`CV analysis completed in ${analyzeDuration}ms`);
+      
+      // Store results and update stage
+      const results: Partial<OptimizationResults> = {
+        optimizedContent: optResult.optimizedContent,
+        matchScore: optResult.matchScore,
+        recommendations: optResult.recommendations || []
+      };
+      
+      // UPDATE STAGE: ANALYZE_STARTED -> ANALYZE_COMPLETED
+      updateStage(state, OptimizationStage.ANALYZE_COMPLETED, results);
+      
+      // UPDATE STAGE: ANALYZE_COMPLETED -> GENERATE_STARTED
+      updateStage(state, OptimizationStage.GENERATE_STARTED);
+      
+      // UPDATE STAGE: GENERATE_STARTED -> GENERATE_COMPLETED
+      updateStage(state, OptimizationStage.GENERATE_COMPLETED);
+      
+      // Store partial results
+      await storePartialResults(userId, cvId, jobDescription, {
+        optimizedContent: optResult.optimizedContent,
+        matchScore: optResult.matchScore,
+        recommendations: optResult.recommendations || [],
+        progress: 100,
+        state: state
+      });
+      
+      // Calculate total duration
+      const totalDuration = Date.now() - startTime;
+      logger.info(`CV optimization completed successfully in ${totalDuration}ms for user ${userId}, CV ${cvId}`);
+      
+      // Return success result
+      return {
+        success: true,
+        message: 'Optimization completed successfully',
+        result: {
+          optimizedContent: optResult.optimizedContent,
+          matchScore: optResult.matchScore,
+          recommendations: optResult.recommendations || [],
+          progress: 100,
+          state: state
+        }
+      };
+    } catch (analyzeError) {
+      const errorMessage = analyzeError instanceof Error ? analyzeError.message : String(analyzeError);
+      logger.warn(`Error during analysis stage for user ${userId}, CV ${cvId}: ${errorMessage}`);
+      
+      // Record the error
+      recordOptimizationError(userId, cvId, jobDescription, errorMessage, OptimizationStage.ANALYZE_STARTED);
+      
+      // Return error result with original content
+      return {
+        success: false,
+        message: `Analysis failed: ${errorMessage}`,
+        result: {
+          optimizedContent: input, // Use original content
+          matchScore: 0,
+          recommendations: [`Error: ${errorMessage}`],
+          progress: 0,
+          error: errorMessage,
+          state: {
+            ...state,
+            stage: OptimizationStage.ERROR,
+            error: errorMessage,
+            lastUpdated: Date.now()
+          }
+        }
+      };
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Unexpected error during CV optimization for user ${userId}, CV ${cvId}: ${errorMessage}`);
+    
+    // Record the error
+    recordOptimizationError(userId, cvId, jobDescription, errorMessage, OptimizationStage.NOT_STARTED);
+    
+    // Return error result
+    return {
+      success: false,
+      message: `Optimization failed: ${errorMessage}`,
+      result: {
+        optimizedContent: input, // Use original content
+        matchScore: 0,
+        recommendations: [`Error: ${errorMessage}`],
+        progress: 0,
+        error: errorMessage,
+        state: {
+          ...state,
+          stage: OptimizationStage.ERROR,
+          error: errorMessage,
+          lastUpdated: Date.now()
+        }
       }
     };
   }

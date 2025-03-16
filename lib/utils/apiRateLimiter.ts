@@ -38,6 +38,67 @@ const rateLimitTracker: RateLimitTracker = {
   },
 };
 
+// Add circuit breaker implementation
+
+// Add circuit breaker state tracking
+const circuitBreakers = {
+  openai: {
+    failures: 0,
+    lastFailure: 0,
+    isOpen: false,
+    resetTimeout: 30000, // 30 seconds timeout before trying again
+    failureThreshold: 3  // Number of failures before opening circuit
+  }
+};
+
+// Add function to check if circuit is open
+function isCircuitOpen(service: 'openai'): boolean {
+  const breaker = circuitBreakers[service];
+  
+  // If circuit is open (too many failures), check if reset timeout has passed
+  if (breaker.isOpen) {
+    if (Date.now() - breaker.lastFailure > breaker.resetTimeout) {
+      // Reset the circuit breaker
+      breaker.isOpen = false;
+      breaker.failures = 0;
+      logger.info(`Circuit breaker for ${service} reset after ${breaker.resetTimeout}ms timeout`);
+      return false; // Circuit is now closed
+    }
+    return true; // Circuit is still open
+  }
+  
+  return false; // Circuit is closed
+}
+
+// Add function to record failures for circuit breaker
+function recordApiFailure(service: 'openai'): void {
+  const breaker = circuitBreakers[service];
+  breaker.failures++;
+  breaker.lastFailure = Date.now();
+  
+  // If too many failures, open the circuit
+  if (breaker.failures >= breaker.failureThreshold) {
+    breaker.isOpen = true;
+    logger.warn(`Circuit breaker for ${service} opened after ${breaker.failures} failures. Will retry after ${breaker.resetTimeout}ms`);
+  }
+}
+
+// Add function to get circuit breaker status
+export function getCircuitStatus(service: 'openai'): { 
+  isOpen: boolean; 
+  failures: number; 
+  lastFailure: number; 
+  timeSinceLastFailure: number;
+} {
+  const breaker = circuitBreakers[service];
+  return {
+    isOpen: breaker.isOpen,
+    failures: breaker.failures,
+    lastFailure: breaker.lastFailure,
+    timeSinceLastFailure: Date.now() - breaker.lastFailure
+  };
+}
+
 /**
  * Check if we're approaching rate limits and should throttle
  */
@@ -188,121 +249,87 @@ export async function retryWithExponentialBackoff<T>(
   const {
     service,
     initialDelayMs = 1000,
-    maxDelayMs = 60000,
-    maxRetries = 5,
+    maxDelayMs = 10000,
+    maxRetries = 3,
     retryStatusCodes = [429, 500, 502, 503, 504],
     priority = 0,
-    taskId,
-    fallbackFn
+    taskId
   } = options;
-  
-  // Use the task queue to manage API calls
-  return queueTask(
-    service,
-    async () => {
-      let retries = 0;
-      let delay = initialDelayMs;
-      let lastError: Error | null = null;
-      
-      // For OpenAI, check if we should throttle before even attempting the call
-      // If we should throttle and have a fallback, use it immediately for better performance
-      if (service === 'openai' && shouldThrottle(service) && fallbackFn) {
-        logger.info(`Preemptively using fallback for ${service} API due to throttling`);
-        try {
-          return await fallbackFn();
-        } catch (fallbackError) {
-          logger.error(`Fallback for ${service} API failed:`, 
-            fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
-          // If fallback fails, continue with original function but with a delay
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
+
+  // Check if circuit breaker is open
+  if (isCircuitOpen(service)) {
+    logger.warn(`Circuit breaker for ${service} is open, using fallback if available`);
+    // Use fallback function if available
+    if (options.fallbackFn) {
+      try {
+        return await options.fallbackFn();
+      } catch (fallbackError) {
+        logger.error(`Fallback function failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
+        throw new Error(`Service ${service} is unavailable and fallback failed`);
       }
-      
-      while (true) {
-        try {
-          // Track this API call
-          trackApiCall(service);
-          
-          // If we should throttle, add a delay before proceeding
-          if (shouldThrottle(service)) {
-            // If we have a fallback and this is OpenAI, use fallback immediately
-            // This is more aggressive than before - we don't wait for retries
-            if (fallbackFn && service === 'openai') {
-              logger.info(`Using fallback for ${service} API due to throttling`);
-              return await fallbackFn();
-            }
-            
-            const throttleDelay = calculateThrottleDelay(service);
-            logger.info(`Throttling ${service} API call for ${throttleDelay}ms to prevent rate limit`);
-            await new Promise(resolve => setTimeout(resolve, throttleDelay));
-          }
-          
-          // Execute the function
-          return await fn();
-        } catch (error) {
-          lastError = error instanceof Error ? error : new Error(String(error));
-          
-          // Check if this is a rate limit error or other retryable error
-          const status = error instanceof Error && 'status' in error 
-            ? (error as any).status 
-            : error instanceof Response 
-              ? error.status 
-              : null;
-          
-          const isRateLimitError = status === 429 || 
-            (error instanceof Error && error.message.includes('rate limit'));
-          
-          const isRetryableError = status !== null && retryStatusCodes.includes(status);
-          
-          // For OpenAI, use fallback more aggressively - immediately on any error
-          if (fallbackFn && service === 'openai') {
-            logger.warn(`${service} API failed, using fallback immediately`);
-            try {
-              return await fallbackFn();
-            } catch (fallbackError) {
-              logger.error(`Fallback for ${service} API also failed:`, 
-                fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
-              // If fallback fails and we've hit max retries, throw the original error
-              if (retries >= maxRetries) {
-                throw error;
-              }
-            }
-          }
-          
-          // If we've hit max retries or it's not a retryable error, try fallback or throw
-          if (retries >= maxRetries || (!isRateLimitError && !isRetryableError)) {
-            // If we have a fallback function, try the fallback
-            if (fallbackFn) {
-              logger.warn(`${service} API failed after ${retries} retries, using fallback`);
-              return await fallbackFn();
-            }
-            
-            throw error;
-          }
-          
-          // Increment retry counter
-          retries++;
-          
-          // Calculate backoff with jitter
-          const jitter = Math.random() * 0.3 + 0.85; // 0.85-1.15
-          
-          // For rate limit errors, use a more aggressive backoff
-          if (isRateLimitError) {
-            delay = Math.min(delay * 3 * jitter, maxDelayMs); // Triple the delay for rate limits
-          } else {
-            delay = Math.min(delay * 2 * jitter, maxDelayMs);
-          }
-          
-          // Log the retry
-          logger.warn(
-            `${service} API ${isRateLimitError ? 'rate limit' : 'error'}, retrying (${retries}/${maxRetries}) after ${Math.round(delay)}ms delay`
-          );
-          
-          // Wait before retrying
-          await new Promise(resolve => setTimeout(resolve, delay));
+    }
+    throw new Error(`Service ${service} is currently unavailable due to multiple failures`);
+  }
+
+  // Existing task queue logic
+  return await queueTask(service, async () => {
+    let retries = 0;
+    let delay = initialDelayMs;
+
+    while (true) {
+      try {
+        // Check for throttling
+        if (shouldThrottle(service)) {
+          const throttleDelay = calculateThrottleDelay(service);
+          logger.info(`Throttling ${service} API call for ${throttleDelay}ms to prevent rate limit`);
+          await new Promise(resolve => setTimeout(resolve, throttleDelay));
         }
+
+        // Track the API call
+        trackApiCall(service);
+
+        // Execute the function
+        const result = await fn();
+        return result;
+      } catch (error) {
+        // Record failure for circuit breaker
+        recordApiFailure(service);
+        
+        // Log the error
+        logger.error(`API call to ${service} failed:`, error instanceof Error ? error.message : String(error));
+
+        // Check if we've reached the max retries
+        if (retries >= maxRetries) {
+          logger.error(`Max retries (${maxRetries}) reached for ${service} API call`);
+          throw error;
+        }
+
+        // Check if the error is retryable
+        const statusCode = error instanceof Error && 'status' in error 
+          ? (error as any).status 
+          : error instanceof Response 
+            ? error.status 
+            : undefined;
+        const isRetryable = !statusCode || retryStatusCodes.includes(statusCode);
+
+        if (!isRetryable) {
+          logger.error(`Non-retryable error (status ${statusCode}) for ${service} API call`);
+          throw error;
+        }
+
+        // Increment retries
+        retries++;
+
+        // Calculate delay with exponential backoff and jitter
+        delay = Math.min(delay * 1.5, maxDelayMs);
+        const jitter = delay * 0.2 * Math.random();
+        const actualDelay = delay + jitter;
+
+        logger.info(`Retrying ${service} API call after ${actualDelay}ms delay (retry ${retries}/${maxRetries})`);
+
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, actualDelay));
       }
-    },
-    { priority, taskId }
-  );
+    }
+  }, { priority, taskId });
 } 

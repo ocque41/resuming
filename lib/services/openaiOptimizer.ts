@@ -1,8 +1,9 @@
 import { OpenAI } from 'openai';
 import { logger } from '@/lib/logger';
-import { retryWithExponentialBackoff } from '@/lib/utils/apiRateLimiter';
+import { retryWithExponentialBackoff, getCircuitStatus } from '../utils/apiRateLimiter';
 import { OptimizationOptions, OptimizationResult, OptimizationStage, OptimizationState } from './progressiveOptimization';
 import { storePartialResults, clearPartialResults, storePartialResultsError, getPartialResults } from '@/app/utils/partialResultsCache';
+import { getOpenAIClient } from './openai.service';
 
 // Define CV analysis result interface
 export interface CVAnalysisResult {
@@ -34,6 +35,17 @@ export interface CVAnalysisResult {
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+// Add performance monitoring
+interface PerformanceMetrics {
+  startTime: number;
+  apiCallDuration?: number;
+  parsingDuration?: number;
+  totalDuration?: number;
+}
+
+// Add timeout for API calls
+const API_TIMEOUT_MS = 30000; // 30 seconds timeout
 
 /**
  * Check if OpenAI is available
@@ -80,6 +92,9 @@ export async function optimizeCV(
   cvText: string,
   options: OptimizationOptions = {}
 ): Promise<OptimizationResult> {
+  const processStartTime = Date.now();
+  logger.info(`Starting CV optimization process for CV ${cvId} (text length: ${cvText.length}, job desc length: ${jobDescription.length})`);
+  
   // Initialize state
   let state: OptimizationState = {
     userId,
@@ -95,6 +110,7 @@ export async function optimizeCV(
   try {
     // Clear any existing partial results
     clearPartialResults(userId, cvId.toString(), jobDescription);
+    logger.debug(`Cleared existing partial results for CV ${cvId}`);
     
     // Store initial state
     storePartialResults(userId, cvId.toString(), jobDescription, {
@@ -104,6 +120,7 @@ export async function optimizeCV(
       progress: 0,
       state
     });
+    logger.debug(`Stored initial state for CV ${cvId}, progress: 0%`);
     
     // Update state to indicate analysis has started
     state = updateState(state, OptimizationStage.ANALYZE_STARTED);
@@ -114,21 +131,20 @@ export async function optimizeCV(
       progress: 10,
       state
     });
-    
-    logger.info(`Starting CV optimization with OpenAI for CV ${cvId}`);
+    logger.info(`Analysis stage started for CV ${cvId}, progress: 10%`);
     
     // Call OpenAI to analyze and optimize the CV
+    const analyzeStartTime = Date.now();
+    logger.info(`Calling lightweight GPT-4o optimization for CV ${cvId}`);
     const result = await analyzeAndOptimizeWithGPT4o(cvText, jobDescription);
+    const analyzeDuration = Date.now() - analyzeStartTime;
+    logger.info(`GPT-4o optimization completed in ${analyzeDuration}ms with match score: ${result.matchScore}`);
     
     // Update state to indicate analysis is complete
-    state = updateState(state, OptimizationStage.ANALYZE_COMPLETED);
-    state.results = {
-      ...state.results,
-      skills: result.cvAnalysis.skills.technical.concat(result.cvAnalysis.skills.professional),
-      industry: result.cvAnalysis.industry || '',
-      language: result.cvAnalysis.language || '',
-      sections: result.cvAnalysis.sections || []
-    };
+    state = updateState(state, OptimizationStage.ANALYZE_COMPLETED, {
+      optimizedContent: result.optimizedContent,
+      matchScore: result.matchScore
+    });
     
     // Store partial results after analysis
     storePartialResults(userId, cvId.toString(), jobDescription, {
@@ -138,6 +154,7 @@ export async function optimizeCV(
       progress: 30,
       state
     });
+    logger.info(`Analysis completed for CV ${cvId}, progress: 30%`);
     
     // Update state to indicate optimization has started
     state = updateState(state, OptimizationStage.OPTIMIZE_STARTED);
@@ -148,48 +165,52 @@ export async function optimizeCV(
       progress: 40,
       state
     });
+    logger.info(`Optimization stage started for CV ${cvId}, progress: 40%`);
     
     // Update state with optimization results
-    state = updateState(state, OptimizationStage.OPTIMIZE_COMPLETED);
-    state.results = {
-      ...state.results,
+    state = updateState(state, OptimizationStage.OPTIMIZE_COMPLETED, {
       optimizedContent: result.optimizedContent,
-      matchScore: result.matchScore,
-      recommendations: result.recommendations
-    };
+      matchScore: result.matchScore
+    });
     
     // Store partial results after optimization
     storePartialResults(userId, cvId.toString(), jobDescription, {
       optimizedContent: result.optimizedContent,
       matchScore: result.matchScore,
-      recommendations: result.recommendations,
+      recommendations: [],
       progress: 70,
       state
     });
+    logger.info(`Optimization completed for CV ${cvId}, progress: 70%`);
     
     // Update state to indicate document generation has started
     state = updateState(state, OptimizationStage.GENERATE_STARTED);
     storePartialResults(userId, cvId.toString(), jobDescription, {
       optimizedContent: result.optimizedContent,
       matchScore: result.matchScore,
-      recommendations: result.recommendations,
+      recommendations: [],
       progress: 80,
       state
     });
+    logger.info(`Document generation started for CV ${cvId}, progress: 80%`);
     
     // Format the document (this is handled by the existing DOCX generation)
+    const genStartTime = Date.now();
     state = updateState(state, OptimizationStage.GENERATE_COMPLETED);
+    const genDuration = Date.now() - genStartTime;
+    logger.info(`Document generation step completed in ${genDuration}ms`);
     
     // Store final results
     storePartialResults(userId, cvId.toString(), jobDescription, {
       optimizedContent: result.optimizedContent,
       matchScore: result.matchScore,
-      recommendations: result.recommendations,
+      recommendations: [],
       progress: 100,
       state
     });
     
-    logger.info(`CV optimization completed successfully for CV ${cvId}`);
+    const totalDuration = Date.now() - processStartTime;
+    logger.info(`CV optimization process completed successfully for CV ${cvId} in ${totalDuration}ms`);
     
     // Return the final result
     return {
@@ -198,13 +219,14 @@ export async function optimizeCV(
       result: {
         optimizedContent: result.optimizedContent,
         matchScore: result.matchScore,
-        recommendations: result.recommendations,
+        recommendations: [],
         progress: 100,
         state
       }
     };
   } catch (error) {
-    logger.error(`Error optimizing CV: ${error instanceof Error ? error.message : String(error)}`);
+    const errorTime = Date.now() - processStartTime;
+    logger.error(`Error optimizing CV ${cvId} after ${errorTime}ms: ${error instanceof Error ? error.message : String(error)}`);
     
     // Store error in partial results
     storePartialResultsError(userId, cvId.toString(), jobDescription, 
@@ -219,7 +241,7 @@ export async function optimizeCV(
     
     // If we have partial results, return them
     if (partialResults && partialResults.optimizedContent) {
-      logger.info(`Returning partial results for CV ${cvId}`);
+      logger.info(`Returning partial results for CV ${cvId} with progress: ${partialResults.progress || 0}%`);
       return {
         success: false,
         message: `Optimization failed but partial results are available: ${error instanceof Error ? error.message : String(error)}`,
@@ -235,6 +257,7 @@ export async function optimizeCV(
     }
     
     // If no partial results, return error
+    logger.warn(`No partial results available for CV ${cvId}, returning error state only`);
     return {
       success: false,
       message: `Optimization failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -260,85 +283,145 @@ export async function analyzeAndOptimizeWithGPT4o(
   optimizedContent: string;
   matchScore: number;
   recommendations: string[];
-  cvAnalysis: CVAnalysisResult & {
-    industry?: string;
-    language?: string;
-    sections?: Array<{ name: string; content: string }>;
+  cvAnalysis: {
+    industry: string;
+    language: string;
+    sections: string[];
+    skills: string[];
+    strengths: string[];
+    weaknesses: string[];
+    missingKeywords: string[];
+    formattingIssues: string[];
+    structuralIssues: string[];
   };
 }> {
+  // Track performance metrics
+  const metrics: PerformanceMetrics = {
+    startTime: Date.now()
+  };
+
   try {
-    logger.info('Analyzing and optimizing CV with GPT-4o');
+    logger.info(`Starting lightweight CV optimization with GPT-4o (content length: ${cvText.length}, job description length: ${jobDescription.length})`);
     
-    // Use the rate limiter with exponential backoff for the chat completion
+    // First, check if the circuit breaker is open
+    const circuitStatus = getCircuitStatus('openai');
+    if (circuitStatus.isOpen) {
+      logger.warn(`Circuit breaker for OpenAI is open with ${circuitStatus.failures} failures. Last failure was ${circuitStatus.timeSinceLastFailure}ms ago.`);
+      // If circuit breaker is open, we'll still continue with the retry logic which will handle it
+    }
+    
+    // Create a prompt for GPT-4o
+    const client = getOpenAIClient();
+    if (!client) {
+      throw new Error('OpenAI client is not available');
+    }
+
+    // Create a abort controller for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+      logger.error(`API call timed out after ${API_TIMEOUT_MS}ms`);
+    }, API_TIMEOUT_MS);
+    
+    // Track API call start time
+    const apiCallStartTime = Date.now();
+    logger.info('Making OpenAI API call for CV optimization (10% progress)...');
+    
     const response = await retryWithExponentialBackoff(
       async () => {
-        return await openai.chat.completions.create({
+        const completion = await client.chat.completions.create({
           model: 'gpt-4o',
           messages: [
             {
               role: 'system',
-              content: `You are a CV optimization expert. Your task is to analyze and optimize the provided CV for the specific job description.
+              content: `You are an expert CV optimization assistant. Your task is to analyze and optimize the CV content based on the job description provided.
               
-              First, analyze the CV to extract structured information with this format:
+              Return a JSON object with the following format:
               {
-                "experience": [{"title": string, "company": string, "dates": string, "responsibilities": string[]}],
-                "education": [{"degree": string, "field": string, "institution": string, "year": string}],
-                "skills": {"technical": string[], "professional": string[]},
-                "achievements": string[],
-                "profile": string,
-                "languages": string[],
-                "industry": string,
-                "language": string,
-                "sections": [{"name": string, "content": string}]
+                "optimizedContent": "The optimized CV content",
+                "matchScore": A number between 0 and 100 representing how well the CV matches the job description
               }
               
-              Then, optimize the CV to better match the job description.
-              
-              Return a JSON object with the following structure:
-              {
-                "optimizedContent": "The optimized CV text",
-                "matchScore": 85, // A number between 0-100 indicating how well the optimized CV matches the job
-                "recommendations": ["Recommendation 1", "Recommendation 2"], // List of recommendations for further improvements
-                "cvAnalysis": {
-                  // Include the CV analysis here with the structure defined above
-                }
-              }
-              
-              Do not include any explanations or additional text. Return only the JSON object.`
+              Focus on making the content more relevant to the job description, highlighting key skills and experiences, and improving clarity and readability.`
             },
             {
               role: 'user',
-              content: `CV: ${cvText}\n\nJob Description: ${jobDescription || "General optimization for ATS compatibility"}`
+              content: `Here is my CV:\n\n${cvText}\n\nHere is the job description:\n\n${jobDescription}\n\nPlease optimize my CV for this job.`
             }
           ],
-          temperature: 0.3,
-          max_tokens: 4000
+          temperature: 0.7,
+          response_format: { type: 'json_object' }
+        }, {
+          signal: controller.signal
         });
+        
+        // Calculate API call duration
+        metrics.apiCallDuration = Date.now() - apiCallStartTime;
+        logger.info(`OpenAI API call completed in ${metrics.apiCallDuration}ms (50% progress)`);
+        
+        return completion;
       },
-      { service: 'openai', maxRetries: 3, priority: 2 }
+      { 
+        service: 'openai',
+        initialDelayMs: 1000,
+        maxRetries: 2,
+        priority: 1,
+        taskId: 'cv-optimization'
+      }
     );
     
-    // Extract the content from the response
-    const content = response.choices[0].message.content || '';
+    // Clear the timeout
+    clearTimeout(timeoutId);
     
-    // Try to parse the response as JSON
-    try {
-      const result = safeJsonParse(content);
-      
-      // Validate the structure
-      if (!result.optimizedContent || typeof result.matchScore !== 'number' || !result.cvAnalysis) {
-        throw new Error('Invalid response structure');
-      }
-      
-      logger.info('CV analysis and optimization with GPT-4o completed successfully');
-      return result;
-    } catch (parseError) {
-      logger.error('Error parsing analysis and optimization response:', parseError instanceof Error ? parseError.message : String(parseError));
-      throw new Error(`Failed to parse analysis and optimization result: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+    // Parse the response
+    const parseStartTime = Date.now();
+    logger.info('Parsing optimization response (75% progress)...');
+    
+    const responseContent = response.choices[0]?.message?.content;
+    if (!responseContent) {
+      throw new Error('No content in response from OpenAI');
     }
+    
+    const jsonData = JSON.parse(responseContent);
+    
+    // Calculate parsing duration
+    metrics.parsingDuration = Date.now() - parseStartTime;
+    logger.info(`Response parsing completed in ${metrics.parsingDuration}ms (90% progress)`);
+    
+    // Calculate total duration
+    metrics.totalDuration = Date.now() - metrics.startTime;
+    
+    // Return the result with empty values for backward compatibility
+    const result = {
+      optimizedContent: jsonData.optimizedContent,
+      matchScore: jsonData.matchScore,
+      recommendations: [],
+      cvAnalysis: {
+        industry: '',
+        language: '',
+        sections: [],
+        skills: [],
+        strengths: [],
+        weaknesses: [],
+        missingKeywords: [],
+        formattingIssues: [],
+        structuralIssues: []
+      }
+    };
+    
+    // Log completion with performance metrics
+    logger.info(`CV optimization completed in ${metrics.totalDuration}ms (API: ${metrics.apiCallDuration}ms, Parsing: ${metrics.parsingDuration}ms) (100% progress)`);
+    
+    return result;
   } catch (error) {
-    logger.error('Error analyzing and optimizing CV with GPT-4o:', error instanceof Error ? error.message : String(error));
-    throw new Error(`Failed to analyze and optimize CV: ${error instanceof Error ? error.message : String(error)}`);
+    // Calculate duration until error
+    const durationUntilError = Date.now() - metrics.startTime;
+    
+    // Log the error with performance information
+    logger.error(`CV optimization failed after ${durationUntilError}ms: ${error instanceof Error ? error.message : String(error)}`);
+    
+    // Re-throw the error
+    throw error;
   }
 }
 

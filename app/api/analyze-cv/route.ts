@@ -125,7 +125,7 @@ async function analyzeCV(cvId: string, userId: string): Promise<AnalysisResult> 
       cvId,
       userId,
       atsScore: calculateATSScore(
-        result.cvAnalysis.skills.technical.length + result.cvAnalysis.skills.professional.length,
+        result.cvAnalysis.skills.length,
         0, // No keywords count from result
         result.cvAnalysis.sections?.length || 0,
         5, // Default format strengths
@@ -145,8 +145,8 @@ async function analyzeCV(cvId: string, userId: string): Promise<AnalysisResult> 
         fileName: cv.fileName,
         uploadDate: cv.createdAt
       },
-      sections: result.cvAnalysis.sections || [],
-      skills: [...result.cvAnalysis.skills.technical, ...result.cvAnalysis.skills.professional]
+      sections: result.cvAnalysis.sections.map(section => ({ name: section, content: '' })) || [],
+      skills: result.cvAnalysis.skills || []
     };
     
     // Ensure all arrays are populated
