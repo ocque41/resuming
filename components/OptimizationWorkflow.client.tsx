@@ -34,9 +34,15 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
   const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
   const [selectedCVName, setSelectedCVName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
   const [processingProgress, setProcessingProgress] = useState<number | null>(null);
+  
+  // Results states
+  const [optimizedContent, setOptimizedContent] = useState<string>("");
+  const [matchScore, setMatchScore] = useState<number>(0);
+  const [recommendations, setRecommendations] = useState<string[]>([]);
   
   // Lighter polling mechanism with backoff
   const [statusPollingInterval, setStatusPollingInterval] = useState<number>(1000);
@@ -78,9 +84,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
     let pollingTimeout: NodeJS.Timeout | null = null;
     
     const checkStatus = async () => {
-      if (!statusPollingEnabled || !selectedCVId || !jobDescription) {
-        return;
-      }
+      if (!selectedCVId || !isProcessing) return;
       
       try {
         const response = await fetch('/api/cv/optimize/partial-results', {
@@ -95,90 +99,65 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
         });
         
         if (!response.ok) {
-          throw new Error(`Error fetching status: ${response.status}`);
+          throw new Error(`Error ${response.status}: ${response.statusText}`);
         }
         
-        // Try to parse the response as JSON
-        let data;
-        try {
-          data = await response.json();
-        } catch (jsonError) {
-          console.error("Error parsing JSON response from partial-results:", jsonError);
-          
-          // Don't stop polling on JSON parse errors, just try again later
-          pollingTimeout = setTimeout(checkStatus, statusPollingInterval * 2);
-          return;
-        }
+        const data = await response.json();
         
         if (data.success) {
-          // Update progress
-          if (data.progress !== undefined) {
-            setProcessingProgress(data.progress);
-          }
+          setProcessingProgress(data.progress || 0);
           
-          // Update optimization state
+          // Update optimization state if available
           if (data.optimizationState) {
             setOptimizationState(data.optimizationState);
           }
           
-          // Update status message based on the current stage
-          if (data.optimizationState?.stage) {
-            const stage = data.optimizationState.stage;
-            let statusMessage = "Processing...";
+          // Update status message based on progress
+          if (data.progress < 30) {
+            setProcessingStatus("Analyzing CV content...");
+          } else if (data.progress < 70) {
+            setProcessingStatus("Optimizing CV content...");
+          } else if (data.progress < 100) {
+            setProcessingStatus("Generating optimized document...");
+          } else {
+            setProcessingStatus("Optimization complete!");
+            setIsProcessing(false);
+            setOptimizedContent(data.partialResults?.optimizedContent || '');
+            setMatchScore(data.partialResults?.matchScore || 0);
+            setRecommendations(data.partialResults?.recommendations || []);
             
-            if (stage.startsWith('ANALYZE_')) {
-              statusMessage = "Analyzing your CV...";
-            } else if (stage.startsWith('OPTIMIZE_')) {
-              statusMessage = "Optimizing your CV for the job description...";
-            } else if (stage.startsWith('GENERATE_')) {
-              statusMessage = "Generating optimized document...";
-            }
+            // Show success message
+            showToast({
+              title: "Optimization Complete",
+              description: "Your CV has been successfully optimized!",
+              duration: 5000,
+            });
             
-            setProcessingStatus(statusMessage);
+            // Stop polling
+            return;
           }
           
-          // Check if processing is complete
-          if (data.progress === 100 || data.optimizationState?.stage === OptimizationStage.GENERATE_COMPLETED) {
-            setIsProcessing(false);
-            setStatusPollingEnabled(false);
-            setProcessingStatus("Optimization complete!");
-            
-            // Handle completion
-            if (data.partialResults?.optimizedContent) {
-              handleAnalysisComplete(selectedCVId, data.partialResults);
-            }
-          } else {
-            // Continue polling with backoff
-            const newInterval = Math.min(statusPollingInterval * 1.2, 5000);
-            setStatusPollingInterval(newInterval);
-            
-            pollingTimeout = setTimeout(checkStatus, newInterval);
-          }
-        } else if (data.error) {
-          // If there's an error but we have partial results, show a warning instead of stopping
-          if (data.optimizationState?.results?.optimizedContent) {
-            setError(`Warning: ${data.error} - Continuing with partial results.`);
-            // Continue polling to get any further updates
-            pollingTimeout = setTimeout(checkStatus, statusPollingInterval);
-          } else {
-            setError(data.error);
-            // Don't stop polling immediately on errors, try a few more times
-            if (statusPollingInterval < 10000) {  // If we haven't backed off too much yet
-              const newInterval = Math.min(statusPollingInterval * 2, 10000);
-              setStatusPollingInterval(newInterval);
-              pollingTimeout = setTimeout(checkStatus, newInterval);
+          // Check for errors but with partial results
+          if (data.partialResults?.error) {
+            // If we have optimized content, show a warning instead of an error
+            if (data.partialResults.optimizedContent) {
+              setWarning(`Warning: ${data.partialResults.error}`);
+              setOptimizedContent(data.partialResults.optimizedContent);
+              setMatchScore(data.partialResults.matchScore || 0);
+              setRecommendations(data.partialResults.recommendations || []);
             } else {
+              setError(`Error: ${data.partialResults.error}`);
               setIsProcessing(false);
-              setStatusPollingEnabled(false);
+              return;
             }
           }
+        } else {
+          throw new Error(data.error || 'Unknown error');
         }
       } catch (error) {
-        console.error("Error checking status:", error);
-        // Don't stop polling on network errors, just try again later with increased interval
-        const newInterval = Math.min(statusPollingInterval * 2, 10000);
-        setStatusPollingInterval(newInterval);
-        pollingTimeout = setTimeout(checkStatus, newInterval);
+        console.error('Error checking status:', error);
+        setError(`Error checking optimization status: ${error instanceof Error ? error.message : String(error)}`);
+        // Don't stop processing on status check errors, just try again
       }
     };
     
@@ -191,7 +170,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
         clearTimeout(pollingTimeout);
       }
     };
-  }, [statusPollingEnabled, statusPollingInterval, selectedCVId, jobDescription]);
+  }, [statusPollingEnabled, statusPollingInterval, selectedCVId, isProcessing]);
   
   // Check if processing is taking too long
   useEffect(() => {
@@ -226,11 +205,12 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
     });
   };
 
-  const handleOptimizeCV = async (cvId: string, cvName: string, jobDesc: string, aiService: 'auto' | 'openai' | 'mistral') => {
+  const handleOptimizeCV = async (cvId: string, cvName: string, jobDesc: string) => {
     setSelectedCVId(cvId);
     setSelectedCVName(cvName);
     setJobDescription(jobDesc);
     setError(null);
+    setWarning(null);
     setIsProcessing(true);
     setProcessingStatus("Starting optimization process...");
     setProcessingProgress(0);
@@ -247,8 +227,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
           cvId,
           jobDescription: jobDesc,
           includeKeywords: true,
-          documentFormat: 'markdown',
-          aiService
+          documentFormat: 'markdown'
         }),
       });
       
@@ -268,66 +247,81 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
       try {
         data = await response.json();
       } catch (jsonError) {
-        // Handle JSON parsing errors
-        console.error("Error parsing JSON response:", jsonError);
-        throw new Error("Invalid response from server. The optimization service may be experiencing issues.");
+        throw new Error(`Failed to parse response: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
       }
       
+      // Check if the optimization was successful
       if (data.success) {
-        // If the process completed immediately (unlikely)
+        // If we have results, update the UI
         if (data.result) {
-          handleAnalysisComplete(cvId, data.result);
+          setOptimizedContent(data.result.optimizedContent || '');
+          setMatchScore(data.result.matchScore || 0);
+          setRecommendations(data.result.recommendations || []);
+          setProcessingProgress(data.result.progress || 100);
+          
+          // If we have an optimization state, update it
+          if (data.result.state) {
+            setOptimizationState(data.result.state);
+          }
+          
+          // If this is a partial result, show a warning
+          if (data.isPartial) {
+            setWarning(`Warning: ${data.message || 'Partial results returned'}`);
+          }
+          
+          // If we have an error but still got results, show a warning
+          if (data.result.error) {
+            setWarning(`Warning: ${data.result.error}`);
+          }
+          
+          // If we have complete results, stop processing
+          if (data.result.progress >= 100 && !data.isPartial) {
+            setIsProcessing(false);
+            setProcessingStatus("Optimization complete!");
+            
+            // Show success message
+            showToast({
+              title: "Optimization Complete",
+              description: "Your CV has been successfully optimized!",
+              duration: 5000,
+            });
+          } else {
+            // Otherwise, continue polling for updates
+            setIsProcessing(true);
+            setProcessingStatus("Processing...");
+          }
         } else {
-          // Start polling for status updates
-          setStatusPollingInterval(1000);
-          setStatusPollingEnabled(true);
+          // If we don't have results, something went wrong
+          throw new Error('No results returned');
         }
       } else {
-        throw new Error(data.error || "Unknown error occurred");
+        // If the optimization failed, show an error
+        throw new Error(data.error || data.message || 'Optimization failed');
       }
     } catch (error) {
-      console.error("Error optimizing CV:", error);
+      console.error('Error optimizing CV:', error);
       
-      // Provide more user-friendly error messages
+      // Set error message based on the type of error
       let errorMessage = error instanceof Error ? error.message : String(error);
       
-      if (errorMessage.includes('Unexpected token') || errorMessage.includes('not valid JSON')) {
-        errorMessage = "The server returned an invalid response. This is likely due to a temporary issue with the AI service. Please try again in a few minutes.";
-        
-        // Start polling for partial results anyway - they might be available
-        setStatusPollingInterval(2000);
-        setStatusPollingEnabled(true);
-      } else if (errorMessage.includes('tee is not a function')) {
-        errorMessage = "There's a temporary issue with the AI service. The system will try to continue with available features.";
-        
-        // Start polling for partial results
-        setStatusPollingInterval(2000);
-        setStatusPollingEnabled(true);
-      } else if (errorMessage.includes('Mistral') || errorMessage.includes('OpenAI')) {
-        errorMessage = "There's a temporary issue with the AI service. Please try again in a few minutes.";
+      // Provide more user-friendly error messages
+      if (errorMessage.includes('rate limit') || errorMessage.includes('too many requests')) {
+        errorMessage = 'The AI service is currently experiencing high demand. Please try again in a few minutes.';
       } else if (errorMessage.includes('timeout') || errorMessage.includes('504')) {
-        errorMessage = "The request timed out. This might be due to high server load or a complex CV. The system will try to continue with partial results if available.";
-        
-        // Start polling for partial results
-        setStatusPollingInterval(2000);
-        setStatusPollingEnabled(true);
+        errorMessage = 'The optimization process timed out. This may be due to server load or the complexity of your CV. Please try again.';
+      } else if (errorMessage.includes('OpenAI')) {
+        errorMessage = 'There was an issue with the AI service. Please try again later.';
       }
       
-      setError(errorMessage);
+      setError(`Error: ${errorMessage}`);
+      setIsProcessing(false);
       
-      // Don't stop processing completely if we're going to poll for partial results
-      if (!statusPollingEnabled) {
-        setIsProcessing(false);
-      }
-      
-      // If the error is related to service availability, suggest trying again later
-      if (errorMessage.includes('service') || errorMessage.includes('AI')) {
-        showToast({
-          title: "Service Issue",
-          description: "We're experiencing some issues with our AI services. Please try again later.",
-          duration: 5000,
-        });
-      }
+      // Show error toast
+      showToast({
+        title: "Optimization Failed",
+        description: errorMessage,
+        duration: 5000,
+      });
     }
   };
 
@@ -350,7 +344,6 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
   const GeneralOptimizationCard = () => {
     const [localJobDescription, setLocalJobDescription] = useState<string>("");
     const [selectedCV, setSelectedCV] = useState<string | null>(null);
-    const [selectedAIService, setSelectedAIService] = useState<string>("auto");
     
     const handleCVSelect = (value: string) => {
       setSelectedCV(value);
@@ -362,7 +355,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
     const handleOptimize = () => {
       if (selectedCV) {
         const [name, id] = selectedCV.split('|');
-        handleOptimizeCV(id, name, localJobDescription, selectedAIService as 'auto' | 'openai' | 'mistral');
+        handleOptimizeCV(id, name, localJobDescription);
       }
     };
     
@@ -410,29 +403,6 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
             />
           </div>
           
-          <div className="space-y-2">
-            <Label htmlFor="ai-service">AI Service</Label>
-            <Select 
-              value={selectedAIService} 
-              onValueChange={setSelectedAIService}
-              disabled={isProcessing}
-            >
-              <SelectTrigger id="ai-service">
-                <SelectValue placeholder="Select AI Service" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">Auto (Use both services)</SelectItem>
-                <SelectItem value="openai">OpenAI Only</SelectItem>
-                <SelectItem value="mistral">Mistral Only</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-gray-500">
-              {selectedAIService === 'auto' && 'Uses both AI services for optimal results.'}
-              {selectedAIService === 'openai' && 'Uses only OpenAI. More reliable but may be slower.'}
-              {selectedAIService === 'mistral' && 'Uses only Mistral. Faster but may have occasional errors.'}
-            </p>
-          </div>
-          
           <Button 
             onClick={handleOptimize} 
             disabled={!selectedCV || isProcessing}
@@ -449,7 +419,6 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
   const SpecificJobOptimizationCard = () => {
     const [localJobDescription, setLocalJobDescription] = useState<string>("");
     const [selectedCV, setSelectedCV] = useState<string | null>(null);
-    const [selectedAIService, setSelectedAIService] = useState<string>("auto");
     
     const handleCVSelect = (value: string) => {
       setSelectedCV(value);
@@ -461,7 +430,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
     const handleOptimize = () => {
       if (selectedCV && localJobDescription) {
         const [name, id] = selectedCV.split('|');
-        handleOptimizeCV(id, name, localJobDescription, selectedAIService as 'auto' | 'openai' | 'mistral');
+        handleOptimizeCV(id, name, localJobDescription);
       }
     };
     
@@ -507,29 +476,6 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
               className="min-h-[150px]"
               disabled={isProcessing}
             />
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="ai-service-specific">AI Service</Label>
-            <Select 
-              value={selectedAIService} 
-              onValueChange={setSelectedAIService}
-              disabled={isProcessing}
-            >
-              <SelectTrigger id="ai-service-specific">
-                <SelectValue placeholder="Select AI Service" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">Auto (Use both services)</SelectItem>
-                <SelectItem value="openai">OpenAI Only</SelectItem>
-                <SelectItem value="mistral">Mistral Only</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-gray-500">
-              {selectedAIService === 'auto' && 'Uses both AI services for optimal results.'}
-              {selectedAIService === 'openai' && 'Uses only OpenAI. More reliable but may be slower.'}
-              {selectedAIService === 'mistral' && 'Uses only Mistral. Faster but may have occasional errors.'}
-            </p>
           </div>
           
           <Button 

@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUser, getCVsForUser } from '@/lib/db/queries.server';
 import { logger } from '@/lib/logger';
 import { isOpenAIAvailable } from '@/lib/services/openai.service';
-import { isMistralAvailable } from '@/lib/services/mistral.service';
 import { clearPartialResults, storePartialResults, getPartialResults, storePartialResultsError } from '@/app/utils/partialResultsCache';
-import { optimizeCVProgressively, resumeOptimization } from '@/lib/services/progressiveOptimizer';
+import { optimizeCV } from '@/lib/services/openaiOptimizer';
 import { OptimizationStage } from '@/lib/services/progressiveOptimization';
 
 /**
@@ -20,8 +19,7 @@ function formatErrorResponse(error: unknown, statusCode: number = 500) {
     errorMessage.includes('not configured') || 
     errorMessage.includes('Authentication failed') ||
     errorMessage.includes('rate limit') ||
-    errorMessage.includes('too many requests') ||
-    errorMessage.includes('tee is not a function');
+    errorMessage.includes('too many requests');
   
   return NextResponse.json(
     { 
@@ -93,10 +91,7 @@ export async function POST(req: NextRequest) {
       includeKeywords, 
       cvText,
       preserveSections,
-      useSimplifiedProcess,
-      maxRetries,
-      documentFormat,
-      aiService
+      documentFormat
     } = body;
 
     // Validate input
@@ -107,11 +102,6 @@ export async function POST(req: NextRequest) {
 
     // Log the request
     logger.info(`Optimize request received for CV ${cvId} from user ${user.id}`);
-    
-    // Log AI service preference if specified
-    if (aiService) {
-      logger.info(`Using ${aiService} AI service for CV ${cvId}`);
-    }
     
     // Clear any existing partial results
     clearPartialResults(user.id.toString(), cvId.toString(), jobDescription);
@@ -135,15 +125,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Check if AI services are available
-    let mistralAvailable = false;
+    // Check if OpenAI is available
     let openaiAvailable = false;
-    
-    try {
-      mistralAvailable = await isMistralAvailable();
-    } catch (mistralError) {
-      logger.warn(`Error checking Mistral availability: ${mistralError instanceof Error ? mistralError.message : String(mistralError)}`);
-    }
     
     try {
       openaiAvailable = await isOpenAIAvailable();
@@ -151,22 +134,14 @@ export async function POST(req: NextRequest) {
       logger.warn(`Error checking OpenAI availability: ${openaiError instanceof Error ? openaiError.message : String(openaiError)}`);
     }
 
-    if (!mistralAvailable) {
-      logger.warn('Mistral service is unavailable, will attempt to use OpenAI fallback');
-    }
-
-    if (!openaiAvailable && !mistralAvailable) {
-      logger.error('Both Mistral and OpenAI services are unavailable');
+    if (!openaiAvailable) {
+      logger.error('OpenAI service is unavailable');
       return formatErrorResponse(
-        'AI services are currently unavailable. Please try again later.',
+        'AI service is currently unavailable. Please try again later.',
         503
       );
     }
 
-    // Determine if we should use simplified process
-    const shouldUseSimplifiedProcess = useSimplifiedProcess || 
-      (textToOptimize.length > 10000 && jobDescription.length > 2000);
-    
     // Set a timeout for the optimization process
     const timeoutMs = 120000; // 2 minutes
     const timeoutPromise = new Promise((_, reject) => {
@@ -174,17 +149,14 @@ export async function POST(req: NextRequest) {
     });
     
     // Run the optimization process with timeout
-    const optimizationPromise = optimizeCVProgressively(
+    const optimizationPromise = optimizeCV(
       user.id.toString(),
       cvId.toString(),
       jobDescription,
       textToOptimize,
       {
         preserveSections,
-        documentFormat: documentFormat || 'markdown',
-        maxRetries: maxRetries || 2,
-        useSimplifiedProcess: shouldUseSimplifiedProcess,
-        aiService: aiService as 'auto' | 'openai' | 'mistral' || 'auto'
+        documentFormat: documentFormat || 'markdown'
       }
     );
     

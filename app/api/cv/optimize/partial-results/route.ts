@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser } from '@/lib/auth/auth';
-import { getPartialResults } from '@/lib/services/partialResults';
+import { getPartialResults } from '@/app/utils/partialResultsCache';
 import { logger } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
     // Authenticate user
     const user = await getUser();
     if (!user) {
-      console.warn('Unauthorized access attempt to partial results API');
+      logger.warn('Unauthorized access attempt to partial results API');
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get partial results
-    const partialResults = await getPartialResults(user.id.toString(), cvId.toString());
+    const partialResults = getPartialResults(user.id.toString(), cvId.toString(), jobDescription);
 
     if (!partialResults) {
       return NextResponse.json(
@@ -40,32 +40,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Calculate progress based on the current stage
-    let progress = 0;
-    const stage = partialResults.optimizationState?.stage;
-
-    if (stage) {
-      // Simplified progress calculation
-      if (stage.startsWith('ANALYZE_')) {
-        // Analysis stage (0-30%)
-        progress = 30;
-      } else if (stage.startsWith('OPTIMIZE_')) {
-        // Optimization stage (30-70%)
-        progress = 70;
-      } else if (stage.startsWith('GENERATE_')) {
-        // Generation stage (70-100%)
-        progress = stage.includes('COMPLETED') ? 100 : 90;
-      }
-    }
+    // Use the progress directly from the partial results
+    const progress = partialResults.progress || 0;
 
     return NextResponse.json({
       success: true,
       progress,
-      optimizationState: partialResults.optimizationState,
+      optimizationState: partialResults.state,
       partialResults
     });
   } catch (error) {
-    console.error('Error fetching partial results:', error instanceof Error ? error.message : String(error));
+    logger.error('Error fetching partial results:', error instanceof Error ? error.message : String(error));
     return NextResponse.json(
       { success: false, error: 'Failed to fetch partial results' },
       { status: 500 }
