@@ -1,7 +1,7 @@
 import { logger } from '@/lib/logger';
 
 // Define a more structured type for partial results
-interface PartialResult {
+export interface PartialResult {
   optimizedContent: string;
   matchScore: number;
   recommendations: string[];
@@ -10,6 +10,7 @@ interface PartialResult {
   lastUpdated: number;
   retryCount?: number; // Track retry attempts
   error?: string; // Store any error messages
+  state?: any; // Store the optimization state
 }
 
 // In-memory cache for partial results
@@ -42,6 +43,7 @@ export function storePartialResults(
     recommendations: string[];
     progress: number;
     error?: string;
+    state?: any; // Add state parameter
   }
 ) {
   const cacheKey = generateCacheKey(userId, cvId, jobDescription);

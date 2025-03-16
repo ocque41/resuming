@@ -335,6 +335,48 @@ export async function optimizeCVWithGPT4oFallback(
 }
 
 /**
+ * Process a custom prompt with GPT-4o
+ */
+export async function processCustomPromptWithGPT4o(
+  prompt: string,
+  temperature: number = 0.3
+): Promise<string> {
+  const client = getOpenAIClient();
+  if (!client) {
+    throw new Error('OpenAI client is not available');
+  }
+
+  try {
+    logger.info('Processing custom prompt with GPT-4o');
+    
+    // Use the rate limiter with exponential backoff for the chat completion
+    const response = await retryWithExponentialBackoff(
+      async () => {
+        return await client.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: temperature
+        });
+      },
+      { service: 'openai', maxRetries: 3, priority: 1 }
+    );
+    
+    // Extract the content from the response
+    const content = response.choices[0].message.content || '';
+    logger.info('Custom prompt processing with GPT-4o completed successfully');
+    return content;
+  } catch (error) {
+    logger.error('Error processing custom prompt with GPT-4o:', error instanceof Error ? error.message : String(error));
+    throw new Error(`Failed to process custom prompt: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
  * Analyze and optimize CV with GPT-4o (combined operation)
  */
 export async function analyzeAndOptimizeCVWithGPT4o(

@@ -2,12 +2,14 @@
 
 import React, { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import AnalyzeCVCard from "@/components/AnalyzeCVCard.client";
-import EnhancedOptimizeCVCard from "@/components/EnhancedOptimizeCVCard.client";
-import SpecificOptimizeCVCard from "./SpecificOptimizeCVCard.client";
-import EnhancedSpecificOptimizationWorkflow from "../app/components/EnhancedSpecificOptimizationWorkflow.client";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import ProgressiveOptimizationStatus from "@/app/components/ProgressiveOptimizationStatus.client";
+import { OptimizationStage } from "@/lib/services/progressiveOptimization";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Toast functionality without using the use-toast hook
 function showToast(message: { title: string; description: string; duration: number }) {
@@ -43,409 +45,457 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
   // In the component state, add a new state variable to track if processing is taking too long
   const [processingTooLong, setProcessingTooLong] = useState<boolean>(false);
   
+  // State for progressive optimization
+  const [optimizationState, setOptimizationState] = useState<any>(null);
+  const [jobDescription, setJobDescription] = useState<string>("");
+  
   // Check for pre-analyzed CV
   useEffect(() => {
     const checkForPreAnalyzedCV = async () => {
       // Only check when on general step with no selection yet
       if (activeStep === "general" && !selectedCVId && cvs.length > 0) {
         try {
-          // Check if any CV has been analyzed but not optimized - lightweight check
-          const response = await fetch(`/api/cv/get-analyzed-cvs`);
-          if (response.ok) {
-            const data = await response.json();
-            
-            if (data.analyzedCVs && data.analyzedCVs.length > 0) {
-              // Find the most recently analyzed CV
-              const mostRecent = data.analyzedCVs[0];
-              
-              // Auto-select this CV
-              setSelectedCVId(String(mostRecent.id));
-              setSelectedCVName(mostRecent.filename);
-              
-              showToast({
-                title: "CV Ready for Optimization",
-                description: `${mostRecent.filename} has been analyzed and is ready for optimization.`,
-                duration: 5000,
-              });
-            }
+          // This could be a lightweight check to see if any CVs have been analyzed before
+          // For now, we'll just select the first CV in the list
+          const firstCV = cvs[0];
+          const [cvName, cvId] = firstCV.split('|');
+          
+          if (cvId) {
+            setSelectedCVId(cvId);
+            setSelectedCVName(cvName);
           }
-        } catch (err) {
-          console.error("Error checking for pre-analyzed CVs:", err);
+        } catch (error) {
+          console.error("Error checking for pre-analyzed CV:", error);
         }
       }
     };
-    
+
     checkForPreAnalyzedCV();
   }, [activeStep, cvs, selectedCVId]);
-  
-  // Polling mechanism for process status with exponential backoff
+
+  // Status polling effect
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout | null = null;
+    let pollingTimeout: NodeJS.Timeout | null = null;
     
     const checkStatus = async () => {
-      if (!statusPollingEnabled || !selectedCVId) return;
+      if (!statusPollingEnabled || !selectedCVId || !jobDescription) {
+        return;
+      }
       
       try {
-        const response = await fetch(`/api/cv/process/status?cvId=${selectedCVId}`);
+        const response = await fetch('/api/cv/optimize/partial-results', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            cvId: selectedCVId,
+            jobDescription
+          }),
+        });
         
-        if (response.ok) {
-          const data = await response.json();
-          
-          if (data.processing) {
-            // Still processing
-            setIsProcessing(true);
-            setProcessingStatus(data.step || "Processing...");
-            setProcessingProgress(data.progress || 0);
-            
-            // Check if processing is stuck
-            if (data.isStuck) {
-              console.warn(`Processing appears stuck at ${data.progress}% for ${data.stuckMinutes} minutes`);
-              
-              // If stuck for more than 3 minutes, show error and offer retry
-              if (data.stuckMinutes > 3) {
-                setError(`Processing appears stuck at ${data.progress}%. You can wait or try again.`);
-                
-                // If stuck for more than 5 minutes, automatically retry
-                if (data.stuckMinutes > 5) {
-                  console.log("Processing stuck for over 5 minutes, attempting automatic retry");
-                  
-                  try {
-                    // Attempt to restart the process with force refresh
-                    const retryResponse = await fetch(`/api/cv/process`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ cvId: selectedCVId, forceRefresh: true }),
-                    });
-                    
-                    if (retryResponse.ok) {
-                      showToast({
-                        title: "Processing Restarted",
-                        description: "We've automatically restarted the process due to a delay.",
-                        duration: 5000,
-                      });
-                      
-                      // Reset error since we're retrying
-                      setError(null);
-                    }
-                  } catch (retryError) {
-                    console.error("Error during automatic retry:", retryError);
-                  }
-                }
-              }
-            } else {
-              // Clear error if processing is moving again
-              setError(null);
-            }
-            
-            // Continue polling, but back off if progress is slow
-            // Use more aggressive polling for lower progress to catch issues earlier
-            const newInterval = data.progress > 80 ? 1000 :
-                               data.progress > 60 ? 2000 :
-                               data.progress > 40 ? 3000 : 2000; // Keep polling more frequently at lower progress
-            
-            setStatusPollingInterval(newInterval);
-            timeoutId = setTimeout(checkStatus, newInterval);
-          } else if (data.isComplete) {
-            // Processing completed
-            setIsProcessing(false);
-            setProcessingStatus("Processing completed");
-            setProcessingProgress(100);
-            setStatusPollingEnabled(false);
-          } else if (data.error) {
-            // Processing encountered an error
-            setIsProcessing(false);
-            setError(`Processing error: ${data.error}`);
-            setStatusPollingEnabled(false);
-          } else {
-            // Not processing or idle
-            setIsProcessing(false);
-            setProcessingStatus("");
-            setProcessingProgress(0);
-            
-            // Stop polling if nothing is happening
-            if (!data.processing && !data.isComplete) {
-              setStatusPollingEnabled(false);
-            }
-          }
-        } else {
-          // Stop polling on error
-          setStatusPollingEnabled(false);
-          setError("Error checking processing status");
+        if (!response.ok) {
+          throw new Error(`Error fetching status: ${response.status}`);
         }
-      } catch (err) {
-        console.error("Error checking CV processing status:", err);
-        setStatusPollingEnabled(false);
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          // Update progress
+          if (data.progress !== undefined) {
+            setProcessingProgress(data.progress);
+          }
+          
+          // Update optimization state
+          if (data.optimizationState) {
+            setOptimizationState(data.optimizationState);
+          }
+          
+          // Update status message based on the current stage
+          if (data.optimizationState?.stage) {
+            const stage = data.optimizationState.stage;
+            let statusMessage = "Processing...";
+            
+            if (stage.startsWith('ANALYZE_')) {
+              statusMessage = "Analyzing your CV...";
+            } else if (stage.startsWith('OPTIMIZE_')) {
+              statusMessage = "Optimizing your CV for the job description...";
+            } else if (stage.startsWith('GENERATE_')) {
+              statusMessage = "Generating optimized document...";
+            }
+            
+            setProcessingStatus(statusMessage);
+          }
+          
+          // Check if processing is complete
+          if (data.progress === 100 || data.optimizationState?.stage === OptimizationStage.GENERATE_COMPLETED) {
+            setIsProcessing(false);
+            setStatusPollingEnabled(false);
+            setProcessingStatus("Optimization complete!");
+            
+            // Handle completion
+            if (data.partialResults?.optimizedContent) {
+              handleAnalysisComplete(selectedCVId, data.partialResults);
+            }
+          } else {
+            // Continue polling with backoff
+            const newInterval = Math.min(statusPollingInterval * 1.2, 5000);
+            setStatusPollingInterval(newInterval);
+            
+            pollingTimeout = setTimeout(checkStatus, newInterval);
+          }
+        } else if (data.error) {
+          setError(data.error);
+          setIsProcessing(false);
+          setStatusPollingEnabled(false);
+        }
+      } catch (error) {
+        console.error("Error checking status:", error);
+        // Don't stop polling on network errors, just try again
+        pollingTimeout = setTimeout(checkStatus, statusPollingInterval);
       }
     };
     
     if (statusPollingEnabled) {
-      timeoutId = setTimeout(checkStatus, statusPollingInterval);
+      pollingTimeout = setTimeout(checkStatus, statusPollingInterval);
     }
     
     return () => {
-      if (timeoutId) clearTimeout(timeoutId);
+      if (pollingTimeout) {
+        clearTimeout(pollingTimeout);
+      }
     };
-  }, [statusPollingEnabled, statusPollingInterval, selectedCVId, activeStep]);
+  }, [statusPollingEnabled, statusPollingInterval, selectedCVId, jobDescription]);
   
-  // Add a useEffect to detect when processing is taking too long
+  // Check if processing is taking too long
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: NodeJS.Timeout | null = null;
     
-    if (isProcessing && processingStatus) {
-      // Set a timeout to show the reset button after 30 seconds
+    if (isProcessing) {
       timeoutId = setTimeout(() => {
         setProcessingTooLong(true);
-      }, 30000); // 30 seconds
+      }, 60000); // 60 seconds
     } else {
-      // Clear processing too long flag when not processing
       setProcessingTooLong(false);
     }
     
-    // Clean up the timeout when the component unmounts or status changes
     return () => {
-      if (timeoutId) clearTimeout(timeoutId);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     };
-  }, [isProcessing, processingStatus]);
-  
-  // Handle when analysis is complete with defensive coding 
-  const handleAnalysisComplete = async (cvId: string) => {
-    try {
-      console.log("Analysis complete, handling completion for CV ID:", cvId);
-      
-      // Ensure cvId is a string
-      if (typeof cvId !== 'string' || !cvId) {
-        console.error("Invalid CV ID received:", cvId);
-        setError("Invalid CV ID. Please try analyzing again.");
-        return;
-      }
-      
-      // Set the selected CV ID safely
-      setSelectedCVId(cvId);
-      
-      // Find the CV name from the ID with safety checks
-      if (Array.isArray(cvs) && cvs.length > 0) {
-        const selectedCV = cvs.find(cv => {
-          if (typeof cv !== 'string') return false;
-          
-          try {
-            const parts = cv.split('|');
-            return parts.length >= 2 && parts[1] === cvId;
-          } catch (error) {
-            console.error("Error parsing CV string:", error);
-            return false;
-          }
-        });
-        
-        if (selectedCV) {
-          try {
-            const parts = selectedCV.split('|');
-            if (parts.length >= 1) {
-              setSelectedCVName(parts[0]);
-            }
-          } catch (error) {
-            console.error("Error setting CV name:", error);
-            // Continue without setting the name
-          }
-        }
-      }
-      
-      // Start polling status
-      setStatusPollingEnabled(true);
-      setStatusPollingInterval(1000); // Start with 1s interval
-      
-      try {
-        // Trigger optimization process
-        const response = await fetch(`/api/cv/process`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cvId }),
-        });
-        
-        if (response.ok) {
-          showToast({
-            title: "Analysis Complete",
-            description: "Your CV has been analyzed. Review results and click the Optimize tab when ready.",
-            duration: 5000,
-          });
-        } else {
-          const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
-          console.error("Error response from optimization process:", errorData);
-          setError(errorData.error || "Failed to start optimization process");
-          setStatusPollingEnabled(false);
-        }
-      } catch (err) {
-        console.error("Error starting optimization:", err);
-        setError(typeof err === 'object' && err !== null && 'message' in err ? 
-          String(err.message) : "Failed to start optimization");
-        setStatusPollingEnabled(false);
-      }
-    } catch (outerError) {
-      console.error("Unexpected error in handleAnalysisComplete:", outerError);
-      setError("An unexpected error occurred. Please try again.");
-      setStatusPollingEnabled(false);
-    }
-  };
-  
-  // Filter CVs for the optimization step
-  const getOptimizeCVs = () => {
-    if (!selectedCVId) return [];
+  }, [isProcessing]);
+
+  const handleAnalysisComplete = async (cvId: string, results: any) => {
+    setIsProcessing(false);
+    setStatusPollingEnabled(false);
+    setProcessingStatus("Optimization complete!");
+    setProcessingProgress(100);
     
-    return cvs.filter((cv: string) => {
-      try {
-        const parts = cv.split('|');
-        return parts.length >= 2 && parts[1] === selectedCVId;
-      } catch (error) {
-        console.error("Error filtering CV:", error);
-        return false;
-      }
+    // Show success message
+    showToast({
+      title: "Optimization Complete",
+      description: "Your CV has been successfully optimized!",
+      duration: 5000,
     });
   };
-  
-  // Handle tab changes
+
+  const handleOptimizeCV = async (cvId: string, cvName: string, jobDesc: string) => {
+    setSelectedCVId(cvId);
+    setSelectedCVName(cvName);
+    setJobDescription(jobDesc);
+    setError(null);
+    setIsProcessing(true);
+    setProcessingStatus("Starting optimization process...");
+    setProcessingProgress(0);
+    setOptimizationState(null);
+    
+    try {
+      // Start the optimization process
+      const response = await fetch('/api/cv/optimize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cvId,
+          jobDescription: jobDesc,
+          includeKeywords: true,
+          documentFormat: 'markdown'
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // If the process completed immediately (unlikely)
+        if (data.result) {
+          handleAnalysisComplete(cvId, data.result);
+        } else {
+          // Start polling for status updates
+          setStatusPollingInterval(1000);
+          setStatusPollingEnabled(true);
+        }
+      } else {
+        throw new Error(data.error || "Unknown error occurred");
+      }
+    } catch (error) {
+      console.error("Error optimizing CV:", error);
+      setError(error instanceof Error ? error.message : String(error));
+      setIsProcessing(false);
+    }
+  };
+
   const handleTabChange = (value: string) => {
     setActiveStep(value as "general" | "specific");
     setError(null);
   };
-  
-  // Add a function to handle reset
-  const handleResetProcessing = async () => {
-    try {
-      // Reset processing state
-      setProcessingStatus('selecting');
-      setProcessingProgress(0);
-      
-      // If we have a CV ID, call the API to cancel processing
-      if (selectedCVId) {
-        const response = await fetch(`/api/cv/process/cancel?cvId=${selectedCVId}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to cancel processing');
-        }
-      }
-      
-      // Show toast notification
-      showToast({
-        title: 'Processing Reset',
-        description: 'CV processing has been reset. You can try again.',
-        duration: 5000
-      });
-      
-      // Clear any existing error
-      setError(null);
-      
-      // Restart the process
-      if (selectedCVId) {
-        const retryResponse = await fetch(`/api/cv/process`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cvId: selectedCVId, forceRefresh: true }),
-        });
-        
-        if (retryResponse.ok) {
-          setStatusPollingEnabled(true);
-          setStatusPollingInterval(1000);
-        }
-      }
-    } catch (error) {
-      console.error('Error resetting processing:', error);
-      setError('Failed to reset processing. Please try again.');
-    }
-  };
-  
-  // Format CVs for EnhancedSpecificOptimizationWorkflow
-  const formattedCvsForSpecific = cvs.map(cv => {
-    try {
-      const [name, id] = cv.split('|');
-      return { id, name };
-    } catch (error) {
-      console.error("Error formatting CV for specific optimization:", error);
-      return { id: "", name: "Unknown CV" };
-    }
-  });
 
-  return (
-    <div className="w-full max-w-6xl mx-auto">
-      {error && (
-        <Alert className="mb-4 bg-destructive/10">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      
-      {/* Only show the processing indicator when no CV is selected or when we're in the analyze step */}
-      {isProcessing && (!selectedCVId || activeStep !== "general") && (
-        <div className="mb-4 p-4 border rounded-md bg-[#050505]">
-          <h3 className="text-lg font-semibold">Processing CV</h3>
-          <p className="text-sm text-muted-foreground">
-            {processingStatus || "Processing..."}. Might take a couple minutes, please wait for an accurate optimization.
-          </p>
-          <div className="w-full h-2 bg-secondary mt-2 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-primary transition-all duration-300 ease-in-out" 
-              style={{ width: `${processingProgress || 0}%` }}
+  const handleResetProcessing = async () => {
+    setIsProcessing(false);
+    setStatusPollingEnabled(false);
+    setProcessingStatus(null);
+    setProcessingProgress(null);
+    setProcessingTooLong(false);
+    setError(null);
+    setOptimizationState(null);
+  };
+
+  // General Optimization Card Component
+  const GeneralOptimizationCard = () => {
+    const [localJobDescription, setLocalJobDescription] = useState<string>("");
+    const [selectedCV, setSelectedCV] = useState<string | null>(null);
+    
+    const handleCVSelect = (value: string) => {
+      setSelectedCV(value);
+      const [name, id] = value.split('|');
+      setSelectedCVName(name);
+      setSelectedCVId(id);
+    };
+    
+    const handleOptimize = () => {
+      if (selectedCV) {
+        const [name, id] = selectedCV.split('|');
+        handleOptimizeCV(id, name, localJobDescription);
+      }
+    };
+    
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>General CV Optimization</CardTitle>
+          <CardDescription>
+            Optimize your CV for better ATS compatibility and readability
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="cv-select">Select your CV</Label>
+            <Select 
+              value={selectedCV || ""} 
+              onValueChange={handleCVSelect}
+              disabled={isProcessing}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a CV" />
+              </SelectTrigger>
+              <SelectContent>
+                {cvs.map((cv) => {
+                  const [name, id] = cv.split('|');
+                  return (
+                    <SelectItem key={id} value={cv}>
+                      {name}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="job-description">Job Description (Optional)</Label>
+            <Textarea
+              id="job-description"
+              placeholder="Paste a job description to tailor your CV (optional)"
+              value={localJobDescription}
+              onChange={(e) => setLocalJobDescription(e.target.value)}
+              className="min-h-[100px]"
+              disabled={isProcessing}
             />
           </div>
-          <div className="flex justify-between items-center mt-1">
-            <p className="text-sm">{processingProgress || 0}%</p>
-            {processingTooLong && (
-              <button
-                onClick={handleResetProcessing}
-                className="px-3 py-1 bg-red-900/30 hover:bg-red-800/50 text-red-300 border border-red-800 rounded-md flex items-center text-xs"
-              >
-                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Taking too long? Reset
-              </button>
-            )}
-          </div>
-          {error && (
-            <Button
-              variant="outline"
-              className="mt-2 bg-[#050505] border-gray-700 text-white hover:bg-gray-800"
-              onClick={() => {
-                if (selectedCVId) {
-                  handleAnalysisComplete(selectedCVId);
-                }
-              }}
+          
+          <Button 
+            onClick={handleOptimize} 
+            disabled={!selectedCV || isProcessing}
+            className="w-full"
+          >
+            {isProcessing ? "Optimizing..." : "Optimize CV"}
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  };
+  
+  // Specific Job Optimization Card Component
+  const SpecificJobOptimizationCard = () => {
+    const [localJobDescription, setLocalJobDescription] = useState<string>("");
+    const [selectedCV, setSelectedCV] = useState<string | null>(null);
+    
+    const handleCVSelect = (value: string) => {
+      setSelectedCV(value);
+      const [name, id] = value.split('|');
+      setSelectedCVName(name);
+      setSelectedCVId(id);
+    };
+    
+    const handleOptimize = () => {
+      if (selectedCV && localJobDescription) {
+        const [name, id] = selectedCV.split('|');
+        handleOptimizeCV(id, name, localJobDescription);
+      }
+    };
+    
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Job-Specific Optimization</CardTitle>
+          <CardDescription>
+            Tailor your CV for a specific job by providing the job description
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="cv-select">Select your CV</Label>
+            <Select 
+              value={selectedCV || ""} 
+              onValueChange={handleCVSelect}
+              disabled={isProcessing}
             >
-              Retry
-            </Button>
-          )}
-        </div>
-      )}
-      
-      <Tabs defaultValue="general" onValueChange={handleTabChange} value={activeStep}>
-        <TabsList className="w-full grid grid-cols-2">
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="specific">
-            Specific
-          </TabsTrigger>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a CV" />
+              </SelectTrigger>
+              <SelectContent>
+                {cvs.map((cv) => {
+                  const [name, id] = cv.split('|');
+                  return (
+                    <SelectItem key={id} value={cv}>
+                      {name}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="job-description">Job Description</Label>
+            <Textarea
+              id="job-description"
+              placeholder="Paste the job description here"
+              value={localJobDescription}
+              onChange={(e) => setLocalJobDescription(e.target.value)}
+              className="min-h-[150px]"
+              disabled={isProcessing}
+            />
+          </div>
+          
+          <Button 
+            onClick={handleOptimize} 
+            disabled={!selectedCV || !localJobDescription || isProcessing}
+            className="w-full"
+          >
+            {isProcessing ? "Optimizing..." : "Optimize for This Job"}
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      <Tabs defaultValue="general" onValueChange={handleTabChange}>
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="general">General Optimization</TabsTrigger>
+          <TabsTrigger value="specific">Specific Job Optimization</TabsTrigger>
         </TabsList>
         
         <TabsContent value="general" className="space-y-4 mt-4">
-          <h2 className="text-2xl font-bold">Optimize Your CV</h2>
-          <p className="text-muted-foreground">
-            Upload your CV to analyze and optimize it for better ATS compatibility.
-          </p>
+          <GeneralOptimizationCard />
           
-          <AnalyzeCVCard onAnalysisComplete={handleAnalysisComplete} cvs={cvs} />
+          {error && (
+            <Alert variant="destructive" className="mt-4">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
           
-          {selectedCVId && (
-            <EnhancedOptimizeCVCard cvs={getOptimizeCVs()} />
+          {isProcessing && (
+            <div className="mt-4">
+              <ProgressiveOptimizationStatus 
+                optimizationState={optimizationState}
+                isOptimizing={isProcessing}
+              />
+            </div>
+          )}
+          
+          {processingTooLong && (
+            <Alert className="mt-4 bg-amber-900/30 border-amber-800">
+              <AlertDescription className="text-amber-200">
+                This is taking longer than expected. The optimization process can take up to 2 minutes for complex CVs.
+                <div className="mt-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="bg-amber-800/50 hover:bg-amber-700/50 border-amber-700/50 mr-2"
+                    onClick={handleResetProcessing}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
           )}
         </TabsContent>
         
         <TabsContent value="specific" className="space-y-4 mt-4">
-          <h2 className="text-2xl font-bold">Job-Specific Optimization</h2>
-          <p className="text-muted-foreground">
-            Optimize your CV for a specific job by pasting the job description below. Our AI will tailor your CV to match the job requirements.
-          </p>
-          <EnhancedSpecificOptimizationWorkflow cvs={formattedCvsForSpecific} />
+          <SpecificJobOptimizationCard />
+          
+          {error && (
+            <Alert variant="destructive" className="mt-4">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          
+          {isProcessing && (
+            <div className="mt-4">
+              <ProgressiveOptimizationStatus 
+                optimizationState={optimizationState}
+                isOptimizing={isProcessing}
+              />
+            </div>
+          )}
+          
+          {processingTooLong && (
+            <Alert className="mt-4 bg-amber-900/30 border-amber-800">
+              <AlertDescription className="text-amber-200">
+                This is taking longer than expected. The optimization process can take up to 2 minutes for complex CVs.
+                <div className="mt-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="bg-amber-800/50 hover:bg-amber-700/50 border-amber-700/50 mr-2"
+                    onClick={handleResetProcessing}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
         </TabsContent>
       </Tabs>
     </div>

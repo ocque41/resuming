@@ -76,17 +76,29 @@ function ModernFileDropdown({
 // Interface for the component props
 interface EnhancedOptimizeCVCardProps {
   cvs?: string[]; // Format: "filename|id"
+  onOptimize?: (cvId: string, cvName: string, jobDesc: string) => Promise<void>;
+  isProcessing?: boolean;
+  selectedCVId?: string | null;
+  selectedCVName?: string | null;
+  disabled?: boolean;
 }
 
 // Component implementation
-export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVCardProps) {
+export default function EnhancedOptimizeCVCard({ 
+  cvs = [], 
+  onOptimize, 
+  isProcessing: isProcessingProp = false, 
+  selectedCVId: selectedCVIdProp = null, 
+  selectedCVName: selectedCVNameProp = null, 
+  disabled = false 
+}: EnhancedOptimizeCVCardProps) {
   // State for CV selection
   const [selectedCV, setSelectedCV] = useState<string | null>(null);
-  const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
-  const [selectedCVName, setSelectedCVName] = useState<string | null>(null);
+  const [internalCVId, setInternalCVId] = useState<string | null>(selectedCVIdProp);
+  const [internalCVName, setInternalCVName] = useState<string | null>(selectedCVNameProp);
   
   // State for processing
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [internalProcessing, setInternalProcessing] = useState<boolean>(isProcessingProp);
   const [isProcessed, setIsProcessed] = useState<boolean>(false);
   const [processingProgress, setProcessingProgress] = useState<number>(0);
   const [processingStatus, setProcessingStatus] = useState<string | null>("");
@@ -130,9 +142,12 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   // State for processing too long detection
   const [processingTooLong, setProcessingTooLong] = useState<boolean>(false);
   
+  // State for job description
+  const [jobDescription, setJobDescription] = useState<string>("");
+  
   // Auto-select first CV if available
   useEffect(() => {
-    if (cvs.length > 0 && !selectedCVId) {
+    if (cvs.length > 0 && !selectedCVIdProp) {
       const [name, id] = cvs[0].split('|');
       handleSelectCV(id, name);
     }
@@ -159,14 +174,14 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   
   // Handle CV selection with fetching original text
   const handleSelectCV = useCallback(async (cvId: string, cvName: string) => {
-    setSelectedCVId(cvId);
-    setSelectedCVName(cvName);
+    setInternalCVId(cvId);
+    setInternalCVName(cvName);
     setSelectedCV(`${cvName}|${cvId}`);
     console.log(`Selected CV: ${cvName} (ID: ${cvId})`);
     
     // Reset states when a new CV is selected
     setIsProcessed(false);
-    setIsProcessing(false);
+    setInternalProcessing(false);
     setProcessingProgress(0);
     setProcessingStatus("");
     setError(null);
@@ -181,20 +196,20 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   
   // Process the CV
   const processCV = useCallback(async (forceRefresh: boolean = false) => {
-    if (!selectedCVId) {
+    if (!internalCVId) {
       setError("Please select a CV first");
       return;
     }
     
     // Set processing state
-    setIsProcessing(true);
+    setInternalProcessing(true);
     setIsProcessed(false);
     setProcessingProgress(0);
     setProcessingStatus("Starting optimization...");
     setError(null);
     
     try {
-      console.log(`Processing CV: ${selectedCVName} (ID: ${selectedCVId}), force refresh: ${forceRefresh}`);
+      console.log(`Processing CV: ${internalCVName} (ID: ${internalCVId}), force refresh: ${forceRefresh}`);
       
       // Start the optimization process
       const response = await fetch('/api/cv/process', {
@@ -203,7 +218,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          cvId: selectedCVId,
+          cvId: internalCVId,
           forceRefresh: forceRefresh
         }),
       });
@@ -226,11 +241,11 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     } catch (error) {
       console.error("Error optimizing CV:", error);
       setError(error instanceof Error ? error.message : "An unknown error occurred during optimization");
-      setIsProcessing(false);
+      setInternalProcessing(false);
       setProcessingProgress(0);
       setStatusPollingEnabled(false);
     }
-  }, [selectedCVId, selectedCVName]);
+  }, [internalCVId, internalCVName]);
   
   // Handle reset
   const handleResetProcessing = useCallback(async () => {
@@ -240,8 +255,8 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       setProcessingProgress(0);
       
       // If we have a CV ID, call the API to cancel processing
-      if (selectedCVId) {
-        const response = await fetch(`/api/cv/process/cancel?cvId=${selectedCVId}`, {
+      if (internalCVId) {
+        const response = await fetch(`/api/cv/process/cancel?cvId=${internalCVId}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -257,11 +272,11 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       setError(null);
       
       // Restart the process
-      if (selectedCVId) {
+      if (internalCVId) {
         const retryResponse = await fetch(`/api/cv/process`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cvId: selectedCVId, forceRefresh: true }),
+          body: JSON.stringify({ cvId: internalCVId, forceRefresh: true }),
         });
         
         if (retryResponse.ok) {
@@ -273,7 +288,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       console.error('Error resetting processing:', error);
       setError('Failed to reset processing. Please try again.');
     }
-  }, [selectedCVId]);
+  }, [internalCVId]);
   
   // Process optimized text to remove edit words and asterisks
   const processOptimizedText = (text: string) => {
@@ -893,17 +908,17 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     let timeoutId: NodeJS.Timeout | null = null;
     
     const checkStatus = async () => {
-      if (!statusPollingEnabled || !selectedCVId) return;
+      if (!statusPollingEnabled || !internalCVId) return;
       
       try {
-        const response = await fetch(`/api/cv/process/status?cvId=${selectedCVId}`);
+        const response = await fetch(`/api/cv/process/status?cvId=${internalCVId}`);
         
         if (response.ok) {
           const data = await response.json();
           
           if (data.processing) {
             // Still processing
-            setIsProcessing(true);
+            setInternalProcessing(true);
             setProcessingStatus(data.step || "Processing...");
             setProcessingProgress(data.progress || 0);
         
@@ -929,7 +944,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             timeoutId = setTimeout(checkStatus, newInterval);
           } else if (data.isComplete) {
             // Processing completed
-          setIsProcessing(false);
+          setInternalProcessing(false);
             setIsProcessed(true);
             setProcessingStatus("Processing completed");
             setProcessingProgress(100);
@@ -955,12 +970,12 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             }
           } else if (data.error) {
             // Processing encountered an error
-            setIsProcessing(false);
+            setInternalProcessing(false);
             setError(`Processing error: ${data.error}`);
             setStatusPollingEnabled(false);
       } else {
             // Not processing or idle
-            setIsProcessing(false);
+            setInternalProcessing(false);
             setProcessingStatus("");
             setProcessingProgress(0);
             
@@ -987,13 +1002,13 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     return () => {
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [statusPollingEnabled, statusPollingInterval, selectedCVId, processOptimizedText]);
+  }, [statusPollingEnabled, statusPollingInterval, internalCVId, processOptimizedText]);
   
   // Add a useEffect to detect when processing is taking too long
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
     
-    if (isProcessing && processingStatus) {
+    if (internalProcessing && processingStatus) {
       // Set a timeout to show the reset button after 30 seconds
       timeoutId = setTimeout(() => {
         setProcessingTooLong(true);
@@ -1007,11 +1022,11 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     return () => {
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [isProcessing, processingStatus]);
+  }, [internalProcessing, processingStatus]);
   
   // Handle DOCX download
   const handleDownloadDocx = async () => {
-    if (!selectedCVId) {
+    if (!internalCVId) {
       toast({
         title: "No CV selected",
         description: "Please select a CV to download",
@@ -1051,7 +1066,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          cvId: selectedCVId,
+          cvId: internalCVId,
           optimizedText: textToUse,
         }),
       });
@@ -1074,7 +1089,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       
       // Use a more professional filename format
       const timestamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0];
-      const cleanCVName = selectedCVName?.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9]/g, '_') || 'optimized';
+      const cleanCVName = internalCVName?.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9]/g, '_') || 'optimized';
       downloadLink.download = `${cleanCVName}_CV_${timestamp}.docx`;
       
       document.body.appendChild(downloadLink);
@@ -1100,6 +1115,20 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     }
   };
 
+  // Handle job description input
+  const handleJobDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setJobDescription(e.target.value);
+  };
+
+  // Handle optimize button click
+  const handleOptimize = () => {
+    if (onOptimize && internalCVId && isProcessingProp !== undefined) {
+      onOptimize(internalCVId, internalCVName || "", jobDescription);
+    } else {
+      processCV(false);
+    }
+  };
+
   return (
     <Card className="w-full shadow-lg border border-[#B4916C]/20 bg-[#121212]">
       <CardHeader>
@@ -1119,7 +1148,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
           <ModernFileDropdown 
             cvs={cvs} 
             onSelect={handleSelectCV} 
-            selectedCVName={selectedCVName}
+            selectedCVName={internalCVName}
           />
         </div>
         
@@ -1142,10 +1171,10 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         )}
         
         {/* Process Button */}
-        {!isProcessed && !isProcessing && (
+        {!isProcessed && !internalProcessing && (
           <Button 
-            onClick={() => processCV(false)} 
-            disabled={!selectedCVId || isProcessing}
+            onClick={handleOptimize} 
+            disabled={!internalCVId || internalProcessing}
             className="w-full bg-[#B4916C] hover:bg-[#A27D59] text-black font-medium mb-4"
           >
             Optimize CV
@@ -1153,7 +1182,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         )}
         
         {/* Processing Indicator */}
-        {isProcessing && (
+        {internalProcessing && (
           <div className="mb-4 p-4 border rounded-md bg-[#050505]">
             <h3 className="text-lg font-semibold">Processing CV</h3>
             <p className="text-sm text-muted-foreground">
