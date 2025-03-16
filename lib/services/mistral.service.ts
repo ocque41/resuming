@@ -347,7 +347,7 @@ export async function optimizeCVForJob(
         2. Match score (0-100)
         3. List of recommendations for improvement
 
-        CV Text:
+    CV Text:
         ${cvText}
 
         Job Description:
@@ -363,13 +363,13 @@ export async function optimizeCVForJob(
         IMPORTANT: Return ONLY the raw JSON object. DO NOT use markdown formatting, code blocks, or any other formatting. DO NOT include any explanation or additional text before or after the JSON.`;
 
         const response = await client!.chat({
-          model: 'mistral-large-latest',
-          messages: [
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
+      model: 'mistral-large-latest',
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
           temperature: 0.2,
           maxTokens: 3000
         });
@@ -387,7 +387,7 @@ export async function optimizeCVForJob(
           }
           
           logger.info(`CV optimization complete. Match score: ${result.matchScore}`);
-          return result;
+    return result;
         } catch (parseError) {
           logger.error('Error parsing Mistral response:', parseError instanceof Error ? parseError.message : String(parseError));
           throw new Error('Failed to parse Mistral response');
@@ -478,7 +478,7 @@ async function optimizeCVWithOpenAI(
       }
       
       logger.info(`CV optimization with OpenAI complete. Match score: ${result.matchScore}`);
-      return result;
+    return result;
     } catch (parseError) {
       logger.error('Error parsing OpenAI response:', parseError instanceof Error ? parseError.message : String(parseError));
       throw new Error('Failed to parse OpenAI response');

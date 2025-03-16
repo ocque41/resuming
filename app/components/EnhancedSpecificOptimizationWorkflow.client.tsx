@@ -2545,7 +2545,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
 
   // Add jobTitle state variable
   const [jobTitle, setJobTitle] = useState<string>('');
-  
+
   // Add service availability state variables
   const [mistralServiceAvailable, setMistralServiceAvailable] = useState<boolean>(true);
   const [mistralFailureCount, setMistralFailureCount] = useState<number>(0);
@@ -2880,17 +2880,17 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       // Start the optimization process
       try {
         const response = await fetchWithRetry(`/api/cv/optimize`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            cvId: selectedCVId,
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  cvId: selectedCVId,
             jobDescription,
             useSimplifiedProcess, // Include the simplified process option
-          }),
-        });
-        
+                }),
+              });
+              
         // Clear polling interval as we have the final result
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current);
@@ -2914,7 +2914,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           
           // Generate document
           generateDocument();
-        } else {
+                } else {
           // Handle error responses
           const errorData = await response.json();
           setError(errorData.error || 'Failed to optimize CV');
@@ -2926,7 +2926,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
             setProcessingStatus('Optimization failed, but partial results are available.');
           }
         }
-      } catch (error) {
+    } catch (error) {
         console.error("Error optimizing CV:", error);
         setError("An error occurred while optimizing the CV.");
         setIsProcessing(false);

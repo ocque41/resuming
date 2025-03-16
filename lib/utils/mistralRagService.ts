@@ -432,9 +432,9 @@ export class MistralRAGService {
       const response = await retryWithExponentialBackoff(
         async () => {
           return await this.openaiClient.embeddings.create({
-            model: this.embeddingModel,
-            input: text
-          });
+        model: this.embeddingModel,
+        input: text
+      });
         },
         { service: 'openai', maxRetries: 3 }
       );
@@ -540,23 +540,27 @@ export class MistralRAGService {
         // Use OpenAI for generation with rate limiting and retries
         const response = await retryWithExponentialBackoff(
           async () => {
-            return await this.openaiClient.chat.completions.create({
-              model: this.openaiGenerationModel,
-              messages: [
-                {
-                  role: 'system',
-                  content: `You are an AI assistant analyzing a CV. Use the following CV context to answer the question. 
-                  If the information is not in the context, say so honestly.
-                  
-                  CV Context:
-                  ${context}`
-                },
-                {
-                  role: 'user',
-                  content: query
-                }
-              ]
-            });
+            return await this.openaiClient.chat.completions.create(
+              this.createApiParams({
+                model: this.openaiGenerationModel,
+                messages: [
+                  {
+                    role: 'system',
+                    content: `You are an AI assistant analyzing a CV. Use the following CV context to answer the question. 
+                    If the information is not in the context, say so honestly.
+                    
+                    CV Context:
+                    ${context}`
+                  },
+                  {
+                    role: 'user',
+                    content: query
+                  }
+                ],
+                temperature: 0.7,
+                maxTokens: 1000,
+              }, false)
+            );
           },
           { service: 'openai', maxRetries: 3 }
         );
@@ -605,19 +609,23 @@ export class MistralRAGService {
         // Use OpenAI for direct response with rate limiting and retries
         const response = await retryWithExponentialBackoff(
           async () => {
-            return await this.openaiClient.chat.completions.create({
-              model: this.openaiGenerationModel,
-              messages: [
-                {
-                  role: 'system',
-                  content: systemPrompt || defaultSystemPrompt
-                },
-                {
-                  role: 'user',
-                  content: query
-                }
-              ]
-            });
+            return await this.openaiClient.chat.completions.create(
+              this.createApiParams({
+                model: this.openaiGenerationModel,
+                messages: [
+                  {
+                    role: 'system',
+                    content: systemPrompt || defaultSystemPrompt
+                  },
+                  {
+                    role: 'user',
+                    content: query
+                  }
+                ],
+                temperature: 0.7,
+                maxTokens: 1000,
+              }, false)
+            );
           },
           { service: 'openai', maxRetries: 3 }
         );
@@ -708,7 +716,7 @@ export class MistralRAGService {
         async () => {
           // Use Mistral for format analysis if available
           if (this.mistralClient) {
-            const prompt = `
+      const prompt = `
             You are a CV format expert. Analyze the following CV and provide feedback on its format, structure, and presentation.
             
             CV Text:
@@ -773,9 +781,9 @@ export class MistralRAGService {
                   result[field] = result[field] ? [result[field]] : [];
                 }
               });
-              
-              return result;
-            } catch (parseError) {
+        
+        return result;
+      } catch (parseError) {
               logger.error('Error parsing CV format analysis:', parseError instanceof Error ? parseError.message : String(parseError));
               logger.debug('Raw response:', content);
               
@@ -786,26 +794,28 @@ export class MistralRAGService {
             // Fallback to OpenAI if Mistral is not available
             logger.info('Using OpenAI for CV format analysis (Mistral not available)');
             
-            const response = await this.openaiClient.chat.completions.create({
-              model: 'gpt-4o',
-              messages: [
-                {
-                  role: 'system',
-                  content: 'You are a CV format expert. Analyze the CV and provide feedback on format, structure, and presentation.'
-                },
-                {
-                  role: 'user',
-                  content: `Analyze this CV format and structure (not content):
-                  
-                  ${textToAnalyze}
-                  
-                  Return ONLY a JSON object with: {"strengths": [...], "weaknesses": [...], "recommendations": [...]}
-                  No markdown, no explanation, just the JSON.`
-                }
-              ],
-              temperature: 0.1,
-              max_tokens: 1000,
-            });
+            const response = await this.openaiClient.chat.completions.create(
+              this.createApiParams({
+                model: 'gpt-4o',
+                messages: [
+                  {
+                    role: 'system',
+                    content: 'You are a CV format expert. Analyze the CV and provide feedback on format, structure, and presentation.'
+                  },
+                  {
+                    role: 'user',
+                    content: `Analyze this CV format and structure (not content):
+                    
+                    ${textToAnalyze}
+                    
+                    Return ONLY a JSON object with: {"strengths": [...], "weaknesses": [...], "recommendations": [...]}
+                    No markdown, no explanation, just the JSON.`
+                  }
+                ],
+                temperature: 0.1,
+                maxTokens: 1000,
+              }, false)
+            );
             
             const content = response.choices[0]?.message?.content || '';
             
@@ -857,26 +867,28 @@ export class MistralRAGService {
               logger.info('Using OpenAI fallback for CV format analysis');
               
               try {
-                const response = await this.openaiClient.chat.completions.create({
-                  model: 'gpt-4o',
-                  messages: [
-                    {
-                      role: 'system',
-                      content: 'You are a CV format expert. Analyze the CV and provide feedback on format, structure, and presentation.'
-                    },
-                    {
-                      role: 'user',
-                      content: `Analyze this CV format and structure (not content):
-                      
-                      ${textToAnalyze}
-                      
-                      Return ONLY a JSON object with: {"strengths": [...], "weaknesses": [...], "recommendations": [...]}
-                      No markdown, no explanation, just the JSON.`
-                    }
-                  ],
-                  temperature: 0.1,
-                  max_tokens: 1000,
-                });
+                const response = await this.openaiClient.chat.completions.create(
+                  this.createApiParams({
+                    model: 'gpt-4o',
+                    messages: [
+                      {
+                        role: 'system',
+                        content: 'You are a CV format expert. Analyze the CV and provide feedback on format, structure, and presentation.'
+                      },
+                      {
+                        role: 'user',
+                        content: `Analyze this CV format and structure (not content):
+                        
+                        ${textToAnalyze}
+                        
+                        Return ONLY a JSON object with: {"strengths": [...], "weaknesses": [...], "recommendations": [...]}
+                        No markdown, no explanation, just the JSON.`
+                      }
+                    ],
+                    temperature: 0.1,
+                    maxTokens: 1000,
+                  }, false)
+                );
                 
                 const content = response.choices[0]?.message?.content || '';
                 
@@ -1052,7 +1064,7 @@ export class MistralRAGService {
       if (this.mistralClient) {
         return await retryWithExponentialBackoff(
           async () => {
-            const prompt = `
+      const prompt = `
             Extract the most important keywords from this CV text. Focus on skills, technologies, qualifications, and industry-specific terms.
             
             CV Text:
@@ -1125,53 +1137,28 @@ export class MistralRAGService {
    */
   private async extractKeywordsWithOpenAI(): Promise<string[]> {
     try {
-      const response = await this.openaiClient.chat.completions.create({
-        model: this.openaiGenerationModel,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a CV analysis expert. Extract the most important keywords from the CV.'
-          },
-          {
-            role: 'user',
-            content: `Extract the most important keywords from this CV text. Focus on skills, technologies, qualifications, and industry-specific terms.
-            
-            CV Text:
-            ${this.originalCVText.substring(0, 4000)} ${this.originalCVText.length > 4000 ? '...(truncated)' : ''}
-            
-            Return ONLY a JSON array of keywords, like this: ["keyword1", "keyword2", "keyword3"]
-            Do not include any explanation or additional text.`
-          }
-        ],
-        temperature: 0.1,
-        max_tokens: 1000,
-      });
+      const prompt = `Extract all keywords and key phrases from the following CV. Focus on skills, technologies, job titles, and industry-specific terms. Return them as a comma-separated list.
+
+CV Content:
+${this.originalCVText}`;
+
+      const response = await this.openaiClient.chat.completions.create(
+        this.createApiParams({
+          model: this.openaiGenerationModel,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+          maxTokens: 50,
+        }, false) // false indicates this is for OpenAI, not Mistral
+      );
       
-      const content = response.choices[0]?.message?.content || '';
-      
-      try {
-        // Try to parse as JSON
-        const jsonMatch = content.match(/\[(.*?)\]/s);
-        if (jsonMatch) {
-          const jsonStr = `[${jsonMatch[1]}]`;
-          const keywords = JSON.parse(jsonStr);
-          return Array.isArray(keywords) ? keywords : [];
-        }
-        
-        // If not valid JSON, extract keywords using regex
-        const keywordRegex = /"([^"]+)"/g;
-        const matches = [...content.matchAll(keywordRegex)];
-        return matches.map(match => match[1]);
-      } catch (parseError) {
-        logger.error('Error parsing OpenAI keywords response:', parseError instanceof Error ? parseError.message : String(parseError));
-        return this.extractKeywordsWithRegex(content);
-      }
+      const content = response.choices[0]?.message?.content?.trim() || '';
+      return this.extractArrayFromString(content);
     } catch (error) {
       logger.error('Error extracting keywords with OpenAI:', error instanceof Error ? error.message : String(error));
       return this.extractKeywordsWithRegex(this.originalCVText);
     }
   }
-  
+
   /**
    * Extract keywords using regex
    */
@@ -1301,107 +1288,54 @@ export class MistralRAGService {
    */
   private async extractRequirementsWithOpenAI(): Promise<string[]> {
     try {
-      const response = await this.openaiClient.chat.completions.create({
-        model: this.openaiGenerationModel,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a CV analysis expert. Extract the key requirements or qualifications from the CV.'
-          },
-          {
-            role: 'user',
-            content: `Analyze this CV text and identify the key requirements or qualifications that the person has.
-            Focus on education, certifications, years of experience, and specific qualifications.
-            
-            CV Text:
-            ${this.originalCVText.substring(0, 4000)} ${this.originalCVText.length > 4000 ? '...(truncated)' : ''}
-            
-            Return ONLY a JSON array of key requirements, like this: ["requirement1", "requirement2", "requirement3"]
-            Do not include any explanation or additional text.`
-          }
-        ],
-        temperature: 0.1,
-        max_tokens: 1000,
-      });
+      const prompt = `Extract key requirements from the following CV. Focus on qualifications, certifications, and essential skills that would be required for positions matching this CV. Return them as a comma-separated list.
+
+CV Content:
+${this.originalCVText}`;
+
+      const response = await this.openaiClient.chat.completions.create(
+        this.createApiParams({
+          model: this.openaiGenerationModel,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+          maxTokens: 1000,
+        }, false)
+      );
       
-      const content = response.choices[0]?.message?.content || '';
-      
-      try {
-        // Try to parse as JSON
-        const jsonMatch = content.match(/\[(.*?)\]/s);
-        if (jsonMatch) {
-          const jsonStr = `[${jsonMatch[1]}]`;
-          const requirements = JSON.parse(jsonStr);
-          return Array.isArray(requirements) ? requirements : [];
-        }
-        
-        // If not valid JSON, extract requirements using regex
-        const requirementRegex = /"([^"]+)"/g;
-        const matches = [...content.matchAll(requirementRegex)];
-        return matches.map(match => match[1]);
-      } catch (parseError) {
-        logger.error('Error parsing OpenAI key requirements response:', parseError instanceof Error ? parseError.message : String(parseError));
-        return this.extractRequirementsWithRegex(this.originalCVText);
-      }
+      const content = response.choices[0]?.message?.content?.trim() || '';
+      return this.extractArrayFromString(content);
     } catch (error) {
-      logger.error('Error extracting key requirements with OpenAI:', error instanceof Error ? error.message : String(error));
+      logger.error('Error extracting requirements with OpenAI:', error instanceof Error ? error.message : String(error));
       return this.extractRequirementsWithRegex(this.originalCVText);
     }
   }
   
   /**
-   * Extract key requirements using regex
+   * Extract requirements using regex patterns
    */
   private extractRequirementsWithRegex(text: string): string[] {
-    // Common requirement patterns
+    // Fallback to simple regex extraction
     const requirementPatterns = [
-      /(?:bachelor|master|phd|doctorate|degree)['\s]+(?:in|of)['\s]+([^,.]+)/gi,
-      /(\d+)[+\s]*(?:years?|yrs?)['\s]+(?:of)?['\s]*experience/gi,
-      /certified['\s]+([^,.]+)/gi,
-      /(?:proficient|fluent)['\s]+(?:in)?['\s]*([^,.]+)/gi,
-      /knowledge['\s]+(?:of)?['\s]*([^,.]+)/gi,
-      /expertise['\s]+(?:in)?['\s]*([^,.]+)/gi
+      /required:?\s*([^.]+)/gi,
+      /qualifications:?\s*([^.]+)/gi,
+      /certifications:?\s*([^.]+)/gi,
+      /\b(\d+\+?\s*years?\s*(?:of)?\s*experience)\b/gi,
+      /\b(Bachelor'?s|Master'?s|PhD|Doctorate)\b/gi,
+      /\b(certified|licensed|accredited)\b/gi
     ];
     
     const requirements: string[] = [];
     
-    // Extract requirements using patterns
     requirementPatterns.forEach(pattern => {
-      const matches = [...text.matchAll(pattern)];
-      matches.forEach(match => {
-        if (match[0]) {
-          requirements.push(match[0].trim());
-        }
-      });
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        requirements.push(match[1].trim());
+      }
     });
     
-    // Look for education section
-    const educationSection = this.extractSectionContent(text, 'education');
-    if (educationSection) {
-      const degreeMatches = [...educationSection.matchAll(/(?:bachelor|master|phd|doctorate|degree|diploma)['\s]+(?:in|of)?['\s]*([^,.]+)/gi)];
-      degreeMatches.forEach(match => {
-        if (match[0]) {
-          requirements.push(match[0].trim());
-        }
-      });
-    }
-    
-    // Look for certification section
-    const certificationSection = this.extractSectionContent(text, 'certification') || 
-                                this.extractSectionContent(text, 'qualifications');
-    if (certificationSection) {
-      const certMatches = [...certificationSection.matchAll(/([A-Z0-9][A-Za-z0-9\s\-]+(?:certification|certificate|certified|qualification))/g)];
-      certMatches.forEach(match => {
-        if (match[0]) {
-          requirements.push(match[0].trim());
-        }
-      });
-    }
-    
-    // Remove duplicates and limit to top 15
-    return [...new Set(requirements)].slice(0, 15);
+    return [...new Set(requirements)];
   }
-  
+
   /**
    * Extract section content using regex
    */
@@ -1424,7 +1358,7 @@ export class MistralRAGService {
     
     if (!this.originalCVText) {
       logger.warn('No CV text available for content analysis');
-      return {
+        return {
         strengths: ['Clear presentation'],
         weaknesses: ['Could not fully analyze the CV content'],
         recommendations: ['Add more specific achievements and quantifiable results']
@@ -1537,7 +1471,7 @@ export class MistralRAGService {
       }
       
       // If no AI service is available, return default analysis
-      return {
+            return {
         strengths: ['Clear presentation'],
         weaknesses: ['Could not fully analyze the CV content'],
         recommendations: ['Add more specific achievements and quantifiable results']
@@ -1561,95 +1495,44 @@ export class MistralRAGService {
     recommendations: string[];
   }> {
     try {
-      logger.info('Analyzing CV content using OpenAI');
-      if (!this.openaiClient) {
-        throw new Error('OpenAI client not initialized');
-      }
-      
-      const prompt = `
-      Analyze the following CV/resume content (not format) and provide:
-      1. Content strengths (what's good about the content)
-      2. Content weaknesses (what could be improved)
-      3. Recommendations for improving the content
+      const prompt = `Analyze the following CV and provide:
+1. Key strengths (what's good about the CV)
+2. Weaknesses (what could be improved)
+3. Recommendations for improvement
 
-      Focus on the CONTENT quality, not the format or layout.
+Format your response as:
+STRENGTHS:
+- Strength 1
+- Strength 2
 
-      CV Content:
-      ${this.originalCVText ? this.originalCVText.substring(0, 4000) : ''}
+WEAKNESSES:
+- Weakness 1
+- Weakness 2
 
-      Return the analysis as a JSON object with the following structure:
-      {
-        "strengths": ["strength1", "strength2", ...],
-        "weaknesses": ["weakness1", "weakness2", ...],
-        "recommendations": ["recommendation1", "recommendation2", ...]
-      }
+RECOMMENDATIONS:
+- Recommendation 1
+- Recommendation 2
+
+CV Content:
+${this.originalCVText.substring(0, 4000)}`;
+
+      const response = await this.openaiClient.chat.completions.create(
+        this.createApiParams({
+          model: this.openaiGenerationModel,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.3,
+          maxTokens: 1000,
+        }, false)
+      );
       
-      IMPORTANT: Return ONLY the raw JSON object. DO NOT use markdown formatting, code blocks, or any other formatting. DO NOT include any explanation or additional text before or after the JSON.
-      `;
-      
-      // Check if Mistral client is available
-      if (!this.mistralClient) {
-        throw new Error('Mistral client not initialized');
-      }
-      
-      const response = await this.mistralClient.chat({
-        model: this.mistralGenerationModel,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-        max_tokens: 50,
-      });
-      
-      const content = response.choices[0]?.message?.content || '';
-      
-      try {
-        // First try to find JSON in markdown code blocks
-        const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || content.match(/```\s*([\s\S]*?)\s*```/);
-        let jsonContent = '';
-        
-        if (jsonMatch && jsonMatch[1]) {
-          // Found JSON in code block
-          jsonContent = jsonMatch[1].trim();
-        } else {
-          // Try to find JSON object directly
-          const jsonObjectMatch = content.match(/\{[\s\S]*\}/);
-          if (jsonObjectMatch) {
-            jsonContent = jsonObjectMatch[0].trim();
-          } else {
-            // Use the whole content as a last resort
-            jsonContent = content.trim();
-          }
-        }
-        
-        // Parse the JSON response
-        const result = JSON.parse(jsonContent);
-        
-        // Validate the structure
-        if (!result.strengths || !result.weaknesses || !result.recommendations) {
-          logger.warn('Invalid CV content analysis structure from OpenAI, using regex extraction');
-          return this.extractContentAnalysisWithRegex(content);
-        }
-        
-        // Ensure arrays are arrays
-        ['strengths', 'weaknesses', 'recommendations'].forEach(field => {
-          if (!Array.isArray(result[field])) {
-            result[field] = result[field] ? [result[field]] : [];
-          }
-        });
-        
-        return result;
-      } catch (parseError) {
-        logger.error('Error parsing OpenAI CV content analysis:', parseError instanceof Error ? parseError.message : String(parseError));
-        logger.debug('Raw OpenAI response:', content);
-        
-        // Try to extract with regex as fallback
-        return this.extractContentAnalysisWithRegex(content);
-      }
+      const content = response.choices[0]?.message?.content?.trim() || '';
+      return this.extractContentAnalysisWithRegex(content);
     } catch (error) {
-      logger.error('Error analyzing CV content with OpenAI:', error instanceof Error ? error.message : String(error));
+      logger.error('Error analyzing content with OpenAI:', error instanceof Error ? error.message : String(error));
       return {
-        strengths: ['Clear presentation'],
-        weaknesses: ['Could not fully analyze the CV content'],
-        recommendations: ['Add more specific achievements and quantifiable results']
+        strengths: [],
+        weaknesses: [],
+        recommendations: []
       };
     }
   }
@@ -1714,9 +1597,9 @@ export class MistralRAGService {
     
     if (!this.originalCVText) {
       logger.warn('No CV text available for industry determination');
-      return 'General';
-    }
-    
+        return 'General';
+      }
+
     try {
       const textToAnalyze = this.originalCVText;
       
@@ -1749,10 +1632,10 @@ export class MistralRAGService {
         logger.warn(`Failed to determine industry with Mistral: ${error instanceof Error ? error.message : String(error)}`);
         return this.determineIndustryWithOpenAI(textToAnalyze);
       }
-    } catch (error) {
-      logger.error(`Error determining industry: ${error instanceof Error ? error.message : String(error)}`);
-      return 'General';
-    }
+      } catch (error) {
+        logger.error(`Error determining industry: ${error instanceof Error ? error.message : String(error)}`);
+        return 'General';
+      }
   }
   
   /**
@@ -1762,33 +1645,25 @@ export class MistralRAGService {
    */
   private async determineIndustryWithOpenAI(cvText: string): Promise<string> {
     try {
-      logger.info('Attempting to determine industry using OpenAI');
-      if (!this.openaiClient) {
-        throw new Error('OpenAI client not initialized');
-      }
-      
-      const prompt = `
-      Analyze the following CV/resume and determine the most relevant industry sector for this professional.
-      Choose from common industry sectors like: Technology, Healthcare, Finance, Education, Marketing, 
-      Engineering, Legal, Retail, Manufacturing, Hospitality, Construction, Media, etc.
-      Return ONLY the industry name as a single string with no additional text, quotes, or formatting.
-      
-      CV Content:
-      ${cvText.substring(0, 4000)}
-      `;
-      
-      const response = await this.openaiClient.chat.completions.create({
-        model: this.openaiGenerationModel,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-        maxTokens: 50,
-      });
+      const prompt = `Determine the industry that this CV is most relevant for. Consider the skills, experience, and education mentioned. Return only the industry name, nothing else.
+
+CV Content:
+${cvText.substring(0, 4000)}`;
+
+      const response = await this.openaiClient.chat.completions.create(
+        this.createApiParams({
+          model: this.openaiGenerationModel,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+          maxTokens: 50,
+        }, false) // false indicates this is for OpenAI
+      );
       
       const industry = response.choices[0]?.message?.content?.trim() || 'General';
       logger.info(`Determined industry using OpenAI: ${industry}`);
       return industry;
     } catch (error) {
-      logger.error(`Failed to determine industry with OpenAI: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error('Error determining industry with OpenAI:', error instanceof Error ? error.message : String(error));
       return 'General';
     }
   }
@@ -1803,9 +1678,9 @@ export class MistralRAGService {
     
     if (!this.originalCVText) {
       logger.warn('No CV text available for language detection');
-      return 'English';
-    }
-    
+        return 'English';
+      }
+
     try {
       const textToAnalyze = this.originalCVText;
       
@@ -1845,7 +1720,7 @@ export class MistralRAGService {
       return 'English';
     }
   }
-  
+
   /**
    * Fallback method to detect language using OpenAI
    * @param cvText The CV text to analyze
@@ -1853,32 +1728,25 @@ export class MistralRAGService {
    */
   private async detectLanguageWithOpenAI(cvText: string): Promise<string> {
     try {
-      logger.info('Attempting to detect language using OpenAI');
-      if (!this.openaiClient) {
-        throw new Error('OpenAI client not initialized');
-      }
-      
-      const prompt = `
-      Analyze the following CV/resume and determine the primary language it is written in.
-      Return ONLY the language name in English (e.g., "English", "French", "German", "Spanish", etc.) 
-      with no additional text, quotes, or formatting.
-      
-      CV Content:
-      ${cvText.substring(0, 4000)}
-      `;
-      
-      const response = await this.openaiClient.chat.completions.create({
-        model: this.openaiGenerationModel,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-        maxTokens: 50,
-      });
+      const prompt = `Detect the language of the following CV text. Return only the language name in English, nothing else.
+
+CV Content:
+${cvText.substring(0, 2000)}`;
+
+      const response = await this.openaiClient.chat.completions.create(
+        this.createApiParams({
+          model: this.openaiGenerationModel,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+          maxTokens: 50,
+        }, false) // false indicates this is for OpenAI
+      );
       
       const language = response.choices[0]?.message?.content?.trim() || 'English';
       logger.info(`Detected language using OpenAI: ${language}`);
       return language;
     } catch (error) {
-      logger.error(`Failed to detect language with OpenAI: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error('Error detecting language with OpenAI:', error instanceof Error ? error.message : String(error));
       return 'English';
     }
   }
@@ -1957,13 +1825,13 @@ export class MistralRAGService {
       } catch (error) {
         logger.warn(`Failed to extract sections with Mistral: ${error instanceof Error ? error.message : String(error)}`);
         return this.extractSectionsWithOpenAI(textToAnalyze);
-      }
-    } catch (error) {
-      logger.error(`Error extracting sections: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      } catch (error) {
+        logger.error(`Error extracting sections: ${error instanceof Error ? error.message : String(error)}`);
       return [];
     }
   }
-  
+
   /**
    * Fallback method to extract sections using OpenAI
    * @param cvText The CV text to analyze
@@ -1971,58 +1839,46 @@ export class MistralRAGService {
    */
   private async extractSectionsWithOpenAI(cvText: string): Promise<Array<{ name: string; content: string }>> {
     try {
-      logger.info('Attempting to extract sections using OpenAI');
-      if (!this.openaiClient) {
-        throw new Error('OpenAI client not initialized');
-      }
+      const prompt = `Extract the main sections from the following CV. For each section, provide the section name and its content.
+
+Format your response as:
+SECTION: [Section Name 1]
+CONTENT: [Section Content 1]
+
+SECTION: [Section Name 2]
+CONTENT: [Section Content 2]
+
+CV Content:
+${cvText.substring(0, 4000)}`;
+
+      const response = await this.openaiClient.chat.completions.create(
+        this.createApiParams({
+          model: this.openaiGenerationModel,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+          maxTokens: 4000,
+        }, false)
+      );
       
-      const prompt = `
-      Analyze the following CV/resume and extract all distinct sections.
-      For each section, provide the section name and its content.
-      Common CV sections include: Summary/Profile, Experience, Education, Skills, Certifications, Languages, etc.
+      const content = response.choices[0]?.message?.content?.trim() || '';
       
-      Return the result as a JSON array of objects, each with "name" and "content" properties.
-      Example format:
-      [
-        {
-          "name": "Summary",
-          "content": "Experienced software engineer with 5 years..."
-        },
-        {
-          "name": "Experience",
-          "content": "Senior Developer, ABC Corp (2018-2022)..."
+      // Parse the response to extract sections
+      const sections: Array<{ name: string; content: string }> = [];
+      const sectionRegex = /SECTION:\s*(.+?)\s*\nCONTENT:\s*([\s\S]+?)(?=\n\s*SECTION:|$)/g;
+      
+      let match;
+      while ((match = sectionRegex.exec(content)) !== null) {
+        const name = match[1].trim();
+        const sectionContent = match[2].trim();
+        
+        if (name && sectionContent) {
+          sections.push({ name, content: sectionContent });
         }
-      ]
-      
-      IMPORTANT: Return ONLY the raw JSON array. DO NOT use markdown formatting, code blocks, or any other formatting. DO NOT include any explanation or additional text before or after the JSON.
-      
-      CV Content:
-      ${cvText}
-      `;
-      
-      const response = await this.openaiClient.chat.completions.create({
-        model: this.openaiGenerationModel,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-        max_tokens: 4000,
-        response_format: { type: 'json_object' }
-      });
-      
-      const responseText = response.choices[0]?.message?.content?.trim() || '{"sections":[]}';
-      
-      try {
-        // Try to parse as JSON
-        const parsed = JSON.parse(responseText);
-        const sections = Array.isArray(parsed) ? parsed : (parsed.sections || []);
-        logger.info(`Extracted ${sections.length} sections using OpenAI`);
-        return sections;
-      } catch (parseError) {
-        logger.warn(`Failed to parse OpenAI response as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-        // Try to extract using regex as fallback
-        return this.extractSectionsWithRegex(cvText);
       }
+      
+      return sections;
     } catch (error) {
-      logger.error(`Failed to extract sections with OpenAI: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error('Error extracting sections with OpenAI:', error instanceof Error ? error.message : String(error));
       return this.extractSectionsWithRegex(cvText);
     }
   }
@@ -2130,7 +1986,7 @@ export class MistralRAGService {
     topP?: number;
   }, forMistral: boolean): any {
     // Clone the params to avoid modifying the original
-    const result = { ...params };
+    const result: any = { ...params };
     
     // Handle the maxTokens/max_tokens difference
     if ('maxTokens' in result) {
