@@ -49,18 +49,18 @@ export default function DocumentGenerationProgress({
       </div>
       
       {processingTooLong && (
-        <div className="mt-4 p-3 bg-amber-900/30 border border-amber-800/50 rounded-md flex items-start">
-          <Clock className="w-5 h-5 text-amber-500 mr-2 flex-shrink-0 mt-0.5" />
+        <div className="mt-4 p-3 bg-[#B4916C]/10 border border-[#B4916C]/30 rounded-md flex items-start">
+          <Clock className="w-5 h-5 text-[#B4916C] mr-2 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-amber-300 font-medium">This is taking longer than expected</p>
-            <p className="text-amber-200/70 text-sm mt-1">
+            <p className="text-[#B4916C] font-medium">This is taking longer than expected</p>
+            <p className="text-[#B4916C]/80 text-sm mt-1">
               Document generation can take up to 2 minutes for complex CVs. You can wait or try again.
             </p>
             <div className="mt-3 flex space-x-3">
               <Button 
                 variant="outline" 
                 size="sm" 
-                className="bg-amber-800/50 hover:bg-amber-700/50 border-amber-700/50"
+                className="bg-[#B4916C]/20 hover:bg-[#B4916C]/30 border-[#B4916C]/50 text-[#B4916C]"
                 onClick={onRetry}
               >
                 <RefreshCw className="mr-2 h-4 w-4" />
@@ -70,7 +70,7 @@ export default function DocumentGenerationProgress({
                 <Button 
                   variant="ghost" 
                   size="sm" 
-                  className="hover:bg-amber-900/50 text-amber-300"
+                  className="hover:bg-[#B4916C]/10 text-[#B4916C]"
                   onClick={onCancel}
                 >
                   Cancel

@@ -121,30 +121,27 @@ export async function analyzeCVContent(cvText: string): Promise<{
                 "language": "English", // The language of the CV
                 "sections": [
                   { "name": "Profile", "content": "..." },
-                  { "name": "Experience", "content": "..." },
-                  // Other sections
+                  { "name": "Experience", "content": "..." }
                 ],
                 "skills": {
-                  "technical": ["JavaScript", "React", "Node.js"], // Technical skills
-                  "professional": ["Project Management", "Team Leadership"] // Professional/soft skills
+                  "technical": ["JavaScript", "React", "Node.js"],
+                  "professional": ["Project Management", "Team Leadership"]
                 },
-                "strengths": ["Clear presentation of experience", "Strong technical skills"], // CV strengths
-                "weaknesses": ["Lacks quantifiable achievements", "No clear career progression"], // CV weaknesses
-                "recommendations": ["Add more quantifiable achievements", "Clarify career progression"], // Recommendations for improvement
-                "atsScore": 75, // Estimated ATS compatibility score (0-100)
-                "formatStrengths": ["Clear section headings", "Consistent formatting"], // Format strengths
-                "formatWeaknesses": ["Dense text blocks", "Inconsistent date formats"], // Format weaknesses
-                "formatRecommendations": ["Use bullet points", "Standardize date formats"] // Format recommendations
+                "strengths": ["Clear presentation of experience", "Strong technical skills"],
+                "weaknesses": ["Lacks quantifiable achievements", "No clear career progression"],
+                "recommendations": ["Add more quantifiable achievements", "Clarify career progression"],
+                "atsScore": 75,
+                "formatStrengths": ["Clear section headings", "Consistent formatting"],
+                "formatWeaknesses": ["Dense text blocks", "Inconsistent date formats"],
+                "formatRecommendations": ["Use bullet points", "Standardize date formats"]
               }
-              
               Do not include any explanations or additional text. Return only the JSON object.`
             },
             {
               role: 'user',
               content: `CV: ${cvText}`
             }
-          ],
-          response_format: { type: "json_object" }
+          ]
         });
       },
       { service: 'openai', maxRetries: 3, priority: 1 }
@@ -288,16 +285,12 @@ export async function optimizeCVWithGPT4o(
               Return a JSON object with the following structure:
               {
                 "optimizedContent": "The optimized CV text",
-                "matchScore": 85, // A number between 0-100 indicating how well the optimized CV matches the job
-                "recommendations": ["Recommendation 1", "Recommendation 2"], // List of recommendations for further improvements
+                "matchScore": 85,
+                "recommendations": ["Recommendation 1", "Recommendation 2"],
                 "matchAnalysis": {
-                  "score": 85, // Overall match score (0-100)
-                  "matchedKeywords": [
-                    {"keyword": "string", "relevance": 0.9, "frequency": 2, "placement": "profile"}
-                  ],
-                  "missingKeywords": [
-                    {"keyword": "string", "importance": 0.8, "suggestedPlacement": "skills"}
-                  ],
+                  "score": 85,
+                  "matchedKeywords": [{"keyword": "string", "relevance": 0.9, "frequency": 2, "placement": "profile"}],
+                  "missingKeywords": [{"keyword": "string", "importance": 0.8, "suggestedPlacement": "skills"}],
                   "recommendations": ["string"],
                   "skillGap": "string",
                   "dimensionalScores": {
@@ -321,15 +314,13 @@ export async function optimizeCVWithGPT4o(
                   }
                 }
               }
-              
               Do not include any explanations or additional text. Return only the JSON object.`
             },
             {
               role: 'user',
               content: `CV: ${cvText}\n\nJob Description: ${jobDescription}\n\nCV Analysis: ${JSON.stringify(analysis)}`
             }
-          ],
-          response_format: { type: "json_object" }
+          ]
         });
       },
       { service: 'openai', maxRetries: 3, priority: 1 }
@@ -459,8 +450,7 @@ export async function optimizeCVWithGPT4oFallback(
               role: 'user',
               content: `CV: ${cvText}\n\nJob Description: ${jobDescription}`
             }
-          ],
-          response_format: { type: "json_object" }
+          ]
         });
       },
       { service: 'openai', maxRetries: 3, priority: 1 }

@@ -3158,9 +3158,6 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
               style={{ width: `${processingProgress}%` }}
             />
           </div>
-          <div className="mt-1 text-sm text-gray-400">
-            {processingProgress}% complete
-          </div>
         </div>
       )}
 

@@ -127,7 +127,7 @@ export default function ProgressiveOptimizationStatus({
       <div 
         key={stage.id} 
         className={`flex items-center mb-3 p-2 rounded-md transition-all duration-300 stage-transition-enter ${
-          inProgress ? 'bg-blue-900/20 border border-blue-800/30' : 
+          inProgress ? 'bg-[#B4916C]/10 border border-[#B4916C]/30' : 
           completed ? 'bg-green-900/10' : ''
         }`}
         style={{ 
@@ -139,8 +139,8 @@ export default function ProgressiveOptimizationStatus({
             <CheckCircle className="h-6 w-6 text-green-500 mr-3 transition-all duration-300 transform scale-100" />
           ) : inProgress ? (
             <>
-              <Loader2 className="h-6 w-6 text-blue-500 mr-3 animate-spin" />
-              <span className="absolute -top-1 -right-1 h-2 w-2 bg-blue-500 rounded-full animate-ping"></span>
+              <Loader2 className="h-6 w-6 text-[#B4916C] mr-3 animate-spin" />
+              <span className="absolute -top-1 -right-1 h-2 w-2 bg-[#B4916C] rounded-full animate-ping"></span>
             </>
           ) : (
             <Circle className="h-6 w-6 text-gray-400 mr-3 transition-all duration-300" />
@@ -149,13 +149,13 @@ export default function ProgressiveOptimizationStatus({
         <div className="flex flex-col">
           <span className={`font-medium transition-all duration-300 ${
             completed ? 'text-green-500' : 
-            inProgress ? 'text-blue-500' : 
+            inProgress ? 'text-[#B4916C]' : 
             'text-gray-400'
           }`}>
             {stage.label}
           </span>
           {inProgress && (
-            <span className="text-xs text-blue-400 animate-pulse mt-1">In progress...</span>
+            <span className="text-xs text-[#B4916C] animate-pulse mt-1">In progress...</span>
           )}
           {completed && (
             <span className="text-xs text-green-400 mt-1">Completed</span>
@@ -175,7 +175,7 @@ export default function ProgressiveOptimizationStatus({
           <span className="text-sm font-medium text-gray-300">Progress</span>
           <span className={`text-sm font-medium ${
             progress === 100 ? 'text-green-500' : 
-            progress > 50 ? 'text-blue-500' : 
+            progress > 50 ? 'text-[#B4916C]' : 
             'text-gray-400'
           } transition-colors duration-500`}>
             {progress}%
@@ -185,16 +185,16 @@ export default function ProgressiveOptimizationStatus({
           <div 
             className={`h-full rounded-full transition-all duration-700 ease-out ${
               progress === 100 ? 'bg-green-500' : 
-              isLowProgress ? 'bg-blue-600 animate-pulse' : 
-              'bg-blue-600'
+              isLowProgress ? 'bg-[#B4916C] animate-pulse' : 
+              'bg-[#B4916C]'
             }`}
             style={{ 
               width: `${progress}%`,
-              boxShadow: progress > 0 ? '0 0 10px rgba(59, 130, 246, 0.5)' : 'none'
+              boxShadow: progress > 0 ? '0 0 10px rgba(180, 145, 108, 0.5)' : 'none'
             }}
           >
             {isLowProgress && progress > 0 && (
-              <div className="h-full w-full bg-blue-400/30 animate-pulse"></div>
+              <div className="h-full w-full bg-[#B4916C]/30 animate-pulse"></div>
             )}
           </div>
         </div>
@@ -222,13 +222,6 @@ export default function ProgressiveOptimizationStatus({
       <CardHeader className="pb-2">
         <CardTitle className="text-xl flex justify-between items-center">
           <span>Optimization Details</span>
-          <span className={`text-sm font-medium ${
-            progress === 100 ? 'text-green-500' : 
-            progress > 0 ? 'text-blue-500' : 
-            'text-gray-400'
-          } transition-colors duration-300`}>
-            {progress}%
-          </span>
         </CardTitle>
       </CardHeader>
       <CardContent>
