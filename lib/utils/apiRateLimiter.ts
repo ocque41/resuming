@@ -289,8 +289,8 @@ export async function retryWithExponentialBackoff<T>(
   const {
     service,
     initialDelayMs = 1000,
-    maxDelayMs = 10000,
-    maxRetries = 3,
+    maxDelayMs = 8000, // Reduced from 10000
+    maxRetries = 2,    // Reduced from 3
     retryStatusCodes = [429, 500, 502, 503, 504],
     priority = 0,
     taskId
@@ -335,10 +335,23 @@ export async function retryWithExponentialBackoff<T>(
         recordApiSuccess(service);
         
         return result;
-      } catch (error) {
+      } catch (error: any) {
         // Format the error message
         const errorMessage = error instanceof Error ? error.message : String(error);
         
+        // Check if this is a timeout error
+        const isTimeoutError = error.type === 'TIMEOUT_ERROR' || 
+                               error.isTimeout === true || 
+                               errorMessage.includes('timeout') || 
+                               errorMessage.includes('timed out');
+        
+        // If it's a timeout, handle it specially - don't retry timeouts
+        if (isTimeoutError) {
+          logger.warn(`API call to ${service} timed out. Not retrying to prevent cascading timeouts.`);
+          recordApiFailure(service);
+          throw error; // Don't retry timeouts
+        }
+                               
         // Record failure for circuit breaker
         recordApiFailure(service);
         
@@ -381,14 +394,14 @@ export async function retryWithExponentialBackoff<T>(
         
         // Default to checking if error contains text that suggests it's retryable
         const isTextRetryable = errorMessage.includes('rate limit') || 
-                                errorMessage.includes('timeout') || 
                                 errorMessage.includes('throttled') || 
                                 errorMessage.includes('capacity') ||
                                 errorMessage.includes('overloaded') ||
                                 errorMessage.includes('busy') ||
                                 errorMessage.includes('retry');
         
-        const isRetryable = isTextRetryable || !statusCode || retryStatusCodes.includes(statusCode);
+        // Explicitly exclude timeouts from retry
+        const isRetryable = (isTextRetryable || !statusCode || retryStatusCodes.includes(statusCode)) && !isTimeoutError;
 
         if (!isRetryable) {
           logger.error(`Non-retryable error (status ${statusCode}) for ${service} API call`);

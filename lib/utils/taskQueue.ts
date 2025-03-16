@@ -20,18 +20,18 @@ let queueConfig = {
     concurrency: 4,             // How many concurrent tasks
     minInterval: 100,           // Minimum interval between tasks in ms
     maxQueueSize: 100,          // Maximum tasks in queue
-    taskTimeout: 60000,         // 60 seconds task timeout
-    taskTimeoutFetchContent: 120000, // 120 seconds for tasks that involve fetching content
-    idleTimeout: 10000,         // Time to wait before shutting down the worker if no tasks
-    maxConsecutiveErrors: 5,    // Maximum consecutive errors before backing off
-    errorBackoff: 5000,         // Backoff time after consecutive errors
+    taskTimeout: 30000,         // 30 seconds task timeout (reduced from 60)
+    taskTimeoutFetchContent: 30000, // 30 seconds timeout for all tasks (reduced from 120)
+    idleTimeout: 5000,          // Time to wait before shutting down the worker if no tasks (reduced)
+    maxConsecutiveErrors: 3,    // Maximum consecutive errors before backing off (reduced from 5)
+    errorBackoff: 3000,         // Backoff time after consecutive errors (reduced from 5000)
   },
   general: {
     concurrency: 10,
     minInterval: 0,             // No delay for general tasks
     maxQueueSize: 500,          // Larger queue for general tasks
     taskTimeout: 30000,         // 30 seconds task timeout
-    taskTimeoutFetchContent: 120000, // 120 seconds for tasks that involve fetching content
+    taskTimeoutFetchContent: 30000, // 30 seconds for tasks that involve fetching content (reduced from 120)
     idleTimeout: 10000,         // Time to wait before shutting down the worker
     maxConsecutiveErrors: 10,   // Higher threshold for general tasks
     errorBackoff: 2000,         // Shorter backoff for general tasks
@@ -149,7 +149,13 @@ export async function queueTask<T>(
       
       const timeoutId = setTimeout(() => {
         logger.error(`Task ${taskId} timed out after ${timeoutDuration}ms`);
-        rejectTask(new Error(`Task timed out after ${timeoutDuration}ms`));
+        
+        // Create a timeout error with special type for better handling
+        const timeoutError = new Error(`Task timed out after ${timeoutDuration}ms. The AI service may be experiencing high load.`);
+        (timeoutError as any).type = 'TIMEOUT_ERROR';
+        (timeoutError as any).isTimeout = true;
+        
+        rejectTask(timeoutError);
         
         // Remove from active tasks
         activeTasks[service].delete(taskId);

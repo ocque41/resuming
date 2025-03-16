@@ -31,12 +31,15 @@ export interface CVAnalysisResult {
   sections?: Array<{ name: string; content: string }>;
 }
 
-// OpenAI client instance
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Error types
+const ERROR_TYPES = {
+  TIMEOUT: 'TIMEOUT_ERROR',
+  API_ERROR: 'API_ERROR',
+  PARSING_ERROR: 'PARSING_ERROR',
+  SYSTEM_ERROR: 'SYSTEM_ERROR'
+};
 
-// Add performance monitoring
+// Performance metrics interface for tracking timing
 interface PerformanceMetrics {
   startTime: number;
   apiCallDuration?: number;
@@ -44,16 +47,19 @@ interface PerformanceMetrics {
   totalDuration?: number;
 }
 
-// Add timeout for API calls
-const API_TIMEOUT_MS = 30000; // 30 seconds timeout
-
 /**
  * Check if OpenAI is available
  */
 export async function isOpenAIAvailable(): Promise<boolean> {
   try {
+    // Get a client instance
+    const client = getOpenAIClient();
+    if (!client) {
+      return false;
+    }
+    
     // Simple model list call to check if the API is accessible
-    await openai.models.list();
+    await client.models.list();
     return true;
   } catch (error) {
     logger.error('OpenAI API is not available:', error instanceof Error ? error.message : String(error));
@@ -274,7 +280,8 @@ export async function optimizeCV(
 }
 
 /**
- * Analyze and optimize a CV with GPT-4o
+ * Analyze and optimize CV text using GPT-4o
+ * This is a combined function to reduce API calls
  */
 export async function analyzeAndOptimizeWithGPT4o(
   cvText: string, 
@@ -295,170 +302,173 @@ export async function analyzeAndOptimizeWithGPT4o(
     structuralIssues: string[];
   };
 }> {
-  // Track performance metrics
+  // Create performance metrics object
   const metrics: PerformanceMetrics = {
     startTime: Date.now()
   };
 
-  try {
-    logger.info(`Starting lightweight CV optimization with GPT-4o (content length: ${cvText.length}, job description length: ${jobDescription.length})`);
-    
-    // First, check if the circuit breaker is open
-    const circuitStatus = getCircuitStatus('openai');
-    if (circuitStatus.isOpen) {
-      logger.warn(`Circuit breaker for OpenAI is open with ${circuitStatus.failures} failures. Last failure was ${circuitStatus.timeSinceLastFailure}ms ago.`);
-      // If circuit breaker is open, we'll still continue with the retry logic which will handle it
-    }
-    
-    // Create a prompt for GPT-4o
-    const client = getOpenAIClient();
-    if (!client) {
-      throw new Error('OpenAI client is not available');
-    }
+  // Log start of optimization
+  logger.info(`Starting CV analysis and optimization with GPT-4o. CV length: ${cvText.length}, Job description length: ${jobDescription.length}`);
 
-    // Create a abort controller for timeout - increasing timeout to 60 seconds
-    const API_TIMEOUT_MS = 60000; // 60 seconds timeout
-    const controller = new AbortController();
+  // Create a timeout promise
+  const timeoutPromise = new Promise<never>((_, reject) => {
     const timeoutId = setTimeout(() => {
-      controller.abort();
-      logger.error(`API call timed out after ${API_TIMEOUT_MS}ms`);
-    }, API_TIMEOUT_MS);
+      clearTimeout(timeoutId);
+      reject({
+        type: ERROR_TYPES.TIMEOUT,
+        message: 'CV optimization timed out after 30 seconds. The system may be experiencing high load or your CV may be too complex.'
+      });
+    }, 30000); // 30 seconds timeout
+  });
+
+  try {
+    // Create a controlled promise for the API call
+    const apiCallPromise = retryWithExponentialBackoff(
+      async () => {
+        // Prepare a simplified prompt to reduce token usage and improve speed
+        const prompt = `
+You are an expert CV optimizer. Analyze the following CV and job description, then return ONLY the optimized CV text and a match score.
+
+CV:
+${cvText}
+
+Job Description:
+${jobDescription}
+
+Please return a structured JSON response with the following fields:
+- optimizedContent: The optimized CV text
+- matchScore: A number between 0-100 indicating how well the optimized CV matches the job
+- recommendations: A short array of 3-5 key recommendations for further improvements
+
+NO explanations or additional text. Just return valid JSON.
+`;
+
+        logger.info('Making API call to OpenAI for CV optimization');
+        const client = getOpenAIClient();
+        if (!client) {
+          throw new Error('OpenAI client not available');
+        }
+        
+        const completion = await client.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            { role: 'system', content: 'You are an expert CV optimizer that returns only JSON.' },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.3,
+          response_format: { type: 'json_object' },
+        });
+
+        // Track API call duration
+        metrics.apiCallDuration = Date.now() - metrics.startTime;
+        logger.info(`OpenAI API call completed in ${metrics.apiCallDuration}ms`);
+
+        return completion.choices[0].message.content;
+      },
+      {
+        service: 'openai',
+        initialDelayMs: 1000,
+        maxDelayMs: 8000, // Reduced from 10000
+        maxRetries: 2, // Reduced retries to avoid long waits
+        retryStatusCodes: [429, 500, 502, 503, 504],
+        priority: 10 // High priority
+      }
+    );
+
+    // Race between API call and timeout
+    const responseContent = await Promise.race([apiCallPromise, timeoutPromise]);
     
-    // Track API call start time
-    const apiCallStartTime = Date.now();
-    logger.info('Making OpenAI API call for CV optimization (10% progress)...');
+    // If we've reached here, we have a response before timeout
+    // Parse the JSON response
+    const parseStart = Date.now();
+    let parsedResponse;
     
     try {
-      const response = await retryWithExponentialBackoff(
-        async () => {
-          logger.debug(`Sending request to OpenAI API with ${cvText.length} chars CV text and ${jobDescription.length} chars job description`);
-          
-          const completion = await client.chat.completions.create({
-            model: 'gpt-4o',
-            messages: [
-              {
-                role: 'system',
-                content: `You are an expert CV optimization assistant. Your task is to analyze and optimize the CV content based on the job description provided.
-                
-                Return a JSON object with the following format:
-                {
-                  "optimizedContent": "The optimized CV content",
-                  "matchScore": A number between 0 and 100 representing how well the CV matches the job description
-                }
-                
-                Focus on making the content more relevant to the job description, highlighting key skills and experiences, and improving clarity and readability.`
-              },
-              {
-                role: 'user',
-                content: `Here is my CV:\n\n${cvText}\n\nHere is the job description:\n\n${jobDescription || "Optimize this CV for general professional standards and clarity."}\n\nPlease optimize my CV for this job.`
-              }
-            ],
-            temperature: 0.7,
-            response_format: { type: 'json_object' }
-          }, {
-            signal: controller.signal
-          });
-          
-          logger.debug('Received response from OpenAI API');
-          
-          // Calculate API call duration
-          metrics.apiCallDuration = Date.now() - apiCallStartTime;
-          logger.info(`OpenAI API call completed in ${metrics.apiCallDuration}ms (50% progress)`);
-          
-          return completion;
-        },
-        { 
-          service: 'openai',
-          initialDelayMs: 1000,
-          maxRetries: 2,
-          priority: 1,
-          taskId: 'cv-optimization'
-        }
-      );
-      
-      // Clear the timeout since we got a response
-      clearTimeout(timeoutId);
-      
-      // Parse the response
-      const parseStartTime = Date.now();
-      logger.info('Parsing optimization response (75% progress)...');
-      
-      const responseContent = response.choices[0]?.message?.content;
+      // Check if response content exists
       if (!responseContent) {
-        throw new Error('No content in response from OpenAI');
+        throw {
+          type: ERROR_TYPES.PARSING_ERROR,
+          message: 'Empty response from AI service'
+        };
       }
       
-      logger.debug(`Received raw content: ${responseContent.substring(0, 100)}...`);
+      parsedResponse = safeJsonParse(responseContent);
+      metrics.parsingDuration = Date.now() - parseStart;
+      logger.info(`Parsed OpenAI response in ${metrics.parsingDuration}ms`);
+    } catch (parseError) {
+      logger.error('Error parsing OpenAI response:', parseError instanceof Error ? parseError.message : String(parseError));
+      logger.debug('Response content that failed to parse:', responseContent);
       
-      let jsonData;
-      try {
-        jsonData = JSON.parse(responseContent);
-        logger.debug('Successfully parsed JSON response');
-      } catch (parseError) {
-        logger.error(`Error parsing JSON response: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-        logger.debug(`Raw response content: ${responseContent}`);
-        throw new Error(`Failed to parse OpenAI response as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-      }
-      
-      // Calculate parsing duration
-      metrics.parsingDuration = Date.now() - parseStartTime;
-      logger.info(`Response parsing completed in ${metrics.parsingDuration}ms (90% progress)`);
-      
-      // Calculate total duration
-      metrics.totalDuration = Date.now() - metrics.startTime;
-      
-      // Validate the response contains expected fields
-      if (!jsonData.optimizedContent || typeof jsonData.matchScore !== 'number') {
-        logger.error(`Invalid response format from OpenAI. Missing required fields. Response: ${JSON.stringify(jsonData)}`);
-        throw new Error('Invalid response format from OpenAI. Missing required fields.');
-      }
-      
-      // Return the result with empty values for backward compatibility
-      const result = {
-        optimizedContent: jsonData.optimizedContent,
-        matchScore: jsonData.matchScore,
-        recommendations: [],
-        cvAnalysis: {
-          industry: '',
-          language: '',
-          sections: [],
-          skills: [],
-          strengths: [],
-          weaknesses: [],
-          missingKeywords: [],
-          formattingIssues: [],
-          structuralIssues: []
-        }
+      throw {
+        type: ERROR_TYPES.PARSING_ERROR,
+        message: 'Failed to parse AI response. The system may be experiencing issues.',
+        originalError: parseError
       };
-      
-      // Log completion with performance metrics
-      logger.info(`CV optimization completed in ${metrics.totalDuration}ms (API: ${metrics.apiCallDuration}ms, Parsing: ${metrics.parsingDuration}ms) (100% progress)`);
-      
-      return result;
-    } catch (apiError) {
-      // Make sure to clear the timeout in case of error
-      clearTimeout(timeoutId);
-      
-      // Log detailed error information
-      logger.error(`API call error: ${apiError instanceof Error ? apiError.message : String(apiError)}`);
-      
-      if (apiError instanceof Error && apiError.name === 'AbortError') {
-        logger.error('API call was aborted due to timeout');
-        throw new Error(`OpenAI API call timed out after ${API_TIMEOUT_MS}ms`);
-      }
-      
-      // Re-throw the error to be handled by the outer catch block
-      throw apiError;
     }
-  } catch (error) {
+
+    // Validate response structure
+    if (!parsedResponse.optimizedContent || typeof parsedResponse.matchScore !== 'number') {
+      logger.error('Invalid response structure from OpenAI:', JSON.stringify(parsedResponse));
+      throw {
+        type: ERROR_TYPES.PARSING_ERROR,
+        message: 'Received invalid response format from AI service.'
+      };
+    }
+
+    // Calculate total duration
+    metrics.totalDuration = Date.now() - metrics.startTime;
+    logger.info(`Total CV optimization process completed in ${metrics.totalDuration}ms`);
+
+    // Return the lightweight response
+    // For backward compatibility, include empty cvAnalysis structure
+    return {
+      optimizedContent: parsedResponse.optimizedContent,
+      matchScore: parsedResponse.matchScore,
+      recommendations: parsedResponse.recommendations || [],
+      cvAnalysis: {
+        industry: '',
+        language: '',
+        sections: [],
+        skills: [],
+        strengths: [],
+        weaknesses: [],
+        missingKeywords: [],
+        formattingIssues: [],
+        structuralIssues: []
+      }
+    };
+  } catch (error: any) {
     // Calculate duration until error
-    const durationUntilError = Date.now() - metrics.startTime;
+    const errorDuration = Date.now() - metrics.startTime;
     
-    // Log the error with performance information
-    logger.error(`CV optimization failed after ${durationUntilError}ms: ${error instanceof Error ? error.message : String(error)}`);
+    // Handle specific error types
+    if (error.type === ERROR_TYPES.TIMEOUT) {
+      logger.warn(`CV optimization timed out after ${errorDuration}ms`);
+    } else {
+      logger.error(`Error in CV optimization after ${errorDuration}ms:`, 
+        error instanceof Error ? error.message : (error.message || JSON.stringify(error)));
+    }
+
+    // Prepare user-friendly error message
+    let errorMessage = 'An error occurred during CV optimization.';
+    let errorType = ERROR_TYPES.SYSTEM_ERROR;
     
-    // Re-throw the error
-    throw error;
+    if (error.type === ERROR_TYPES.TIMEOUT) {
+      errorMessage = 'CV optimization timed out after 30 seconds. Please try again when the system has less load or simplify your CV.';
+      errorType = ERROR_TYPES.TIMEOUT;
+    } else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      errorMessage = 'Connection to AI service timed out. Please try again later when the system has less load.';
+      errorType = ERROR_TYPES.TIMEOUT;
+    } else if (error.status === 429 || error.message?.includes('rate limit')) {
+      errorMessage = 'AI service is currently at capacity. Please try again in a few minutes.';
+      errorType = ERROR_TYPES.API_ERROR;
+    }
+
+    throw {
+      type: errorType,
+      message: errorMessage,
+      originalError: error
+    };
   }
 }
 

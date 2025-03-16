@@ -478,140 +478,196 @@ export async function optimizeCV(
     
     // UPDATE STAGE: NOT_STARTED -> ANALYZE_STARTED
     updateStage(state, OptimizationStage.ANALYZE_STARTED);
-    logger.info(`Analysis stage started for CV ${cvId}, progress: 10%`);
+    logger.info(`Analysis stage started for CV ${cvId}, progress: 5%`);
     
     // Update partial results with initial progress
     await storePartialResults(userId, cvId, jobDescription, {
       optimizedContent: "",
       matchScore: 0,
       recommendations: [],
-      progress: 10,
+      progress: 5,
       state: state
     });
-    logger.debug(`Updated partial results for ${userId}:${cvId}:${jobDescription}, progress: 10%`);
+    logger.debug(`Updated partial results for ${userId}:${cvId}:${jobDescription}, progress: 5%`);
     
     try {
       logger.info(`Calling lightweight GPT-4o optimization for CV ${cvId}`);
       
-      // Use a timeout to ensure we don't wait forever
-      const OVERALL_TIMEOUT = 90000; // 90 seconds
-      let optimizationTimedOut = false;
+      // Set a global timeout for the entire optimization process
+      const GLOBAL_TIMEOUT = 30000; // 30 seconds exactly as requested
+      let optimizationComplete = false;
+      let optResult: any = null;
       
+      // Create a timeout promise that rejects after 30 seconds
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => {
-          optimizationTimedOut = true;
-          reject(new Error(`Overall optimization timed out after ${OVERALL_TIMEOUT}ms`));
-        }, OVERALL_TIMEOUT);
+          if (!optimizationComplete) {
+            reject({
+              type: 'TIMEOUT_ERROR',
+              message: 'CV optimization timed out after 30 seconds. The system may be experiencing high load or your CV may be too complex.'
+            });
+          }
+        }, GLOBAL_TIMEOUT);
       });
       
-      // Optimization with race between actual process and timeout
-      const optResult = await Promise.race([
-        analyzeAndOptimizeWithGPT4o(input, jobDescription),
-        timeoutPromise
-      ]);
-      
-      // Optimization completed successfully
-      const analyzeDuration = Date.now() - startTime;
-      logger.info(`CV optimization completed in ${analyzeDuration}ms for CV ${cvId}`);
-      
-      // UPDATE STAGE: ANALYZE_STARTED -> ANALYZE_COMPLETED
-      updateStage(state, OptimizationStage.ANALYZE_COMPLETED);
-      logger.info(`Analysis completed for CV ${cvId}, progress: 40%`);
-      
-      // Update partial results after analysis
-      await storePartialResults(userId, cvId, jobDescription, {
-        optimizedContent: optResult.optimizedContent,
-        matchScore: optResult.matchScore,
-        recommendations: optResult.recommendations || [],
-        progress: 40,
-        state: state
-      });
-      logger.debug(`Updated partial results for ${userId}:${cvId}, progress: 40%`);
-      
-      // UPDATE STAGE: ANALYZE_COMPLETED -> GENERATE_STARTED
-      updateStage(state, OptimizationStage.GENERATE_STARTED);
-      logger.info(`Document generation started for CV ${cvId}, progress: 85%`);
-      
-      // Update partial results for generation start
-      await storePartialResults(userId, cvId, jobDescription, {
-        optimizedContent: optResult.optimizedContent,
-        matchScore: optResult.matchScore,
-        recommendations: optResult.recommendations || [],
-        progress: 85,
-        state: state
-      });
-      logger.debug(`Updated partial results for ${userId}:${cvId}, progress: 85%`);
-      
-      // UPDATE STAGE: GENERATE_STARTED -> GENERATE_COMPLETED (No actual generation in lightweight mode)
-      updateStage(state, OptimizationStage.GENERATE_COMPLETED);
-      logger.info(`Document generation completed for CV ${cvId}, progress: 100%`);
-      
-      // Final partial results update
-      await storePartialResults(userId, cvId, jobDescription, {
-        optimizedContent: optResult.optimizedContent,
-        matchScore: optResult.matchScore,
-        recommendations: optResult.recommendations || [],
-        progress: 100,
-        state: state
-      });
-      logger.debug(`Final partial results stored for ${userId}:${cvId}, progress: 100%`);
-      
-      // Calculate total duration
-      const totalDuration = Date.now() - startTime;
-      logger.info(`CV optimization workflow completed successfully in ${totalDuration}ms for user ${userId}, CV ${cvId}`);
-      
-      // Return success result
-      return {
-        success: true,
-        message: 'Optimization completed successfully',
-        result: {
+      try {
+        // Run the optimization with a race between the actual process and the timeout
+        optResult = await Promise.race([
+          analyzeAndOptimizeWithGPT4o(input, jobDescription),
+          timeoutPromise
+        ]);
+        
+        // Mark as complete to prevent timeout from triggering if we finished just in time
+        optimizationComplete = true;
+        
+        // Optimization completed successfully
+        const analyzeDuration = Date.now() - startTime;
+        logger.info(`CV optimization completed in ${analyzeDuration}ms for CV ${cvId}`);
+        
+        // UPDATE STAGE: ANALYZE_STARTED -> ANALYZE_COMPLETED
+        updateStage(state, OptimizationStage.ANALYZE_COMPLETED);
+        logger.info(`Analysis completed for CV ${cvId}, progress: 40%`);
+        
+        // Update partial results after analysis
+        await storePartialResults(userId, cvId, jobDescription, {
+          optimizedContent: optResult.optimizedContent,
+          matchScore: optResult.matchScore,
+          recommendations: optResult.recommendations || [],
+          progress: 40,
+          state: state
+        });
+        logger.debug(`Updated partial results for ${userId}:${cvId}, progress: 40%`);
+        
+        // UPDATE STAGE: ANALYZE_COMPLETED -> GENERATE_STARTED
+        updateStage(state, OptimizationStage.GENERATE_STARTED);
+        logger.info(`Document generation started for CV ${cvId}, progress: 85%`);
+        
+        // Update partial results for generation start
+        await storePartialResults(userId, cvId, jobDescription, {
+          optimizedContent: optResult.optimizedContent,
+          matchScore: optResult.matchScore,
+          recommendations: optResult.recommendations || [],
+          progress: 85,
+          state: state
+        });
+        logger.debug(`Updated partial results for ${userId}:${cvId}, progress: 85%`);
+        
+        // UPDATE STAGE: GENERATE_STARTED -> GENERATE_COMPLETED (No actual generation in lightweight mode)
+        updateStage(state, OptimizationStage.GENERATE_COMPLETED);
+        logger.info(`Document generation completed for CV ${cvId}, progress: 100%`);
+        
+        // Final partial results update
+        await storePartialResults(userId, cvId, jobDescription, {
           optimizedContent: optResult.optimizedContent,
           matchScore: optResult.matchScore,
           recommendations: optResult.recommendations || [],
           progress: 100,
           state: state
+        });
+        logger.debug(`Final partial results stored for ${userId}:${cvId}, progress: 100%`);
+        
+        // Calculate total duration
+        const totalDuration = Date.now() - startTime;
+        logger.info(`CV optimization workflow completed successfully in ${totalDuration}ms for user ${userId}, CV ${cvId}`);
+        
+        // Return success result
+        return {
+          success: true,
+          message: 'Optimization completed successfully',
+          result: {
+            optimizedContent: optResult.optimizedContent,
+            matchScore: optResult.matchScore,
+            recommendations: optResult.recommendations || [],
+            progress: 100,
+            state: state
+          }
+        };
+      } catch (optimizationError: any) {
+        // Check if we have a timeout or another error
+        let errorMessage = 'An unexpected error occurred during optimization.';
+        let errorRecommendation = 'Please try again later.';
+        
+        // Handle specific error types
+        if (optimizationError.type === 'TIMEOUT_ERROR') {
+          errorMessage = 'CV optimization timed out after 30 seconds.';
+          errorRecommendation = 'Please try again when the system has less load or simplify your CV.';
+          logger.warn(`CV optimization timed out after 30 seconds for user ${userId}, CV ${cvId}`);
+        } else if (optimizationError.type === 'API_ERROR') {
+          errorMessage = 'AI service is currently at capacity.';
+          errorRecommendation = 'Please try again in a few minutes.';
+          logger.warn(`AI service capacity issue for user ${userId}, CV ${cvId}: ${optimizationError.message}`);
+        } else {
+          // For other errors, log details
+          logger.error(`Error during CV optimization for CV ${cvId}: ${optimizationError.message || JSON.stringify(optimizationError)}`);
+          if (optimizationError.stack) {
+            logger.debug(`Error stack: ${optimizationError.stack}`);
+          }
         }
-      };
-    } catch (optimizationError) {
-      // Log detailed error information
-      const errorMessage = optimizationError instanceof Error ? optimizationError.message : String(optimizationError);
-      const errorStack = optimizationError instanceof Error ? optimizationError.stack : undefined;
+        
+        // Create a user-friendly error message
+        const userErrorMessage = `${errorMessage} ${errorRecommendation}`;
+        
+        // Record error in the state
+        recordOptimizationError(userId, cvId, jobDescription, userErrorMessage, OptimizationStage.ANALYZE_STARTED);
+        logger.debug(`Recorded optimization error for ${userId}:${cvId}`);
+        
+        // Update state to error
+        updateStage(state, OptimizationStage.ERROR);
+        state.error = userErrorMessage;
+        
+        // Store error in partial results
+        await storePartialResults(userId, cvId, jobDescription, {
+          optimizedContent: "",
+          matchScore: 0,
+          recommendations: [errorRecommendation],
+          progress: 0,
+          error: userErrorMessage,
+          state: state
+        });
+        logger.debug(`Updated partial results with error for ${userId}:${cvId}`);
+        
+        // Return error result with user-friendly message
+        return {
+          success: false,
+          message: userErrorMessage,
+          result: {
+            optimizedContent: input, // Return original content
+            matchScore: 0,
+            recommendations: [errorRecommendation],
+            progress: 0,
+            error: userErrorMessage,
+            state: state
+          }
+        };
+      }
+    } catch (outerError: any) {
+      // This catches any errors in the optimization wrapper
+      const errorMessage = outerError.message || (outerError instanceof Error ? outerError.message : String(outerError));
+      logger.error(`Unexpected error in optimization wrapper for user ${userId}, CV ${cvId}: ${errorMessage}`);
       
-      logger.error(`Error during CV optimization for CV ${cvId}: ${errorMessage}`);
-      if (errorStack) {
-        logger.debug(`Error stack: ${errorStack}`);
+      try {
+        // Record the error
+        recordOptimizationError(userId, cvId, jobDescription, errorMessage, OptimizationStage.NOT_STARTED);
+      } catch (recordError) {
+        logger.error(`Failed to record optimization error: ${recordError instanceof Error ? recordError.message : String(recordError)}`);
       }
       
-      // Record error details
-      recordOptimizationError(userId, cvId, jobDescription, errorMessage, OptimizationStage.ANALYZE_STARTED);
-      logger.debug(`Recorded optimization error for ${userId}:${cvId}`);
-      
-      // Update state to error
-      updateStage(state, OptimizationStage.ERROR);
-      state.error = errorMessage;
-      
-      // Mark progress as failed in partial results
-      await storePartialResults(userId, cvId, jobDescription, {
-        optimizedContent: "",
-        matchScore: 0,
-        recommendations: [`Error: ${errorMessage}`],
-        progress: 0,
-        error: errorMessage,
-        state: state
-      });
-      logger.debug(`Updated partial results with error for ${userId}:${cvId}`);
-      
-      // Return error result with details
+      // Return error result
       return {
         success: false,
         message: `Optimization failed: ${errorMessage}`,
         result: {
           optimizedContent: input, // Use original content
           matchScore: 0,
-          recommendations: [`Error: ${errorMessage}`],
+          recommendations: [`Error: The system encountered an issue. Please try again later.`],
           progress: 0,
           error: errorMessage,
-          state: state
+          state: {
+            ...state,
+            stage: OptimizationStage.ERROR,
+            error: errorMessage,
+            lastUpdated: Date.now()
+          }
         }
       };
     }
@@ -634,7 +690,7 @@ export async function optimizeCV(
       result: {
         optimizedContent: input, // Use original content
         matchScore: 0,
-        recommendations: [`Error: ${errorMessage}`],
+        recommendations: [`Error: The system encountered an issue. Please try again later.`],
         progress: 0,
         error: errorMessage,
         state: {
