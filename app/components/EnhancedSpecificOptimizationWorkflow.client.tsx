@@ -1350,48 +1350,102 @@ const extractProfile = (text: string): string => {
 };
 
 const optimizeProfile = (profile: string, jobDescription: string, jobKeywords: string[]): string => {
-  if (!profile || profile.trim().length === 0) {
-    return 'Experienced professional with a proven track record of success, seeking to leverage skills and expertise to excel in a new challenging role.';
-  }
-
-  // Clean the profile
-  let cleanedProfile = profile.trim();
+  // Extract important job requirements and key phrases
+  const extractKeyPhrases = (text: string): string[] => {
+    const phrases: string[] = [];
+    
+    // Look for key requirement statements
+    const requirementPatterns = [
+      /(?:required|must have|essential|you will need)[:\s]+([^.;]+[.;])/gi,
+      /(?:seeking|looking for)[:\s]+([^.;]+[.;])/gi,
+      /(?:responsibilities include|will be responsible for|the role involves)[:\s]+([^.;]+[.;])/gi,
+      /(?:ideal candidate|you will|you should)[:\s]+([^.;]+[.;])/gi
+    ];
+    
+    requirementPatterns.forEach(pattern => {
+      const matches = [...text.matchAll(pattern)];
+      matches.forEach(match => {
+        if (match[1] && match[1].trim().length > 10) {
+          phrases.push(match[1].trim());
+        }
+      });
+    });
+    
+    // Look for sentences containing key career terms
+    const careerTerms = ['experience', 'background', 'expertise', 'skills', 'knowledge', 'qualifications'];
+    careerTerms.forEach(term => {
+      const termPattern = new RegExp(`[^.;]+\\b${term}\\b[^.;]+[.;]`, 'gi');
+      const matches = [...text.matchAll(termPattern)];
+      matches.forEach(match => {
+        if (match[0] && match[0].trim().length > 15 && !phrases.includes(match[0].trim())) {
+          phrases.push(match[0].trim());
+        }
+      });
+    });
+    
+    return phrases;
+  };
   
-  // Make keyword matching case-insensitive
-  const lowercaseKeywords = jobKeywords.map(keyword => keyword.toLowerCase());
-
-  // Check if the profile mentions main keywords
-  const containsKeywords = lowercaseKeywords.some(keyword => 
-    cleanedProfile.toLowerCase().includes(keyword)
-  );
-
-  if (containsKeywords) {
-    // Profile already has relevant keywords, just make minor enhancements
-    // Ensure it ends with proper punctuation
-    if (!cleanedProfile.endsWith('.') && !cleanedProfile.endsWith('!') && !cleanedProfile.endsWith('?')) {
-      cleanedProfile += '.';
-    }
+  // Generate a new profile if none exists or it's very short
+  if (!profile || profile.length < 50) {
+    const keyPhrases = extractKeyPhrases(jobDescription);
+    const topKeywords = jobKeywords.slice(0, 5);
     
-    return cleanedProfile;
-  } else {
-    // Profile needs more job-specific context
-    // Extract job title from description if possible
-    const titleMatch = jobDescription.match(/(?:seeking|looking for|hiring|position for)(?: a| an)? ([^\.]+)/i);
-    const jobTitle = titleMatch ? titleMatch[1].trim() : "professional role";
-    
-    // Enhance the profile with job-specific context
-    let enhancedProfile = cleanedProfile;
-    
-    // Ensure it ends with proper punctuation before adding our enhancement
-    if (!enhancedProfile.endsWith('.') && !enhancedProfile.endsWith('!') && !enhancedProfile.endsWith('?')) {
-      enhancedProfile += '.';
-    }
-    
-    // Add job-specific enhancement
-    enhancedProfile += ` Seeking to leverage expertise in ${lowercaseKeywords.slice(0, 3).join(', ')} to excel as a ${jobTitle}.`;
-    
-    return enhancedProfile;
+    // Create a compelling profile using job phrases and keywords
+    return `Experienced professional with a strong background in ${topKeywords.slice(0, 3).join(', ')}. ${
+      keyPhrases.length > 0 
+        ? `Skilled in ${keyPhrases[0].toLowerCase().replace(/^i am |^i have |^you will |^the ideal candidate |^seeking |^looking for /i, '')}` 
+        : `Seeking to leverage expertise in ${topKeywords.join(', ')} to excel in this role.`
+    } Demonstrated ability to ${
+      keyPhrases.length > 1 
+        ? keyPhrases[1].toLowerCase().replace(/^i am |^i have |^you will |^the ideal candidate |^seeking |^looking for /i, '') 
+        : `deliver results and contribute to team success through strong ${topKeywords.slice(3, 5).join(' and ')} skills.`
+    }`;
   }
+  
+  // If profile exists but needs enhancement
+  const keyPhrases = extractKeyPhrases(jobDescription);
+  const profileLower = profile.toLowerCase();
+  
+  // Check if the profile already mentions key job requirements
+  let containsKeyJobTerms = false;
+  for (const keyword of jobKeywords.slice(0, 5)) {
+    if (profileLower.includes(keyword.toLowerCase())) {
+      containsKeyJobTerms = true;
+      break;
+    }
+  }
+  
+  // If profile already contains key job terms, just return it with minor enhancement
+  if (containsKeyJobTerms && profile.length > 100) {
+    // Only add a minor enhancement if the profile is already strong
+    return profile;
+  }
+  
+  // Profile needs significant enhancement
+  // Keep the original profile but add job-specific enhancements
+  let enhancedProfile = profile.trim();
+  
+  // Make sure the profile ends with appropriate punctuation
+  if (!/[.;!?]$/.test(enhancedProfile)) {
+    enhancedProfile += '.';
+  }
+  
+  // Add a sentence highlighting job-specific skills
+  const jobSpecificAddition = ` Offers particular expertise in ${jobKeywords.slice(0, 3).join(', ')}`;
+  
+  // Add key job phrase if available
+  if (keyPhrases.length > 0) {
+    const keyPhrase = keyPhrases[0].toLowerCase()
+      .replace(/^i am |^i have |^you will |^the ideal candidate |^seeking |^looking for /i, '')
+      .replace(/\.$/, '');
+      
+    enhancedProfile += `${jobSpecificAddition} with demonstrated ability to ${keyPhrase}.`;
+  } else {
+    enhancedProfile += `${jobSpecificAddition}.`;
+  }
+  
+  return enhancedProfile;
 };
 
 const extractTechnicalSkills = (text: string): string[] => {
@@ -2813,189 +2867,194 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   
   // Generate optimized text based on job description
   const generateOptimizedText = (originalText: string, jobDescription: string): string => {
-    try {
-      // Extract job keywords for optimization
-      const jobKeywords = extractKeywords(jobDescription);
-      
-      // Extract and optimize the different sections
-      const profile = extractProfile(originalText);
-      let optimizedProfile = optimizeProfile(profile, jobDescription, jobKeywords);
-      
-      // Format the profile for better parsing - ensure it has a clear header and proper spacing
-      // Break long profile into digestible sentences for better document formatting
-      let formattedProfile = "PROFILE:\n";
-      
-      // Break profile into sentences for better readability
-      const profileSentences = optimizedProfile.split(/(?<=[.!?])\s+/);
-      formattedProfile += profileSentences.join('\n') + '\n\n';
-      
-      // Extract and optimize other sections
-      const achievements = extractAchievements(originalText);
-      const optimizedAchievements = optimizeAchievements(achievements, jobDescription, jobKeywords);
-      
-      // Extract and optimize goals
-      const goals = extractGoals(originalText);
-      const optimizedGoals = optimizeGoals(goals, jobDescription, jobKeywords);
-      
-      // Extract and optimize languages (preserve original order but enhance descriptions)
-      const languages = extractLanguages(originalText);
-      const optimizedLanguages = languages.length > 0 ? optimizeLanguages(languages, jobDescription) : [];
-      
-      // Extract and optimize skills (preserve original skills and add relevant missing ones)
-      const technicalSkills = extractTechnicalSkills(originalText);
-      const professionalSkills = extractProfessionalSkills(originalText);
-      const optimizedSkillsData = optimizeSkills(technicalSkills, professionalSkills, jobDescription, jobKeywords);
-      
-      // Extract and optimize education (preserve original data but highlight relevant aspects)
-      const education = extractEducationData(originalText);
-      const optimizedEducation = education.length > 0 ? optimizeEducation(education, jobDescription, jobKeywords) : [];
-      
-      // Extract and preserve experience (will be placed at the end)
-      const experienceEntries = extractExperienceData(originalText);
-      
-      // Extract name and contact info for header
-      const name = extractName(originalText);
-      const contactInfo = extractContactInfo(originalText);
-      
-      // Create a well-structured optimized text with clear section headers
-      let optimizedText = '';
-      
-      // 1. HEADER: Add header section (name and contact info)
-      optimizedText += `${name}\n`;
-      
-      // Add contact info if available
-      const contactLines = [];
-      if (contactInfo.email) contactLines.push(contactInfo.email);
-      if (contactInfo.phone) contactLines.push(contactInfo.phone);
-      if (contactInfo.location) contactLines.push(contactInfo.location);
-      if (contactInfo.linkedin) contactLines.push(contactInfo.linkedin);
-      if (contactInfo.website) contactLines.push(contactInfo.website);
-      
-      if (contactLines.length > 0) {
-        optimizedText += `${contactLines.join(' | ')}\n`;
-      }
-      
-      optimizedText += '\n';
-      
-      // 2. PROFILE: Add profile section with clear header
-      optimizedText += `PROFILE:\n${formattedProfile}`;
-      
-      // 3. SUMMARY: Add one sentence summary of role scope
-      optimizedText += `SUMMARY:\n${extractSubheader(originalText)}\n\n`;
-      
-      // 4. ACHIEVEMENTS: Add achievements section with clear header
-      if (optimizedAchievements.length > 0) {
-        optimizedText += `ACHIEVEMENTS:\n`;
-        optimizedAchievements.forEach(achievement => {
-          // Check if achievement contains quantifiable results
-          const hasQuantifiableResults = /\d+%|\d+\s*(?:million|thousand|hundred|k|m|b|billion|x|times)|\$\d+|increased|improved|reduced|saved|generated/i.test(achievement);
-          
-          if (hasQuantifiableResults) {
-            // Use a star symbol for achievements with metrics to make them stand out
-            optimizedText += `★ ${achievement}\n`;
-          } else {
-            optimizedText += `• ${achievement}\n`;
-          }
-        });
-        optimizedText += '\n';
-      }
-      
-      // 5. GOALS: Add goals section with clear header
-      if (optimizedGoals.length > 0) {
-        optimizedText += `GOALS:\n`;
-        optimizedGoals.forEach(goal => {
-          optimizedText += `• ${goal}\n`;
-        });
-        optimizedText += '\n';
-      }
-      
-      // 6. LANGUAGES: Add languages section with clear header
-      if (optimizedLanguages.length > 0) {
-        optimizedText += `LANGUAGES:\n`;
-        optimizedLanguages.forEach(language => {
-          // Format language entries consistently
-          const parts = language.split(/[:-]/).map(part => part.trim());
-          if (parts.length === 2) {
-            optimizedText += `• ${parts[0]} - ${parts[1]}\n`;
-          } else {
-            optimizedText += `• ${language}\n`;
-          }
-        });
-        optimizedText += '\n';
-      }
-      
-      // 7. SKILLS: Add skills section with clear header and subsections
-      optimizedText += `SKILLS:\n`;
-      
-      if (optimizedSkillsData.technical.length > 0) {
-        optimizedText += `Technical Skills:\n`;
-        optimizedSkillsData.technical.forEach((skill: string) => {
-          optimizedText += `• ${skill}\n`;
-        });
-        optimizedText += '\n';
-      }
-      
-      if (optimizedSkillsData.professional.length > 0) {
-        optimizedText += `Professional Skills:\n`;
-        optimizedSkillsData.professional.forEach((skill: string) => {
-          optimizedText += `• ${skill}\n`;
-        });
-        optimizedText += '\n';
-      }
-      
-      // 8. EDUCATION: Add education section with clear header
-      if (optimizedEducation.length > 0) {
-        optimizedText += `EDUCATION:\n`;
-        optimizedEducation.forEach((edu: EducationEntry) => {
-          let eduLine = edu.degree;
-          if (edu.institution) eduLine += `, ${edu.institution}`;
-          if (edu.location) eduLine += `, ${edu.location}`;
-          optimizedText += `${eduLine}\n`;
-          
-          let details = [];
-          if (edu.year) details.push(edu.year);
-          if (edu.gpa) details.push(`GPA: ${edu.gpa}`);
-          
-          if (details.length > 0) {
-            optimizedText += `${details.join(', ')}\n`;
-          }
-          
-          if (edu.relevantCourses && edu.relevantCourses.length > 0) {
-            optimizedText += `Relevant Courses:\n`;
-            edu.relevantCourses.forEach((course: string) => {
-              optimizedText += `• ${course}\n`;
-            });
-          }
-          
-          if (edu.achievements && edu.achievements.length > 0) {
-            optimizedText += `Academic Achievements:\n`;
-            edu.achievements.forEach((achievement: string) => {
-              optimizedText += `• ${achievement}\n`;
-            });
-          }
-          
-          optimizedText += '\n';
-        });
-      }
-      
-      // 9. EXPERIENCE: Add experience section at the end if available in original text
-      if (experienceEntries.length > 0) {
-        optimizedText += `EXPERIENCE:\n`;
-        experienceEntries.forEach(exp => {
-          if (exp.title) optimizedText += `${exp.title}\n`;
-          if (exp.startDate || exp.endDate) {
-            const dateRange = `${exp.startDate || ''} - ${exp.endDate || 'Present'}`;
-            optimizedText += `${dateRange}\n`;
-          }
-          optimizedText += '\n';
-        });
-      }
-      
-      return optimizedText;
-    } catch (error) {
-      console.error("Error generating optimized text:", error);
-      return "An error occurred while generating optimized text.";
+    if (!originalText || !jobDescription) {
+      return originalText;
     }
+    
+    // Extract job keywords
+    const jobKeywords = extractKeywords(jobDescription, true);
+    
+    // Extract and optimize profile - ensure we have a good quality profile section
+    const profile = extractProfile(originalText);
+    let optimizedProfileText = optimizeProfile(profile, jobDescription, jobKeywords);
+    
+    // Make sure profile isn't empty and has substance
+    if (!optimizedProfileText || optimizedProfileText.trim().length < 50) {
+      // Create a fallback profile using job keywords
+      optimizedProfileText = `Experienced professional with expertise in ${jobKeywords.slice(0, 5).join(', ')}. ` +
+        `Proven track record of delivering results and committed to excellence in ${jobKeywords.slice(5, 8).join(', ')}.`;
+    }
+    
+    // Extract one sentence summary (subheader)
+    const subheader = extractSubheader(originalText) || 
+      `Experienced professional seeking to leverage skills and expertise in ${jobKeywords.slice(0, 3).join(', ')}`;
+    
+    // Extract and optimize achievements
+    const achievements = extractAchievements(originalText);
+    const optimizedAchievements = achievements.length > 0 ? optimizeAchievements(achievements, jobDescription, jobKeywords) : [];
+    
+    // Extract and optimize goals
+    const goals = extractGoals(originalText);
+    const optimizedGoals = goals.length > 0 ? optimizeGoals(goals, jobDescription, jobKeywords) : [];
+    
+    // Extract and optimize languages (preserve original order but enhance descriptions)
+    const languages = extractLanguages(originalText);
+    const optimizedLanguages = languages.length > 0 ? optimizeLanguages(languages, jobDescription) : [];
+    
+    // Extract and optimize skills (preserve original skills and add relevant missing ones)
+    const technicalSkills = extractTechnicalSkills(originalText);
+    const professionalSkills = extractProfessionalSkills(originalText);
+    const optimizedSkillsData = optimizeSkills(technicalSkills, professionalSkills, jobDescription, jobKeywords);
+    
+    // Extract and optimize education (preserve original data but highlight relevant aspects)
+    const education = extractEducationData(originalText);
+    const optimizedEducation = education.length > 0 ? optimizeEducation(education, jobDescription, jobKeywords) : [];
+    
+    // Extract and preserve experience (will be placed at the end)
+    const experienceEntries = extractExperienceData(originalText);
+    
+    // Extract name and contact info for header
+    const name = extractName(originalText);
+    const contactInfo = extractContactInfo(originalText);
+    
+    // Create a well-structured optimized text with clear section headers
+    let optimizedText = '';
+    
+    // 1. HEADER: Add header section (name and contact info)
+    optimizedText += `${name}\n`;
+    
+    // Add contact info if available
+    const contactLines = [];
+    if (contactInfo.email) contactLines.push(contactInfo.email);
+    if (contactInfo.phone) contactLines.push(contactInfo.phone);
+    if (contactInfo.location) contactLines.push(contactInfo.location);
+    if (contactInfo.linkedin) contactLines.push(contactInfo.linkedin);
+    if (contactInfo.website) contactLines.push(contactInfo.website);
+    
+    if (contactLines.length > 0) {
+      optimizedText += `${contactLines.join(' | ')}\n`;
+    }
+    
+    optimizedText += '\n';
+    
+    // 2. PROFILE: Add profile section with clear header
+    optimizedText += `PROFILE:\n${optimizedProfileText}\n\n`;
+    
+    // 2. PROFILE: Add profile section with clear header formatted for better parsing
+    optimizedText += `PROFILE:\n${optimizedProfileText.trim()}\n\n`;
+    
+    // 3. SUMMARY: Add one sentence summary of role scope
+    optimizedText += `SUMMARY:\n${subheader}\n\n`;
+    
+    // 4. ACHIEVEMENTS: Add achievements section with clear header
+    if (optimizedAchievements.length > 0) {
+      optimizedText += `ACHIEVEMENTS:\n`;
+      optimizedAchievements.forEach(achievement => {
+        // Check if achievement contains quantifiable results
+        const hasQuantifiableResults = /\d+%|\d+\s*(?:million|thousand|hundred|k|m|b|billion|x|times)|\$\d+|increased|improved|reduced|saved|generated/i.test(achievement);
+        
+        if (hasQuantifiableResults) {
+          // Use a star symbol for achievements with metrics to make them stand out
+          optimizedText += `★ ${achievement}\n`;
+        } else {
+          optimizedText += `• ${achievement}\n`;
+        }
+      });
+      optimizedText += '\n';
+    }
+    
+    // 5. GOALS: Add goals section with clear header
+    if (optimizedGoals.length > 0) {
+      optimizedText += `GOALS:\n`;
+      optimizedGoals.forEach(goal => {
+        optimizedText += `• ${goal}\n`;
+      });
+      optimizedText += '\n';
+    }
+    
+    // 6. LANGUAGES: Add languages section with clear header
+    if (optimizedLanguages.length > 0) {
+      optimizedText += `LANGUAGES:\n`;
+      optimizedLanguages.forEach(language => {
+        // Format language entries consistently
+        const parts = language.split(/[:-]/).map(part => part.trim());
+        if (parts.length === 2) {
+          optimizedText += `• ${parts[0]} - ${parts[1]}\n`;
+        } else {
+          optimizedText += `• ${language}\n`;
+        }
+      });
+      optimizedText += '\n';
+    }
+    
+    // 7. SKILLS: Add skills section with clear header and subsections
+    optimizedText += `SKILLS:\n`;
+    
+    if (optimizedSkillsData.technical.length > 0) {
+      optimizedText += `Technical Skills:\n`;
+      optimizedSkillsData.technical.forEach((skill: string) => {
+        optimizedText += `• ${skill}\n`;
+      });
+      optimizedText += '\n';
+    }
+    
+    if (optimizedSkillsData.professional.length > 0) {
+      optimizedText += `Professional Skills:\n`;
+      optimizedSkillsData.professional.forEach((skill: string) => {
+        optimizedText += `• ${skill}\n`;
+      });
+      optimizedText += '\n';
+    }
+    
+    // 8. EDUCATION: Add education section with clear header
+    if (optimizedEducation.length > 0) {
+      optimizedText += `EDUCATION:\n`;
+      optimizedEducation.forEach((edu: EducationEntry) => {
+        let eduLine = edu.degree;
+        if (edu.institution) eduLine += `, ${edu.institution}`;
+        if (edu.location) eduLine += `, ${edu.location}`;
+        optimizedText += `${eduLine}\n`;
+        
+        let details = [];
+        if (edu.year) details.push(edu.year);
+        if (edu.gpa) details.push(`GPA: ${edu.gpa}`);
+        
+        if (details.length > 0) {
+          optimizedText += `${details.join(', ')}\n`;
+        }
+        
+        if (edu.relevantCourses && edu.relevantCourses.length > 0) {
+          optimizedText += `Relevant Courses:\n`;
+          edu.relevantCourses.forEach((course: string) => {
+            optimizedText += `• ${course}\n`;
+          });
+        }
+        
+        if (edu.achievements && edu.achievements.length > 0) {
+          optimizedText += `Academic Achievements:\n`;
+          edu.achievements.forEach((achievement: string) => {
+            optimizedText += `• ${achievement}\n`;
+          });
+        }
+        
+        optimizedText += '\n';
+      });
+    }
+    
+    // 9. EXPERIENCE: Add experience section at the end if available in original text
+    if (experienceEntries.length > 0) {
+      optimizedText += `EXPERIENCE:\n`;
+      experienceEntries.forEach(exp => {
+        if (exp.title) optimizedText += `${exp.title}\n`;
+        if (exp.startDate || exp.endDate) {
+          const dateRange = `${exp.startDate || ''} - ${exp.endDate || 'Present'}`;
+          optimizedText += `${dateRange}\n`;
+        }
+        optimizedText += '\n';
+      });
+    }
+    
+    return optimizedText;
   };
 
   const showToast = useCallback(({ title, description, duration }: { title: string; description: string; duration: number }) => {
@@ -3470,20 +3529,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         },
         body: JSON.stringify({
           cvId: selectedCVId,
-          optimizedText: (() => {
-            // Clean the optimized text
-            const cleanedText = cleanOptimizedText(optimizedText);
-            
-            // Log for debugging
-            console.log("Sections in optimized text:");
-            cleanedText.split('\n').forEach(line => {
-              if (line.trim().match(/^[A-Z][A-Z\s]+:$/)) {
-                console.log(`Found section: ${line.trim()}`);
-              }
-            });
-            
-            return cleanedText;
-          })(),
+          optimizedText: cleanOptimizedText(optimizedText),
           jobDescription: jobDescription || '',
           jobTitle: jobTitle || '',
         }),
@@ -3589,22 +3635,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
             },
             body: JSON.stringify({
               cvId: selectedCVId,
-              optimizedText: (() => {
-                // Clean the optimized text
-                const cleanedText = cleanOptimizedText(optimizedText);
-                
-                // Log for debugging
-                console.log("Sections in optimized text:");
-                cleanedText.split('\n').forEach(line => {
-                  if (line.trim().match(/^[A-Z][A-Z\s]+:$/)) {
-                    console.log(`Found section: ${line.trim()}`);
-                  }
-                });
-                
-                return cleanedText;
-              })(),
-              jobDescription: jobDescription || '',
-              jobTitle: jobTitle || '',
+              optimizedText
             }),
           });
           
@@ -3710,79 +3741,90 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     generateDocument();
   };
 
-  // Clean up optimized text to ensure proper section parsing
+  // Clean up optimized text to ensure proper section parsing and formatting
   const cleanOptimizedText = (text: string): string => {
     if (!text) return '';
     
     // Split text into lines
     const lines = text.split('\n');
-    const cleanedLines = [];
-    let currentSection = '';
-    let hasProfileSection = false;
+    const cleanedLines: string[] = [];
     
-    // Process each line
+    // Track sections to avoid duplicates
+    const seenSections = new Set<string>();
+    let currentSection = '';
+    
+    // Ensure section headers are properly formatted
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
       
-      // Skip empty lines at the beginning
-      if (cleanedLines.length === 0 && line === '') continue;
-      
-      // Check if this line is a section header - expanded to match more variations
-      const sectionMatch = line.match(/^(PROFILE|SUMMARY|ABOUT ME|PROFESSIONAL SUMMARY|PERSONAL STATEMENT|EXPERIENCE|WORK EXPERIENCE|EDUCATION|SKILLS|TECHNICAL SKILLS|PROFESSIONAL SKILLS|LANGUAGES|ACHIEVEMENTS|REFERENCES)(:|\s-)?$/i);
-      
-      if (sectionMatch) {
-        // Found a section header
-        currentSection = sectionMatch[1].toUpperCase();
+      // Check if this is a section header
+      const sectionMatch = line.match(/^([A-Z][A-Z\s]+):?$/);
+      if (sectionMatch && sectionMatch[1]) {
+        const sectionName = sectionMatch[1];
         
-        // Check if we found a profile section
-        if (/^(PROFILE|SUMMARY|ABOUT ME|PROFESSIONAL SUMMARY|PERSONAL STATEMENT)$/i.test(currentSection)) {
-          hasProfileSection = true;
+        // If we've seen this section before, skip it
+        if (seenSections.has(sectionName)) {
+          // Skip until we find another section or end of text
+          while (i < lines.length - 1) {
+            i++;
+            const nextLine = lines[i].trim();
+            if (nextLine.match(/^[A-Z][A-Z\s]+:?$/)) {
+              i--; // Go back so we can process this line in next iteration
+              break;
+            }
+          }
+          continue;
         }
         
-        // Add the cleaned section header
-        cleanedLines.push(`${currentSection}:`);
-      } else {
-        // Not a section header, add the line as is
-        cleanedLines.push(line);
+        // Make sure section header ends with a colon
+        const formattedHeader = sectionName + ':';
+        
+        // Mark this section as seen and add to output
+        seenSections.add(sectionName);
+        currentSection = sectionName;
+        cleanedLines.push(formattedHeader);
+        
+        // Special handling for important sections - ensure they have content
+        if (['PROFILE', 'EXPERIENCE', 'EDUCATION', 'SKILLS'].includes(sectionName)) {
+          let sectionHasContent = false;
+          
+          // Look ahead to see if section has content
+          for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
+            if (lines[j].trim().length > 10 && !lines[j].match(/^[A-Z][A-Z\s]+:?$/)) {
+              sectionHasContent = true;
+              break;
+            }
+          }
+          
+          // If important section has no content, add placeholder
+          if (!sectionHasContent) {
+            if (sectionName === 'PROFILE') {
+              cleanedLines.push("Experienced professional with a track record of success seeking opportunities to apply skills and expertise.");
+            }
+          }
+        }
+        
+        continue;
       }
+      
+      // Special handling for profile section - ensure it has good content
+      if (currentSection === 'PROFILE' && line.length < 2) {
+        // Skip empty lines in profile
+        continue;
+      }
+      
+      // Add other lines normally
+      cleanedLines.push(lines[i]);
     }
     
-    // If no profile section was found, try to extract one from the first substantive content
-    if (!hasProfileSection) {
-      // Look through first few lines to see if there's content that could be a profile
-      let profileContent = '';
-      for (let i = 0; i < Math.min(20, lines.length); i++) {
-        const line = lines[i].trim();
-        if (line.length > 50 && 
-            !line.includes('@') && 
-            !line.includes('http') && 
-            !/^[A-Z\s]+:$/i.test(line)) {
-          profileContent = line;
-          break;
-        }
-      }
-      
-      if (profileContent) {
-        // Insert a profile section at the beginning (after any contact info that might exist)
-        let insertIndex = 0;
-        // Skip past any contact info (first few short lines)
-        while (insertIndex < cleanedLines.length && 
-               (cleanedLines[insertIndex].length < 30 || 
-                cleanedLines[insertIndex].includes('@') || 
-                cleanedLines[insertIndex].includes('http'))) {
-          insertIndex++;
-        }
-        
-        // Insert profile section
-        cleanedLines.splice(insertIndex, 0, 'PROFILE:', profileContent, '');
-        console.log('Added missing PROFILE section with extracted content');
-      }
+    // Special check: if no PROFILE section was found, add one at the beginning
+    if (!seenSections.has('PROFILE')) {
+      cleanedLines.unshift("PROFILE:", "Experienced professional with a strong background seeking new opportunities to leverage expertise and contribute to organizational success.");
     }
     
     return cleanedLines.join('\n');
   };
 
-  // Return the component's JSX
   return (
     <div className="w-full max-w-6xl mx-auto">
       {/* File selection */}
@@ -3821,7 +3863,341 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         </button>
       </div>
 
-      {/* Rest of your component UI */}
+      {/* Processing status */}
+      {isProcessing && (
+        <div className="mb-6 p-4 border border-gray-700 rounded-md">
+          <div className="flex items-center mb-2">
+            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+            <span>{processingStatus || 'Processing...'}</span>
+          </div>
+          <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[#B4916C] transition-all duration-300"
+              style={{ width: `${processingProgress}%` }}
+            />
+          </div>
+          <div className="mt-1 text-sm text-gray-400">
+            {processingProgress}% complete
+          </div>
+        </div>
+      )}
+
+      {/* Error message */}
+      {error && (
+        <div className="mb-6 p-4 border border-red-800 bg-red-900/20 rounded-md text-red-200">
+          <div className="flex items-center">
+            <AlertCircle className="w-4 h-4 mr-2" />
+            <span>{error}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Results */}
+      {isProcessed && (
+        <div className="space-y-6">
+          {/* Job match score */}
+          {jobMatchAnalysis && (
+            <div className="mt-8 space-y-6">
+              <div className="bg-[#0D0D0D] rounded-lg p-6 border border-[#1D1D1D]">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-semibold">Job Match Analysis</h3>
+                  
+                  {/* Score pill */}
+                  <div className="px-3 py-1 rounded-full text-sm font-medium" style={{ 
+                    backgroundColor: 
+                      jobMatchAnalysis.score >= 80 ? 'rgba(34, 197, 94, 0.2)' : 
+                      jobMatchAnalysis.score >= 60 ? 'rgba(234, 179, 8, 0.2)' : 
+                      'rgba(239, 68, 68, 0.2)',
+                    color: 
+                      jobMatchAnalysis.score >= 80 ? 'rgb(34, 197, 94)' : 
+                      jobMatchAnalysis.score >= 60 ? 'rgb(234, 179, 8)' : 
+                      'rgb(239, 68, 68)'
+                  }}>
+                    {jobMatchAnalysis.score}% Match
+                  </div>
+                </div>
+                
+                {/* Document Generation Section */}
+                <div className="mb-6 p-4 bg-[#0A0A0A] border border-gray-800 rounded-lg">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+                    <div>
+                      <h4 className="text-lg font-medium text-[#B4916C]">Generate Optimized Document</h4>
+                      <p className="text-sm text-gray-400">Create a professionally formatted DOCX file with your optimized content</p>
+                    </div>
+                    
+                    <Button
+                      onClick={handleGenerateDocument}
+                      disabled={isGeneratingDocument || !optimizedText}
+                      className="w-full md:w-auto bg-[#B4916C] hover:bg-[#A3815B] text-white"
+                      size="lg"
+                    >
+                      {isGeneratingDocument ? (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <FileText className="mr-2 h-4 w-4" />
+                          Generate DOCX
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  
+                  {/* Document Generation Progress */}
+                  {isGeneratingDocument && (
+                    <DocumentGenerationProgress 
+                      progress={processingProgress || 0}
+                      status={processingStatus || ''}
+                      error={documentError}
+                      isGenerating={isGeneratingDocument}
+                    />
+                  )}
+                  
+                  {/* Document Download Status */}
+                  {isDownloading && (
+                    <DocumentDownloadStatus
+                      isDownloading={isDownloading}
+                      isDownloadComplete={isDownloadComplete}
+                      error={documentError}
+                      onManualDownload={handleManualDownload}
+                    />
+                  )}
+                  
+                  {isDownloadComplete && !isDownloading && (
+                    <DocumentDownloadStatus
+                      isDownloading={false}
+                      isDownloadComplete={true}
+                      error={null}
+                      onManualDownload={handleManualDownload}
+                    />
+                  )}
+                  
+                  {documentError && !isGeneratingDocument && !isDownloading && (
+                    <DocumentDownloadStatus
+                      isDownloading={false}
+                      isDownloadComplete={false}
+                      error={documentError}
+                      onManualDownload={handleManualDownload}
+                    />
+                  )}
+                </div>
+                
+                {/* Overall Score Section */}
+                <div className="flex flex-col md:flex-row items-start gap-6 mt-4">
+                  <div className="w-full md:w-1/3 bg-[#050505] rounded-lg p-4 border border-gray-800">
+                    <h4 className="text-lg font-medium mb-3">Overall Match</h4>
+                    <div className="flex flex-col items-center">
+                      <div className="flex items-baseline">
+                        <span className="text-4xl font-bold" style={{ 
+                          color: 
+                            jobMatchAnalysis.score >= 80 ? 'rgb(34, 197, 94)' : 
+                            jobMatchAnalysis.score >= 60 ? 'rgb(234, 179, 8)' : 
+                            'rgb(239, 68, 68)'
+                        }}>
+                          {jobMatchAnalysis.score}%
+                        </span>
+                        <div className="w-16 h-16 relative">
+                          <svg viewBox="0 0 36 36" className="w-full h-full">
+                            <path
+                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                              fill="none"
+                              stroke="#444"
+                              strokeWidth="2"
+                              strokeDasharray="100, 100"
+                            />
+                            <path
+                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                              fill="none"
+                              stroke={
+                                jobMatchAnalysis.score >= 80 ? 'rgb(34, 197, 94)' : 
+                                jobMatchAnalysis.score >= 60 ? 'rgb(234, 179, 8)' : 
+                                'rgb(239, 68, 68)'
+                              }
+                              strokeWidth="2"
+                              strokeDasharray={`${jobMatchAnalysis.score}, 100`}
+                            />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Optimized CV */}
+          <div className="p-6 border border-gray-700 rounded-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold">Optimized CV</h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleGenerateDocument}
+                  className="flex items-center px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A37F5C] transition-colors"
+                  disabled={!optimizedText || isGeneratingDocument}
+                >
+                  {isGeneratingDocument ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4 mr-2" />
+                      Download DOCX
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+            
+            {/* Document Generation Progress/Error */}
+            {isGeneratingDocument && (
+              <div className="mb-4 p-3 bg-[#121212] border border-[#B4916C]/30 rounded-md">
+                <div className="flex items-center mb-2">
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin text-[#B4916C]" />
+                  <span className="text-sm font-medium">
+                    {documentError && documentError.includes('(') && documentError.includes('%') 
+                      ? documentError 
+                      : "Generating document..."}
+                  </span>
+                </div>
+                <Progress 
+                  value={documentError && documentError.includes('(') && documentError.includes('%')
+                    ? parseInt(documentError.match(/\((\d+)%\)/)?.[1] || "0") 
+                    : 0} 
+                  className="h-1.5" 
+                />
+              </div>
+            )}
+            
+            {/* Document Error (when not generating) */}
+            {!isGeneratingDocument && documentError && (
+              <Alert className="mb-4 bg-destructive/10">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription dangerouslySetInnerHTML={{ __html: documentError }} />
+              </Alert>
+            )}
+            
+            {/* Explanation of optimized content */}
+            <div className="mb-4 p-4 bg-[#0A0A0A] rounded-md border border-gray-800">
+              <h4 className="font-medium mb-2 text-[#B4916C]">About Your Optimized CV</h4>
+              <p className="text-sm text-gray-300 mb-2">
+                Below is your optimized CV content tailored specifically for the job description you provided. 
+                This content has been enhanced to improve your match score and highlight relevant skills and experiences.
+              </p>
+              <ul className="list-disc pl-5 text-xs text-gray-400 space-y-1">
+                <li>Your profile has been refined to align with the job requirements</li>
+                <li>Skills and achievements most relevant to the position are emphasized</li>
+                <li>Language has been optimized for ATS compatibility</li>
+                <li>Use the "Generate DOCX" button above to create a properly formatted document</li>
+              </ul>
+            </div>
+            
+            {/* Optimized text with copy button */}
+            <div className="relative">
+              <div className="absolute top-2 right-2">
+                <button 
+                  onClick={() => {
+                    if (optimizedText) {
+                      navigator.clipboard.writeText(optimizedText);
+                      showToast({
+                        title: "Copied!",
+                        description: "Optimized content copied to clipboard",
+                        duration: 3000
+                      });
+                    }
+                  }}
+                  className="p-2 bg-[#111] hover:bg-[#222] rounded-md text-gray-400 hover:text-white transition-colors"
+                  title="Copy to clipboard"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                  </svg>
+                </button>
+              </div>
+              <div className="whitespace-pre-wrap font-mono text-sm bg-[#050505] p-4 rounded-md border border-gray-700 max-h-96 overflow-y-auto">
+                {optimizedText}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Document Generation Progress */}
+      {isGeneratingDocument && (
+        <div className="mt-4 p-4 border border-gray-700 rounded-md bg-gray-800/50">
+          <h3 className="text-lg font-medium mb-2 text-[#B4916C]">Generating Document</h3>
+          
+          <div className="mb-2">
+            <div className="flex justify-between text-sm mb-1">
+              <span>{processingStatus || "Preparing..."}</span>
+              <span>{processingProgress}%</span>
+            </div>
+            <div className="w-full bg-gray-700 h-2 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-[#B4916C] transition-all duration-300" 
+                style={{ width: `${processingProgress}%` }}
+              ></div>
+            </div>
+          </div>
+          
+          <p className="text-sm text-gray-400 mb-2">
+            Please wait while we generate your optimized document. This may take a few moments.
+          </p>
+          
+          {processingProgress > 0 && processingProgress < 100 && processingProgress === processingProgress && (
+            <div className="text-xs text-gray-500">
+              <p>Generating a document with all your optimized content...</p>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Document Error with Manual Download Option */}
+      {documentError && !isGeneratingDocument && (
+        <div className="mt-4 p-4 border border-red-800/50 rounded-md bg-red-900/20">
+          <h3 className="text-lg font-medium mb-2 text-red-400">Document Generation Issue</h3>
+          <p className="text-sm text-gray-300 mb-3">{documentError}</p>
+          
+          {cachedDocument?.blob && (
+            <div className="space-y-2">
+              <button
+                onClick={handleManualDownload}
+                className="w-full px-4 py-3 bg-[#B4916C] text-white rounded-md hover:bg-[#A3815B] transition-colors flex items-center justify-center font-medium"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download Document Manually
+              </button>
+              <p className="text-xs text-gray-400 text-center">
+                Click the button above to download your document. If this doesn't work, please try again in a different browser.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Manual Download Button - Always show when there's a cached document */}
+      {cachedDocument?.blob && !documentError && !isGeneratingDocument && (
+        <div className="mt-4 p-4 border border-gray-700 rounded-md bg-gray-800/50">
+          <h3 className="text-lg font-medium mb-2 text-gray-200">Document Ready</h3>
+          <p className="text-sm text-gray-300 mb-3">Your document has been generated and is ready for download.</p>
+          
+          <button
+            onClick={handleManualDownload}
+            className="w-full px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A3815B] transition-colors flex items-center justify-center"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Download Document
+          </button>
+        </div>
+      )}
     </div>
   );
-} // Close the component function
+} 
