@@ -186,22 +186,35 @@ async function generateSpecificDocx(
       'EXPERIENCE',
       'LANGUAGES',
       'EDUCATION',
-      'SKILLS', 
       'TECHNICAL SKILLS', 
       'PROFESSIONAL SKILLS',
+      'SKILLS', // Move generic skills to the end so it's only used if specific skills don't exist
       'REFERENCES'
   ];
   
   // Parse the CV text into sections
   const sections = parseOptimizedText(cvText);
   
-  // Check for duplicate skills sections and merge if needed
-  if (sections['SKILLS'] && (sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS'])) {
-    // If we have both general skills and specific skills, only keep the specific ones
-    if (sections['TECHNICAL SKILLS'] && sections['PROFESSIONAL SKILLS']) {
-      delete sections['SKILLS']; // Remove the general skills as we have specific ones
-      logger.info('Removed duplicate general SKILLS section as technical and professional skills exist');
+  // Better handling of duplicate skills sections
+  if ((sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS'])) {
+    // If we have specific skills sections, remove the generic skills section
+    delete sections['SKILLS']; 
+    logger.info('Removed generic SKILLS section as specific skills categories exist');
+  }
+  
+  // If we have both SUMMARY and PROFILE, use only PROFILE to avoid duplication
+  if (sections['PROFILE'] && sections['SUMMARY']) {
+    // If the SUMMARY content is substantially different from PROFILE, combine them
+    if (typeof sections['PROFILE'] === 'string' && 
+        typeof sections['SUMMARY'] === 'string' && 
+        !sections['PROFILE'].includes(sections['SUMMARY']) && 
+        !sections['SUMMARY'].includes(sections['PROFILE']) &&
+        sections['SUMMARY'].length > 30) {
+      sections['PROFILE'] = `${sections['PROFILE']}\n\n${sections['SUMMARY']}`;
+      logger.info('Merged SUMMARY content into PROFILE section to avoid duplication');
     }
+    // Remove the separate SUMMARY section
+    delete sections['SUMMARY'];
   }
   
   // More detailed logging for debugging section parsing
@@ -252,28 +265,49 @@ async function generateSpecificDocx(
     
     // Special handling for Profile section with enhanced formatting
     if (section === 'PROFILE') {
-      // Add profile header with special formatting
-      const profileHeader = new Paragraph({
-        text: 'Professional Profile',
-        heading: HeadingLevel.HEADING_2,
-        spacing: {
-          before: 400,
-          after: 200,
-        },
-        alignment: AlignmentType.CENTER,
-      });
-      paragraphs.push(profileHeader);
+      // We don't need to add a header here since it's handled by the standardized section header code
       
       // Process profile content with enhanced formatting
       if (typeof content === 'string') {
         const contentLines = content.split('\n').filter(line => line.trim());
         
-        // Join all profile content into a single paragraph for better flow
-        const profileText = contentLines.join(' ');
+        // Join all profile content into a single cohesive paragraph
+        let profileText = '';
+        
+        // Process each line to create a well-formatted profile
+        for (let i = 0; i < contentLines.length; i++) {
+          const line = contentLines[i].trim();
+          
+          // Skip lines that are too short or look like headers
+          if (line.length < 5 || (line.toUpperCase() === line && line.length < 20)) {
+            continue;
+          }
+          
+          // Skip lines that are likely bullet points at this stage
+          if (line.startsWith('•') || line.startsWith('-') || line.startsWith('*') || line.match(/^\d+\.\s/)) {
+            continue;
+          }
+          
+          // Add spacing between sentences if needed
+          if (profileText && !profileText.endsWith(' ') && !profileText.endsWith('.') && 
+              !profileText.endsWith('!') && !profileText.endsWith('?')) {
+            profileText += ' ';
+          }
+          
+          // Add the line to the profile text
+          if (profileText && !profileText.endsWith(' ') && !line.startsWith(' ')) {
+            profileText += ' ' + line;
+          } else {
+            profileText += line;
+          }
+        }
+        
+        // Clean up any double spaces
+        profileText = profileText.replace(/\s\s+/g, ' ').trim();
         
         // Add profile content with enhanced formatting
         const profileParagraph = new Paragraph({
-        children: [
+          children: [
             new TextRun({
               text: profileText,
               size: 24, // Larger text for better visibility
@@ -281,7 +315,7 @@ async function generateSpecificDocx(
               color: '333333', // Darker text for better readability
             }),
           ],
-            spacing: {
+          spacing: {
             before: 200,
             after: 300,
             line: 360, // Increased line spacing
@@ -322,8 +356,44 @@ async function generateSpecificDocx(
     else {
       // Add section header (except for Header section)
       if (section !== 'Header') {
+        // Use a standardized section name display for better formatting
+        let displaySectionName = section;
+        
+        // Capitalize only the first letter of each word for better readability
+        displaySectionName = displaySectionName.split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(' ');
+        
+        // Handle specific section renames for consistency
+        if (section === 'SKILLS' && (sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS'])) {
+          displaySectionName = 'Key Skills';
+        } else if (section === 'SUMMARY' && sections['PROFILE']) {
+          // Skip SUMMARY section if PROFILE exists to avoid duplication
+          continue; // Skip this section in the loop rather than returning undefined
+        } else if (section === 'PROFILE') {
+          displaySectionName = 'Professional Profile';
+        } else if (section === 'PROFESSIONAL SKILLS') {
+          displaySectionName = 'Professional Skills';
+        } else if (section === 'TECHNICAL SKILLS') {
+          displaySectionName = 'Technical Skills';
+        } else if (section === 'EXPERIENCE') {
+          displaySectionName = 'Experience';
+        } else if (section === 'EDUCATION') {
+          displaySectionName = 'Education';
+        } else if (section === 'ACHIEVEMENTS') {
+          displaySectionName = 'Achievements';
+        } else if (section === 'GOALS') {
+          displaySectionName = 'Goals';
+        } else if (section === 'LANGUAGES') {
+          displaySectionName = 'Languages';
+        } else if (section === 'EXPECTATIONS') {
+          displaySectionName = 'What to Expect from the Job';
+        } else if (section === 'REFERENCES') {
+          displaySectionName = 'References';
+        }
+        
         const sectionHeader = new Paragraph({
-          text: section,
+          text: displaySectionName,
           heading: HeadingLevel.HEADING_2,
           thematicBreak: true,
           spacing: {
@@ -351,10 +421,19 @@ async function generateSpecificDocx(
           // Skip empty lines
           if (!line.trim()) continue;
           
-          // Check if this line is a bullet point
+          // Improved bullet point detection - standardize across different formats
           const isBulletPoint = line.trim().startsWith('•') || 
                               line.trim().startsWith('-') ||
-                              line.trim().startsWith('*');
+                              line.trim().startsWith('*') ||
+                              line.trim().match(/^\d+\.\s/) !== null;
+          
+          // Format the text - remove the bullet character if it's there
+          let lineText = line.trim();
+          if (isBulletPoint) {
+            // Remove any bullet character or numbered prefix
+            lineText = lineText.replace(/^[•\-\*]\s*/, '').trim();
+            lineText = lineText.replace(/^\d+\.\s*/, '').trim();
+          }
           
           // Check if this is likely a job title or education institution (typically starts with capital letter and is relatively short)
           const isLikelyTitle = line.length < 60 && 
@@ -365,7 +444,7 @@ async function generateSpecificDocx(
           const paragraph = new Paragraph({
             children: [
               new TextRun({
-                text: isBulletPoint ? line.trim().substring(1).trim() : line,
+                text: lineText,
                 // Use bold for header content that might be a name or for section titles
                 bold: section === 'Header' || isLikelyTitle ? true : undefined,
                 // Use slightly larger size for header content and titles
@@ -402,15 +481,24 @@ async function generateSpecificDocx(
           // Skip empty lines
           if (!item.trim()) continue;
           
-          // Check if this item is a bullet point
+          // Improved bullet point detection - standardize across different formats
           const isBulletPoint = item.trim().startsWith('•') || 
                               item.trim().startsWith('-') ||
-                              item.trim().startsWith('*');
+                              item.trim().startsWith('*') || 
+                              item.trim().match(/^\d+\.\s/) !== null;
+          
+          // Format the text - remove the bullet character if it's there
+          let itemText = item.trim();
+          if (isBulletPoint) {
+            // Remove any bullet character or numbered prefix
+            itemText = itemText.replace(/^[•\-\*]\s*/, '').trim();
+            itemText = itemText.replace(/^\d+\.\s*/, '').trim();
+          }
           
           const paragraph = new Paragraph({
             children: [
               new TextRun({
-                text: isBulletPoint ? item.trim().substring(1).trim() : item,
+                text: itemText,
                 // Use special formatting for languages
                 italics: section === 'LANGUAGES' ? true : undefined,
                 // Use specific color for achievements to make them stand out
@@ -900,7 +988,8 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
       // Check for bullet points or numbered lists (common for achievements)
       const isBulletOrNumbered = line.trim().startsWith('•') || 
                                  line.trim().startsWith('-') || 
-                                 line.match(/^\d+\./);
+                                 line.trim().startsWith('*') || 
+                                 line.trim().match(/^\d+\./);
       
       // Check for achievement indicators
       const hasIndicator = achievementIndicators.some(regex => regex.test(line));
