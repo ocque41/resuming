@@ -222,11 +222,42 @@ async function generateSpecificDocx(
   });
   paragraphs.push(horizontalLine);
 
-  // Process sections in order
+  // Process sections in order with enhanced Profile section handling
   for (const sectionName of sectionOrder) {
-    const content = sections[sectionName];
+    // Force check for Profile section as fallback
+    let content = sections[sectionName];
     
-    // Skip if section doesn't exist
+    // Special handling for Profile section if it's missing
+    if (sectionName === 'PROFILE' && !content) {
+      // Check for similar sections
+      content = sections['SUMMARY'] || sections['ABOUT ME'] || sections['PROFESSIONAL SUMMARY'] || sections['PERSONAL STATEMENT'];
+      
+      // If still not found, try to extract from the first part of text
+      if (!content) {
+        // Look for first substantial paragraph after header
+        const lines = cvText.split('\n').filter(line => line.trim());
+        let contactInfoEnded = false;
+        
+        for (let i = 0; i < Math.min(20, lines.length); i++) {
+          const line = lines[i];
+          
+          // Skip contact info
+          if (line.includes('@') || /^\+?[\d\s()-]{7,}$/.test(line) || line.includes('linkedin.com')) {
+            continue;
+          }
+          
+          contactInfoEnded = true;
+          
+          // Look for a substantial line
+          if (line.length > 50 && !line.match(/^[A-Z\s]+:$/)) {
+            content = line;
+            break;
+          }
+        }
+      }
+    }
+    
+    // Skip if section doesn't exist after all attempts
     if (!content) continue;
     
     // Skip adding a header for "Header" section
@@ -251,11 +282,11 @@ async function generateSpecificDocx(
       paragraphs.push(sectionHeading);
     }
     
-    // Special handling for profile section
+    // Special handling for profile section with enhanced formatting
     if (sectionName === 'PROFILE') {
       const profileContent = typeof content === 'string' ? content : content.join('\n');
       
-      // Add profile content with special formatting
+      // Apply a professional style to the profile text
       const profileParagraph = new Paragraph({
         children: [
           new TextRun({
@@ -264,6 +295,7 @@ async function generateSpecificDocx(
             font: {
               name: "Calibri",
             },
+            color: '333333', // Darker text color for better readability
           }),
         ],
         spacing: {
@@ -274,24 +306,36 @@ async function generateSpecificDocx(
         indent: {
           left: 0,
         },
+        border: {
+          bottom: {
+            color: 'B4916C', // Brand color for subtle emphasis
+            space: 1,
+            style: BorderStyle.SINGLE,
+            size: 3,
+          },
+        },
       });
       paragraphs.push(profileParagraph);
       
-      // Add a small separator after profile
-      const profileSeparator = new Paragraph({
-        children: [
-          new TextRun({
-            text: '_______________________________________________________________',
-            color: 'cccccc',
-            size: 16,
-          }),
-        ],
-        alignment: AlignmentType.CENTER,
-        spacing: {
-          after: 400,
-        },
-      });
-      paragraphs.push(profileSeparator);
+      // Add job-specific context if available
+      if (jobTitle) {
+        const contextParagraph = new Paragraph({
+          children: [
+            new TextRun({
+              text: `Targeting: ${jobTitle}${companyName ? ` at ${companyName}` : ''}`,
+              size: 20,
+              italics: true,
+              color: 'B4916C', // Brand color
+            }),
+          ],
+          spacing: {
+            before: 200,
+            after: 400,
+          },
+          alignment: AlignmentType.RIGHT,
+        });
+        paragraphs.push(contextParagraph);
+      }
       
       continue; // Skip the rest of the loop for profile
     }

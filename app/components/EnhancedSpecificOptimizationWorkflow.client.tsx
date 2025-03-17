@@ -2874,9 +2874,16 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     // Extract job keywords
     const jobKeywords = extractKeywords(jobDescription, true);
     
-    // Extract and optimize profile
+    // Extract and optimize profile - ensure we have a good quality profile section
     const profile = extractProfile(originalText);
-    const optimizedProfileText = optimizeProfile(profile, jobDescription, jobKeywords);
+    let optimizedProfileText = optimizeProfile(profile, jobDescription, jobKeywords);
+    
+    // Make sure profile isn't empty and has substance
+    if (!optimizedProfileText || optimizedProfileText.trim().length < 50) {
+      // Create a fallback profile using job keywords
+      optimizedProfileText = `Experienced professional with expertise in ${jobKeywords.slice(0, 5).join(', ')}. ` +
+        `Proven track record of delivering results and committed to excellence in ${jobKeywords.slice(5, 8).join(', ')}.`;
+    }
     
     // Extract one sentence summary (subheader)
     const subheader = extractSubheader(originalText) || 
@@ -2932,6 +2939,9 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     
     // 2. PROFILE: Add profile section with clear header
     optimizedText += `PROFILE:\n${optimizedProfileText}\n\n`;
+    
+    // 2. PROFILE: Add profile section with clear header formatted for better parsing
+    optimizedText += `PROFILE:\n${optimizedProfileText.trim()}\n\n`;
     
     // 3. SUMMARY: Add one sentence summary of role scope
     optimizedText += `SUMMARY:\n${subheader}\n\n`;
@@ -3519,7 +3529,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         },
         body: JSON.stringify({
           cvId: selectedCVId,
-          optimizedText,
+          optimizedText: cleanOptimizedText(optimizedText),
           jobDescription: jobDescription || '',
           jobTitle: jobTitle || '',
         }),
@@ -3729,6 +3739,60 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   // Add a handler for the generate document button
   const handleGenerateDocument = () => {
     generateDocument();
+  };
+
+  // Clean up optimized text to ensure proper section parsing
+  const cleanOptimizedText = (text: string): string => {
+    if (!text) return '';
+    
+    // Split text into lines
+    const lines = text.split('\n');
+    const cleanedLines: string[] = [];
+    
+    // Track sections to avoid duplicates
+    const seenSections = new Set<string>();
+    let currentSection = '';
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      // Check if this is a section header
+      const sectionMatch = line.match(/^([A-Z][A-Z\s]+):$/);
+      if (sectionMatch && sectionMatch[1]) {
+        const sectionName = sectionMatch[1];
+        
+        // If we've seen this section before, skip it
+        if (seenSections.has(sectionName)) {
+          // Skip until we find another section or end of text
+          while (i < lines.length - 1) {
+            i++;
+            const nextLine = lines[i].trim();
+            if (nextLine.match(/^[A-Z][A-Z\s]+:$/)) {
+              i--; // Go back so we can process this line in next iteration
+              break;
+            }
+          }
+          continue;
+        }
+        
+        // Mark this section as seen and add to output
+        seenSections.add(sectionName);
+        currentSection = sectionName;
+        cleanedLines.push(line);
+        continue;
+      }
+      
+      // Special handling for profile section - ensure it has good content
+      if (currentSection === 'PROFILE' && line.length < 2) {
+        // Skip empty lines in profile
+        continue;
+      }
+      
+      // Add other lines normally
+      cleanedLines.push(lines[i]);
+    }
+    
+    return cleanedLines.join('\n');
   };
 
   return (
