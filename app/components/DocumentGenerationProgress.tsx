@@ -114,8 +114,10 @@ const DocumentGenerationProgress: React.FC<DocumentGenerationProgressProps> = ({
           <h4 className="text-sm font-medium text-white mb-1">Document Generation Tips</h4>
           <ul className="text-xs text-gray-400 list-disc pl-4 space-y-1">
             <li>Document generation typically takes 15-30 seconds</li>
-            <li>Please don't refresh the page during generation</li>
-            <li>If download doesn't start automatically, use the manual download button</li>
+            <li>Please don't refresh the page during generation, if it takes too long a reset button will appear</li>
+            <li>It does not download automatically, use the manual download button</li>
+            <li>The optimized document will not be automatically added to your CV collection, please download and upload it manually for further optimization, analysis, job application or document editing</li>
+            <li>The final optimized document should have Profile, Experience, Achievements, Goals, Skills, Education and Summary sections. If you cannot see this sections well formatted in the structured view, try the optimization again, if after 2 to 4 tries you still not see this sections well formatted, your CV is missing key sections like Education, Experience or Skills</li>
           </ul>
         </div>
       )}
