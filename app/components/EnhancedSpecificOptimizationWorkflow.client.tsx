@@ -2598,31 +2598,80 @@ const generateOptimizedDocument = async (content: string, name: string = 'CV', c
   }
 };
 
+// Add this function before the main component
+function SectionImprovementsPanel({ 
+  improvements, 
+  enhancedProfile 
+}: { 
+  improvements: Record<string, string>;
+  enhancedProfile: string;
+}): JSX.Element {
+  return (
+    <div className="bg-[#050505] border border-gray-800 rounded-lg p-4 mt-4">
+      <h3 className="text-lg font-medium mb-3 text-[#B4916C]">CV Section Improvements</h3>
+      
+      {/* Enhanced Profile Section */}
+      {enhancedProfile && (
+        <div className="mb-4">
+          <h4 className="font-medium text-white mb-2">Enhanced Profile</h4>
+          <div className="bg-gray-900 p-3 rounded border border-gray-700">
+            <p className="text-gray-300">{enhancedProfile}</p>
+          </div>
+        </div>
+      )}
+      
+      {/* Section Improvements */}
+      {Object.keys(improvements).length > 0 ? (
+        <div className="space-y-3">
+          {Object.entries(improvements).map(([section, improvement]) => (
+            <div key={section} className="bg-gray-900 p-3 rounded border border-gray-700">
+              <h4 className="font-medium text-white mb-1 capitalize">{section}</h4>
+              <p className="text-gray-300">{improvement}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-gray-400 italic">No specific section improvements detected.</p>
+      )}
+    </div>
+  );
+}
+
 export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: EnhancedSpecificOptimizationWorkflowProps): JSX.Element {
   const { toast } = useToast();
-  const [selectedCVId, setSelectedCVId] = useState<string>('');
-  const [selectedCVName, setSelectedCVName] = useState<string>('');
-  const [originalText, setOriginalText] = useState<string | null>(null);
-  const [optimizedText, setOptimizedText] = useState<string | null>(null);
-  const [jobDescription, setJobDescription] = useState<string>('');
-  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
-  const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [documentError, setDocumentError] = useState<string | null>(null);
-  const [jobMatchAnalysis, setJobMatchAnalysis] = useState<JobMatchAnalysis | null>(null);
-  const [isGeneratingDocument, setIsGeneratingDocument] = useState<boolean>(false);
   
-  // Processing state variables
+  // CV selection state
+  const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
+  const [selectedCVName, setSelectedCVName] = useState<string | null>(null);
+  
+  // Job-related state
+  const [jobDescription, setJobDescription] = useState<string>('');
+  const [jobTitle, setJobTitle] = useState<string | null>(null);
+  
+  // Processing state
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isProcessed, setIsProcessed] = useState<boolean>(false);
   const [processingProgress, setProcessingProgress] = useState<number>(0);
   const [processingStatus, setProcessingStatus] = useState<string>('');
-  const [activeTab, setActiveTab] = useState('jobDescription');
   const [processingTooLong, setProcessingTooLong] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('jobDescription');
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
   const [activeAnalysisTab, setActiveAnalysisTab] = useState('keywords');
   
+  // Result state
+  const [originalText, setOriginalText] = useState<string | null>(null);
+  const [optimizedText, setOptimizedText] = useState<string | null>(null);
+  const [jobMatchAnalysis, setJobMatchAnalysis] = useState<JobMatchAnalysis | null>(null);
   const [structuredCV, setStructuredCV] = useState<StructuredCV | null>(null);
-
+  const [sectionImprovements, setSectionImprovements] = useState<Record<string, string>>({});
+  const [enhancedProfile, setEnhancedProfile] = useState<string>('');
+  
+  // Document generation state
+  const [isGeneratingDocument, setIsGeneratingDocument] = useState<boolean>(false);
+  const [documentError, setDocumentError] = useState<string | null>(null);
+  
   // Add a new state variable for document caching
   const [cachedDocument, setCachedDocument] = useState<{
     doc: Document | null;
@@ -2636,10 +2685,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     text: null,
     timestamp: 0
   });
-
-  // Add jobTitle state variable
-  const [jobTitle, setJobTitle] = useState<string>('');
-
+  
   // Add these state variables
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [isDownloadComplete, setIsDownloadComplete] = useState<boolean>(false);
@@ -2796,8 +2842,10 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
             throw new Error(`Failed to tailor CV: ${tailoringResult.error}`);
           }
           
-          // Store the optimized text for use later
+          // Store the optimized text and other results for use later
           setOptimizedText(tailoringResult.tailoredContent);
+          setEnhancedProfile(tailoringResult.enhancedProfile || '');
+          setSectionImprovements(tailoringResult.sectionImprovements || {});
           
           // Step 2: Extract job title from job description if not already set
           if (!jobTitle) {
@@ -4149,6 +4197,143 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
             </svg>
             Download Document
           </button>
+        </div>
+      )}
+
+      {/* Optimized CV Display */}
+      {isProcessed && (
+        <div className="mt-6">
+          <div className="border-b border-gray-700 mb-4">
+            <nav className="-mb-px flex space-x-4">
+              <button
+                onClick={() => setActiveTab('jobDescription')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'jobDescription'
+                    ? 'border-[#B4916C] text-[#B4916C]'
+                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
+                }`}
+              >
+                Job Description
+              </button>
+              <button
+                onClick={() => setActiveTab('optimizedCV')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'optimizedCV'
+                    ? 'border-[#B4916C] text-[#B4916C]'
+                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
+                }`}
+              >
+                Optimized CV
+              </button>
+              <button
+                onClick={() => setActiveTab('jobMatch')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'jobMatch'
+                    ? 'border-[#B4916C] text-[#B4916C]'
+                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
+                }`}
+              >
+                Job Match Analysis
+              </button>
+              <button
+                onClick={() => setActiveTab('improvements')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'improvements'
+                    ? 'border-[#B4916C] text-[#B4916C]'
+                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
+                }`}
+              >
+                Improvements
+              </button>
+            </nav>
+          </div>
+
+          {/* Tab Content */}
+          <div className="mt-4">
+            {/* Job Description Tab */}
+            {activeTab === 'jobDescription' && (
+              <div>
+                <div className="flex justify-between mb-2">
+                  <h3 className="text-lg font-medium">Job Description</h3>
+                </div>
+                <div className="whitespace-pre-wrap bg-[#050505] p-4 rounded-md border border-gray-700 max-h-96 overflow-y-auto">
+                  {jobDescription || 'No job description provided.'}
+                </div>
+              </div>
+            )}
+
+            {/* Optimized CV Tab */}
+            {activeTab === 'optimizedCV' && (
+              <div>
+                <div className="flex justify-between mb-2">
+                  <h3 className="text-lg font-medium">Optimized CV</h3>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={handleGenerateDocument}
+                      disabled={isGeneratingDocument}
+                      className={`px-2 py-1 rounded text-xs flex items-center ${
+                        isGeneratingDocument
+                          ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                          : 'bg-[#B4916C] text-white hover:bg-[#A37F5C]'
+                      }`}
+                    >
+                      {isGeneratingDocument ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <FileText className="w-4 h-4 mr-1" />
+                          Generate Document
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(optimizedText || '');
+                        toast({
+                          title: "Copied!",
+                          description: "Optimized CV content copied to clipboard."
+                        });
+                      }}
+                      className="px-2 py-1 rounded text-xs flex items-center bg-gray-700 text-white hover:bg-gray-600"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                      </svg>
+                      Copy
+                    </button>
+                  </div>
+                </div>
+                <div className="whitespace-pre-wrap font-mono text-sm bg-[#050505] p-4 rounded-md border border-gray-700 max-h-96 overflow-y-auto">
+                  {optimizedText}
+                </div>
+              </div>
+            )}
+
+            {/* Job Match Analysis Tab */}
+            {activeTab === 'jobMatch' && jobMatchAnalysis && (
+              <div>
+                <h3 className="text-lg font-medium mb-3">Job Match Analysis</h3>
+                <JobMatchDetailedAnalysis jobMatchAnalysis={jobMatchAnalysis} />
+              </div>
+            )}
+
+            {/* Improvements Tab */}
+            {activeTab === 'improvements' && (
+              <div>
+                <h3 className="text-lg font-medium mb-3">CV Tailoring Improvements</h3>
+                <SectionImprovementsPanel 
+                  improvements={sectionImprovements} 
+                  enhancedProfile={enhancedProfile} 
+                />
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
