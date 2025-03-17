@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle } from "lucide-react";
 import { analyzeCVContent, optimizeCVForJob } from '@/lib/services/mistral.service';
+import { tailorCVForJob } from '@/app/lib/services/tailorCVService';
 import { useToast } from "@/hooks/use-toast";
 import JobMatchDetailedAnalysis from './JobMatchDetailedAnalysis';
 import { downloadDocument, withDownloadTimeout, generateDocumentWithRetry } from '../utils/documentUtils';
@@ -2784,51 +2785,77 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
             throw new Error("Missing original CV text or job description");
           }
           
-          // Step 1: Call Mistral API to optimize the CV
-          const optimizationResult = await optimizeCVForJob(originalText, jobDescription);
+          // Step 1: Call the tailoring API to optimize the CV
+          const tailoringResult = await tailorCVForJob(
+            originalText || '',
+            jobDescription || '',
+            jobTitle || undefined
+          );
           
-          if (!optimizationResult || !optimizationResult.optimizedContent) {
-            throw new Error("Failed to optimize CV content");
+          if (!tailoringResult.success) {
+            throw new Error(`Failed to tailor CV: ${tailoringResult.error}`);
           }
           
           // Store the optimized text for use later
-          setOptimizedText(optimizationResult.optimizedContent);
+          setOptimizedText(tailoringResult.tailoredContent);
           
-          // Step 2: Extract job title from job description
-          const jobTitleMatch = jobDescription.match(/(?:job title|position|role|job)[:\s]+([^\n.]+)/i);
-          if (jobTitleMatch && jobTitleMatch[1]) {
-            setJobTitle(jobTitleMatch[1].trim());
+          // Step 2: Extract job title from job description if not already set
+          if (!jobTitle) {
+            const jobTitleMatch = jobDescription.match(/(?:job title|position|role|job)[:\s]+([^\n.]+)/i);
+            if (jobTitleMatch && jobTitleMatch[1]) {
+              setJobTitle(jobTitleMatch[1].trim());
+            }
           }
           
           // Step 3: Generate job match analysis
-          const analysis = analyzeJobMatch(optimizationResult.optimizedContent, jobDescription);
+          const analysis = analyzeJobMatch(tailoringResult.tailoredContent, jobDescription);
           setJobMatchAnalysis(analysis);
           
           // Step 4: Generate structured CV from optimized text
-          const structured = generateStructuredCV(optimizationResult.optimizedContent, jobDescription);
+          const structured = generateStructuredCV(tailoringResult.tailoredContent, jobDescription);
           setStructuredCV(structured);
           
         } catch (error) {
-          console.error("Error in CV optimization process:", error);
+          console.error("Error in CV tailoring process:", error);
           
-          // If API fails, fallback to client-side optimization
+          // If API fails, try regular optimization
           try {
-            console.log("API optimization failed, falling back to client-side optimization");
+            console.log("Tailoring API failed, falling back to standard optimization");
             
-            // Generate optimized text based on job description
-            const optimizedText = generateOptimizedText(originalText || '', jobDescription);
-            setOptimizedText(optimizedText);
+            // Try the standard optimization API
+            const optimizationResult = await optimizeCVForJob(
+              originalText || '',
+              jobDescription || ''
+            );
+            
+            if (!optimizationResult || !optimizationResult.optimizedContent) {
+              throw new Error("Failed to optimize CV content");
+            }
+            
+            // Store the optimized text
+            setOptimizedText(optimizationResult.optimizedContent);
+            
+            // Generate structured CV and analysis
+            const structuredCV = generateStructuredCV(optimizationResult.optimizedContent, jobDescription);
+            setStructuredCV(structuredCV);
+            
+            const analysis = analyzeJobMatch(optimizationResult.optimizedContent, jobDescription);
+            setJobMatchAnalysis(analysis);
+            
+          } catch (optimizationError) {
+            console.error("Standard optimization also failed, using client-side fallback:", optimizationError);
+            
+            // Use client-side optimization as final fallback
+            const fallbackText = generateOptimizedText(originalText || '', jobDescription);
+            setOptimizedText(fallbackText);
             
             // Generate structured CV
-            const structuredCV = generateStructuredCV(optimizedText, jobDescription);
+            const structuredCV = generateStructuredCV(fallbackText, jobDescription);
             setStructuredCV(structuredCV);
             
             // Generate job match analysis on the optimized content
-            const analysis = analyzeJobMatch(optimizedText, jobDescription);
+            const analysis = analyzeJobMatch(fallbackText, jobDescription);
             setJobMatchAnalysis(analysis);
-          } catch (fallbackError) {
-            console.error("Fallback optimization also failed:", fallbackError);
-            setError("Failed to optimize CV: " + (fallbackError instanceof Error ? fallbackError.message : String(fallbackError)));
           }
         }
       };
@@ -2863,7 +2890,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       setIsProcessing(false);
       setProcessingProgress(0);
     }
-  }, [selectedCVId, selectedCVName, jobDescription, originalText]);
+  }, [selectedCVId, selectedCVName, jobDescription, originalText, jobTitle]);
   
   // Generate optimized text based on job description
   const generateOptimizedText = (originalText: string, jobDescription: string): string => {
@@ -3494,201 +3521,63 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
 
   // Modify the generateDocument function to use caching
   const generateDocument = async () => {
-    if (isGeneratingDocument || !optimizedText) {
-      setDocumentError("No optimized content available. Please optimize your CV first.");
+    if (!optimizedText) {
+      setDocumentError("No optimized text available. Please optimize your CV first.");
       return;
     }
     
     setIsGeneratingDocument(true);
-    setProcessingProgress(0);
-    setProcessingStatus("Starting document generation...");
     setDocumentError(null);
-    setIsDownloading(false);
-    setIsDownloadComplete(false);
     
     try {
-      // Step 1: Prepare document data
-      setProcessingProgress(10);
-      setProcessingStatus("Preparing document data...");
-      await new Promise(resolve => setTimeout(resolve, 500)); // UI feedback delay
+      console.log("Starting document generation...");
       
-      // Step 2: Structure CV content
-      setProcessingProgress(30);
-      setProcessingStatus("Structuring CV content...");
-      await new Promise(resolve => setTimeout(resolve, 500)); // UI feedback delay
+      // Check for missing important sections before generating document
+      const sectionsToCheck = ['PROFILE', 'EXPERIENCE', 'EDUCATION', 'SKILLS'];
+      const missingSections = [];
       
-      // Step 3: Generate document
-      setProcessingProgress(50);
-      setProcessingStatus("Generating document...");
-      
-      // Use our retry mechanism for document generation
-      const generateDocumentFn = () => fetch('/api/cv/specific-generate-docx', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          cvId: selectedCVId,
-          optimizedText: cleanOptimizedText(optimizedText),
-          jobDescription: jobDescription || '',
-          jobTitle: jobTitle || '',
-        }),
-      });
-      
-      console.log("Calling the specific-generate-docx API with:", {
-        cvId: selectedCVId,
-        optimizedTextLength: optimizedText.length,
-        hasJobDescription: !!jobDescription,
-        jobTitle: jobTitle || 'Not provided'
-      });
-      
-      // Generate document with retry mechanism
-      let documentResponse;
-      try {
-        documentResponse = await generateDocumentFn();
-        
-        if (!documentResponse.ok) {
-          throw new Error(`API returned status: ${documentResponse.status}`);
-        }
-        
-        const jsonResponse = await documentResponse.json();
-        console.log("Received API response:", jsonResponse);
-        
-        if (!jsonResponse.success) {
-          throw new Error(jsonResponse.error || "API returned unsuccessful response");
-        }
-        
-        if (!jsonResponse.docxBase64 && !jsonResponse.downloadUrl) {
-          throw new Error("API response missing both docxBase64 and downloadUrl");
-        }
-        
-        // Create a blob from the base64 string
-        const byteCharacters = atob(jsonResponse.docxBase64);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-        
-        // Step 4: Prepare for download
-        setProcessingProgress(80);
-        setProcessingStatus("Preparing for download...");
-        
-        // Cache the document for manual download
-        setCachedDocument({
-          doc: null,
-          blob: blob,
-          text: optimizedText,
-          url: URL.createObjectURL(blob),
-          timestamp: Date.now()
-        });
-        
-        // Step 5: Download document
-        setProcessingProgress(90);
-        setProcessingStatus("Downloading document...");
-        setIsDownloading(true);
-        
-        // Get CV name without file extension
-        const cvName = selectedCVName 
-          ? selectedCVName.replace(/\.\w+$/, '') 
-          : 'CV';
-        const filename = `${cvName}_optimized.docx`;
-        
-        // Attempt to download with timeout
-        const downloadSuccess = await withDownloadTimeout(
-          async () => await downloadDocument(blob, filename),
-          10000 // 10 second timeout
-        );
-        
-        // Always mark as complete, even if download fails
-        setProcessingProgress(100);
-        setIsDownloading(false);
-        
-        if (downloadSuccess) {
-          setIsDownloadComplete(true);
-          setProcessingStatus("Document generated and downloaded successfully!");
-          showToast({
-            title: "Success!",
-            description: "Your optimized CV has been generated and downloaded successfully.",
-            duration: 5000
-          });
-        } else {
-          // If automatic download failed but we have the document cached
-          setProcessingStatus("Document generated successfully. Manual download available.");
-          setDocumentError("Automatic download failed. Please use the manual download button below.");
-        }
-      } catch (apiError) {
-        console.error("API error:", apiError);
-        setProcessingProgress(0);
-        setProcessingStatus("Document generation failed");
-        setDocumentError(`API error: ${apiError instanceof Error ? apiError.message : String(apiError)}`);
-        
-        // Try again with a direct approach
-        try {
-          setProcessingStatus("Trying alternative method...");
-          
-          const response = await fetch('/api/cv/generate-docx', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              cvId: selectedCVId,
-              optimizedText
-            }),
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            
-            if (data.success && data.docxBase64) {
-              // Create a blob from base64
-              const byteCharacters = atob(data.docxBase64);
-              const byteNumbers = new Array(byteCharacters.length);
-              for (let i = 0; i < byteCharacters.length; i++) {
-                byteNumbers[i] = byteCharacters.charCodeAt(i);
-              }
-              const byteArray = new Uint8Array(byteNumbers);
-              const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-              
-              // Cache the document
-              setCachedDocument({
-                doc: null,
-                blob: blob,
-                text: optimizedText,
-                url: URL.createObjectURL(blob),
-                timestamp: Date.now()
-              });
-              
-              // Get CV name
-              const cvName = selectedCVName 
-                ? selectedCVName.replace(/\.\w+$/, '') 
-                : 'CV';
-              const filename = `${cvName}_optimized.docx`;
-              
-              // Try to download
-              const downloadSuccess = await downloadDocument(blob, filename);
-              
-              if (downloadSuccess) {
-                setIsDownloadComplete(true);
-                setProcessingStatus("Document generated and downloaded successfully (fallback method)!");
-                setDocumentError(null);
-              } else {
-                setProcessingStatus("Document generated successfully. Manual download available.");
-                setDocumentError("Automatic download failed. Please use the manual download button below.");
-              }
-            } else {
-              throw new Error("Fallback API returned no docxBase64 data");
-            }
-          } else {
-            throw new Error(`Fallback API returned status: ${response.status}`);
-          }
-        } catch (fallbackError) {
-          console.error("Fallback method failed:", fallbackError);
-          setDocumentError(`Document generation failed after multiple attempts. Please try again later or contact support. (${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)})`);
+      for (const section of sectionsToCheck) {
+        const sectionRegex = new RegExp(`\\b${section}\\s*:`, 'i');
+        if (!sectionRegex.test(optimizedText)) {
+          missingSections.push(section);
         }
       }
+      
+      // Warn about missing sections but continue with generation
+      if (missingSections.length > 0) {
+        const warningMessage = `Warning: The following important sections may be missing: ${missingSections.join(', ')}. The document will be generated with default placeholders for these sections.`;
+        console.warn(warningMessage);
+        toast({
+          title: "Document Generation Warning",
+          description: warningMessage,
+          variant: "destructive"
+        });
+      }
+      
+      // Warn if no job details
+      if (!jobDescription) {
+        const warningMessage = "No job description provided. The generated document will be a general CV without specific job targeting.";
+        console.warn(warningMessage);
+        toast({
+          title: "No Job Details",
+          description: warningMessage,
+          variant: "destructive"
+        });
+      }
+      
+      // Get CV name without file extension
+      const cvName = selectedCVName 
+        ? selectedCVName.replace(/\.\w+$/, '') 
+        : 'CV';
+      
+      // Check if CV ID is available
+      if (!selectedCVId) {
+        throw new Error('No CV selected for document generation');
+      }
+      
+      console.log(`Generating document for CV ID: ${selectedCVId}`);
+      
+      // ... rest of existing code ...
     } catch (error) {
       console.error("Document generation error:", error);
       
@@ -3749,13 +3638,57 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     const lines = text.split('\n');
     const cleanedLines: string[] = [];
     
+    // Extract name and contact info from the first few lines
+    let nameAndContactLines: string[] = [];
+    let foundNameOrContact = false;
+    
+    // Check the first 10 lines for name and contact info
+    for (let i = 0; i < Math.min(10, lines.length); i++) {
+      const line = lines[i].trim();
+      
+      // Skip empty lines
+      if (line.length === 0) continue;
+      
+      // Check if it's a section header
+      const isSectionHeader = /^[A-Z][A-Z\s]+:?$/.test(line);
+      if (isSectionHeader) break;
+      
+      // Check if it contains contact info patterns
+      const isContactInfo = /(?:@|email|phone|tel:|linkedin|www\.|http|github|location)/i.test(line);
+      
+      // First non-empty line is usually the name
+      if (!foundNameOrContact && line.length > 0) {
+        foundNameOrContact = true;
+        nameAndContactLines.push(line);
+      } 
+      // Contact info lines
+      else if (isContactInfo || line.includes('|') || /^\s*[\d\(\)\+-]{7,}/.test(line)) {
+        nameAndContactLines.push(line);
+      }
+    }
+    
     // Track sections to avoid duplicates
     const seenSections = new Set<string>();
     let currentSection = '';
     
+    // Important sections we want to ensure exist in the document
+    const importantSections = ['PROFILE', 'EXPERIENCE', 'EDUCATION', 'SKILLS'];
+    
+    // Add the name and contact info to the cleaned lines
+    nameAndContactLines.forEach(line => cleanedLines.push(line));
+    
+    // Add a separator after contact info if we found any
+    if (nameAndContactLines.length > 0) {
+      cleanedLines.push('');
+    }
+    
     // Ensure section headers are properly formatted
-    for (let i = 0; i < lines.length; i++) {
+    let i = nameAndContactLines.length > 0 ? 10 : 0; // Start after the header section if we found one
+    for (; i < lines.length; i++) {
       const line = lines[i].trim();
+      
+      // Skip empty lines at the beginning
+      if (cleanedLines.length === 0 && line.length === 0) continue;
       
       // Check if this is a section header
       const sectionMatch = line.match(/^([A-Z][A-Z\s]+):?$/);
@@ -3785,7 +3718,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         cleanedLines.push(formattedHeader);
         
         // Special handling for important sections - ensure they have content
-        if (['PROFILE', 'EXPERIENCE', 'EDUCATION', 'SKILLS'].includes(sectionName)) {
+        if (importantSections.includes(sectionName)) {
           let sectionHasContent = false;
           
           // Look ahead to see if section has content
@@ -3800,6 +3733,12 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           if (!sectionHasContent) {
             if (sectionName === 'PROFILE') {
               cleanedLines.push("Experienced professional with a track record of success seeking opportunities to apply skills and expertise.");
+            } else if (sectionName === 'EXPERIENCE') {
+              cleanedLines.push("Professional experience includes roles that have developed relevant skills and expertise.");
+            } else if (sectionName === 'EDUCATION') {
+              cleanedLines.push("Educational background providing foundation for professional development.");
+            } else if (sectionName === 'SKILLS') {
+              cleanedLines.push("• Technical skills\n• Professional skills\n• Communication\n• Problem solving");
             }
           }
         }
@@ -3814,13 +3753,27 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       }
       
       // Add other lines normally
-      cleanedLines.push(lines[i]);
+      cleanedLines.push(line);
     }
     
-    // Special check: if no PROFILE section was found, add one at the beginning
-    if (!seenSections.has('PROFILE')) {
-      cleanedLines.unshift("PROFILE:", "Experienced professional with a strong background seeking new opportunities to leverage expertise and contribute to organizational success.");
-    }
+    // Add missing important sections at the end if they weren't found
+    importantSections.forEach(section => {
+      if (!seenSections.has(section)) {
+        cleanedLines.push('');
+        cleanedLines.push(`${section}:`);
+        
+        // Add default content for each section
+        if (section === 'PROFILE') {
+          cleanedLines.push("Experienced professional with a strong background seeking new opportunities to leverage expertise and contribute to organizational success.");
+        } else if (section === 'EXPERIENCE') {
+          cleanedLines.push("Professional experience includes positions that have developed relevant skills and expertise aligned with this role.");
+        } else if (section === 'EDUCATION') {
+          cleanedLines.push("Educational background providing foundation for professional development and career advancement.");
+        } else if (section === 'SKILLS') {
+          cleanedLines.push("• Technical skills relevant to the position\n• Professional skills including teamwork and communication\n• Problem solving and analytical thinking\n• Adaptability and continuous learning");
+        }
+      }
+    });
     
     return cleanedLines.join('\n');
   };

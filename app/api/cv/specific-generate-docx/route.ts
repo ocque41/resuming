@@ -308,18 +308,21 @@ async function generateSpecificDocx(
         }
       }
     } 
-    // Standard handling for other sections
-    else if (section !== 'Header') {
-      const sectionHeader = new Paragraph({
-        text: section,
-        heading: HeadingLevel.HEADING_2,
-        thematicBreak: true,
-        spacing: {
-          before: 400,
-          after: 200,
-        },
-      });
-      paragraphs.push(sectionHeader);
+    // Standard handling for other sections including Header section
+    else {
+      // Add section header (except for Header section)
+      if (section !== 'Header') {
+        const sectionHeader = new Paragraph({
+          text: section,
+          heading: HeadingLevel.HEADING_2,
+          thematicBreak: true,
+          spacing: {
+            before: 400,
+            after: 200,
+          },
+        });
+        paragraphs.push(sectionHeader);
+      }
       
       // Add content
       if (typeof content === 'string') {
@@ -339,13 +342,18 @@ async function generateSpecificDocx(
             children: [
               new TextRun({
                 text: isBulletPoint ? line.trim().substring(1).trim() : line,
+                // Use bold for header content that might be a name
+                bold: section === 'Header' && line.match(/^[A-Z][a-z]+ [A-Z][a-z]+$/) ? true : undefined,
+                // Use slightly larger size for header content
+                size: section === 'Header' ? 28 : undefined,
               }),
             ],
             spacing: {
-              before: 100,
-              after: 100,
+              before: section === 'Header' ? 0 : 100,
+              after: section === 'Header' ? 0 : 100,
               line: 300,
             },
+            alignment: section === 'Header' ? AlignmentType.CENTER : undefined,
             bullet: isBulletPoint ? {
               level: 0,
             } : undefined,
@@ -490,17 +498,35 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
   ];
   
   // Extract contact information (usually at the top)
-  const headerEndIndex = Math.min(10, lines.length);
+  const headerEndIndex = Math.min(12, lines.length);
   const headerContent: string[] = [];
+  
+  // Look for typical header content including name and contact details
   for (let i = 0; i < headerEndIndex; i++) {
-    if (/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(lines[i].trim()) || // Email
-        /^\+?[\d\s()-]{7,}$/.test(lines[i].trim()) || // Phone
-        /^(https?:\/\/)?(www\.)?linkedin\.com\/in\/[\w-]+\/?$/.test(lines[i].trim())) { // LinkedIn
-      headerContent.push(lines[i]);
+    const line = lines[i].trim();
+    
+    // Skip likely section headers
+    if (line.match(/^[\s*•\-\|\#]?\s*[A-Z][A-Z\s]+:?/)) {
+      continue;
+    }
+    
+    // Check for typical contact information patterns
+    if (line.match(/^[A-Z][a-z]+ [A-Z][a-z]+$/i) || // Name pattern
+        line.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/) || // Email
+        line.match(/\b(\+\d{1,3}[- ]?)?\(?\d{3}\)?[- ]?\d{3}[- ]?\d{4}\b/) || // Phone
+        line.match(/linkedin\.com\/in\//) || // LinkedIn URL
+        line.match(/github\.com\//) || // GitHub URL
+        line.match(/^\d+\s+[A-Za-z\s]+,\s*[A-Za-z\s]+,\s*[A-Za-z\s]+/) || // Address pattern
+        (i < 3 && line.length > 0)) { // First few non-empty lines
+      
+      headerContent.push(line);
     }
   }
+  
+  // Store header content if found
   if (headerContent.length > 0) {
     sections['Header'] = headerContent.join('\n');
+    logger.info(`Extracted header with ${headerContent.length} lines of contact information`);
   }
   
   let currentSection = '';
@@ -647,6 +673,79 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     const name = text.match(/^([A-Z][a-z]+\s+[A-Z][a-z]+)(?:\n|$)/)?.[1] || "Professional";
     sections['PROFILE'] = `${sections['PROFILE']} ${name} is an experienced professional seeking opportunities to apply skills and expertise in a new role.`;
     logger.info('Enhanced short PROFILE section');
+  }
+  
+  // If we still don't have a profile, attempt to extract it from the text more comprehensively
+  if (!sections['PROFILE']) {
+    logger.info('No profile section found, attempting to extract one from CV content');
+    
+    // First try to extract a substantive paragraph from the beginning of the CV
+    let bestProfileCandidate = '';
+    let bestCandidateScore = 0;
+    
+    // Skip header lines and look for a substantive paragraph
+    for (let i = headerContent.length; i < Math.min(30, lines.length); i++) {
+      const line = lines[i].trim();
+      
+      // Skip section headers and short lines
+      if (line.match(/^[A-Z][A-Z\s]+:?$/) || line.length < 40) {
+        continue;
+      }
+      
+      // Calculate a "profile likelihood score" based on content
+      let score = line.length / 20; // Longer text gets higher score
+      
+      // Boost score for lines with profile-related keywords
+      const profileKeywords = [
+        'professional', 'experienced', 'skilled', 'background', 
+        'expertise', 'years of experience', 'career', 
+        'passionate', 'dedicated', 'seeking', 'opportunity'
+      ];
+      
+      profileKeywords.forEach(keyword => {
+        if (line.toLowerCase().includes(keyword)) {
+          score += 2;
+        }
+      });
+      
+      // Penalize for lines that look like responsibilities or bullet points
+      if (line.startsWith('•') || line.startsWith('-') || 
+          line.match(/^\d+\./) || 
+          line.toLowerCase().includes('responsible for')) {
+        score -= 5;
+      }
+      
+      // Update best candidate if this one is better
+      if (score > bestCandidateScore) {
+        bestProfileCandidate = line;
+        bestCandidateScore = score;
+      }
+    }
+    
+    // If we found a good candidate, use it
+    if (bestProfileCandidate && bestCandidateScore > 5) {
+      sections['PROFILE'] = bestProfileCandidate;
+      logger.info(`Extracted profile from CV with score ${bestCandidateScore}`);
+    } else {
+      // Use first 1-2 paragraphs if no good candidate was found
+      const firstParas = lines.filter(line => line.trim().length > 50)
+                             .slice(0, 2)
+                             .join('\n');
+      
+      if (firstParas.length > 50) {
+        sections['PROFILE'] = firstParas;
+        logger.info('Using first substantial paragraphs as profile');
+      } else {
+        // Last resort: create a generic profile using name if available
+        const nameMatch = headerContent.length > 0 ? 
+                         headerContent[0].match(/^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/) : 
+                         text.match(/^([A-Z][a-z]+\s+[A-Z][a-z]+)(?:\n|$)/);
+        
+        const name = nameMatch ? nameMatch[1] : "Professional";
+        sections['PROFILE'] = `${name} is an experienced professional with a strong background seeking new opportunities to leverage expertise and contribute to organizational success.`;
+        logger.info('Created default PROFILE section using name from CV');
+      }
+    }
   }
   
   logger.info(`Parsed ${Object.keys(sections).length} sections from optimized text`);

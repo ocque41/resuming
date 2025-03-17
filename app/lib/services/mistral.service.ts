@@ -546,4 +546,135 @@ export async function analyzeJobMatch(cvText: string, jobDescription: string): P
     logger.error('Error analyzing job match with Mistral AI:', error instanceof Error ? error.message : String(error));
     throw new Error('Failed to analyze job match');
   }
+}
+
+/**
+ * Tailors the CV content for a specific job using Mistral AI
+ * This is an enhanced function specifically for the specific-optimize workflow
+ */
+export async function tailorCVForSpecificJob(cvText: string, jobDescription: string, jobTitle?: string): Promise<{
+  tailoredContent: string;
+  enhancedProfile: string;
+  sectionImprovements: Record<string, string>;
+}> {
+  try {
+    // Client-side check - redirect to API
+    if (typeof window !== 'undefined') {
+      const response = await fetch('/api/cv/tailor-for-job', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ cvText, jobDescription, jobTitle }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'API returned unsuccessful response');
+      }
+      
+      return data.result;
+    }
+    
+    // Server-side processing
+    const client = getMistralClient();
+    if (!client) {
+      throw new Error('Mistral client not initialized');
+    }
+    
+    logger.info(`Tailoring CV for job: ${jobTitle || 'Unspecified position'}`);
+    
+    // Use a more detailed system prompt to guide the AI
+    const systemPrompt = `You are an expert CV optimizer specialized in tailoring CVs to specific job descriptions.
+Your task is to analyze the CV and job description, then optimize the CV content to highlight relevant experiences, 
+skills, and qualifications that match the job requirements.
+
+Follow these guidelines:
+1. Preserve the original structure and sections of the CV
+2. Enhance the profile/summary section to highlight relevant qualifications for this specific job
+3. Tailor the language to include keywords from the job description
+4. Prioritize achievements that demonstrate relevant skills
+5. Ensure all content is factual and based only on information in the original CV
+6. Do not fabricate experiences, skills, or qualifications
+7. Return the content in a structured format that preserves sections
+
+Most importantly, identify and extract the name and contact details from the original CV and maintain them.`;
+
+    // Process the data through Mistral AI
+    const result = await executeMistralRequest(async () => {
+      const response = await client.chat({
+        model: 'mistral-large-latest',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { 
+            role: 'user', 
+            content: `Here is my CV:
+---
+${cvText}
+---
+
+Here is the job description I'm applying for:
+---
+${jobDescription}
+---
+${jobTitle ? `\nPosition: ${jobTitle}` : ''}
+
+Please tailor my CV for this job. Enhance the profile section to focus on relevant qualifications.
+Return the optimized content in a JSON format with these fields:
+1. tailoredContent: The complete tailored CV
+2. enhancedProfile: A specifically enhanced profile section
+3. sectionImprovements: A summary of improvements made to each section`
+          }
+        ],
+        temperature: 0.3,
+        maxTokens: 4000,
+        // @ts-ignore - The Mistral API supports response_format but the type definitions may not be updated
+        response_format: { type: 'json_object' }
+      });
+      
+      try {
+        // First try direct parsing
+        return JSON.parse(response.choices[0].message.content) as {
+          tailoredContent: string;
+          enhancedProfile: string;
+          sectionImprovements: Record<string, string>;
+        };
+      } catch (parseError) {
+        // If direct parsing fails, extract JSON from the response
+        logger.warn('Failed to parse Mistral response as JSON directly', parseError);
+        
+        // Try to extract JSON from the response
+        const content = response.choices[0].message.content;
+        const jsonStart = content.indexOf('{');
+        const jsonEnd = content.lastIndexOf('}');
+        
+        if (jsonStart >= 0 && jsonEnd > jsonStart) {
+          const jsonStr = content.substring(jsonStart, jsonEnd + 1);
+          return JSON.parse(jsonStr) as {
+            tailoredContent: string;
+            enhancedProfile: string;
+            sectionImprovements: Record<string, string>;
+          };
+        }
+        
+        // If JSON extraction fails, return a simple structure with the response
+        logger.error('Failed to extract JSON from Mistral response, using fallback');
+        return {
+          tailoredContent: content,
+          enhancedProfile: '',
+          sectionImprovements: {}
+        };
+      }
+    });
+    
+    logger.info('Successfully tailored CV for job');
+    return result;
+  } catch (error) {
+    logger.error('Error tailoring CV for job:', error instanceof Error ? error.message : String(error));
+    throw error;
+  }
 } 
