@@ -435,10 +435,13 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                       Improvement Suggestions
                     </h3>
                     <ul className="space-y-2 text-sm text-gray-300">
-                      {analysisResults.summary.improvements.map((improvement: string, index: number) => (
+                      {analysisResults.summary.improvements.map((improvement: string | { improvement: string; impact?: string }, index: number) => (
                         <li key={index} className="flex items-start">
                           <div className="text-amber-500 mr-2">•</div>
-                          {improvement}
+                          {typeof improvement === 'object' && improvement !== null 
+                            ? (improvement.improvement || 'Improvement needed') + 
+                              (improvement.impact ? ` - Impact: ${improvement.impact}` : '')
+                            : improvement}
                         </li>
                       ))}
                     </ul>

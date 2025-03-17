@@ -118,7 +118,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     education: ""
   });
   const [showStructuredView, setShowStructuredView] = useState<boolean>(true);
-  const [improvements, setImprovements] = useState<string[]>([]);
+  const [improvements, setImprovements] = useState<Array<string | { improvement: string; impact?: string }>>([]);
   
   // State for DOCX download
   const [isDownloadingDocx, setIsDownloadingDocx] = useState<boolean>(false);
@@ -1335,7 +1335,12 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                             <h6 className="text-white font-medium mb-2">Suggested Improvements</h6>
                             <ul className="list-disc pl-5 space-y-1 text-gray-400 text-sm">
                               {improvements.map((improvement, index) => (
-                                <li key={index}>{improvement}</li>
+                                <li key={index}>
+                                  {typeof improvement === 'object' && improvement !== null 
+                                    ? (improvement.improvement || 'Improvement needed') + 
+                                      (improvement.impact ? ` - Impact: ${improvement.impact}` : '')
+                                    : improvement}
+                                </li>
                               ))}
                             </ul>
                           </div>

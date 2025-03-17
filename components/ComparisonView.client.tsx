@@ -16,7 +16,7 @@ interface ComparisonViewProps {
     atsScore: number;
     optimizationDate?: string;
   };
-  improvements?: string[];
+  improvements?: Array<string | { improvement: string; impact?: string }>;
   onDownloadOriginal?: () => void;
   onDownloadOptimized?: () => void;
   displayMode?: 'horizontal' | 'vertical';
@@ -162,7 +162,12 @@ export default function ComparisonView({
                 improvements.map((improvement, index) => (
                   <div key={index} className="flex items-start rounded-md bg-[#0A0A0A] border border-gray-800 p-4">
                     <ArrowRight className="h-5 w-5 text-[#B4916C] mr-3 mt-0.5 flex-shrink-0" />
-                    <div className="text-gray-300">{improvement}</div>
+                    <div className="text-gray-300">
+                      {typeof improvement === 'object' && improvement !== null 
+                        ? (improvement.improvement || '') + 
+                          (improvement.impact ? ` (Impact: ${improvement.impact})` : '')
+                        : improvement}
+                    </div>
                   </div>
                 ))
               ) : (

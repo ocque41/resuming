@@ -1,6 +1,9 @@
 import MistralClient from '@mistralai/mistralai';
-import 'server-only';
 import { logger } from '@/lib/logger';
+import { mistralRateLimiter } from '@/app/lib/services/rate-limiter';
+
+// Instead of importing server-only, we'll use a runtime check
+const isServer = typeof window === 'undefined';
 
 /**
  * Helper function to extract JSON from markdown-formatted text
@@ -21,14 +24,20 @@ export function extractJsonFromMarkdown(text: string): string {
 }
 
 // Initialize Mistral client
-const client = new MistralClient(process.env.MISTRAL_API_KEY || '');
+const getMistralClient = (): MistralClient | null => {
+  // Only initialize on the server
+  if (isServer) {
+    return new MistralClient(process.env.MISTRAL_API_KEY || '');
+  }
+  return null;
+};
 
 // Add MistralService class for general text generation
 export class MistralService {
-  private client: MistralClient;
+  private client: MistralClient | null;
   
   constructor() {
-    this.client = client;
+    this.client = getMistralClient();
   }
   
   async generateText({
@@ -43,6 +52,16 @@ export class MistralService {
     response_format?: { type: string };
   }): Promise<string> {
     try {
+      // Check if we're on the server
+      if (!isServer) {
+        throw new Error('This method can only be called on the server');
+      }
+      
+      // Check if client is initialized
+      if (!this.client) {
+        throw new Error('Mistral client is not initialized');
+      }
+      
       const chatOptions: any = {
         model: 'mistral-large-latest',
         messages: [
@@ -136,6 +155,16 @@ export interface CVAnalysisResult {
 
 export async function analyzeCVContent(cvText: string): Promise<CVAnalysisResult> {
   try {
+    // Check if we're on the server
+    if (!isServer) {
+      throw new Error('This method can only be called on the server');
+    }
+    
+    const client = getMistralClient();
+    if (!client) {
+      throw new Error('Mistral client is not initialized');
+    }
+    
     const prompt = `Analyze the following CV and extract structured information. Format the response as JSON with the following structure:
     {
       "experience": [{"title": string, "company": string, "dates": string, "responsibilities": string[]}],
@@ -174,6 +203,16 @@ export async function optimizeCVForJob(cvText: string, jobDescription: string): 
   recommendations: string[];
 }> {
   try {
+    // Check if we're on the server
+    if (!isServer) {
+      throw new Error('This method can only be called on the server');
+    }
+    
+    const client = getMistralClient();
+    if (!client) {
+      throw new Error('Mistral client is not initialized');
+    }
+    
     const prompt = `Optimize the following CV for the given job description. Provide:
     1. Optimized CV content with relevant keywords and phrases
     2. Match score (0-100)
