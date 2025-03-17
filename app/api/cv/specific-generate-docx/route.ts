@@ -181,40 +181,57 @@ async function generateSpecificDocx(
       'Header',
       'PROFILE', 
       'ACHIEVEMENTS',
-      'GOALS',
+      'GOALS', 
       'EXPECTATIONS',
       'EXPERIENCE',
       'LANGUAGES',
       'EDUCATION',
+      'SKILLS', 
       'TECHNICAL SKILLS', 
       'PROFESSIONAL SKILLS',
-      'SKILLS', // Move generic skills to the end so it's only used if specific skills don't exist
       'REFERENCES'
   ];
   
   // Parse the CV text into sections
   const sections = parseOptimizedText(cvText);
   
-  // Better handling of duplicate skills sections
-  if ((sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS'])) {
-    // If we have specific skills sections, remove the generic skills section
-    delete sections['SKILLS']; 
-    logger.info('Removed generic SKILLS section as specific skills categories exist');
+  // Deduplicate skills sections
+  if (sections['TECHNICAL SKILLS'] && sections['PROFESSIONAL SKILLS']) {
+    // Convert both skill sections to arrays for easier processing
+    const technicalSkills = typeof sections['TECHNICAL SKILLS'] === 'string' 
+      ? sections['TECHNICAL SKILLS'].split('\n') 
+      : sections['TECHNICAL SKILLS'];
+    
+    const professionalSkills = typeof sections['PROFESSIONAL SKILLS'] === 'string'
+      ? sections['PROFESSIONAL SKILLS'].split('\n')
+      : sections['PROFESSIONAL SKILLS'];
+    
+    // Create sets to identify duplicates (case-insensitive comparison)
+    const technicalSkillsSet = new Set(technicalSkills.map(skill => skill.toLowerCase().trim()));
+    
+    // Filter professional skills to remove duplicates found in technical skills
+    const uniqueProfessionalSkills = professionalSkills.filter(skill => {
+      const skillLower = skill.toLowerCase().trim();
+      return !technicalSkillsSet.has(skillLower);
+    });
+    
+    // Update sections with deduplicated skills
+    if (Array.isArray(sections['PROFESSIONAL SKILLS'])) {
+      sections['PROFESSIONAL SKILLS'] = uniqueProfessionalSkills;
+    } else {
+      sections['PROFESSIONAL SKILLS'] = uniqueProfessionalSkills.join('\n');
+    }
+    
+    logger.info(`Removed ${professionalSkills.length - uniqueProfessionalSkills.length} duplicate skills from PROFESSIONAL SKILLS`);
   }
   
-  // If we have both SUMMARY and PROFILE, use only PROFILE to avoid duplication
-  if (sections['PROFILE'] && sections['SUMMARY']) {
-    // If the SUMMARY content is substantially different from PROFILE, combine them
-    if (typeof sections['PROFILE'] === 'string' && 
-        typeof sections['SUMMARY'] === 'string' && 
-        !sections['PROFILE'].includes(sections['SUMMARY']) && 
-        !sections['SUMMARY'].includes(sections['PROFILE']) &&
-        sections['SUMMARY'].length > 30) {
-      sections['PROFILE'] = `${sections['PROFILE']}\n\n${sections['SUMMARY']}`;
-      logger.info('Merged SUMMARY content into PROFILE section to avoid duplication');
+  // Check for duplicate skills sections and merge if needed
+  if (sections['SKILLS'] && (sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS'])) {
+    // If we have both general skills and specific skills, only keep the specific ones
+    if (sections['TECHNICAL SKILLS'] && sections['PROFESSIONAL SKILLS']) {
+      delete sections['SKILLS']; // Remove the general skills as we have specific ones
+      logger.info('Removed duplicate general SKILLS section as technical and professional skills exist');
     }
-    // Remove the separate SUMMARY section
-    delete sections['SUMMARY'];
   }
   
   // More detailed logging for debugging section parsing
@@ -260,50 +277,63 @@ async function generateSpecificDocx(
     // Skip if section doesn't exist
     if (!sections[section]) continue;
     
+    // If we already processed PROFILE and this is SUMMARY, skip it to avoid duplication
+    if (section === 'SUMMARY' && sections['PROFILE']) {
+      logger.info('Skipping SUMMARY section as PROFILE already exists');
+      continue;
+    }
+    
     // Get content for this section
     const content = sections[section];
     
     // Special handling for Profile section with enhanced formatting
     if (section === 'PROFILE') {
-      // We don't need to add a header here since it's handled by the standardized section header code
+      // Add profile header with special formatting
+      const profileHeader = new Paragraph({
+        text: 'Professional Profile',
+        heading: HeadingLevel.HEADING_2,
+        spacing: {
+          before: 400,
+          after: 200,
+        },
+        thematicBreak: true,
+        border: {
+          bottom: {
+            color: 'B4916C', // Brand color for visual separation
+            size: 1,
+            space: 4,
+            style: BorderStyle.SINGLE,
+          },
+        },
+      });
+      paragraphs.push(profileHeader);
       
       // Process profile content with enhanced formatting
       if (typeof content === 'string') {
         const contentLines = content.split('\n').filter(line => line.trim());
         
-        // Join all profile content into a single cohesive paragraph
-        let profileText = '';
+        // Remove any line that appears to be a header for "PROFILE" or "SUMMARY"
+        const filteredLines = contentLines.filter(line => 
+          !line.match(/^[\s*•\-\|\#]?PROFILE:?$/i) && 
+          !line.match(/^[\s*•\-\|\#]?SUMMARY:?$/i) && 
+          !line.match(/^[\s*•\-\|\#]?PROFESSIONAL\s+PROFILE:?$/i) &&
+          !line.match(/^[\s*•\-\|\#]?PROFESSIONAL\s+SUMMARY:?$/i) &&
+          !line.match(/^[\s*•\-\|\#]?ABOUT\s+ME:?$/i) &&
+          !line.match(/^[\s*•\-\|\#]?PROFILE\s*:$/i) &&
+          !line.match(/^SUMMARY\s*:$/i));
         
-        // Process each line to create a well-formatted profile
-        for (let i = 0; i < contentLines.length; i++) {
-          const line = contentLines[i].trim();
-          
-          // Skip lines that are too short or look like headers
-          if (line.length < 5 || (line.toUpperCase() === line && line.length < 20)) {
-            continue;
-          }
-          
-          // Skip lines that are likely bullet points at this stage
-          if (line.startsWith('•') || line.startsWith('-') || line.startsWith('*') || line.match(/^\d+\.\s/)) {
-            continue;
-          }
-          
-          // Add spacing between sentences if needed
-          if (profileText && !profileText.endsWith(' ') && !profileText.endsWith('.') && 
-              !profileText.endsWith('!') && !profileText.endsWith('?')) {
-            profileText += ' ';
-          }
-          
-          // Add the line to the profile text
-          if (profileText && !profileText.endsWith(' ') && !line.startsWith(' ')) {
-            profileText += ' ' + line;
-          } else {
-            profileText += line;
-          }
-        }
+        // Clean the lines to remove any special formatting that might cause issues
+        const cleanedLines = filteredLines.map(line => {
+          // Remove colons at the end of a line if it appears to be just a label 
+          return line.replace(/^(.{1,20}):$/, '$1')
+                     // Clean up potential formatting characters
+                     .replace(/^[\s*•\-\|\#]+\s*/, '')
+                     // Remove any "PROFILE:" or "SUMMARY:" prefix that may be within a line
+                     .replace(/^(?:PROFILE|SUMMARY|PROFESSIONAL\s+PROFILE|PROFESSIONAL\s+SUMMARY):\s*/i, '');
+        });
         
-        // Clean up any double spaces
-        profileText = profileText.replace(/\s\s+/g, ' ').trim();
+        // Join all profile content into a single paragraph for better flow
+        const profileText = cleanedLines.join(' ');
         
         // Add profile content with enhanced formatting
         const profileParagraph = new Paragraph({
@@ -320,80 +350,52 @@ async function generateSpecificDocx(
             after: 300,
             line: 360, // Increased line spacing
           },
-          border: {
-            bottom: {
-              color: 'B4916C', // Brand color for subtle emphasis
-              size: 6,
-              space: 8,
-              style: BorderStyle.SINGLE,
-            },
-          },
+          // Remove border from paragraph to maintain consistent styling with other sections
         });
         paragraphs.push(profileParagraph);
         
-        // Add job-specific context if job title is provided
+        // Add job-specific context if job title is provided, but with better styling
         if (jobTitle) {
           const contextParagraph = new Paragraph({
             children: [
               new TextRun({
-                text: `Seeking opportunities as a ${jobTitle} to leverage expertise and contribute to organizational success.`,
+                text: `Seeking opportunities as a ${jobTitle}${companyName ? ` at ${companyName}` : ''} to leverage expertise and contribute to organizational success.`,
                 italics: true,
-                color: 'B4916C', // Brand color
                 size: 22,
+                color: '333333', // Match the main text color for consistency
               }),
             ],
             spacing: {
-              before: 200,
-              after: 400,
+              before: 100,
+              after: 200,
             },
-            alignment: AlignmentType.CENTER,
+            // No special alignment to match other content
           });
           paragraphs.push(contextParagraph);
         }
       }
     } 
-    // Standard handling for other sections including Header section
+    // Standard handling for other sections
     else {
       // Add section header (except for Header section)
       if (section !== 'Header') {
-        // Use a standardized section name display for better formatting
-        let displaySectionName = section;
+        // Fix section title formatting - convert to proper case for display
+        let displaySectionTitle = section;
         
-        // Capitalize only the first letter of each word for better readability
-        displaySectionName = displaySectionName.split(' ')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-          .join(' ');
-        
-        // Handle specific section renames for consistency
-        if (section === 'SKILLS' && (sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS'])) {
-          displaySectionName = 'Key Skills';
-        } else if (section === 'SUMMARY' && sections['PROFILE']) {
-          // Skip SUMMARY section if PROFILE exists to avoid duplication
-          continue; // Skip this section in the loop rather than returning undefined
-        } else if (section === 'PROFILE') {
-          displaySectionName = 'Professional Profile';
-        } else if (section === 'PROFESSIONAL SKILLS') {
-          displaySectionName = 'Professional Skills';
-        } else if (section === 'TECHNICAL SKILLS') {
-          displaySectionName = 'Technical Skills';
-        } else if (section === 'EXPERIENCE') {
-          displaySectionName = 'Experience';
-        } else if (section === 'EDUCATION') {
-          displaySectionName = 'Education';
-        } else if (section === 'ACHIEVEMENTS') {
-          displaySectionName = 'Achievements';
-        } else if (section === 'GOALS') {
-          displaySectionName = 'Goals';
-        } else if (section === 'LANGUAGES') {
-          displaySectionName = 'Languages';
-        } else if (section === 'EXPECTATIONS') {
-          displaySectionName = 'What to Expect from the Job';
-        } else if (section === 'REFERENCES') {
-          displaySectionName = 'References';
-        }
+        // Handle special section name formatting
+        if (section === 'ACHIEVEMENTS') displaySectionTitle = 'Achievements';
+        else if (section === 'GOALS') displaySectionTitle = 'Goals';
+        else if (section === 'EXPECTATIONS') displaySectionTitle = 'What to Expect from the Job';
+        else if (section === 'EXPERIENCE') displaySectionTitle = 'Experience';
+        else if (section === 'LANGUAGES') displaySectionTitle = 'Languages';
+        else if (section === 'EDUCATION') displaySectionTitle = 'Education';
+        else if (section === 'SKILLS') displaySectionTitle = 'Skills';
+        else if (section === 'TECHNICAL SKILLS') displaySectionTitle = 'Technical Skills';
+        else if (section === 'PROFESSIONAL SKILLS') displaySectionTitle = 'Professional Skills';
+        else if (section === 'REFERENCES') displaySectionTitle = 'References';
         
         const sectionHeader = new Paragraph({
-          text: displaySectionName,
+          text: displaySectionTitle,
           heading: HeadingLevel.HEADING_2,
           thematicBreak: true,
           spacing: {
@@ -417,25 +419,37 @@ async function generateSpecificDocx(
         // Handle string content
         const contentLines = content.split('\n');
         
-        for (const line of contentLines) {
+        // Clean content by removing section headers within the content
+        const cleanedLines = contentLines
+          .filter(line => line.trim()) // Remove empty lines
+          .filter(line => {
+            // Skip lines that appear to be just the section name (to avoid duplication)
+            const sectionNamePattern = new RegExp(`^\\s*[\\*•\\-\\|\\#]?\\s*${section}\\s*:?$`, 'i');
+            return !sectionNamePattern.test(line);
+          })
+          .map(line => {
+            // Clean up formatting characters and section prefixes
+            return line
+              .replace(/^[\s*•\-\|\#]+\s*/, '') // Remove starting special characters
+              .replace(new RegExp(`^${section}\\s*:\\s*`, 'i'), ''); // Remove section name prefix
+          });
+        
+        for (const line of cleanedLines) {
           // Skip empty lines
           if (!line.trim()) continue;
           
-          // Improved bullet point detection - standardize across different formats
+          // Check if this line is a bullet point - expanded pattern matching
           const isBulletPoint = line.trim().startsWith('•') || 
                               line.trim().startsWith('-') ||
                               line.trim().startsWith('*') ||
-                              line.trim().match(/^\d+\.\s/) !== null;
+                              line.trim().match(/^[\*•\-\|\#]\s/) !== null;
           
-          // Format the text - remove the bullet character if it's there
-          let lineText = line.trim();
-          if (isBulletPoint) {
-            // Remove any bullet character or numbered prefix
-            lineText = lineText.replace(/^[•\-\*]\s*/, '').trim();
-            lineText = lineText.replace(/^\d+\.\s*/, '').trim();
-          }
+          // Extract the bullet content, properly handling the bullet character
+          const bulletContent = isBulletPoint 
+            ? line.trim().replace(/^[\*•\-\|\#]\s*/, '').trim() 
+            : line;
           
-          // Check if this is likely a job title or education institution (typically starts with capital letter and is relatively short)
+          // Check if this is likely a job title or education institution
           const isLikelyTitle = line.length < 60 && 
                               /^[A-Z]/.test(line) && 
                               (section === 'EXPERIENCE' || section === 'EDUCATION') &&
@@ -444,7 +458,7 @@ async function generateSpecificDocx(
           const paragraph = new Paragraph({
             children: [
               new TextRun({
-                text: lineText,
+                text: bulletContent,
                 // Use bold for header content that might be a name or for section titles
                 bold: section === 'Header' || isLikelyTitle ? true : undefined,
                 // Use slightly larger size for header content and titles
@@ -477,28 +491,40 @@ async function generateSpecificDocx(
         }
       } else if (Array.isArray(content)) {
         // Handle array content
-        for (const item of content) {
+        // Clean content by removing section headers within the content
+        const cleanedItems = content
+          .filter(item => item.trim()) // Remove empty items
+          .filter(item => {
+            // Skip items that appear to be just the section name (to avoid duplication)
+            const sectionNamePattern = new RegExp(`^\\s*[\\*•\\-\\|\\#]?\\s*${section}\\s*:?$`, 'i');
+            return !sectionNamePattern.test(item);
+          })
+          .map(item => {
+            // Clean up formatting characters and section prefixes
+            return item
+              .replace(/^[\s*•\-\|\#]+\s*/, '') // Remove starting special characters
+              .replace(new RegExp(`^${section}\\s*:\\s*`, 'i'), ''); // Remove section name prefix
+          });
+        
+        for (const item of cleanedItems) {
           // Skip empty lines
           if (!item.trim()) continue;
           
-          // Improved bullet point detection - standardize across different formats
+          // Check if this item is a bullet point - expanded pattern matching
           const isBulletPoint = item.trim().startsWith('•') || 
                               item.trim().startsWith('-') ||
-                              item.trim().startsWith('*') || 
-                              item.trim().match(/^\d+\.\s/) !== null;
+                              item.trim().startsWith('*') ||
+                              item.trim().match(/^[\*•\-\|\#]\s/) !== null;
           
-          // Format the text - remove the bullet character if it's there
-          let itemText = item.trim();
-          if (isBulletPoint) {
-            // Remove any bullet character or numbered prefix
-            itemText = itemText.replace(/^[•\-\*]\s*/, '').trim();
-            itemText = itemText.replace(/^\d+\.\s*/, '').trim();
-          }
+          // Extract the bullet content, properly handling the bullet character
+          const bulletContent = isBulletPoint 
+            ? item.trim().replace(/^[\*•\-\|\#]\s*/, '').trim() 
+            : item;
           
           const paragraph = new Paragraph({
             children: [
               new TextRun({
-                text: itemText,
+                text: bulletContent,
                 // Use special formatting for languages
                 italics: section === 'LANGUAGES' ? true : undefined,
                 // Use specific color for achievements to make them stand out
@@ -525,17 +551,17 @@ async function generateSpecificDocx(
       }
     }
   }
-  
-  // Add footer with date
+          
+          // Add footer with date
   const footer = new Paragraph({
-    children: [
-      new TextRun({
+            children: [
+              new TextRun({
         text: `Generated on ${new Date().toLocaleDateString()}`,
-        size: 20,
+                size: 20,
         color: '666666',
       }),
-    ],
-    spacing: {
+            ],
+            spacing: {
       before: 400,
             },
             alignment: AlignmentType.CENTER,
@@ -988,8 +1014,7 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
       // Check for bullet points or numbered lists (common for achievements)
       const isBulletOrNumbered = line.trim().startsWith('•') || 
                                  line.trim().startsWith('-') || 
-                                 line.trim().startsWith('*') || 
-                                 line.trim().match(/^\d+\./);
+                                 line.match(/^\d+\./);
       
       // Check for achievement indicators
       const hasIndicator = achievementIndicators.some(regex => regex.test(line));
