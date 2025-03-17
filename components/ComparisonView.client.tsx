@@ -50,6 +50,18 @@ export default function ComparisonView({
     ));
   };
   
+  // Safely render improvement text
+  const renderImprovement = (improvement: string | { improvement: string; impact?: string }) => {
+    if (typeof improvement === 'string') {
+      return improvement;
+    } else if (improvement && typeof improvement === 'object') {
+      return (improvement.improvement || '') + 
+        (improvement.impact ? ` (Impact: ${improvement.impact})` : '');
+    } else {
+      return 'Unknown improvement';
+    }
+  };
+  
   // Calculate score improvement
   const scoreImprovement = optimizedContent && originalContent 
     ? Math.max(0, optimizedContent.atsScore - originalContent.atsScore) 
@@ -163,10 +175,7 @@ export default function ComparisonView({
                   <div key={index} className="flex items-start rounded-md bg-[#0A0A0A] border border-gray-800 p-4">
                     <ArrowRight className="h-5 w-5 text-[#B4916C] mr-3 mt-0.5 flex-shrink-0" />
                     <div className="text-gray-300">
-                      {typeof improvement === 'object' && improvement !== null 
-                        ? (improvement.improvement || '') + 
-                          (improvement.impact ? ` (Impact: ${improvement.impact})` : '')
-                        : improvement}
+                      {renderImprovement(improvement)}
                     </div>
                   </div>
                 ))

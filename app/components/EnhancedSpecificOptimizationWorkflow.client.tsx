@@ -541,27 +541,40 @@ function ModernFileDropdown({
   );
 }
 
+// Add this utility function at the top of the file, after imports
+const escapeRegExp = (string: string): string => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
 // Update the analyzeJobMatch function
 const analyzeJobMatch = (cvText: string, jobDescription: string): JobMatchAnalysis => {
   const cvKeywords = extractKeywords(cvText);
-  const jobKeywords = extractKeywords(jobDescription);
+  const jobKeywords = extractKeywords(jobDescription, true);
   
-  // Calculate keyword matches with relevance scores
-  const matchedKeywords: KeywordMatch[] = cvKeywords
-    .filter((keyword: string) => jobKeywords.includes(keyword))
-    .map((keyword: string) => {
-      const frequency = (cvText.match(new RegExp(keyword, 'gi')) || []).length;
-      const placement = determineKeywordPlacement(cvText, keyword);
-      const relevance = calculateKeywordRelevance(keyword, jobDescription, placement, frequency);
-      
-      return {
-        keyword,
-        relevance,
-        frequency,
-        placement
-      };
-    });
-
+  // Find keywords that match in the CV
+  const matchedKeywords: KeywordMatch[] = [];
+  jobKeywords.forEach(keyword => {
+    try {
+      const escapedKeyword = escapeRegExp(keyword);
+      const frequency = (cvText.match(new RegExp(escapedKeyword, 'gi')) || []).length;
+      if (frequency > 0) {
+        const placement = determineKeywordPlacement(cvText, escapedKeyword);
+        const relevance = calculateKeywordRelevance(keyword, jobDescription, placement, frequency);
+        matchedKeywords.push({ keyword, relevance, frequency, placement });
+      }
+    } catch (e) {
+      // Fallback to simple string match if regex fails
+      if (cvText.toLowerCase().includes(keyword.toLowerCase())) {
+        matchedKeywords.push({ 
+          keyword, 
+          relevance: 70, // Default relevance score
+          frequency: 1,  // At least one occurrence
+          placement: 'Unknown' 
+        });
+      }
+    }
+  });
+  
   // Calculate missing keywords with importance scores
   const missingKeywords: MissingKeyword[] = jobKeywords
     .filter((keyword: string) => !cvKeywords.includes(keyword))
@@ -648,81 +661,88 @@ const analyzeJobMatch = (cvText: string, jobDescription: string): JobMatchAnalys
   };
 };
 
-// Add helper functions for keyword analysis
+// Update determineKeywordPlacement
 const determineKeywordPlacement = (text: string, keyword: string): string => {
-  const sections = {
-    profile: /(?:profile|summary|objective)/i,
-    experience: /(?:experience|work history|employment)/i,
-    skills: /(?:skills|expertise|competencies)/i,
-    education: /(?:education|qualifications|academic)/i,
-    achievements: /(?:achievements|accomplishments)/i
-  };
-
-  for (const [section, pattern] of Object.entries(sections)) {
-    const sectionMatch = text.match(pattern);
-    if (sectionMatch && sectionMatch.index !== undefined) {
-      const sectionStart = sectionMatch.index;
-      const keywordMatch = text.slice(sectionStart).match(new RegExp(keyword, 'i'));
-      if (keywordMatch) {
-        return section;
+  try {
+    const escapedKeyword = escapeRegExp(keyword);
+    const sectionNames = ['summary', 'profile', 'experience', 'skills', 'education', 'achievements'];
+    
+    for (const section of sectionNames) {
+      const sectionStart = text.toLowerCase().indexOf(section.toLowerCase());
+      if (sectionStart !== -1) {
+        const keywordMatch = text.slice(sectionStart).match(new RegExp(escapedKeyword, 'i'));
+        if (keywordMatch) {
+          return section.charAt(0).toUpperCase() + section.slice(1);
+        }
       }
     }
+    return 'Other';
+  } catch (e) {
+    return 'Other'; // Fallback if regex fails
   }
-
-  return 'various';
 };
 
+// Update calculateKeywordRelevance
 const calculateKeywordRelevance = (
   keyword: string,
   jobDescription: string,
   placement: string,
   frequency: number
 ): number => {
-  let relevance = 0;
-
-  // Base relevance from frequency
-  relevance += Math.min(frequency * 10, 30);
-
-  // Relevance from job description emphasis
-  const keywordEmphasis = (jobDescription.match(new RegExp(keyword, 'gi')) || []).length;
-  relevance += Math.min(keywordEmphasis * 15, 40);
-
-  // Placement bonus
-  const placementScores: Record<string, number> = {
-    profile: 20,
-    skills: 25,
-    experience: 30,
-    achievements: 15,
-    education: 10,
-    various: 5
-  };
-  relevance += placementScores[placement] || 0;
-
-  // Normalize to 0-100
-  return Math.min(Math.round(relevance), 100);
+  try {
+    const escapedKeyword = escapeRegExp(keyword);
+    // Base relevance score
+    let relevance = 70;
+    
+    // Adjust based on frequency of the keyword in the job description
+    const keywordEmphasis = (jobDescription.match(new RegExp(escapedKeyword, 'gi')) || []).length;
+    relevance += Math.min(keywordEmphasis * 2, 10); // Max +10 for emphasis
+    
+    // Placement bonus
+    const placementScores: Record<string, number> = {
+      profile: 20,
+      skills: 25,
+      experience: 30,
+      achievements: 15,
+      education: 10,
+      various: 5
+    };
+    relevance += placementScores[placement] || 0;
+    
+    // Normalize to 0-100
+    return Math.min(Math.max(relevance, 30), 100); // Keep within 30-100 range
+  } catch (e) {
+    return 70; // Default relevance if regex fails
+  }
 };
 
+// Update calculateKeywordImportance
 const calculateKeywordImportance = (keyword: string, jobDescription: string): number => {
-  let importance = 0;
-
-  // Frequency in job description
-  const frequency = (jobDescription.match(new RegExp(keyword, 'gi')) || []).length;
-  importance += Math.min(frequency * 15, 45);
-
-  // Position in job description
-  const firstOccurrence = jobDescription.toLowerCase().indexOf(keyword.toLowerCase());
-  if (firstOccurrence !== -1) {
-    const positionScore = Math.max(0, 30 - Math.floor(firstOccurrence / 100));
-    importance += positionScore;
+  try {
+    const escapedKeyword = escapeRegExp(keyword);
+    // Base importance score
+    let importance = 70;
+    
+    // Check frequency
+    const frequency = (jobDescription.match(new RegExp(escapedKeyword, 'gi')) || []).length;
+    importance += Math.min(frequency * 2, 10); // Max +10 for frequency
+    
+    // Check if it's in a requirement context
+    const requirementContext = new RegExp(`(required|must have|essential).*?${escapedKeyword}`, 'i');
+    if (requirementContext.test(jobDescription)) {
+      importance += 10;
+    }
+    
+    // Context importance
+    const positionContext = new RegExp(`${escapedKeyword}.*?(?:position|role|job title|title)`, 'i');
+    if (positionContext.test(jobDescription)) {
+      importance += 10;
+    }
+    
+    return Math.min(Math.max(importance, 30), 100); // Keep within 30-100 range
+  } catch (e) {
+    return 70; // Default importance if regex fails
   }
-
-  // Context importance
-  const requirementContext = new RegExp(`(required|must have|essential).*?${keyword}`, 'i');
-  if (requirementContext.test(jobDescription)) {
-    importance += 25;
-  }
-
-  return Math.min(Math.round(importance), 100);
 };
 
 const suggestKeywordPlacement = (keyword: string, jobDescription: string): string => {
@@ -748,26 +768,40 @@ const suggestKeywordPlacement = (keyword: string, jobDescription: string): strin
   return 'skills section';
 };
 
+// Update calculateKeywordDensity
 const calculateKeywordDensity = (text: string, keywords: string[]): number => {
-  const words = text.toLowerCase().split(/\s+/).length;
-  let keywordCount = 0;
-  
-  keywords.forEach(keyword => {
-    const matches = text.match(new RegExp(keyword, 'gi'));
-    if (matches) {
-      keywordCount += matches.length;
-    }
-  });
-  
-  const density = (keywordCount / words) * 100;
-  
-  // Optimal density is between 1-3%
-  if (density >= 1 && density <= 3) {
-    return 100;
-  } else if (density < 1) {
-    return Math.round((density / 1) * 100);
-  } else {
-    return Math.round((3 / density) * 100);
+  try {
+    const words = text.toLowerCase().match(/\b\w+\b/g) || [];
+    const totalWords = words.length;
+    
+    if (totalWords === 0) return 0;
+    
+    let keywordCount = 0;
+    
+    keywords.forEach(keyword => {
+      try {
+        const escapedKeyword = escapeRegExp(keyword);
+        const matches = text.match(new RegExp(escapedKeyword, 'gi'));
+        keywordCount += matches ? matches.length : 0;
+      } catch (e) {
+        // Fallback to simple string counting if regex fails
+        let count = 0;
+        let pos = text.toLowerCase().indexOf(keyword.toLowerCase());
+        while (pos !== -1) {
+          count++;
+          pos = text.toLowerCase().indexOf(keyword.toLowerCase(), pos + 1);
+        }
+        keywordCount += count;
+      }
+    });
+    
+    // Calculate density as a percentage
+    const density = (keywordCount / totalWords) * 100;
+    
+    // Normalize to a 0-100 score
+    return Math.min(Math.max(density * 5, 0), 100); // Scale up, but cap at 100
+  } catch (e) {
+    return 50; // Default score if calculation fails
   }
 };
 
@@ -799,42 +833,42 @@ const calculateFormatCompatibility = (text: string): number => {
   return score;
 };
 
+// Update calculateContentRelevance
 const calculateContentRelevance = (cvText: string, jobDescription: string): number => {
-  const relevanceFactors = [
-    {
-      pattern: /(?:required|must have|essential).*?(?:skills|qualifications|experience)/gi,
-      weight: 0.4
-    },
-    {
-      pattern: /(?:responsibilities|duties|tasks)/gi,
-      weight: 0.3
-    },
-    {
-      pattern: /(?:preferred|desired|nice to have)/gi,
-      weight: 0.2
-    },
-    {
-      pattern: /(?:benefits|offer|provide)/gi,
-      weight: 0.1
-    }
-  ];
-  
-  let totalScore = 0;
-  let totalWeight = 0;
-  
-  relevanceFactors.forEach(({ pattern, weight }) => {
-    const jobRequirements = jobDescription.match(pattern) || [];
-    if (jobRequirements.length > 0) {
-      const matchCount = jobRequirements.filter(req => 
-        new RegExp(req.replace(/(?:required|must have|essential|preferred|desired)/gi, ''), 'i').test(cvText)
-      ).length;
-      
-      totalScore += (matchCount / jobRequirements.length) * weight * 100;
-      totalWeight += weight;
-    }
-  });
-  
-  return totalWeight > 0 ? Math.round(totalScore / totalWeight) : 50;
+  try {
+    // Extract important keywords from the job description (focused on responsibilities, requirements)
+    const jobKeywords = extractKeywords(jobDescription, true);
+    
+    // Count how many of these keywords appear in the CV
+    let matchCount = 0;
+    
+    jobKeywords.forEach(keyword => {
+      try {
+        const escapedKeyword = escapeRegExp(keyword);
+        const jobMatches = (jobDescription.match(new RegExp(escapedKeyword, 'gi')) || []).length;
+        const cvMatches = (cvText.match(new RegExp(escapedKeyword, 'gi')) || []).length;
+        
+        // If the keyword appears more often in the CV than in the job description, it's a strong match
+        if (cvMatches >= jobMatches && jobMatches > 0) {
+          matchCount += 2;
+        } else if (cvMatches > 0) {
+          matchCount += 1;
+        }
+      } catch (e) {
+        // Fallback to simple includes check
+        if (cvText.toLowerCase().includes(keyword.toLowerCase())) {
+          matchCount += 1;
+        }
+      }
+    });
+    
+    // Calculate score based on the percentage of matched keywords
+    const relevanceScore = (matchCount / (jobKeywords.length * 2)) * 100;
+    
+    return Math.min(Math.max(relevanceScore, 0), 100);
+  } catch (e) {
+    return 50; // Default score if calculation fails
+  }
 };
 
 const analyzeCVSection = (
@@ -1362,6 +1396,11 @@ const extractTechnicalSkills = (text: string): string[] => {
     'babel', 'npm', 'yarn', 'linux', 'unix', 'windows', 'macos', 'ios', 'android'
   ];
 
+  // Helper function to escape special regex characters in a string
+  const escapeRegExp = (string: string): string => {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  };
+
   // Function to validate if a string is likely a technical skill
   const isLikelyTechnicalSkill = (skill: string): boolean => {
     const lowerSkill = skill.toLowerCase();
@@ -1433,12 +1472,22 @@ const extractTechnicalSkills = (text: string): string[] => {
     
     // Look for technical skill keywords in the line
     commonTechnicalSkillKeywords.forEach(keyword => {
-      const regex = new RegExp(`\\b${keyword}\\b`, 'i');
-      if (regex.test(trimmedLine)) {
-        // Extract the skill and surrounding context
-        const skillMatch = trimmedLine.match(new RegExp(`(?:\\b\\w+\\s+)?${keyword}(?:\\s+\\w+\\b)?`, 'i'));
-        if (skillMatch && !originalSkills.includes(skillMatch[0])) {
-          originalSkills.push(skillMatch[0]);
+      try {
+        // Escape special regex characters in the keyword
+        const escapedKeyword = escapeRegExp(keyword);
+        const regex = new RegExp(`\\b${escapedKeyword}\\b`, 'i');
+        if (regex.test(trimmedLine)) {
+          // Extract the skill and surrounding context
+          const skillRegex = new RegExp(`(?:\\b\\w+\\s+)?${escapedKeyword}(?:\\s+\\w+\\b)?`, 'i');
+          const skillMatch = trimmedLine.match(skillRegex);
+          if (skillMatch && !originalSkills.includes(skillMatch[0])) {
+            originalSkills.push(skillMatch[0]);
+          }
+        }
+      } catch (e) {
+        // In case of regex error, try a simple string match instead
+        if (trimmedLine.toLowerCase().includes(keyword.toLowerCase()) && !originalSkills.includes(keyword)) {
+          originalSkills.push(keyword);
         }
       }
     });
@@ -1475,6 +1524,11 @@ const extractProfessionalSkills = (text: string): string[] => {
     'patience', 'resilience', 'self-motivation', 'initiative', 'integrity',
     'ethics', 'professionalism', 'accountability', 'reliability', 'resourcefulness'
   ];
+
+  // Reusing the escapeRegExp function defined in extractTechnicalSkills
+  const escapeRegExp = (string: string): string => {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  };
 
   // Function to validate if a string is likely a professional skill
   const isLikelyProfessionalSkill = (skill: string): boolean => {
@@ -1547,12 +1601,22 @@ const extractProfessionalSkills = (text: string): string[] => {
     
     // Look for professional skill keywords in the line
     commonProfessionalSkillKeywords.forEach(keyword => {
-      const regex = new RegExp(`\\b${keyword}\\b`, 'i');
-      if (regex.test(trimmedLine)) {
-        // Extract the skill and surrounding context
-        const skillMatch = trimmedLine.match(new RegExp(`(?:\\b\\w+\\s+)?${keyword}(?:\\s+\\w+\\b)?`, 'i'));
-        if (skillMatch && !originalSkills.includes(skillMatch[0])) {
-          originalSkills.push(skillMatch[0]);
+      try {
+        // Escape special regex characters in the keyword
+        const escapedKeyword = escapeRegExp(keyword);
+        const regex = new RegExp(`\\b${escapedKeyword}\\b`, 'i');
+        if (regex.test(trimmedLine)) {
+          // Extract the skill and surrounding context
+          const skillRegex = new RegExp(`(?:\\b\\w+\\s+)?${escapedKeyword}(?:\\s+\\w+\\b)?`, 'i');
+          const skillMatch = trimmedLine.match(skillRegex);
+          if (skillMatch && !originalSkills.includes(skillMatch[0])) {
+            originalSkills.push(skillMatch[0]);
+          }
+        }
+      } catch (e) {
+        // In case of regex error, try a simple string match instead
+        if (trimmedLine.toLowerCase().includes(keyword.toLowerCase()) && !originalSkills.includes(keyword)) {
+          originalSkills.push(keyword);
         }
       }
     });
