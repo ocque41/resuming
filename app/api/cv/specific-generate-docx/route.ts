@@ -176,23 +176,69 @@ async function generateSpecificDocx(
 ): Promise<Buffer> {
   logger.info('Starting document generation process');
   
-  // Order of sections to process
+  // Order of sections to process with a focus on most important sections first
   const sectionOrder = [
     'Header',
-    'PROFILE',
-    'EXPERIENCE',
-    'EDUCATION',
-    'SKILLS',
-    'TECHNICAL SKILLS',
-    'PROFESSIONAL SKILLS',
-    'LANGUAGES',
-    'ACHIEVEMENTS',
-    'GOALS',
-    'REFERENCES'
+    'PROFILE',             // Profile is critical - comes right after contact info
+    'SUMMARY',             // Alternative to profile
+    'EXPERIENCE',          // Experience is very important for employers
+    'EDUCATION',           // Education typically follows experience
+    'SKILLS',              // General skills section
+    'TECHNICAL SKILLS',    // Technical skills are typically separate
+    'PROFESSIONAL SKILLS', // Professional/soft skills section
+    'LANGUAGES',           // Language proficiencies
+    'ACHIEVEMENTS',        // Key achievements
+    'GOALS',               // Career goals/objectives
+    'REFERENCES',          // References typically come last
+    'ABOUT ME',            // Alternative profile section
+    'PROFESSIONAL SUMMARY', // Another alternative profile
+    'PERSONAL STATEMENT',  // Another alternative profile
+    'CORE COMPETENCIES',   // Alternative skills section
+    'KEY SKILLS',          // Alternative skills section
+    'WORK EXPERIENCE',     // Alternative experience section
+    'EMPLOYMENT HISTORY',  // Alternative experience section
+    'QUALIFICATIONS',      // Alternative education section
+    'ACADEMIC BACKGROUND', // Alternative education section
   ];
   
   // Parse the CV text into sections
   const sections = parseOptimizedText(cvText);
+  
+  // Log found sections for debugging
+  logger.info(`Found sections: ${Object.keys(sections).join(', ')}`);
+  
+  // Quick check for PROFILE section - if missing, try to extract it directly
+  if (!sections['PROFILE']) {
+    logger.warn('PROFILE section missing, attempting to extract directly');
+    
+    // Look for a profile paragraph at the beginning of the CV
+    const lines = cvText.split('\n').filter(line => line.trim());
+    
+    // Skip past header (emails, phones, etc.)
+    let i = 0;
+    while (i < Math.min(10, lines.length) && 
+          (lines[i].includes('@') || 
+           /^\+?[\d\s()-]{7,}$/.test(lines[i]) || 
+           lines[i].includes('linkedin.com') ||
+           lines[i].length < 30)) {
+      i++;
+    }
+    
+    // Try to find a substantial paragraph that might be a profile
+    for (let j = i; j < Math.min(i + 10, lines.length); j++) {
+      if (lines[j].length > 50 && !lines[j].includes('@') && !lines[j].match(/^[A-Z\s]+:$/)) {
+        sections['PROFILE'] = lines[j];
+        logger.info('Extracted potential profile paragraph directly from text');
+        break;
+      }
+    }
+    
+    // If still no profile, create a default one
+    if (!sections['PROFILE']) {
+      sections['PROFILE'] = 'Professional with extensive experience seeking new opportunities.';
+      logger.info('Created default profile content as none was found');
+    }
+  }
   
   // Create all paragraphs that will be added to the document
   const paragraphs = [];
@@ -223,46 +269,26 @@ async function generateSpecificDocx(
   paragraphs.push(horizontalLine);
 
   // Process sections in order with enhanced Profile section handling
+  logger.info(`Starting to process sections. Available: ${Object.keys(sections).join(', ')}`);
+  const processedSections: string[] = [];
+  
   for (const sectionName of sectionOrder) {
     // Force check for Profile section as fallback
     let content = sections[sectionName];
     
-    // Special handling for Profile section if it's missing
-    if (sectionName === 'PROFILE' && !content) {
-      // Check for similar sections
-      content = sections['SUMMARY'] || sections['ABOUT ME'] || sections['PROFESSIONAL SUMMARY'] || sections['PERSONAL STATEMENT'];
-      
-      // If still not found, try to extract from the first part of text
-      if (!content) {
-        // Look for first substantial paragraph after header
-        const lines = cvText.split('\n').filter(line => line.trim());
-        let contactInfoEnded = false;
-        
-        for (let i = 0; i < Math.min(20, lines.length); i++) {
-          const line = lines[i];
-          
-          // Skip contact info
-          if (line.includes('@') || /^\+?[\d\s()-]{7,}$/.test(line) || line.includes('linkedin.com')) {
-            continue;
-          }
-          
-          contactInfoEnded = true;
-          
-          // Look for a substantial line
-          if (line.length > 50 && !line.match(/^[A-Z\s]+:$/)) {
-            content = line;
-            break;
-          }
-        }
-      }
+    // Skip if section doesn't exist
+    if (!content) {
+      logger.debug(`Section "${sectionName}" not found, skipping`);
+      continue;
     }
     
-    // Skip if section doesn't exist after all attempts
-    if (!content) continue;
-    
+    logger.info(`Processing section: ${sectionName} (${typeof content === 'string' ? 'string' : 'array'}, length: ${typeof content === 'string' ? content.length : (content as string[]).length} characters)`);
+    processedSections.push(sectionName);
+
     // Skip adding a header for "Header" section
     if (sectionName !== 'Header') {
       // Add section heading
+      logger.debug(`Adding heading for section: ${sectionName}`);
       const sectionHeading = new Paragraph({
         text: sectionName,
         heading: HeadingLevel.HEADING_2,
@@ -281,63 +307,79 @@ async function generateSpecificDocx(
       });
       paragraphs.push(sectionHeading);
     }
-    
-    // Special handling for profile section with enhanced formatting
+
+    // If section is PROFILE, apply special formatting
     if (sectionName === 'PROFILE') {
-      const profileContent = typeof content === 'string' ? content : content.join('\n');
+      logger.info(`Processing PROFILE section with ${typeof content === 'string' ? content.length : 'array'} chars`);
       
-      // Apply a professional style to the profile text
+      // Ensure valid content
+      let profileText = '';
+      if (typeof content === 'string') {
+        profileText = content.trim();
+      } else if (Array.isArray(content)) {
+        profileText = content.join('\n').trim();
+      }
+      
+      // Enhance profile if it's too short
+      if (profileText.length < 100) {
+        logger.warn('Profile content is very short, enhancing it');
+        const jobContext = jobTitle ? ` seeking to excel as a ${jobTitle}` : '';
+        profileText = `Experienced professional with a strong background in relevant skills${jobContext}. ${profileText}`;
+      }
+      
+      // Add job-specific context if a job title is provided
+      if (jobTitle && !profileText.toLowerCase().includes(jobTitle.toLowerCase())) {
+        logger.info('Adding job context to profile');
+        if (!profileText.endsWith('.')) profileText += '.';
+        profileText += ` Looking to leverage skills and experience as a ${jobTitle}.`;
+      }
+      
+      // Format profile text with special formatting for better visual appearance
       const profileParagraph = new Paragraph({
         children: [
           new TextRun({
-            text: profileContent,
-            size: 24, // Slightly larger text
-            font: {
-              name: "Calibri",
-            },
-            color: '333333', // Darker text color for better readability
+            text: profileText,
+            size: 26, // Slightly larger than normal text
+            color: '333333', // Dark color for visibility - using brand color
           }),
         ],
-        spacing: {
-          before: 200,
-          after: 400, // Extra space after profile
-          line: 360, // Increased line spacing
+        spacing: { 
+          after: 400,
+          line: 360 // Better line spacing
         },
-        indent: {
-          left: 0,
-        },
+        style: 'bodyText',
         border: {
           bottom: {
-            color: 'B4916C', // Brand color for subtle emphasis
+            color: 'EEEEEE',
             space: 1,
             style: BorderStyle.SINGLE,
-            size: 3,
-          },
-        },
+            size: 1
+          }
+        }
       });
+      
       paragraphs.push(profileParagraph);
       
-      // Add job-specific context if available
+      // If job title is provided, add a context paragraph in italics
       if (jobTitle) {
         const contextParagraph = new Paragraph({
           children: [
             new TextRun({
-              text: `Targeting: ${jobTitle}${companyName ? ` at ${companyName}` : ''}`,
+              text: `CV Optimized for ${jobTitle} position`,
               size: 20,
+              color: 'B4916C', // Brand color for subtle emphasis
               italics: true,
-              color: 'B4916C', // Brand color
             }),
           ],
-          spacing: {
-            before: 200,
-            after: 400,
-          },
-          alignment: AlignmentType.RIGHT,
+          spacing: { 
+            after: 300,
+            before: 100
+          }
         });
         paragraphs.push(contextParagraph);
       }
       
-      continue; // Skip the rest of the loop for profile
+      continue;
     }
     
     // Handle content (could be string or array)
@@ -452,6 +494,9 @@ async function generateSpecificDocx(
     ],
   });
   
+  // Log summary of what was processed
+  logger.info(`Document generation complete. Processed ${processedSections.length} sections: ${processedSections.join(', ')}`);
+
   // Generate buffer with a try-catch to handle any errors
   try {
     logger.info('Packing document to buffer');
@@ -470,131 +515,100 @@ async function generateSpecificDocx(
 function parseOptimizedText(text: string): Record<string, string | string[]> {
   const sections: Record<string, string | string[]> = {};
   
-  // Return empty sections if no text provided
-  if (!text || typeof text !== 'string') {
-    logger.warn('No valid text provided for parsing');
+  logger.info(`Parsing optimized text (length: ${text?.length || 0})`);
+  if (!text || text.trim().length === 0) {
+    logger.warn('Empty text provided to parseOptimizedText');
     return sections;
   }
+
+  const lines = text.split('\n');
   
-  // Split text into lines
-  const lines = text.split('\n').filter(line => line.trim());
-  
-  // First try to check if the text is in JSON format
   try {
-    const parsedJson = JSON.parse(text);
-    if (typeof parsedJson === 'object' && parsedJson !== null) {
-      logger.info('Successfully parsed text as JSON');
-      return parsedJson;
-    }
-  } catch (e) {
-    // Not valid JSON, continue with regular parsing
-    logger.info('Text is not in JSON format, using standard parsing');
+    // Try to parse as JSON first
+    const parsed = JSON.parse(text);
+    logger.info(`Successfully parsed JSON with sections: ${Object.keys(parsed).join(', ')}`);
+    return parsed;
+  } catch (error) {
+    // If not JSON, continue with standard parsing
+    logger.info('Not JSON format, proceeding with standard parsing');
   }
-  
-  // Define section patterns - prioritizing case-insensitive matches
-  const sectionPatterns: { regex: RegExp, name: string }[] = [
-    { regex: /^(PROFILE|SUMMARY|ABOUT ME|PROFESSIONAL SUMMARY|PERSONAL STATEMENT)(:|\s-|\n)/i, name: 'PROFILE' },
-    { regex: /^(ACHIEVEMENTS|ACCOMPLISHMENTS)(:|\s-|\n)/i, name: 'ACHIEVEMENTS' },
-    { regex: /^(GOALS|CAREER GOALS|OBJECTIVES)(:|\s-|\n)/i, name: 'GOALS' },
-    { regex: /^(LANGUAGES|LANGUAGE PROFICIENCY)(:|\s-|\n)/i, name: 'LANGUAGES' },
-    { regex: /^(TECHNICAL SKILLS)(:|\s-|\n)/i, name: 'TECHNICAL SKILLS' },
-    { regex: /^(PROFESSIONAL SKILLS|SOFT SKILLS)(:|\s-|\n)/i, name: 'PROFESSIONAL SKILLS' },
-    { regex: /^(SKILLS|CORE COMPETENCIES|KEY SKILLS)(:|\s-|\n)/i, name: 'SKILLS' },
-    { regex: /^(EDUCATION|ACADEMIC BACKGROUND|QUALIFICATIONS)(:|\s-|\n)/i, name: 'EDUCATION' },
-    { regex: /^(EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY|PROFESSIONAL EXPERIENCE)(:|\s-|\n)/i, name: 'EXPERIENCE' },
-    { regex: /^(REFERENCES)(:|\s-|\n)/i, name: 'REFERENCES' }
-  ];
-  
-  // Extract contact information (usually at the top)
-  const headerEndIndex = Math.min(10, lines.length);
-  const headerContent: string[] = [];
-  for (let i = 0; i < headerEndIndex; i++) {
-    if (/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(lines[i].trim()) || // Email
-        /^\+?[\d\s()-]{7,}$/.test(lines[i].trim()) || // Phone
-        /^(https?:\/\/)?(www\.)?linkedin\.com\/in\/[\w-]+\/?$/.test(lines[i].trim())) { // LinkedIn
-      headerContent.push(lines[i]);
-    }
-  }
-  if (headerContent.length > 0) {
-    sections['Header'] = headerContent.join('\n');
-  }
-  
+
+  // Define patterns for section headers with more variations
+  const sectionPatterns = {
+    'PROFILE': /^(?:\*\*)?(?:PROFILE|SUMMARY|ABOUT ME|PROFESSIONAL SUMMARY|PERSONAL STATEMENT|CAREER OBJECTIVE|OBJECTIVE)(?:\*\*)?:?$/i,
+    'EXPERIENCE': /^(?:\*\*)?(?:EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY|PROFESSIONAL EXPERIENCE|CAREER HISTORY)(?:\*\*)?:?$/i,
+    'EDUCATION': /^(?:\*\*)?(?:EDUCATION|QUALIFICATIONS|ACADEMIC BACKGROUND|ACADEMIC QUALIFICATIONS|EDUCATIONAL BACKGROUND)(?:\*\*)?:?$/i,
+    'SKILLS': /^(?:\*\*)?(?:SKILLS)(?:\*\*)?:?$/i,
+    'TECHNICAL SKILLS': /^(?:\*\*)?(?:TECHNICAL SKILLS|TECHNICAL EXPERTISE|TECHNICAL PROFICIENCIES)(?:\*\*)?:?$/i,
+    'PROFESSIONAL SKILLS': /^(?:\*\*)?(?:PROFESSIONAL SKILLS|SOFT SKILLS|CORE COMPETENCIES|KEY SKILLS|COMPETENCIES)(?:\*\*)?:?$/i,
+    'LANGUAGES': /^(?:\*\*)?(?:LANGUAGES|LANGUAGE PROFICIENCIES|LANGUAGE SKILLS)(?:\*\*)?:?$/i,
+    'ACHIEVEMENTS': /^(?:\*\*)?(?:ACHIEVEMENTS|ACCOMPLISHMENTS|KEY ACHIEVEMENTS|HONORS|AWARDS)(?:\*\*)?:?$/i,
+    'GOALS': /^(?:\*\*)?(?:GOALS|OBJECTIVES|CAREER GOALS|PROFESSIONAL GOALS)(?:\*\*)?:?$/i,
+    'REFERENCES': /^(?:\*\*)?(?:REFERENCES|PROFESSIONAL REFERENCES)(?:\*\*)?:?$/i
+  };
+
   let currentSection = '';
   let sectionContent: string[] = [];
-  let foundFirstSection = false;
-  
-  // Special handling for profile - often the first substantive paragraph after contact info
-  let potentialProfile = '';
-  let inProfileParagraph = false;
 
   // Process each line
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i].trim();
     
-    // Check if this line is a section header
-    let matchedSection = '';
-    for (const pattern of sectionPatterns) {
-      if (pattern.regex.test(line)) {
-        matchedSection = pattern.name;
+    // Skip empty lines at the beginning
+    if (!currentSection && line === '') continue;
+
+    // Check if line is a section header
+    let foundMatch = false;
+    for (const [section, pattern] of Object.entries(sectionPatterns)) {
+      if (pattern.test(line)) {
+        // If we were processing a section, add it to sections
+        if (currentSection && sectionContent.length > 0) {
+          sections[currentSection] = sectionContent.join('\n');
+        }
+        
+        currentSection = section;
+        sectionContent = [];
+        foundMatch = true;
+        logger.debug(`Found section header: ${section}`);
         break;
       }
     }
-    
-    if (matchedSection) {
-      // Save previous section content if any
-      if (currentSection && sectionContent.length > 0) {
-        sections[currentSection] = sectionContent.join('\n');
-      }
-      
-      // Start a new section
-      currentSection = matchedSection;
-      sectionContent = [];
-      foundFirstSection = true;
-      
-      // Extract content from the section header line (after the colon or dash)
-      const headerContentMatch = line.match(/(?::|-)(.+)$/);
-      if (headerContentMatch && headerContentMatch[1].trim()) {
-        sectionContent.push(headerContentMatch[1].trim());
-      }
-    } else if (currentSection) {
-      // Add to current section
+
+    // If line is not a section header, add to current section
+    if (!foundMatch && currentSection) {
       sectionContent.push(line);
-    } else if (!foundFirstSection && !inProfileParagraph && line.length > 20 && !sections['PROFILE']) {
-      // If we haven't found a section yet and this is a substantial line, treat it as the profile
-      potentialProfile = line;
-      inProfileParagraph = true;
-    } else if (inProfileParagraph) {
-      // Continue adding to the profile paragraph
-      if (line.trim().length > 0) {
-        potentialProfile += '\n' + line;
-      } else {
-        // End of paragraph
-        inProfileParagraph = false;
-      }
     }
   }
-  
-  // Save the last section
+
+  // Add the last section
   if (currentSection && sectionContent.length > 0) {
     sections[currentSection] = sectionContent.join('\n');
   }
+
+  // Log what sections were found
+  logger.info(`Found ${Object.keys(sections).length} sections: ${Object.keys(sections).join(', ')}`);
   
-  // If we found a potential profile paragraph but no PROFILE section
-  if (potentialProfile && !sections['PROFILE']) {
-    sections['PROFILE'] = potentialProfile;
-  }
-  
-  // Ensure key sections exist
-  if (!sections['PROFILE'] && !sections['SUMMARY']) {
-    // Look through the first 15 lines for a substantial paragraph
-    for (let i = 0; i < Math.min(15, lines.length); i++) {
-      if (lines[i].length > 50 && !lines[i].includes('@') && !lines[i].includes('http')) {
-        sections['PROFILE'] = lines[i];
+  // If no profile section was found, try to extract one from the first substantial paragraph
+  if (!sections['PROFILE'] && lines.length > 0) {
+    logger.warn('No PROFILE section found, attempting to extract one');
+    
+    // Try to extract a profile from the first substantial paragraph
+    for (let i = 0; i < Math.min(20, lines.length); i++) {
+      const line = lines[i].trim();
+      // Skip headers, contact info, and short lines
+      if (line.length > 50 && 
+          !line.includes('@') && 
+          !line.includes('http') && 
+          !/^\+?[\d\s()-]{7,}$/.test(line) &&
+          !Object.values(sectionPatterns).some(pattern => pattern.test(line))) {
+        
+        // Found a substantial paragraph that's likely a profile
+        sections['PROFILE'] = line;
+        logger.info('Extracted fallback profile from text');
         break;
       }
     }
   }
   
-  logger.info(`Parsed ${Object.keys(sections).length} sections from optimized text`);
   return sections;
 } 
