@@ -169,22 +169,22 @@ export async function POST(request: NextRequest) {
  * Generate a specific DOCX file for optimized CV
  */
 async function generateSpecificDocx(
-  cvText: string,
-  jobTitle?: string,
+  cvText: string, 
+  jobTitle?: string, 
   companyName?: string,
   jobDescription?: string
 ): Promise<Buffer> {
-  logger.info('Starting document generation process');
-  
+    logger.info('Starting document generation process');
+    
   // Order of sections to process
-  const sectionOrder = [
-    'Header',
-    'PROFILE',
+    const sectionOrder = [
+      'Header',
+      'PROFILE', 
     'EXPERIENCE',
     'EDUCATION',
-    'SKILLS',
-    'TECHNICAL SKILLS',
-    'PROFESSIONAL SKILLS',
+      'SKILLS', 
+      'TECHNICAL SKILLS', 
+      'PROFESSIONAL SKILLS',
     'LANGUAGES',
     'ACHIEVEMENTS',
     'GOALS',
@@ -263,7 +263,7 @@ async function generateSpecificDocx(
         
         // Add profile content with enhanced formatting
         const profileParagraph = new Paragraph({
-          children: [
+        children: [
             new TextRun({
               text: profileText,
               size: 24, // Larger text for better visibility
@@ -271,7 +271,7 @@ async function generateSpecificDocx(
               color: '333333', // Darker text for better readability
             }),
           ],
-          spacing: {
+            spacing: {
             before: 200,
             after: 300,
             line: 360, // Increased line spacing
@@ -310,14 +310,14 @@ async function generateSpecificDocx(
     } 
     // Standard handling for other sections including Header section
     else {
-      // Add section header (except for Header section)
+            // Add section header (except for Header section)
       if (section !== 'Header') {
         const sectionHeader = new Paragraph({
           text: section,
           heading: HeadingLevel.HEADING_2,
           thematicBreak: true,
-          spacing: {
-            before: 400,
+                  spacing: {
+                    before: 400,
             after: 200,
           },
         });
@@ -325,7 +325,7 @@ async function generateSpecificDocx(
       }
       
       // Add content
-      if (typeof content === 'string') {
+            if (typeof content === 'string') {
         // Handle string content
         const contentLines = content.split('\n');
         
@@ -339,16 +339,16 @@ async function generateSpecificDocx(
                                line.trim().startsWith('*');
           
           const paragraph = new Paragraph({
-            children: [
-              new TextRun({
+                      children: [
+                        new TextRun({
                 text: isBulletPoint ? line.trim().substring(1).trim() : line,
                 // Use bold for header content that might be a name
                 bold: section === 'Header' && line.match(/^[A-Z][a-z]+ [A-Z][a-z]+$/) ? true : undefined,
                 // Use slightly larger size for header content
                 size: section === 'Header' ? 28 : undefined,
               }),
-            ],
-            spacing: {
+                      ],
+                      spacing: {
               before: section === 'Header' ? 0 : 100,
               after: section === 'Header' ? 0 : 100,
               line: 300,
@@ -365,10 +365,10 @@ async function generateSpecificDocx(
             },
           });
           paragraphs.push(paragraph);
-        }
-      } else if (Array.isArray(content)) {
+              }
+            } else if (Array.isArray(content)) {
         // Handle array content
-        for (const item of content) {
+              for (const item of content) {
           // Check if this item is a bullet point
           const isBulletPoint = item.trim().startsWith('•') || 
                                item.trim().startsWith('-') ||
@@ -412,13 +412,13 @@ async function generateSpecificDocx(
     ],
     spacing: {
       before: 400,
-    },
-    alignment: AlignmentType.CENTER,
-    border: {
-      top: {
+            },
+            alignment: AlignmentType.CENTER,
+            border: {
+              top: {
         color: '999999',
-        space: 1,
-        style: BorderStyle.SINGLE,
+                space: 1,
+                style: BorderStyle.SINGLE,
         size: 6,
       },
     },
@@ -442,17 +442,17 @@ async function generateSpecificDocx(
         children: paragraphs,
       },
     ],
-  });
-  
-  // Generate buffer with a try-catch to handle any errors
-  try {
-    logger.info('Packing document to buffer');
-    const buffer = await Packer.toBuffer(doc);
-    logger.info('Document successfully packed to buffer');
-    return buffer;
-  } catch (packError) {
-    logger.error('Error packing document to buffer:', packError instanceof Error ? packError.message : String(packError));
-    throw new Error(`Failed to pack document to buffer: ${packError instanceof Error ? packError.message : 'Unknown error'}`);
+    });
+
+    // Generate buffer with a try-catch to handle any errors
+    try {
+      logger.info('Packing document to buffer');
+      const buffer = await Packer.toBuffer(doc);
+      logger.info('Document successfully packed to buffer');
+      return buffer;
+    } catch (packError) {
+      logger.error('Error packing document to buffer:', packError instanceof Error ? packError.message : String(packError));
+      throw new Error(`Failed to pack document to buffer: ${packError instanceof Error ? packError.message : 'Unknown error'}`);
   }
 }
 
@@ -750,4 +750,4 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
   
   logger.info(`Parsed ${Object.keys(sections).length} sections from optimized text`);
   return sections;
-}
+} 
