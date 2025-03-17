@@ -5,12 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, FileText, BarChart4, AlertCircle, CheckCircle, Info } from "lucide-react";
+import { Loader2, FileText, BarChart2, AlertCircle, CheckCircle, Info } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import {
-  Progress,
-  ProgressIndicator,
-} from "@/components/ui/progress";
 
 interface MatchedKeyword {
   keyword: string;
@@ -59,6 +55,19 @@ interface JobMatchAnalysisResult {
   };
 }
 
+// Simple progress bar component
+const Progress = ({ value, className = "" }: { value: number, className?: string }) => (
+  <div className={`relative h-2 bg-gray-700 rounded-full overflow-hidden ${className}`}>
+    <div 
+      className="absolute top-0 left-0 h-full rounded-full transition-all duration-300" 
+      style={{ 
+        width: `${value}%`,
+        backgroundColor: value >= 80 ? "#10b981" : value >= 60 ? "#f59e0b" : "#ef4444"
+      }} 
+    />
+  </div>
+);
+
 export default function JobMatchAnalysisVisualizer() {
   const { toast } = useToast();
   const [cvText, setCvText] = useState('');
@@ -89,7 +98,7 @@ export default function JobMatchAnalysisVisualizer() {
     setLoading(true);
     
     try {
-      const response = await fetch('/api/cv/job-match-analysis', {
+      const response = await fetch('/api/job-match/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -103,11 +112,11 @@ export default function JobMatchAnalysisVisualizer() {
 
       const data = await response.json();
       
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to analyze job match');
+      if (data.error) {
+        throw new Error(data.error);
       }
 
-      setAnalysis(data.analysis);
+      setAnalysis(data);
       toast({
         title: "Analysis Complete",
         description: "Your CV has been analyzed against the job description",
@@ -131,12 +140,6 @@ export default function JobMatchAnalysisVisualizer() {
     return "text-red-500";
   };
 
-  const getProgressColor = (score: number) => {
-    if (score >= 80) return "bg-green-500";
-    if (score >= 60) return "bg-yellow-500";
-    return "bg-red-500";
-  };
-
   const renderScoreCard = (title: string, score: number, icon: React.ReactNode) => (
     <Card className="bg-[#1D1D1D] border-none text-white">
       <CardContent className="pt-6">
@@ -147,9 +150,7 @@ export default function JobMatchAnalysisVisualizer() {
           </div>
           <span className={`text-xl font-bold ${getScoreColor(score)}`}>{score}%</span>
         </div>
-        <Progress className="h-2 bg-gray-700">
-          <ProgressIndicator className={`${getProgressColor(score)}`} style={{ width: `${score}%` }} />
-        </Progress>
+        <Progress value={score} />
       </CardContent>
     </Card>
   );
@@ -160,9 +161,7 @@ export default function JobMatchAnalysisVisualizer() {
         <h3 className="text-lg font-medium text-white">{title}</h3>
         <span className={`font-bold ${getScoreColor(analysis.score)}`}>{analysis.score}%</span>
       </div>
-      <Progress className="h-2 mb-3 bg-gray-700">
-        <ProgressIndicator className={`${getProgressColor(analysis.score)}`} style={{ width: `${analysis.score}%` }} />
-      </Progress>
+      <Progress value={analysis.score} />
       <p className="text-gray-300">{analysis.feedback}</p>
     </div>
   );
@@ -249,9 +248,7 @@ export default function JobMatchAnalysisVisualizer() {
                   <div className="rounded-lg bg-[#1D1D1D] p-4">
                     <h3 className="text-lg font-medium text-[#B4916C] mb-2">Overall Match</h3>
                     <div className="mb-4">
-                      <Progress className="h-3 bg-gray-700">
-                        <ProgressIndicator className={`${getProgressColor(analysis.score)}`} style={{ width: `${analysis.score}%` }} />
-                      </Progress>
+                      <Progress value={analysis.score} />
                     </div>
                     <p className="text-gray-300">{analysis.detailedAnalysis}</p>
                   </div>
@@ -292,9 +289,7 @@ export default function JobMatchAnalysisVisualizer() {
                   <div className="rounded-lg bg-[#1D1D1D] p-4">
                     <h3 className="text-lg font-medium text-[#B4916C] mb-2">Improvement Potential</h3>
                     <div className="mb-4">
-                      <Progress className="h-3 bg-gray-700">
-                        <ProgressIndicator className="bg-blue-500" style={{ width: `${analysis.improvementPotential}%` }} />
-                      </Progress>
+                      <Progress value={analysis.improvementPotential} />
                     </div>
                     <p className="text-gray-300">
                       With targeted improvements, you could increase your match score by up to {analysis.improvementPotential}%.

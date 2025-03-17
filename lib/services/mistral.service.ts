@@ -1,7 +1,52 @@
 import MistralClient from '@mistralai/mistralai';
+import { logger } from '@/lib/logger';
 
 // Initialize Mistral client
 const client = new MistralClient(process.env.MISTRAL_API_KEY || '');
+
+// Add MistralService class for general text generation
+export class MistralService {
+  private client: MistralClient;
+  
+  constructor() {
+    this.client = client;
+  }
+  
+  async generateText({
+    prompt,
+    temperature = 0.2,
+    max_tokens = 3000,
+    response_format = undefined
+  }: {
+    prompt: string;
+    temperature?: number;
+    max_tokens?: number;
+    response_format?: { type: string };
+  }): Promise<string> {
+    try {
+      const response = await this.client.chat({
+        model: 'mistral-large-latest',
+        messages: [
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature,
+        maxTokens: max_tokens,
+        ...(response_format && { response_format })
+      });
+      
+      return response.choices[0].message.content;
+    } catch (error) {
+      logger.error('Error generating text with Mistral AI:', error instanceof Error ? error : new Error(String(error)));
+      throw new Error('Failed to generate text');
+    }
+  }
+}
+
+// Create an instance of the MistralService for export
+export const mistralService = new MistralService();
 
 export interface CVAnalysisResult {
   experience: Array<{

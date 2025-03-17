@@ -13,8 +13,8 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
-import { Loader2, CheckCircle2, Copy, Download } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
+import { Loader2, CheckCircle, Copy, Download } from "lucide-react";
+import { toast } from "app/components/ui/use-toast";
 
 const experienceLevels = [
   "Entry Level",
@@ -28,26 +28,25 @@ const experienceLevels = [
 ];
 
 interface JobDescriptionResult {
-  title: string;
-  overview: string;
-  aboutCompany: string;
-  responsibilities: string[];
-  requirements: {
+  title?: string;
+  overview?: string;
+  aboutCompany?: string;
+  responsibilities?: string[];
+  requirements?: {
     essential: string[];
     preferred: string[];
   };
-  skills: {
+  skills?: {
     technical: string[];
     soft: string[];
   };
-  experienceEducation: string;
-  benefits: string[];
-  applicationProcess: string;
-  fullDescription: string;
+  experienceEducation?: string;
+  benefits?: string[];
+  applicationProcess?: string;
+  fullDescription?: string;
 }
 
 export default function JobDescriptionGenerator() {
-  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [jobTitle, setJobTitle] = useState('');
   const [industry, setIndustry] = useState('');
@@ -72,7 +71,7 @@ export default function JobDescriptionGenerator() {
     setLoading(true);
     
     try {
-      const response = await fetch('/api/cv/generate-job-description', {
+      const response = await fetch('/api/job-description/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -94,21 +93,36 @@ export default function JobDescriptionGenerator() {
 
       const data = await response.json();
       
-      if (!data.success) {
+      if (!data.jobDescription) {
         throw new Error(data.error || 'Failed to generate job description');
       }
 
-      setGeneratedDescription(data.jobDescription);
+      // Convert plain text response to our structure
+      let descriptionObj: JobDescriptionResult = {
+        fullDescription: data.jobDescription,
+        title: jobTitle
+      };
+      
+      // Try to extract sections from text
+      try {
+        const sections = extractSectionsFromText(data.jobDescription);
+        descriptionObj = { ...descriptionObj, ...sections };
+      } catch (parseError) {
+        console.error('Error parsing sections:', parseError);
+        // Still use the raw text even if parsing failed
+      }
+      
+      setGeneratedDescription(descriptionObj);
+      
       toast({
-        title: "Job Description Generated",
-        description: "Your job description has been successfully created",
-        variant: "default"
+        title: "Success!",
+        description: "Job description has been generated successfully",
       });
     } catch (error) {
       console.error('Error generating job description:', error);
       toast({
-        title: "Generation Failed",
-        description: error instanceof Error ? error.message : "An unknown error occurred",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to generate job description",
         variant: "destructive"
       });
     } finally {
@@ -116,10 +130,66 @@ export default function JobDescriptionGenerator() {
     }
   };
 
+  // Helper function to extract structured data from text description
+  const extractSectionsFromText = (text: string): Partial<JobDescriptionResult> => {
+    const result: Partial<JobDescriptionResult> = {};
+    
+    // Try to extract Overview/Summary
+    const overviewMatch = text.match(/(?:Overview|Summary):(.*?)(?:\n\n|\n(?=[A-Z]))/s);
+    if (overviewMatch) result.overview = overviewMatch[1].trim();
+    
+    // Try to extract About Company
+    const companyMatch = text.match(/(?:About|About the Company|Company):(.*?)(?:\n\n|\n(?=[A-Z]))/s);
+    if (companyMatch) result.aboutCompany = companyMatch[1].trim();
+    
+    // Try to extract Responsibilities
+    const responsibilitiesMatch = text.match(/Responsibilities:(.*?)(?:\n\n|\n(?=[A-Z]))/s);
+    if (responsibilitiesMatch) {
+      result.responsibilities = responsibilitiesMatch[1]
+        .trim()
+        .split(/\n(?=[-•*])/)
+        .map(item => item.replace(/^[-•*]\s*/, '').trim())
+        .filter(Boolean);
+    }
+    
+    // Try to extract Requirements
+    const requirementsMatch = text.match(/(?:Requirements|Qualifications):(.*?)(?:\n\n|\n(?=[A-Z]))/s);
+    if (requirementsMatch) {
+      const reqItems = requirementsMatch[1]
+        .trim()
+        .split(/\n(?=[-•*])/)
+        .map(item => item.replace(/^[-•*]\s*/, '').trim())
+        .filter(Boolean);
+      
+      // Simple heuristic: first half essential, rest preferred
+      const halfIndex = Math.ceil(reqItems.length / 2);
+      result.requirements = {
+        essential: reqItems.slice(0, halfIndex),
+        preferred: reqItems.slice(halfIndex)
+      };
+    }
+    
+    // Try to extract Benefits
+    const benefitsMatch = text.match(/(?:Benefits|Benefits\/Perks|Perks):(.*?)(?:\n\n|\n(?=[A-Z]))/s);
+    if (benefitsMatch) {
+      result.benefits = benefitsMatch[1]
+        .trim()
+        .split(/\n(?=[-•*])/)
+        .map(item => item.replace(/^[-•*]\s*/, '').trim())
+        .filter(Boolean);
+    }
+    
+    // Try to extract How to Apply
+    const applyMatch = text.match(/(?:How to Apply|Application Process):(.*?)(?:\n\n|\n(?=[A-Z])|$)/s);
+    if (applyMatch) result.applicationProcess = applyMatch[1].trim();
+    
+    return result;
+  };
+  
   const copyToClipboard = () => {
     if (!generatedDescription) return;
     
-    navigator.clipboard.writeText(generatedDescription.fullDescription);
+    navigator.clipboard.writeText(generatedDescription.fullDescription || '');
     toast({
       title: "Copied",
       description: "Job description copied to clipboard",
@@ -130,7 +200,7 @@ export default function JobDescriptionGenerator() {
   const downloadAsText = () => {
     if (!generatedDescription) return;
     
-    const blob = new Blob([generatedDescription.fullDescription], { type: 'text/plain' });
+    const blob = new Blob([generatedDescription.fullDescription || ''], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -141,14 +211,18 @@ export default function JobDescriptionGenerator() {
     URL.revokeObjectURL(url);
   };
 
-  const renderListSection = (title: string, items: string[]) => (
+  const renderListSection = (title: string, items: string[] = []) => (
     <div className="mb-6">
       <h3 className="text-lg font-semibold mb-2 text-[#B4916C]">{title}</h3>
-      <ul className="list-disc pl-5 space-y-1">
-        {items.map((item, index) => (
-          <li key={index} className="text-white">{item}</li>
-        ))}
-      </ul>
+      {items.length > 0 ? (
+        <ul className="list-disc pl-5 space-y-1">
+          {items.map((item, index) => (
+            <li key={index} className="text-white">{item}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-gray-400">No data available</p>
+      )}
     </div>
   );
 
@@ -316,7 +390,7 @@ export default function JobDescriptionGenerator() {
                   <div className="mb-2">
                     <h4 className="font-medium text-white">Essential:</h4>
                     <ul className="list-disc pl-5 space-y-1">
-                      {generatedDescription.requirements.essential.map((item, index) => (
+                      {generatedDescription.requirements?.essential.map((item, index) => (
                         <li key={index} className="text-white">{item}</li>
                       ))}
                     </ul>
@@ -324,7 +398,7 @@ export default function JobDescriptionGenerator() {
                   <div>
                     <h4 className="font-medium text-white">Preferred:</h4>
                     <ul className="list-disc pl-5 space-y-1">
-                      {generatedDescription.requirements.preferred.map((item, index) => (
+                      {generatedDescription.requirements?.preferred.map((item, index) => (
                         <li key={index} className="text-white">{item}</li>
                       ))}
                     </ul>
@@ -336,7 +410,7 @@ export default function JobDescriptionGenerator() {
                   <div className="mb-2">
                     <h4 className="font-medium text-white">Technical:</h4>
                     <ul className="list-disc pl-5 space-y-1">
-                      {generatedDescription.skills.technical.map((item, index) => (
+                      {generatedDescription.skills?.technical.map((item, index) => (
                         <li key={index} className="text-white">{item}</li>
                       ))}
                     </ul>
@@ -344,7 +418,7 @@ export default function JobDescriptionGenerator() {
                   <div>
                     <h4 className="font-medium text-white">Soft Skills:</h4>
                     <ul className="list-disc pl-5 space-y-1">
-                      {generatedDescription.skills.soft.map((item, index) => (
+                      {generatedDescription.skills?.soft.map((item, index) => (
                         <li key={index} className="text-white">{item}</li>
                       ))}
                     </ul>

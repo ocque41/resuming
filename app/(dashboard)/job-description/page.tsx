@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getUser } from "@/lib/db/queries.server";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import JobDescriptionGenerator from "@/components/JobDescriptionGenerator.client";
+import JobDescriptionGenerator from "../../components/JobDescriptionGenerator.client";
 
 export default async function JobDescriptionPage() {
   const user = await getUser();

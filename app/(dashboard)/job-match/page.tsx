@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getUser } from "@/lib/db/queries.server";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import JobMatchAnalysisVisualizer from "@/components/JobMatchAnalysisVisualizer.client";
+import JobMatchAnalysisVisualizer from "../../components/JobMatchAnalysisVisualizer.client";
 
 export default async function JobMatchPage() {
   const user = await getUser();

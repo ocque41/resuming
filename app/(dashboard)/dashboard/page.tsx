@@ -175,6 +175,40 @@ export default async function DashboardPage() {
             <ChevronRight className="h-5 w-5 text-[#B4916C]" />
           </Link>
           
+          {/* Job Description Generator Link - NEW */}
+          <Link 
+            href="/job-description" 
+            className="flex items-center justify-between p-4 md:p-6 bg-black border border-[#B4916C]/20 rounded-lg shadow-lg hover:bg-[#1D1D1D] transition-colors"
+          >
+            <div className="flex items-center">
+              <div className="flex items-center justify-center h-10 w-10 rounded-full bg-[#B4916C]/10 text-[#B4916C] mr-3">
+                <FileText className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base md:text-lg font-medium text-[#B4916C]">Job Description Generator</h3>
+                <p className="text-sm text-gray-400">Create detailed job descriptions</p>
+              </div>
+            </div>
+            <ChevronRight className="h-5 w-5 text-[#B4916C]" />
+          </Link>
+          
+          {/* Job Match Analysis Link - NEW */}
+          <Link 
+            href="/job-match" 
+            className="flex items-center justify-between p-4 md:p-6 bg-black border border-[#B4916C]/20 rounded-lg shadow-lg hover:bg-[#1D1D1D] transition-colors"
+          >
+            <div className="flex items-center">
+              <div className="flex items-center justify-center h-10 w-10 rounded-full bg-[#B4916C]/10 text-[#B4916C] mr-3">
+                <BarChart2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base md:text-lg font-medium text-[#B4916C]">CV to Job Match</h3>
+                <p className="text-sm text-gray-400">Analyze CV against job descriptions</p>
+              </div>
+            </div>
+            <ChevronRight className="h-5 w-5 text-[#B4916C]" />
+          </Link>
+          
           {/* Job Matching Link */}
           <Link 
             href="/dashboard/jobs" 
