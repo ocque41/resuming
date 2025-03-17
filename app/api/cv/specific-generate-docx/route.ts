@@ -180,15 +180,16 @@ async function generateSpecificDocx(
     const sectionOrder = [
       'Header',
       'PROFILE', 
-    'EXPERIENCE',
-    'EDUCATION',
+      'EXPERIENCE',
+      'EDUCATION',
       'SKILLS', 
       'TECHNICAL SKILLS', 
       'PROFESSIONAL SKILLS',
-    'LANGUAGES',
-    'ACHIEVEMENTS',
-    'GOALS',
-    'REFERENCES'
+      'ACHIEVEMENTS',
+      'GOALS',
+      'LANGUAGES',
+      'EXPECTATIONS',
+      'REFERENCES'
   ];
   
   // Parse the CV text into sections
@@ -310,22 +311,30 @@ async function generateSpecificDocx(
     } 
     // Standard handling for other sections including Header section
     else {
-            // Add section header (except for Header section)
+      // Add section header (except for Header section)
       if (section !== 'Header') {
         const sectionHeader = new Paragraph({
           text: section,
           heading: HeadingLevel.HEADING_2,
           thematicBreak: true,
-                  spacing: {
-                    before: 400,
+          spacing: {
+            before: 400,
             after: 200,
+          },
+          border: {
+            bottom: {
+              color: 'B4916C', // Brand color for visual separation
+              size: 1,
+              space: 4,
+              style: BorderStyle.SINGLE,
+            },
           },
         });
         paragraphs.push(sectionHeader);
       }
       
-      // Add content
-            if (typeof content === 'string') {
+      // Add content with improved formatting based on section type
+      if (typeof content === 'string') {
         // Handle string content
         const contentLines = content.split('\n');
         
@@ -335,25 +344,37 @@ async function generateSpecificDocx(
           
           // Check if this line is a bullet point
           const isBulletPoint = line.trim().startsWith('•') || 
-                               line.trim().startsWith('-') ||
-                               line.trim().startsWith('*');
+                              line.trim().startsWith('-') ||
+                              line.trim().startsWith('*');
+          
+          // Check if this is likely a job title or education institution (typically starts with capital letter and is relatively short)
+          const isLikelyTitle = line.length < 60 && 
+                              /^[A-Z]/.test(line) && 
+                              (section === 'EXPERIENCE' || section === 'EDUCATION') &&
+                              !isBulletPoint;
           
           const paragraph = new Paragraph({
-                      children: [
-                        new TextRun({
+            children: [
+              new TextRun({
                 text: isBulletPoint ? line.trim().substring(1).trim() : line,
-                // Use bold for header content that might be a name
-                bold: section === 'Header' && line.match(/^[A-Z][a-z]+ [A-Z][a-z]+$/) ? true : undefined,
-                // Use slightly larger size for header content
-                size: section === 'Header' ? 28 : undefined,
+                // Use bold for header content that might be a name or for section titles
+                bold: section === 'Header' || isLikelyTitle ? true : undefined,
+                // Use slightly larger size for header content and titles
+                size: section === 'Header' ? 28 : 
+                      isLikelyTitle ? 26 : undefined,
+                // Use special formatting for language proficiencies
+                italics: section === 'LANGUAGES' && !isLikelyTitle ? true : undefined,
+                // Use specific color for achievements to make them stand out
+                color: section === 'ACHIEVEMENTS' && isBulletPoint ? 'B4916C' : undefined,
               }),
-                      ],
-                      spacing: {
-              before: section === 'Header' ? 0 : 100,
-              after: section === 'Header' ? 0 : 100,
+            ],
+            spacing: {
+              before: section === 'Header' ? 0 : isLikelyTitle ? 200 : 100,
+              after: section === 'Header' ? 0 : isLikelyTitle ? 100 : 100,
               line: 300,
             },
-            alignment: section === 'Header' ? AlignmentType.CENTER : undefined,
+            alignment: section === 'Header' ? AlignmentType.CENTER : 
+                      isLikelyTitle ? AlignmentType.LEFT : undefined,
             bullet: isBulletPoint ? {
               level: 0,
             } : undefined,
@@ -365,19 +386,26 @@ async function generateSpecificDocx(
             },
           });
           paragraphs.push(paragraph);
-              }
-            } else if (Array.isArray(content)) {
+        }
+      } else if (Array.isArray(content)) {
         // Handle array content
-              for (const item of content) {
+        for (const item of content) {
+          // Skip empty lines
+          if (!item.trim()) continue;
+          
           // Check if this item is a bullet point
           const isBulletPoint = item.trim().startsWith('•') || 
-                               item.trim().startsWith('-') ||
-                               item.trim().startsWith('*');
+                              item.trim().startsWith('-') ||
+                              item.trim().startsWith('*');
           
           const paragraph = new Paragraph({
             children: [
               new TextRun({
                 text: isBulletPoint ? item.trim().substring(1).trim() : item,
+                // Use special formatting for languages
+                italics: section === 'LANGUAGES' ? true : undefined,
+                // Use specific color for achievements to make them stand out
+                color: section === 'ACHIEVEMENTS' && isBulletPoint ? 'B4916C' : undefined,
               }),
             ],
             spacing: {
@@ -483,18 +511,74 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     logger.info('Text is not in JSON format, using standard parsing');
   }
   
-  // Define section patterns - improved to capture more variations and prioritize finding the actual profile section
-  const sectionPatterns: { regex: RegExp, name: string, priority?: number }[] = [
-    { regex: /^\s*[\*•\-\|\#]?\s*(?:PROFILE|SUMMARY|ABOUT(?:\s+ME)?|PROFESSIONAL(?:\s+SUMMARY)?|PERSONAL(?:\s+STATEMENT)?)[\s\*•:\-_\|\#]*$/i, name: 'PROFILE', priority: 10 },
-    { regex: /^\s*[\*•\-\|\#]?\s*(?:ACHIEVEMENTS|ACCOMPLISHMENTS|KEY(?:\s+ACHIEVEMENTS))[\s\*•:\-_\|\#]*$/i, name: 'ACHIEVEMENTS' },
-    { regex: /^\s*[\*•\-\|\#]?\s*(?:GOALS|OBJECTIVES|CAREER(?:\s+GOALS))[\s\*•:\-_\|\#]*$/i, name: 'GOALS' },
-    { regex: /^\s*[\*•\-\|\#]?\s*(?:LANGUAGES?|LANGUAGE(?:\s+PROFICIENCY)|LANGUAGE(?:\s+SKILLS))[\s\*•:\-_\|\#]*$/i, name: 'LANGUAGES' },
-    { regex: /^\s*[\*•\-\|\#]?\s*(?:TECHNICAL(?:\s+SKILLS)|TECHNICAL(?:\s+EXPERTISE)|TECHNICAL(?:\s+PROFICIENCIES))[\s\*•:\-_\|\#]*$/i, name: 'TECHNICAL SKILLS' },
-    { regex: /^\s*[\*•\-\|\#]?\s*(?:PROFESSIONAL(?:\s+SKILLS)|SOFT(?:\s+SKILLS)|KEY(?:\s+SKILLS))[\s\*•:\-_\|\#]*$/i, name: 'PROFESSIONAL SKILLS' },
-    { regex: /^\s*[\*•\-\|\#]?\s*(?:SKILLS|CORE(?:\s+SKILLS)|EXPERTISE|COMPETENCIES|CAPABILITIES)[\s\*•:\-_\|\#]*$/i, name: 'SKILLS' },
-    { regex: /^\s*[\*•\-\|\#]?\s*(?:EDUCATION|ACADEMIC(?:\s+BACKGROUND)|EDUCATIONAL(?:\s+HISTORY)|QUALIFICATIONS)[\s\*•:\-_\|\#]*$/i, name: 'EDUCATION' },
-    { regex: /^\s*[\*•\-\|\#]?\s*(?:EXPERIENCE|WORK(?:\s+EXPERIENCE)|EMPLOYMENT(?:\s+HISTORY)|PROFESSIONAL(?:\s+EXPERIENCE)|CAREER(?:\s+HISTORY))[\s\*•:\-_\|\#]*$/i, name: 'EXPERIENCE' },
-    { regex: /^\s*[\*•\-\|\#]?\s*(?:REFERENCES|PROFESSIONAL(?:\s+REFERENCES)|RECOMMENDATIONS)[\s\*•:\-_\|\#]*$/i, name: 'REFERENCES' }
+  // Define section patterns - improved to capture more variations and prioritize finding all important sections
+  const sectionPatterns: { regex: RegExp, name: string, priority?: number, synonyms?: string[] }[] = [
+    { 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:PROFILE|SUMMARY|ABOUT(?:\s+ME)?|PROFESSIONAL(?:\s+SUMMARY)?|PERSONAL(?:\s+STATEMENT)?)[\s\*•:\-_\|\#]*$/i, 
+      name: 'PROFILE', 
+      priority: 10,
+      synonyms: ['SUMMARY', 'ABOUT ME', 'PROFESSIONAL SUMMARY', 'PERSONAL STATEMENT']
+    },
+    { 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:ACHIEVEMENTS|ACCOMPLISHMENTS|KEY(?:\s+ACHIEVEMENTS)|HIGHLIGHTS)[\s\*•:\-_\|\#]*$/i, 
+      name: 'ACHIEVEMENTS',
+      priority: 8,
+      synonyms: ['ACCOMPLISHMENTS', 'KEY ACHIEVEMENTS', 'HIGHLIGHTS'] 
+    },
+    { 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:GOALS|OBJECTIVES|CAREER(?:\s+GOALS)|ASPIRATIONS|CAREER(?:\s+OBJECTIVES))[\s\*•:\-_\|\#]*$/i, 
+      name: 'GOALS',
+      priority: 7,
+      synonyms: ['OBJECTIVES', 'CAREER GOALS', 'ASPIRATIONS', 'CAREER OBJECTIVES']
+    },
+    { 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:LANGUAGES?|LANGUAGE(?:\s+PROFICIENCY)|LANGUAGE(?:\s+SKILLS))[\s\*•:\-_\|\#]*$/i, 
+      name: 'LANGUAGES',
+      priority: 6,
+      synonyms: ['LANGUAGE PROFICIENCY', 'LANGUAGE SKILLS']
+    },
+    { 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:TECHNICAL(?:\s+SKILLS)|TECHNICAL(?:\s+EXPERTISE)|TECHNICAL(?:\s+PROFICIENCIES)|IT(?:\s+SKILLS))[\s\*•:\-_\|\#]*$/i, 
+      name: 'TECHNICAL SKILLS',
+      priority: 5,
+      synonyms: ['TECHNICAL EXPERTISE', 'TECHNICAL PROFICIENCIES', 'IT SKILLS'] 
+    },
+    { 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:PROFESSIONAL(?:\s+SKILLS)|SOFT(?:\s+SKILLS)|KEY(?:\s+SKILLS)|CORE(?:\s+COMPETENCIES))[\s\*•:\-_\|\#]*$/i, 
+      name: 'PROFESSIONAL SKILLS',
+      priority: 5,
+      synonyms: ['SOFT SKILLS', 'KEY SKILLS', 'CORE COMPETENCIES']
+    },
+    { 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:SKILLS|CORE(?:\s+SKILLS)|EXPERTISE|COMPETENCIES|CAPABILITIES)[\s\*•:\-_\|\#]*$/i, 
+      name: 'SKILLS',
+      priority: 5,
+      synonyms: ['CORE SKILLS', 'EXPERTISE', 'COMPETENCIES', 'CAPABILITIES']
+    },
+    { 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:EDUCATION|ACADEMIC(?:\s+BACKGROUND)|EDUCATIONAL(?:\s+HISTORY)|QUALIFICATIONS|ACADEMIC(?:\s+QUALIFICATIONS))[\s\*•:\-_\|\#]*$/i, 
+      name: 'EDUCATION',
+      priority: 9,
+      synonyms: ['ACADEMIC BACKGROUND', 'EDUCATIONAL HISTORY', 'QUALIFICATIONS', 'ACADEMIC QUALIFICATIONS']
+    },
+    { 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:EXPERIENCE|WORK(?:\s+EXPERIENCE)|EMPLOYMENT(?:\s+HISTORY)|PROFESSIONAL(?:\s+EXPERIENCE)|CAREER(?:\s+HISTORY)|JOB(?:\s+HISTORY))[\s\*•:\-_\|\#]*$/i, 
+      name: 'EXPERIENCE',
+      priority: 9,
+      synonyms: ['WORK EXPERIENCE', 'EMPLOYMENT HISTORY', 'PROFESSIONAL EXPERIENCE', 'CAREER HISTORY', 'JOB HISTORY']
+    },
+    { 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:REFERENCES|PROFESSIONAL(?:\s+REFERENCES)|RECOMMENDATIONS)[\s\*•:\-_\|\#]*$/i, 
+      name: 'REFERENCES',
+      priority: 3,
+      synonyms: ['PROFESSIONAL REFERENCES', 'RECOMMENDATIONS']
+    },
+    { 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:EXPECTATIONS|WHAT(?:\s+TO)?(?:\s+EXPECT)|JOB(?:\s+EXPECTATIONS)|ROLE(?:\s+REQUIREMENTS))[\s\*•:\-_\|\#]*$/i, 
+      name: 'EXPECTATIONS',
+      priority: 4,
+      synonyms: ['WHAT TO EXPECT', 'JOB EXPECTATIONS', 'ROLE REQUIREMENTS']
+    }
   ];
   
   // Extract contact information (usually at the top)
@@ -785,6 +869,237 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
         sections['PROFILE'] = `${name} is a professional with relevant experience and skills.`;
         logger.info('Created minimal PROFILE section using name from CV');
       }
+    }
+  }
+  
+  // Ensure ACHIEVEMENTS section exists
+  if (!sections['ACHIEVEMENTS']) {
+    logger.info('Looking for possible ACHIEVEMENTS content');
+    
+    // Look for achievements content by searching for paragraphs with achievement indicators
+    const achievementIndicators = [
+      /accomplished/i, /achieved/i, /improved/i, /increased/i, /decreased/i, 
+      /reduced/i, /delivered/i, /launched/i, /created/i, /developed/i,
+      /implemented/i, /managed/i, /led/i, /awarded/i, /recognized/i,
+      /\d+%/i, /success/i, /award/i, /certification/i, /honor/i
+    ];
+    
+    // Find content that looks like achievements
+    const achievementContent = lines.filter(line => {
+      if (line.length < 20) return false;
+      
+      // Check for bullet points or numbered lists (common for achievements)
+      const isBulletOrNumbered = line.trim().startsWith('•') || 
+                                 line.trim().startsWith('-') || 
+                                 line.match(/^\d+\./);
+      
+      // Check for achievement indicators
+      const hasIndicator = achievementIndicators.some(regex => regex.test(line));
+      
+      // Check for quantifiable results
+      const hasQuantifiableResults = /\d+%|\$\d+|\d+ million|\d+ thousand|\d+ projects/i.test(line);
+      
+      return (isBulletOrNumbered && (hasIndicator || hasQuantifiableResults)) || 
+             (hasIndicator && hasQuantifiableResults);
+    });
+    
+    if (achievementContent.length > 0) {
+      sections['ACHIEVEMENTS'] = achievementContent.join('\n');
+      logger.info(`Created ACHIEVEMENTS section with ${achievementContent.length} lines of content`);
+    }
+  }
+
+  // Ensure GOALS section exists
+  if (!sections['GOALS']) {
+    logger.info('Looking for possible GOALS content');
+    
+    // Look for goals content by searching for paragraphs with goals/objectives indicators
+    const goalIndicators = [
+      /seeking/i, /goal/i, /objective/i, /aspire/i, /aspiration/i, 
+      /aim/i, /target/i, /hope/i, /plan/i, /intention/i,
+      /looking to/i, /interested in/i, /desire to/i, /wish to/i
+    ];
+    
+    // Find content that looks like goals/objectives
+    const goalContent = lines.filter(line => {
+      if (line.length < 20) return false;
+      
+      // Check for goal indicators
+      const hasIndicator = goalIndicators.some(regex => regex.test(line));
+      
+      // Check for future-oriented language
+      const hasFutureOrientation = /to become|to advance|to develop|to grow|to achieve|to acquire|to obtain|to establish/i.test(line);
+      
+      return hasIndicator || hasFutureOrientation;
+    });
+    
+    if (goalContent.length > 0) {
+      sections['GOALS'] = goalContent.join('\n');
+      logger.info(`Created GOALS section with ${goalContent.length} lines of content`);
+    }
+  }
+
+  // Ensure LANGUAGES section exists
+  if (!sections['LANGUAGES']) {
+    logger.info('Looking for possible LANGUAGES content');
+    
+    // Common language patterns
+    const languagePatterns = [
+      /english|spanish|french|german|italian|chinese|japanese|russian|arabic|portuguese|dutch|swedish|norwegian|finnish|danish|korean|hindi|urdu|bengali|punjabi|tamil|telugu|marathi|gujarati|kannada|malayalam|polish|turkish|vietnamese|thai|indonesian|malay|filipino|czech|slovak|hungarian|romanian|bulgarian|greek|hebrew|farsi|swahili/i
+    ];
+    
+    // Find content that mentions languages
+    const languageContent = lines.filter(line => {
+      if (line.length > 80) return false; // Language listings tend to be short
+      
+      // Check for language names
+      const hasLanguage = languagePatterns.some(regex => regex.test(line));
+      
+      // Check for proficiency indicators
+      const hasProficiencyIndicator = /native|fluent|proficient|intermediate|beginner|basic|advanced|business|professional|working|knowledge/i.test(line);
+      
+      return hasLanguage && (hasProficiencyIndicator || line.includes(':') || line.includes('-'));
+    });
+    
+    if (languageContent.length > 0) {
+      sections['LANGUAGES'] = languageContent.join('\n');
+      logger.info(`Created LANGUAGES section with ${languageContent.length} lines of content`);
+    }
+  }
+
+  // Enhance EXPERIENCE detection
+  if (!sections['EXPERIENCE']) {
+    logger.info('Looking for work experience content with improved detection');
+    
+    // Improved detection for work experience entries
+    const experienceIndicators = [
+      // Date patterns
+      /\b\d{4}\s*(-|–|—|to)\s*(\d{4}|present|current)/i,
+      /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d{4}\s*(-|–|—|to)/i,
+      
+      // Job title patterns
+      /\b(senior|junior|lead|chief|head|principal|director|manager|supervisor|coordinator|specialist|analyst|engineer|developer|consultant|associate|assistant)\b/i,
+      
+      // Company indicators
+      /\bat\b|\bfor\b|\bcompany\b|\binc\b|\bltd\b|\bcorp\b|\bcorporation\b/i
+    ];
+    
+    // Find groups of adjacent lines that look like work experience entries
+    let experienceBlocks: string[][] = [];
+    let currentBlock: string[] = [];
+    let inExperienceBlock = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) {
+        if (inExperienceBlock && currentBlock.length > 0) {
+          experienceBlocks.push(currentBlock);
+          currentBlock = [];
+          inExperienceBlock = false;
+        }
+        continue;
+      }
+      
+      // Check if this line has experience indicators
+      const hasExperienceIndicator = experienceIndicators.some(regex => regex.test(line));
+      
+      // If we find a line that looks like a job title or contains dates
+      if (hasExperienceIndicator) {
+        if (!inExperienceBlock) {
+          inExperienceBlock = true;
+          currentBlock = [line];
+        } else {
+          // If already in block and found a new entry, save current and start new
+          if (line.length < 60 && (line.match(/\b\d{4}\b/) || /^[A-Z]/.test(line))) {
+            experienceBlocks.push(currentBlock);
+            currentBlock = [line];
+          } else {
+            currentBlock.push(line);
+          }
+        }
+      } 
+      // If we're already collecting an experience block, keep adding lines
+      else if (inExperienceBlock) {
+        currentBlock.push(line);
+      }
+    }
+    
+    // Add the last block if there is one
+    if (inExperienceBlock && currentBlock.length > 0) {
+      experienceBlocks.push(currentBlock);
+    }
+    
+    // If we found experience blocks, join them with appropriate spacing
+    if (experienceBlocks.length > 0) {
+      const experienceContent = experienceBlocks
+        .map(block => block.join('\n'))
+        .join('\n\n');
+      
+      sections['EXPERIENCE'] = experienceContent;
+      logger.info(`Created EXPERIENCE section with ${experienceBlocks.length} entries`);
+    }
+  }
+
+  // Enhance EDUCATION detection
+  if (!sections['EDUCATION']) {
+    logger.info('Looking for education content with improved detection');
+    
+    // Education indicators
+    const educationIndicators = [
+      /\b(university|college|institute|school|academy|bachelor|master|ph\.?d|diploma|degree|certification|certificate)\b/i,
+      /\b(bsc|ba|bs|ms|msc|ma|mba|phd|doctorate|postgraduate|undergraduate)\b/i,
+      /\b\d{4}\s*(-|–|—|to)\s*(\d{4}|present)/i, // Date ranges
+      /\beducation\b/i
+    ];
+    
+    // Find content that looks like education entries
+    const educationContent: string[] = [];
+    let inEducationBlock = false;
+    let currentEducationEntry: string[] = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) {
+        if (inEducationBlock && currentEducationEntry.length > 0) {
+          educationContent.push(currentEducationEntry.join('\n'));
+          currentEducationEntry = [];
+          inEducationBlock = false;
+        }
+        continue;
+      }
+      
+      // Check if this line has education indicators
+      const hasEducationIndicator = educationIndicators.some(regex => regex.test(line));
+      
+      if (hasEducationIndicator) {
+        if (!inEducationBlock) {
+          inEducationBlock = true;
+          currentEducationEntry = [line];
+        } else {
+          // If line seems like a new entry (starts with date or capital letter and is short)
+          if (line.length < 60 && (line.match(/\b\d{4}\b/) || /^[A-Z]/.test(line))) {
+            educationContent.push(currentEducationEntry.join('\n'));
+            currentEducationEntry = [line];
+          } else {
+            currentEducationEntry.push(line);
+          }
+        }
+      } 
+      // If we're already collecting an education block, keep adding lines
+      else if (inEducationBlock) {
+        currentEducationEntry.push(line);
+      }
+    }
+    
+    // Add the last entry if there is one
+    if (inEducationBlock && currentEducationEntry.length > 0) {
+      educationContent.push(currentEducationEntry.join('\n'));
+    }
+    
+    // If we found education entries, join them with appropriate spacing
+    if (educationContent.length > 0) {
+      sections['EDUCATION'] = educationContent.join('\n\n');
+      logger.info(`Created EDUCATION section with ${educationContent.length} entries`);
     }
   }
   
