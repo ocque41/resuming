@@ -1539,4 +1539,151 @@ Example response format:
     
     return result;
   }
+
+  /**
+   * Comprehensive CV analysis in a single API call
+   * Combines multiple analysis steps to reduce API call count
+   * @returns All CV analysis data in a single object
+   */
+  public async analyzeCVComprehensive(): Promise<{
+    skills: string[];
+    keywords: string[];
+    keyRequirements: string[];
+    formatAnalysis: { strengths: string[]; weaknesses: string[]; recommendations: string[] };
+    contentAnalysis: { strengths: string[]; weaknesses: string[]; recommendations: string[] };
+    industry: string;
+    language: string;
+    sections: Array<{ name: string; content: string }>;
+  }> {
+    logger.info('Starting comprehensive CV analysis with a single API call');
+    
+    // Default values in case of error
+    const defaultResult = {
+      skills: [],
+      keywords: [],
+      keyRequirements: ['Professional experience', 'Relevant education', 'Technical skills', 'Communication skills', 'Problem-solving abilities'],
+      formatAnalysis: {
+        strengths: ['Professional structure'],
+        weaknesses: ['Could improve formatting'],
+        recommendations: ['Enhance layout for better readability']
+      },
+      contentAnalysis: {
+        strengths: ['Experience clearly presented'],
+        weaknesses: ['Consider adding more accomplishments'],
+        recommendations: ['Quantify achievements with specific metrics']
+      },
+      industry: 'General',
+      language: 'English',
+      sections: [{ name: 'Experience', content: '' }, { name: 'Education', content: '' }, { name: 'Skills', content: '' }]
+    };
+    
+    // If no CV text is available, return default values
+    if (!this.originalCVText || this.originalCVText.trim() === '') {
+      logger.warn('No CV text available for analysis, returning default values');
+      return defaultResult;
+    }
+    
+    try {
+      // Create a comprehensive prompt that asks for all aspects of the analysis
+      const comprehensivePrompt = `
+You are a professional CV/resume analyzer with expertise in career development and recruitment. Analyze the following CV thoroughly and provide a complete assessment in JSON format.
+
+CV CONTENT:
+${this.originalCVText}
+
+Provide a comprehensive analysis with the following structure exactly (valid JSON format required):
+{
+  "skills": ["skill1", "skill2", ...], // List of 10-15 professional skills found in the CV
+  "keywords": ["keyword1", "keyword2", ...], // List of 10-15 important keywords relevant for job searches
+  "keyRequirements": ["requirement1", "requirement2", ...], // List of 5-7 key professional requirements/qualifications the candidate has
+  "formatAnalysis": {
+    "strengths": ["strength1", "strength2", ...], // 3 strengths of the CV format
+    "weaknesses": ["weakness1", "weakness2", ...], // 3 weaknesses of the CV format
+    "recommendations": ["recommendation1", "recommendation2", ...] // 3 recommendations to improve CV format
+  },
+  "contentAnalysis": {
+    "strengths": ["strength1", "strength2", ...], // 3 strengths of the CV content
+    "weaknesses": ["weakness1", "weakness2", ...], // 3 weaknesses of the CV content 
+    "recommendations": ["recommendation1", "recommendation2", ...] // 3 recommendations to improve CV content
+  },
+  "industry": "The most likely industry for this CV", // Single most relevant industry
+  "language": "Language of the CV", // Primary language of the document
+  "sections": [
+    {"name": "section1", "content": "brief summary of section"}, 
+    {"name": "section2", "content": "brief summary of section"},
+    ...
+  ] // 3-7 main sections identified in the CV with brief content summaries
+}
+
+You MUST return ONLY properly formatted JSON - no additional text, explanations, or markdown.
+`;
+      
+      // Make a single API call instead of multiple separate ones
+      const response = await this.generateDirectResponse(comprehensivePrompt);
+      
+      // Parse the response as JSON
+      try {
+        const analysisResult = JSON.parse(response);
+        
+        // Validate the structure and ensure all required fields exist
+        if (!analysisResult.skills) analysisResult.skills = defaultResult.skills;
+        if (!analysisResult.keywords) analysisResult.keywords = defaultResult.keywords;
+        if (!analysisResult.keyRequirements) analysisResult.keyRequirements = defaultResult.keyRequirements;
+        if (!analysisResult.formatAnalysis) analysisResult.formatAnalysis = defaultResult.formatAnalysis;
+        if (!analysisResult.contentAnalysis) analysisResult.contentAnalysis = defaultResult.contentAnalysis;
+        if (!analysisResult.industry) analysisResult.industry = defaultResult.industry;
+        if (!analysisResult.language) analysisResult.language = defaultResult.language;
+        if (!analysisResult.sections) analysisResult.sections = defaultResult.sections;
+        
+        logger.info('Successfully completed comprehensive CV analysis');
+        return analysisResult;
+      } catch (parseError) {
+        logger.error(`Error parsing JSON response from comprehensive analysis: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+        logger.error(`Response that couldn't be parsed: ${response.substring(0, 200)}...`);
+        
+        // Instead of returning default values immediately, attempt to extract structured data from the text response
+        return this.extractStructuredDataFromText(response) || defaultResult;
+      }
+    } catch (error) {
+      logger.error(`Error during comprehensive CV analysis: ${error instanceof Error ? error.message : String(error)}`);
+      return defaultResult;
+    }
+  }
+  
+  /**
+   * Attempts to extract structured data from a text response that couldn't be parsed as JSON
+   * @param text The response text to parse
+   * @returns Partially structured data or null if parsing fails
+   */
+  private extractStructuredDataFromText(text: string): null | {
+    skills: string[];
+    keywords: string[];
+    keyRequirements: string[];
+    formatAnalysis: { strengths: string[]; weaknesses: string[]; recommendations: string[] };
+    contentAnalysis: { strengths: string[]; weaknesses: string[]; recommendations: string[] };
+    industry: string;
+    language: string;
+    sections: Array<{ name: string; content: string }>;
+  } {
+    try {
+      // Try to find JSON in the text (sometimes the model adds explanatory text around the JSON)
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const jsonStr = jsonMatch[0];
+        try {
+          const result = JSON.parse(jsonStr);
+          logger.info('Successfully extracted JSON from text response');
+          return result;
+        } catch (e) {
+          logger.warn('Found JSON-like structure but still failed to parse');
+        }
+      }
+      
+      // If we couldn't extract JSON, return null
+      return null;
+    } catch (error) {
+      logger.error(`Error extracting structured data from text: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
+  }
 } 

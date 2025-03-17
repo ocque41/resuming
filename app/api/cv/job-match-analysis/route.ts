@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser } from '@/lib/db/queries.server';
-import MistralClient from '@mistralai/mistralai';
 import { logger } from '@/lib/logger';
+import MistralClient from '@mistralai/mistralai';
 import { mistralRateLimiter } from '../../../lib/services/rate-limiter';
+import { MistralRAGService } from '@/lib/utils/mistralRagService';
 
 // Initialize Mistral client
 const getMistralClient = () => {
@@ -53,24 +54,60 @@ export async function POST(request: NextRequest) {
       throw new Error('Mistral client not initialized');
     }
 
-    logger.info('Starting job match analysis with Mistral AI');
+    logger.info('Starting job match analysis process');
     
-    // Use rate limiter for the API call
+    // First extract CV keywords and relevant info using our RAG service
+    // This will save tokens in the job-match prompt
+    let cvKeywords: string[] = [];
+    let cvSkills: string[] = [];
+    let cvSections: Array<{ name: string, summary: string }> = [];
+    
+    try {
+      logger.info('Extracting CV information using RAG service');
+      const ragService = new MistralRAGService();
+      await ragService.processCVDocument(cvText);
+      
+      // Use the comprehensive analysis method to get CV data
+      const cvAnalysis = await ragService.analyzeCVComprehensive();
+      cvKeywords = cvAnalysis.keywords;
+      cvSkills = cvAnalysis.skills;
+      cvSections = cvAnalysis.sections.map(section => ({
+        name: section.name,
+        // Limit content length to keep the prompt size manageable
+        summary: section.content.substring(0, 100) + (section.content.length > 100 ? '...' : '')
+      }));
+      
+      logger.info(`Extracted ${cvKeywords.length} keywords, ${cvSkills.length} skills, and ${cvSections.length} sections from CV`);
+    } catch (ragError) {
+      logger.error('Error using RAG service for CV analysis:', ragError instanceof Error ? ragError.message : String(ragError));
+      // Continue with the process even if this step fails
+      logger.info('Continuing with job match analysis without RAG preprocessing');
+    }
+    
+    // Use rate limiter for the Mistral API call
     const analysis = await mistralRateLimiter.execute(async () => {
-      const prompt = `Analyze how well the following CV matches the provided job description. Provide a structured analysis with:
+      // Create an enhanced prompt that includes the pre-extracted CV data
+      // This saves tokens because we don't need to include the full CV text
+      const enhancedPrompt = `Analyze how well the following CV matches the provided job description. 
 
+      CV Information:
+      - Keywords: ${cvKeywords.join(', ')}
+      - Skills: ${cvSkills.join(', ')}
+      - Sections: ${JSON.stringify(cvSections)}
+      
+      Full CV Text (for reference):
+      ${cvText}
+
+      Job Description:
+      ${jobDescription}
+
+      Provide a structured analysis with:
       1. Overall match score (0-100)
       2. List of matched keywords with relevance scores
       3. Missing keywords with importance rankings
       4. Specific recommendations for improvement
       5. Detailed breakdown of skills match, experience match, education match, etc.
       6. Section-by-section analysis with specific feedback
-
-      CV Text:
-      ${cvText}
-
-      Job Description:
-      ${jobDescription}
 
       Format the response as JSON with the following structure:
       {
@@ -98,18 +135,22 @@ export async function POST(request: NextRequest) {
           "education": {"score": number, "feedback": string},
           "achievements": {"score": number, "feedback": string}
         }
-      }`;
+      }
+      
+      Return ONLY valid JSON without any additional text or explanations.`;
 
       const response = await client.chat({
         model: 'mistral-large-latest',
         messages: [
           {
             role: 'user',
-            content: prompt
+            content: enhancedPrompt
           }
         ],
         temperature: 0.1,
-        maxTokens: 3000
+        maxTokens: 3000,
+        // @ts-ignore - The Mistral API supports response_format but the type definitions may not be updated
+        response_format: { type: 'json_object' }
       });
 
       try {

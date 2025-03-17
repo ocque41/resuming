@@ -96,7 +96,9 @@ Format the response as JSON with the following structure:
   "benefits": string[],
   "applicationProcess": string,
   "fullDescription": string
-}`;
+}
+
+Return ONLY valid JSON without any additional text or explanations.`;
 
     // Use rate limiter for the API call
     const result = await mistralRateLimiter.execute(async () => {
@@ -109,7 +111,9 @@ Format the response as JSON with the following structure:
           }
         ],
         temperature: 0.3,
-        maxTokens: 2500
+        maxTokens: 2500,
+        // @ts-ignore - The Mistral API supports response_format but the type definitions may not be updated
+        response_format: { type: 'json_object' }
       });
 
       try {
