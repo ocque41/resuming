@@ -510,6 +510,433 @@ async function generateSpecificDocx(
         paragraphs.push(sectionHeader);
       }
       
+      // Add special handling for OBJECTIVES/GOALS section
+      if (section === 'GOALS') {
+        // Enhanced formatting for goals/objectives section
+        const goalsHeader = new Paragraph({
+          text: 'Career Objectives',
+          heading: HeadingLevel.HEADING_2,
+          spacing: {
+            before: 400,
+            after: 200,
+          },
+          thematicBreak: true,
+          border: {
+            bottom: {
+              color: 'B4916C',
+              size: 1, 
+              space: 4,
+              style: BorderStyle.SINGLE,
+            },
+          },
+        });
+        paragraphs.push(goalsHeader);
+        
+        // Handle content based on type (array or string)
+        let goalItems = Array.isArray(content) ? content : [content];
+        
+        // Clean goal items to ensure they don't include section headers
+        goalItems = goalItems
+          .flatMap(item => typeof item === 'string' ? item.split('\n') : item)
+          .map(goal => typeof goal === 'string' ? goal.trim() : goal)
+          .filter(goal => 
+            typeof goal === 'string' && 
+            goal.length > 0 && 
+            !goal.toUpperCase().includes(section) &&
+            !goal.toUpperCase().includes('GOAL') &&
+            !goal.toUpperCase().includes('OBJECTIVES'));
+        
+        // Create bullet points for each goal
+        for (const goal of goalItems) {
+          if (typeof goal === 'string' && goal.trim()) {
+            const cleanedGoal = goal.trim().replace(/^[•\-\*]+\s*/, '');
+            paragraphs.push(
+              new Paragraph({
+                text: cleanedGoal,
+                bullet: {
+                  level: 0
+                },
+                spacing: {
+                  before: 100,
+                  after: 100,
+                }
+              })
+            );
+          }
+        }
+        
+        continue; // Skip the generic content handling for goals
+      }
+      
+      // Add special handling for EXPERIENCE section
+      else if (section === 'EXPERIENCE') {
+        // Enhanced formatting for experience section
+        const experienceHeader = new Paragraph({
+          text: 'Professional Experience',
+          heading: HeadingLevel.HEADING_2,
+          spacing: {
+            before: 400,
+            after: 200,
+          },
+          thematicBreak: true,
+          border: {
+            bottom: {
+              color: 'B4916C',
+              size: 1, 
+              space: 4,
+              style: BorderStyle.SINGLE,
+            },
+          },
+        });
+        paragraphs.push(experienceHeader);
+        
+        // Handle content based on type (array or string)
+        let experienceItems = Array.isArray(content) ? content : content.split('\n\n');
+        
+        // Process each experience entry
+        for (let i = 0; i < experienceItems.length; i++) {
+          let entry = typeof experienceItems[i] === 'string' ? experienceItems[i] : '';
+          if (!entry.trim()) continue;
+          
+          // Check if this entry has company/title/date format
+          const lines = entry.split('\n');
+          
+          // First line often contains the job title/company
+          if (lines.length > 0 && lines[0].trim()) {
+            paragraphs.push(
+              new Paragraph({
+                text: lines[0].trim(),
+                heading: HeadingLevel.HEADING_3,
+                spacing: {
+                  before: 200,
+                  after: 100,
+                },
+              })
+            );
+          }
+          
+          // Second line often contains dates
+          if (lines.length > 1 && lines[1].trim()) {
+            // Check if it looks like a date range
+            if (lines[1].match(/\d{4}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/i)) {
+              paragraphs.push(
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: lines[1].trim(),
+                      italics: true,
+                    }),
+                  ],
+                  spacing: {
+                    before: 0,
+                    after: 100,
+                  },
+                })
+              );
+            } else {
+              // Not a date, treat as regular content
+              paragraphs.push(
+                new Paragraph({
+                  text: lines[1].trim(),
+                })
+              );
+            }
+          }
+          
+          // Remaining lines are likely responsibilities or achievements
+          for (let j = 2; j < lines.length; j++) {
+            if (!lines[j].trim()) continue;
+            
+            // Check if line starts with a bullet point
+            const hasBullet = lines[j].trim().match(/^[•\-\*]/);
+            
+            paragraphs.push(
+              new Paragraph({
+                text: lines[j].trim().replace(/^[•\-\*]+\s*/, ''),
+                bullet: hasBullet ? { level: 0 } : undefined,
+                spacing: {
+                  before: 60,
+                  after: 60,
+                }
+              })
+            );
+          }
+          
+          // Add spacing between entries
+          if (i < experienceItems.length - 1) {
+            paragraphs.push(new Paragraph({ text: '', spacing: { before: 150, after: 150 } }));
+          }
+        }
+        
+        continue; // Skip the generic content handling for experience
+      }
+      
+      // Add special handling for LANGUAGES section
+      else if (section === 'LANGUAGES') {
+        // Enhanced formatting for languages section
+        const languagesHeader = new Paragraph({
+          text: 'Language Proficiency',
+          heading: HeadingLevel.HEADING_2,
+          spacing: {
+            before: 400,
+            after: 200,
+          },
+          thematicBreak: true,
+          border: {
+            bottom: {
+              color: 'B4916C',
+              size: 1, 
+              space: 4,
+              style: BorderStyle.SINGLE,
+            },
+          },
+        });
+        paragraphs.push(languagesHeader);
+        
+        // Handle content based on type (array or string)
+        let languageItems = Array.isArray(content) ? content : [content];
+        
+        // Clean language items to ensure they don't include section headers
+        languageItems = languageItems
+          .flatMap(item => typeof item === 'string' ? item.split('\n') : item)
+          .map(lang => typeof lang === 'string' ? lang.trim() : lang)
+          .filter(lang => 
+            typeof lang === 'string' && 
+            lang.length > 0 && 
+            !lang.toUpperCase().includes('LANGUAGES') &&
+            !lang.toUpperCase().includes('LANGUAGE PROFICIENCY'));
+        
+        // Create bullet points for each language
+        for (const lang of languageItems) {
+          if (typeof lang === 'string' && lang.trim()) {
+            const cleanedLang = lang.trim().replace(/^[•\-\*]+\s*/, '');
+            paragraphs.push(
+              new Paragraph({
+                text: cleanedLang,
+                bullet: {
+                  level: 0
+                },
+                spacing: {
+                  before: 100,
+                  after: 100,
+                }
+              })
+            );
+          }
+        }
+        
+        continue; // Skip the generic content handling for languages
+      }
+      
+      // Add special handling for EDUCATION section
+      else if (section === 'EDUCATION') {
+        // Enhanced formatting for education section
+        const educationHeader = new Paragraph({
+          text: 'Education',
+          heading: HeadingLevel.HEADING_2,
+          spacing: {
+            before: 400,
+            after: 200,
+          },
+          thematicBreak: true,
+          border: {
+            bottom: {
+              color: 'B4916C',
+              size: 1, 
+              space: 4,
+              style: BorderStyle.SINGLE,
+            },
+          },
+        });
+        paragraphs.push(educationHeader);
+        
+        // Handle content based on type (array or string)
+        let educationItems = Array.isArray(content) ? content : content.split('\n\n');
+        
+        // Process each education entry
+        for (let i = 0; i < educationItems.length; i++) {
+          let entry = typeof educationItems[i] === 'string' ? educationItems[i] : '';
+          if (!entry.trim()) continue;
+          
+          // Split entry into lines
+          const lines = entry.split('\n');
+          
+          // First line often contains the degree/institution
+          if (lines.length > 0 && lines[0].trim()) {
+            paragraphs.push(
+              new Paragraph({
+                text: lines[0].trim(),
+                heading: HeadingLevel.HEADING_3,
+                spacing: {
+                  before: 200,
+                  after: 100,
+                },
+              })
+            );
+          }
+          
+          // Second line often contains dates or location
+          if (lines.length > 1 && lines[1].trim()) {
+            paragraphs.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: lines[1].trim(),
+                    italics: true,
+                  }),
+                ],
+                spacing: {
+                  before: 0,
+                  after: 100,
+                },
+              })
+            );
+          }
+          
+          // Remaining lines are likely additional details
+          for (let j = 2; j < lines.length; j++) {
+            if (!lines[j].trim()) continue;
+            
+            // Check if line starts with a bullet point
+            const hasBullet = lines[j].trim().match(/^[•\-\*]/);
+            
+            paragraphs.push(
+              new Paragraph({
+                text: lines[j].trim().replace(/^[•\-\*]+\s*/, ''),
+                bullet: hasBullet ? { level: 0 } : undefined,
+                spacing: {
+                  before: 60,
+                  after: 60,
+                }
+              })
+            );
+          }
+          
+          // Add spacing between entries
+          if (i < educationItems.length - 1) {
+            paragraphs.push(new Paragraph({ text: '', spacing: { before: 150, after: 150 } }));
+          }
+        }
+        
+        continue; // Skip the generic content handling for education
+      }
+      
+      // Add special handling for EXPECTATIONS section
+      else if (section === 'EXPECTATIONS') {
+        // Enhanced formatting for expectations section
+        const expectationsHeader = new Paragraph({
+          text: 'Job Expectations',
+          heading: HeadingLevel.HEADING_2,
+          spacing: {
+            before: 400,
+            after: 200,
+          },
+          thematicBreak: true,
+          border: {
+            bottom: {
+              color: 'B4916C',
+              size: 1, 
+              space: 4,
+              style: BorderStyle.SINGLE,
+            },
+          },
+        });
+        paragraphs.push(expectationsHeader);
+        
+        // Handle content based on type (array or string)
+        let expectationItems = Array.isArray(content) ? content : [content];
+        
+        // Clean expectation items to ensure they don't include section headers
+        expectationItems = expectationItems
+          .flatMap(item => typeof item === 'string' ? item.split('\n') : item)
+          .map(exp => typeof exp === 'string' ? exp.trim() : exp)
+          .filter(exp => 
+            typeof exp === 'string' && 
+            exp.length > 0 && 
+            !exp.toUpperCase().includes('EXPECTATIONS') && 
+            !exp.toUpperCase().includes('WHAT TO EXPECT'));
+        
+        // Create paragraphs for each expectation
+        for (const exp of expectationItems) {
+          if (typeof exp === 'string' && exp.trim()) {
+            const cleanedExp = exp.trim().replace(/^[•\-\*]+\s*/, '');
+            
+            // Determine if this should be a bullet point
+            const shouldBeBullet = cleanedExp.length < 100 || cleanedExp.match(/^[A-Z][a-z]+/);
+            
+            paragraphs.push(
+              new Paragraph({
+                text: cleanedExp,
+                bullet: shouldBeBullet ? { level: 0 } : undefined,
+                spacing: {
+                  before: 100,
+                  after: 100,
+                }
+              })
+            );
+          }
+        }
+        
+        continue; // Skip the generic content handling for expectations
+      }
+      
+      // Add special handling for ACHIEVEMENTS section
+      else if (section === 'ACHIEVEMENTS') {
+        // Enhanced formatting for achievements section
+        const achievementsHeader = new Paragraph({
+          text: 'Key Achievements',
+          heading: HeadingLevel.HEADING_2,
+          spacing: {
+            before: 400,
+            after: 200,
+          },
+          thematicBreak: true,
+          border: {
+            bottom: {
+              color: 'B4916C',
+              size: 1, 
+              space: 4,
+              style: BorderStyle.SINGLE,
+            },
+          },
+        });
+        paragraphs.push(achievementsHeader);
+        
+        // Handle content based on type (array or string)
+        let achievementItems = Array.isArray(content) ? content : [content];
+        
+        // Clean achievement items to ensure they don't include section headers
+        achievementItems = achievementItems
+          .flatMap(item => typeof item === 'string' ? item.split('\n') : item)
+          .map(ach => typeof ach === 'string' ? ach.trim() : ach)
+          .filter(ach => 
+            typeof ach === 'string' && 
+            ach.length > 0 && 
+            !ach.toUpperCase().includes('ACHIEVEMENTS') &&
+            !ach.toUpperCase().includes('KEY ACHIEVEMENTS'));
+        
+        // Create bullet points for each achievement
+        for (const ach of achievementItems) {
+          if (typeof ach === 'string' && ach.trim()) {
+            const cleanedAch = ach.trim().replace(/^[•\-\*]+\s*/, '');
+            paragraphs.push(
+              new Paragraph({
+                text: cleanedAch,
+                bullet: {
+                  level: 0
+                },
+                spacing: {
+                  before: 100,
+                  after: 100,
+                }
+              })
+            );
+          }
+        }
+        
+        continue; // Skip the generic content handling for achievements
+      }
+      
       // Add content with improved formatting based on section type
       if (typeof content === 'string') {
         // Handle string content
@@ -730,7 +1157,7 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     logger.info('Text is not in JSON format, using standard parsing');
   }
   
-  // Define section patterns - improved to capture more variations and prioritize finding all important sections
+  // Define section patterns to improve detection
   const sectionPatterns: { regex: RegExp, name: string, priority?: number, synonyms?: string[] }[] = [
     { 
       regex: /^\s*[\*•\-\|\#]?\s*(?:PROFILE|SUMMARY|ABOUT(?:\s+ME)?|PROFESSIONAL(?:\s+SUMMARY)?|PERSONAL(?:\s+STATEMENT)?)[\s\*•:\-_\|\#]*$/i, 
@@ -739,64 +1166,64 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
       synonyms: ['SUMMARY', 'ABOUT ME', 'PROFESSIONAL SUMMARY', 'PERSONAL STATEMENT']
     },
     { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:ACHIEVEMENTS|ACCOMPLISHMENTS|KEY(?:\s+ACHIEVEMENTS)|HIGHLIGHTS)[\s\*•:\-_\|\#]*$/i, 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:ACHIEVEMENTS|ACCOMPLISHMENTS|KEY(?:\s+ACHIEVEMENTS)|HIGHLIGHTS|NOTABLE(?:\s+ACHIEVEMENTS))[\s\*•:\-_\|\#]*$/i, 
       name: 'ACHIEVEMENTS',
       priority: 8,
-      synonyms: ['ACCOMPLISHMENTS', 'KEY ACHIEVEMENTS', 'HIGHLIGHTS'] 
+      synonyms: ['ACCOMPLISHMENTS', 'KEY ACHIEVEMENTS', 'HIGHLIGHTS', 'NOTABLE ACHIEVEMENTS'] 
     },
     { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:GOALS|OBJECTIVES|CAREER(?:\s+GOALS)|ASPIRATIONS|CAREER(?:\s+OBJECTIVES))[\s\*•:\-_\|\#]*$/i, 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:GOALS|OBJECTIVES|CAREER(?:\s+GOALS)|ASPIRATIONS|CAREER(?:\s+OBJECTIVES)|AMBITIONS|PROFESSIONAL(?:\s+OBJECTIVES))[\s\*•:\-_\|\#]*$/i, 
       name: 'GOALS',
       priority: 7,
-      synonyms: ['OBJECTIVES', 'CAREER GOALS', 'ASPIRATIONS', 'CAREER OBJECTIVES']
+      synonyms: ['OBJECTIVES', 'CAREER GOALS', 'ASPIRATIONS', 'CAREER OBJECTIVES', 'PROFESSIONAL OBJECTIVES', 'AMBITIONS']
     },
     { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:LANGUAGES?|LANGUAGE(?:\s+PROFICIENCY)|LANGUAGE(?:\s+SKILLS))[\s\*•:\-_\|\#]*$/i, 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:LANGUAGES?|LANGUAGE(?:\s+PROFICIENCY)|LANGUAGE(?:\s+SKILLS)|FOREIGN(?:\s+LANGUAGES))[\s\*•:\-_\|\#]*$/i, 
       name: 'LANGUAGES',
       priority: 6,
-      synonyms: ['LANGUAGE PROFICIENCY', 'LANGUAGE SKILLS']
+      synonyms: ['LANGUAGE PROFICIENCY', 'LANGUAGE SKILLS', 'FOREIGN LANGUAGES']
     },
     { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:TECHNICAL(?:\s+SKILLS)|TECHNICAL(?:\s+EXPERTISE)|TECHNICAL(?:\s+PROFICIENCIES)|IT(?:\s+SKILLS))[\s\*•:\-_\|\#]*$/i, 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:TECHNICAL(?:\s+SKILLS)|TECHNICAL(?:\s+EXPERTISE)|TECHNICAL(?:\s+PROFICIENCIES)|IT(?:\s+SKILLS)|TECH(?:\s+SKILLS))[\s\*•:\-_\|\#]*$/i, 
       name: 'TECHNICAL SKILLS',
       priority: 5,
-      synonyms: ['TECHNICAL EXPERTISE', 'TECHNICAL PROFICIENCIES', 'IT SKILLS'] 
+      synonyms: ['TECHNICAL EXPERTISE', 'TECHNICAL PROFICIENCIES', 'IT SKILLS', 'TECH SKILLS'] 
     },
     { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:PROFESSIONAL(?:\s+SKILLS)|SOFT(?:\s+SKILLS)|KEY(?:\s+SKILLS)|CORE(?:\s+COMPETENCIES))[\s\*•:\-_\|\#]*$/i, 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:PROFESSIONAL(?:\s+SKILLS)|SOFT(?:\s+SKILLS)|KEY(?:\s+SKILLS)|CORE(?:\s+COMPETENCIES)|INTERPERSONAL(?:\s+SKILLS))[\s\*•:\-_\|\#]*$/i, 
       name: 'PROFESSIONAL SKILLS',
       priority: 5,
-      synonyms: ['SOFT SKILLS', 'KEY SKILLS', 'CORE COMPETENCIES']
+      synonyms: ['SOFT SKILLS', 'KEY SKILLS', 'CORE COMPETENCIES', 'INTERPERSONAL SKILLS']
     },
     { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:SKILLS|CORE(?:\s+SKILLS)|EXPERTISE|COMPETENCIES|CAPABILITIES)[\s\*•:\-_\|\#]*$/i, 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:SKILLS|CORE(?:\s+SKILLS)|EXPERTISE|COMPETENCIES|CAPABILITIES|PROFICIENCIES)[\s\*•:\-_\|\#]*$/i, 
       name: 'SKILLS',
       priority: 5,
-      synonyms: ['CORE SKILLS', 'EXPERTISE', 'COMPETENCIES', 'CAPABILITIES']
+      synonyms: ['CORE SKILLS', 'EXPERTISE', 'COMPETENCIES', 'CAPABILITIES', 'PROFICIENCIES']
     },
     { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:EDUCATION|ACADEMIC(?:\s+BACKGROUND)|EDUCATIONAL(?:\s+HISTORY)|QUALIFICATIONS|ACADEMIC(?:\s+QUALIFICATIONS))[\s\*•:\-_\|\#]*$/i, 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:EDUCATION|ACADEMIC(?:\s+BACKGROUND)|EDUCATIONAL(?:\s+HISTORY)|QUALIFICATIONS|ACADEMIC(?:\s+QUALIFICATIONS)|EDUCATIONAL(?:\s+QUALIFICATIONS)|DEGREES)[\s\*•:\-_\|\#]*$/i, 
       name: 'EDUCATION',
       priority: 9,
-      synonyms: ['ACADEMIC BACKGROUND', 'EDUCATIONAL HISTORY', 'QUALIFICATIONS', 'ACADEMIC QUALIFICATIONS']
+      synonyms: ['ACADEMIC BACKGROUND', 'EDUCATIONAL HISTORY', 'QUALIFICATIONS', 'ACADEMIC QUALIFICATIONS', 'EDUCATIONAL QUALIFICATIONS', 'DEGREES']
     },
     { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:EXPERIENCE|WORK(?:\s+EXPERIENCE)|EMPLOYMENT(?:\s+HISTORY)|PROFESSIONAL(?:\s+EXPERIENCE)|CAREER(?:\s+HISTORY)|JOB(?:\s+HISTORY))[\s\*•:\-_\|\#]*$/i, 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:EXPERIENCE|WORK(?:\s+EXPERIENCE)|EMPLOYMENT(?:\s+HISTORY)|PROFESSIONAL(?:\s+EXPERIENCE)|CAREER(?:\s+HISTORY)|JOB(?:\s+HISTORY)|WORK(?:\s+HISTORY))[\s\*•:\-_\|\#]*$/i, 
       name: 'EXPERIENCE',
       priority: 9,
-      synonyms: ['WORK EXPERIENCE', 'EMPLOYMENT HISTORY', 'PROFESSIONAL EXPERIENCE', 'CAREER HISTORY', 'JOB HISTORY']
+      synonyms: ['WORK EXPERIENCE', 'EMPLOYMENT HISTORY', 'PROFESSIONAL EXPERIENCE', 'CAREER HISTORY', 'JOB HISTORY', 'WORK HISTORY']
     },
     { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:REFERENCES|PROFESSIONAL(?:\s+REFERENCES)|RECOMMENDATIONS)[\s\*•:\-_\|\#]*$/i, 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:REFERENCES|PROFESSIONAL(?:\s+REFERENCES)|RECOMMENDATIONS|REFEREES)[\s\*•:\-_\|\#]*$/i, 
       name: 'REFERENCES',
       priority: 3,
-      synonyms: ['PROFESSIONAL REFERENCES', 'RECOMMENDATIONS']
+      synonyms: ['PROFESSIONAL REFERENCES', 'RECOMMENDATIONS', 'REFEREES']
     },
     { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:EXPECTATIONS|WHAT(?:\s+TO)?(?:\s+EXPECT)|JOB(?:\s+EXPECTATIONS)|ROLE(?:\s+REQUIREMENTS))[\s\*•:\-_\|\#]*$/i, 
+      regex: /^\s*[\*•\-\|\#]?\s*(?:EXPECTATIONS|WHAT(?:\s+TO)?(?:\s+EXPECT)|JOB(?:\s+EXPECTATIONS)|ROLE(?:\s+REQUIREMENTS)|JOB(?:\s+REQUIREMENTS)|DESIRED(?:\s+ROLE)|EXPECTATIONS(?:\s+FROM(?:\s+THE)?(?:\s+JOB)?)|WHY(?:\s+THIS(?:\s+JOB)?)|MOTIVATIONS?)[\s\*•:\-_\|\#]*$/i, 
       name: 'EXPECTATIONS',
       priority: 4,
-      synonyms: ['WHAT TO EXPECT', 'JOB EXPECTATIONS', 'ROLE REQUIREMENTS']
+      synonyms: ['WHAT TO EXPECT', 'JOB EXPECTATIONS', 'ROLE REQUIREMENTS', 'JOB REQUIREMENTS', 'DESIRED ROLE', 'WHY THIS JOB', 'MOTIVATIONS']
     }
   ];
   
