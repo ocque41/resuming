@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle } from "lucide-react";
+import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle, Loader2 } from "lucide-react";
 import { analyzeCVContent, optimizeCVForJob } from '@/lib/services/mistral.service';
 import { tailorCVForJob } from '@/app/lib/services/tailorCVService';
 import { useToast } from "@/hooks/use-toast";
@@ -20,9 +20,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2 } from "lucide-react";
-import { ModernFileDropdown } from './ModernFileDropdown';
-import { SectionImprovementsPanel } from './SectionImprovementsPanel';
+import FileDropdown from './FileDropdown';
+import SectionImprovementsPanel from './SectionImprovementsPanel';
 
 // Type definitions
 interface KeywordMatch {
@@ -3512,7 +3511,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="cv-select">Select CV</Label>
-            <ModernFileDropdown
+            <FileDropdown
               cvs={cvs.map(cv => `${cv.name}|${cv.id}`)}
               onSelect={(id, name) => {
                 setSelectedCVId(id);

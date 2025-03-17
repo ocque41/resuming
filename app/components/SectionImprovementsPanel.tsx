@@ -5,7 +5,7 @@ interface SectionImprovementsPanelProps {
   enhancedProfile: string;
 }
 
-export function SectionImprovementsPanel({ improvements, enhancedProfile }: SectionImprovementsPanelProps) {
+export default function SectionImprovementsPanel({ improvements, enhancedProfile }: SectionImprovementsPanelProps) {
   return (
     <div className="bg-[#050505] border border-gray-800 rounded-lg p-4 mt-4">
       <h3 className="text-lg font-medium mb-3 text-[#B4916C]">CV Section Improvements</h3>

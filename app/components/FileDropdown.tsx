@@ -1,13 +1,13 @@
 import React from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-interface ModernFileDropdownProps {
+interface FileDropdownProps {
   cvs: string[];
   onSelect: (id: string, name: string) => void;
   selectedCVName?: string | null;
 }
 
-export function ModernFileDropdown({ cvs, onSelect, selectedCVName }: ModernFileDropdownProps) {
+export default function FileDropdown({ cvs, onSelect, selectedCVName }: FileDropdownProps) {
   return (
     <Select
       value={selectedCVName || undefined}
