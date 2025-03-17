@@ -99,6 +99,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Extract company name from job description if available
+    let companyName = '';
+    if (jobDescription) {
+      // Look for company name in the job description
+      const companyRegex = /(?:at|for|with|from|by)\s+([\w\s&\-',]+?)(?:\.|,|\sin\s|\spos\s|$)/i;
+      const companyMatch = jobDescription.match(companyRegex);
+      if (companyMatch && companyMatch[1]) {
+        companyName = companyMatch[1].trim();
+        // Remove common words that might be incorrectly captured
+        companyName = companyName.replace(/\b(the|a|an|our|their|company|organization|position|role|opportunity)\b/gi, '').trim();
+      }
+    }
+
     // Generate the DOCX file with timeout protection
     let docxBuffer;
     try {
@@ -110,7 +123,7 @@ export async function POST(request: NextRequest) {
       });
       
       // Create a promise for the document generation
-      const generatePromise = generateSpecificDocx(cvText, jobTitle, jobDescription);
+      const generatePromise = generateSpecificDocx(cvText, jobTitle, companyName, jobDescription);
       
       // Race the promises
       docxBuffer = await Promise.race([generatePromise, timeoutPromise]) as Buffer;
@@ -153,231 +166,257 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Generate a DOCX document from CV text specifically for the specific optimization workflow
+ * Generate a specific DOCX file for optimized CV
  */
 async function generateSpecificDocx(
-  cvText: string, 
-  jobTitle?: string, 
+  cvText: string,
+  jobTitle?: string,
+  companyName?: string,
   jobDescription?: string
 ): Promise<Buffer> {
-  if (!cvText) {
-    throw new Error('CV text is required');
-  }
+  logger.info('Starting document generation process');
+  
+  // Order of sections to process
+  const sectionOrder = [
+    'Header',
+    'PROFILE',
+    'EXPERIENCE',
+    'EDUCATION',
+    'SKILLS',
+    'TECHNICAL SKILLS',
+    'PROFESSIONAL SKILLS',
+    'LANGUAGES',
+    'ACHIEVEMENTS',
+    'GOALS',
+    'REFERENCES'
+  ];
+  
+  // Parse the CV text into sections
+  const sections = parseOptimizedText(cvText);
+  
+  // Create all paragraphs that will be added to the document
+  const paragraphs = [];
+  
+  // Create title with job title if available
+  const pageTitle = new Paragraph({
+    text: jobTitle 
+      ? `Curriculum Vitae - ${jobTitle}${companyName ? ` at ${companyName}` : ''}`
+      : 'Curriculum Vitae',
+    heading: HeadingLevel.HEADING_1,
+    alignment: AlignmentType.CENTER,
+  });
+  paragraphs.push(pageTitle);
+  
+  // Add horizontal line
+  const horizontalLine = new Paragraph({
+    children: [
+      new TextRun({
+        text: '_______________________________________________________________',
+        color: '999999',
+      }),
+    ],
+    alignment: AlignmentType.CENTER,
+    spacing: {
+      after: 400,
+    },
+  });
+  paragraphs.push(horizontalLine);
 
-  try {
-    logger.info('Starting document generation process');
+  // Process sections in order
+  for (const sectionName of sectionOrder) {
+    const content = sections[sectionName];
     
-    // Parse the CV text into sections
-    const sections = parseOptimizedText(cvText);
+    // Skip if section doesn't exist
+    if (!content) continue;
     
-    // Define section order for processing
-    const sectionOrder = [
-      'Header',
-      'PROFILE', 
-      'SUMMARY',
-      'ACHIEVEMENTS',
-      'GOALS', 
-      'CAREER GOALS',
-      'LANGUAGES',
-      'SKILLS', 
-      'TECHNICAL SKILLS', 
-      'PROFESSIONAL SKILLS',
-      'EDUCATION',
-      'EXPERIENCE'
-    ];
+    // Skip adding a header for "Header" section
+    if (sectionName !== 'Header') {
+      // Add section heading
+      const sectionHeading = new Paragraph({
+        text: sectionName,
+        heading: HeadingLevel.HEADING_2,
+        spacing: {
+          before: 400,
+          after: 200,
+        },
+        border: {
+          bottom: {
+            color: "999999",
+            space: 1,
+            style: BorderStyle.SINGLE,
+            size: 6,
+          },
+        },
+      });
+      paragraphs.push(sectionHeading);
+    }
     
-    // Create document
-    const doc = new Document({
-      sections: [{
+    // Special handling for profile section
+    if (sectionName === 'PROFILE') {
+      const profileContent = typeof content === 'string' ? content : content.join('\n');
+      
+      // Add profile content with special formatting
+      const profileParagraph = new Paragraph({
+        children: [
+          new TextRun({
+            text: profileContent,
+            size: 24, // Slightly larger text
+            font: {
+              name: "Calibri",
+            },
+          }),
+        ],
+        spacing: {
+          before: 200,
+          after: 400, // Extra space after profile
+          line: 360, // Increased line spacing
+        },
+        indent: {
+          left: 0,
+        },
+      });
+      paragraphs.push(profileParagraph);
+      
+      // Add a small separator after profile
+      const profileSeparator = new Paragraph({
+        children: [
+          new TextRun({
+            text: '_______________________________________________________________',
+            color: 'cccccc',
+            size: 16,
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: {
+          after: 400,
+        },
+      });
+      paragraphs.push(profileSeparator);
+      
+      continue; // Skip the rest of the loop for profile
+    }
+    
+    // Handle content (could be string or array)
+    if (typeof content === 'string') {
+      // Split by lines to check for bullet points
+      const lines = content.split('\n');
+      
+      for (const line of lines) {
+        // Check if this line is a bullet point
+        const isBulletPoint = line.trim().startsWith('•') || 
+                             line.trim().startsWith('-') ||
+                             line.trim().startsWith('*');
+        
+        // Create appropriate paragraph
+        const paragraph = new Paragraph({
+          children: [
+            new TextRun({
+              text: isBulletPoint ? line.trim().substring(1).trim() : line,
+            }),
+          ],
+          spacing: {
+            before: 100,
+            after: 100,
+            line: 300,
+          },
+          bullet: isBulletPoint ? {
+            level: 0,
+          } : undefined,
+          indent: isBulletPoint ? {
+            left: 720,
+            hanging: 360,
+          } : {
+            left: 0,
+          },
+        });
+        paragraphs.push(paragraph);
+      }
+    } else if (Array.isArray(content)) {
+      // Handle array content
+      for (const item of content) {
+        // Check if this item is a bullet point
+        const isBulletPoint = item.trim().startsWith('•') || 
+                             item.trim().startsWith('-') ||
+                             item.trim().startsWith('*');
+        
+        const paragraph = new Paragraph({
+          children: [
+            new TextRun({
+              text: isBulletPoint ? item.trim().substring(1).trim() : item,
+            }),
+          ],
+          spacing: {
+            before: 100,
+            after: 100,
+            line: 300,
+          },
+          bullet: isBulletPoint ? {
+            level: 0,
+          } : undefined,
+          indent: isBulletPoint ? {
+            left: 720,
+            hanging: 360,
+          } : {
+            left: 0,
+          },
+        });
+        paragraphs.push(paragraph);
+      }
+    }
+  }
+  
+  // Add footer with date
+  const footer = new Paragraph({
+    children: [
+      new TextRun({
+        text: `Generated on ${new Date().toLocaleDateString()}`,
+        size: 20,
+        color: '666666',
+      }),
+    ],
+    spacing: {
+      before: 400,
+    },
+    alignment: AlignmentType.CENTER,
+    border: {
+      top: {
+        color: '999999',
+        space: 1,
+        style: BorderStyle.SINGLE,
+        size: 6,
+      },
+    },
+  });
+  paragraphs.push(footer);
+  
+  // Create new document by directly providing all paragraphs to the section
+  const doc = new Document({
+    sections: [
+      {
         properties: {
           page: {
             margin: {
               top: 1000,
               right: 1000,
               bottom: 1000,
-              left: 1000
-            }
-          }
+              left: 1000,
+            },
+          },
         },
-        children: [
-          // Title with job title if available
-          new Paragraph({
-            text: jobTitle ? `Optimized CV for ${jobTitle}` : 'Optimized CV',
-            heading: HeadingLevel.HEADING_1,
-            spacing: {
-              after: 200
-            },
-            alignment: AlignmentType.CENTER,
-          }),
-          
-          // Add a horizontal line after header
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: '',
-                size: 16
-              })
-            ],
-            border: {
-              bottom: {
-                color: 'B4916C',
-                space: 1,
-                style: BorderStyle.SINGLE,
-                size: 8
-              }
-            },
-            spacing: {
-              after: 300
-            }
-          }),
-          
-          // Add each section in the specified order
-          ...sectionOrder.flatMap(sectionName => {
-            const content = sections[sectionName];
-            if (!content || (Array.isArray(content) && content.length === 0)) {
-              return [];
-            }
-            
-            const paragraphs = [];
-            
-            // Add section header (except for Header section)
-            if (sectionName !== 'Header') {
-              paragraphs.push(
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: sectionName.toUpperCase(),
-                      size: 28,
-                      bold: true,
-                      color: 'B4916C'
-                    })
-                  ],
-                  spacing: {
-                    before: 400,
-                    after: 200
-                  },
-                  border: {
-                    bottom: {
-                      color: 'B4916C',
-                      space: 1,
-                      style: BorderStyle.SINGLE,
-                      size: 6
-                    }
-                  }
-                })
-              );
-            }
-            
-            // Add section content
-            if (typeof content === 'string') {
-              // Split by lines and add each line as a paragraph
-              const lines = content.split('\n').filter(line => line.trim());
-              
-              for (const line of lines) {
-                // Check if line is a bullet point
-                if (line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*')) {
-                  paragraphs.push(
-                    new Paragraph({
-                      children: [
-                        new TextRun({
-                          text: '• ',
-                          bold: true,
-                          color: 'B4916C'
-                        }),
-                        new TextRun({
-                          text: line.replace(/^[•\-*]\s*/, '')
-                        })
-                      ],
-                      spacing: {
-                        before: 120,
-                        after: 120
-                      },
-                      indent: {
-                        left: 360
-                      }
-                    })
-                  );
-                } else {
-                  paragraphs.push(
-                    new Paragraph({
-                      text: line,
-                      spacing: {
-                        before: 120,
-                        after: 120
-                      }
-                    })
-                  );
-                }
-              }
-            } else if (Array.isArray(content)) {
-              // Add each item as a bullet point
-              for (const item of content) {
-                paragraphs.push(
-                  new Paragraph({
-                    children: [
-                      new TextRun({
-                        text: '• ',
-                        bold: true,
-                        color: 'B4916C'
-                      }),
-                      new TextRun({
-                        text: item
-                      })
-                    ],
-                    spacing: {
-                      before: 120,
-                      after: 120
-                    },
-                    indent: {
-                      left: 360
-                    }
-                  })
-                );
-              }
-            }
-            
-            return paragraphs;
-          }),
-          
-          // Add footer with date
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: `Optimized CV | ${new Date().toLocaleDateString()}`,
-                size: 20,
-                color: '666666'
-              })
-            ],
-            spacing: {
-              before: 400
-            },
-            alignment: AlignmentType.CENTER,
-            border: {
-              top: {
-                color: 'B4916C',
-                space: 1,
-                style: BorderStyle.SINGLE,
-                size: 6
-              }
-            }
-          })
-        ]
-      }]
-    });
-
-    // Generate buffer with a try-catch to handle any errors
-    try {
-      logger.info('Packing document to buffer');
-      const buffer = await Packer.toBuffer(doc);
-      logger.info('Document successfully packed to buffer');
-      return buffer;
-    } catch (packError) {
-      logger.error('Error packing document to buffer:', packError instanceof Error ? packError.message : String(packError));
-      throw new Error(`Failed to pack document to buffer: ${packError instanceof Error ? packError.message : 'Unknown error'}`);
-    }
-  } catch (error) {
-    logger.error('Error generating specific DOCX:', error instanceof Error ? error.message : String(error));
-    throw new Error(`Failed to generate specific DOCX: ${error instanceof Error ? error.message : String(error)}`);
+        children: paragraphs,
+      },
+    ],
+  });
+  
+  // Generate buffer with a try-catch to handle any errors
+  try {
+    logger.info('Packing document to buffer');
+    const buffer = await Packer.toBuffer(doc);
+    logger.info('Document successfully packed to buffer');
+    return buffer;
+  } catch (packError) {
+    logger.error('Error packing document to buffer:', packError instanceof Error ? packError.message : String(packError));
+    throw new Error(`Failed to pack document to buffer: ${packError instanceof Error ? packError.message : 'Unknown error'}`);
   }
 }
 
@@ -408,49 +447,85 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     logger.info('Text is not in JSON format, using standard parsing');
   }
   
-  // Define section patterns
-  const sectionPatterns = [
-    /^(PROFILE|SUMMARY)(:|\s-)/i,
-    /^(ACHIEVEMENTS|ACCOMPLISHMENTS)(:|\s-)/i,
-    /^(GOALS|CAREER GOALS)(:|\s-)/i,
-    /^(LANGUAGES|LANGUAGE PROFICIENCY)(:|\s-)/i,
-    /^(SKILLS|TECHNICAL SKILLS|PROFESSIONAL SKILLS)(:|\s-)/i,
-    /^(EDUCATION|ACADEMIC BACKGROUND)(:|\s-)/i,
-    /^(EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY)(:|\s-)/i,
-    /^(REFERENCES)(:|\s-)/i
+  // Define section patterns - prioritizing case-insensitive matches
+  const sectionPatterns: { regex: RegExp, name: string }[] = [
+    { regex: /^(PROFILE|SUMMARY|ABOUT ME|PROFESSIONAL SUMMARY|PERSONAL STATEMENT)(:|\s-|\n)/i, name: 'PROFILE' },
+    { regex: /^(ACHIEVEMENTS|ACCOMPLISHMENTS)(:|\s-|\n)/i, name: 'ACHIEVEMENTS' },
+    { regex: /^(GOALS|CAREER GOALS|OBJECTIVES)(:|\s-|\n)/i, name: 'GOALS' },
+    { regex: /^(LANGUAGES|LANGUAGE PROFICIENCY)(:|\s-|\n)/i, name: 'LANGUAGES' },
+    { regex: /^(TECHNICAL SKILLS)(:|\s-|\n)/i, name: 'TECHNICAL SKILLS' },
+    { regex: /^(PROFESSIONAL SKILLS|SOFT SKILLS)(:|\s-|\n)/i, name: 'PROFESSIONAL SKILLS' },
+    { regex: /^(SKILLS|CORE COMPETENCIES|KEY SKILLS)(:|\s-|\n)/i, name: 'SKILLS' },
+    { regex: /^(EDUCATION|ACADEMIC BACKGROUND|QUALIFICATIONS)(:|\s-|\n)/i, name: 'EDUCATION' },
+    { regex: /^(EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY|PROFESSIONAL EXPERIENCE)(:|\s-|\n)/i, name: 'EXPERIENCE' },
+    { regex: /^(REFERENCES)(:|\s-|\n)/i, name: 'REFERENCES' }
   ];
+  
+  // Extract contact information (usually at the top)
+  const headerEndIndex = Math.min(10, lines.length);
+  const headerContent: string[] = [];
+  for (let i = 0; i < headerEndIndex; i++) {
+    if (/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(lines[i].trim()) || // Email
+        /^\+?[\d\s()-]{7,}$/.test(lines[i].trim()) || // Phone
+        /^(https?:\/\/)?(www\.)?linkedin\.com\/in\/[\w-]+\/?$/.test(lines[i].trim())) { // LinkedIn
+      headerContent.push(lines[i]);
+    }
+  }
+  if (headerContent.length > 0) {
+    sections['Header'] = headerContent.join('\n');
+  }
   
   let currentSection = '';
   let sectionContent: string[] = [];
+  let foundFirstSection = false;
   
+  // Special handling for profile - often the first substantive paragraph after contact info
+  let potentialProfile = '';
+  let inProfileParagraph = false;
+
   // Process each line
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
     // Check if this line is a section header
-    let isSectionHeader = false;
+    let matchedSection = '';
     for (const pattern of sectionPatterns) {
-      if (pattern.test(line)) {
-        // If we were already processing a section, save it
-        if (currentSection) {
-          sections[currentSection] = sectionContent.join('\n');
-        }
-        
-        // Start a new section - extract section name without colon or dash
-        currentSection = line.replace(/(:|\s-).*/g, '').trim();
-        sectionContent = [];
-        isSectionHeader = true;
+      if (pattern.regex.test(line)) {
+        matchedSection = pattern.name;
         break;
       }
     }
     
-    // If not a section header, add to current section
-    if (!isSectionHeader && currentSection) {
+    if (matchedSection) {
+      // Save previous section content if any
+      if (currentSection && sectionContent.length > 0) {
+        sections[currentSection] = sectionContent.join('\n');
+      }
+      
+      // Start a new section
+      currentSection = matchedSection;
+      sectionContent = [];
+      foundFirstSection = true;
+      
+      // Extract content from the section header line (after the colon or dash)
+      const headerContentMatch = line.match(/(?::|-)(.+)$/);
+      if (headerContentMatch && headerContentMatch[1].trim()) {
+        sectionContent.push(headerContentMatch[1].trim());
+      }
+    } else if (currentSection) {
+      // Add to current section
       sectionContent.push(line);
-    } else if (!isSectionHeader && !currentSection) {
-      // If no section has been identified yet, this is likely header information
-      if (!sections['Header']) {
-        sections['Header'] = line;
+    } else if (!foundFirstSection && !inProfileParagraph && line.length > 20 && !sections['PROFILE']) {
+      // If we haven't found a section yet and this is a substantial line, treat it as the profile
+      potentialProfile = line;
+      inProfileParagraph = true;
+    } else if (inProfileParagraph) {
+      // Continue adding to the profile paragraph
+      if (line.trim().length > 0) {
+        potentialProfile += '\n' + line;
       } else {
-        sections['Header'] += '\n' + line;
+        // End of paragraph
+        inProfileParagraph = false;
       }
     }
   }
@@ -460,15 +535,22 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     sections[currentSection] = sectionContent.join('\n');
   }
   
-  // If we couldn't parse any sections, try a simpler approach
-  if (Object.keys(sections).length <= 1) {
-    logger.warn('Few sections detected, using fallback parsing method');
-    
-    // Handle entire text as a profile section if nothing else was detected
-    if (!sections['PROFILE'] && !sections['SUMMARY']) {
-      sections['PROFILE'] = text;
+  // If we found a potential profile paragraph but no PROFILE section
+  if (potentialProfile && !sections['PROFILE']) {
+    sections['PROFILE'] = potentialProfile;
+  }
+  
+  // Ensure key sections exist
+  if (!sections['PROFILE'] && !sections['SUMMARY']) {
+    // Look through the first 15 lines for a substantial paragraph
+    for (let i = 0; i < Math.min(15, lines.length); i++) {
+      if (lines[i].length > 50 && !lines[i].includes('@') && !lines[i].includes('http')) {
+        sections['PROFILE'] = lines[i];
+        break;
+      }
     }
   }
   
+  logger.info(`Parsed ${Object.keys(sections).length} sections from optimized text`);
   return sections;
 } 

@@ -11,4 +11,7 @@ globs:
 # - I like your analysis and that we agree
 your plan seams reliable, lets try it, remember it should be quick implementation with minor adjustments we currently just want to make the system work so we can work on the results, lets not add a lot of things or making mayor changes because we will be trapped in a errors loophole
 
+# - lets keep it functioning
+our instructions now would be to do micro adjustments or micro implementations step by step to see the result get better little by little without breaking the system or code so we can keep on iterating and improving little by little, step by step
+
 

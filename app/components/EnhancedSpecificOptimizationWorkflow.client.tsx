@@ -1308,65 +1308,141 @@ const extractSubheader = (text: string): string => {
 };
 
 const extractProfile = (text: string): string => {
-  // Try to find profile/summary/objective section
-  const profilePattern = /(?:profile|summary|objective|about me)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+  // Try to find profile/summary/objective section with more pattern variations
+  // Expanded pattern to catch more profile section headers
+  const profilePattern = /(?:profile|summary|objective|about(?:\s+me)?|professional\s+summary|personal\s+statement|career\s+profile|bio|introduction)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+(?:\s*:|$)|\n\s*$)/is;
+  
   const match = text.match(profilePattern);
   
-  if (!match || !match[1]) {
-    // If no profile section found, try to extract the first paragraph as a profile
-    const firstParagraphPattern = /^(?:[^\n]+\n){1,3}([^\n]+(?:\n[^\n]+){1,5})/;
-    const firstParagraphMatch = text.match(firstParagraphPattern);
-    return firstParagraphMatch ? firstParagraphMatch[1].trim() : '';
+  if (match && match[1] && match[1].trim().length > 10) {
+    // Found a valid profile section with reasonable content
+    return match[1].trim();
   }
   
-  return match[1].trim();
+  // Secondary pattern for profiles that might be formatted differently
+  const secondaryProfilePattern = /^(?:[^\n]*?\b(?:profile|summary|about|professional)\b[^\n]*?\n+)([^\n]+(?:\n[^\n]+){1,5})/i;
+  const secondaryMatch = text.match(secondaryProfilePattern);
+  
+  if (secondaryMatch && secondaryMatch[1] && secondaryMatch[1].trim().length > 10) {
+    return secondaryMatch[1].trim();
+  }
+  
+  // If no profile section found, try to extract the first substantive paragraph as a profile
+  // Avoid capturing just contact information or short headers
+  const firstParagraphPattern = /(?:^|\n\n)([^:\n]{20,}(?:\n[^:\n]{10,}){0,5})/;
+  const firstParagraphMatch = text.match(firstParagraphPattern);
+  
+  if (firstParagraphMatch && firstParagraphMatch[1] && firstParagraphMatch[1].trim().length > 30) {
+    // Ensure we have a substantive paragraph (at least 30 chars)
+    return firstParagraphMatch[1].trim();
+  }
+  
+  // Last resort: check for an initial paragraph after a short header that might be a name
+  const nameFollowedByProfile = /^[^\n]{2,30}\n+([^\n]{20,}(?:\n[^\n]{10,}){0,3})/;
+  const nameProfileMatch = text.match(nameFollowedByProfile);
+  
+  if (nameProfileMatch && nameProfileMatch[1]) {
+    return nameProfileMatch[1].trim();
+  }
+  
+  // If all else fails, return empty string
+  return '';
 };
 
 const optimizeProfile = (profile: string, jobDescription: string, jobKeywords: string[]): string => {
-  // If profile is empty, generate a new one
-  if (!profile) {
-    return `Experienced professional with expertise in ${jobKeywords.slice(0, 3).join(', ')}, seeking to leverage my skills in ${jobKeywords.slice(3, 5).join(' and ')} to excel in this role.`;
-  }
-  
-  // Extract important job requirements
-  const requirementPatterns = [
-    /(?:required|must have|essential)[:\s]+([^.]+)/gi,
-    /(?:seeking|looking for)[:\s]+([^.]+)/gi,
-    /(?:responsibilities include|will be responsible for)[:\s]+([^.]+)/gi
-  ];
-  
-  let keyRequirements: string[] = [];
-  requirementPatterns.forEach(pattern => {
-    const matches = [...jobDescription.matchAll(pattern)];
-    matches.forEach(match => {
-      if (match[1]) {
-        keyRequirements.push(match[1].trim());
-      }
+  // Extract important job requirements and key phrases
+  const extractKeyPhrases = (text: string): string[] => {
+    const phrases: string[] = [];
+    
+    // Look for key requirement statements
+    const requirementPatterns = [
+      /(?:required|must have|essential|you will need)[:\s]+([^.;]+[.;])/gi,
+      /(?:seeking|looking for)[:\s]+([^.;]+[.;])/gi,
+      /(?:responsibilities include|will be responsible for|the role involves)[:\s]+([^.;]+[.;])/gi,
+      /(?:ideal candidate|you will|you should)[:\s]+([^.;]+[.;])/gi
+    ];
+    
+    requirementPatterns.forEach(pattern => {
+      const matches = [...text.matchAll(pattern)];
+      matches.forEach(match => {
+        if (match[1] && match[1].trim().length > 10) {
+          phrases.push(match[1].trim());
+        }
+      });
     });
-  });
+    
+    // Look for sentences containing key career terms
+    const careerTerms = ['experience', 'background', 'expertise', 'skills', 'knowledge', 'qualifications'];
+    careerTerms.forEach(term => {
+      const termPattern = new RegExp(`[^.;]+\\b${term}\\b[^.;]+[.;]`, 'gi');
+      const matches = [...text.matchAll(termPattern)];
+      matches.forEach(match => {
+        if (match[0] && match[0].trim().length > 15 && !phrases.includes(match[0].trim())) {
+          phrases.push(match[0].trim());
+        }
+      });
+    });
+    
+    return phrases;
+  };
   
-  // If no key requirements found, use top keywords
-  if (keyRequirements.length === 0) {
-    keyRequirements = jobKeywords.slice(0, 3);
+  // Generate a new profile if none exists or it's very short
+  if (!profile || profile.length < 50) {
+    const keyPhrases = extractKeyPhrases(jobDescription);
+    const topKeywords = jobKeywords.slice(0, 5);
+    
+    // Create a compelling profile using job phrases and keywords
+    return `Experienced professional with a strong background in ${topKeywords.slice(0, 3).join(', ')}. ${
+      keyPhrases.length > 0 
+        ? `Skilled in ${keyPhrases[0].toLowerCase().replace(/^i am |^i have |^you will |^the ideal candidate |^seeking |^looking for /i, '')}` 
+        : `Seeking to leverage expertise in ${topKeywords.join(', ')} to excel in this role.`
+    } Demonstrated ability to ${
+      keyPhrases.length > 1 
+        ? keyPhrases[1].toLowerCase().replace(/^i am |^i have |^you will |^the ideal candidate |^seeking |^looking for /i, '') 
+        : `deliver results and contribute to team success through strong ${topKeywords.slice(3, 5).join(' and ')} skills.`
+    }`;
   }
   
-  // Check if profile already contains key requirements
+  // If profile exists but needs enhancement
+  const keyPhrases = extractKeyPhrases(jobDescription);
   const profileLower = profile.toLowerCase();
-  const missingRequirements = keyRequirements.filter(req => 
-    !profileLower.includes(req.toLowerCase())
-  );
   
-  // If profile already contains all key requirements, return it as is
-  if (missingRequirements.length === 0) {
+  // Check if the profile already mentions key job requirements
+  let containsKeyJobTerms = false;
+  for (const keyword of jobKeywords.slice(0, 5)) {
+    if (profileLower.includes(keyword.toLowerCase())) {
+      containsKeyJobTerms = true;
+      break;
+    }
+  }
+  
+  // If profile already contains key job terms, just return it with minor enhancement
+  if (containsKeyJobTerms && profile.length > 100) {
+    // Only add a minor enhancement if the profile is already strong
     return profile;
   }
   
-  // Otherwise, enhance the profile with missing requirements
-  let enhancedProfile = profile;
+  // Profile needs significant enhancement
+  // Keep the original profile but add job-specific enhancements
+  let enhancedProfile = profile.trim();
   
-  // Add a sentence highlighting missing requirements if needed
-  if (missingRequirements.length > 0) {
-    enhancedProfile += ` Particularly skilled in ${missingRequirements.join(', ')}.`;
+  // Make sure the profile ends with appropriate punctuation
+  if (!/[.;!?]$/.test(enhancedProfile)) {
+    enhancedProfile += '.';
+  }
+  
+  // Add a sentence highlighting job-specific skills
+  const jobSpecificAddition = ` Offers particular expertise in ${jobKeywords.slice(0, 3).join(', ')}`;
+  
+  // Add key job phrase if available
+  if (keyPhrases.length > 0) {
+    const keyPhrase = keyPhrases[0].toLowerCase()
+      .replace(/^i am |^i have |^you will |^the ideal candidate |^seeking |^looking for /i, '')
+      .replace(/\.$/, '');
+      
+    enhancedProfile += `${jobSpecificAddition} with demonstrated ability to ${keyPhrase}.`;
+  } else {
+    enhancedProfile += `${jobSpecificAddition}.`;
   }
   
   return enhancedProfile;

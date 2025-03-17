@@ -31,14 +31,14 @@ const DocumentGenerationProgress: React.FC<DocumentGenerationProgressProps> = ({
   const activeStep = currentStepIndex === -1 ? steps.length - 1 : currentStepIndex - 1;
 
   return (
-    <div className="w-full bg-[#0D0D0D] border border-gray-800 rounded-lg p-4 mb-4">
+    <div className="w-full bg-[#0D0D0D] border border-[#333333] rounded-lg p-4 mb-4">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-lg font-medium text-white">Document Generation</h3>
         <span className="text-sm font-medium text-white">{progress}%</span>
       </div>
       
       {/* Progress bar */}
-      <div className="w-full h-2 bg-gray-800 rounded-full mb-4 overflow-hidden">
+      <div className="w-full h-2 bg-[#333333] rounded-full mb-4 overflow-hidden">
         <div 
           className="h-full transition-all duration-300 ease-in-out rounded-full"
           style={{ 
@@ -110,9 +110,9 @@ const DocumentGenerationProgress: React.FC<DocumentGenerationProgressProps> = ({
       
       {/* Tips for users */}
       {isGenerating && (
-        <div className="mt-4 p-3 bg-gray-800/50 rounded-md">
+        <div className="mt-4 p-3 bg-[#333333] rounded-md">
           <h4 className="text-sm font-medium text-white mb-1">Document Generation Tips</h4>
-          <ul className="text-xs text-gray-400 list-disc pl-4 space-y-1">
+          <ul className="text-xs text-white list-disc pl-4 space-y-1">
             <li>Document generation typically takes 15-30 seconds</li>
             <li>Please don't refresh the page during generation, if it takes too long a reset button will appear</li>
             <li>It does not download automatically, use the manual download button</li>
