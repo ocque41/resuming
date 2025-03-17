@@ -8,6 +8,7 @@ import SpecificOptimizeCVCard from "./SpecificOptimizeCVCard.client";
 import EnhancedSpecificOptimizationWorkflow from "../app/components/EnhancedSpecificOptimizationWorkflow.client";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Info } from "lucide-react";
 
 // Toast functionality without using the use-toast hook
 function showToast(message: { title: string; description: string; duration: number }) {
@@ -370,6 +371,20 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+      
+      {/* Document Generation Tips - Placed here so it's visible in both tabs */}
+      <div className="mb-4 p-4 border border-gray-700 rounded-md bg-gray-800/50">
+        <h4 className="flex items-center text-sm font-medium mb-2 text-gray-300">
+          <Info className="h-4 w-4 mr-2 text-blue-400" />
+          Document Generation Tips
+        </h4>
+        <ul className="text-xs text-gray-400 space-y-1 list-disc pl-5">
+          <li>The generated document will include all sections from your optimized CV</li>
+          <li>Document generation may take up to 30 seconds for complex CVs</li>
+          <li>If generation fails, try again or use a different browser</li>
+          <li>For best results, ensure your CV has clear section headers</li>
+        </ul>
+      </div>
       
       {/* Only show the processing indicator when no CV is selected or when we're in the analyze step */}
       {isProcessing && (!selectedCVId || activeStep !== "general") && (
