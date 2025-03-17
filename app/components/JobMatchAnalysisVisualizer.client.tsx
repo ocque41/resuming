@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, FileText, BarChart2, AlertCircle, CheckCircle, Info } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "app/components/ui/use-toast";
 
 interface MatchedKeyword {
   keyword: string;
