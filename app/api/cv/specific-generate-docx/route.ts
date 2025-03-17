@@ -180,20 +180,29 @@ async function generateSpecificDocx(
     const sectionOrder = [
       'Header',
       'PROFILE', 
+      'ACHIEVEMENTS',
+      'GOALS',
+      'EXPECTATIONS',
       'EXPERIENCE',
+      'LANGUAGES',
       'EDUCATION',
       'SKILLS', 
       'TECHNICAL SKILLS', 
       'PROFESSIONAL SKILLS',
-      'ACHIEVEMENTS',
-      'GOALS',
-      'LANGUAGES',
-      'EXPECTATIONS',
       'REFERENCES'
   ];
   
   // Parse the CV text into sections
   const sections = parseOptimizedText(cvText);
+  
+  // Check for duplicate skills sections and merge if needed
+  if (sections['SKILLS'] && (sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS'])) {
+    // If we have both general skills and specific skills, only keep the specific ones
+    if (sections['TECHNICAL SKILLS'] && sections['PROFESSIONAL SKILLS']) {
+      delete sections['SKILLS']; // Remove the general skills as we have specific ones
+      logger.info('Removed duplicate general SKILLS section as technical and professional skills exist');
+    }
+  }
   
   // More detailed logging for debugging section parsing
   const sectionSummary = Object.entries(sections).map(([key, value]) => {
@@ -936,6 +945,37 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     if (goalContent.length > 0) {
       sections['GOALS'] = goalContent.join('\n');
       logger.info(`Created GOALS section with ${goalContent.length} lines of content`);
+    }
+  }
+
+  // Ensure EXPECTATIONS section exists
+  if (!sections['EXPECTATIONS']) {
+    logger.info('Looking for possible EXPECTATIONS content');
+    
+    // Look for expectations content by searching for relevant indicators
+    const expectationIndicators = [
+      /expect/i, /anticipate/i, /looking for/i, /seeking/i, /desire/i, 
+      /work environment/i, /company culture/i, /team dynamics/i, /work-life balance/i,
+      /opportunity for/i, /chance to/i, /hope to/i, /would like to/i,
+      /ideal role/i, /ideal position/i, /ideal job/i, /perfect job/i
+    ];
+    
+    // Find content that looks like expectations
+    const expectationContent = lines.filter(line => {
+      if (line.length < 20) return false;
+      
+      // Check for expectation indicators
+      const hasIndicator = expectationIndicators.some(regex => regex.test(line));
+      
+      // Check for phrases about the workplace or job
+      const hasWorkplacePhrase = /workplace|company|organization|team|culture|environment|position|role|job|career|growth|development|advancement/i.test(line);
+      
+      return hasIndicator && hasWorkplacePhrase;
+    });
+    
+    if (expectationContent.length > 0) {
+      sections['EXPECTATIONS'] = expectationContent.join('\n');
+      logger.info(`Created EXPECTATIONS section with ${expectationContent.length} lines of content`);
     }
   }
 
