@@ -62,14 +62,19 @@ skills, and qualifications that match the job requirements.
 
 Follow these guidelines:
 1. Preserve the original structure and sections of the CV
-2. Enhance the profile/summary section to highlight relevant qualifications for this specific job
-3. Tailor the language to include keywords from the job description
-4. Prioritize achievements that demonstrate relevant skills
-5. Ensure all content is factual and based only on information in the original CV
-6. Do not fabricate experiences, skills, or qualifications
-7. Return the content in a structured format that preserves sections
+2. Find the existing profile/summary/about me section in the CV and enhance it to highlight relevant qualifications for this specific job
+3. DO NOT generate a generic profile - always use the actual profile content from the CV as a base
+4. Look for profile sections labeled as "PROFILE", "SUMMARY", "ABOUT ME", "PROFESSIONAL SUMMARY", or similar
+5. If no explicit profile section exists, identify and use the first substantial paragraph of the CV that appears to be an introduction
+6. Tailor the language to include keywords from the job description
+7. Prioritize achievements that demonstrate relevant skills
+8. Ensure all content is factual and based only on information in the original CV
+9. Do not fabricate experiences, skills, or qualifications
+10. Return the content in a structured format that preserves sections
 
-Most importantly, identify and extract the name and contact details from the original CV and maintain them.`;
+Most importantly:
+- Identify and extract the name and contact details from the original CV and maintain them
+- Ensure the profile/summary is directly based on the actual content from the original CV, enhanced with relevant keywords from the job description`;
 
     // Use rate limiter for the API call
     const result = await mistralRateLimiter.execute(async () => {
@@ -90,10 +95,13 @@ ${jobDescription}
 ---
 ${jobTitle ? `\nPosition: ${jobTitle}` : ''}
 
-Please tailor my CV for this job. Enhance the profile section to focus on relevant qualifications.
+Please tailor my CV for this job. First, locate my existing profile/summary/about me section in the CV and enhance it specifically to match this job's requirements. Use my actual profile content as the base for any enhancements.
+
+If there's no explicit profile section, use the first substantive paragraph that introduces my background and experience.
+
 Return the optimized content in a JSON format with these fields:
-1. tailoredContent: The complete tailored CV
-2. enhancedProfile: A specifically enhanced profile section
+1. tailoredContent: The complete tailored CV with my enhanced profile section
+2. enhancedProfile: The specifically enhanced profile section (based on my original profile)
 3. sectionImprovements: A summary of improvements made to each section`
           }
         ],

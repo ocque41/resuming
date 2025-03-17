@@ -483,9 +483,9 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     logger.info('Text is not in JSON format, using standard parsing');
   }
   
-  // Define section patterns - improved to capture more variations
-  const sectionPatterns: { regex: RegExp, name: string }[] = [
-    { regex: /^\s*[\*•\-\|\#]?\s*(?:PROFILE|SUMMARY|ABOUT(?:\s+ME)?|PROFESSIONAL(?:\s+SUMMARY)?|PERSONAL(?:\s+STATEMENT)?)[\s\*•:\-_\|\#]*$/i, name: 'PROFILE' },
+  // Define section patterns - improved to capture more variations and prioritize finding the actual profile section
+  const sectionPatterns: { regex: RegExp, name: string, priority?: number }[] = [
+    { regex: /^\s*[\*•\-\|\#]?\s*(?:PROFILE|SUMMARY|ABOUT(?:\s+ME)?|PROFESSIONAL(?:\s+SUMMARY)?|PERSONAL(?:\s+STATEMENT)?)[\s\*•:\-_\|\#]*$/i, name: 'PROFILE', priority: 10 },
     { regex: /^\s*[\*•\-\|\#]?\s*(?:ACHIEVEMENTS|ACCOMPLISHMENTS|KEY(?:\s+ACHIEVEMENTS))[\s\*•:\-_\|\#]*$/i, name: 'ACHIEVEMENTS' },
     { regex: /^\s*[\*•\-\|\#]?\s*(?:GOALS|OBJECTIVES|CAREER(?:\s+GOALS))[\s\*•:\-_\|\#]*$/i, name: 'GOALS' },
     { regex: /^\s*[\*•\-\|\#]?\s*(?:LANGUAGES?|LANGUAGE(?:\s+PROFICIENCY)|LANGUAGE(?:\s+SKILLS))[\s\*•:\-_\|\#]*$/i, name: 'LANGUAGES' },
@@ -537,7 +537,7 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
   let potentialProfile = '';
   let inProfileParagraph = false;
 
-  // Process each line with improved content extraction
+  // Process each line with improved content extraction, focusing on actual profile content
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     
@@ -546,10 +546,13 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     
     // Check if this line is a section header using our patterns
     let matchedSection = '';
+    let matchPriority = 0;
+    
     for (const pattern of sectionPatterns) {
       if (pattern.regex.test(line)) {
         matchedSection = pattern.name;
-        logger.info(`Found section header: ${matchedSection} in line: "${line.substring(0, 50)}..."`);
+        matchPriority = pattern.priority || 0;
+        logger.info(`Found section header: ${matchedSection} in line: "${line.substring(0, 50)}..." with priority ${matchPriority}`);
         break;
       }
     }
@@ -572,17 +575,19 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
         sectionContent.push(headerContentMatch[1].trim());
       }
     } else if (currentSection) {
+      // Skip section content lines that are just headers themselves (all caps and short)
+      if (line.toUpperCase() === line && line.length < 15 && !line.match(/^[\d\.\-•]+/) && !line.includes(':')) {
+        logger.info(`Skipping likely header within section: "${line}"`);
+        continue;
+      }
+      
       // Add to current section
       sectionContent.push(line);
-      
-      // Check for possible missed section headers (all caps, short line)
-      if (line.toUpperCase() === line && line.length < 30 && line.length > 3 && !line.includes(':')) {
-        logger.info(`Possible missed section header: "${line}" - treating as content for ${currentSection}`);
-      }
     } else if (!foundFirstSection && !inProfileParagraph && line.length > 20 && 
               !sections['PROFILE'] && 
               !line.includes('@') && !line.includes('http') && 
-              !/^\+?[\d\s()-]{7,}$/.test(line)) {
+              !/^\+?[\d\s()-]{7,}$/.test(line) &&
+              !/^[A-Z][A-Z\s]+$/.test(line)) { // Skip all-caps header lines
       // If we haven't found a section yet and this is a substantial non-contact-info line
       // treat it as the profile
       potentialProfile = line;
@@ -590,7 +595,7 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
       logger.info(`Found potential profile paragraph starting with: "${line.substring(0, 50)}..."`);
     } else if (inProfileParagraph) {
       // Continue adding to the profile paragraph
-      if (line.trim().length > 0) {
+      if (line.trim().length > 0 && !line.match(/^[A-Z][A-Z\s]+$/) && line.length > 5) {
         potentialProfile += '\n' + line;
       } else {
         // End of paragraph
@@ -683,23 +688,32 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     let bestProfileCandidate = '';
     let bestCandidateScore = 0;
     
+    // Look through first 20% of the document for potential profile paragraphs
+    const searchDepth = Math.min(30, Math.ceil(lines.length * 0.2));
+    
     // Skip header lines and look for a substantive paragraph
-    for (let i = headerContent.length; i < Math.min(30, lines.length); i++) {
+    for (let i = headerContent.length; i < searchDepth; i++) {
       const line = lines[i].trim();
       
-      // Skip section headers and short lines
-      if (line.match(/^[A-Z][A-Z\s]+:?$/) || line.length < 40) {
+      // Skip section headers, short lines, and bullet points
+      if (line.match(/^[A-Z][A-Z\s]+:?$/) || 
+          line.length < 40 || 
+          line.startsWith('•') || 
+          line.startsWith('-') ||
+          line.match(/^\d+\./)) {
         continue;
       }
       
       // Calculate a "profile likelihood score" based on content
-      let score = line.length / 20; // Longer text gets higher score
+      let score = line.length / 15; // Longer text gets higher score
       
       // Boost score for lines with profile-related keywords
       const profileKeywords = [
         'professional', 'experienced', 'skilled', 'background', 
         'expertise', 'years of experience', 'career', 
-        'passionate', 'dedicated', 'seeking', 'opportunity'
+        'passionate', 'dedicated', 'seeking', 'opportunity',
+        'summary', 'profile', 'about me', 'qualified', 'specialist',
+        'knowledge', 'capabilities', 'strengths', 'track record'
       ];
       
       profileKeywords.forEach(keyword => {
@@ -708,17 +722,35 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
         }
       });
       
-      // Penalize for lines that look like responsibilities or bullet points
-      if (line.startsWith('•') || line.startsWith('-') || 
-          line.match(/^\d+\./) || 
-          line.toLowerCase().includes('responsible for')) {
-        score -= 5;
+      // Extra boost for first-person language which is common in profiles
+      if (line.match(/\b(I am|I have|I possess|My|I'm)\b/i)) {
+        score += 3;
+      }
+      
+      // Position boost - paragraphs closer to the top are more likely to be profiles
+      score += (searchDepth - i) / 5;
+      
+      // Penalize lines that look like job titles or company names
+      if (line.includes(' at ') || line.includes(' - ') || line.match(/\b(inc|ltd|llc|corp)\b/i)) {
+        score -= 3;
       }
       
       // Update best candidate if this one is better
       if (score > bestCandidateScore) {
         bestProfileCandidate = line;
         bestCandidateScore = score;
+        
+        // Check if this is part of a paragraph and include adjacent lines
+        let j = i + 1;
+        while (j < lines.length && 
+               lines[j].trim().length > 20 && 
+               !lines[j].match(/^[A-Z][A-Z\s]+:?$/) && 
+               !lines[j].startsWith('•') && 
+               !lines[j].startsWith('-') &&
+               !lines[j].match(/^\d+\./)) {
+          bestProfileCandidate += '\n' + lines[j].trim();
+          j++;
+        }
       }
     }
     
@@ -726,11 +758,19 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     if (bestProfileCandidate && bestCandidateScore > 5) {
       sections['PROFILE'] = bestProfileCandidate;
       logger.info(`Extracted profile from CV with score ${bestCandidateScore}`);
+    } else if (potentialProfile && potentialProfile.length > 50) {
+      // Use our potential profile if it's substantial
+      sections['PROFILE'] = potentialProfile;
+      logger.info('Using previously identified potential profile paragraph');
     } else {
       // Use first 1-2 paragraphs if no good candidate was found
-      const firstParas = lines.filter(line => line.trim().length > 50)
-                             .slice(0, 2)
-                             .join('\n');
+      const firstParas = lines.filter(line => 
+        line.trim().length > 40 && 
+        !line.match(/^[A-Z][A-Z\s]+:?$/) && 
+        !line.startsWith('•') && 
+        !line.startsWith('-') &&
+        !line.match(/^\d+\./)
+      ).slice(0, 2).join('\n');
       
       if (firstParas.length > 50) {
         sections['PROFILE'] = firstParas;
@@ -742,8 +782,8 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
                          text.match(/^([A-Z][a-z]+\s+[A-Z][a-z]+)(?:\n|$)/);
         
         const name = nameMatch ? nameMatch[1] : "Professional";
-        sections['PROFILE'] = `${name} is an experienced professional with a strong background seeking new opportunities to leverage expertise and contribute to organizational success.`;
-        logger.info('Created default PROFILE section using name from CV');
+        sections['PROFILE'] = `${name} is a professional with relevant experience and skills.`;
+        logger.info('Created minimal PROFILE section using name from CV');
       }
     }
   }
