@@ -3,6 +3,27 @@ import { getUser } from '@/lib/db/queries.server';
 import MistralClient from '@mistralai/mistralai';
 import { logger } from '@/lib/logger';
 import { mistralRateLimiter } from '../../../lib/services/rate-limiter';
+import { extractJsonFromMarkdown } from '@/lib/services/mistral.service';
+
+// Define the expected shape of a job description result
+interface JobDescriptionResult {
+  title: string;
+  overview: string;
+  aboutCompany: string;
+  responsibilities: string[];
+  requirements: {
+    essential: string[];
+    preferred: string[];
+  };
+  skills: {
+    technical: string[];
+    soft: string[];
+  };
+  experienceEducation: string;
+  benefits: string[];
+  applicationProcess: string;
+  fullDescription: string;
+}
 
 // Initialize Mistral client
 const getMistralClient = () => {
@@ -98,7 +119,7 @@ Format the response as JSON with the following structure:
   "fullDescription": string
 }
 
-Return ONLY valid JSON without any additional text or explanations.`;
+Return ONLY valid JSON without any markdown formatting or explanatory text.`;
 
     // Use rate limiter for the API call
     const result = await mistralRateLimiter.execute(async () => {
@@ -117,10 +138,24 @@ Return ONLY valid JSON without any additional text or explanations.`;
       });
 
       try {
-        return JSON.parse(response.choices[0].message.content);
+        // First try direct parsing
+        return JSON.parse(response.choices[0].message.content) as JobDescriptionResult;
       } catch (parseError) {
-        logger.error('Error parsing Mistral response:', parseError instanceof Error ? parseError.message : String(parseError));
-        throw new Error('Failed to parse job description');
+        // If direct parsing fails, try to extract JSON from markdown
+        logger.warn('Failed to parse JSON directly, attempting to extract from markdown:', 
+                   parseError instanceof Error ? parseError.message : String(parseError));
+        
+        const content = response.choices[0].message.content;
+        const cleanedContent = extractJsonFromMarkdown(content);
+        
+        try {
+          return JSON.parse(cleanedContent) as JobDescriptionResult;
+        } catch (extractError) {
+          logger.error('Failed to extract and parse JSON from response:', 
+                      extractError instanceof Error ? extractError.message : String(extractError));
+          logger.error('Raw response snippet (first 100 chars):', content.substring(0, 100));
+          throw new Error('Failed to parse job description');
+        }
       }
     });
 

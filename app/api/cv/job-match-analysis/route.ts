@@ -4,6 +4,44 @@ import { logger } from '@/lib/logger';
 import MistralClient from '@mistralai/mistralai';
 import { mistralRateLimiter } from '../../../lib/services/rate-limiter';
 import { MistralRAGService } from '@/lib/utils/mistralRagService';
+import { extractJsonFromMarkdown } from '@/lib/services/mistral.service';
+
+// Define the expected shape of a job match analysis result
+interface JobMatchAnalysis {
+  score: number;
+  matchedKeywords: Array<{
+    keyword: string;
+    relevance: number;
+    frequency: number;
+    placement: string;
+  }>;
+  missingKeywords: Array<{
+    keyword: string;
+    importance: number;
+    suggestedPlacement: string;
+  }>;
+  recommendations: string[];
+  skillGap: string;
+  dimensionalScores: {
+    skillsMatch: number;
+    experienceMatch: number;
+    educationMatch: number;
+    industryFit: number;
+    overallCompatibility: number;
+    keywordDensity: number;
+    formatCompatibility: number;
+    contentRelevance: number;
+  };
+  detailedAnalysis: string;
+  improvementPotential: number;
+  sectionAnalysis: {
+    profile: { score: number; feedback: string };
+    skills: { score: number; feedback: string };
+    experience: { score: number; feedback: string };
+    education: { score: number; feedback: string };
+    achievements: { score: number; feedback: string };
+  };
+}
 
 // Initialize Mistral client
 const getMistralClient = () => {
@@ -137,7 +175,7 @@ export async function POST(request: NextRequest) {
         }
       }
       
-      Return ONLY valid JSON without any additional text or explanations.`;
+      Return ONLY valid JSON without any markdown formatting or explanatory text.`;
 
       const response = await client.chat({
         model: 'mistral-large-latest',
@@ -154,10 +192,25 @@ export async function POST(request: NextRequest) {
       });
 
       try {
-        return JSON.parse(response.choices[0].message.content);
+        // First try direct parsing
+        return JSON.parse(response.choices[0].message.content) as JobMatchAnalysis;
       } catch (parseError) {
-        logger.error('Error parsing Mistral response:', parseError instanceof Error ? parseError.message : String(parseError));
-        throw new Error('Failed to parse job match analysis result');
+        // If direct parsing fails, try to extract JSON from markdown
+        logger.warn('Failed to parse JSON directly, attempting to extract from markdown:', 
+                   parseError instanceof Error ? parseError.message : String(parseError));
+        
+        const content = response.choices[0].message.content;
+        const cleanedContent = extractJsonFromMarkdown(content);
+        
+        try {
+          return JSON.parse(cleanedContent) as JobMatchAnalysis;
+        } catch (extractError) {
+          logger.error('Failed to extract and parse JSON from response:', 
+                      extractError instanceof Error ? extractError.message : String(extractError));
+          logger.error('Raw response was:', content);
+          logger.error('Cleaned content was:', cleanedContent);
+          throw new Error('Failed to parse job match analysis result');
+        }
       }
     });
     

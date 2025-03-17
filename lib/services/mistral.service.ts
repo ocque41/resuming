@@ -1,5 +1,24 @@
 import MistralClient from '@mistralai/mistralai';
+import 'server-only';
 import { logger } from '@/lib/logger';
+
+/**
+ * Helper function to extract JSON from markdown-formatted text
+ * This handles cases where the AI model returns JSON within markdown code blocks
+ */
+export function extractJsonFromMarkdown(text: string): string {
+  // Check if the text contains markdown JSON code blocks
+  const jsonBlockRegex = /```(?:json)?\s*\n([\s\S]*?)\n```/;
+  const match = text.match(jsonBlockRegex);
+  
+  if (match && match[1]) {
+    // Return the content inside the code block
+    return match[1].trim();
+  }
+  
+  // If no code block found, return the original text
+  return text;
+}
 
 // Initialize Mistral client
 const client = new MistralClient(process.env.MISTRAL_API_KEY || '');
@@ -24,7 +43,7 @@ export class MistralService {
     response_format?: { type: string };
   }): Promise<string> {
     try {
-      const response = await this.client.chat({
+      const chatOptions: any = {
         model: 'mistral-large-latest',
         messages: [
           {
@@ -33,14 +52,60 @@ export class MistralService {
           }
         ],
         temperature,
-        maxTokens: max_tokens,
-        ...(response_format && { response_format })
+        maxTokens: max_tokens
+      };
+      
+      // Add response_format if specified
+      if (response_format) {
+        // @ts-ignore - The Mistral API supports response_format but TS typing might not be updated
+        chatOptions.response_format = response_format;
+      }
+      
+      const response = await this.client.chat(chatOptions);
+      
+      const content = response.choices[0].message.content;
+      
+      // If response is supposed to be JSON, try to clean it if needed
+      if (response_format?.type === 'json_object') {
+        return extractJsonFromMarkdown(content);
+      }
+      
+      return content;
+    } catch (error) {
+      logger.error('Error generating text with Mistral AI:', error instanceof Error ? error.message : String(error));
+      throw new Error('Failed to generate text');
+    }
+  }
+  
+  /**
+   * Generate JSON directly and parse it to an object
+   */
+  async generateJSON<T>({
+    prompt,
+    temperature = 0.2,
+    max_tokens = 3000
+  }: {
+    prompt: string;
+    temperature?: number;
+    max_tokens?: number;
+  }): Promise<T> {
+    try {
+      const textResponse = await this.generateText({
+        prompt: `${prompt}\n\nIMPORTANT: Return ONLY valid JSON without any markdown formatting or explanatory text.`,
+        temperature,
+        max_tokens,
+        response_format: { type: 'json_object' }
       });
       
-      return response.choices[0].message.content;
+      try {
+        return JSON.parse(textResponse) as T;
+      } catch (parseError) {
+        logger.error('Error parsing JSON response:', parseError instanceof Error ? parseError.message : String(parseError));
+        throw new Error('Failed to parse JSON from model response');
+      }
     } catch (error) {
-      logger.error('Error generating text with Mistral AI:', error instanceof Error ? error : new Error(String(error)));
-      throw new Error('Failed to generate text');
+      logger.error('Error generating JSON with Mistral AI:', error instanceof Error ? error.message : String(error));
+      throw error;
     }
   }
 }

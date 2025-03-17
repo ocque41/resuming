@@ -1,7 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/db/queries.server";
-import { mistralService } from "@/lib/services/mistral.service";
+import { mistralService, extractJsonFromMarkdown } from "@/lib/services/mistral.service";
 import { logger } from "@/lib/logger";
+
+// Define the expected shape of a job match analysis response
+interface JobMatchAnalysis {
+  overallMatchScore: number;
+  strengths: string[];
+  gaps: string[];
+  matchedKeywords: string[];
+  missingKeywords: string[];
+  sectionAnalysis: Array<{ 
+    section: string; 
+    score: number; 
+    comments: string;
+  }>;
+  dimensionalScores: {
+    technicalSkills: number;
+    experience: number;
+    education: number;
+    softSkills: number;
+  };
+  improvements: string[];
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -72,21 +93,44 @@ Format your response as a JSON object with the following structure:
   "improvements": [string]
 }`;
 
-    // Generate the analysis using our existing mistralService
-    const rawResponse = await mistralService.generateText({
-      prompt,
-      temperature: 0.3,
-      max_tokens: 3000,
-      response_format: { type: "json_object" },
-    });
-
-    // Parse the JSON response
-    const analysis = JSON.parse(rawResponse);
-
-    // Return the analysis
-    return NextResponse.json(analysis);
+    try {
+      // Use the new generateJSON method which handles JSON parsing internally
+      const analysis = await mistralService.generateJSON<JobMatchAnalysis>({
+        prompt,
+        temperature: 0.3,
+        max_tokens: 3000
+      });
+      
+      // Return the analysis
+      return NextResponse.json(analysis);
+    } catch (parseError) {
+      logger.error("Error parsing job match analysis result:", parseError instanceof Error ? parseError.message : String(parseError));
+      
+      // Fallback: Try to generate text and parse it manually as a last resort
+      try {
+        const rawResponse = await mistralService.generateText({
+          prompt,
+          temperature: 0.3,
+          max_tokens: 3000,
+          response_format: { type: "json_object" }
+        });
+        
+        // Clean up response and handle potential markdown formatting
+        const cleanedResponse = extractJsonFromMarkdown(rawResponse);
+        const analysis = JSON.parse(cleanedResponse) as JobMatchAnalysis;
+        
+        logger.info("Successfully parsed job match analysis using fallback method");
+        return NextResponse.json(analysis);
+      } catch (fallbackError) {
+        logger.error("Fallback parsing also failed:", fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
+        return NextResponse.json(
+          { error: "Failed to parse job match analysis result" },
+          { status: 500 }
+        );
+      }
+    }
   } catch (error) {
-    logger.error("Error analyzing job match", error instanceof Error ? error : new Error(String(error)));
+    logger.error("Error analyzing job match", error instanceof Error ? error.message : String(error));
     return NextResponse.json(
       { error: "Failed to analyze job match" },
       { status: 500 }
