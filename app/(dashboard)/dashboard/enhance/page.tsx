@@ -73,9 +73,10 @@ function ErrorDisplay({ error }: { error: Error }) {
 
 export default async function EnhancePage() {
   try {
-    // For development, skip authentication
-    const isDevelopment = process.env.NODE_ENV === 'development';
+    // Force development mode temporarily to debug UI
+    const isDevelopment = true; // process.env.NODE_ENV === 'development';
     
+    // For development, skip authentication
     if (!isDevelopment) {
       // In production, check for authentication
       try {
@@ -84,7 +85,6 @@ export default async function EnhancePage() {
         
         if (authModule) {
           // Use a type assertion to avoid TypeScript errors
-          // This is safe because we're checking for the existence of the module at runtime
           const anyAuthModule = authModule as any;
           
           // Try to find auth config in the module
@@ -106,14 +106,20 @@ export default async function EnhancePage() {
           console.warn("Auth module not found, but continuing in development mode");
         }
       } catch (error) {
-        console.error("Authentication error:", error);
-        // In production, redirect to login on auth error
+        console.error("Authentication error details:", error);
+        // Instead of redirecting, show error UI during development
+        if (process.env.NODE_ENV === 'development') {
+          return <ErrorDisplay error={error instanceof Error ? error : new Error(String(error))} />;
+        }
         redirect("/login");
       }
     }
     
     // Use sample documents in development mode, empty array in production
     const documentsData: DocumentData[] = isDevelopment ? sampleDocuments : [];
+    
+    // Add this console log to verify environment
+    console.log("Current environment:", process.env.NODE_ENV);
     
     // Render the client component with proper props
     return <EnhancePageClient documentsData={documentsData} />;

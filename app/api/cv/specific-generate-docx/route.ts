@@ -101,6 +101,26 @@ export async function POST(request: NextRequest) {
 
     // Extract company name from job description if available
     let companyName = '';
+    let cleanJobTitle = jobTitle || '';
+
+    // Clean up job title - ensure it's not the entire job description
+    if (cleanJobTitle && cleanJobTitle.length > 50) {
+      // Job title is too long - extract a clean job title from it
+      logger.info(`Job title is suspiciously long (${cleanJobTitle.length} chars), attempting to extract clean title`);
+      
+      // Try to extract job title using regex patterns
+      const jobTitlePattern = /^([^.,:;\n]{3,50})/;
+      const match = cleanJobTitle.match(jobTitlePattern);
+      if (match && match[1]) {
+        cleanJobTitle = match[1].trim();
+        logger.info(`Extracted clean job title: "${cleanJobTitle}"`);
+      } else {
+        // Fallback - just use the first 30 chars
+        cleanJobTitle = cleanJobTitle.substring(0, 30).trim();
+        logger.info(`Using truncated job title: "${cleanJobTitle}"`);
+      }
+    }
+
     if (jobDescription) {
       // Look for company name in the job description
       const companyRegex = /(?:at|for|with|from|by)\s+([\w\s&\-',]+?)(?:\.|,|\sin\s|\spos\s|$)/i;
@@ -122,8 +142,8 @@ export async function POST(request: NextRequest) {
         setTimeout(() => reject(new Error('Document generation timed out after 30 seconds')), 30000);
       });
       
-      // Create a promise for the document generation
-      const generatePromise = generateSpecificDocx(cvText, jobTitle, companyName, jobDescription);
+      // Create a promise for the document generation - use the cleaned job title
+      const generatePromise = generateSpecificDocx(cvText, cleanJobTitle, companyName, jobDescription);
       
       // Race the promises
       docxBuffer = await Promise.race([generatePromise, timeoutPromise]) as Buffer;
@@ -193,61 +213,18 @@ async function generateSpecificDocx(
   ];
   
   // Parse the CV text into sections
-  const sections = await parseOptimizedText(cvText);
-  
-  // Log all detected sections to help with debugging
-  logger.info(`Detected sections: ${Object.keys(sections).join(', ')}`);
-  
-  // Check for sections that might have been detected with slightly different names
-  // and normalize them to our expected section names
-  const normalizedSections: Record<string, string | string[]> = { ...sections };
-  
-  // Section name normalization map
-  const sectionNormalizationMap: Record<string, string> = {
-    'SUMMARY': 'PROFILE',
-    'PROFESSIONAL SUMMARY': 'PROFILE',
-    'EXECUTIVE SUMMARY': 'PROFILE',
-    'ABOUT ME': 'PROFILE',
-    'WORK EXPERIENCE': 'EXPERIENCE',
-    'EMPLOYMENT HISTORY': 'EXPERIENCE',
-    'PROFESSIONAL EXPERIENCE': 'EXPERIENCE',
-    'WORK HISTORY': 'EXPERIENCE',
-    'TECHNICAL EXPERTISE': 'TECHNICAL SKILLS',
-    'TECH SKILLS': 'TECHNICAL SKILLS',
-    'CORE SKILLS': 'SKILLS',
-    'KEY SKILLS': 'SKILLS',
-    'SOFT SKILLS': 'PROFESSIONAL SKILLS',
-    'INTERPERSONAL SKILLS': 'PROFESSIONAL SKILLS',
-    'LANGUAGE PROFICIENCY': 'LANGUAGES',
-    'LANGUAGE SKILLS': 'LANGUAGES',
-    'LANGUAGE KNOWLEDGE': 'LANGUAGES',
-    'LANGUAGE PROFICIENCIES': 'LANGUAGES',
-    'ACCOMPLISHMENTS': 'ACHIEVEMENTS',
-    'KEY ACHIEVEMENTS': 'ACHIEVEMENTS',
-    'CERTIFICATIONS': 'CERTIFICATES',
-    'QUALIFICATIONS': 'EDUCATION'
-  };
-  
-  // Normalize section names
-  Object.keys(sections).forEach(sectionName => {
-    const normalizedName = sectionNormalizationMap[sectionName];
-    if (normalizedName && !normalizedSections[normalizedName]) {
-      logger.info(`Normalizing section name from "${sectionName}" to "${normalizedName}"`);
-      normalizedSections[normalizedName] = sections[sectionName];
-      // Keep the original section too for now
-    }
-  });
+  const sections = parseOptimizedText(cvText);
   
   // Merge PROFILE and SUMMARY sections to avoid duplication
-  if (normalizedSections['PROFILE'] || normalizedSections['SUMMARY']) {
+  if (sections['PROFILE'] || sections['SUMMARY']) {
     // Get content from both sections
-    const profileContent = typeof normalizedSections['PROFILE'] === 'string' 
-      ? normalizedSections['PROFILE'] 
-      : Array.isArray(normalizedSections['PROFILE']) ? normalizedSections['PROFILE'].join('\n') : '';
+    const profileContent = typeof sections['PROFILE'] === 'string' 
+      ? sections['PROFILE'] 
+      : Array.isArray(sections['PROFILE']) ? sections['PROFILE'].join('\n') : '';
     
-    const summaryContent = typeof normalizedSections['SUMMARY'] === 'string' 
-      ? normalizedSections['SUMMARY'] 
-      : Array.isArray(normalizedSections['SUMMARY']) ? normalizedSections['SUMMARY'].join('\n') : '';
+    const summaryContent = typeof sections['SUMMARY'] === 'string' 
+      ? sections['SUMMARY'] 
+      : Array.isArray(sections['SUMMARY']) ? sections['SUMMARY'].join('\n') : '';
     
     // Create a combined profile
     let combinedProfile = '';
@@ -280,18 +257,18 @@ async function generateSpecificDocx(
     }
     
     // Store the combined profile back to PROFILE
-    normalizedSections['PROFILE'] = combinedProfile;
+    sections['PROFILE'] = combinedProfile;
     
     // Remove SUMMARY to avoid duplication
-    if (normalizedSections['SUMMARY']) {
-      delete normalizedSections['SUMMARY'];
+    if (sections['SUMMARY']) {
+      delete sections['SUMMARY'];
     }
   }
   
   // Enhanced skills section deduplication logic
   // Step 1: Handle all skills-related sections together 
   const skillSectionNames = ['SKILLS', 'TECHNICAL SKILLS', 'PROFESSIONAL SKILLS'];
-  const presentSkillSections = skillSectionNames.filter(name => normalizedSections[name]);
+  const presentSkillSections = skillSectionNames.filter(name => sections[name]);
   
   if (presentSkillSections.length > 1) {
     logger.info(`Multiple skill sections detected: ${presentSkillSections.join(', ')}`);
@@ -300,111 +277,20 @@ async function generateSpecificDocx(
     const processedSkills: Record<string, string[]> = {};
     const skillWords = new Set<string>(); // Tracks unique skill words for better deduplication
     
-    // Define skill validation regexes
-    const commonTechnicalSkillsRegex = /\b(?:html|css|javascript|typescript|react|angular|vue|node|express|python|java|c#|c\+\+|ruby|php|go|rust|swift|sql|mysql|postgresql|mongodb|oracle|database|aws|azure|gcp|cloud|docker|kubernetes|jenkins|git|github|gitlab|office|excel|word|powerpoint|tableau|powerbi|sap|salesforce|jira|agile|scrum|photoshop|illustrator|indesign|design|adobe|figma|sketch)\b/i;
-    
-    const commonProfessionalSkillsRegex = /\b(?:leadership|management|communication|teamwork|collaboration|problem[-\s]solving|critical thinking|time management|organization|project management|customer service|negotiation|conflict resolution|strategy|analysis|research|writing|editing|presentation|public speaking|interpersonal|coaching|mentoring|detail[-\s]oriented|creativity|innovation|adaptability|flexibility)\b/i;
-    
-    // Track extracted skills to avoid duplicates
-    const allExtractedSkills = new Set<string>();
-    
     for (const sectionName of presentSkillSections) {
       // Get content and convert to array
-      let skillsContent = normalizedSections[sectionName];
+      let skillsContent = sections[sectionName];
       let skillsArray = Array.isArray(skillsContent) ? [...skillsContent] : [skillsContent];
       
       // Process into individual skills
       skillsArray = skillsArray
         .flatMap(item => typeof item === 'string' ? item.split('\n') : item)
         .map(skill => typeof skill === 'string' ? skill.trim() : skill)
-        .filter(skill => {
-          if (typeof skill !== 'string' || skill.length === 0) {
-            return false;
-          }
-          
-          // Convert to lowercase for comparison
-          const skillLower = skill.toLowerCase();
-          
-          // Core filter to remove non-skills and keep actual skills
-          const isValidSkill = (
-            // Exclude section headers - more strict pattern matching
-            !/^(skills|technical|professional|core|key|language|competenc|soft|hard)/i.test(skill) &&
-            
-            // Exclude social media platforms when they appear alone (they're not skills)
-            !/^(facebook|twitter|instagram|linkedin|tiktok|threads|youtube|social media)$/i.test(skillLower) &&
-            
-            // Exclude filler words and meta-content that aren't actual skills
-            !/^(for|to|from|by|with|of|about|at|in|on|the|a|an|this|that|these|those|it|they|etc|including|brands|listed|mentioned|above|below)/i.test(skill) &&
-            
-            // Exclude common phrases that aren't skills
-            !/^(for yourself|including|or organizations|yourself|etc\.?|brands|your|you'll|you will)/i.test(skillLower) &&
-            
-            // Exclude long phrases that are likely job description fragments
-            skill.split(' ').length <= 6 &&
-            
-            // Skill should have reasonable length (not too short, not too long)
-            skill.length >= 2 && skill.length <= 50 &&
-            
-            // Valid skills typically don't have multiple sentences
-            !skill.includes('. ') &&
-            
-            // Valid skills don't contain URLs or email addresses
-            !skill.includes('http') && !skill.includes('@') &&
-            
-            // Must contain at least one letter (not just numbers or symbols)
-            /[a-z]/i.test(skill)
-          );
-          
-          // If it's already a clearly invalid skill, return false
-          if (!isValidSkill) return false;
-          
-          // Recognize common technical skills - higher confidence
-          if (commonTechnicalSkillsRegex.test(skillLower)) {
-            return true;
-          }
-          
-          // Recognize common professional skills - higher confidence
-          if (commonProfessionalSkillsRegex.test(skillLower)) {
-            return true;
-          }
-          
-          // For other items, they should:
-          // 1. Be reasonably short (already checked)
-          // 2. Not start with common non-skill words
-          // 3. Not be just numbers
-          return (
-            // Not just numbers
-            !/^\d+$/.test(skill) &&
-            
-            // Not just a punctuation
-            !/^[.,;:()\[\]{}'"]+$/.test(skill) &&
-            
-            // Either starts with bullet or has a capital letter (proper format)
-            (/^[•\-*]/.test(skill) || /[A-Z]/.test(skill))
-          );
-        });
-      
-      // Further clean skill items - remove leading bullets and standardize format
-      skillsArray = skillsArray.map(skill => {
-        if (typeof skill !== 'string') return '';
-        
-        // Remove leading bullets/characters
-        let cleanedSkill = skill.replace(/^[•\-*\s]+/, '');
-        
-        // Make first letter uppercase for consistency
-        if (cleanedSkill.length > 0) {
-          cleanedSkill = cleanedSkill.charAt(0).toUpperCase() + cleanedSkill.slice(1);
-        }
-        
-        return cleanedSkill;
-      }).filter(skill => skill && !allExtractedSkills.has(skill.toLowerCase()));
-      
-      // Add to tracking set to avoid duplicates
-      skillsArray.forEach(skill => {
-        if (typeof skill === 'string') {
-          allExtractedSkills.add(skill.toLowerCase());
-        }
-      });
+        .filter(skill => 
+          typeof skill === 'string' && 
+          skill.length > 0 && 
+          !skill.toUpperCase().includes(sectionName.toUpperCase()) &&
+          !skill.toUpperCase().includes('SKILL'));
       
       // Store processed array
       processedSkills[sectionName] = skillsArray as string[];
@@ -420,37 +306,12 @@ async function generateSpecificDocx(
       }
     }
     
-    // If after filtering we have empty skill sections, extract skills from job description
-    for (const sectionName of presentSkillSections) {
-      if (processedSkills[sectionName].length === 0 && jobDescription) {
-        logger.info(`${sectionName} section is empty after filtering, extracting from job description`);
-        
-        // Get skills from job description
-        let extractedSkills: string[] = [];
-        
-        if (sectionName === 'TECHNICAL SKILLS') {
-          // For technical skills, use tech-focused extraction
-          extractedSkills = extractTechnicalTermsFromJobDescription(jobDescription);
-        } else {
-          // For other skills, use the general skill extraction
-          extractedSkills = extractSkillsFromJobDescription(jobDescription)
-            .filter(skill => !allExtractedSkills.has(skill.toLowerCase()));
-        }
-        
-        // Add the extracted skills
-        processedSkills[sectionName] = extractedSkills;
-        
-        // Update tracking set
-        extractedSkills.forEach(skill => allExtractedSkills.add(skill.toLowerCase()));
-      }
-    }
-    
     // Prioritizing specific skill sections over generic ones
     if (processedSkills['TECHNICAL SKILLS'] || processedSkills['PROFESSIONAL SKILLS']) {
       // If we have specific skill sections, remove the generic SKILLS section
-      if (normalizedSections['SKILLS']) {
+      if (sections['SKILLS']) {
         logger.info('Deleting generic SKILLS section since we have specific skill sections');
-        delete normalizedSections['SKILLS'];
+        delete sections['SKILLS'];
       }
     }
     
@@ -488,29 +349,29 @@ async function generateSpecificDocx(
       });
       
       // Update sections with deduplicated content
-      normalizedSections['TECHNICAL SKILLS'] = processedSkills['TECHNICAL SKILLS'];
-      normalizedSections['PROFESSIONAL SKILLS'] = processedSkills['PROFESSIONAL SKILLS'];
+      sections['TECHNICAL SKILLS'] = processedSkills['TECHNICAL SKILLS'];
+      sections['PROFESSIONAL SKILLS'] = processedSkills['PROFESSIONAL SKILLS'];
       
       logger.info(`After deduplication: TECHNICAL SKILLS has ${processedSkills['TECHNICAL SKILLS'].length} items, PROFESSIONAL SKILLS has ${processedSkills['PROFESSIONAL SKILLS'].length} items`);
       
       // If either section is now empty, remove it
       if (processedSkills['PROFESSIONAL SKILLS'].length === 0) {
         logger.info('Removed PROFESSIONAL SKILLS section as all items were duplicates of TECHNICAL SKILLS');
-        delete normalizedSections['PROFESSIONAL SKILLS'];
+        delete sections['PROFESSIONAL SKILLS'];
       }
       
       if (processedSkills['TECHNICAL SKILLS'].length === 0) {
         logger.info('Removed TECHNICAL SKILLS section as all items were duplicates');
-        delete normalizedSections['TECHNICAL SKILLS'];
+        delete sections['TECHNICAL SKILLS'];
       }
     }
   }
   
   // Rename 'SKILLS' to 'OTHER SKILLS' if we have both technical/professional and general skills
   // to better distinguish between them in the final document
-  if (normalizedSections['SKILLS'] && (normalizedSections['TECHNICAL SKILLS'] || normalizedSections['PROFESSIONAL SKILLS'])) {
-    normalizedSections['OTHER SKILLS'] = normalizedSections['SKILLS'];
-    delete normalizedSections['SKILLS'];
+  if (sections['SKILLS'] && (sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS'])) {
+    sections['OTHER SKILLS'] = sections['SKILLS'];
+    delete sections['SKILLS'];
     // Update section order to include OTHER SKILLS
     const otherSkillsIndex = sectionOrder.indexOf('SKILLS');
     if (otherSkillsIndex !== -1) {
@@ -541,7 +402,9 @@ async function generateSpecificDocx(
   
   // Create title with job title if available
   const pageTitle = new Paragraph({
-    text: 'Curriculum Vitae', // Always use simple title without including job info
+    text: jobTitle 
+      ? `Curriculum Vitae - ${jobTitle}${companyName ? ` at ${companyName}` : ''}`
+      : 'Curriculum Vitae',
             heading: HeadingLevel.HEADING_1,
             alignment: AlignmentType.CENTER,
   });
@@ -898,133 +761,116 @@ async function generateSpecificDocx(
       
       continue; // Skip the generic content handling
     }
-    // Special handling for Languages
+    // Special handling for Languages section
     else if (section === 'LANGUAGES') {
-      logger.info(`Processing languages section with content: ${typeof content === 'string' ? content.substring(0, 50) + '...' : 'array'}`);
-      
-      paragraphs.push(
-        new Paragraph({
-          text: 'Languages',
-          heading: HeadingLevel.HEADING_2,
-          thematicBreak: true,
-          spacing: {
-            before: 200,
-            after: 120,
+      // Add languages header with special formatting
+      const languagesHeader = new Paragraph({
+        text: 'Languages',
+        heading: HeadingLevel.HEADING_2,
+        spacing: {
+          before: 400,
+          after: 200,
+        },
+        thematicBreak: true,
+        border: {
+          bottom: {
+            color: 'B4916C', // Brand color for visual separation
+            size: 1,
+            space: 4,
+            style: BorderStyle.SINGLE,
           },
-        })
-      );
+        },
+      });
+      paragraphs.push(languagesHeader);
       
-      // Normalize the content into an array
-      let languageItems: string[] = [];
-      
+      // Process language content with enhanced formatting
       if (typeof content === 'string') {
-        // Split by common delimiters
-        languageItems = content
-          .split(/[,;\n]/)
-          .map(lang => lang.trim())
-          .filter(lang => lang.length > 0 && 
-                 !/^languages|language skills|language proficiency|fluent in/i.test(lang));
-            } else if (Array.isArray(content)) {
-        languageItems = content
-          .filter(item => item.trim().length > 0 && 
-                 !/^languages|language skills|language proficiency|fluent in/i.test(item));
-      }
-      
-      // Log the number of language items found
-      logger.info(`Found ${languageItems.length} language items to process`);
-      
-      // Process each language
-      const processedLanguages = new Map<string, string>(); // Map of language name to proficiency
-      
-      // Common proficiency levels for normalization
-      const proficiencyLevels = [
-        'Native', 'Fluent', 'Proficient', 'Advanced', 'Intermediate', 'Basic', 'Beginner'
-      ];
-      
-      // Extract language name and proficiency from each item
-      for (const item of languageItems) {
-        // Check for common separators
-        const hasSeparator = item.includes(':') || item.includes('-') || item.includes('–') || 
-                            item.includes('(') || item.includes(',');
+        const contentLines = content.split('\n').filter(line => line.trim());
         
-        let languageName = item.trim();
-        let proficiencyLevel = '';
-        
-        // Parse based on separator type
-        if (hasSeparator) {
-          if (item.includes(':')) {
-            const [name, level] = item.split(':', 2);
-            languageName = name.trim();
-            proficiencyLevel = level.trim();
-          } else if (item.includes('-') || item.includes('–')) {
-            const parts = item.split(/[-–]/);
+        for (const line of contentLines) {
+          if (!line.trim()) continue;
+          
+          // Check if this language line contains a proficiency level marker
+          const hasSeparator = line.includes(':') || line.includes('-') || line.includes('–');
+          
+          let languageName = line.trim();
+          let proficiencyLevel = '';
+          
+          // Try to separate language name from proficiency level
+          if (hasSeparator) {
+            const parts = line.split(/[:–-]/);
             if (parts.length >= 2) {
               languageName = parts[0].trim();
               proficiencyLevel = parts.slice(1).join(' - ').trim();
             }
-          } else if (item.includes('(')) {
-            const match = item.match(/^(.*?)\s*\((.*?)\)$/);
-            if (match) {
-              languageName = match[1].trim();
-              proficiencyLevel = match[2].trim();
-            }
-          } else if (item.includes(',')) {
-            const parts = item.split(',');
+          }
+          
+          paragraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: languageName,
+                  bold: true,
+                  size: 24,
+                }),
+                ...(proficiencyLevel ? [
+                  new TextRun({
+                    text: ` - ${proficiencyLevel}`,
+                    italics: true,
+                    size: 24,
+                  }),
+                ] : []),
+              ],
+              spacing: {
+                before: 120,
+                after: 120,
+              },
+            })
+          );
+              }
+            } else if (Array.isArray(content)) {
+        // Handle array content for languages
+              for (const item of content) {
+          if (!item.trim()) continue;
+          
+          // Check if this language line contains a proficiency level marker
+          const hasSeparator = item.includes(':') || item.includes('-') || item.includes('–');
+          
+          let languageName = item.trim();
+          let proficiencyLevel = '';
+          
+          // Try to separate language name from proficiency level
+          if (hasSeparator) {
+            const parts = item.split(/[:–-]/);
             if (parts.length >= 2) {
               languageName = parts[0].trim();
-              proficiencyLevel = parts.slice(1).join(', ').trim();
+              proficiencyLevel = parts.slice(1).join(' - ').trim();
             }
           }
-        } else {
-          // Check if the item contains any known proficiency level
-          for (const level of proficiencyLevels) {
-            if (item.toLowerCase().includes(level.toLowerCase())) {
-              const levelIndex = item.toLowerCase().indexOf(level.toLowerCase());
-              languageName = item.substring(0, levelIndex).trim();
-              proficiencyLevel = item.substring(levelIndex).trim();
-              break;
-            }
-          }
-        }
-        
-        // If we have a recognized language, add or update it
-        if (languageName && languageName.length > 1) {
-          // Normalize the language name (capitalize first letter)
-          languageName = languageName.charAt(0).toUpperCase() + languageName.slice(1).toLowerCase();
           
-          // Only add proficiency if it's not already in the language name
-          if (proficiencyLevel && !languageName.toLowerCase().includes(proficiencyLevel.toLowerCase())) {
-            processedLanguages.set(languageName, proficiencyLevel);
-          } else {
-            processedLanguages.set(languageName, '');
-          }
-        }
-      }
-      
-      // Add the processed languages to the document
-      for (const [language, proficiency] of processedLanguages.entries()) {
                 paragraphs.push(
                   new Paragraph({
                     children: [
                       new TextRun({
-                text: language,
+                  text: languageName,
                         bold: true,
-                size: 24,
-                      }),
-              ...(proficiency ? [
-                      new TextRun({
-                  text: ` - ${proficiency}`,
-                  italics: true,
                   size: 24,
-                }),
-              ] : []),
+                      }),
+                ...(proficiencyLevel ? [
+                      new TextRun({
+                    text: ` - ${proficiencyLevel}`,
+                    italics: true,
+                    size: 24,
+                  }),
+                ] : []),
                     ],
                     spacing: {
                       before: 120,
-              after: 120,
-            },
-          })
-        );
+                after: 120,
+              },
+            })
+          );
+        }
       }
       
       continue; // Skip the generic content handling
@@ -1061,49 +907,17 @@ async function generateSpecificDocx(
       // Handle content based on type (array or string)
       let skillItems = Array.isArray(content) ? content : [content];
       
-      // Clean skill items to ensure they don't include section headers or non-skills
+      // Clean skill items to ensure they don't include section headers
       skillItems = skillItems
         .flatMap(item => typeof item === 'string' ? item.split('\n') : item)
         .map(skill => typeof skill === 'string' ? skill.trim() : skill)
-        .filter(skill => {
-          if (typeof skill !== 'string' || skill.length === 0) {
-            return false;
-          }
-          
-          // Only filter out obvious non-skills to be more inclusive
-          const isSkillLike = (
-            // Exclude exact section headers
-            !(skill.toUpperCase() === section || 
-              skill.toUpperCase() === 'TECHNICAL SKILLS' || 
-              skill.toUpperCase() === 'PROFESSIONAL SKILLS' || 
-              skill.toUpperCase() === 'SKILLS') &&
-            
-            // Exclude obvious social media profiles
-            !skill.match(/^\s*(https?:\/\/)?(www\.)?([a-z]+\.(com|org|net)\/)/i) &&
-            
-            // Keep phrases of reasonable length
-            skill.split(' ').length <= 8 &&
-            
-            // Should have at least 2 characters to be meaningful
-            skill.replace(/[•\-\*\s]/g, '').length >= 2
-          );
-          
-          return isSkillLike;
-        });
-      
-      // If we ended up with no skills, try to extract some from job description
-      if (skillItems.length === 0 && jobDescription) {
-        logger.info('No skills found after filtering, extracting from job description');
-        skillItems = extractSkillsFromJobDescription(jobDescription);
-      }
-      
-      // Further clean skill items - remove leading bullets if we'll add our own
-      skillItems = skillItems.map(skill => {
-        if (typeof skill === 'string') {
-          return skill.replace(/^[•\-\*\s]+/, '');
-        }
-        return skill;
-      });
+        .filter(skill => 
+          typeof skill === 'string' && 
+          skill.length > 0 && 
+          !skill.toUpperCase().includes(section) &&
+          !skill.toUpperCase().includes('TECHNICAL') &&
+          !skill.toUpperCase().includes('PROFESSIONAL') &&
+          !skill.toUpperCase().includes('SKILL'));
       
       // Create bullet points for each skill
       for (const skill of skillItems) {
@@ -1405,7 +1219,7 @@ async function generateSpecificDocx(
 /**
  * Parse optimized text into sections
  */
-async function parseOptimizedText(text: string): Promise<Record<string, string | string[]>> {
+function parseOptimizedText(text: string): Record<string, string | string[]> {
   const sections: Record<string, string | string[]> = {};
   
   // Return empty sections if no text provided
@@ -1456,22 +1270,22 @@ async function parseOptimizedText(text: string): Promise<Record<string, string |
   // Define section detection patterns
   const sectionPatterns = [
     { name: 'SUMMARY', regex: /^[\s*•\-\|]*(?:SUMMARY|PROFESSIONAL\s+SUMMARY|EXECUTIVE\s+SUMMARY|PROFILE\s+SUMMARY)[\s:]*$/i, priority: 5 },
-    { name: 'PROFILE', regex: /^[\s*•\-\|]*(?:PROFILE|PROFESSIONAL\s+PROFILE|ABOUT(?:\s+ME)?|PERSONAL\s+STATEMENT)[\s:]*$/i, priority: 5 },
-    { name: 'EXPERIENCE', regex: /^[\s*•\-\|]*(?:EXPERIENCE|WORK\s+EXPERIENCE|EMPLOYMENT(?:\s+HISTORY)?|PROFESSIONAL\s+EXPERIENCE|CAREER|WORK\s+HISTORY|PROFESSIONAL\s+BACKGROUND)[\s:]*$/i, priority: 4 },
-    { name: 'EDUCATION', regex: /^[\s*•\-\|]*(?:EDUCATION|ACADEMIC\s+BACKGROUND|ACADEMIC\s+HISTORY|QUALIFICATIONS|EDUCATIONAL\s+BACKGROUND|ACADEMIC\s+QUALIFICATIONS)[\s:]*$/i, priority: 4 },
-    { name: 'SKILLS', regex: /^[\s*•\-\|]*(?:SKILLS|CORE\s+SKILLS|KEY\s+SKILLS|SKILL\s+SET|COMPETENCIES|AREAS\s+OF\s+EXPERTISE)[\s:]*$/i, priority: 3 },
-    { name: 'TECHNICAL SKILLS', regex: /^[\s*•\-\|]*(?:TECHNICAL\s+SKILLS|TECHNICAL\s+EXPERTISE|TECH\s+SKILLS|TECHNICAL\s+PROFICIENCIES|HARD\s+SKILLS|TECHNICAL\s+COMPETENCIES|IT\s+SKILLS|TECHNOLOGIES)[\s:]*$/i, priority: 4 },
-    { name: 'PROFESSIONAL SKILLS', regex: /^[\s*•\-\|]*(?:PROFESSIONAL\s+SKILLS|SOFT\s+SKILLS|INTERPERSONAL\s+SKILLS|CORE\s+COMPETENCIES|TRANSFERABLE\s+SKILLS|PERSONAL\s+SKILLS)[\s:]*$/i, priority: 4 },
-    { name: 'LANGUAGES', regex: /^[\s*•\-\|]*(?:LANGUAGES?|LANGUAGE\s+SKILLS|LANGUAGE\s+PROFICIENCIES|LANGUAGE\s+KNOWLEDGE|FOREIGN\s+LANGUAGES|LANGUAGE\s+COMPETENCIES|LINGUISTIC\s+SKILLS)[\s:]*$/i, priority: 3 },
-    { name: 'ACHIEVEMENTS', regex: /^[\s*•\-\|]*(?:ACHIEVEMENTS|ACCOMPLISHMENTS|KEY\s+ACHIEVEMENTS|MAJOR\s+ACCOMPLISHMENTS|NOTABLE\s+ACHIEVEMENTS|KEY\s+ACCOMPLISHMENTS)[\s:]*$/i, priority: 3 },
-    { name: 'CERTIFICATIONS', regex: /^[\s*•\-\|]*(?:CERTIFICATIONS?|CERTIFICATES?|PROFESSIONAL\s+CERTIFICATIONS?|CREDENTIALS|ACCREDITATIONS|LICENSES|PROFESSIONAL\s+QUALIFICATIONS)[\s:]*$/i, priority: 3 },
-    { name: 'PROJECTS', regex: /^[\s*•\-\|]*(?:PROJECTS?|KEY\s+PROJECTS?|MAJOR\s+PROJECTS?|PROJECT\s+EXPERIENCE|SIGNIFICANT\s+PROJECTS?)[\s:]*$/i, priority: 3 },
-    { name: 'PUBLICATIONS', regex: /^[\s*•\-\|]*(?:PUBLICATIONS?|PUBLISHED\s+WORKS?|PAPERS|RESEARCH\s+PUBLICATIONS?|ARTICLES|JOURNALS)[\s:]*$/i, priority: 2 },
-    { name: 'REFERENCES', regex: /^[\s*•\-\|]*(?:REFERENCES?|PROFESSIONAL\s+REFERENCES?|RECOMMENDATION|REFEREES)[\s:]*$/i, priority: 1 },
-    { name: 'VOLUNTEER', regex: /^[\s*•\-\|]*(?:VOLUNTEER(?:\s+EXPERIENCE)?|COMMUNITY\s+SERVICE|COMMUNITY\s+INVOLVEMENT|VOLUNTEERING|VOLUNTARY\s+WORK)[\s:]*$/i, priority: 2 },
-    { name: 'INTERESTS', regex: /^[\s*•\-\|]*(?:INTERESTS?|HOBBIES|ACTIVITIES|PERSONAL\s+INTERESTS?|PASTIMES|LEISURE\s+ACTIVITIES)[\s:]*$/i, priority: 1 },
-    { name: 'GOALS', regex: /^[\s*•\-\|]*(?:GOALS|CAREER\s+GOALS|OBJECTIVES?|CAREER\s+OBJECTIVES?|PROFESSIONAL\s+GOALS|ASPIRATIONS)[\s:]*$/i, priority: 3 },
-    { name: 'EXPECTATIONS', regex: /^[\s*•\-\|]*(?:EXPECTATIONS|SALARY\s+EXPECTATIONS|COMPENSATION\s+REQUIREMENTS|SALARY\s+REQUIREMENTS|DESIRED\s+COMPENSATION)[\s:]*$/i, priority: 2 }
+    { name: 'PROFILE', regex: /^[\s*•\-\|]*(?:PROFILE|PROFESSIONAL\s+PROFILE|ABOUT(?:\s+ME)?)[\s:]*$/i, priority: 5 },
+    { name: 'EXPERIENCE', regex: /^[\s*•\-\|]*(?:EXPERIENCE|WORK\s+EXPERIENCE|EMPLOYMENT(?:\s+HISTORY)?|PROFESSIONAL\s+EXPERIENCE|CAREER|WORK\s+HISTORY)[\s:]*$/i, priority: 4 },
+    { name: 'EDUCATION', regex: /^[\s*•\-\|]*(?:EDUCATION|ACADEMIC\s+BACKGROUND|ACADEMIC\s+HISTORY|QUALIFICATIONS)[\s:]*$/i, priority: 4 },
+    { name: 'SKILLS', regex: /^[\s*•\-\|]*(?:SKILLS|CORE\s+SKILLS|KEY\s+SKILLS)[\s:]*$/i, priority: 3 },
+    { name: 'TECHNICAL SKILLS', regex: /^[\s*•\-\|]*(?:TECHNICAL\s+SKILLS|TECHNICAL\s+EXPERTISE|TECH\s+SKILLS|TECHNICAL\s+PROFICIENCIES)[\s:]*$/i, priority: 4 },
+    { name: 'PROFESSIONAL SKILLS', regex: /^[\s*•\-\|]*(?:PROFESSIONAL\s+SKILLS|SOFT\s+SKILLS|INTERPERSONAL\s+SKILLS|CORE\s+COMPETENCIES)[\s:]*$/i, priority: 4 },
+    { name: 'LANGUAGES', regex: /^[\s*•\-\|]*(?:LANGUAGES|LANGUAGE\s+SKILLS|LANGUAGE\s+PROFICIENCIES|LANGUAGE\s+KNOWLEDGE)[\s:]*$/i, priority: 3 },
+    { name: 'ACHIEVEMENTS', regex: /^[\s*•\-\|]*(?:ACHIEVEMENTS|ACCOMPLISHMENTS|KEY\s+ACHIEVEMENTS|MAJOR\s+ACCOMPLISHMENTS)[\s:]*$/i, priority: 3 },
+    { name: 'CERTIFICATIONS', regex: /^[\s*•\-\|]*(?:CERTIFICATIONS|CERTIFICATES|PROFESSIONAL\s+CERTIFICATIONS|CREDENTIALS)[\s:]*$/i, priority: 3 },
+    { name: 'PROJECTS', regex: /^[\s*•\-\|]*(?:PROJECTS|KEY\s+PROJECTS|MAJOR\s+PROJECTS|PROJECT\s+EXPERIENCE)[\s:]*$/i, priority: 3 },
+    { name: 'PUBLICATIONS', regex: /^[\s*•\-\|]*(?:PUBLICATIONS|PUBLISHED\s+WORKS|PAPERS|RESEARCH\s+PUBLICATIONS)[\s:]*$/i, priority: 2 },
+    { name: 'REFERENCES', regex: /^[\s*•\-\|]*(?:REFERENCES|PROFESSIONAL\s+REFERENCES|RECOMMENDATION)[\s:]*$/i, priority: 1 },
+    { name: 'VOLUNTEER', regex: /^[\s*•\-\|]*(?:VOLUNTEER(?:\s+EXPERIENCE)?|COMMUNITY\s+SERVICE|COMMUNITY\s+INVOLVEMENT)[\s:]*$/i, priority: 2 },
+    { name: 'INTERESTS', regex: /^[\s*•\-\|]*(?:INTERESTS|HOBBIES|ACTIVITIES|PERSONAL\s+INTERESTS)[\s:]*$/i, priority: 1 },
+    { name: 'GOALS', regex: /^[\s*•\-\|]*(?:GOALS|CAREER\s+GOALS|OBJECTIVES|CAREER\s+OBJECTIVES)[\s:]*$/i, priority: 3 },
+    { name: 'EXPECTATIONS', regex: /^[\s*•\-\|]*(?:EXPECTATIONS|SALARY\s+EXPECTATIONS|COMPENSATION\s+REQUIREMENTS)[\s:]*$/i, priority: 2 }
   ];
 
   // Process each line with improved content extraction, focusing on actual profile content
@@ -1554,122 +1368,295 @@ async function parseOptimizedText(text: string): Promise<Record<string, string |
     logger.info(`Added potential profile paragraph as PROFILE section, length: ${potentialProfile.length} characters`);
   }
   
-  // Enhanced SKILLS section detection - if no skills section was found explicitly
-  if (!sections['SKILLS'] && !sections['TECHNICAL SKILLS'] && !sections['PROFESSIONAL SKILLS']) {
-    logger.info('No skills sections found, looking for skills with aggressive detection methods');
+  // Enhanced EXPERIENCE section detection
+  if (!sections['EXPERIENCE']) {
+    logger.info('Looking for experience content with aggressive detection methods');
     
-    // Common skill indicators that might appear in line prefixes
-    const skillIndicatorPrefixes = [
-      /^[\s*•\-]*(?:proficient in|skilled in|expertise in|knowledge of|experience with|familiar with)/i,
-      /^[\s*•\-]*(?:proficiency in|mastery of|trained in|certified in|qualified in)/i
+    // Improved detection for work experience entries - more patterns
+    const datePatterns = [
+      /\b\d{4}[\s-–—]+(?:\d{4}|present|current|now|ongoing)\b/i,
+      /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\.\s]+\d{4}[\s-–—]+(?:present|current|now|ongoing|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec[\.\s]+\d{4})\b/i,
+      /\b\d{1,2}\/\d{4}[\s-–—]+(?:present|current|now|\d{1,2}\/\d{4})\b/i,
+      /\(\d{4}[\s-–—]+(?:\d{4}|present|current|now|ongoing)\)/i,
+      /\b(?:20\d{2}|19\d{2})[\s\-–—]+(?:20\d{2}|19\d{2}|present|current|now|ongoing)\b/i,
+      /\b(?:january|february|march|april|may|june|july|august|september|october|november|december)[\s,]+\d{4}[\s\-–—]+(?:present|current|now|january|february|march|april|may|june|july|august|september|october|november|december[\s,]+\d{4})\b/i
     ];
     
-    // Skill-like patterns (technical terms, languages, tools, etc.)
-    const skillPatterns = [
-      /\b(?:html|css|javascript|typescript|react|angular|vue|node|express|python|java|c#|c\+\+|ruby|php|go|rust|swift)\b/i,
-      /\b(?:sql|mysql|postgresql|mongodb|oracle|database|aws|azure|gcp|cloud|docker|kubernetes|jenkins|git|github|gitlab)\b/i,
-      /\b(?:microsoft|excel|word|powerpoint|office|powerbi|tableau|sap|salesforce|jira|agile|scrum|kanban|lean)\b/i,
-      /\b(?:machine learning|ai|artificial intelligence|data science|data analysis|big data|statistics|analytics|visualization)\b/i,
-      /\b(?:marketing|sales|customer service|communication|leadership|management|teamwork|collaboration)\b/i,
-      /\b(?:accounting|finance|budgeting|forecasting|reporting|compliance|audit|legal|regulatory)\b/i,
-      /\b(?:design|ux|ui|photoshop|illustrator|indesign|sketch|figma|adobe|creative suite)\b/i,
-      /\b(?:writing|editing|copywriting|content|social media|seo|digital marketing|analytics|email marketing)\b/i,
-      /\b(?:english|spanish|french|german|italian|portuguese|chinese|japanese|korean|russian|arabic)\b/i
+    const titlePatterns = [
+      /^([A-Z][A-Za-z\s&,]+?)(?:,|\sat\s|\sfor\s|\swith\s|\s-|\s\(|\n|$)/i,
+      /(?:as|position|role|title)(?:\s+of)?(?:\s+a)?\s+([A-Z][A-Za-z\s&,]+?)(?:[,\.]\s|\s-|\s\(|\n|$)/i,
+      /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*$/,
+      /\b(?:senior|junior|lead|principal|chief|head|director|manager|supervisor|associate|assistant|coordinator|specialist|analyst|consultant|engineer|developer|designer|architect|officer|executive|administrator|representative)\b/i
     ];
     
-    // Look for lines that might contain skills
-    const technicalSkills: string[] = [];
-    const softSkills: string[] = [];
+    const experienceBlocks: string[][] = [];
+    let currentBlock: string[] = [];
+    let inExperienceBlock = false;
+    let blockStartIndex = -1;
     
-    // Check all lines for skill-like content
+    // First pass: identify potential job title/date lines
+    const potentialExperienceLines: number[] = [];
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue;
       
-      // Skip lines that are too long to be a single skill
-      if (line.length > 100) continue;
-      
-      // Skip lines that are clearly contact info
-      if (line.includes('@') || line.includes('linkedin.com') || line.match(/^\+?[\d\s()-]{7,}$/)) continue;
-      
-      // Check for skill indicator prefixes
-      const hasSkillPrefix = skillIndicatorPrefixes.some(pattern => pattern.test(line));
-      
-      // Check for skill-like patterns
-      let hasSkillPattern = false;
-      for (const pattern of skillPatterns) {
-        if (pattern.test(line.toLowerCase())) {
-          hasSkillPattern = true;
+      // Check for date patterns
+      let hasDate = false;
+      for (const pattern of datePatterns) {
+        if (pattern.test(line)) {
+          hasDate = true;
           break;
         }
       }
       
-      // Check if the line is a bullet point - likely a skill item
-      const isBulletPoint = /^[\s*•\-]+/.test(line);
-      
-      // Check if line is a short phrase likely to be a skill
-      const isShortPhrase = line.length < 40 && 
-                           !line.includes('.') && 
-                           !/^[A-Z][A-Z\s]+$/.test(line) && // Not all caps
-                           !/\b(?:for|including|brands|etc|or|and|your|from|the|with|that|this)\b/i.test(line); // Filter common non-skill words
-      
-      // If line looks like a skill
-      if ((hasSkillPrefix || hasSkillPattern || (isBulletPoint && isShortPhrase)) && 
-          !line.toUpperCase().includes('SKILLS') && !line.toUpperCase().includes('EXPERIENCE')) {
-        
-        // Determine if it's more likely a technical or soft skill
-        if (line.match(/\b(?:communication|teamwork|leadership|management|interpersonal|organization|problem[\s-]solving|time management|adaptability|creativity|critical thinking|emotional intelligence|conflict resolution|customer service|flexibility|negotiation|patience|persuasion|public speaking|self-motivation|work ethic)\b/i)) {
-          // Likely a soft skill
-          softSkills.push(line);
-        } else {
-          // Likely a technical skill
-          technicalSkills.push(line);
+      // Check for job title patterns
+      let hasTitle = false;
+      for (const pattern of titlePatterns) {
+        if (pattern.test(line)) {
+          hasTitle = true;
+          break;
         }
+      }
+      
+      // Mark lines with both date and title patterns or just date patterns
+      if ((hasDate && hasTitle) || hasDate) {
+        potentialExperienceLines.push(i);
       }
     }
     
-    // Create skills sections if we found content
-    if (technicalSkills.length > 0) {
-      sections['TECHNICAL SKILLS'] = technicalSkills.join('\n');
-      logger.info(`Created TECHNICAL SKILLS section with ${technicalSkills.length} lines`);
+    // Second pass: extract experience blocks
+    for (let i = 0; i < potentialExperienceLines.length; i++) {
+      const startIdx = potentialExperienceLines[i];
+      const endIdx = i < potentialExperienceLines.length - 1 
+        ? potentialExperienceLines[i + 1] - 1 
+        : lines.length - 1;
+      
+      // Extract lines for this potential experience entry
+      const block = [];
+      for (let j = startIdx; j <= endIdx; j++) {
+        const line = lines[j].trim();
+        if (line) block.push(line);
+      }
+      
+      if (block.length > 0) {
+        experienceBlocks.push(block);
+      }
     }
     
-    if (softSkills.length > 0) {
-      sections['PROFESSIONAL SKILLS'] = softSkills.join('\n');
-      logger.info(`Created PROFESSIONAL SKILLS section with ${softSkills.length} lines`);
-    }
-    
-    // If we found neither, search for inline lists of skills in the profile or experience sections
-    if (technicalSkills.length === 0 && softSkills.length === 0) {
-      logger.info('No separate skills found, searching for inline skills in other sections');
+    // Alternative detection if first method didn't work
+    if (experienceBlocks.length === 0) {
+      logger.info('Trying alternative experience detection method');
       
-      // Patterns that might indicate a list of skills within other content
-      const inlineSkillsPatterns = [
-        /(?:skills include|skilled in|proficient in|expertise in|knowledge of|experience with|familiar with)[^.!?]*([^.!?]+)/i,
-        /(?:including|such as|like|e\.g\.|i\.e\.)[^.!?]*([^.!?]+)/i
-      ];
-      
-      const profileContent = sections['PROFILE'] || '';
-      const experienceContent = sections['EXPERIENCE'] || '';
-      const allContent = `${profileContent}\n${experienceContent}`;
-      
-      // Try to extract inline skills
-      for (const pattern of inlineSkillsPatterns) {
-        const match = allContent.match(pattern);
-        if (match && match[1]) {
-          // Potential list of skills - split by commas or "and"
-          const skillsList = match[1].split(/(?:,\s*|\s+and\s+|\s*[;|]\s*)/).filter(item => 
-            item.trim().length > 0 && 
-            !/\b(?:for|including|brands|etc|or|your|from|the|with|that|this)\b/i.test(item.trim())
-          );
+      // Look for lines with job titles and company names
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) {
+          if (inExperienceBlock && currentBlock.length > 0) {
+            experienceBlocks.push([...currentBlock]);
+            currentBlock = [];
+            inExperienceBlock = false;
+          }
+          continue;
+        }
+        
+        // Check if line looks like a job title line
+        const hasJobTitle = titlePatterns.some(pattern => pattern.test(line));
+        const hasDate = datePatterns.some(pattern => pattern.test(line));
+        const hasCompanyIndicator = /\b(?:at|with|for)\s+[A-Z]/i.test(line);
+        
+        // If this line appears to start a new experience entry
+        if ((hasJobTitle && (hasDate || hasCompanyIndicator)) || 
+            (line.length < 60 && hasDate && line.match(/[A-Z][a-z]+/))) {
           
-          if (skillsList.length > 0) {
-            sections['SKILLS'] = skillsList.join('\n');
-            logger.info(`Created SKILLS section with ${skillsList.length} items extracted from inline content`);
-            break;
+          // If we were already in an experience block, save it
+          if (inExperienceBlock && currentBlock.length > 0) {
+            experienceBlocks.push([...currentBlock]);
+            currentBlock = [];
+          }
+          
+          // Start a new experience block
+          inExperienceBlock = true;
+          currentBlock = [line];
+          blockStartIndex = i;
+        }
+        // If we're in a block and this line continues the current experience entry
+        else if (inExperienceBlock) {
+          // Add to the current block if:
+          // 1. It's a bullet point or indented line
+          // 2. It's within a reasonable distance from the start of the block
+          // 3. It doesn't look like the start of a new section
+          const isBulletPoint = /^[\s*•\-\|]+/.test(line);
+          const isCloseToBlockStart = i - blockStartIndex < 15;
+          const isNotSectionHeader = !line.match(/^[A-Z][A-Z\s]+$/);
+          
+          if ((isBulletPoint || isCloseToBlockStart) && isNotSectionHeader) {
+            currentBlock.push(line);
+          } else {
+            // This line might be the start of a new section or unrelated content
+            // End the current experience block
+            experienceBlocks.push([...currentBlock]);
+            currentBlock = [];
+            inExperienceBlock = false;
           }
         }
       }
+      
+      // Add the last block if there is one
+      if (inExperienceBlock && currentBlock.length > 0) {
+        experienceBlocks.push([...currentBlock]);
+      }
+    }
+    
+    // If we found experience blocks, create the EXPERIENCE section
+    if (experienceBlocks.length > 0) {
+      // Join blocks with appropriate spacing
+      const experienceContent = experienceBlocks
+        .map(block => block.join('\n'))
+        .join('\n\n');
+      
+      sections['EXPERIENCE'] = experienceContent;
+      logger.info(`Created EXPERIENCE section with ${experienceBlocks.length} entries`);
+    } else {
+      // Try a very aggressive method - find any lines with dates in them and look for keywords
+      const experienceKeywords = /\b(?:work|job|position|role|career|employment|responsible|duties|tasks|led|managed|developed|created|built|implemented|design|collaborate|team|client|project)\b/i;
+      
+      const dateAndKeywordLines: string[] = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        // Check for date patterns
+        const hasDate = datePatterns.some(pattern => pattern.test(line));
+        // Check for experience keywords
+        const hasExperienceKeyword = experienceKeywords.test(line);
+        
+        if (hasDate && hasExperienceKeyword) {
+          // Add this line and a few following lines
+          dateAndKeywordLines.push(line);
+          
+          // Add next 3 non-empty lines as they might be part of this experience item
+          let addedLines = 0;
+          for (let j = i + 1; j < lines.length && addedLines < 3; j++) {
+            const nextLine = lines[j].trim();
+            if (nextLine) {
+              dateAndKeywordLines.push(nextLine);
+              addedLines++;
+            }
+          }
+        }
+      }
+      
+      if (dateAndKeywordLines.length > 0) {
+        sections['EXPERIENCE'] = dateAndKeywordLines.join('\n');
+        logger.info(`Created minimal EXPERIENCE section with ${dateAndKeywordLines.length} lines (fallback method)`);
+      }
+    }
+  }
+
+  // Enhance LANGUAGES section detection
+  if (!sections['LANGUAGES']) {
+    logger.info('Looking for language content with enhanced detection methods');
+    
+    // Common language names and proficiency levels with expanded patterns
+    const languageNames = /\b(?:English|Spanish|French|German|Italian|Portuguese|Chinese|Japanese|Korean|Russian|Arabic|Hindi|Bengali|Dutch|Swedish|Norwegian|Finnish|Danish|Polish|Greek|Turkish|Thai|Vietnamese|Ukrainian|Hebrew|Czech|Slovak|Hungarian|Romanian|Bulgarian|Serbian|Croatian|Slovenian|Macedonian|Albanian|Lithuanian|Latvian|Estonian|Maltese|Icelandic|Irish|Welsh|Scottish|Gaelic|Basque|Catalan|Galician|Luxembourgish|Indonesian|Malay|Tagalog|Filipino|Javanese|Swahili|Afrikaans|Zulu|Xhosa|Yoruba|Igbo|Amharic|Somali|Persian|Urdu|Pashto|Kurdish|Armenian|Georgian|Azerbaijani|Uzbek|Kazakh|Kyrgyz|Tajik|Turkmen|Mongolian|Nepali|Bengali|Sinhala|Burmese|Khmer|Lao|Hmong)\b/i;
+    
+    const proficiencyLevels = /\b(?:native|fluent|proficient|intermediate|beginner|basic|conversational|business|professional|advanced|elementary|pre-intermediate|upper-intermediate|bilingual|mother\s+tongue|working\s+knowledge|limited\s+working\s+proficiency|full\s+working\s+proficiency|native\s+or\s+bilingual\s+proficiency|A1|A2|B1|B2|C1|C2)\b/i;
+    
+    // Language section indicators
+    const languageSectionIndicators = /\b(?:speak|spoken|written|verbal|oral|communication|proficiency|level|certified|certification|test|score|TOEFL|IELTS|Cambridge|DELF|DALF|CEFR|HSK|JLPT|DELE|Goethe|TestDaF)\b/i;
+    
+    // Language content collection
+    const languageLines: string[] = [];
+    
+    // Find paragraphs with language content
+    let potentialLanguageParagraph: string[] = [];
+    let inLanguageParagraph = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) {
+        if (inLanguageParagraph && potentialLanguageParagraph.length > 0) {
+          // Check if this paragraph has language content
+          const paragraphText = potentialLanguageParagraph.join(' ');
+          const hasLanguageName = languageNames.test(paragraphText);
+          const hasProficiencyLevel = proficiencyLevels.test(paragraphText);
+          
+          if (hasLanguageName && hasProficiencyLevel) {
+            languageLines.push(...potentialLanguageParagraph);
+          }
+          
+          // Reset for next paragraph
+          potentialLanguageParagraph = [];
+          inLanguageParagraph = false;
+        }
+        continue;
+      }
+      
+      // Check if this line has language indicators
+      const hasLanguageName = languageNames.test(line);
+      const hasProficiencyLevel = proficiencyLevels.test(line);
+      const hasLanguageIndicator = languageSectionIndicators.test(line);
+      
+      // If this line has strong language indicators
+      if (hasLanguageName && (hasProficiencyLevel || hasLanguageIndicator)) {
+        // This is definitely a language line
+        languageLines.push(line);
+      }
+      // If this line has just a language name and is short (likely a list item)
+      else if (hasLanguageName && line.length < 40) {
+        languageLines.push(line);
+      }
+      // Start or continue a potential language paragraph
+      else if (hasLanguageName || hasProficiencyLevel || hasLanguageIndicator) {
+        inLanguageParagraph = true;
+        potentialLanguageParagraph.push(line);
+      }
+      // If we're in a potential language paragraph, continue collecting
+      else if (inLanguageParagraph) {
+        potentialLanguageParagraph.push(line);
+        
+        // If this paragraph is getting too long, it's probably not about languages
+        if (potentialLanguageParagraph.length > 5) {
+          inLanguageParagraph = false;
+          potentialLanguageParagraph = [];
+        }
+      }
+    }
+    
+    // Process the last paragraph if needed
+    if (inLanguageParagraph && potentialLanguageParagraph.length > 0) {
+      const paragraphText = potentialLanguageParagraph.join(' ');
+      const hasLanguageName = languageNames.test(paragraphText);
+      const hasProficiencyLevel = proficiencyLevels.test(paragraphText);
+      
+      if (hasLanguageName && hasProficiencyLevel) {
+        languageLines.push(...potentialLanguageParagraph);
+      }
+    }
+    
+    // If no language lines found yet, try a more aggressive approach
+    if (languageLines.length === 0) {
+      // Try to find any lines just mentioning languages, even without proficiency
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        if (languageNames.test(line) && line.length < 50) {
+          languageLines.push(line);
+        }
+      }
+    }
+    
+    // If we found language content, create the LANGUAGES section
+    if (languageLines.length > 0) {
+      sections['LANGUAGES'] = languageLines.join('\n');
+      logger.info(`Created LANGUAGES section with ${languageLines.length} lines`);
+    }
+    // Create a default language section if none found
+    else if (!sections['EXPERIENCE'] || sections['EXPERIENCE'].toString().toLowerCase().includes('english')) {
+      // If there are clues about English in the experience section
+      sections['LANGUAGES'] = 'English - Proficient';
+      logger.info('Created default LANGUAGES section (English only)');
     }
   }
 
@@ -1708,13 +1695,103 @@ async function parseOptimizedText(text: string): Promise<Record<string, string |
     logger.info('Created default PROFILE section as none was found');
   }
   
-  // Return the parsed sections
+  // Ensure we have ACHIEVEMENTS if possible
+  if (!sections['ACHIEVEMENTS']) {
+    logger.info('Looking for achievement statements to create ACHIEVEMENTS section');
+    
+    // Look for lines that contain achievement indicators and quantifiable results
+    const achievementContent = lines.filter(line => {
+      if (line.length < 20) return false;
+      
+      // Check for bullet points or numbering
+      const isBulletOrNumbered = /^[\s*•\-\d\.]+/.test(line);
+      
+      // Check for achievement indicators
+      const hasIndicator = /achieved|improve|increased|reduced|saved|delivered|launched|developed|created|led|managed|won|award|recognized|success/i.test(line);
+      
+      // Check for quantifiable results
+      const hasQuantifiableResults = /\d+%|\$\d+|\d+ million|\d+ thousand|\d+ projects/i.test(line);
+      
+      return (isBulletOrNumbered && (hasIndicator || hasQuantifiableResults)) || 
+             (hasIndicator && hasQuantifiableResults);
+    });
+    
+    if (achievementContent.length > 0) {
+      sections['ACHIEVEMENTS'] = achievementContent.join('\n');
+      logger.info(`Created ACHIEVEMENTS section with ${achievementContent.length} lines of content`);
+    }
+  }
+
+  // Ensure GOALS section exists (career objectives)
+  if (!sections['GOALS']) {
+    logger.info('Looking for possible GOALS/OBJECTIVES content');
+    
+    // Look for goals/objectives indicators
+    const goalIndicators = [
+      /seeking|aspire|objective|aim|goal|looking for|desire|ambition|career|advancement|growth|develop|transition/i,
+      /next step|future|progress|promote|advance|expand|learn|improve|opportunity|challenge/i
+    ];
+    
+    // Find content that looks like goals/objectives
+    const goalContent = lines.filter(line => {
+      if (line.length < 20) return false;
+      
+      // Check for goal indicators
+      let hasGoalIndicator = false;
+      for (const regex of goalIndicators) {
+        if (regex.test(line)) {
+          hasGoalIndicator = true;
+          break;
+        }
+      }
+      
+      return hasGoalIndicator;
+    });
+    
+    if (goalContent.length > 0) {
+      sections['GOALS'] = goalContent.join('\n');
+      logger.info(`Created GOALS section with ${goalContent.length} lines of content`);
+    }
+  }
+
+  // Ensure EXPECTATIONS section exists (what to expect from the job)
+  if (!sections['EXPECTATIONS']) {
+    logger.info('Looking for possible EXPECTATIONS content');
+    
+    // Look for expectations content by searching for relevant indicators
+    const expectationIndicators = [
+      /salary|compensation|package|benefit|remuneration|looking for|expect|requirement/i,
+      /\$\d+k|\$\d+,\d+|per annum|annually|yearly|hourly rate|contract rate|day rate/i
+    ];
+    
+    // Find content that looks like expectations
+    const expectationContent = lines.filter(line => {
+      if (line.length < 20) return false;
+      
+      // Check for expectation indicators
+      let hasExpectationIndicator = false;
+      for (const regex of expectationIndicators) {
+        if (regex.test(line)) {
+          hasExpectationIndicator = true;
+          break;
+        }
+      }
+      
+      return hasExpectationIndicator;
+    });
+    
+    if (expectationContent.length > 0) {
+      sections['EXPECTATIONS'] = expectationContent.join('\n');
+      logger.info(`Created EXPECTATIONS section with ${expectationContent.length} lines of content`);
+    }
+  }
+  
   return sections;
-}
+} 
 
 /**
- * Tailor CV content based on job description
- * This function enhances various sections of the CV to match job requirements
+ * Tailors CV content to better match a job description
+ * Makes minor adjustments while preserving original content integrity
  */
 async function tailorCVContentForJob(
   sections: Record<string, string | string[]>,
@@ -1725,7 +1802,7 @@ async function tailorCVContentForJob(
   // If no job description provided, return sections as is
   if (!jobDescription) {
     logger.info('No job description provided, skipping content tailoring');
-  return sections;
+    return sections;
   }
 
   logger.info('Starting CV content tailoring for job match with 80/20 preservation ratio');
@@ -1852,16 +1929,6 @@ async function tailorCVContentForJob(
         tailoredSections['LANGUAGES'],
         jobDescription
       );
-    }
-    
-    // Extract technical skills from job description to ensure we have them
-    const technicalSkills = extractSkillsFromJobDescription(jobDescription);
-    logger.info(`Extracted ${technicalSkills.length} technical skills from job description`);
-    
-    // Ensure TECHNICAL SKILLS section exists if job requires technical skills
-    if (technicalSkills.length > 0 && !tailoredSections['TECHNICAL SKILLS'] && !tailoredSections['SKILLS']) {
-      logger.info('Adding TECHNICAL SKILLS section from job description');
-      tailoredSections['TECHNICAL SKILLS'] = technicalSkills;
     }
     
     logger.info('CV content tailoring completed successfully with 80/20 preservation ratio');
@@ -2028,83 +2095,46 @@ async function optimizeExperienceForJob(
   jobDescription: string,
   keyTerms: string[]
 ): Promise<string | string[]> {
-  // Validate input
-  if (!experienceContent || 
-      (Array.isArray(experienceContent) && experienceContent.length === 0) ||
-      (typeof experienceContent === 'string' && !experienceContent.trim())) {
-    logger.warn('Empty experience content received, returning as is');
-    return experienceContent;
-  }
-
-  // For array input, prioritize but preserve entries
+  // For array input, score and reorder entries
   if (Array.isArray(experienceContent)) {
-    logger.info('Optimizing array of experience entries');
-    
-    // Preserve all entries but score them to prioritize
+    // Create a scored version of each entry
     const scoredEntries = experienceContent.map(entry => {
-      // Skip invalid entries
-      if (!entry || typeof entry !== 'string' || entry.trim().length < 10) {
-        return { entry, score: -1 }; // Low score for invalid entries
-      }
-      
       let score = 0;
       
-      // Check for job title or company name matches - these are important
-      const experienceLines = entry.split('\n');
-      const firstLine = experienceLines[0]?.toLowerCase() || '';
-      
-      // First line often contains job title/company name - check for key term matches
+      // Check for key terms
       for (const term of keyTerms) {
-        if (term && firstLine.includes(term.toLowerCase())) {
-          score += 5; // Higher score for job title matches
-        }
-        // Check rest of content for term matches
-        else if (term && entry.toLowerCase().includes(term.toLowerCase())) {
+        if (entry.toLowerCase().includes(term.toLowerCase())) {
           score += 2;
         }
       }
       
-      // Bonus for quantifiable achievements
+      // Check for quantifiable results (usually important)
       if (entry.match(/\d+%|\$\d+|\d+\s+million|\d+\s+thousand/)) {
         score += 3;
       }
       
-      // Bonus for action verbs at the beginning of lines
-      const actionVerbs = ['managed', 'led', 'developed', 'created', 'implemented', 'designed', 'built', 'improved'];
-      const actionVerbCount = experienceLines.filter(line => 
-        actionVerbs.some(verb => line.toLowerCase().trim().startsWith(verb))
-      ).length;
-      
-      score += actionVerbCount;
-      
       return { entry, score };
     });
     
-    // Remove invalid entries
-    const validScoredEntries = scoredEntries.filter(item => item.score >= 0);
-    
-    // Sort by score but never discard entries
-    validScoredEntries.sort((a, b) => b.score - a.score);
+    // Sort by score (highest first)
+    scoredEntries.sort((a, b) => b.score - a.score);
     
     // Get entries sorted by relevance
-    const sortedEntries = validScoredEntries.map(item => item.entry);
+    const sortedEntries = scoredEntries.map(item => item.entry);
     
-    // Enhance formatting but preserve content of the most relevant entries
+    // Use Mistral AI to enhance the most relevant entries (top 3)
     if (jobDescription && sortedEntries.length > 0) {
-      logger.info('Enhancing formatting for experience entries while preserving content');
+      logger.info('Using Mistral AI to enhance experience entries');
       
-      // Only enhance top 3 entries for efficiency, but keep ALL entries
+      // Only enhance the top entries to be efficient
       const enhancedEntries = [...sortedEntries]; // Make a copy
       
       for (let i = 0; i < Math.min(3, enhancedEntries.length); i++) {
-        // Only enhance valid entries that are substantial
-        if (enhancedEntries[i] && enhancedEntries[i].length > 30) {
-          enhancedEntries[i] = await enhanceTextWithMistralAI(
-            enhancedEntries[i],
-            jobDescription,
-            'experience'
-          );
-        }
+        enhancedEntries[i] = await enhanceTextWithMistralAI(
+          enhancedEntries[i],
+          jobDescription,
+          'experience'
+        );
       }
       
       return enhancedEntries;
@@ -2115,62 +2145,43 @@ async function optimizeExperienceForJob(
   }
   
   // For string input
-  logger.info('Optimizing string-based experience content');
   const experience = experienceContent as string;
   
-  // Check if content is substantial enough to process
-  if (experience.trim().length < 30) {
-    logger.warn('Experience content too short to optimize');
-    return experience;
-  }
-  
-  // Try to split the content into job entries based on line breaks and identify sections
-  const entries = experience.split(/\n{2,}/).filter(entry => entry.trim().length > 0);
+  // Try to split the content into job entries based on line breaks
+  const entries = experience.split(/\n{2,}/);
   
   if (entries.length > 1) {
-    logger.info(`Split experience into ${entries.length} entries`);
-    
-    // Score each entry for relevance
+    // Score each entry
     const scoredEntries = entries.map(entry => {
       let score = 0;
       
       // Check for key terms
       for (const term of keyTerms) {
-        if (term && entry.toLowerCase().includes(term.toLowerCase())) {
+        if (entry.toLowerCase().includes(term.toLowerCase())) {
           score += 2;
         }
-      }
-      
-      // Bonus points for recent roles (contain recent years)
-      if (entry.match(/202\d|201[5-9]/)) {
-        score += 3;
       }
       
       return { entry, score };
     });
     
-    // Sort by score (highest first) but preserve all entries
+    // Sort by score (highest first)
     scoredEntries.sort((a, b) => b.score - a.score);
     
     // Get entries sorted by relevance
     const sortedEntries = scoredEntries.map(item => item.entry);
     
-    // Enhance formatting of the most relevant entry while preserving content
+    // Use Mistral AI to enhance the most relevant entry
     if (jobDescription && sortedEntries.length > 0) {
-      logger.info('Enhancing top experience entry while preserving content');
+      logger.info('Using Mistral AI to enhance top experience entry');
       
       const enhancedEntries = [...sortedEntries];
+      enhancedEntries[0] = await enhanceTextWithMistralAI(
+        enhancedEntries[0],
+        jobDescription,
+        'experience'
+      );
       
-      // Only enhance the first entry
-      if (enhancedEntries[0] && enhancedEntries[0].length > 30) {
-        enhancedEntries[0] = await enhanceTextWithMistralAI(
-          enhancedEntries[0],
-          jobDescription,
-          'experience'
-        );
-      }
-      
-      // Join back together with double newlines
       return enhancedEntries.join('\n\n');
     }
     
@@ -2178,9 +2189,9 @@ async function optimizeExperienceForJob(
     return sortedEntries.join('\n\n');
   }
   
-  // If it's a single continuous text, enhance formatting while preserving content
-  if (jobDescription && experience.trim().length > 50) {
-    logger.info('Enhancing single experience section while preserving content');
+  // If it's a single continuous text, enhance it directly
+  if (jobDescription) {
+    logger.info('Using Mistral AI to enhance experience section');
     return await enhanceTextWithMistralAI(
       experience,
       jobDescription,
@@ -2200,90 +2211,13 @@ async function optimizeSkillsForJob(
   jobDescription: string,
   keyTerms: string[]
 ): Promise<string | string[]> {
-  // If skills content is empty or undefined, try to extract skills from job description
-  if (!skillsContent || (Array.isArray(skillsContent) && skillsContent.length === 0) || 
-      (typeof skillsContent === 'string' && !skillsContent.trim())) {
-    logger.info('Skills section is empty, extracting skills from job description');
-    
-    // Extract potential skills from job description
-    const extractedSkills = extractSkillsFromJobDescription(jobDescription);
-    
-    // Format as the original content type (array or string)
-    return Array.isArray(skillsContent) ? extractedSkills : extractedSkills.join('\n');
-  }
-
   // Convert to array if string
-  const skillsArray = typeof skillsContent === 'string' 
-    ? skillsContent.split('\n').filter(line => line.trim()) 
-    : skillsContent.filter(item => typeof item === 'string' && item.trim());
-  
-  // Clean and validate skills - remove non-skill content
-  const validatedSkills = skillsArray
-    .map(skill => typeof skill === 'string' ? skill.trim() : '')
-    .filter(skill => {
-      // Skip empty items
-      if (!skill) return false;
-      
-      // Skill filtering criteria
-      // 1. Filter out items that are too long to be a skill
-      if (skill.length > 100) return false;
-      
-      // 2. Filter out items that are clearly not skills (prepositions, articles, etc.)
-      const nonSkillPatterns = [
-        /^(?:for|to|from|by|with|of|about|at|in|on|the|a|an|this|that|these|those|it|they)\s/i,
-        /\b(?:including|etc|brands|organizations|yourself|below|above|your|my|we|us|our|their)\b/i,
-        /^[^a-zA-Z0-9]+$/, // Items with no alphanumeric characters
-        /^\d+$/, // Just numbers
-        /^[A-Z][A-Z]+$/ // All uppercase acronyms without context (might be just headers)
-      ];
-      
-      if (nonSkillPatterns.some(pattern => pattern.test(skill))) {
-        return false;
-      }
-      
-      // 3. Remove social media profiles and links
-      if (skill.includes('facebook.com') || 
-          skill.includes('twitter.com') || 
-          skill.includes('linkedin.com') || 
-          skill.includes('instagram.com') || 
-          skill.includes('http://') || 
-          skill.includes('https://')) {
-        return false;
-      }
-      
-      // 4. Check minimum length - skill should have some substance
-      if (skill.length < 3) return false;
-      
-      // Allow skill if it passes all filters
-      return true;
-    });
-  
-  // If no valid skills remain, extract from job description as fallback
-  if (validatedSkills.length === 0) {
-    logger.info('No valid skills found after filtering, extracting from job description');
-    const extractedSkills = extractSkillsFromJobDescription(jobDescription);
-    return Array.isArray(skillsContent) ? extractedSkills : extractedSkills.join('\n');
-  }
-  
-  // Add technical terms from job description that are missing from the skills list
-  // This helps ensure that all relevant skills are included
-  const jobTechnicalTerms = extractTechnicalTermsFromJobDescription(jobDescription);
-  
-  // Add any missing technical terms from job description
-  const existingTerms = new Set(validatedSkills.map(s => s.toLowerCase()));
-  const additionalSkills = jobTechnicalTerms.filter(term => 
-    term.length > 0 && 
-    !existingTerms.has(term.toLowerCase()) &&
-    !existingTerms.has(term.toLowerCase() + ' (proficient)')
-  );
-  
-  if (additionalSkills.length > 0) {
-    logger.info(`Adding ${additionalSkills.length} technical skills from job description`);
-    validatedSkills.push(...additionalSkills);
-  }
+  const skillsArray = Array.isArray(skillsContent) 
+    ? skillsContent 
+    : skillsContent.split('\n').filter(line => line.trim());
   
   // Calculate relevance score for each skill based on presence in job description and key terms
-  const scoredSkills = validatedSkills.map(skill => {
+  const scoredSkills = skillsArray.map(skill => {
     let score = 0;
     
     // Check if skill is directly mentioned in job description
@@ -2293,8 +2227,8 @@ async function optimizeSkillsForJob(
     
     // Check if skill matches any key terms
     for (const term of keyTerms) {
-      if (term && (skill.toLowerCase().includes(term.toLowerCase()) || 
-          term.toLowerCase().includes(skill.toLowerCase()))) {
+      if (skill.toLowerCase().includes(term.toLowerCase()) || 
+          term.toLowerCase().includes(skill.toLowerCase())) {
         score += 3;
         break;
       }
@@ -2311,21 +2245,15 @@ async function optimizeSkillsForJob(
   
   // Enhance the skills with Mistral AI
   try {
-    logger.info('Enhancing skills with AI');
+    logger.info('Enhancing skills with Mistral AI');
     
     // For array input, enhance the top skills
     if (Array.isArray(skillsContent)) {
       const enhancedSkills = [...sortedSkills];
       
-      // Enhance all skills for better coverage, but max 15 to keep the list focused
-      const skillsToEnhance = Math.min(15, enhancedSkills.length);
-      logger.info(`Enhancing ${skillsToEnhance} skills from the original list`);
-      
-      for (let i = 0; i < skillsToEnhance; i++) {
-        // Only enhance if it's a real skill (not section header, not already enhanced)
-        if (enhancedSkills[i] && 
-            !enhancedSkills[i].includes('(') && 
-            enhancedSkills[i].length < 50) {
+      // Only enhance top skills that are relevant to the job
+      for (let i = 0; i < Math.min(5, enhancedSkills.length); i++) {
+        if (scoredSkills[i].score > 0) { // Only enhance relevant skills
           enhancedSkills[i] = await enhanceTextWithMistralAI(
             enhancedSkills[i],
             jobDescription,
@@ -2336,122 +2264,20 @@ async function optimizeSkillsForJob(
       
       return enhancedSkills;
     } else {
-      // For string input, enhance each line
-      const skillLines = sortedSkills.join('\n').split('\n');
-      const enhancedLines = [];
+      // For string input, enhance the whole skills section
+      const enhancedSkills = await enhanceTextWithMistralAI(
+        sortedSkills.join('\n'),
+        jobDescription,
+        'skills'
+      );
       
-      for (const line of skillLines) {
-        if (line && line.trim() && line.length < 50) {
-          enhancedLines.push(await enhanceTextWithMistralAI(
-            line.trim(),
-            jobDescription,
-            'skills'
-          ));
-        } else {
-          enhancedLines.push(line);
-        }
-      }
-      
-      return enhancedLines.join('\n');
+      return enhancedSkills;
     }
   } catch (error) {
     logger.error('Error enhancing skills:', error instanceof Error ? error.message : String(error));
     // Return in original format on error
     return Array.isArray(skillsContent) ? sortedSkills : sortedSkills.join('\n');
   }
-}
-
-/**
- * Extract technical terms from job description that are likely to be technical skills
- */
-function extractTechnicalTermsFromJobDescription(jobDescription: string): string[] {
-  logger.info('Extracting technical terms from job description');
-  
-  // Define patterns for common technical terms and tools
-  const technicalPatterns = [
-    /\b(?:html|css|javascript|typescript|react|angular|vue|nodejs|express|php|ruby|python|java|c\+\+|c#|swift|go|rust)\b/gi,
-    /\b(?:aws|azure|gcp|cloud|docker|kubernetes|jenkins|git|github|gitlab|bitbucket|terraform|ansible|chef|puppet)\b/gi,
-    /\b(?:sql|mysql|postgresql|mongodb|oracle|sqlite|dynamodb|redis|cassandra|elasticsearch|database|nosql)\b/gi,
-    /\b(?:linux|unix|windows|macos|ios|android|devops|ci\/cd|automation|scripting|bash|powershell)\b/gi,
-    /\b(?:adobe|photoshop|illustrator|indesign|xd|figma|sketch|design|ui|ux|user experience|user interface)\b/gi,
-    /\b(?:office|excel|word|powerpoint|sharepoint|outlook|microsoft|google workspace|google docs)\b/gi,
-    /\b(?:seo|sem|google analytics|google ads|facebook ads|social media|digital marketing)\b/gi,
-    /\b(?:api|rest|graphql|json|xml|soap|microservices|serverless|architecture)\b/gi,
-    /\b(?:agile|scrum|kanban|jira|confluence|project management|product management)\b/gi,
-    /\b(?:analytics|data science|machine learning|ai|artificial intelligence|deep learning|nlp|neural networks)\b/gi,
-    /\b(?:tableau|power bi|looker|data visualization|data analysis|statistics|r|data mining)\b/gi
-  ];
-
-  const terms = new Set<string>();
-  
-  // Extract all matches from each pattern
-  for (const pattern of technicalPatterns) {
-    const matches = jobDescription.match(pattern);
-    if (matches) {
-      for (const match of matches) {
-        // Format term with first letter capitalized
-        const term = match.charAt(0).toUpperCase() + match.slice(1).toLowerCase();
-        terms.add(term);
-      }
-    }
-  }
-  
-  // Extract specific terms commonly mentioned in "required skills" sections
-  const skillsSection = extractSkillsSectionFromJobDescription(jobDescription);
-  if (skillsSection) {
-    // Extract bullet points from skills section
-    const skillLines = skillsSection.split('\n');
-    for (const line of skillLines) {
-      // If line is a bullet point and mentions experience
-      if (line.match(/^[\s•\-*]+/) && line.length < 100) {
-        // Extract the core skill from the line
-        const cleaned = line.replace(/^[\s•\-*]+/, '').trim();
-        // Only add if it's a reasonable length for a skill
-        if (cleaned.length > 3 && cleaned.length < 40) {
-          terms.add(cleaned.charAt(0).toUpperCase() + cleaned.slice(1));
-        }
-      }
-    }
-  }
-  
-  logger.info(`Found ${terms.size} potential technical terms in job description`);
-  return Array.from(terms).slice(0, 10); // Limit to 10 terms to avoid overwhelming
-}
-
-/**
- * Extract skills section from job description
- */
-function extractSkillsSectionFromJobDescription(jobDescription: string): string | null {
-  // Common headers for skills sections in job descriptions
-  const skillsSectionHeaders = [
-    /required skills/i,
-    /qualifications/i,
-    /requirements/i,
-    /skills and experience/i,
-    /technical skills/i,
-    /your skills/i,
-    /skills required/i,
-    /what you'll need/i,
-    /what we're looking for/i
-  ];
-  
-  // Try to find a skills section
-  const paragraphs = jobDescription.split(/\n\s*\n/); // Split by empty lines
-  
-  for (let i = 0; i < paragraphs.length; i++) {
-    const paragraph = paragraphs[i];
-    
-    // Check if this paragraph is a skills section header
-    const isSkillsHeader = skillsSectionHeaders.some(pattern => pattern.test(paragraph));
-    
-    if (isSkillsHeader && i < paragraphs.length - 1) {
-      // Return the next paragraph (skills content)
-      return paragraphs[i + 1];
-    }
-  }
-  
-  // If no section header found, return null
-  return null;
 }
 
 /**
@@ -2661,125 +2487,137 @@ async function enhanceTextWithMistralAI(
   // This is a placeholder function that would be replaced with actual API integration
   // For now, we'll just simulate what the AI might do with some basic enhancements
   
-  logger.info(`Enhancing ${enhancementType} content - preserving 90% original content`);
+  logger.info(`Simulating Mistral AI enhancement for ${enhancementType} - preserving 80% original content`);
   
   try {
     // Simulate API latency
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    // Start with original text - conservative approach
-    let enhancedText = originalText.trim();
-    
-    // Skip enhancement if text is too short or appears to be a header/title
-    if (enhancedText.length < 5 || enhancedText.toUpperCase() === enhancedText) {
-      return enhancedText;
-    }
+    // Default to original text - conservative approach
+    let enhancedText = originalText;
     
     // Extract key terms from job description
     const keyTerms = extractKeyTermsFromJobDescription(jobDescription);
-    const topKeyTerms = keyTerms.slice(0, 3); // Reduce to 3 key terms for more subtle enhancement
+    const topKeyTerms = keyTerms.slice(0, 3); // Reduce from 5 to 3 key terms for more subtle enhancement
     
     // Simulate different enhancement types - with minimal changes
     switch (enhancementType) {
       case 'profile':
-        // For profile, make VERY minimal changes, focus on preserving content
-        // Detect if profile already mentions key terms
-        let hasKeyTerm = false;
-        for (const term of topKeyTerms) {
-          if (term && enhancedText.toLowerCase().includes(term.toLowerCase())) {
-            hasKeyTerm = true;
-            break;
-          }
-        }
-        
-        // Only add a SINGLE key term if none are present, and only at the end
-        if (!hasKeyTerm && topKeyTerms.length > 0 && topKeyTerms[0]) {
-          // Add just one key term in a subtle way at the end
-          enhancedText = `${enhancedText.trim()} Experience includes ${topKeyTerms[0]}.`;
+        // For profile, make very minimal changes
+        if (!originalText.toLowerCase().includes(topKeyTerms[0]?.toLowerCase()) && topKeyTerms.length > 0) {
+          // Add just one key term in a subtle way
+          enhancedText = `${originalText} Experience includes ${topKeyTerms[0]}.`;
         }
         break;
         
       case 'experience':
-        // For experience, PRESERVE original content structure
-        // Only add bullet points if they don't exist
-        if (enhancedText && enhancedText.length > 30 && !enhancedText.includes('•')) {
-          // Split into lines to preserve structure
-          const lines = enhancedText.split('\n');
+        // For experience, only enhance highly relevant content
+        if (originalText.includes('\n')) {
+          const lines = originalText.split('\n');
           
-          // Only format lines that are likely descriptions, not company names or dates
+          // Only enhance one or two lines that are highly relevant
+          let enhancementCount = 0;
           enhancedText = lines.map(line => {
-            // Skip short lines (likely dates or company names)
-            if (line.trim().length < 20 || line.match(/\d{4}/)) {
-              return line;
+            // Only enhance up to 2 lines maximum
+            if (enhancementCount < 2) {
+              for (const term of topKeyTerms) {
+                if (line.toLowerCase().includes(term.toLowerCase()) && 
+                  !line.includes('•') && line.length > 20) {
+                  enhancementCount++;
+                  // Just add a bullet point for important achievements
+                  return `• ${line}`;
+                }
+              }
             }
-            
-            // Skip lines that already have formatting
-            if (line.trim().startsWith('•') || line.trim().startsWith('-')) {
-              return line;
-            }
-            
-            // Add bullet only to substantial content lines that need formatting
-            return `• ${line.trim()}`;
+            return line;
           }).join('\n');
         }
         break;
         
-      case 'skills':
-        // For skills, preserve all original content
-        if (enhancedText && enhancedText.length > 2 && enhancedText.length < 50) {
-          // Skip if the skill already includes any context or formatting
-          if (!enhancedText.includes('(') && 
-              !enhancedText.includes(' - ') && 
-              !enhancedText.includes(':')) {
-              
-            // Check if skill matches job description terms
-            let hasMatch = false;
-            for (const term of keyTerms) {
-              if (term && (
-                  enhancedText.toLowerCase().includes(term.toLowerCase()) ||
-                  term.toLowerCase().includes(enhancedText.toLowerCase()))) {
-                hasMatch = true;
-                break;
-              }
+      case 'achievements':
+        // For achievements, make minimal enhancements to relevant items
+        // Only enhance if achievement has no quantifiable results and mentions a key term
+        if (!originalText.match(/\d+%|\$\d+|\d+\s+million|\d+\s+thousand/)) {
+          for (const term of topKeyTerms) {
+            if (originalText.toLowerCase().includes(term.toLowerCase())) {
+              // Add a subtle quantifiable element, preserving most original content
+              enhancedText = `${originalText} with positive results`;
+              break;
             }
-
-            // Add relevant context based on match
-            if (hasMatch) {
-              const contextPhrases = [
-                `(highly relevant)`,
-                `(key requirement)`,
-                `(core competency)`,
-                `(essential skill)`
-              ];
-              const randomPhrase = contextPhrases[Math.floor(Math.random() * contextPhrases.length)];
-              enhancedText = `${enhancedText} ${randomPhrase}`;
-            } 
-            // Even for non-matching skills, provide some context, but only for valid skills
-            else if (enhancedText.length > 3 && enhancedText.length < 30) {
-              // Validate that it looks like a skill (not a filter term or heading)
-              if (!/for|including|brand|etc|or|and|your|from/.test(enhancedText.toLowerCase())) {
-                const generalPhrases = [
-                  `(proficient)`,
-                  `(experienced)`,
-                  `(transferable skill)`
-                ];
-                const randomPhrase = generalPhrases[Math.floor(Math.random() * generalPhrases.length)];
-                enhancedText = `${enhancedText} ${randomPhrase}`;
-              }
-            }
+          }
+        }
+        
+        // Only add an action verb if it clearly doesn't start with one
+        const actionVerbs = ['Achieved', 'Delivered', 'Implemented', 'Managed', 'Developed', 'Led', 'Created', 'Improved'];
+        const startsWithActionVerb = actionVerbs.some(verb => 
+          originalText.startsWith(verb) || originalText.startsWith('• ' + verb)
+        );
+        
+        if (!startsWithActionVerb && 
+            !originalText.match(/^[A-Z][a-z]+/) && // Doesn't start with a capitalized word
+            !originalText.startsWith('•')) {
+          // Only add verb if text doesn't already start with a good beginning
+          const randomVerb = actionVerbs[Math.floor(Math.random() * actionVerbs.length)];
+          enhancedText = `${randomVerb} ${originalText}`;
+        }
+        break;
+        
+      case 'languages':
+        // For languages, only add proficiency if it's completely missing
+        if (originalText) {
+          const parts = originalText.split(/[-:]/);
+          
+          if (parts.length === 1 && 
+              !originalText.toLowerCase().includes('fluent') && 
+              !originalText.toLowerCase().includes('native') && 
+              !originalText.toLowerCase().includes('proficient') && 
+              !originalText.toLowerCase().includes('level') && 
+              !originalText.match(/\d/)) { // No numbers (indicating levels)
+            // Only then add a minimal proficiency indicator
+            const languageName = parts[0].trim();
+            enhancedText = `${languageName} - Proficient`;
           }
         }
         break;
         
-      case 'achievements':
-      case 'languages':
-        // For these sections, make no changes - preserve the original content
+      case 'skills':
+        // For skills, make minimal job-specific enhancement
+        if (originalText) {
+          // Skip if the skill already includes any context
+          if (!originalText.includes('(') && 
+              !originalText.includes(' - ') && 
+              !originalText.includes(':') && 
+              originalText.length < 25) {
+            
+            // Only enhance skills that EXACTLY match job keywords, not partial matches
+            let shouldEnhance = false;
+            for (const term of topKeyTerms) {
+              // Strict matching - the skill must be the exact term or begin with the term
+              if (originalText.toLowerCase() === term.toLowerCase() || 
+                  originalText.toLowerCase().startsWith(term.toLowerCase() + ' ')) {
+                shouldEnhance = true;
+                break;
+              }
+            }
+            
+            if (shouldEnhance) {
+              // Add minimal context but without the "relevant" marker which could look strange
+              const contextOptions = [
+                `(${topKeyTerms[0] || 'job-related'})`,
+                `(key skill)`,
+                `(focus area)`
+              ];
+              const selectedContext = contextOptions[Math.floor(Math.random() * contextOptions.length)];
+              enhancedText = `${originalText} ${selectedContext}`;
+            }
+          }
+        }
         break;
     }
     
     return enhancedText;
   } catch (error) {
-    logger.error('Error in AI enhancement:', error instanceof Error ? error.message : String(error));
+    logger.error('Error in Mistral AI enhancement:', error instanceof Error ? error.message : String(error));
     return originalText; // Fall back to original on error
   }
 }
@@ -3043,153 +2881,4 @@ function extractKeyNouns(text: string): string[] {
   );
   
   return nouns.length > 0 ? nouns : ['professional', 'technical', 'leadership'];
-}
-
-/**
- * Extracts potential skills from job description
- */
-function extractSkillsFromJobDescription(jobDescription: string): string[] {
-  logger.info('Extracting skills from job description');
-  
-  // Extract key terms that might be skills
-  const terms = extractKeyTermsFromJobDescription(jobDescription);
-  
-  // Common technical terms that are likely skills
-  const technicalTerms = [
-    'html', 'css', 'javascript', 'typescript', 'react', 'angular', 'vue', 'node', 'express',
-    'python', 'java', 'c#', 'c++', 'ruby', 'php', 'go', 'rust', 'swift', 'kotlin',
-    'sql', 'mysql', 'postgresql', 'mongodb', 'oracle', 'aws', 'azure', 'gcp', 'docker',
-    'kubernetes', 'terraform', 'jenkins', 'git', 'github', 'gitlab', 'jira', 'agile', 'scrum',
-    'machine learning', 'ai', 'data science', 'data analysis', 'excel', 'powerpoint', 'word',
-    'project management', 'powerbi', 'tableau', 'sap', 'salesforce', 'marketing', 'sales',
-    'customer service', 'leadership', 'management', 'communication', 'problem solving',
-    'teamwork', 'collaboration', 'analytical', 'critical thinking', 'time management'
-  ];
-  
-  // Extract phrases that might be skills (1-3 word phrases)
-  const skillsRegex = /\b([A-Za-z]+(?: [A-Za-z]+){0,2})\b/g;
-  const phrases = jobDescription.match(skillsRegex) || [];
-  
-  // Filter phrases to likely skills
-  const potentialSkills = new Set<string>();
-  
-  // Add skills from key terms
-  for (const term of terms) {
-    potentialSkills.add(term);
-  }
-  
-  // Add technical terms found in job description
-  for (const term of technicalTerms) {
-    if (jobDescription.toLowerCase().includes(term.toLowerCase())) {
-      potentialSkills.add(term.charAt(0).toUpperCase() + term.slice(1).toLowerCase());
-    }
-  }
-  
-  // Add skill-like phrases
-  for (const phrase of phrases) {
-    // Skip short or common words
-    if (phrase.length < 4 || 
-        /\b(and|the|for|this|that|with|have|from|would|should|could|been|were|when|where|what|which|who|how|why)\b/i.test(phrase)) {
-      continue;
-    }
-    
-    // Check if the phrase is likely a skill
-    if (phrase.length > 3 && !phrase.includes(' ')) {
-      potentialSkills.add(phrase.charAt(0).toUpperCase() + phrase.slice(1).toLowerCase());
-    } else if (phrase.split(' ').length <= 3 && phrase.length > 6) {
-      // Multi-word phrases that could be skills
-      potentialSkills.add(phrase.charAt(0).toUpperCase() + phrase.slice(1).toLowerCase());
-    }
-  }
-  
-  // Convert to array
-  const skills = Array.from(potentialSkills);
-  
-  // Ensure we have at least 10 skills
-  if (skills.length < 10) {
-    // Add some general skills based on industry
-    const industry = extractIndustryFromJobDescription(jobDescription);
-    if (industry) {
-      const industrySkills = getIndustrySkills(industry);
-      for (const skill of industrySkills) {
-        potentialSkills.add(skill);
-        if (potentialSkills.size >= 15) break;
-      }
-    }
-    
-    // Add technical skills as backup
-    if (potentialSkills.size < 15) {
-      for (const skill of technicalTerms) {
-        potentialSkills.add(skill.charAt(0).toUpperCase() + skill.slice(1).toLowerCase());
-        if (potentialSkills.size >= 15) break;
-      }
-    }
-  }
-  
-  // Return up to 15 skills
-  return Array.from(potentialSkills).slice(0, 15);
-}
-
-/**
- * Returns common skills for a specific industry
- */
-function getIndustrySkills(industry: string): string[] {
-  const industrySkillMap: Record<string, string[]> = {
-    'technology': [
-      'Programming', 'Software Development', 'Cloud Computing', 'DevOps', 
-      'Machine Learning', 'Database Management', 'Cybersecurity',
-      'Agile Methodology', 'UX/UI Design', 'API Development'
-    ],
-    'finance': [
-      'Financial Analysis', 'Accounting', 'Risk Management', 'Investment Banking',
-      'Financial Modeling', 'Budgeting', 'Auditing', 'Compliance',
-      'Banking', 'Portfolio Management'
-    ],
-    'healthcare': [
-      'Patient Care', 'Electronic Health Records', 'Medical Terminology',
-      'Healthcare Compliance', 'Clinical Experience', 'Medical Documentation',
-      'Patient Assessment', 'Healthcare Management', 'Medical Coding'
-    ],
-    'marketing': [
-      'Digital Marketing', 'Social Media Marketing', 'Content Creation',
-      'SEO', 'Market Research', 'Brand Management', 'Email Marketing',
-      'Campaign Management', 'Analytics', 'Customer Engagement'
-    ],
-    'education': [
-      'Curriculum Development', 'Student Assessment', 'Classroom Management',
-      'Instructional Design', 'Educational Technology', 'Lesson Planning',
-      'Student Support', 'Educational Leadership', 'Teaching'
-    ],
-    'manufacturing': [
-      'Quality Assurance', 'Supply Chain Management', 'Lean Manufacturing',
-      'Inventory Management', 'Production Planning', 'Process Improvement',
-      'Equipment Maintenance', 'ERP Systems', 'Safety Management'
-    ],
-    'retail': [
-      'Customer Service', 'Sales', 'Inventory Management', 'Visual Merchandising',
-      'POS Systems', 'Retail Operations', 'Stock Management', 'Merchandising',
-      'Cash Handling', 'Loss Prevention'
-    ],
-    'consulting': [
-      'Business Strategy', 'Client Management', 'Project Management',
-      'Process Improvement', 'Data Analysis', 'Change Management',
-      'Business Development', 'Stakeholder Management', 'Presentations'
-    ]
-  };
-  
-  // Normalize industry name and find closest match
-  const normalizedIndustry = industry.toLowerCase();
-  
-  for (const [key, skills] of Object.entries(industrySkillMap)) {
-    if (normalizedIndustry.includes(key.toLowerCase())) {
-      return skills;
-    }
-  }
-  
-  // Return general business skills if no match found
-  return [
-    'Communication', 'Leadership', 'Project Management', 'Problem Solving',
-    'Critical Thinking', 'Teamwork', 'Organization', 'Attention to Detail',
-    'Time Management', 'Adaptability'
-  ];
 } 
