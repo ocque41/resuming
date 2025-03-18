@@ -246,102 +246,154 @@ async function generateSpecificDocx(
     }
   });
 
-  // Enhanced skills section deduplication
-  // If we have TECHNICAL SKILLS or PROFESSIONAL SKILLS, remove generic SKILLS
-  if ((sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS']) && sections['SKILLS']) {
-    logger.info('Removing generic SKILLS section since specific skills sections exist');
-    delete sections['SKILLS'];
+  // Deduplicate skills sections
+  if (sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS']) {
+    logger.info('Starting skills deduplication process');
+    
+    // Create a set to track all skills for deduplication
+    const allSkills = new Set();
+    
+    // Process technical skills first
+    if (sections['TECHNICAL SKILLS']) {
+      // Convert to array for easier processing
+      const technicalSkills = typeof sections['TECHNICAL SKILLS'] === 'string' 
+        ? sections['TECHNICAL SKILLS'].split('\n') 
+        : sections['TECHNICAL SKILLS'];
+      
+      // Clean technical skills by removing section headers and whitespace
+      const cleanedTechnicalSkills = technicalSkills
+        .filter(skill => skill.trim())
+        .map(skill => skill.replace(/^technical\s+skills:?\s*/i, '').trim());
+      
+      logger.info(`Processed TECHNICAL SKILLS: ${cleanedTechnicalSkills.length} skills after cleaning`);
+      
+      // Add all technical skills to our tracking set
+      cleanedTechnicalSkills.forEach(skill => allSkills.add(skill.toLowerCase().trim()));
+      
+      // Update with cleaned content
+      if (Array.isArray(sections['TECHNICAL SKILLS'])) {
+        sections['TECHNICAL SKILLS'] = cleanedTechnicalSkills;
+      } else {
+        sections['TECHNICAL SKILLS'] = cleanedTechnicalSkills.join('\n');
+      }
+      
+      // Now handle professional skills if they exist
+      if (sections['PROFESSIONAL SKILLS']) {
+        // Convert to array for easier processing
+        const professionalSkills = typeof sections['PROFESSIONAL SKILLS'] === 'string'
+          ? sections['PROFESSIONAL SKILLS'].split('\n')
+          : sections['PROFESSIONAL SKILLS'];
+          
+        // Clean and filter professional skills, removing any duplicates found in technical skills
+        const cleanedProfessionalSkills = professionalSkills
+          .filter(skill => skill.trim())
+          .map(skill => skill.replace(/^professional\s+skills:?\s*/i, '').trim())
+          .filter(skill => !allSkills.has(skill.toLowerCase().trim()));
+          
+        // Only keep the professional skills section if we have unique skills
+        if (cleanedProfessionalSkills.length > 0) {
+          if (Array.isArray(sections['PROFESSIONAL SKILLS'])) {
+            sections['PROFESSIONAL SKILLS'] = cleanedProfessionalSkills;
+          } else {
+            sections['PROFESSIONAL SKILLS'] = cleanedProfessionalSkills.join('\n');
+          }
+          logger.info(`Deduplicated PROFESSIONAL SKILLS, keeping ${cleanedProfessionalSkills.length} unique skills`);
+        } else {
+          // If all professional skills were duplicates, remove the section
+          delete sections['PROFESSIONAL SKILLS'];
+          logger.info('Removed PROFESSIONAL SKILLS section as all skills were duplicated in TECHNICAL SKILLS');
+        }
+      }
+    }
   }
-
-  // Deduplicate content between Professional Skills and Technical Skills
-  if (sections['TECHNICAL SKILLS'] && sections['PROFESSIONAL SKILLS']) {
-    logger.info('Deduplicating between TECHNICAL SKILLS and PROFESSIONAL SKILLS');
-    
-    // Convert to arrays for easier processing
-    let technicalSkills = Array.isArray(sections['TECHNICAL SKILLS']) 
-      ? sections['TECHNICAL SKILLS'] 
-      : typeof sections['TECHNICAL SKILLS'] === 'string'
-        ? sections['TECHNICAL SKILLS'].split('\n')
-        : [];
+  
+  // Finally, remove generic SKILLS if we have specific skill sections
+  if (sections['SKILLS']) {
+    // If we have specific skills sections, merge the generic skills into them
+    if (sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS']) {
+      const genericSkills = typeof sections['SKILLS'] === 'string'
+        ? sections['SKILLS'].split('\n')
+        : sections['SKILLS'];
+      
+      // Create a set of all existing skills from specific sections
+      const existingSkills = new Set<string>();
+      
+      // Add technical skills to the set if they exist
+      if (sections['TECHNICAL SKILLS']) {
+        const technicalSkills = typeof sections['TECHNICAL SKILLS'] === 'string'
+          ? sections['TECHNICAL SKILLS'].split('\n')
+          : sections['TECHNICAL SKILLS'];
         
-    let professionalSkills = Array.isArray(sections['PROFESSIONAL SKILLS']) 
-      ? sections['PROFESSIONAL SKILLS'] 
-      : typeof sections['PROFESSIONAL SKILLS'] === 'string'
-        ? sections['PROFESSIONAL SKILLS'].split('\n')
-        : [];
-    
-    // Clean skill entries
-    technicalSkills = technicalSkills.map(skill => 
-      typeof skill === 'string' ? skill.trim() : skill
-    ).filter(skill => 
-      typeof skill === 'string' && 
-      skill.length > 0 && 
-      !skill.toUpperCase().includes('TECHNICAL SKILLS') &&
-      !skill.toUpperCase().includes('SKILL'));
-    
-    professionalSkills = professionalSkills.map(skill => 
-      typeof skill === 'string' ? skill.trim() : skill
-    ).filter(skill => 
-      typeof skill === 'string' && 
-      skill.length > 0 && 
-      !skill.toUpperCase().includes('PROFESSIONAL SKILLS') &&
-      !skill.toUpperCase().includes('SKILL'));
-    
-    // Also remove any standalone labels that might be duplicated
-    // This specifically targets the "Blender" issue in the screenshot
-    const standaloneLabels = new Set<string>();
-    
-    // Identify standalone labels (usually applications or tools like "Blender")
-    [...technicalSkills, ...professionalSkills].forEach(skill => {
-      if (typeof skill === 'string' && skill.trim().length > 0 && skill.trim().split(/\s+/).length === 1) {
-        standaloneLabels.add(skill.trim().toLowerCase());
+        technicalSkills.forEach(skill => 
+          existingSkills.add(skill.toLowerCase().trim()));
       }
-    });
-    
-    // Filter out duplicate standalone labels
-    let hasProcessedLabel = new Set<string>();
-    
-    technicalSkills = technicalSkills.filter(skill => {
-      if (typeof skill !== 'string') return false;
-      const trimmed = skill.trim();
       
-      // Check if it's a standalone label that we've seen before
-      if (trimmed.split(/\s+/).length === 1) {
-        const lower = trimmed.toLowerCase();
-        if (hasProcessedLabel.has(lower)) return false;
-        hasProcessedLabel.add(lower);
+      // Add professional skills to the set if they exist
+      if (sections['PROFESSIONAL SKILLS']) {
+        const professionalSkills = typeof sections['PROFESSIONAL SKILLS'] === 'string'
+          ? sections['PROFESSIONAL SKILLS'].split('\n')
+          : sections['PROFESSIONAL SKILLS'];
+        
+        professionalSkills.forEach(skill => 
+          existingSkills.add(skill.toLowerCase().trim()));
       }
-      return true;
-    });
-    
-    professionalSkills = professionalSkills.filter(skill => {
-      if (typeof skill !== 'string') return false;
-      const trimmed = skill.trim();
       
-      // Check if it's a standalone label that we've seen before
-      if (trimmed.split(/\s+/).length === 1) {
-        const lower = trimmed.toLowerCase();
-        if (hasProcessedLabel.has(lower)) return false;
-        hasProcessedLabel.add(lower);
+      // Clean generic skills and filter out duplicates
+      const cleanedGenericSkills = genericSkills
+        .filter(skill => skill.trim())
+        .map(skill => skill.replace(/^skills:?\s*/i, '').trim())
+        .filter(skill => !existingSkills.has(skill.toLowerCase().trim()));
+      
+      // If we have unique generic skills, add them to an appropriate section
+      if (cleanedGenericSkills.length > 0) {
+        logger.info(`Found ${cleanedGenericSkills.length} unique skills in generic SKILLS section`);
+        
+        // Prefer adding to technical skills if it exists
+        if (sections['TECHNICAL SKILLS']) {
+          const currentTechnical = typeof sections['TECHNICAL SKILLS'] === 'string'
+            ? sections['TECHNICAL SKILLS'].split('\n')
+            : sections['TECHNICAL SKILLS'];
+          
+          const updatedTechnicalSkills = [...currentTechnical, ...cleanedGenericSkills];
+          
+          sections['TECHNICAL SKILLS'] = Array.isArray(sections['TECHNICAL SKILLS'])
+            ? updatedTechnicalSkills
+            : updatedTechnicalSkills.join('\n');
+          
+          logger.info(`Added ${cleanedGenericSkills.length} unique skills from SKILLS to TECHNICAL SKILLS`);
+        }
+        // Otherwise add to professional skills
+        else if (sections['PROFESSIONAL SKILLS']) {
+          const currentProfessional = typeof sections['PROFESSIONAL SKILLS'] === 'string'
+            ? sections['PROFESSIONAL SKILLS'].split('\n')
+            : sections['PROFESSIONAL SKILLS'];
+          
+          const updatedProfessionalSkills = [...currentProfessional, ...cleanedGenericSkills];
+          
+          sections['PROFESSIONAL SKILLS'] = Array.isArray(sections['PROFESSIONAL SKILLS'])
+            ? updatedProfessionalSkills
+            : updatedProfessionalSkills.join('\n');
+          
+          logger.info(`Added ${cleanedGenericSkills.length} unique skills from SKILLS to PROFESSIONAL SKILLS`);
+        }
+        // If we don't have either specific section, create a technical skills section
+        else {
+          sections['TECHNICAL SKILLS'] = Array.isArray(sections['SKILLS'])
+            ? cleanedGenericSkills
+            : cleanedGenericSkills.join('\n');
+          
+          logger.info(`Created TECHNICAL SKILLS section with ${cleanedGenericSkills.length} skills from SKILLS`);
+        }
       }
-      return true;
-    });
-    
-    // Create case-insensitive sets for comparison
-    const techSkillsSet = new Set(technicalSkills.map(s => 
-      typeof s === 'string' ? s.toLowerCase() : ''
-    ));
-    
-    // Remove any professional skills that are duplicated in technical skills
-    professionalSkills = professionalSkills.filter(skill => 
-      typeof skill === 'string' && !techSkillsSet.has(skill.toLowerCase())
-    );
-    
-    // Update sections with deduplicated content
-    sections['TECHNICAL SKILLS'] = technicalSkills;
-    sections['PROFESSIONAL SKILLS'] = professionalSkills;
-    
-    logger.info(`Deduplicated skills: Technical (${technicalSkills.length}), Professional (${professionalSkills.length})`);
+      
+      // Remove the generic SKILLS section as its content is now in specific sections
+      delete sections['SKILLS'];
+      logger.info('Removed generic SKILLS section after processing its content');
+    }
+  }
+  // If we only have generic SKILLS section, keep it
+  else if (sections['SKILLS']) {
+    logger.info('Keeping generic SKILLS section as no specific skills sections exist');
   }
   
   // More detailed logging for debugging section parsing
@@ -387,11 +439,10 @@ async function generateSpecificDocx(
     // Skip if section doesn't exist or was already processed (e.g., SUMMARY merged into PROFILE)
     if (!sections[section]) continue;
     
-    // Skip certain sections if their equivalents were already processed
-    // This handles the duplicates shown in the brown circles in the sample document
+    // Skip certain sections if their equivalents exist to prevent duplication
     if ((section === 'SKILLS' && (sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS'])) ||
         (section === 'SUMMARY' && sections['PROFILE'])) {
-      logger.info(`Skipping ${section} section to prevent duplication`);
+      logger.info(`Skipping ${section} section to prevent duplication with more specific sections`);
       continue;
     }
     
