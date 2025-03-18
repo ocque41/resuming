@@ -196,104 +196,156 @@ async function generateSpecificDocx(
   const sections = parseOptimizedText(cvText);
   
   // Merge PROFILE and SUMMARY sections to avoid duplication
-  if (sections['PROFILE'] && sections['SUMMARY']) {
-    // Extract and merge the content
+  if (sections['PROFILE'] || sections['SUMMARY']) {
+    // Get content from both sections
     const profileContent = typeof sections['PROFILE'] === 'string' 
       ? sections['PROFILE'] 
-      : Array.isArray(sections['PROFILE']) ? sections['PROFILE'].join(' ') : '';
+      : Array.isArray(sections['PROFILE']) ? sections['PROFILE'].join('\n') : '';
     
     const summaryContent = typeof sections['SUMMARY'] === 'string' 
       ? sections['SUMMARY'] 
-      : Array.isArray(sections['SUMMARY']) ? sections['SUMMARY'].join(' ') : '';
+      : Array.isArray(sections['SUMMARY']) ? sections['SUMMARY'].join('\n') : '';
     
-    // Only merge if they're not identical
-    if (profileContent.toLowerCase().trim() !== summaryContent.toLowerCase().trim()) {
-      sections['PROFILE'] = profileContent + (profileContent && summaryContent ? '\n\n' : '') + summaryContent;
-      logger.info('Merged SUMMARY section into PROFILE to avoid duplication');
+    // Create a combined profile
+    let combinedProfile = '';
+    
+    // If both exist, merge them intelligently
+    if (profileContent && summaryContent) {
+      // Check for substantial overlap (80% or more similarity)
+      const profileWords = new Set(profileContent.toLowerCase().split(/\s+/).filter(w => w.length > 3));
+      const summaryWords = summaryContent.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+      
+      let matchCount = 0;
+      for (const word of summaryWords) {
+        if (profileWords.has(word)) matchCount++;
+      }
+      
+      const similarityRatio = summaryWords.length > 0 ? matchCount / summaryWords.length : 0;
+      
+      if (similarityRatio > 0.8) {
+        // If very similar, just use the longer one
+        combinedProfile = profileContent.length >= summaryContent.length ? profileContent : summaryContent;
+        logger.info(`PROFILE and SUMMARY are ${Math.round(similarityRatio * 100)}% similar, using longer content`);
+      } else {
+        // If sufficiently different, combine them
+        combinedProfile = profileContent + (profileContent && summaryContent ? '\n\n' : '') + summaryContent;
+        logger.info('Combined different PROFILE and SUMMARY sections');
+      }
     } else {
-      // If they're identical, just keep PROFILE
-      logger.info('PROFILE and SUMMARY are identical, keeping only PROFILE');
+      // Use whichever one exists
+      combinedProfile = profileContent || summaryContent;
     }
     
-    // Always remove the SUMMARY section as its content is now in PROFILE or it's a duplicate
+    // Store in PROFILE section
+    sections['PROFILE'] = combinedProfile;
+    
+    // Always delete SUMMARY section after merging
     delete sections['SUMMARY'];
-    logger.info('Deleted SUMMARY section after merging with PROFILE');
+    logger.info('Removed SUMMARY section after merging with PROFILE');
   }
   
-  // Special handling for Technical and Professional Skills to avoid duplications
-  if (sections['TECHNICAL SKILLS'] && sections['PROFESSIONAL SKILLS']) {
-    // Convert to arrays for easier processing
-    let technicalSkills = Array.isArray(sections['TECHNICAL SKILLS']) 
-      ? sections['TECHNICAL SKILLS'] 
-      : [sections['TECHNICAL SKILLS']];
+  // Enhanced skills section deduplication logic
+  // Step 1: Handle all skills-related sections together 
+  const skillSectionNames = ['SKILLS', 'TECHNICAL SKILLS', 'PROFESSIONAL SKILLS'];
+  const presentSkillSections = skillSectionNames.filter(name => sections[name]);
+  
+  if (presentSkillSections.length > 1) {
+    logger.info(`Multiple skill sections detected: ${presentSkillSections.join(', ')}`);
     
-    let professionalSkills = Array.isArray(sections['PROFESSIONAL SKILLS']) 
-      ? sections['PROFESSIONAL SKILLS'] 
-      : [sections['PROFESSIONAL SKILLS']];
+    // Process each skills section into a standardized format (array of skills)
+    const processedSkills: Record<string, string[]> = {};
+    const skillWords = new Set<string>(); // Tracks unique skill words for better deduplication
+    
+    for (const sectionName of presentSkillSections) {
+      // Get content and convert to array
+      let skillsContent = sections[sectionName];
+      let skillsArray = Array.isArray(skillsContent) ? [...skillsContent] : [skillsContent];
       
-    // Clean skills arrays - more aggressively remove section headers and duplicates
-    technicalSkills = technicalSkills
-      .flatMap(item => typeof item === 'string' ? item.split('\n') : item)
-      .map(skill => typeof skill === 'string' ? skill.trim() : skill)
-      .filter(skill => 
-        typeof skill === 'string' && 
-        skill.length > 0 && 
-        !skill.toUpperCase().includes('TECHNICAL SKILLS') &&
-        !skill.toUpperCase().includes('TECHNICAL') &&
-        !skill.toUpperCase().includes('SKILL'));
+      // Process into individual skills
+      skillsArray = skillsArray
+        .flatMap(item => typeof item === 'string' ? item.split('\n') : item)
+        .map(skill => typeof skill === 'string' ? skill.trim() : skill)
+        .filter(skill => 
+          typeof skill === 'string' && 
+          skill.length > 0 && 
+          !skill.toUpperCase().includes(sectionName.toUpperCase()) &&
+          !skill.toUpperCase().includes('SKILL'));
+      
+      // Store processed array
+      processedSkills[sectionName] = skillsArray as string[];
+      
+      // Add to skill words for comparison
+      for (const skill of skillsArray) {
+        if (typeof skill === 'string') {
+          const words = skill.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
+          for (const word of words) {
+            skillWords.add(word);
+          }
+        }
+      }
+    }
+    
+    // Prioritizing specific skill sections over generic ones
+    if (processedSkills['TECHNICAL SKILLS'] || processedSkills['PROFESSIONAL SKILLS']) {
+      // If we have specific skill sections, remove the generic SKILLS section
+      if (sections['SKILLS']) {
+        logger.info('Deleting generic SKILLS section since we have specific skill sections');
+        delete sections['SKILLS'];
+      }
+    }
+    
+    // Deduplicate between TECHNICAL SKILLS and PROFESSIONAL SKILLS
+    if (processedSkills['TECHNICAL SKILLS'] && processedSkills['PROFESSIONAL SKILLS']) {
+      const techSkills = processedSkills['TECHNICAL SKILLS'];
+      const techSkillsLower = techSkills.map((s: string) => typeof s === 'string' ? s.toLowerCase() : '');
+      
+      // Remove duplicates from professional skills
+      processedSkills['PROFESSIONAL SKILLS'] = processedSkills['PROFESSIONAL SKILLS'].filter((skill: string) => {
+        if (typeof skill !== 'string') return false;
         
-    professionalSkills = professionalSkills
-      .flatMap(item => typeof item === 'string' ? item.split('\n') : item)
-      .map(skill => typeof skill === 'string' ? skill.trim() : skill)
-      .filter(skill => 
-        typeof skill === 'string' && 
-        skill.length > 0 && 
-        !skill.toUpperCase().includes('PROFESSIONAL SKILLS') &&
-        !skill.toUpperCase().includes('PROFESSIONAL') &&
-        !skill.toUpperCase().includes('SKILL'));
+        // Check for exact matches
+        if (techSkillsLower.includes(skill.toLowerCase())) return false;
+        
+        // Check for high similarity in words
+        const skillWords = skill.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
+        if (skillWords.length === 0) return true;
+        
+        // For each tech skill, check if it contains most of the words in this professional skill
+        for (const techSkill of techSkillsLower) {
+          const techWords = techSkill.split(/\s+/).filter((w: string) => w.length > 3);
+          let matchCount = 0;
+          for (const word of skillWords) {
+            if (techWords.includes(word)) matchCount++;
+          }
+          
+          // If 80% or more words match, consider it a duplicate
+          if (skillWords.length > 0 && matchCount / skillWords.length > 0.8) {
+            return false;
+          }
+        }
+        
+        return true;
+      });
       
-    // Create a set of technical skills (case insensitive) for comparison
-    const technicalSkillsSet = new Set(technicalSkills.map(s => typeof s === 'string' ? s.toLowerCase() : ''));
-    
-    // Filter professional skills to remove duplicates found in technical skills
-    professionalSkills = professionalSkills.filter(skill => 
-      typeof skill === 'string' && !technicalSkillsSet.has(skill.toLowerCase()));
+      // Update sections with deduplicated content
+      sections['TECHNICAL SKILLS'] = processedSkills['TECHNICAL SKILLS'];
+      sections['PROFESSIONAL SKILLS'] = processedSkills['PROFESSIONAL SKILLS'];
       
-    // Update sections with cleaned content
-    sections['TECHNICAL SKILLS'] = technicalSkills;
-    sections['PROFESSIONAL SKILLS'] = professionalSkills;
-    
-    // Remove generic SKILLS section if we have specific skill sections
-    if (sections['SKILLS']) {
-      logger.info('Deleting generic SKILLS section since we have specific skill sections');
-      delete sections['SKILLS'];
+      logger.info(`After deduplication: TECHNICAL SKILLS has ${processedSkills['TECHNICAL SKILLS'].length} items, PROFESSIONAL SKILLS has ${processedSkills['PROFESSIONAL SKILLS'].length} items`);
+      
+      // If either section is now empty, remove it
+      if (processedSkills['PROFESSIONAL SKILLS'].length === 0) {
+        logger.info('Removed PROFESSIONAL SKILLS section as all items were duplicates of TECHNICAL SKILLS');
+        delete sections['PROFESSIONAL SKILLS'];
+      }
+      
+      if (processedSkills['TECHNICAL SKILLS'].length === 0) {
+        logger.info('Removed TECHNICAL SKILLS section as all items were duplicates');
+        delete sections['TECHNICAL SKILLS'];
+      }
     }
   }
   
-  // If we have only one type of skills section, ensure we don't also have a generic SKILLS section
-  if ((sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS']) && sections['SKILLS']) {
-    // Check for duplication - if skills section contents overlap with specific skill sections
-    const specificSkillsContent = [
-      ...(Array.isArray(sections['TECHNICAL SKILLS']) ? sections['TECHNICAL SKILLS'] : [sections['TECHNICAL SKILLS'] || '']),
-      ...(Array.isArray(sections['PROFESSIONAL SKILLS']) ? sections['PROFESSIONAL SKILLS'] : [sections['PROFESSIONAL SKILLS'] || ''])
-    ].filter(Boolean).map(s => typeof s === 'string' ? s.toLowerCase() : '');
-    
-    const genericSkillsContent = Array.isArray(sections['SKILLS']) 
-      ? sections['SKILLS'] 
-      : [sections['SKILLS'] || ''];
-    
-    const specificSkillsSet = new Set(specificSkillsContent);
-    const hasOverlap = genericSkillsContent.some(skill => 
-      typeof skill === 'string' && specificSkillsSet.has(skill.toLowerCase()));
-    
-    if (hasOverlap) {
-      logger.info('Removing generic SKILLS section due to overlap with specific skills sections');
-      delete sections['SKILLS'];
-    } else {
-      logger.info('Generic SKILLS section contains unique content, keeping it alongside specific skill sections');
-    }
-  }
-
   // Rename 'SKILLS' to 'OTHER SKILLS' if we have both technical/professional and general skills
   // to better distinguish between them in the final document
   if (sections['SKILLS'] && (sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS'])) {
@@ -346,17 +398,28 @@ async function generateSpecificDocx(
   paragraphs.push(horizontalLine);
 
   // Process each section in order with enhanced Profile formatting
+  const processedSections = new Set(); // Track sections we've already processed
+  
   for (const section of sectionOrder) {
     // Skip if section doesn't exist
-    if (!sections[section]) continue;
-    
-    // If we already processed PROFILE and this is SUMMARY, skip it to avoid duplication
-    if (section === 'SUMMARY' && sections['PROFILE']) {
-      logger.info('Skipping SUMMARY section as PROFILE already exists');
+    if (!sections[section]) {
+      logger.info(`Skipping ${section} section as it doesn't exist`);
       continue;
     }
     
-    // Skip SKILLS section if we have technical or professional skills to avoid duplication
+    // Skip if we've already processed an equivalent section
+    if (processedSections.has(section)) {
+      logger.info(`Skipping ${section} section as it was already processed`);
+      continue;
+    }
+    
+    // Skip if this is SUMMARY and we already processed PROFILE
+    if (section === 'SUMMARY' && processedSections.has('PROFILE')) {
+      logger.info('Skipping SUMMARY section as PROFILE was already processed');
+      continue;
+    }
+    
+    // Skip SKILLS section if we have specific skills sections
     if (section === 'SKILLS' && (sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS'])) {
       logger.info('Skipping generic SKILLS section as specific skills sections exist');
       continue;
@@ -364,7 +427,10 @@ async function generateSpecificDocx(
     
     // Get content for this section
     const content = sections[section];
-
+    
+    // Mark this section as processed
+    processedSections.add(section);
+    
     // Special handling for Profile section with enhanced formatting
     if (section === 'PROFILE') {
       // Add profile header with special formatting
@@ -796,108 +862,22 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
   const sections: Record<string, string | string[]> = {};
   
   // Return empty sections if no text provided
-  if (!text || typeof text !== 'string') {
-    logger.warn('No valid text provided for parsing');
+  if (!text) {
     return sections;
   }
   
-  // Split text into lines
-  const lines = text.split('\n').filter(line => line.trim());
+  // Split the text into lines for processing
+  const lines = text.split('\n');
   
-  // First try to check if the text is in JSON format
-  try {
-    const parsedJson = JSON.parse(text);
-    if (typeof parsedJson === 'object' && parsedJson !== null) {
-      logger.info('Successfully parsed text as JSON');
-      return parsedJson;
-    }
-  } catch (e) {
-    // Not valid JSON, continue with regular parsing
-    logger.info('Text is not in JSON format, using standard parsing');
-  }
-  
-  // Define section patterns - improved to capture more variations and prioritize finding all important sections
-  const sectionPatterns: { regex: RegExp, name: string, priority?: number, synonyms?: string[] }[] = [
-    { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:PROFILE|SUMMARY|ABOUT(?:\s+ME)?|PROFESSIONAL(?:\s+SUMMARY)?|PERSONAL(?:\s+STATEMENT)?)[\s\*•:\-_\|\#]*$/i, 
-      name: 'PROFILE', 
-      priority: 10,
-      synonyms: ['SUMMARY', 'ABOUT ME', 'PROFESSIONAL SUMMARY', 'PERSONAL STATEMENT']
-    },
-    { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:ACHIEVEMENTS|ACCOMPLISHMENTS|KEY(?:\s+ACHIEVEMENTS)|HIGHLIGHTS)[\s\*•:\-_\|\#]*$/i, 
-      name: 'ACHIEVEMENTS',
-      priority: 8,
-      synonyms: ['ACCOMPLISHMENTS', 'KEY ACHIEVEMENTS', 'HIGHLIGHTS'] 
-    },
-    { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:GOALS|OBJECTIVES|CAREER(?:\s+GOALS)|ASPIRATIONS|CAREER(?:\s+OBJECTIVES))[\s\*•:\-_\|\#]*$/i, 
-      name: 'GOALS',
-      priority: 7,
-      synonyms: ['OBJECTIVES', 'CAREER GOALS', 'ASPIRATIONS', 'CAREER OBJECTIVES']
-    },
-    { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:LANGUAGES?|LANGUAGE(?:\s+PROFICIENCY)|LANGUAGE(?:\s+SKILLS))[\s\*•:\-_\|\#]*$/i, 
-      name: 'LANGUAGES',
-      priority: 6,
-      synonyms: ['LANGUAGE PROFICIENCY', 'LANGUAGE SKILLS']
-    },
-    { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:TECHNICAL(?:\s+SKILLS)|TECHNICAL(?:\s+EXPERTISE)|TECHNICAL(?:\s+PROFICIENCIES)|IT(?:\s+SKILLS))[\s\*•:\-_\|\#]*$/i, 
-      name: 'TECHNICAL SKILLS',
-      priority: 5,
-      synonyms: ['TECHNICAL EXPERTISE', 'TECHNICAL PROFICIENCIES', 'IT SKILLS'] 
-    },
-    { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:PROFESSIONAL(?:\s+SKILLS)|SOFT(?:\s+SKILLS)|KEY(?:\s+SKILLS)|CORE(?:\s+COMPETENCIES))[\s\*•:\-_\|\#]*$/i, 
-      name: 'PROFESSIONAL SKILLS',
-      priority: 5,
-      synonyms: ['SOFT SKILLS', 'KEY SKILLS', 'CORE COMPETENCIES']
-    },
-    { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:SKILLS|CORE(?:\s+SKILLS)|EXPERTISE|COMPETENCIES|CAPABILITIES)[\s\*•:\-_\|\#]*$/i, 
-      name: 'SKILLS',
-      priority: 5,
-      synonyms: ['CORE SKILLS', 'EXPERTISE', 'COMPETENCIES', 'CAPABILITIES']
-    },
-    { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:EDUCATION|ACADEMIC(?:\s+BACKGROUND)|EDUCATIONAL(?:\s+HISTORY)|QUALIFICATIONS|ACADEMIC(?:\s+QUALIFICATIONS))[\s\*•:\-_\|\#]*$/i, 
-      name: 'EDUCATION',
-      priority: 9,
-      synonyms: ['ACADEMIC BACKGROUND', 'EDUCATIONAL HISTORY', 'QUALIFICATIONS', 'ACADEMIC QUALIFICATIONS']
-    },
-    { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:EXPERIENCE|WORK(?:\s+EXPERIENCE)|EMPLOYMENT(?:\s+HISTORY)|PROFESSIONAL(?:\s+EXPERIENCE)|CAREER(?:\s+HISTORY)|JOB(?:\s+HISTORY))[\s\*•:\-_\|\#]*$/i, 
-      name: 'EXPERIENCE',
-      priority: 9,
-      synonyms: ['WORK EXPERIENCE', 'EMPLOYMENT HISTORY', 'PROFESSIONAL EXPERIENCE', 'CAREER HISTORY', 'JOB HISTORY']
-    },
-    { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:REFERENCES|PROFESSIONAL(?:\s+REFERENCES)|RECOMMENDATIONS)[\s\*•:\-_\|\#]*$/i, 
-      name: 'REFERENCES',
-      priority: 3,
-      synonyms: ['PROFESSIONAL REFERENCES', 'RECOMMENDATIONS']
-    },
-    { 
-      regex: /^\s*[\*•\-\|\#]?\s*(?:EXPECTATIONS|WHAT(?:\s+TO)?(?:\s+EXPECT)|JOB(?:\s+EXPECTATIONS)|ROLE(?:\s+REQUIREMENTS))[\s\*•:\-_\|\#]*$/i, 
-      name: 'EXPECTATIONS',
-      priority: 4,
-      synonyms: ['WHAT TO EXPECT', 'JOB EXPECTATIONS', 'ROLE REQUIREMENTS']
-    }
-  ];
-  
-  // Extract contact information (usually at the top)
-  const headerEndIndex = Math.min(12, lines.length);
+  // Extract a header section (usually contains contact info at the top of CV)
   const headerContent: string[] = [];
   
-  // Look for typical header content including name and contact details
-  for (let i = 0; i < headerEndIndex; i++) {
+  // Process the first few lines to extract contact information
+  for (let i = 0; i < Math.min(15, lines.length); i++) {
     const line = lines[i].trim();
     
-    // Skip likely section headers
-    if (line.match(/^[\s*•\-\|\#]?\s*[A-Z][A-Z\s]+:?/)) {
-      continue;
-    }
+    // Skip blank lines
+    if (!line) continue;
     
     // Check for typical contact information patterns
     if (line.match(/^[A-Z][a-z]+ [A-Z][a-z]+$/i) || // Name pattern
@@ -925,6 +905,27 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
   // Special handling for profile - often the first substantive paragraph after contact info
   let potentialProfile = '';
   let inProfileParagraph = false;
+
+  // Define section detection patterns
+  const sectionPatterns = [
+    { name: 'SUMMARY', regex: /^[\s*•\-\|]*(?:SUMMARY|PROFESSIONAL\s+SUMMARY|EXECUTIVE\s+SUMMARY|PROFILE\s+SUMMARY)[\s:]*$/i, priority: 5 },
+    { name: 'PROFILE', regex: /^[\s*•\-\|]*(?:PROFILE|PROFESSIONAL\s+PROFILE|ABOUT(?:\s+ME)?)[\s:]*$/i, priority: 5 },
+    { name: 'EXPERIENCE', regex: /^[\s*•\-\|]*(?:EXPERIENCE|WORK\s+EXPERIENCE|EMPLOYMENT(?:\s+HISTORY)?|PROFESSIONAL\s+EXPERIENCE|CAREER)[\s:]*$/i, priority: 4 },
+    { name: 'EDUCATION', regex: /^[\s*•\-\|]*(?:EDUCATION|ACADEMIC\s+BACKGROUND|ACADEMIC\s+HISTORY|QUALIFICATIONS)[\s:]*$/i, priority: 4 },
+    { name: 'SKILLS', regex: /^[\s*•\-\|]*(?:SKILLS|CORE\s+SKILLS|KEY\s+SKILLS)[\s:]*$/i, priority: 3 },
+    { name: 'TECHNICAL SKILLS', regex: /^[\s*•\-\|]*(?:TECHNICAL\s+SKILLS|TECHNICAL\s+EXPERTISE|TECH\s+SKILLS|TECHNICAL\s+PROFICIENCIES)[\s:]*$/i, priority: 4 },
+    { name: 'PROFESSIONAL SKILLS', regex: /^[\s*•\-\|]*(?:PROFESSIONAL\s+SKILLS|SOFT\s+SKILLS|INTERPERSONAL\s+SKILLS|CORE\s+COMPETENCIES)[\s:]*$/i, priority: 4 },
+    { name: 'LANGUAGES', regex: /^[\s*•\-\|]*(?:LANGUAGES|LANGUAGE\s+SKILLS|LANGUAGE\s+PROFICIENCIES)[\s:]*$/i, priority: 3 },
+    { name: 'ACHIEVEMENTS', regex: /^[\s*•\-\|]*(?:ACHIEVEMENTS|ACCOMPLISHMENTS|KEY\s+ACHIEVEMENTS|MAJOR\s+ACCOMPLISHMENTS)[\s:]*$/i, priority: 3 },
+    { name: 'CERTIFICATIONS', regex: /^[\s*•\-\|]*(?:CERTIFICATIONS|CERTIFICATES|PROFESSIONAL\s+CERTIFICATIONS|CREDENTIALS)[\s:]*$/i, priority: 3 },
+    { name: 'PROJECTS', regex: /^[\s*•\-\|]*(?:PROJECTS|KEY\s+PROJECTS|MAJOR\s+PROJECTS|PROJECT\s+EXPERIENCE)[\s:]*$/i, priority: 3 },
+    { name: 'PUBLICATIONS', regex: /^[\s*•\-\|]*(?:PUBLICATIONS|PUBLISHED\s+WORKS|PAPERS|RESEARCH\s+PUBLICATIONS)[\s:]*$/i, priority: 2 },
+    { name: 'REFERENCES', regex: /^[\s*•\-\|]*(?:REFERENCES|PROFESSIONAL\s+REFERENCES|RECOMMENDATION)[\s:]*$/i, priority: 1 },
+    { name: 'VOLUNTEER', regex: /^[\s*•\-\|]*(?:VOLUNTEER(?:\s+EXPERIENCE)?|COMMUNITY\s+SERVICE|COMMUNITY\s+INVOLVEMENT)[\s:]*$/i, priority: 2 },
+    { name: 'INTERESTS', regex: /^[\s*•\-\|]*(?:INTERESTS|HOBBIES|ACTIVITIES|PERSONAL\s+INTERESTS)[\s:]*$/i, priority: 1 },
+    { name: 'GOALS', regex: /^[\s*•\-\|]*(?:GOALS|CAREER\s+GOALS|OBJECTIVES|CAREER\s+OBJECTIVES)[\s:]*$/i, priority: 3 },
+    { name: 'EXPECTATIONS', regex: /^[\s*•\-\|]*(?:EXPECTATIONS|SALARY\s+EXPECTATIONS|COMPENSATION\s+REQUIREMENTS)[\s:]*$/i, priority: 2 }
+  ];
 
   // Process each line with improved content extraction, focusing on actual profile content
   for (let i = 0; i < lines.length; i++) {
@@ -1051,131 +1052,23 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     const nameMatch = text.match(/^([A-Z][a-z]+\s+[A-Z][a-z]+)(?:\n|$)/);
     const name = nameMatch ? nameMatch[1] : "Professional";
     
-    sections['PROFILE'] = `${name} with experience and skills seeking new opportunities to leverage expertise and contribute to organizational success.`;
-    logger.info('Created default PROFILE section');
+    sections['PROFILE'] = `${name} with a strong background in the field. Experienced in delivering results and working with teams.`;
+    logger.info('Created default PROFILE section as none was found');
   }
   
-  // Additional check: If we have a SUMMARY but no PROFILE, use SUMMARY as PROFILE
-  if (!sections['PROFILE'] && sections['SUMMARY']) {
-    sections['PROFILE'] = sections['SUMMARY'];
-    logger.info('Using SUMMARY section as PROFILE');
-  }
-  
-  // Final check: Make sure PROFILE is substantial
-  if (sections['PROFILE'] && typeof sections['PROFILE'] === 'string' && sections['PROFILE'].length < 50) {
-    // If profile is too short, try to enhance it
-    const name = text.match(/^([A-Z][a-z]+\s+[A-Z][a-z]+)(?:\n|$)/)?.[1] || "Professional";
-    sections['PROFILE'] = `${sections['PROFILE']} ${name} is an experienced professional seeking opportunities to apply skills and expertise in a new role.`;
-    logger.info('Enhanced short PROFILE section');
-  }
-  
-  // If we still don't have a profile, attempt to extract it from the text more comprehensively
-  if (!sections['PROFILE']) {
-    logger.info('No profile section found, attempting to extract one from CV content');
-    
-    // First try to extract a substantive paragraph from the beginning of the CV
-    let bestProfileCandidate = '';
-    let bestCandidateScore = 0;
-    
-    // Look through first 20% of the document for potential profile paragraphs
-    const searchDepth = Math.min(30, Math.ceil(lines.length * 0.2));
-    
-    // Skip header lines and look for a substantive paragraph
-    for (let i = headerContent.length; i < searchDepth; i++) {
-      const line = lines[i].trim();
-      
-      // Skip section headers, short lines, and bullet points
-      if (line.match(/^[A-Z][A-Z\s]+:?$/) || 
-          line.length < 40 || 
-          line.startsWith('•') || 
-          line.startsWith('-') ||
-          line.match(/^\d+\./)) {
-        continue;
-      }
-      
-      // Calculate a "profile likelihood score" based on content
-      let score = line.length / 15; // Longer text gets higher score
-      
-      // Boost score for lines with profile-related keywords
-      const profileKeywords = [
-        'professional', 'experienced', 'skilled', 'background', 
-        'expertise', 'years of experience', 'career', 
-        'passionate', 'dedicated', 'seeking', 'opportunity',
-        'summary', 'profile', 'about me', 'qualified', 'specialist',
-        'knowledge', 'capabilities', 'strengths', 'track record'
-      ];
-      
-      profileKeywords.forEach(keyword => {
-        if (line.toLowerCase().includes(keyword)) {
-          score += 2;
-        }
-      });
-      
-      // Extra boost for first-person language which is common in profiles
-      if (line.match(/\b(I am|I have|I possess|My|I'm)\b/i)) {
-        score += 3;
-      }
-      
-      // Position boost - paragraphs closer to the top are more likely to be profiles
-      score += (searchDepth - i) / 5;
-      
-      // Penalize lines that look like job titles or company names
-      if (line.includes(' at ') || line.includes(' - ') || line.match(/\b(inc|ltd|llc|corp)\b/i)) {
-        score -= 3;
-      }
-      
-      // Update best candidate if this one is better
-      if (score > bestCandidateScore) {
-        bestProfileCandidate = line;
-        bestCandidateScore = score;
-        
-        // Check if this is part of a paragraph and include adjacent lines
-        let j = i + 1;
-        while (j < lines.length && 
-               lines[j].trim().length > 20 && 
-               !lines[j].match(/^[A-Z][A-Z\s]+:?$/) && 
-               !lines[j].startsWith('•') && 
-               !lines[j].startsWith('-') &&
-               !lines[j].match(/^\d+\./)) {
-          bestProfileCandidate += '\n' + lines[j].trim();
-          j++;
-        }
-      }
-    }
-    
-    // If we found a good candidate, use it
-    if (bestProfileCandidate && bestCandidateScore > 5) {
-      sections['PROFILE'] = bestProfileCandidate;
-      logger.info(`Extracted profile from CV with score ${bestCandidateScore}`);
-    }
-  }
-  
-  // Ensure the function has a proper return statement
-  logger.info(`Parsed ${Object.keys(sections).length} sections from optimized text`);
-
-  // Ensure ACHIEVEMENTS section exists
+  // Ensure we have ACHIEVEMENTS if possible
   if (!sections['ACHIEVEMENTS']) {
-    logger.info('Looking for possible ACHIEVEMENTS content');
+    logger.info('Looking for achievement statements to create ACHIEVEMENTS section');
     
-    // Look for achievements content by searching for paragraphs with achievement indicators
-    const achievementIndicators = [
-      /accomplished/i, /achieved/i, /improved/i, /increased/i, /decreased/i, 
-      /reduced/i, /delivered/i, /launched/i, /created/i, /developed/i,
-      /implemented/i, /managed/i, /led/i, /awarded/i, /recognized/i,
-      /\d+%/i, /success/i, /award/i, /certification/i, /honor/i
-    ];
-    
-    // Find content that looks like achievements
+    // Look for lines that contain achievement indicators and quantifiable results
     const achievementContent = lines.filter(line => {
       if (line.length < 20) return false;
       
-      // Check for bullet points or numbered lists (common for achievements)
-      const isBulletOrNumbered = line.trim().startsWith('•') || 
-                                 line.trim().startsWith('-') || 
-                                 line.match(/^\d+\./);
+      // Check for bullet points or numbering
+      const isBulletOrNumbered = /^[\s*•\-\d\.]+/.test(line);
       
       // Check for achievement indicators
-      const hasIndicator = achievementIndicators.some(regex => regex.test(line));
+      const hasIndicator = /achieved|improve|increased|reduced|saved|delivered|launched|developed|created|led|managed|won|award|recognized|success/i.test(line);
       
       // Check for quantifiable results
       const hasQuantifiableResults = /\d+%|\$\d+|\d+ million|\d+ thousand|\d+ projects/i.test(line);
@@ -1185,7 +1078,7 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     });
     
     if (achievementContent.length > 0) {
-      sections['ACHIEVEMENTS'] = achievementContent;
+      sections['ACHIEVEMENTS'] = achievementContent.join('\n');
       logger.info(`Created ACHIEVEMENTS section with ${achievementContent.length} lines of content`);
     }
   }
@@ -1194,11 +1087,10 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
   if (!sections['GOALS']) {
     logger.info('Looking for possible GOALS/OBJECTIVES content');
     
-    // Look for goals content by searching for paragraphs with goals/objectives indicators
+    // Look for goals/objectives indicators
     const goalIndicators = [
-      /seeking/i, /goal/i, /objective/i, /aspire/i, /aspiration/i, 
-      /aim/i, /target/i, /hope/i, /plan/i, /intention/i,
-      /looking to/i, /interested in/i, /desire to/i, /wish to/i
+      /seeking|aspire|objective|aim|goal|looking for|desire|ambition|career|advancement|growth|develop|transition/i,
+      /next step|future|progress|promote|advance|expand|learn|improve|opportunity|challenge/i
     ];
     
     // Find content that looks like goals/objectives
@@ -1206,16 +1098,19 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
       if (line.length < 20) return false;
       
       // Check for goal indicators
-      const hasIndicator = goalIndicators.some(regex => regex.test(line));
+      let hasGoalIndicator = false;
+      for (const regex of goalIndicators) {
+        if (regex.test(line)) {
+          hasGoalIndicator = true;
+          break;
+        }
+      }
       
-      // Check for future-oriented language
-      const hasFutureOrientation = /to become|to advance|to develop|to grow|to achieve|to acquire|to obtain|to establish/i.test(line);
-      
-      return hasIndicator || hasFutureOrientation;
+      return hasGoalIndicator;
     });
     
     if (goalContent.length > 0) {
-      sections['GOALS'] = goalContent;
+      sections['GOALS'] = goalContent.join('\n');
       logger.info(`Created GOALS section with ${goalContent.length} lines of content`);
     }
   }
@@ -1226,10 +1121,8 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     
     // Look for expectations content by searching for relevant indicators
     const expectationIndicators = [
-      /expect/i, /anticipate/i, /looking for/i, /seeking/i, /desire/i, 
-      /work environment/i, /company culture/i, /team dynamics/i, /work-life balance/i,
-      /opportunity for/i, /chance to/i, /hope to/i, /would like to/i,
-      /ideal role/i, /ideal position/i, /ideal job/i, /perfect job/i
+      /salary|compensation|package|benefit|remuneration|looking for|expect|requirement/i,
+      /\$\d+k|\$\d+,\d+|per annum|annually|yearly|hourly rate|contract rate|day rate/i
     ];
     
     // Find content that looks like expectations
@@ -1237,16 +1130,19 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
       if (line.length < 20) return false;
       
       // Check for expectation indicators
-      const hasIndicator = expectationIndicators.some(regex => regex.test(line));
+      let hasExpectationIndicator = false;
+      for (const regex of expectationIndicators) {
+        if (regex.test(line)) {
+          hasExpectationIndicator = true;
+          break;
+        }
+      }
       
-      // Check for phrases about the workplace or job
-      const hasWorkplacePhrase = /workplace|company|organization|team|culture|environment|position|role|job|career|growth|development|advancement/i.test(line);
-      
-      return hasIndicator && hasWorkplacePhrase;
+      return hasExpectationIndicator;
     });
     
     if (expectationContent.length > 0) {
-      sections['EXPECTATIONS'] = expectationContent;
+      sections['EXPECTATIONS'] = expectationContent.join('\n');
       logger.info(`Created EXPECTATIONS section with ${expectationContent.length} lines of content`);
     }
   }
@@ -1256,25 +1152,26 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     logger.info('Looking for possible LANGUAGES content');
     
     // Common language patterns
-    const languagePatterns = [
-      /english|spanish|french|german|italian|chinese|japanese|russian|arabic|portuguese|dutch|swedish|norwegian|finnish|danish|korean|hindi|urdu|bengali|punjabi|tamil|telugu|marathi|gujarati|kannada|malayalam|polish|turkish|vietnamese|thai|indonesian|malay|filipino|czech|slovak|hungarian|romanian|bulgarian|greek|hebrew|farsi|swahili/i
-    ];
+    const languageNames = /\b(English|Spanish|French|German|Italian|Portuguese|Chinese|Japanese|Korean|Russian|Arabic|Hindi|Bengali|Dutch|Swedish|Norwegian|Finnish|Danish|Polish|Greek|Turkish|Thai|Vietnamese)\b/i;
+    const proficiencyLevels = /\b(native|fluent|proficient|intermediate|beginner|basic|conversational|business|professional|advanced)\b/i;
     
     // Find content that mentions languages
     const languageContent = lines.filter(line => {
       if (line.length > 80) return false; // Language listings tend to be short
       
       // Check for language names
-      const hasLanguage = languagePatterns.some(regex => regex.test(line));
+      const hasLanguageName = languageNames.test(line);
+      const hasProficiencyLevel = proficiencyLevels.test(line);
       
-      // Check for proficiency indicators
-      const hasProficiencyIndicator = /native|fluent|proficient|intermediate|beginner|basic|advanced|business|professional|working|knowledge/i.test(line);
+      // Languages are often in lists or have level indicators
+      const isLanguageFormat = hasLanguageName && 
+        (hasProficiencyLevel || /[:|-]/.test(line) || /[,;]/.test(line));
       
-      return hasLanguage && (hasProficiencyIndicator || line.includes(':') || line.includes('-'));
+      return isLanguageFormat;
     });
     
     if (languageContent.length > 0) {
-      sections['LANGUAGES'] = languageContent;
+      sections['LANGUAGES'] = languageContent.join('\n');
       logger.info(`Created LANGUAGES section with ${languageContent.length} lines of content`);
     }
   }
@@ -1284,20 +1181,24 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     logger.info('Looking for work experience content with improved detection');
     
     // Improved detection for work experience entries
-    const experienceIndicators = [
-      // Date patterns
-      /\b\d{4}\s*(-|–|—|to)\s*(\d{4}|present|current)/i,
-      /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d{4}\s*(-|–|—|to)/i,
-      
-      // Job title patterns
-      /\b(senior|junior|lead|chief|head|principal|director|manager|supervisor|coordinator|specialist|analyst|engineer|developer|consultant|associate|assistant)\b/i,
-      
-      // Company indicators
-      /\bat\b|\bfor\b|\bcompany\b|\binc\b|\bltd\b|\bcorp\b|\bcorporation\b/i
+    const datePatterns = [
+      /\d{4}[—–-]\d{4}|\d{4}[—–-](?:present|current|now)/i,
+      /(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d{4}\s+(?:to|–|—|-)\s+(?:present|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i,
+      /\d{1,2}\/\d{4}\s+(?:to|–|—|-)\s+(?:present|\d{1,2}\/\d{4})/i,
+      /\(\d{4}[—–-]\d{4}\)|\(\d{4}[—–-](?:present|current|now)\)/i
     ];
     
-    // Find groups of adjacent lines that look like work experience entries
-    let experienceBlocks: string[][] = [];
+    const companyPatterns = [
+      /(?:at|with|for)\s+([A-Z][A-Za-z0-9\s\&\.,]+?)(?:[,\.]\s|\s-|\s\(|\n|$)/i,
+      /^([A-Z][A-Za-z0-9\s\&\.,]+?)(?:[,\.]\s|\s-|\s\(|\n|$)/
+    ];
+    
+    const titlePatterns = [
+      /^([A-Z][A-Za-z\s]+?)(?:,|\sat\s|\sfor\s|\swith\s|\s-|\s\(|\n|$)/i,
+      /(?:as|position|role|title)(?:\s+of)?(?:\s+a)?\s+([A-Z][A-Za-z\s]+?)(?:[,\.]\s|\s-|\s\(|\n|$)/i
+    ];
+    
+    const experienceBlocks: string[][] = [];
     let currentBlock: string[] = [];
     let inExperienceBlock = false;
     
@@ -1312,37 +1213,51 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
         continue;
       }
       
-      // Check if this line has experience indicators
-      const hasExperienceIndicator = experienceIndicators.some(regex => regex.test(line));
-      
-      // If we find a line that looks like a job title or contains dates
-      if (hasExperienceIndicator) {
-        if (!inExperienceBlock) {
-          inExperienceBlock = true;
-          currentBlock = [line];
-        } else {
-          // If already in block and found a new entry, save current and start new
-          if (line.length < 60 && (line.match(/\b\d{4}\b/) || /^[A-Z]/.test(line))) {
-            experienceBlocks.push(currentBlock);
-            currentBlock = [line];
-          } else {
-            currentBlock.push(line);
-          }
+      // Check if this line has date patterns
+      let hasDate = false;
+      for (const pattern of datePatterns) {
+        if (pattern.test(line)) {
+          hasDate = true;
+          break;
         }
+      }
+      
+      // Check if this line has company or title patterns
+      let hasCompanyOrTitle = false;
+      for (const pattern of [...companyPatterns, ...titlePatterns]) {
+        if (pattern.test(line)) {
+          hasCompanyOrTitle = true;
+          break;
+        }
+      }
+      
+      // If line has date and company/title, it's likely the start of an experience entry
+      if (hasDate && hasCompanyOrTitle) {
+        if (inExperienceBlock && currentBlock.length > 0) {
+          experienceBlocks.push(currentBlock);
+          currentBlock = [];
+        }
+        inExperienceBlock = true;
+        currentBlock.push(line);
       } 
-      // If we're already collecting an experience block, keep adding lines
-      else if (inExperienceBlock) {
+      // If we're in a block and the line is bulleted or indented, add to current block
+      else if (inExperienceBlock && (line.startsWith('•') || line.startsWith('-') || line.startsWith('  '))) {
+        currentBlock.push(line);
+      }
+      // If we're in a block and the line isn't another experience entry header, add to current block
+      else if (inExperienceBlock && !hasDate) {
         currentBlock.push(line);
       }
     }
     
-    // Add the last block if there is one
+    // Add the last block if it exists
     if (inExperienceBlock && currentBlock.length > 0) {
       experienceBlocks.push(currentBlock);
     }
     
-    // If we found experience blocks, join them with appropriate spacing
+    // If we found experience blocks, create the EXPERIENCE section
     if (experienceBlocks.length > 0) {
+      // Join blocks with appropriate spacing
       const experienceContent = experienceBlocks
         .map(block => block.join('\n'))
         .join('\n\n');
@@ -1357,14 +1272,18 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     logger.info('Looking for education content with improved detection');
     
     // Education indicators
-    const educationIndicators = [
-      /\b(university|college|institute|school|academy|bachelor|master|ph\.?d|diploma|degree|certification|certificate)\b/i,
-      /\b(bsc|ba|bs|ms|msc|ma|mba|phd|doctorate|postgraduate|undergraduate)\b/i,
-      /\b\d{4}\s*(-|–|—|to)\s*(\d{4}|present)/i, // Date ranges
-      /\beducation\b/i
+    const degreePatterns = [
+      /\b(?:Bachelor|Master|PhD|Doctorate|BSc|BA|MSc|MA|MBA|MD|JD|Associate|Diploma)\b/i,
+      /\b(?:degree|graduated|university|college|school|institute|certification)\b/i
     ];
     
-    // Find content that looks like education entries
+    const yearPatterns = [
+      /\b(?:20\d{2}|19\d{2})\b/,
+      /\bclass of \d{4}\b/i,
+      /\bGPA\s+\d+\.\d+\b/i,
+      /\bGrade[:]?\s+[A-Z][+]?\b/i
+    ];
+    
     const educationContent: string[] = [];
     let inEducationBlock = false;
     let currentEducationEntry: string[] = [];
@@ -1380,30 +1299,49 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
         continue;
       }
       
-      // Check if this line has education indicators
-      const hasEducationIndicator = educationIndicators.some(regex => regex.test(line));
-      
-      if (hasEducationIndicator) {
-        if (!inEducationBlock) {
-          inEducationBlock = true;
-          currentEducationEntry = [line];
-        } else {
-          // If line seems like a new entry (starts with date or capital letter and is short)
-          if (line.length < 60 && (line.match(/\b\d{4}\b/) || /^[A-Z]/.test(line))) {
-            educationContent.push(currentEducationEntry.join('\n'));
-            currentEducationEntry = [line];
-          } else {
-            currentEducationEntry.push(line);
-          }
+      // Check if this line has degree patterns
+      let hasDegree = false;
+      for (const pattern of degreePatterns) {
+        if (pattern.test(line)) {
+          hasDegree = true;
+          break;
         }
+      }
+      
+      // Check if this line has year patterns
+      let hasYear = false;
+      for (const pattern of yearPatterns) {
+        if (pattern.test(line)) {
+          hasYear = true;
+          break;
+        }
+      }
+      
+      // If line has degree and year, it's likely the start of an education entry
+      if (hasDegree && hasYear) {
+        if (inEducationBlock && currentEducationEntry.length > 0) {
+          educationContent.push(currentEducationEntry.join('\n'));
+          currentEducationEntry = [];
+        }
+        inEducationBlock = true;
+        currentEducationEntry.push(line);
       } 
-      // If we're already collecting an education block, keep adding lines
-      else if (inEducationBlock) {
+      // If we're in a block and the line is bulleted or indented, add to current block
+      else if (inEducationBlock && (line.startsWith('•') || line.startsWith('-') || line.startsWith('  '))) {
+        currentEducationEntry.push(line);
+      }
+      // If we're in a block and the line isn't another education entry header, add to current block
+      else if (inEducationBlock && !hasDegree) {
+        currentEducationEntry.push(line);
+      }
+      // If we find a line with education indicators outside of a block, start a new block
+      else if (!inEducationBlock && hasDegree) {
+        inEducationBlock = true;
         currentEducationEntry.push(line);
       }
     }
     
-    // Add the last entry if there is one
+    // Add the last entry if it exists
     if (inEducationBlock && currentEducationEntry.length > 0) {
       educationContent.push(currentEducationEntry.join('\n'));
     }
