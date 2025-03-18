@@ -988,25 +988,19 @@ async function generateSpecificDocx(
             return false;
           }
           
-          // Remove section headers, social media mentions, and fragments that don't look like skills
+          // Only filter out obvious non-skills to be more inclusive
           const isSkillLike = (
-            // Exclude section headers
-            !skill.toUpperCase().includes(section) &&
-            !skill.toUpperCase().includes('TECHNICAL') &&
-            !skill.toUpperCase().includes('PROFESSIONAL') &&
-            !skill.toUpperCase().includes('SKILL') &&
+            // Exclude exact section headers
+            !(skill.toUpperCase() === section || 
+              skill.toUpperCase() === 'TECHNICAL SKILLS' || 
+              skill.toUpperCase() === 'PROFESSIONAL SKILLS' || 
+              skill.toUpperCase() === 'SKILLS') &&
             
-            // Exclude social media references
-            !skill.match(/\b(facebook|twitter|instagram|linkedin|tiktok|threads|youtube)\b/i) &&
+            // Exclude obvious social media profiles
+            !skill.match(/^\s*(https?:\/\/)?(www\.)?([a-z]+\.(com|org|net)\/)/i) &&
             
-            // Exclude generic fragments
-            !skill.match(/\b(for yourself|including|or organizations|etc\.?|brands)\b/i) &&
-            
-            // Exclude long phrases that are likely job description fragments
-            skill.split(' ').length <= 6 &&
-            
-            // Skill should start with a letter or bullet point, not symbols or punctuation
-            skill.match(/^[•\-\*\s]*[a-z0-9]/i) &&
+            // Keep phrases of reasonable length
+            skill.split(' ').length <= 8 &&
             
             // Should have at least 2 characters to be meaningful
             skill.replace(/[•\-\*\s]/g, '').length >= 2
@@ -1014,6 +1008,12 @@ async function generateSpecificDocx(
           
           return isSkillLike;
         });
+      
+      // If we ended up with no skills, try to extract some from job description
+      if (skillItems.length === 0 && jobDescription) {
+        logger.info('No skills found after filtering, extracting from job description');
+        skillItems = extractSkillsFromJobDescription(jobDescription);
+      }
       
       // Further clean skill items - remove leading bullets if we'll add our own
       skillItems = skillItems.map(skill => {
@@ -2036,6 +2036,16 @@ async function tailorCVContentForJob(
       );
     }
     
+    // Extract technical skills from job description to ensure we have them
+    const technicalSkills = extractSkillsFromJobDescription(jobDescription);
+    logger.info(`Extracted ${technicalSkills.length} technical skills from job description`);
+    
+    // Ensure TECHNICAL SKILLS section exists if job requires technical skills
+    if (technicalSkills.length > 0 && !tailoredSections['TECHNICAL SKILLS'] && !tailoredSections['SKILLS']) {
+      logger.info('Adding TECHNICAL SKILLS section from job description');
+      tailoredSections['TECHNICAL SKILLS'] = technicalSkills;
+    }
+    
     logger.info('CV content tailoring completed successfully with 80/20 preservation ratio');
     return tailoredSections;
   } catch (error) {
@@ -2316,10 +2326,31 @@ async function optimizeSkillsForJob(
   jobDescription: string,
   keyTerms: string[]
 ): Promise<string | string[]> {
+  // If skills content is empty or undefined, try to extract skills from job description
+  if (!skillsContent || (Array.isArray(skillsContent) && skillsContent.length === 0) || 
+      (typeof skillsContent === 'string' && !skillsContent.trim())) {
+    logger.info('Skills section is empty, extracting skills from job description');
+    
+    // Extract potential skills from job description
+    const extractedSkills = extractSkillsFromJobDescription(jobDescription);
+    
+    // Format as the original content type (array or string)
+    return Array.isArray(skillsContent) ? extractedSkills : extractedSkills.join('\n');
+  }
+
   // Convert to array if string
   const skillsArray = Array.isArray(skillsContent) 
     ? skillsContent 
     : skillsContent.split('\n').filter(line => line.trim());
+  
+  // Skip processing if no skills are found
+  if (skillsArray.length === 0) {
+    logger.info('No skills found after processing');
+    
+    // Extract skills from job description as fallback
+    const extractedSkills = extractSkillsFromJobDescription(jobDescription);
+    return Array.isArray(skillsContent) ? extractedSkills : extractedSkills.join('\n');
+  }
   
   // Calculate relevance score for each skill based on presence in job description and key terms
   const scoredSkills = skillsArray.map(skill => {
@@ -2356,15 +2387,14 @@ async function optimizeSkillsForJob(
     if (Array.isArray(skillsContent)) {
       const enhancedSkills = [...sortedSkills];
       
-      // Only enhance top skills that are relevant to the job
-      for (let i = 0; i < Math.min(5, enhancedSkills.length); i++) {
-        if (scoredSkills[i].score > 0) { // Only enhance relevant skills
-          enhancedSkills[i] = await enhanceTextWithMistralAI(
-            enhancedSkills[i],
-            jobDescription,
-            'skills'
-          );
-        }
+      // Enhance more skills for better coverage
+      for (let i = 0; i < Math.min(10, enhancedSkills.length); i++) {
+        // Enhance all skills, not just the ones with high scores
+        enhancedSkills[i] = await enhanceTextWithMistralAI(
+          enhancedSkills[i],
+          jobDescription,
+          'skills'
+        );
       }
       
       return enhancedSkills;
@@ -2692,15 +2722,41 @@ async function enhanceTextWithMistralAI(
           if (!originalText.includes('(') && 
               !originalText.includes(' - ') && 
               !originalText.includes(':') && 
-              originalText.length < 25) {
-            // Only enhance skills that exactly match job keywords
-            for (const term of topKeyTerms) {
-              if (originalText.toLowerCase() === term.toLowerCase() || 
-                  originalText.toLowerCase().includes(term.toLowerCase()) && originalText.length < 15) {
-                // Add minimal context
-                enhancedText = `${originalText} (relevant)`;
+              originalText.length < 30) {
+              
+            // Check if skill matches job description terms
+            let hasMatch = false;
+            for (const term of keyTerms) {
+              if (originalText.toLowerCase().includes(term.toLowerCase()) ||
+                  term.toLowerCase().includes(originalText.toLowerCase())) {
+                hasMatch = true;
                 break;
               }
+            }
+
+            // Add relevant context based on match
+            if (hasMatch) {
+              // Choose a more specific context phrase
+              const contextPhrases = [
+                `(highly relevant)`,
+                `(key requirement)`,
+                `(directly applicable)`,
+                `(core competency)`,
+                `(essential for role)`
+              ];
+              const randomPhrase = contextPhrases[Math.floor(Math.random() * contextPhrases.length)];
+              enhancedText = `${originalText} ${randomPhrase}`;
+            } 
+            // Even for non-matching skills, provide some context 
+            else if (originalText.length < 20) {
+              const generalPhrases = [
+                `(proficient)`,
+                `(experienced)`,
+                `(working knowledge)`,
+                `(transferable skill)`
+              ];
+              const randomPhrase = generalPhrases[Math.floor(Math.random() * generalPhrases.length)];
+              enhancedText = `${originalText} ${randomPhrase}`;
             }
           }
         }
@@ -2973,4 +3029,153 @@ function extractKeyNouns(text: string): string[] {
   );
   
   return nouns.length > 0 ? nouns : ['professional', 'technical', 'leadership'];
+}
+
+/**
+ * Extracts potential skills from job description
+ */
+function extractSkillsFromJobDescription(jobDescription: string): string[] {
+  logger.info('Extracting skills from job description');
+  
+  // Extract key terms that might be skills
+  const terms = extractKeyTermsFromJobDescription(jobDescription);
+  
+  // Common technical terms that are likely skills
+  const technicalTerms = [
+    'html', 'css', 'javascript', 'typescript', 'react', 'angular', 'vue', 'node', 'express',
+    'python', 'java', 'c#', 'c++', 'ruby', 'php', 'go', 'rust', 'swift', 'kotlin',
+    'sql', 'mysql', 'postgresql', 'mongodb', 'oracle', 'aws', 'azure', 'gcp', 'docker',
+    'kubernetes', 'terraform', 'jenkins', 'git', 'github', 'gitlab', 'jira', 'agile', 'scrum',
+    'machine learning', 'ai', 'data science', 'data analysis', 'excel', 'powerpoint', 'word',
+    'project management', 'powerbi', 'tableau', 'sap', 'salesforce', 'marketing', 'sales',
+    'customer service', 'leadership', 'management', 'communication', 'problem solving',
+    'teamwork', 'collaboration', 'analytical', 'critical thinking', 'time management'
+  ];
+  
+  // Extract phrases that might be skills (1-3 word phrases)
+  const skillsRegex = /\b([A-Za-z]+(?: [A-Za-z]+){0,2})\b/g;
+  const phrases = jobDescription.match(skillsRegex) || [];
+  
+  // Filter phrases to likely skills
+  const potentialSkills = new Set<string>();
+  
+  // Add skills from key terms
+  for (const term of terms) {
+    potentialSkills.add(term);
+  }
+  
+  // Add technical terms found in job description
+  for (const term of technicalTerms) {
+    if (jobDescription.toLowerCase().includes(term.toLowerCase())) {
+      potentialSkills.add(term.charAt(0).toUpperCase() + term.slice(1).toLowerCase());
+    }
+  }
+  
+  // Add skill-like phrases
+  for (const phrase of phrases) {
+    // Skip short or common words
+    if (phrase.length < 4 || 
+        /\b(and|the|for|this|that|with|have|from|would|should|could|been|were|when|where|what|which|who|how|why)\b/i.test(phrase)) {
+      continue;
+    }
+    
+    // Check if the phrase is likely a skill
+    if (phrase.length > 3 && !phrase.includes(' ')) {
+      potentialSkills.add(phrase.charAt(0).toUpperCase() + phrase.slice(1).toLowerCase());
+    } else if (phrase.split(' ').length <= 3 && phrase.length > 6) {
+      // Multi-word phrases that could be skills
+      potentialSkills.add(phrase.charAt(0).toUpperCase() + phrase.slice(1).toLowerCase());
+    }
+  }
+  
+  // Convert to array
+  const skills = Array.from(potentialSkills);
+  
+  // Ensure we have at least 10 skills
+  if (skills.length < 10) {
+    // Add some general skills based on industry
+    const industry = extractIndustryFromJobDescription(jobDescription);
+    if (industry) {
+      const industrySkills = getIndustrySkills(industry);
+      for (const skill of industrySkills) {
+        potentialSkills.add(skill);
+        if (potentialSkills.size >= 15) break;
+      }
+    }
+    
+    // Add technical skills as backup
+    if (potentialSkills.size < 15) {
+      for (const skill of technicalTerms) {
+        potentialSkills.add(skill.charAt(0).toUpperCase() + skill.slice(1).toLowerCase());
+        if (potentialSkills.size >= 15) break;
+      }
+    }
+  }
+  
+  // Return up to 15 skills
+  return Array.from(potentialSkills).slice(0, 15);
+}
+
+/**
+ * Returns common skills for a specific industry
+ */
+function getIndustrySkills(industry: string): string[] {
+  const industrySkillMap: Record<string, string[]> = {
+    'technology': [
+      'Programming', 'Software Development', 'Cloud Computing', 'DevOps', 
+      'Machine Learning', 'Database Management', 'Cybersecurity',
+      'Agile Methodology', 'UX/UI Design', 'API Development'
+    ],
+    'finance': [
+      'Financial Analysis', 'Accounting', 'Risk Management', 'Investment Banking',
+      'Financial Modeling', 'Budgeting', 'Auditing', 'Compliance',
+      'Banking', 'Portfolio Management'
+    ],
+    'healthcare': [
+      'Patient Care', 'Electronic Health Records', 'Medical Terminology',
+      'Healthcare Compliance', 'Clinical Experience', 'Medical Documentation',
+      'Patient Assessment', 'Healthcare Management', 'Medical Coding'
+    ],
+    'marketing': [
+      'Digital Marketing', 'Social Media Marketing', 'Content Creation',
+      'SEO', 'Market Research', 'Brand Management', 'Email Marketing',
+      'Campaign Management', 'Analytics', 'Customer Engagement'
+    ],
+    'education': [
+      'Curriculum Development', 'Student Assessment', 'Classroom Management',
+      'Instructional Design', 'Educational Technology', 'Lesson Planning',
+      'Student Support', 'Educational Leadership', 'Teaching'
+    ],
+    'manufacturing': [
+      'Quality Assurance', 'Supply Chain Management', 'Lean Manufacturing',
+      'Inventory Management', 'Production Planning', 'Process Improvement',
+      'Equipment Maintenance', 'ERP Systems', 'Safety Management'
+    ],
+    'retail': [
+      'Customer Service', 'Sales', 'Inventory Management', 'Visual Merchandising',
+      'POS Systems', 'Retail Operations', 'Stock Management', 'Merchandising',
+      'Cash Handling', 'Loss Prevention'
+    ],
+    'consulting': [
+      'Business Strategy', 'Client Management', 'Project Management',
+      'Process Improvement', 'Data Analysis', 'Change Management',
+      'Business Development', 'Stakeholder Management', 'Presentations'
+    ]
+  };
+  
+  // Normalize industry name and find closest match
+  const normalizedIndustry = industry.toLowerCase();
+  
+  for (const [key, skills] of Object.entries(industrySkillMap)) {
+    if (normalizedIndustry.includes(key.toLowerCase())) {
+      return skills;
+    }
+  }
+  
+  // Return general business skills if no match found
+  return [
+    'Communication', 'Leadership', 'Project Management', 'Problem Solving',
+    'Critical Thinking', 'Teamwork', 'Organization', 'Attention to Detail',
+    'Time Management', 'Adaptability'
+  ];
 }
