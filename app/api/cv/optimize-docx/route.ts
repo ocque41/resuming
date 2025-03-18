@@ -141,70 +141,62 @@ function startBackgroundProcess(cvRecord: any, templateId: string, userId: strin
         improvedAtsScore
       });
       
+      // Validate and preprocess the optimized text
+      let processedText = optimizedText;
+      if (!processedText || processedText.trim().length === 0) {
+        console.warn("Optimized text is empty, using original CV text as fallback");
+        processedText = cvText;
+      }
+      
+      // Ensure proper section headers if they're missing
+      const requiredSections = ['PROFILE', 'EXPERIENCE', 'EDUCATION', 'SKILLS'];
+      for (const section of requiredSections) {
+        if (!processedText.includes(`${section}\n`)) {
+          // If the section content exists in optimizedSections but the header is missing
+          if (optimizedSections[section.toLowerCase()] && optimizedSections[section.toLowerCase()].trim().length > 0) {
+            processedText += `\n\n${section}\n${optimizedSections[section.toLowerCase()]}`;
+          }
+        }
+      }
+      
       // Generate the optimized DOCX document
       console.log("Generating optimized DOCX document");
       await updateMetadata(cvRecord.id, { progress: 80, step: "Generating optimized DOCX document" });
       
-      // Sanitize and clean data for document generation to prevent corruption
-      // Only pass primitive values and properly structured arrays to avoid document corruption
-      const docxOptions = {
-        atsScore: originalAtsScore,
-        improvedAtsScore: improvedAtsScore,
-        industry: optimizedAnalysisResult.industry || 'General',
-        // Ensure experienceEntries are properly formatted with all required fields
-        experienceEntries: (optimizedAnalysisResult.experienceEntries || []).map((entry: any) => ({
-          jobTitle: String(entry.jobTitle || ''),
-          company: String(entry.company || ''),
-          dateRange: String(entry.dateRange || ''),
-          location: entry.location ? String(entry.location) : undefined,
-          responsibilities: Array.isArray(entry.responsibilities) 
-            ? entry.responsibilities.map((r: any) => String(r)) 
-            : []
-        })),
-        // Simplify improvements to a simple string array limited to 5 items
-        improvements: [] as string[]
-      };
-      
-      // Extract improvements from various sources, ensuring they're all strings
-      let allImprovements: string[] = [];
-      
-      // Add section recommendations if they exist
-      if (optimizedAnalysisResult.sectionRecommendations) {
-        Object.values(optimizedAnalysisResult.sectionRecommendations).forEach((rec: any) => {
-          if (typeof rec === 'string') allImprovements.push(rec);
-          else if (Array.isArray(rec)) {
-            rec.forEach((r: any) => {
-              if (typeof r === 'string') allImprovements.push(r);
-            });
+      // Use the document generator with correct parameters
+      let docxBuffer: Buffer;
+      try {
+        docxBuffer = await DocumentGenerator.generateDocx(
+          processedText, 
+          // Pass analytics data as metadata parameter
+          {
+            atsScore: originalAtsScore,
+            improvedAtsScore: improvedAtsScore,
+            industry: optimizedAnalysisResult.industry || 'General',
+            experienceEntries: optimizedAnalysisResult.experienceEntries || [],
+            improvements: [
+              ...(optimizedAnalysisResult.sectionRecommendations ? Object.values(optimizedAnalysisResult.sectionRecommendations) : []),
+              ...(optimizedAnalysisResult.keywordRecommendations || []),
+              ...(optimizedAnalysisResult.improvementSuggestions ? Object.values(optimizedAnalysisResult.improvementSuggestions) : [])
+            ].filter(item => typeof item === 'string').slice(0, 5)
+          },
+          // Add template options as third parameter
+          {
+            templateStyle: 'modern',
+            fontOptions: {
+              preset: 'professional'
+            }
           }
+        );
+        console.log(`Successfully generated DOCX document (${docxBuffer.length} bytes)`);
+      } catch (docxError) {
+        console.error("Error generating DOCX document:", docxError);
+        await updateMetadata(cvRecord.id, { 
+          docxGenerationError: docxError instanceof Error ? docxError.message : String(docxError),
+          docxGenerationErrorTimestamp: new Date().toISOString()
         });
+        throw new Error(`Failed to generate DOCX: ${docxError instanceof Error ? docxError.message : String(docxError)}`);
       }
-      
-      // Add keyword recommendations if they exist
-      if (Array.isArray(optimizedAnalysisResult.keywordRecommendations)) {
-        optimizedAnalysisResult.keywordRecommendations.forEach((kw: any) => {
-          if (typeof kw === 'string') allImprovements.push(kw);
-        });
-      }
-      
-      // Add generic improvement suggestions if they exist
-      if (optimizedAnalysisResult.improvementSuggestions) {
-        Object.values(optimizedAnalysisResult.improvementSuggestions).forEach((sugg: any) => {
-          if (typeof sugg === 'string') allImprovements.push(sugg);
-        });
-      }
-      
-      // Only keep the first 5 improvements and ensure they're all strings
-      docxOptions.improvements = allImprovements
-        .filter(item => typeof item === 'string' && item.length > 0)
-        .slice(0, 5);
-        
-      console.log("Using document options:", JSON.stringify(docxOptions, null, 2));
-      
-      // Use the generateDocx from lib/docx/docxGenerator.ts, not DocumentGenerator
-      // Import the function directly to avoid using the static class method
-      const { generateDocx } = await import('@/lib/docx/docxGenerator');
-      const docxBuffer = await generateDocx(optimizedText, docxOptions);
       
       // Save the generated DOCX to Dropbox
       console.log("Saving optimized DOCX to Dropbox");
@@ -215,7 +207,30 @@ function startBackgroundProcess(cvRecord: any, templateId: string, userId: strin
       const optimizedFileName = `optimized_${cvRecord.fileName.replace('.pdf', '.docx')}`;
       const dropboxPath = `/cvs/${userId}/${optimizedFileName}`;
       
-      await saveFileToDropbox(dropboxClient, dropboxPath, docxBuffer);
+      try {
+        // Save the buffer to Dropbox with proper content type
+        await saveFileToDropbox(dropboxClient, dropboxPath, docxBuffer);
+        
+        console.log(`Successfully saved DOCX to Dropbox: ${dropboxPath}`);
+        
+        // Verify the file was saved by checking if it exists
+        try {
+          const fileMetadata = await dropboxClient.filesGetMetadata({
+            path: dropboxPath
+          });
+          
+          console.log(`Verified file saved to Dropbox: ${fileMetadata.result.path_display}, size: ${(fileMetadata.result as any).size || 'unknown'} bytes`);
+        } catch (verifyError) {
+          console.warn(`Could not verify file save, but continuing: ${verifyError}`);
+        }
+      } catch (saveError) {
+        console.error("Error saving DOCX to Dropbox:", saveError);
+        await updateMetadata(cvRecord.id, {
+          dropboxSaveError: saveError instanceof Error ? saveError.message : String(saveError),
+          dropboxSaveErrorTimestamp: new Date().toISOString()
+        });
+        throw new Error(`Failed to save DOCX to Dropbox: ${saveError instanceof Error ? saveError.message : String(saveError)}`);
+      }
       
       // Update CV record with optimized document reference
       await db.update(cvs)

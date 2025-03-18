@@ -1053,9 +1053,9 @@ export async function performLocalAnalysis(cvText: string) {
       industryCounts[industry] = 0;
       
       for (const keyword of keywords) {
-        const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+      const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
         const matches = cvText.match(regex);
-        if (matches) {
+      if (matches) {
           industryCounts[industry] += matches.length;
         }
       }
@@ -1066,7 +1066,7 @@ export async function performLocalAnalysis(cvText: string) {
     for (const [industry, count] of Object.entries(industryCounts)) {
       if (count > maxCount) {
         maxCount = count;
-        topIndustry = industry;
+      topIndustry = industry;
       }
     }
     
@@ -1386,7 +1386,7 @@ function splitIntoSections(cvText: string): Record<string, string> {
   
   // Identify sections and extract their content
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
+      const line = lines[i].trim();
     if (line.length === 0) {
       // Add an empty line to the current section
       sections[currentSection] += '\n';

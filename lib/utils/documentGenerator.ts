@@ -198,20 +198,20 @@ export class DocumentGenerator {
           ],
         },
         sections: [{
-          properties: {
-            page: {
-              margin: {
+            properties: {
+              page: {
+                margin: {
                 top: 1000,
                 right: 1000,
                 bottom: 1000,
                 left: 1000,
-              },
-              size: {
+                },
+                size: {
                 width: 12240, // 8.5"
                 height: 15840, // 11"
+                },
               },
             },
-          },
           children: docContent,
         }],
       });
@@ -322,22 +322,22 @@ export class DocumentGenerator {
     const headerContent = sections['header'] || '';
     
     switch (templateStyle) {
-      case this.TemplateStyles.MODERN:
+        case this.TemplateStyles.MODERN:
         this.createModernHeader(children, headerContent, photoOptions, fonts, colors);
-        break;
-      case this.TemplateStyles.CLASSIC:
+          break;
+        case this.TemplateStyles.CLASSIC:
         this.createClassicHeader(children, headerContent, photoOptions, fonts, colors);
-        break;
-      case this.TemplateStyles.MINIMAL:
+          break;
+        case this.TemplateStyles.MINIMAL:
         this.createMinimalHeader(children, headerContent, photoOptions, fonts, colors);
-        break;
-      case this.TemplateStyles.EXECUTIVE:
+          break;
+        case this.TemplateStyles.EXECUTIVE:
         this.createExecutiveHeader(children, headerContent, photoOptions, fonts, colors);
-        break;
-      case this.TemplateStyles.CREATIVE:
+          break;
+        case this.TemplateStyles.CREATIVE:
         this.createCreativeHeader(children, headerContent, photoOptions, fonts, colors);
-        break;
-      default:
+          break;
+        default:
         this.createModernHeader(children, headerContent, photoOptions, fonts, colors);
     }
     
@@ -1652,8 +1652,8 @@ export class DocumentGenerator {
             );
           });
         }
-        
-        // Add space between jobs
+          
+          // Add space between jobs
         children.push(
           new Paragraph({
             spacing: { after: 200 },
@@ -1798,8 +1798,8 @@ export class DocumentGenerator {
           // Determine what this line represents
           if (!currentJob) {
             currentJob = line;
-          } else if (!currentCompany) {
-            currentCompany = line;
+            } else if (!currentCompany) {
+              currentCompany = line;
           } else if (!currentDateRange && 
                    (line.includes('-') || line.includes('to') || line.includes('present') || 
                     line.match(/\b(19|20)\d{2}\b/))) {
@@ -1931,7 +1931,7 @@ export class DocumentGenerator {
       }
     }
   }
-
+  
   /**
    * Create education section with enhanced formatting
    */
@@ -2051,7 +2051,7 @@ export class DocumentGenerator {
    * Add an education entry to the document with enhanced styling
    */
   private static addEducationToDocument(
-    children: any[], 
+    children: any[],
     degree: string, 
     institution: string, 
     year: string, 
@@ -2186,12 +2186,12 @@ export class DocumentGenerator {
       );
     });
   }
-
+  
   /**
    * Create languages section with visual proficiency indicators
    */
   private static createLanguagesSection(
-    children: any[],
+    children: any[], 
     languagesText: string,
     templateStyle: string,
     fonts: any,
@@ -2276,73 +2276,73 @@ export class DocumentGenerator {
     // Create a table for languages with proficiency indicators
     if (languageEntries.length > 0) {
       const languagesTable = new Table({
-        width: {
-          size: 100,
-          type: WidthType.PERCENTAGE,
-        },
-        borders: {
-          top: { style: BorderStyle.NONE },
-          bottom: { style: BorderStyle.NONE },
-          left: { style: BorderStyle.NONE },
-          right: { style: BorderStyle.NONE },
-          insideHorizontal: { style: BorderStyle.NONE },
-          insideVertical: { style: BorderStyle.NONE },
-        },
+      width: {
+        size: 100,
+        type: WidthType.PERCENTAGE,
+      },
+      borders: {
+        top: { style: BorderStyle.NONE },
+        bottom: { style: BorderStyle.NONE },
+        left: { style: BorderStyle.NONE },
+        right: { style: BorderStyle.NONE },
+        insideHorizontal: { style: BorderStyle.NONE },
+        insideVertical: { style: BorderStyle.NONE },
+      },
         rows: languageEntries.map(entry => {
           const proficiencyBar = entry.proficiency 
             ? this.getLanguageLevelBar(entry.proficiency)
             : '';
             
           return new TableRow({
-            children: [
+          children: [
               // Language name
-              new TableCell({
-                width: {
+            new TableCell({
+              width: {
                   size: 40,
-                  type: WidthType.PERCENTAGE,
-                },
-                borders: {
-                  top: { style: BorderStyle.NONE },
-                  bottom: { style: BorderStyle.NONE },
-                  left: { style: BorderStyle.NONE },
-                  right: { style: BorderStyle.NONE },
-                },
-                children: [
-                  new Paragraph({
-                    children: [
-                      new TextRun({
+                type: WidthType.PERCENTAGE,
+              },
+              borders: {
+                top: { style: BorderStyle.NONE },
+                bottom: { style: BorderStyle.NONE },
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.NONE },
+              },
+              children: [
+                new Paragraph({
+                  children: [
+                    new TextRun({
                         text: entry.language,
                         size: 22,
-                        bold: true,
-                        color: colors.dark,
-                        font: fonts.bodyFont,
-                      }),
-                    ],
-                  }),
-                ],
-              }),
-              
+                      bold: true,
+                      color: colors.dark,
+                      font: fonts.bodyFont,
+                    }),
+                  ],
+                }),
+              ],
+            }),
+            
               // Proficiency level
-              new TableCell({
-                width: {
+            new TableCell({
+              width: {
                   size: 60,
-                  type: WidthType.PERCENTAGE,
-                },
-                borders: {
-                  top: { style: BorderStyle.NONE },
-                  bottom: { style: BorderStyle.NONE },
-                  left: { style: BorderStyle.NONE },
-                  right: { style: BorderStyle.NONE },
-                },
-                children: [
-                  new Paragraph({
-                    children: [
-                      new TextRun({
+                type: WidthType.PERCENTAGE,
+              },
+              borders: {
+                top: { style: BorderStyle.NONE },
+                bottom: { style: BorderStyle.NONE },
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.NONE },
+              },
+              children: [
+                new Paragraph({
+                  children: [
+                    new TextRun({
                         text: proficiencyBar,
                         size: 22,
                         color: colors.primary,
-                        font: fonts.bodyFont,
-                      }),
+                      font: fonts.bodyFont,
+                    }),
                       entry.proficiency ? new TextRun({
                         text: ` ${entry.proficiency}`,
                         size: 22,
@@ -2350,11 +2350,11 @@ export class DocumentGenerator {
                         italics: true,
                         font: fonts.bodyFont,
                       }) : new TextRun({ text: '' }),
-                    ],
-                  }),
-                ],
-              }),
-            ],
+                  ],
+                }),
+              ],
+            }),
+          ],
           });
         }),
       });
