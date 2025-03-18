@@ -194,16 +194,23 @@ async function generateSpecificDocx(
     
     logger.info(`PROFILE content length: ${profileContent.length}, SUMMARY content length: ${summaryContent.length}`);
     
-    // Check if they're not identical (to avoid redundancy)
-    if (profileContent.toLowerCase().trim() !== summaryContent.toLowerCase().trim()) {
-      // Only merge if they're different
+    // Check if the SUMMARY content is contained within the PROFILE (to avoid redundancy)
+    const normalizedProfile = profileContent.toLowerCase().trim();
+    const normalizedSummary = summaryContent.toLowerCase().trim();
+    
+    if (normalizedProfile.includes(normalizedSummary)) {
+      logger.info('SUMMARY content is already included in PROFILE - keeping only PROFILE');
+    } else if (normalizedSummary.includes(normalizedProfile)) {
+      // If summary is more comprehensive, use it as the profile
+      sections['PROFILE'] = summaryContent;
+      logger.info('PROFILE content is included in SUMMARY - using SUMMARY as PROFILE');
+    } else {
+      // Only merge if they're different and one doesn't contain the other
       sections['PROFILE'] = profileContent + (profileContent && summaryContent ? '\n\n' : '') + summaryContent;
       logger.info(`Merged SUMMARY section into PROFILE to create combined section of ${sections['PROFILE'].length} chars`);
-    } else {
-      logger.info('PROFILE and SUMMARY have identical content - keeping only PROFILE');
     }
     
-    // Remove the SUMMARY section after merging
+    // Always remove the SUMMARY section after handling
     delete sections['SUMMARY'];
     logger.info('Removed SUMMARY section after handling - it will not appear separately in the document');
   }
@@ -272,6 +279,12 @@ async function generateSpecificDocx(
   if (sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS']) {
     logger.info('Starting skills deduplication process');
     
+    // Always remove generic SKILLS if we have specific skills sections
+    if (sections['SKILLS']) {
+      delete sections['SKILLS'];
+      logger.info('Removed generic SKILLS section as specific skills sections exist');
+    }
+    
     // Create a set to track all skills for deduplication
     const allSkills = new Set();
     
@@ -327,13 +340,6 @@ async function generateSpecificDocx(
         }
       }
     }
-    
-    // Finally, remove generic SKILLS if we have specific skill sections
-    if (sections['SKILLS']) {
-      // We already have specific skills sections, we can safely remove the generic one
-      delete sections['SKILLS'];
-      logger.info('Removed generic SKILLS section as specific skill sections exist');
-    }
   }
   
   // More detailed logging for debugging section parsing
@@ -374,17 +380,59 @@ async function generateSpecificDocx(
   });
   paragraphs.push(horizontalLine);
 
+  // Define the order of sections to ensure proper structure
+  const sectionOrder = [
+    'Header',
+    'PROFILE',
+    // Specifically exclude SUMMARY from processing - it will be merged into PROFILE
+    // 'SUMMARY',
+    'ACHIEVEMENTS',
+    'GOALS',
+    'EXPECTATIONS',
+    'EXPERIENCE',
+    'LANGUAGES',
+    'EDUCATION',
+    // Specifically exclude generic SKILLS from processing when specific skills exist
+    // 'SKILLS',
+    'TECHNICAL SKILLS',
+    'PROFESSIONAL SKILLS',
+    'REFERENCES'
+  ];
+
+  // Final section cleanup before processing
+  // 1. Ensure SUMMARY doesn't appear if PROFILE exists (should be merged/handled already)
+  if (sections['PROFILE'] && sections['SUMMARY']) {
+    delete sections['SUMMARY'];
+    logger.info('Removed lingering SUMMARY section before processing - already merged into PROFILE');
+  }
+
+  // 2. Ensure SKILLS doesn't appear if TECHNICAL or PROFESSIONAL skills exist
+  if ((sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS']) && sections['SKILLS']) {
+    delete sections['SKILLS'];
+    logger.info('Removed lingering SKILLS section before processing - using specific skills sections instead');
+  }
+
+  // Log final sections that will be processed
+  logger.info(`Final sections to be processed: ${Object.keys(sections).join(', ')}`);
+
   // Process each section in order with enhanced Profile formatting
-  for (const section of ['Header', 'PROFILE', 'ACHIEVEMENTS', 'GOALS', 'EXPECTATIONS', 'EXPERIENCE', 'LANGUAGES', 'EDUCATION', 'SKILLS', 'TECHNICAL SKILLS', 'PROFESSIONAL SKILLS', 'REFERENCES']) {
+  const processedSections = new Set<string>();
+  for (const section of sectionOrder) {
     // Skip if section doesn't exist
     if (!sections[section]) {
       logger.info(`Section ${section} does not exist, skipping`);
       continue;
     }
     
-    // Skip SUMMARY section if PROFILE exists (redundant check, as we already merge these earlier)
-    if (section === 'SUMMARY' && sections['PROFILE']) {
-      logger.info(`Skipping SUMMARY section as PROFILE already exists - preventing duplication`);
+    // Skip if we've already processed this section (prevent duplicates)
+    if (processedSections.has(section)) {
+      logger.info(`Section ${section} was already processed, skipping duplicate`);
+      continue;
+    }
+    
+    // Skip SUMMARY section if PROFILE exists
+    if (section === 'SUMMARY') {
+      logger.info(`Skipping SUMMARY section - content is merged into PROFILE`);
       continue;
     }
     
@@ -395,6 +443,9 @@ async function generateSpecificDocx(
     }
     
     logger.info(`Processing section: ${section} (${typeof sections[section] === 'string' ? sections[section].length : 'array'} chars)`);
+    
+    // Mark this section as processed
+    processedSections.add(section);
     
     // Get content for this section
     const content = sections[section];
