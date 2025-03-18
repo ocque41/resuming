@@ -520,6 +520,333 @@ async function generateSpecificDocx(
         }
       }
     } 
+    // Special handling for Experience section with enhanced formatting
+    else if (section === 'EXPERIENCE') {
+      // Add experience header with special formatting
+      const experienceHeader = new Paragraph({
+        text: 'Experience',
+        heading: HeadingLevel.HEADING_2,
+        spacing: {
+          before: 400,
+          after: 200,
+        },
+        thematicBreak: true,
+        border: {
+          bottom: {
+            color: 'B4916C', // Brand color for visual separation
+            size: 1,
+            space: 4,
+            style: BorderStyle.SINGLE,
+          },
+        },
+      });
+      paragraphs.push(experienceHeader);
+      
+      // Process experience content with enhanced formatting
+      if (typeof content === 'string') {
+        const contentLines = content.split('\n').filter(line => line.trim());
+        
+        let currentJobTitle = '';
+        let currentCompanyDates = '';
+        let inJobBlock = false;
+        
+        for (const line of contentLines) {
+          if (!line.trim()) continue;
+          
+          // Check if this is a likely job title or company+date line
+          const isLikelyTitleOrCompany = line.length < 60 && 
+                                      /^[A-Z]/.test(line) && 
+                                      !line.startsWith('•') && 
+                                      !line.startsWith('-') && 
+                                      !line.startsWith('*');
+          
+          // Check if this line contains a date (for experience entries)
+          const containsDate = line.match(/\b(19|20)\d{2}\b/) || 
+                              line.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i) ||
+                              line.match(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\b/i) ||
+                              line.match(/\bpresent\b/i) ||
+                              line.match(/\bcurrent\b/i);
+          
+          // Check if this is a bullet point or responsibility
+          const isBulletPoint = line.trim().match(/^[•\-\*]/) || line.match(/^[\s]{2,}/);
+          
+          if (isLikelyTitleOrCompany && containsDate) {
+            // This is likely a job title with dates or company with dates
+            if (inJobBlock) {
+              // Add some space between job entries
+              paragraphs.push(new Paragraph({ spacing: { before: 200, after: 0 } }));
+            }
+            
+            // Create bold paragraph for the job title/company line
+            paragraphs.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: line.trim(),
+                    bold: true,
+                    size: 26,
+                  }),
+                ],
+                spacing: {
+                  before: 240,
+                  after: 120,
+                },
+              })
+            );
+            
+            inJobBlock = true;
+            currentJobTitle = line.trim();
+          } 
+          else if (isLikelyTitleOrCompany && inJobBlock && currentJobTitle && !currentCompanyDates) {
+            // This might be a company name that follows the job title
+            paragraphs.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: line.trim(),
+                    bold: true,
+                    italics: true,
+                    size: 24,
+                  }),
+                ],
+                spacing: {
+                  before: 60,
+                  after: 120,
+                },
+              })
+            );
+            
+            currentCompanyDates = line.trim();
+          }
+          else if (isBulletPoint || (!isLikelyTitleOrCompany && inJobBlock)) {
+            // This is likely a responsibility or achievement under the job
+            // Clean up bullet points
+            const cleanContent = line.trim().replace(/^[•\-\*\s]+/, '').trim();
+            
+            paragraphs.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: cleanContent,
+                    size: 24,
+                  }),
+                ],
+                bullet: isBulletPoint ? { level: 0 } : undefined,
+                spacing: {
+                  before: 60,
+                  after: 60,
+                },
+                indent: {
+                  left: isBulletPoint ? 720 : 360,
+                  hanging: isBulletPoint ? 360 : 0,
+                },
+              })
+            );
+          }
+          else {
+            // Regular text - could be a standalone line
+            paragraphs.push(
+              new Paragraph({
+                text: line.trim(),
+                spacing: {
+                  before: 120,
+                  after: 120,
+                },
+              })
+            );
+          }
+        }
+      } else if (Array.isArray(content)) {
+        // Handle array content for experience
+        for (const item of content) {
+          if (!item.trim()) continue;
+          
+          // Similar logic as above but for array items
+          const isLikelyTitleOrCompany = item.length < 60 && 
+                                       /^[A-Z]/.test(item) && 
+                                       !item.startsWith('•') && 
+                                       !item.startsWith('-') && 
+                                       !item.startsWith('*');
+                                       
+          const containsDate = item.match(/\b(19|20)\d{2}\b/) || 
+                              item.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i) ||
+                              item.match(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\b/i) ||
+                              item.match(/\bpresent\b/i) ||
+                              item.match(/\bcurrent\b/i);
+                              
+          const isBulletPoint = item.trim().match(/^[•\-\*]/) || item.match(/^[\s]{2,}/);
+          
+          if (isLikelyTitleOrCompany && containsDate) {
+            // Job title with dates
+            paragraphs.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: item.trim(),
+                    bold: true,
+                    size: 26,
+                  }),
+                ],
+                spacing: {
+                  before: 240,
+                  after: 120,
+                },
+              })
+            );
+          } else if (isBulletPoint) {
+            // Bullet point responsibility
+            const cleanContent = item.trim().replace(/^[•\-\*\s]+/, '').trim();
+            
+            paragraphs.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: cleanContent,
+                    size: 24,
+                  }),
+                ],
+                bullet: { level: 0 },
+                spacing: {
+                  before: 60,
+                  after: 60,
+                },
+                indent: {
+                  left: 720,
+                  hanging: 360,
+                },
+              })
+            );
+          } else {
+            // Regular content
+            paragraphs.push(
+              new Paragraph({
+                text: item.trim(),
+                spacing: {
+                  before: 120,
+                  after: 120,
+                },
+              })
+            );
+          }
+        }
+      }
+      
+      continue; // Skip the generic content handling
+    }
+    // Special handling for Languages section
+    else if (section === 'LANGUAGES') {
+      // Add languages header with special formatting
+      const languagesHeader = new Paragraph({
+        text: 'Languages',
+        heading: HeadingLevel.HEADING_2,
+        spacing: {
+          before: 400,
+          after: 200,
+        },
+        thematicBreak: true,
+        border: {
+          bottom: {
+            color: 'B4916C', // Brand color for visual separation
+            size: 1,
+            space: 4,
+            style: BorderStyle.SINGLE,
+          },
+        },
+      });
+      paragraphs.push(languagesHeader);
+      
+      // Process language content with enhanced formatting
+      if (typeof content === 'string') {
+        const contentLines = content.split('\n').filter(line => line.trim());
+        
+        for (const line of contentLines) {
+          if (!line.trim()) continue;
+          
+          // Check if this language line contains a proficiency level marker
+          const hasSeparator = line.includes(':') || line.includes('-') || line.includes('–');
+          
+          let languageName = line.trim();
+          let proficiencyLevel = '';
+          
+          // Try to separate language name from proficiency level
+          if (hasSeparator) {
+            const parts = line.split(/[:–-]/);
+            if (parts.length >= 2) {
+              languageName = parts[0].trim();
+              proficiencyLevel = parts.slice(1).join(' - ').trim();
+            }
+          }
+          
+          paragraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: languageName,
+                  bold: true,
+                  size: 24,
+                }),
+                ...(proficiencyLevel ? [
+                  new TextRun({
+                    text: ` - ${proficiencyLevel}`,
+                    italics: true,
+                    size: 24,
+                  }),
+                ] : []),
+              ],
+              spacing: {
+                before: 120,
+                after: 120,
+              },
+            })
+          );
+        }
+      } else if (Array.isArray(content)) {
+        // Handle array content for languages
+        for (const item of content) {
+          if (!item.trim()) continue;
+          
+          // Check if this language line contains a proficiency level marker
+          const hasSeparator = item.includes(':') || item.includes('-') || item.includes('–');
+          
+          let languageName = item.trim();
+          let proficiencyLevel = '';
+          
+          // Try to separate language name from proficiency level
+          if (hasSeparator) {
+            const parts = item.split(/[:–-]/);
+            if (parts.length >= 2) {
+              languageName = parts[0].trim();
+              proficiencyLevel = parts.slice(1).join(' - ').trim();
+            }
+          }
+          
+          paragraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: languageName,
+                  bold: true,
+                  size: 24,
+                }),
+                ...(proficiencyLevel ? [
+                  new TextRun({
+                    text: ` - ${proficiencyLevel}`,
+                    italics: true,
+                    size: 24,
+                  }),
+                ] : []),
+              ],
+              spacing: {
+                before: 120,
+                after: 120,
+              },
+            })
+          );
+        }
+      }
+      
+      continue; // Skip the generic content handling
+    }
     // Special formatting for Skills sections
     else if (section === 'TECHNICAL SKILLS' || section === 'PROFESSIONAL SKILLS' || section === 'SKILLS' || section === 'OTHER SKILLS') {
       // Determine section title based on section key
@@ -914,12 +1241,12 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
   const sectionPatterns = [
     { name: 'SUMMARY', regex: /^[\s*•\-\|]*(?:SUMMARY|PROFESSIONAL\s+SUMMARY|EXECUTIVE\s+SUMMARY|PROFILE\s+SUMMARY)[\s:]*$/i, priority: 5 },
     { name: 'PROFILE', regex: /^[\s*•\-\|]*(?:PROFILE|PROFESSIONAL\s+PROFILE|ABOUT(?:\s+ME)?)[\s:]*$/i, priority: 5 },
-    { name: 'EXPERIENCE', regex: /^[\s*•\-\|]*(?:EXPERIENCE|WORK\s+EXPERIENCE|EMPLOYMENT(?:\s+HISTORY)?|PROFESSIONAL\s+EXPERIENCE|CAREER)[\s:]*$/i, priority: 4 },
+    { name: 'EXPERIENCE', regex: /^[\s*•\-\|]*(?:EXPERIENCE|WORK\s+EXPERIENCE|EMPLOYMENT(?:\s+HISTORY)?|PROFESSIONAL\s+EXPERIENCE|CAREER|WORK\s+HISTORY)[\s:]*$/i, priority: 4 },
     { name: 'EDUCATION', regex: /^[\s*•\-\|]*(?:EDUCATION|ACADEMIC\s+BACKGROUND|ACADEMIC\s+HISTORY|QUALIFICATIONS)[\s:]*$/i, priority: 4 },
     { name: 'SKILLS', regex: /^[\s*•\-\|]*(?:SKILLS|CORE\s+SKILLS|KEY\s+SKILLS)[\s:]*$/i, priority: 3 },
     { name: 'TECHNICAL SKILLS', regex: /^[\s*•\-\|]*(?:TECHNICAL\s+SKILLS|TECHNICAL\s+EXPERTISE|TECH\s+SKILLS|TECHNICAL\s+PROFICIENCIES)[\s:]*$/i, priority: 4 },
     { name: 'PROFESSIONAL SKILLS', regex: /^[\s*•\-\|]*(?:PROFESSIONAL\s+SKILLS|SOFT\s+SKILLS|INTERPERSONAL\s+SKILLS|CORE\s+COMPETENCIES)[\s:]*$/i, priority: 4 },
-    { name: 'LANGUAGES', regex: /^[\s*•\-\|]*(?:LANGUAGES|LANGUAGE\s+SKILLS|LANGUAGE\s+PROFICIENCIES)[\s:]*$/i, priority: 3 },
+    { name: 'LANGUAGES', regex: /^[\s*•\-\|]*(?:LANGUAGES|LANGUAGE\s+SKILLS|LANGUAGE\s+PROFICIENCIES|LANGUAGE\s+KNOWLEDGE)[\s:]*$/i, priority: 3 },
     { name: 'ACHIEVEMENTS', regex: /^[\s*•\-\|]*(?:ACHIEVEMENTS|ACCOMPLISHMENTS|KEY\s+ACHIEVEMENTS|MAJOR\s+ACCOMPLISHMENTS)[\s:]*$/i, priority: 3 },
     { name: 'CERTIFICATIONS', regex: /^[\s*•\-\|]*(?:CERTIFICATIONS|CERTIFICATES|PROFESSIONAL\s+CERTIFICATIONS|CREDENTIALS)[\s:]*$/i, priority: 3 },
     { name: 'PROJECTS', regex: /^[\s*•\-\|]*(?:PROJECTS|KEY\s+PROJECTS|MAJOR\s+PROJECTS|PROJECT\s+EXPERIENCE)[\s:]*$/i, priority: 3 },
@@ -1011,20 +1338,298 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     logger.info(`Added potential profile paragraph as PROFILE section, length: ${potentialProfile.length} characters`);
   }
   
-  // Special case for EXPERIENCE if not found but common patterns exist
+  // Enhanced EXPERIENCE section detection
   if (!sections['EXPERIENCE']) {
-    // Look for patterns like "2020-2023: <Company>" or "Job Title - Company (2020-2023)"
-    const experienceLines = lines.filter(line => 
-      /\d{4}[—–-]\d{4}|[(]\d{4}[—–-]\d{4}[)]/.test(line) || // Date ranges
-      /(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d{4}\s+(?:to|–|—|-)\s+(?:present|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(line) // Month ranges
-    );
+    logger.info('Looking for experience content with aggressive detection methods');
     
-    if (experienceLines.length > 0) {
-      sections['EXPERIENCE'] = experienceLines.join('\n');
-      logger.info(`Created EXPERIENCE section from ${experienceLines.length} date-containing lines`);
+    // Improved detection for work experience entries - more patterns
+    const datePatterns = [
+      /\b\d{4}[\s-–—]+(?:\d{4}|present|current|now|ongoing)\b/i,
+      /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\.\s]+\d{4}[\s-–—]+(?:present|current|now|ongoing|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec[\.\s]+\d{4})\b/i,
+      /\b\d{1,2}\/\d{4}[\s-–—]+(?:present|current|now|\d{1,2}\/\d{4})\b/i,
+      /\(\d{4}[\s-–—]+(?:\d{4}|present|current|now|ongoing)\)/i,
+      /\b(?:20\d{2}|19\d{2})[\s\-–—]+(?:20\d{2}|19\d{2}|present|current|now|ongoing)\b/i,
+      /\b(?:january|february|march|april|may|june|july|august|september|october|november|december)[\s,]+\d{4}[\s\-–—]+(?:present|current|now|january|february|march|april|may|june|july|august|september|october|november|december[\s,]+\d{4})\b/i
+    ];
+    
+    const titlePatterns = [
+      /^([A-Z][A-Za-z\s&,]+?)(?:,|\sat\s|\sfor\s|\swith\s|\s-|\s\(|\n|$)/i,
+      /(?:as|position|role|title)(?:\s+of)?(?:\s+a)?\s+([A-Z][A-Za-z\s&,]+?)(?:[,\.]\s|\s-|\s\(|\n|$)/i,
+      /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*$/,
+      /\b(?:senior|junior|lead|principal|chief|head|director|manager|supervisor|associate|assistant|coordinator|specialist|analyst|consultant|engineer|developer|designer|architect|officer|executive|administrator|representative)\b/i
+    ];
+    
+    const experienceBlocks: string[][] = [];
+    let currentBlock: string[] = [];
+    let inExperienceBlock = false;
+    let blockStartIndex = -1;
+    
+    // First pass: identify potential job title/date lines
+    const potentialExperienceLines: number[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      // Check for date patterns
+      let hasDate = false;
+      for (const pattern of datePatterns) {
+        if (pattern.test(line)) {
+          hasDate = true;
+          break;
+        }
+      }
+      
+      // Check for job title patterns
+      let hasTitle = false;
+      for (const pattern of titlePatterns) {
+        if (pattern.test(line)) {
+          hasTitle = true;
+          break;
+        }
+      }
+      
+      // Mark lines with both date and title patterns or just date patterns
+      if ((hasDate && hasTitle) || hasDate) {
+        potentialExperienceLines.push(i);
+      }
+    }
+    
+    // Second pass: extract experience blocks
+    for (let i = 0; i < potentialExperienceLines.length; i++) {
+      const startIdx = potentialExperienceLines[i];
+      const endIdx = i < potentialExperienceLines.length - 1 
+        ? potentialExperienceLines[i + 1] - 1 
+        : lines.length - 1;
+      
+      // Extract lines for this potential experience entry
+      const block = [];
+      for (let j = startIdx; j <= endIdx; j++) {
+        const line = lines[j].trim();
+        if (line) block.push(line);
+      }
+      
+      if (block.length > 0) {
+        experienceBlocks.push(block);
+      }
+    }
+    
+    // Alternative detection if first method didn't work
+    if (experienceBlocks.length === 0) {
+      logger.info('Trying alternative experience detection method');
+      
+      // Look for lines with job titles and company names
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) {
+          if (inExperienceBlock && currentBlock.length > 0) {
+            experienceBlocks.push([...currentBlock]);
+            currentBlock = [];
+            inExperienceBlock = false;
+          }
+          continue;
+        }
+        
+        // Check if line looks like a job title line
+        const hasJobTitle = titlePatterns.some(pattern => pattern.test(line));
+        const hasDate = datePatterns.some(pattern => pattern.test(line));
+        const hasCompanyIndicator = /\b(?:at|with|for)\s+[A-Z]/i.test(line);
+        
+        // If this line appears to start a new experience entry
+        if ((hasJobTitle && (hasDate || hasCompanyIndicator)) || 
+            (line.length < 60 && hasDate && line.match(/[A-Z][a-z]+/))) {
+          
+          // If we were already in an experience block, save it
+          if (inExperienceBlock && currentBlock.length > 0) {
+            experienceBlocks.push([...currentBlock]);
+            currentBlock = [];
+          }
+          
+          // Start a new experience block
+          inExperienceBlock = true;
+          currentBlock = [line];
+          blockStartIndex = i;
+        }
+        // If we're in a block and this line continues the current experience entry
+        else if (inExperienceBlock) {
+          // Add to the current block if:
+          // 1. It's a bullet point or indented line
+          // 2. It's within a reasonable distance from the start of the block
+          // 3. It doesn't look like the start of a new section
+          const isBulletPoint = /^[\s*•\-\|]+/.test(line);
+          const isCloseToBlockStart = i - blockStartIndex < 15;
+          const isNotSectionHeader = !line.match(/^[A-Z][A-Z\s]+$/);
+          
+          if ((isBulletPoint || isCloseToBlockStart) && isNotSectionHeader) {
+            currentBlock.push(line);
+          } else {
+            // This line might be the start of a new section or unrelated content
+            // End the current experience block
+            experienceBlocks.push([...currentBlock]);
+            currentBlock = [];
+            inExperienceBlock = false;
+          }
+        }
+      }
+      
+      // Add the last block if there is one
+      if (inExperienceBlock && currentBlock.length > 0) {
+        experienceBlocks.push([...currentBlock]);
+      }
+    }
+    
+    // If we found experience blocks, create the EXPERIENCE section
+    if (experienceBlocks.length > 0) {
+      // Join blocks with appropriate spacing
+      const experienceContent = experienceBlocks
+        .map(block => block.join('\n'))
+        .join('\n\n');
+      
+      sections['EXPERIENCE'] = experienceContent;
+      logger.info(`Created EXPERIENCE section with ${experienceBlocks.length} entries`);
+    } else {
+      // Try a very aggressive method - find any lines with dates in them and look for keywords
+      const experienceKeywords = /\b(?:work|job|position|role|career|employment|responsible|duties|tasks|led|managed|developed|created|built|implemented|design|collaborate|team|client|project)\b/i;
+      
+      const dateAndKeywordLines: string[] = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        // Check for date patterns
+        const hasDate = datePatterns.some(pattern => pattern.test(line));
+        // Check for experience keywords
+        const hasExperienceKeyword = experienceKeywords.test(line);
+        
+        if (hasDate && hasExperienceKeyword) {
+          // Add this line and a few following lines
+          dateAndKeywordLines.push(line);
+          
+          // Add next 3 non-empty lines as they might be part of this experience item
+          let addedLines = 0;
+          for (let j = i + 1; j < lines.length && addedLines < 3; j++) {
+            const nextLine = lines[j].trim();
+            if (nextLine) {
+              dateAndKeywordLines.push(nextLine);
+              addedLines++;
+            }
+          }
+        }
+      }
+      
+      if (dateAndKeywordLines.length > 0) {
+        sections['EXPERIENCE'] = dateAndKeywordLines.join('\n');
+        logger.info(`Created minimal EXPERIENCE section with ${dateAndKeywordLines.length} lines (fallback method)`);
+      }
     }
   }
-  
+
+  // Enhance LANGUAGES section detection
+  if (!sections['LANGUAGES']) {
+    logger.info('Looking for language content with enhanced detection methods');
+    
+    // Common language names and proficiency levels with expanded patterns
+    const languageNames = /\b(?:English|Spanish|French|German|Italian|Portuguese|Chinese|Japanese|Korean|Russian|Arabic|Hindi|Bengali|Dutch|Swedish|Norwegian|Finnish|Danish|Polish|Greek|Turkish|Thai|Vietnamese|Ukrainian|Hebrew|Czech|Slovak|Hungarian|Romanian|Bulgarian|Serbian|Croatian|Slovenian|Macedonian|Albanian|Lithuanian|Latvian|Estonian|Maltese|Icelandic|Irish|Welsh|Scottish|Gaelic|Basque|Catalan|Galician|Luxembourgish|Indonesian|Malay|Tagalog|Filipino|Javanese|Swahili|Afrikaans|Zulu|Xhosa|Yoruba|Igbo|Amharic|Somali|Persian|Urdu|Pashto|Kurdish|Armenian|Georgian|Azerbaijani|Uzbek|Kazakh|Kyrgyz|Tajik|Turkmen|Mongolian|Nepali|Bengali|Sinhala|Burmese|Khmer|Lao|Hmong)\b/i;
+    
+    const proficiencyLevels = /\b(?:native|fluent|proficient|intermediate|beginner|basic|conversational|business|professional|advanced|elementary|pre-intermediate|upper-intermediate|bilingual|mother\s+tongue|working\s+knowledge|limited\s+working\s+proficiency|full\s+working\s+proficiency|native\s+or\s+bilingual\s+proficiency|A1|A2|B1|B2|C1|C2)\b/i;
+    
+    // Language section indicators
+    const languageSectionIndicators = /\b(?:speak|spoken|written|verbal|oral|communication|proficiency|level|certified|certification|test|score|TOEFL|IELTS|Cambridge|DELF|DALF|CEFR|HSK|JLPT|DELE|Goethe|TestDaF)\b/i;
+    
+    // Language content collection
+    const languageLines: string[] = [];
+    
+    // Find paragraphs with language content
+    let potentialLanguageParagraph: string[] = [];
+    let inLanguageParagraph = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) {
+        if (inLanguageParagraph && potentialLanguageParagraph.length > 0) {
+          // Check if this paragraph has language content
+          const paragraphText = potentialLanguageParagraph.join(' ');
+          const hasLanguageName = languageNames.test(paragraphText);
+          const hasProficiencyLevel = proficiencyLevels.test(paragraphText);
+          
+          if (hasLanguageName && hasProficiencyLevel) {
+            languageLines.push(...potentialLanguageParagraph);
+          }
+          
+          // Reset for next paragraph
+          potentialLanguageParagraph = [];
+          inLanguageParagraph = false;
+        }
+        continue;
+      }
+      
+      // Check if this line has language indicators
+      const hasLanguageName = languageNames.test(line);
+      const hasProficiencyLevel = proficiencyLevels.test(line);
+      const hasLanguageIndicator = languageSectionIndicators.test(line);
+      
+      // If this line has strong language indicators
+      if (hasLanguageName && (hasProficiencyLevel || hasLanguageIndicator)) {
+        // This is definitely a language line
+        languageLines.push(line);
+      }
+      // If this line has just a language name and is short (likely a list item)
+      else if (hasLanguageName && line.length < 40) {
+        languageLines.push(line);
+      }
+      // Start or continue a potential language paragraph
+      else if (hasLanguageName || hasProficiencyLevel || hasLanguageIndicator) {
+        inLanguageParagraph = true;
+        potentialLanguageParagraph.push(line);
+      }
+      // If we're in a potential language paragraph, continue collecting
+      else if (inLanguageParagraph) {
+        potentialLanguageParagraph.push(line);
+        
+        // If this paragraph is getting too long, it's probably not about languages
+        if (potentialLanguageParagraph.length > 5) {
+          inLanguageParagraph = false;
+          potentialLanguageParagraph = [];
+        }
+      }
+    }
+    
+    // Process the last paragraph if needed
+    if (inLanguageParagraph && potentialLanguageParagraph.length > 0) {
+      const paragraphText = potentialLanguageParagraph.join(' ');
+      const hasLanguageName = languageNames.test(paragraphText);
+      const hasProficiencyLevel = proficiencyLevels.test(paragraphText);
+      
+      if (hasLanguageName && hasProficiencyLevel) {
+        languageLines.push(...potentialLanguageParagraph);
+      }
+    }
+    
+    // If no language lines found yet, try a more aggressive approach
+    if (languageLines.length === 0) {
+      // Try to find any lines just mentioning languages, even without proficiency
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        if (languageNames.test(line) && line.length < 50) {
+          languageLines.push(line);
+        }
+      }
+    }
+    
+    // If we found language content, create the LANGUAGES section
+    if (languageLines.length > 0) {
+      sections['LANGUAGES'] = languageLines.join('\n');
+      logger.info(`Created LANGUAGES section with ${languageLines.length} lines`);
+    }
+    // Create a default language section if none found
+    else if (!sections['EXPERIENCE'] || sections['EXPERIENCE'].toString().toLowerCase().includes('english')) {
+      // If there are clues about English in the experience section
+      sections['LANGUAGES'] = 'English - Proficient';
+      logger.info('Created default LANGUAGES section (English only)');
+    }
+  }
+
   // Ensure key sections exist - especially PROFILE
   if (!sections['PROFILE'] && !sections['SUMMARY']) {
     // First try to find lines with "professional" or "experienced" near the beginning
@@ -1148,212 +1753,6 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     if (expectationContent.length > 0) {
       sections['EXPECTATIONS'] = expectationContent.join('\n');
       logger.info(`Created EXPECTATIONS section with ${expectationContent.length} lines of content`);
-    }
-  }
-
-  // Ensure LANGUAGES section exists
-  if (!sections['LANGUAGES']) {
-    logger.info('Looking for possible LANGUAGES content');
-    
-    // Common language patterns
-    const languageNames = /\b(English|Spanish|French|German|Italian|Portuguese|Chinese|Japanese|Korean|Russian|Arabic|Hindi|Bengali|Dutch|Swedish|Norwegian|Finnish|Danish|Polish|Greek|Turkish|Thai|Vietnamese)\b/i;
-    const proficiencyLevels = /\b(native|fluent|proficient|intermediate|beginner|basic|conversational|business|professional|advanced)\b/i;
-    
-    // Find content that mentions languages
-    const languageContent = lines.filter(line => {
-      if (line.length > 80) return false; // Language listings tend to be short
-      
-      // Check for language names
-      const hasLanguageName = languageNames.test(line);
-      const hasProficiencyLevel = proficiencyLevels.test(line);
-      
-      // Languages are often in lists or have level indicators
-      const isLanguageFormat = hasLanguageName && 
-        (hasProficiencyLevel || /[:|-]/.test(line) || /[,;]/.test(line));
-      
-      return isLanguageFormat;
-    });
-    
-    if (languageContent.length > 0) {
-      sections['LANGUAGES'] = languageContent.join('\n');
-      logger.info(`Created LANGUAGES section with ${languageContent.length} lines of content`);
-    }
-  }
-
-  // Enhance EXPERIENCE detection
-  if (!sections['EXPERIENCE']) {
-    logger.info('Looking for work experience content with improved detection');
-    
-    // Improved detection for work experience entries
-    const datePatterns = [
-      /\d{4}[—–-]\d{4}|\d{4}[—–-](?:present|current|now)/i,
-      /(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d{4}\s+(?:to|–|—|-)\s+(?:present|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i,
-      /\d{1,2}\/\d{4}\s+(?:to|–|—|-)\s+(?:present|\d{1,2}\/\d{4})/i,
-      /\(\d{4}[—–-]\d{4}\)|\(\d{4}[—–-](?:present|current|now)\)/i
-    ];
-    
-    const companyPatterns = [
-      /(?:at|with|for)\s+([A-Z][A-Za-z0-9\s\&\.,]+?)(?:[,\.]\s|\s-|\s\(|\n|$)/i,
-      /^([A-Z][A-Za-z0-9\s\&\.,]+?)(?:[,\.]\s|\s-|\s\(|\n|$)/
-    ];
-    
-    const titlePatterns = [
-      /^([A-Z][A-Za-z\s]+?)(?:,|\sat\s|\sfor\s|\swith\s|\s-|\s\(|\n|$)/i,
-      /(?:as|position|role|title)(?:\s+of)?(?:\s+a)?\s+([A-Z][A-Za-z\s]+?)(?:[,\.]\s|\s-|\s\(|\n|$)/i
-    ];
-    
-    const experienceBlocks: string[][] = [];
-    let currentBlock: string[] = [];
-    let inExperienceBlock = false;
-    
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) {
-        if (inExperienceBlock && currentBlock.length > 0) {
-          experienceBlocks.push(currentBlock);
-          currentBlock = [];
-          inExperienceBlock = false;
-        }
-        continue;
-      }
-      
-      // Check if this line has date patterns
-      let hasDate = false;
-      for (const pattern of datePatterns) {
-        if (pattern.test(line)) {
-          hasDate = true;
-          break;
-        }
-      }
-      
-      // Check if this line has company or title patterns
-      let hasCompanyOrTitle = false;
-      for (const pattern of [...companyPatterns, ...titlePatterns]) {
-        if (pattern.test(line)) {
-          hasCompanyOrTitle = true;
-          break;
-        }
-      }
-      
-      // If line has date and company/title, it's likely the start of an experience entry
-      if (hasDate && hasCompanyOrTitle) {
-        if (inExperienceBlock && currentBlock.length > 0) {
-          experienceBlocks.push(currentBlock);
-          currentBlock = [];
-        }
-        inExperienceBlock = true;
-        currentBlock.push(line);
-      } 
-      // If we're in a block and the line is bulleted or indented, add to current block
-      else if (inExperienceBlock && (line.startsWith('•') || line.startsWith('-') || line.startsWith('  '))) {
-        currentBlock.push(line);
-      }
-      // If we're in a block and the line isn't another experience entry header, add to current block
-      else if (inExperienceBlock && !hasDate) {
-        currentBlock.push(line);
-      }
-    }
-    
-    // Add the last block if it exists
-    if (inExperienceBlock && currentBlock.length > 0) {
-      experienceBlocks.push(currentBlock);
-    }
-    
-    // If we found experience blocks, create the EXPERIENCE section
-    if (experienceBlocks.length > 0) {
-      // Join blocks with appropriate spacing
-      const experienceContent = experienceBlocks
-        .map(block => block.join('\n'))
-        .join('\n\n');
-      
-      sections['EXPERIENCE'] = experienceContent;
-      logger.info(`Created EXPERIENCE section with ${experienceBlocks.length} entries`);
-    }
-  }
-
-  // Enhance EDUCATION detection
-  if (!sections['EDUCATION']) {
-    logger.info('Looking for education content with improved detection');
-    
-    // Education indicators
-    const degreePatterns = [
-      /\b(?:Bachelor|Master|PhD|Doctorate|BSc|BA|MSc|MA|MBA|MD|JD|Associate|Diploma)\b/i,
-      /\b(?:degree|graduated|university|college|school|institute|certification)\b/i
-    ];
-    
-    const yearPatterns = [
-      /\b(?:20\d{2}|19\d{2})\b/,
-      /\bclass of \d{4}\b/i,
-      /\bGPA\s+\d+\.\d+\b/i,
-      /\bGrade[:]?\s+[A-Z][+]?\b/i
-    ];
-    
-    const educationContent: string[] = [];
-    let inEducationBlock = false;
-    let currentEducationEntry: string[] = [];
-    
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) {
-        if (inEducationBlock && currentEducationEntry.length > 0) {
-          educationContent.push(currentEducationEntry.join('\n'));
-          currentEducationEntry = [];
-          inEducationBlock = false;
-        }
-        continue;
-      }
-      
-      // Check if this line has degree patterns
-      let hasDegree = false;
-      for (const pattern of degreePatterns) {
-        if (pattern.test(line)) {
-          hasDegree = true;
-          break;
-        }
-      }
-      
-      // Check if this line has year patterns
-      let hasYear = false;
-      for (const pattern of yearPatterns) {
-        if (pattern.test(line)) {
-          hasYear = true;
-          break;
-        }
-      }
-      
-      // If line has degree and year, it's likely the start of an education entry
-      if (hasDegree && hasYear) {
-        if (inEducationBlock && currentEducationEntry.length > 0) {
-          educationContent.push(currentEducationEntry.join('\n'));
-          currentEducationEntry = [];
-        }
-        inEducationBlock = true;
-        currentEducationEntry.push(line);
-      } 
-      // If we're in a block and the line is bulleted or indented, add to current block
-      else if (inEducationBlock && (line.startsWith('•') || line.startsWith('-') || line.startsWith('  '))) {
-        currentEducationEntry.push(line);
-      }
-      // If we're in a block and the line isn't another education entry header, add to current block
-      else if (inEducationBlock && !hasDegree) {
-        currentEducationEntry.push(line);
-      }
-      // If we find a line with education indicators outside of a block, start a new block
-      else if (!inEducationBlock && hasDegree) {
-        inEducationBlock = true;
-        currentEducationEntry.push(line);
-      }
-    }
-    
-    // Add the last entry if it exists
-    if (inEducationBlock && currentEducationEntry.length > 0) {
-      educationContent.push(currentEducationEntry.join('\n'));
-    }
-    
-    // If we found education entries, join them with appropriate spacing
-    if (educationContent.length > 0) {
-      sections['EDUCATION'] = educationContent.join('\n\n');
-      logger.info(`Created EDUCATION section with ${educationContent.length} entries`);
     }
   }
   
