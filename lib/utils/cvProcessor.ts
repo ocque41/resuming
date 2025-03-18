@@ -183,7 +183,7 @@ export async function processCVWithAI(
 
       // Phase 1: Local analysis to get basic information
       await updateProgress('local_analysis_starting', 5);
-      const localAnalysis = performLocalAnalysis(rawText);
+      const localAnalysis = await performLocalAnalysis(rawText);
       await updateProgress('local_analysis_complete', 10);
 
       trackEvent({
@@ -488,14 +488,11 @@ export async function processCVWithAI(
  */
 async function handleFallbackCompletion(cvId: number, rawText: string, currentMetadata: any) {
   try {
-    // Perform local analysis as fallback
-    const localAnalysis = performLocalAnalysis(rawText);
+    // Perform local analysis
+    const localAnalysis = await performLocalAnalysis(rawText);
     
-    // Create enhanced text
-    const enhancedText = enhanceTextWithLocalRules(rawText, localAnalysis);
-    
-    // Calculate scores based on local analysis
-    const atsScore = localAnalysis.localAtsScore;
+    // Calculate scores based on local analysis - using now the properties from localAnalysis
+    const atsScore = localAnalysis.localAtsScore || 65;
     const improvedAtsScore = Math.min(98, atsScore + 10);
     
     // Basic improvements
@@ -520,7 +517,7 @@ async function handleFallbackCompletion(cvId: number, rawText: string, currentMe
       processingStatus: "Processing completed with fallback system",
       atsScore: atsScore,
       improvedAtsScore: improvedAtsScore,
-      optimizedText: enhancedText,
+      optimizedText: localAnalysis.optimizedText || rawText,
       improvements: improvements,
       lastUpdated: new Date().toISOString(),
       completedAt: new Date().toISOString(),
@@ -986,230 +983,445 @@ ${analysis.weaknesses?.join(', ') || 'Improve overall ATS compatibility'}`
 }
 
 /**
- * Performs a local analysis of CV text to supplement AI analysis
- * @param text The raw CV text to analyze
- * @returns Local analysis results
+ * Performs local analysis on the CV text to extract structured information
+ * This is used when RAG services are not available or to supplement them
+ * @param cvText The raw CV text to analyze
+ * @returns An object containing extracted information including experience entries
  */
-export function performLocalAnalysis(text: string) {
-  // Normalize text for analysis
-  const normalizedText = text.toLowerCase();
+export async function performLocalAnalysis(cvText: string) {
+  try {
+    // Extract sections from the CV text
+    const sections = splitIntoSections(cvText);
+    
+    // Extract structured data from the sections
+    const experienceEntries = extractExperienceEntries(sections);
+    const skills = extractSkills(sections);
+    const languageProficiency = extractLanguages(sections);
+    
+    // Calculate a local ATS score based on extracted data
+    let localAtsScore = 65; // Base score
+    
+    // Adjust score based on experience entries
+    if (experienceEntries.length > 0) {
+      const experienceScore = Math.min(10, experienceEntries.length * 2);
+      localAtsScore += experienceScore;
+      
+      // Check if experience entries have quantifiable achievements
+      const hasQuantifiableAchievements = experienceEntries.some(entry => 
+        entry.responsibilities.some(resp => 
+          /\d+%|\d+x|\$\d+|\d+\s*million|\d+\s*k/i.test(resp)
+        )
+      );
+      
+      if (hasQuantifiableAchievements) {
+        localAtsScore += 5;
+      }
+    }
+    
+    // Adjust score based on skills
+    if (skills.length > 0) {
+      const skillsScore = Math.min(10, skills.length);
+      localAtsScore += skillsScore;
+    }
+    
+    // Adjust score based on language proficiency
+    if (languageProficiency.length > 0) {
+      localAtsScore += 5;
+    }
+    
+    // Cap the score at 95
+    localAtsScore = Math.min(95, Math.max(30, localAtsScore));
+    
+    // Determine top industry based on skills and experience
+    let topIndustry = 'General';
+    const industryKeywords = {
+      'Technology': ['software', 'developer', 'web', 'app', 'programming', 'java', 'python', 'javascript', 'react', 'angular', 'node', 'full-stack', 'frontend', 'backend', 'devops', 'cloud', 'aws', 'azure', 'it'],
+      'Finance': ['finance', 'accounting', 'financial', 'investment', 'banking', 'loans', 'mortgage', 'audit', 'tax', 'budget', 'equity', 'portfolio', 'compliance', 'risk'],
+      'Healthcare': ['health', 'medical', 'healthcare', 'patient', 'doctor', 'physician', 'nurse', 'hospital', 'clinic', 'therapy', 'pharmaceutical', 'dental', 'medicine'],
+      'Marketing': ['marketing', 'digital', 'seo', 'sem', 'content', 'social media', 'campaign', 'brand', 'advertising', 'market research', 'analytics', 'engagement'],
+      'Sales': ['sales', 'customer', 'account manager', 'business development', 'revenue', 'pipeline', 'client', 'leads', 'prospects', 'closing', 'negotiation', 'territory'],
+      'Education': ['teaching', 'teacher', 'professor', 'instructor', 'curriculum', 'education', 'university', 'college', 'academic', 'faculty', 'student', 'course', 'classroom', 'learning'],
+      'Engineering': ['engineering', 'engineer', 'mechanical', 'electrical', 'civil', 'chemical', 'industrial', 'product', 'design', 'manufacturing', 'CAD', 'technical', 'specifications'],
+      'Human Resources': ['HR', 'human resources', 'recruitment', 'talent acquisition', 'hiring', 'onboarding', 'employee relations', 'benefits', 'compensation', 'training', 'development', 'retention'],
+      'Legal': ['legal', 'lawyer', 'attorney', 'law', 'counsel', 'litigation', 'corporate', 'contract', 'compliance', 'regulatory', 'paralegal', 'judicial', 'legislation']
+    };
+    
+    // Count industry keyword matches in the CV text
+    const industryCounts: Record<string, number> = {};
+    
+    for (const [industry, keywords] of Object.entries(industryKeywords)) {
+      industryCounts[industry] = 0;
+      
+      for (const keyword of keywords) {
+        const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+        const matches = cvText.match(regex);
+        if (matches) {
+          industryCounts[industry] += matches.length;
+        }
+      }
+    }
+    
+    // Find the industry with the most keyword matches
+    let maxCount = 0;
+    for (const [industry, count] of Object.entries(industryCounts)) {
+      if (count > maxCount) {
+        maxCount = count;
+        topIndustry = industry;
+      }
+    }
+    
+    // Generate enhanced text based on local analysis
+    const optimizedText = enhanceTextWithLocalRules(cvText, {
+      experienceEntries,
+      skills,
+      languageProficiency,
+      topIndustry
+    });
+    
+    return {
+      experienceEntries,
+      skills,
+      languageProficiency,
+      localAtsScore,
+      topIndustry,
+      optimizedText
+    };
+  } catch (error) {
+    console.error('Error in performLocalAnalysis:', error);
+    return {
+      experienceEntries: [],
+      skills: [],
+      languageProficiency: [],
+      localAtsScore: 65,
+      topIndustry: 'General',
+      optimizedText: cvText
+    };
+  }
+}
+
+/**
+ * Extracts structured experience entries from the CV sections
+ * @param sections The CV sections extracted from the text
+ * @returns An array of experience entries with structured information
+ */
+function extractExperienceEntries(sections: Record<string, string>): Array<{
+  jobTitle: string;
+  company: string;
+  dateRange: string;
+  location?: string;
+  responsibilities: string[];
+}> {
+  // Get the experience section text (check different possible names)
+  const experienceText = sections['experience'] || 
+                        sections['work experience'] || 
+                        sections['employment history'] || 
+                        sections['professional experience'] || '';
   
-  // Extract sections
-  const sections: Record<string, string> = {};
-  const possibleSections = [
-    'summary', 'profile', 'objective', 'experience', 'work experience', 'employment history',
-    'education', 'skills', 'technical skills', 'certifications', 'achievements',
-    'projects', 'publications', 'languages', 'interests', 'references'
+  if (!experienceText) {
+    return [];
+  }
+  
+  // Split into lines and process
+  const lines = experienceText.split('\n');
+  const entries: Array<{
+    jobTitle: string;
+    company: string;
+    dateRange: string;
+    location?: string;
+    responsibilities: string[];
+  }> = [];
+  
+  let currentEntry: {
+    jobTitle: string;
+    company: string;
+    dateRange: string;
+    location?: string;
+    responsibilities: string[];
+  } | null = null;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.length === 0) continue;
+    
+    // Check if this is likely a job title (short line, not a bullet point, not a date)
+    if (line.length < 60 && !line.startsWith('•') && !line.startsWith('-') && 
+        !line.startsWith('*') && i < lines.length - 1 && 
+        !isDateRange(line)) {
+      
+      // If we've been processing an entry, add it to the list before starting a new one
+      if (currentEntry && currentEntry.jobTitle && currentEntry.responsibilities.length > 0) {
+        entries.push(currentEntry);
+      }
+      
+      // Start a new entry
+      if (!currentEntry || currentEntry.jobTitle) {
+        currentEntry = {
+          jobTitle: line,
+          company: '',
+          dateRange: '',
+          responsibilities: []
+        };
+      } else if (!currentEntry.company) {
+        currentEntry.company = line;
+      } else if (!currentEntry.dateRange && isDateRange(line)) {
+        currentEntry.dateRange = line;
+      } else if (!currentEntry.location && containsLocationIndicator(line)) {
+        currentEntry.location = line;
+      } else {
+        // Could be a responsibility that's not formatted as a bullet
+        currentEntry.responsibilities.push(line);
+      }
+    } 
+    // Check if this is a date range
+    else if (currentEntry && !currentEntry.dateRange && isDateRange(line)) {
+      currentEntry.dateRange = line;
+    }
+    // Check if this is a location
+    else if (currentEntry && !currentEntry.location && containsLocationIndicator(line)) {
+      currentEntry.location = line;
+    }
+    // Check if this is a bullet point for responsibilities
+    else if (currentEntry && (line.startsWith('•') || line.startsWith('-') || line.startsWith('*'))) {
+      currentEntry.responsibilities.push(line.substring(1).trim());
+    }
+    // Otherwise, it's likely a regular line of text describing responsibilities
+    else if (currentEntry) {
+      currentEntry.responsibilities.push(line);
+    }
+  }
+  
+  // Add the last entry if we were processing one
+  if (currentEntry && currentEntry.jobTitle && currentEntry.responsibilities.length > 0) {
+    entries.push(currentEntry);
+  }
+  
+  return entries;
+}
+
+/**
+ * Checks if a text string is likely a date range
+ * @param text The text to check
+ * @returns true if the text is likely a date range
+ */
+function isDateRange(text: string): boolean {
+  // Look for common date range patterns
+  const datePatterns = [
+    /\b(19|20)\d{2}\s*(-|–|—|to)\s*(19|20)\d{2}\b/i, // YYYY-YYYY
+    /\b(19|20)\d{2}\s*(-|–|—|to)\s*(present|current|now)\b/i, // YYYY-Present
+    /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s*(19|20)\d{2}\s*(-|–|—|to)/i, // Month YYYY-
+    /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s*\d{4}\b/i, // Month YYYY
   ];
   
-  // Extract sections based on common section headers
-  possibleSections.forEach(section => {
-    const sectionRegex = new RegExp(`(?:^|\\n)\\s*${section}\\s*(?:\\:|\\n)`, 'i');
-    const match = normalizedText.match(sectionRegex);
-    if (match) {
-      const start = match.index || 0;
-      const nextSectionMatch = normalizedText.substring(start + 1).match(/(?:^|\n)\s*(?:summary|profile|objective|experience|work experience|employment history|education|skills|technical skills|certifications|achievements|projects|publications|languages|interests|references)\s*(?:\:|\n)/i);
-      const end = nextSectionMatch ? start + 1 + (nextSectionMatch.index || 0) : normalizedText.length;
-      sections[section.toLowerCase().replace(/\s+/g, '_')] = normalizedText.substring(start, end);
-    }
-  });
+  return datePatterns.some(pattern => pattern.test(text));
+}
+
+/**
+ * Checks if a text string is likely a location
+ * @param text The text to check
+ * @returns true if the text is likely a location
+ */
+function containsLocationIndicator(text: string): boolean {
+  // Look for location patterns
+  const locationPatterns = [
+    /\b(remote|on-site|hybrid)\b/i,
+    /\b[A-Z][a-z]+,\s*[A-Z]{2}\b/, // City, STATE
+    /\b[A-Z][a-z]+,\s*[A-Z][a-z]+\b/, // City, State
+    /\b[A-Z]{2,3},\s*USA\b/, // STATE, USA
+    /\bUnited States\b/,
+    /\bUSA\b/,
+    /\bLocation:/i,
+    /\bBased in\b/i
+  ];
   
-  // Check for key elements
-  const hasContact = /(?:email|phone|address|linkedin)/.test(normalizedText);
-  const hasEducation = /(?:education|degree|university|college|bachelor|master|phd|diploma)/.test(normalizedText);
-  const hasExperience = /(?:experience|work|employment|job|position|role)/.test(normalizedText);
-  const hasSkills = /(?:skills|proficient|proficiency|familiar|expertise|expert|knowledge)/.test(normalizedText);
+  return locationPatterns.some(pattern => pattern.test(text));
+}
+
+/**
+ * Extracts skills from CV sections
+ * @param sections The CV sections
+ * @returns Array of extracted skills
+ */
+function extractSkills(sections: Record<string, string>): string[] {
+  // Get the skills section (check different possible names)
+  const skillsText = sections['skills'] || 
+                    sections['technical skills'] || 
+                    sections['core competencies'] || 
+                    sections['competencies'] || '';
   
-  // Count action verbs
-  let actionVerbCount = 0;
-  ACTION_VERBS.forEach(verb => {
-    const regex = new RegExp(`\\b${verb}\\b`, 'gi');
-    const matches = normalizedText.match(regex);
-    if (matches) {
-      actionVerbCount += matches.length;
-    }
-  });
+  if (!skillsText) {
+    return [];
+  }
   
-  // Count metrics (numbers followed by % or other indicators)
-  const metricsMatches = normalizedText.match(/\b\d+\s*(?:%|percent|million|billion|k|thousand|users|clients|customers|increase|decrease|growth)\b/gi);
-  const metricsCount = metricsMatches ? metricsMatches.length : 0;
+  // Split and clean up skills
+  const skills: string[] = [];
+  const lines = skillsText.split('\n');
   
-  // Assess keyword relevance by industry
-  const keywordsByIndustry: Record<string, number> = {};
-  Object.entries(INDUSTRY_KEYWORDS).forEach(([industry, keywords]) => {
-    let count = 0;
-    keywords.forEach(keyword => {
-      const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
-      const matches = normalizedText.match(regex);
-      if (matches) {
-        count += matches.length;
-      }
-    });
-    keywordsByIndustry[industry] = count;
-  });
-  
-  // Determine most likely industry
-  let topIndustry = 'General';
-  let topCount = 0;
-  Object.entries(keywordsByIndustry).forEach(([industry, count]) => {
-    if (count > topCount) {
-      topIndustry = industry;
-      topCount = count;
-    }
-  });
-  
-  // Parse experience entries - New functionality
-  let experienceEntries = [];
-  if (hasExperience) {
-    // Extract experience section from raw text to preserve case
-    const experienceSectionNames = ['experience', 'work experience', 'employment history', 'professional experience'];
-    let experienceSection = '';
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (trimmedLine.length === 0) continue;
     
-    for (const name of experienceSectionNames) {
-      const regex = new RegExp(`(?:^|\\n)\\s*(${name})\\s*(?:\\:|\\n)`, 'i');
-      const match = text.match(regex);
-      if (match) {
-        const start = match.index || 0;
-        const nextSectionRegex = /(?:^|\n)\s*(education|skills|technical skills|certifications|achievements|projects|publications|languages|interests|references)\s*(?:\:|\n)/i;
-        const nextMatch = text.substring(start + match[0].length).match(nextSectionRegex);
-        
-        const end = nextMatch 
-          ? start + match[0].length + (nextMatch.index || 0) 
-          : text.length;
-        
-        experienceSection = text.substring(start + match[0].length, end).trim();
+    // Try to handle different formats of skills sections
+    
+    // Check if this is a bullet point
+    if (trimmedLine.startsWith('•') || trimmedLine.startsWith('-') || trimmedLine.startsWith('*')) {
+      skills.push(trimmedLine.substring(1).trim());
+    }
+    // Check if this line contains comma-separated skills
+    else if (trimmedLine.includes(',')) {
+      const skillsInLine = trimmedLine.split(',').map(s => s.trim()).filter(s => s.length > 0);
+      skills.push(...skillsInLine);
+    }
+    // Otherwise add the whole line as a single skill
+    else {
+      skills.push(trimmedLine);
+    }
+  }
+  
+  return skills;
+}
+
+/**
+ * Extracts language proficiency information
+ * @param sections The CV sections
+ * @returns Array of language proficiency entries
+ */
+function extractLanguages(sections: Record<string, string>): Array<{
+  language: string;
+  proficiency?: string;
+}> {
+  // Get the languages section (check different possible names)
+  const languagesText = sections['languages'] || 
+                        sections['language proficiency'] || 
+                        sections['language skills'] || '';
+  
+  if (!languagesText) {
+    return [];
+  }
+  
+  // Parse languages
+  const languages: Array<{
+    language: string;
+    proficiency?: string;
+  }> = [];
+  
+  const lines = languagesText.split('\n');
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (trimmedLine.length === 0) continue;
+    
+    // Check for common formats of language entries
+    const colonIndex = trimmedLine.indexOf(':');
+    const dashIndex = trimmedLine.indexOf('-');
+    const commaIndex = trimmedLine.indexOf(',');
+    const parenthesisIndex = trimmedLine.indexOf('(');
+    
+    let separatorIndex = -1;
+    let separator = '';
+    
+    if (colonIndex > 0) {
+      separatorIndex = colonIndex;
+      separator = ':';
+    } else if (dashIndex > 0 && trimmedLine.charAt(dashIndex-1) === ' ' && trimmedLine.charAt(dashIndex+1) === ' ') {
+      separatorIndex = dashIndex;
+      separator = '-';
+    } else if (commaIndex > 0) {
+      separatorIndex = commaIndex;
+      separator = ',';
+    } else if (parenthesisIndex > 0) {
+      separatorIndex = parenthesisIndex;
+      separator = '(';
+    }
+    
+    if (separatorIndex > 0) {
+      // Split line into language and proficiency
+      const language = trimmedLine.substring(0, separatorIndex).trim();
+      let proficiency = '';
+      
+      if (separator === '(') {
+        const closingIndex = trimmedLine.indexOf(')', separatorIndex);
+        proficiency = closingIndex > 0 
+          ? trimmedLine.substring(separatorIndex + 1, closingIndex).trim()
+          : trimmedLine.substring(separatorIndex + 1).trim();
+      } else {
+        proficiency = trimmedLine.substring(separatorIndex + 1).trim();
+      }
+      
+      languages.push({ language, proficiency });
+    } else {
+      // Just a language name
+      languages.push({ language: trimmedLine });
+    }
+  }
+  
+  return languages;
+}
+
+/**
+ * Splits the CV text into separate sections based on common headers
+ * @param cvText The full CV text
+ * @returns An object containing the text of each identified section
+ */
+function splitIntoSections(cvText: string): Record<string, string> {
+  const sections: Record<string, string> = {};
+  
+  // Define common section headers to look for
+  const sectionHeaders = {
+    'header': /^(?!.*(experience|education|skills|languages|profile|summary|objective))/i,
+    'profile': /\b(profile|summary|about me|professional summary|objective)\b/i,
+    'experience': /\b(experience|work experience|employment history|professional experience)\b/i,
+    'education': /\b(education|educational background|academic qualifications|academic background)\b/i,
+    'skills': /\b(skills|technical skills|core competencies|competencies|expertise)\b/i,
+    'languages': /\b(languages|language proficiency|language skills)\b/i,
+    'certifications': /\b(certifications|certificates|qualifications|professional development)\b/i,
+    'projects': /\b(projects|key projects|professional projects)\b/i,
+    'references': /\b(references|testimonials)\b/i
+  };
+  
+  // Split the CV text into lines
+  const lines = cvText.split('\n');
+  
+  // Initialize a variable to track the current section
+  let currentSection = 'header';
+  sections[currentSection] = '';
+  
+  // Identify sections and extract their content
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.length === 0) {
+      // Add an empty line to the current section
+      sections[currentSection] += '\n';
+      continue;
+    }
+    
+    // Check if this line contains a section header
+    let foundNewSection = false;
+    for (const [sectionName, pattern] of Object.entries(sectionHeaders)) {
+      if (sectionName !== 'header' && pattern.test(line) && line.length < 50) {
+        // Found a new section
+        currentSection = sectionName;
+        if (!sections[currentSection]) {
+          sections[currentSection] = '';
+        }
+        foundNewSection = true;
         break;
       }
     }
     
-    if (experienceSection) {
-      experienceEntries = parseExperienceEntries(experienceSection);
+    if (!foundNewSection) {
+      // Add the line to the current section
+      if (sections[currentSection].length > 0 && !sections[currentSection].endsWith('\n')) {
+        sections[currentSection] += '\n';
+      }
+      sections[currentSection] += line;
     }
   }
   
-  // Calculate rough ATS score based on local factors
-  let localAtsScore = 50; // Start at 50
-  
-  // Add points for having essential sections
-  if (hasContact) localAtsScore += 10;
-  if (hasEducation) localAtsScore += 10;
-  if (hasExperience) localAtsScore += 10;
-  if (hasSkills) localAtsScore += 10;
-  
-  // Add points for action verbs and metrics
-  localAtsScore += Math.min(10, actionVerbCount);
-  localAtsScore += Math.min(10, metricsCount * 2);
-  
-  // Add points for industry relevance
-  localAtsScore += Math.min(10, topCount);
-  
-  // Ensure score is between 0-100
-  localAtsScore = Math.max(0, Math.min(100, localAtsScore));
-  
-  return {
-    sections,
-    hasContact,
-    hasEducation,
-    hasExperience,
-    hasSkills,
-    actionVerbCount,
-    metricsCount,
-    keywordsByIndustry,
-    topIndustry,
-    localAtsScore,
-    experienceEntries // Add the parsed experience entries to the result
-  };
-}
-
-/**
- * Parse experience section into structured entries
- * @param experienceText The raw experience section text
- * @returns Array of parsed experience entries
- */
-function parseExperienceEntries(experienceText: string) {
-  const entries = [];
-  
-  // Split by potential job blocks (looking for patterns that might indicate a new job)
-  const jobBlocks = experienceText.split(/\n\s*\n/).filter(block => block.trim().length > 0);
-  
-  for (const block of jobBlocks) {
-    const lines = block.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-    if (lines.length === 0) continue;
-    
-    const entry: any = {
-      jobTitle: '',
-      company: '',
-      dateRange: '',
-      location: '',
-      responsibilities: []
-    };
-    
-    // Try to identify job title, company, and date
-    let headerLinesProcessed = 0;
-    for (let i = 0; i < Math.min(5, lines.length); i++) {
-      const line = lines[i];
-      
-      // Check for date range (years like 2015-2020 or Jan 2015 - Dec 2020)
-      if (/\b(19|20)\d{2}\b.*?(?:\b(19|20)\d{2}\b|present|current|now\b)/i.test(line)) {
-        entry.dateRange = line;
-        headerLinesProcessed++;
-        continue;
-      }
-      
-      // Check for company name (often has LLC, Inc, Ltd, GmbH, etc.)
-      if (/\b(LLC|Inc|Ltd|Limited|GmbH|Corp|Corporation|Group|Company)\b/i.test(line)) {
-        entry.company = line;
-        headerLinesProcessed++;
-        continue;
-      }
-      
-      // Check for location (City, State or City, Country format)
-      if (/\b([A-Z][a-z]+(\s[A-Z][a-z]+)*,\s*[A-Z]{2}|[A-Z][a-z]+(\s[A-Z][a-z]+)*,\s*[A-Z][a-z]+)\b/.test(line)) {
-        entry.location = line;
-        headerLinesProcessed++;
-        continue;
-      }
-      
-      // If we haven't assigned the job title yet and this line is short, it's likely the job title
-      if (!entry.jobTitle && line.length < 60) {
-        entry.jobTitle = line;
-        headerLinesProcessed++;
-        continue;
-      }
-      
-      // If we haven't assigned the company yet and this line is short, it might be the company
-      if (!entry.company && line.length < 60) {
-        entry.company = line;
-        headerLinesProcessed++;
-        continue;
-      }
-      
-      // If this is a bullet point, it's part of responsibilities
-      if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
-        entry.responsibilities.push(line.substring(1).trim());
-        continue;
-      }
-      
-      // If none of the above, it might be just a plain responsibility line
-      entry.responsibilities.push(line);
-    }
-    
-    // Process remaining lines as responsibilities
-    for (let i = Math.min(5, lines.length); i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (line.length === 0) continue;
-      
-      if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
-        entry.responsibilities.push(line.substring(1).trim());
-      } else {
-        entry.responsibilities.push(line);
-      }
-    }
-    
-    entries.push(entry);
+  // Clean up sections
+  for (const sectionName in sections) {
+    sections[sectionName] = sections[sectionName].trim();
   }
   
-  return entries;
+  return sections;
 }
 
 /**

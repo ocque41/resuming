@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, RefreshCw, Clock, Info, Download, FileText } from "lucide-react";
+import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, Building, Briefcase } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cacheDocument, getCachedDocument, clearCachedDocument, getCacheAge } from "@/lib/cache/documentCache";
 import { toast } from "@/hooks/use-toast";
@@ -78,6 +78,23 @@ interface EnhancedOptimizeCVCardProps {
   cvs?: string[]; // Format: "filename|id"
 }
 
+// Add proper type definitions for ExperienceEntriesPreview
+interface ExperienceEntry {
+  jobTitle: string;
+  company: string;
+  dateRange: string;
+  location?: string;
+  responsibilities: string[];
+}
+
+// Add a type definition for improvement
+interface Improvement {
+  improvement: string;
+  impact?: string;
+}
+
+type ImprovementType = string | Improvement;
+
 // Component implementation
 export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVCardProps) {
   // State for CV selection
@@ -128,7 +145,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     industry: ""
   });
   const [showStructuredView, setShowStructuredView] = useState<boolean>(true);
-  const [improvements, setImprovements] = useState<Array<string | { improvement: string; impact?: string }>>([]);
+  const [improvements, setImprovements] = useState<ImprovementType[]>([]);
   
   // State for DOCX download
   const [isDownloadingDocx, setIsDownloadingDocx] = useState<boolean>(false);
@@ -1310,6 +1327,59 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     }
   };
 
+  // Add a new component for displaying experience entries if available
+  const ExperienceEntriesPreview = ({ experienceEntries }: { experienceEntries: ExperienceEntry[] }) => {
+    if (!experienceEntries || !Array.isArray(experienceEntries) || experienceEntries.length === 0) {
+      return null;
+    }
+    
+    return (
+      <div className="mt-4 border border-gray-800 rounded-lg p-4 bg-black/50">
+        <h3 className="text-lg font-medium text-[#B4916C] flex items-center gap-2 mb-3">
+          <Briefcase size={18} />
+          <span>Experience Entries</span>
+        </h3>
+        
+        <div className="space-y-4">
+          {experienceEntries.slice(0, 2).map((entry, index) => (
+            <div key={index} className="border-b border-gray-800 pb-3 last:border-b-0 last:pb-0">
+              <div className="flex justify-between">
+                <div>
+                  <p className="text-white font-medium">{entry.jobTitle}</p>
+                  <p className="text-gray-400 text-sm">{entry.company}</p>
+                </div>
+                <div className="text-gray-500 text-sm">
+                  {entry.dateRange}
+                  {entry.location && <div>{entry.location}</div>}
+                </div>
+              </div>
+              
+              {entry.responsibilities && entry.responsibilities.length > 0 && (
+                <ul className="mt-2 pl-5 text-sm text-gray-300 list-disc space-y-1">
+                  {entry.responsibilities.slice(0, 2).map((resp: string, idx: number) => (
+                    <li key={idx}>{resp}</li>
+                  ))}
+                  {entry.responsibilities.length > 2 && (
+                    <li className="text-gray-500 text-xs">+{entry.responsibilities.length - 2} more</li>
+                  )}
+                </ul>
+              )}
+            </div>
+          ))}
+          
+          {experienceEntries.length > 2 && (
+            <p className="text-gray-500 text-xs mt-2">
+              +{experienceEntries.length - 2} more experience entries
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Enhance the improvements display
+  const showImprovements = true;
+
   return (
     <Card className="w-full shadow-lg border border-[#B4916C]/20 bg-[#121212]">
       <CardHeader>
@@ -1575,13 +1645,14 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                         {improvements.length > 0 && (
                           <div className="mt-6 border-t border-gray-800 pt-4">
                             <h6 className="text-white font-medium mb-2">Suggested Improvements</h6>
-                            <ul className="list-disc pl-5 space-y-1 text-gray-400 text-sm">
+                            <ul className="space-y-2 text-sm text-gray-300">
                               {improvements.map((improvement, index) => (
-                                <li key={index}>
-                                  {typeof improvement === 'object' && improvement !== null 
-                                    ? (improvement.improvement || 'Improvement needed') + 
-                                      (improvement.impact ? ` - Impact: ${improvement.impact}` : '')
-                                    : improvement}
+                                <li key={index} className="flex items-start">
+                                  <span className="text-[#B4916C] mr-2">•</span>
+                                  <span>{typeof improvement === 'string' 
+                                    ? improvement 
+                                    : improvement.improvement || 'Improved CV quality'}
+                                  </span>
                                 </li>
                               ))}
                             </ul>
@@ -1627,6 +1698,31 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                   </div>
                 </div>
               </div>
+          </div>
+        )}
+
+        {/* Experience Entries Preview */}
+        {structuredCV.experience && structuredCV.experience.length > 0 && (
+          <ExperienceEntriesPreview experienceEntries={structuredCV.experience} />
+        )}
+
+        {/* Improvements Display */}
+        {showImprovements && improvements.length > 0 && (
+          <div className="mt-6 bg-black/50 border border-gray-800 rounded-lg p-4">
+            <h3 className="text-lg font-medium text-[#B4916C] mb-3">
+              Improvements Made
+            </h3>
+            <ul className="space-y-2 text-sm text-gray-300">
+              {improvements.map((improvement, index) => (
+                <li key={index} className="flex items-start">
+                  <span className="text-[#B4916C] mr-2">•</span>
+                  <span>{typeof improvement === 'string' 
+                    ? improvement 
+                    : improvement.improvement || 'Improved CV quality'}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </CardContent>

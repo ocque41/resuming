@@ -131,127 +131,96 @@ export class DocumentGenerator {
     }
   ): Promise<Buffer> {
     try {
-      logger.info("Starting professional document generation");
-      const startTime = Date.now();
-      
-      // Clean up text for better parsing
-      let filteredText = cvText
-        .replace(/\bDeveloped\b/g, '')
-        .replace(/\bDelivered\b/g, '')
-        .replace(/\bImplemented\b/g, '');
-      
-      // Clean up any double spaces that might have been created
-      filteredText = filteredText.replace(/\s{2,}/g, ' ');
-      
-      // Split the CV text into sections based on common headers
-      const sections = this.splitIntoSections(filteredText);
-      
-      // Process template style
+      // Set default options
       const templateStyle = options?.templateStyle || this.TemplateStyles.MODERN;
+      const photoOptions = options?.photoOptions || {};
       
-      // Process font options
-      let fonts = {
-        headingFont: this.FontPresets.MODERN.headingFont,
-        bodyFont: this.FontPresets.MODERN.bodyFont,
-        nameFont: this.FontPresets.MODERN.nameFont
+      // Setup fonts - fix the preset handling
+      const presetName = options?.fontOptions?.preset?.toUpperCase() || 'MODERN';
+      const fontPreset = this.FontPresets[presetName as keyof typeof this.FontPresets] || this.FontPresets.MODERN;
+      
+      const fonts = {
+        headingFont: options?.fontOptions?.headingFont || fontPreset.headingFont,
+        bodyFont: options?.fontOptions?.bodyFont || fontPreset.bodyFont,
+        nameFont: options?.fontOptions?.nameFont || fontPreset.nameFont
       };
-
-      // Handle custom font presets
-      if (options?.fontOptions?.preset) {
-        const presetKey = options.fontOptions.preset.toUpperCase();
-        if (presetKey in DocumentGenerator.FontPresets) {
-          fonts = { ...DocumentGenerator.FontPresets[presetKey as keyof typeof DocumentGenerator.FontPresets] };
-        }
-      }
-
-      // Override individual font options if specified
-      if (options?.fontOptions?.headingFont) fonts.headingFont = options.fontOptions.headingFont;
-      if (options?.fontOptions?.bodyFont) fonts.bodyFont = options.fontOptions.bodyFont;
-      if (options?.fontOptions?.nameFont) fonts.nameFont = options.fontOptions.nameFont;
-
-      // Process color options
-      const colors = { ...this.colors };
-      if (options?.colorOptions?.primary) colors.primary = options.colorOptions.primary;
-      if (options?.colorOptions?.accent) colors.accent = options.colorOptions.accent;
       
-      // Create document with optimal margins and modern formatting
+      // Setup colors
+      const primaryColor = options?.colorOptions?.primary || '#333333';
+      const accentColor = options?.colorOptions?.accent || '#B4916C';
+      
+      const colors = {
+        primary: primaryColor,
+        accent: accentColor,
+        dark: '#333333',
+        medium: '#555555',
+        light: '#AAAAAA',
+        ultraLight: '#EEEEEE',
+        white: '#FFFFFF',
+      };
+      
+      // Split CV text into sections
+      const sections = this.splitIntoSections(cvText);
+      
+      // Create document content based on template style and sections
+      const docContent = this.createDocumentContent(
+        sections, 
+        metadata,
+        templateStyle,
+        photoOptions,
+        fonts,
+        colors
+      );
+      
+      // Create document with the content
       const doc = new Document({
+        title: "Optimized CV",
+        description: "Generated with CV Optimizer",
         styles: {
           paragraphStyles: [
             {
-              id: "SectionHeading",
-              name: "Section Heading",
+              id: "Heading1",
+              name: "Heading 1",
               basedOn: "Normal",
               next: "Normal",
-              quickFormat: true,
               run: {
-                font: fonts.headingFont,
-                size: 28,
+                font: fonts.nameFont,
+                size: 40,
                 bold: true,
                 color: colors.primary,
               },
               paragraph: {
                 spacing: {
-                  after: 120,
-                  before: 240,
-                },
-              },
-            },
-            {
-              id: "BodyText",
-              name: "Body Text",
-              basedOn: "Normal",
-              next: "Normal",
-              quickFormat: true,
-              run: {
-                font: fonts.bodyFont,
-                size: 22,
-                color: colors.dark,
-              },
-              paragraph: {
-                spacing: {
-                  after: 80,
-                  line: 360, // 1.5 line spacing
+                  after: 240,
                 },
               },
             },
           ],
         },
-        sections: [
-          {
-            properties: {
-              page: {
-                margin: {
-                  top: convertInchesToTwip(0.5),
-                  right: convertInchesToTwip(0.5),
-                  bottom: convertInchesToTwip(0.5),
-                  left: convertInchesToTwip(0.5),
-                },
-                size: {
-                  orientation: PageOrientation.PORTRAIT,
-                },
+        sections: [{
+          properties: {
+            page: {
+              margin: {
+                top: 1000,
+                right: 1000,
+                bottom: 1000,
+                left: 1000,
+              },
+              size: {
+                width: 12240, // 8.5"
+                height: 15840, // 11"
               },
             },
-            children: this.createDocumentContent(
-              sections, 
-              metadata, 
-              templateStyle,
-              options?.photoOptions,
-              fonts,
-              colors
-            )
-          }
-        ]
+          },
+          children: docContent,
+        }],
       });
       
       // Generate buffer
-      const buffer = await Packer.toBuffer(doc);
-      
-      logger.info(`Document generation completed in ${Date.now() - startTime}ms`);
-      return buffer;
+      return await Packer.toBuffer(doc);
     } catch (error) {
-      logger.error(`Error generating document: ${error instanceof Error ? error.message : String(error)}`);
-      throw new Error(`Document generation failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.error("Error generating document:", error);
+      throw new Error("Failed to generate CV document");
     }
   }
   
@@ -295,7 +264,7 @@ export class DocumentGenerator {
   }
   
   /**
-   * Create document content with professional formatting
+   * Create document content based on sections and template style
    */
   private static createDocumentContent(
     sections: Record<string, string>, 
@@ -323,82 +292,108 @@ export class DocumentGenerator {
       white: string;
     }
   ): any[] {
-    // Default fonts and colors if not provided
-    const activeColors = colors || this.colors;
-    const activeFonts = fonts || {
-      headingFont: this.FontPresets.MODERN.headingFont,
-      bodyFont: this.FontPresets.MODERN.bodyFont,
-      nameFont: this.FontPresets.MODERN.nameFont
-    };
-    
-    // Use modern template as default
-    const activeTemplate = templateStyle || this.TemplateStyles.MODERN;
-    
+    // Initialize document children array
     const children: any[] = [];
     
-    // Setup default photo options if not provided
-    const photo = {
-      path: photoOptions?.path || '',
-      placement: photoOptions?.placement || this.PhotoPlacement.TOP_RIGHT,
-      size: photoOptions?.size || this.PhotoSize.MEDIUM,
-      border: photoOptions?.border !== undefined ? photoOptions.border : true,
-      borderColor: photoOptions?.borderColor || activeColors.primary
-    };
+    // Set defaults if not provided
+    templateStyle = templateStyle || this.TemplateStyles.MODERN;
     
-    // Add header based on selected template
-    if (sections.header) {
-      switch (activeTemplate) {
-        case this.TemplateStyles.MODERN:
-          this.createModernHeader(children, sections.header, photo, activeFonts, activeColors);
-          break;
-        case this.TemplateStyles.CLASSIC:
-          this.createClassicHeader(children, sections.header, photo, activeFonts, activeColors);
-          break;
-        case this.TemplateStyles.MINIMAL:
-          this.createMinimalHeader(children, sections.header, photo, activeFonts, activeColors);
-          break;
-        case this.TemplateStyles.EXECUTIVE:
-          this.createExecutiveHeader(children, sections.header, photo, activeFonts, activeColors);
-          break;
-        case this.TemplateStyles.CREATIVE:
-          this.createCreativeHeader(children, sections.header, photo, activeFonts, activeColors);
-          break;
-        default:
-          this.createModernHeader(children, sections.header, photo, activeFonts, activeColors);
-          break;
+    if (!fonts) {
+      fonts = {
+        headingFont: 'Arial',
+        bodyFont: 'Arial',
+        nameFont: 'Arial'
+      };
+    }
+    
+    if (!colors) {
+      colors = {
+        primary: '#333333',
+        accent: '#B4916C',
+        dark: '#333333',
+        medium: '#555555',
+        light: '#AAAAAA',
+        ultraLight: '#EEEEEE',
+        white: '#FFFFFF'
+      };
+    }
+    
+    // Process header section (different for each template style)
+    const headerContent = sections['header'] || '';
+    
+    switch (templateStyle) {
+      case this.TemplateStyles.MODERN:
+        this.createModernHeader(children, headerContent, photoOptions, fonts, colors);
+        break;
+      case this.TemplateStyles.CLASSIC:
+        this.createClassicHeader(children, headerContent, photoOptions, fonts, colors);
+        break;
+      case this.TemplateStyles.MINIMAL:
+        this.createMinimalHeader(children, headerContent, photoOptions, fonts, colors);
+        break;
+      case this.TemplateStyles.EXECUTIVE:
+        this.createExecutiveHeader(children, headerContent, photoOptions, fonts, colors);
+        break;
+      case this.TemplateStyles.CREATIVE:
+        this.createCreativeHeader(children, headerContent, photoOptions, fonts, colors);
+        break;
+      default:
+        this.createModernHeader(children, headerContent, photoOptions, fonts, colors);
+    }
+    
+    // Process summary/profile section if available
+    if (sections['profile'] || sections['summary']) {
+      const summaryText = sections['profile'] || sections['summary'] || '';
+      this.createSummarySection(children, summaryText, templateStyle, fonts, colors);
+    }
+    
+    // Process experience section if available
+    if (sections['experience'] || sections['work experience'] || sections['employment history']) {
+      const experienceText = 
+        sections['experience'] || 
+        sections['work experience'] || 
+        sections['employment history'] || '';
+      
+      // Use the enhanced experience section handling
+      this.createExperienceSection(children, experienceText, templateStyle, fonts, colors, metadata);
+    }
+    
+    // Process skills section if available
+    if (sections['skills'] || sections['technical skills'] || sections['competencies']) {
+      const skillsText = 
+        sections['skills'] || 
+        sections['technical skills'] || 
+        sections['competencies'] || '';
+      this.createSkillsSection(children, skillsText, metadata, templateStyle, fonts, colors);
+    }
+    
+    // Process education section if available
+    if (sections['education'] || sections['academic background']) {
+      const educationText = 
+        sections['education'] || 
+        sections['academic background'] || '';
+      this.createEducationSection(children, educationText, templateStyle, fonts, colors);
+    }
+    
+    // Process languages section if available
+    if (sections['languages'] || sections['language proficiency']) {
+      const languagesText = 
+        sections['languages'] || 
+        sections['language proficiency'] || '';
+      this.createLanguagesSection(children, languagesText, templateStyle, fonts, colors);
+    }
+    
+    // Process any other sections
+    for (const [key, value] of Object.entries(sections)) {
+      // Skip sections we've already handled
+      if (['header', 'profile', 'summary', 'experience', 'work experience', 'employment history',
+           'skills', 'technical skills', 'competencies', 'education', 'academic background',
+           'languages', 'language proficiency'].includes(key)) {
+        continue;
       }
-    }
-    
-    // Add summary section if available
-    if (sections.summary) {
-      this.createSummarySection(children, sections.summary, activeTemplate, activeFonts, activeColors);
-    }
-    
-    // Add skills section with modern formatting
-    if (sections.skills) {
-      this.createSkillsSection(children, sections.skills, metadata, activeTemplate, activeFonts, activeColors);
-    }
-    
-    // Add experience section with enhanced formatting
-    if (sections.experience) {
-      this.createExperienceSection(children, sections.experience, activeTemplate, activeFonts, activeColors);
-    }
-    
-    // Add education section with enhanced formatting
-    if (sections.education) {
-      this.createEducationSection(children, sections.education, activeTemplate, activeFonts, activeColors);
-    }
-    
-    // Add languages section if available
-    if (sections.languages) {
-      this.createLanguagesSection(children, sections.languages, activeTemplate, activeFonts, activeColors);
-    }
-    
-    // Add any remaining sections
-    for (const [sectionName, content] of Object.entries(sections)) {
-      if (!['header', 'summary', 'skills', 'experience', 'education', 'languages'].includes(sectionName)) {
-        this.createGenericSection(children, sectionName, content, activeTemplate, activeFonts, activeColors);
-      }
+      
+      // Add the section with generic formatting
+      this.createGenericSection(children, key, value, templateStyle, fonts, colors);
     }
     
     return children;
@@ -1508,34 +1503,32 @@ export class DocumentGenerator {
   }
   
   /**
-   * Creates a professional experience section with enhanced formatting
+   * Create the experience section of the document with enhanced formatting
    */
   private static createExperienceSection(
     children: any[],
     experienceText: string,
     templateStyle: string,
     fonts: any,
-    colors: any
+    colors: any,
+    metadata?: any
   ): void {
-    // Add section header
-    const sectionTitle = templateStyle === this.TemplateStyles.EXECUTIVE ? 
-      'PROFESSIONAL EXPERIENCE' : 'EXPERIENCE';
-      
+    // Add section heading
     children.push(
       new Paragraph({
         children: [
           new TextRun({
-            text: sectionTitle,
+            text: 'EXPERIENCE',
             bold: true,
-            size: 28, // ~14pt font
+            size: 28,
             color: colors.primary,
-            font: fonts.nameFont,
+            font: fonts.headingFont,
           }),
         ],
-        spacing: { before: 200, after: 120 },
+        spacing: { before: 240, after: 120 },
         border: {
           bottom: {
-            color: colors.light,
+            color: colors.ultraLight,
             space: 1,
             style: BorderStyle.SINGLE,
             size: 6,
@@ -1544,71 +1537,403 @@ export class DocumentGenerator {
       })
     );
     
-    // Process experience content
-    const experienceLines = experienceText.split('\n');
-    let currentJobTitle = '';
-    let currentCompany = '';
-    let currentDateRange = '';
-    let currentBullets: string[] = [];
-    let isProcessingJob = false;
-    
-    for (let i = 0; i < experienceLines.length; i++) {
-      const line = experienceLines[i].trim();
-      if (line.length === 0) {
-        // Empty line - if we were processing a job, add it to the document
-        if (isProcessingJob && (currentJobTitle || currentCompany)) {
-          this.addJobToDocument(children, currentJobTitle, currentCompany, currentDateRange, currentBullets, fonts, colors);
-          
-          // Reset for next job
-          currentJobTitle = '';
-          currentCompany = '';
-          currentDateRange = '';
-          currentBullets = [];
-          isProcessingJob = false;
-        }
-        continue;
-      }
-      
-      // Check if this is a bullet point
-      const isBullet = line.startsWith('-') || line.startsWith('•') || line.startsWith('*');
-      
-      if (isBullet) {
-        // Add to current bullets
-        currentBullets.push(line.substring(1).trim());
-        isProcessingJob = true;
-      } else {
-        // Check if this might be a job title, company, or date
-        const containsYear = /\b(19|20)\d{2}\b/.test(line);
-        const isShortLine = line.length < 60;
+    // Check if we have structured experience entries in metadata
+    if (metadata?.experienceEntries && Array.isArray(metadata.experienceEntries) && metadata.experienceEntries.length > 0) {
+      // Process each experience entry
+      metadata.experienceEntries.forEach((entry: any) => {
+        if (!entry) return;
         
-        if (containsYear && isShortLine) {
-          // This is likely a date range
-          currentDateRange = line;
-          isProcessingJob = true;
-        } else if (isShortLine) {
-          // This is likely a job title or company
-          if (!currentJobTitle) {
-            currentJobTitle = line;
+        // Create a table for job title and date
+        const headerTable = new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          borders: {
+            top: { style: BorderStyle.NONE },
+            bottom: { style: BorderStyle.NONE },
+            left: { style: BorderStyle.NONE },
+            right: { style: BorderStyle.NONE },
+            insideHorizontal: { style: BorderStyle.NONE },
+            insideVertical: { style: BorderStyle.NONE },
+          },
+          rows: [
+            new TableRow({
+              children: [
+                // Left cell for job title
+                new TableCell({
+                  width: { size: 70, type: WidthType.PERCENTAGE },
+                  borders: {
+                    top: { style: BorderStyle.NONE },
+                    bottom: { style: BorderStyle.NONE },
+                    left: { style: BorderStyle.NONE },
+                    right: { style: BorderStyle.NONE },
+                  },
+                  children: [
+                    new Paragraph({
+                      children: [
+                        new TextRun({
+                          text: entry.jobTitle || 'Position',
+                          size: 24,
+                          bold: true,
+                          color: colors.dark,
+                          font: fonts.bodyFont,
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                // Right cell for date range
+                new TableCell({
+                  width: { size: 30, type: WidthType.PERCENTAGE },
+                  borders: {
+                    top: { style: BorderStyle.NONE },
+                    bottom: { style: BorderStyle.NONE },
+                    left: { style: BorderStyle.NONE },
+                    right: { style: BorderStyle.NONE },
+                  },
+                  children: [
+                    new Paragraph({
+                      alignment: AlignmentType.RIGHT,
+                      children: [
+                        new TextRun({
+                          text: entry.dateRange || '',
+                          size: 22,
+                          color: colors.medium,
+                          font: fonts.bodyFont,
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        });
+        
+        children.push(headerTable);
+        
+        // Add company and location
+        const companyLocationParagraph = new Paragraph({
+          children: [
+            new TextRun({
+              text: entry.company || 'Company',
+              size: 22,
+              italics: true,
+              color: colors.medium,
+              font: fonts.bodyFont,
+            }),
+            // Add location if available
+            entry.location ? new TextRun({
+              text: ` | ${entry.location}`,
+              size: 22,
+              color: colors.medium,
+              font: fonts.bodyFont,
+            }) : new TextRun({ text: '' }),
+          ],
+          spacing: { after: 120 },
+        });
+        
+        children.push(companyLocationParagraph);
+        
+        // Add responsibilities as bullet points
+        if (entry.responsibilities && entry.responsibilities.length > 0) {
+          entry.responsibilities.forEach((responsibility: string) => {
+            children.push(
+              new Paragraph({
+                bullet: { level: 0 },
+                children: [
+                  new TextRun({
+                    text: responsibility,
+                    size: 22,
+                    color: colors.dark,
+                    font: fonts.bodyFont,
+                  }),
+                ],
+                spacing: { before: 40, after: 40 },
+              })
+            );
+          });
+        }
+        
+        // Add space between jobs
+        children.push(
+          new Paragraph({
+            spacing: { after: 200 },
+          })
+        );
+      });
+    } else {
+      // Fallback to parsing experience text if no structured entries are available
+      const lines = experienceText.split('\n');
+      let currentJob = '';
+      let currentCompany = '';
+      let currentDateRange = '';
+      let currentBullets: string[] = [];
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.length === 0) continue;
+        
+        // Check if this is likely a job title (short line, not a bullet point)
+        if (line.length < 60 && !line.startsWith('•') && !line.startsWith('-') && 
+            !line.startsWith('*') && i < lines.length - 1) {
+          
+          // If we've been processing a job, add it to the document before starting a new one
+          if (currentJob && currentBullets.length > 0) {
+            // Add job header
+            const jobHeaderTable = new Table({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              borders: {
+                top: { style: BorderStyle.NONE },
+                bottom: { style: BorderStyle.NONE },
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.NONE },
+                insideHorizontal: { style: BorderStyle.NONE },
+                insideVertical: { style: BorderStyle.NONE },
+              },
+              rows: [
+                new TableRow({
+                  children: [
+                    // Left cell for job title
+                    new TableCell({
+                      width: { size: 70, type: WidthType.PERCENTAGE },
+                      borders: {
+                        top: { style: BorderStyle.NONE },
+                        bottom: { style: BorderStyle.NONE },
+                        left: { style: BorderStyle.NONE },
+                        right: { style: BorderStyle.NONE },
+                      },
+                      children: [
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: currentJob,
+                              size: 24,
+                              bold: true,
+                              color: colors.dark,
+                              font: fonts.bodyFont,
+                            }),
+                          ],
+                        }),
+                      ],
+                    }),
+                    // Right cell for date range
+                    new TableCell({
+                      width: { size: 30, type: WidthType.PERCENTAGE },
+                      borders: {
+                        top: { style: BorderStyle.NONE },
+                        bottom: { style: BorderStyle.NONE },
+                        left: { style: BorderStyle.NONE },
+                        right: { style: BorderStyle.NONE },
+                      },
+                      children: [
+                        new Paragraph({
+                          alignment: AlignmentType.RIGHT,
+                          children: [
+                            new TextRun({
+                              text: currentDateRange,
+                              size: 22,
+                              color: colors.medium,
+                              font: fonts.bodyFont,
+                            }),
+                          ],
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+              ],
+            });
+            
+            children.push(jobHeaderTable);
+            
+            // Add company
+            if (currentCompany) {
+              children.push(
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: currentCompany,
+                      size: 22,
+                      italics: true,
+                      color: colors.medium,
+                      font: fonts.bodyFont,
+                    }),
+                  ],
+                  spacing: { after: 120 },
+                })
+              );
+            }
+            
+            // Add bullets
+            currentBullets.forEach(bullet => {
+              children.push(
+                new Paragraph({
+                  bullet: { level: 0 },
+                  children: [
+                    new TextRun({
+                      text: bullet,
+                      size: 22,
+                      color: colors.dark,
+                      font: fonts.bodyFont,
+                    }),
+                  ],
+                  spacing: { before: 40, after: 40 },
+                })
+              );
+            });
+            
+            // Add space between jobs
+            children.push(
+              new Paragraph({
+                spacing: { after: 200 },
+              })
+            );
+            
+            // Reset for next job
+            currentJob = '';
+            currentCompany = '';
+            currentDateRange = '';
+            currentBullets = [];
+          }
+          
+          // Determine what this line represents
+          if (!currentJob) {
+            currentJob = line;
           } else if (!currentCompany) {
             currentCompany = line;
+          } else if (!currentDateRange && 
+                   (line.includes('-') || line.includes('to') || line.includes('present') || 
+                    line.match(/\b(19|20)\d{2}\b/))) {
+            currentDateRange = line;
+          } else {
+            currentBullets.push(line);
           }
-          isProcessingJob = true;
-        } else {
-          // This is likely a description - add it as a bullet
+        } 
+        // Check if this is a date range
+        else if (!currentDateRange && 
+                (line.includes('-') || line.includes('to') || line.includes('present') || 
+                 line.match(/\b(19|20)\d{2}\b/))) {
+          currentDateRange = line;
+        }
+        // Check if this is a bullet point
+        else if (line.startsWith('•') || line.startsWith('-') || line.startsWith('*')) {
+          currentBullets.push(line.substring(1).trim());
+        }
+        // Otherwise, it's likely a regular line of text
+        else {
           currentBullets.push(line);
-          isProcessingJob = true;
         }
       }
-    }
-    
-    // Add the last job if there is one
-    if (isProcessingJob && (currentJobTitle || currentCompany)) {
-      this.addJobToDocument(children, currentJobTitle, currentCompany, currentDateRange, currentBullets, fonts, colors);
+      
+      // Add the last job if we were processing one
+      if (currentJob && currentBullets.length > 0) {
+        // Add job header
+        const jobHeaderTable = new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          borders: {
+            top: { style: BorderStyle.NONE },
+            bottom: { style: BorderStyle.NONE },
+            left: { style: BorderStyle.NONE },
+            right: { style: BorderStyle.NONE },
+            insideHorizontal: { style: BorderStyle.NONE },
+            insideVertical: { style: BorderStyle.NONE },
+          },
+          rows: [
+            new TableRow({
+              children: [
+                // Left cell for job title
+                new TableCell({
+                  width: { size: 70, type: WidthType.PERCENTAGE },
+                  borders: {
+                    top: { style: BorderStyle.NONE },
+                    bottom: { style: BorderStyle.NONE },
+                    left: { style: BorderStyle.NONE },
+                    right: { style: BorderStyle.NONE },
+                  },
+                  children: [
+                    new Paragraph({
+                      children: [
+                        new TextRun({
+                          text: currentJob,
+                          size: 24,
+                          bold: true,
+                          color: colors.dark,
+                          font: fonts.bodyFont,
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                // Right cell for date range
+                new TableCell({
+                  width: { size: 30, type: WidthType.PERCENTAGE },
+                  borders: {
+                    top: { style: BorderStyle.NONE },
+                    bottom: { style: BorderStyle.NONE },
+                    left: { style: BorderStyle.NONE },
+                    right: { style: BorderStyle.NONE },
+                  },
+                  children: [
+                    new Paragraph({
+                      alignment: AlignmentType.RIGHT,
+                      children: [
+                        new TextRun({
+                          text: currentDateRange,
+                          size: 22,
+                          color: colors.medium,
+                          font: fonts.bodyFont,
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        });
+        
+        children.push(jobHeaderTable);
+        
+        // Add company
+        if (currentCompany) {
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: currentCompany,
+                  size: 22,
+                  italics: true,
+                  color: colors.medium,
+                  font: fonts.bodyFont,
+                }),
+              ],
+              spacing: { after: 120 },
+            })
+          );
+        }
+        
+        // Add bullets
+        currentBullets.forEach(bullet => {
+          children.push(
+            new Paragraph({
+              bullet: { level: 0 },
+              children: [
+                new TextRun({
+                  text: bullet,
+                  size: 22,
+                  color: colors.dark,
+                  font: fonts.bodyFont,
+                }),
+              ],
+              spacing: { before: 40, after: 40 },
+            })
+          );
+        });
+      }
     }
   }
-  
+
   /**
-   * Creates an education section with enhanced formatting
+   * Create education section with enhanced formatting
    */
   private static createEducationSection(
     children: any[],
@@ -1617,22 +1942,22 @@ export class DocumentGenerator {
     fonts: any,
     colors: any
   ): void {
-    // Add section header
+    // Add section heading
     children.push(
       new Paragraph({
         children: [
           new TextRun({
             text: 'EDUCATION',
             bold: true,
-            size: 28, // ~14pt font
+            size: 28,
             color: colors.primary,
-            font: fonts.nameFont,
+            font: fonts.headingFont,
           }),
         ],
-        spacing: { before: 200, after: 120 },
+        spacing: { before: 240, after: 120 },
         border: {
           bottom: {
-            color: colors.light,
+            color: colors.ultraLight,
             space: 1,
             style: BorderStyle.SINGLE,
             size: 6,
@@ -1716,464 +2041,14 @@ export class DocumentGenerator {
       }
     }
     
-    // Add the last education entry if there is one
+    // Add the final education entry if there is one
     if (isProcessingEducation && (currentDegree || currentInstitution)) {
       this.addEducationToDocument(children, currentDegree, currentInstitution, currentYear, currentDetails, fonts, colors);
     }
   }
   
   /**
-   * Creates a languages section with visual level indicators
-   */
-  private static createLanguagesSection(
-    children: any[],
-    languagesText: string,
-    templateStyle: string,
-    fonts: any,
-    colors: any
-  ): void {
-    // Add Languages header
-    children.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: 'LANGUAGES',
-            bold: true,
-            size: 28,
-            color: colors.primary,
-            font: fonts.nameFont,
-          }),
-        ],
-        spacing: {
-          before: 200,
-          after: 120
-        },
-        border: {
-          bottom: {
-            color: colors.light,
-            space: 1,
-            style: BorderStyle.SINGLE,
-            size: 6,
-          },
-        },
-      })
-    );
-    
-    // Process languages
-    const languageLines = languagesText.split('\n');
-    const languagesList: {language: string, level: string}[] = [];
-    
-    languageLines.forEach(line => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
-      
-      // Try to extract language and level
-      const parts = trimmed.split(':').map(p => p.trim());
-      if (parts.length >= 2) {
-        languagesList.push({
-          language: parts[0],
-          level: parts[1]
-        });
-      } else if (trimmed.includes('-')) {
-        const dashParts = trimmed.split('-').map(p => p.trim());
-        if (dashParts.length >= 2) {
-          languagesList.push({
-            language: dashParts[0],
-            level: dashParts[1]
-          });
-        } else {
-          languagesList.push({
-            language: trimmed,
-            level: 'Proficient'
-          });
-        }
-      } else {
-        languagesList.push({
-          language: trimmed,
-          level: 'Proficient'
-        });
-      }
-    });
-    
-    // Create language visualization based on template style
-    if (templateStyle === this.TemplateStyles.MODERN || 
-        templateStyle === this.TemplateStyles.CREATIVE) {
-      // Modern visualization with horizontal bars
-      this.createLanguageBars(children, languagesList, 3, fonts, colors);
-    } else if (templateStyle === this.TemplateStyles.MINIMAL) {
-      // Simple list for minimal style
-      this.createSimpleLanguageList(children, languagesList, fonts, colors);
-    } else {
-      // Classic visualization
-      this.createLanguageBars(children, languagesList, 2, fonts, colors);
-    }
-  }
-  
-  /**
-   * Creates language proficiency bars
-   */
-  private static createLanguageBars(
-    children: any[],
-    languagesList: {language: string, level: string}[],
-    columnsPerRow: number,
-    fonts: any,
-    colors: any
-  ): void {
-    // Create a table for languages with modern visualization
-    const languageRows: TableRow[] = [];
-    
-    for (let i = 0; i < languagesList.length; i += columnsPerRow) {
-      const rowLanguages = languagesList.slice(i, i + columnsPerRow);
-      
-      // Create cells for this row
-      const cells = rowLanguages.map(lang => 
-        new TableCell({
-          borders: {
-            top: { style: BorderStyle.NONE },
-            bottom: { style: BorderStyle.NONE },
-            left: { style: BorderStyle.NONE },
-            right: { style: BorderStyle.NONE },
-          },
-          children: [
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: lang.language,
-                  size: 22,
-                  bold: true,
-                  color: colors.dark,
-                  font: fonts.bodyFont,
-                }),
-              ],
-              spacing: { after: 40 }
-            }),
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: this.getLanguageLevelBar(lang.level),
-                  size: 20,
-                  color: colors.primary,
-                  font: fonts.nameFont,
-                }),
-              ],
-              spacing: { before: 0, after: 80 }
-            })
-          ],
-        })
-      );
-      
-      // If we don't have enough languages to fill the row, add empty cells
-      while (cells.length < columnsPerRow) {
-        cells.push(
-          new TableCell({
-            borders: {
-              top: { style: BorderStyle.NONE },
-              bottom: { style: BorderStyle.NONE },
-              left: { style: BorderStyle.NONE },
-              right: { style: BorderStyle.NONE },
-            },
-            children: [new Paragraph({})],
-          })
-        );
-      }
-      
-      // Add the row to the table
-      languageRows.push(new TableRow({ children: cells }));
-    }
-    
-    // Create the languages table
-    const languagesTable = new Table({
-      width: {
-        size: 100,
-        type: WidthType.PERCENTAGE,
-      },
-      layout: TableLayoutType.FIXED,
-      borders: {
-        top: { style: BorderStyle.NONE },
-        bottom: { style: BorderStyle.NONE },
-        left: { style: BorderStyle.NONE },
-        right: { style: BorderStyle.NONE },
-        insideHorizontal: { style: BorderStyle.NONE },
-        insideVertical: { style: BorderStyle.NONE },
-      },
-      rows: languageRows,
-    });
-    
-    // Add the languages table
-    children.push(languagesTable);
-  }
-  
-  /**
-   * Creates a simple language list for minimal style
-   */
-  private static createSimpleLanguageList(
-    children: any[],
-    languagesList: {language: string, level: string}[],
-    fonts: any,
-    colors: any
-  ): void {
-    languagesList.forEach(lang => {
-      children.push(
-        new Paragraph({
-          children: [
-            new TextRun({
-              text: `${lang.language}: `,
-              size: 22,
-              bold: true,
-              color: colors.dark,
-              font: fonts.bodyFont,
-            }),
-            new TextRun({
-              text: lang.level,
-              size: 22,
-              color: colors.medium,
-              font: fonts.bodyFont,
-            }),
-          ],
-          spacing: {
-            before: 40,
-            after: 40
-          }
-        })
-      );
-    });
-  }
-  
-  /**
-   * Creates a generic section for any additional content
-   */
-  private static createGenericSection(
-    children: any[],
-    sectionName: string,
-    content: string,
-    templateStyle: string,
-    fonts: any,
-    colors: any
-  ): void {
-    // Format section name
-    const formattedName = sectionName.charAt(0).toUpperCase() + sectionName.slice(1).toLowerCase();
-    
-    // Add section header
-    children.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: formattedName,
-            bold: true,
-            size: 28, // ~14pt font
-            color: colors.primary,
-            font: fonts.nameFont,
-          }),
-        ],
-        spacing: { before: 200, after: 120 },
-        border: {
-          bottom: {
-            color: colors.light,
-            space: 1,
-            style: BorderStyle.SINGLE,
-            size: 6,
-          },
-        },
-      })
-    );
-    
-    // Process content
-    const contentLines = content.split('\n');
-    contentLines.forEach(line => {
-      const trimmedLine = line.trim();
-      if (trimmedLine.length === 0) return;
-      
-      // Check if line is a bullet point
-      if (trimmedLine.startsWith('-') || trimmedLine.startsWith('•') || trimmedLine.startsWith('*')) {
-        children.push(
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: "• ",
-                size: 22,
-                bold: true,
-                color: colors.primary,
-                font: fonts.nameFont,
-              }),
-              new TextRun({
-                text: trimmedLine.substring(1).trim(),
-                size: 22,
-                color: colors.dark,
-                font: fonts.bodyFont,
-              }),
-            ],
-            spacing: {
-              before: 40,
-              after: 40
-            },
-            indent: {
-              left: convertInchesToTwip(0.25)
-            }
-          })
-        );
-      } else {
-        children.push(
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: trimmedLine,
-                size: 22,
-                color: colors.dark,
-                font: fonts.bodyFont,
-              }),
-            ],
-            spacing: {
-              before: 40,
-              after: 40
-            }
-          })
-        );
-      }
-    });
-  }
-  
-  /**
-   * Add a job entry to the document with premium styling
-   */
-  private static addJobToDocument(
-    children: any[], 
-    jobTitle: string, 
-    company: string, 
-    dateRange: string, 
-    bullets: string[],
-    fonts: any,
-    colors: any
-  ): void {
-    // Create a table for job title and date - modern side-by-side layout
-    const jobHeaderTable = new Table({
-      width: {
-        size: 100,
-        type: WidthType.PERCENTAGE,
-      },
-      layout: TableLayoutType.FIXED,
-      borders: {
-        top: { style: BorderStyle.NONE },
-        bottom: { style: BorderStyle.NONE },
-        left: { style: BorderStyle.NONE },
-        right: { style: BorderStyle.NONE },
-        insideHorizontal: { style: BorderStyle.NONE },
-        insideVertical: { style: BorderStyle.NONE },
-      },
-      rows: [
-        new TableRow({
-          children: [
-            // Left column for job title and company
-            new TableCell({
-              width: {
-                size: 70,
-                type: WidthType.PERCENTAGE,
-              },
-              borders: {
-                top: { style: BorderStyle.NONE },
-                bottom: { style: BorderStyle.NONE },
-                left: { style: BorderStyle.NONE },
-                right: { style: BorderStyle.NONE },
-              },
-              children: [
-                // Job title
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: jobTitle,
-                      size: 24, // ~12pt font
-                      bold: true,
-                      color: colors.dark,
-                      font: fonts.bodyFont,
-                    }),
-                  ],
-                  spacing: {
-                    after: 40
-                  }
-                }),
-                // Company
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: company,
-                      size: 22, // ~11pt font
-                      italics: true,
-                      color: colors.medium,
-                      font: fonts.bodyFont,
-                    }),
-                  ],
-                  spacing: {
-                    after: 40
-                  }
-                }),
-              ],
-            }),
-            
-            // Right column for date range
-            new TableCell({
-              width: {
-                size: 30,
-                type: WidthType.PERCENTAGE,
-              },
-              borders: {
-                top: { style: BorderStyle.NONE },
-                bottom: { style: BorderStyle.NONE },
-                left: { style: BorderStyle.NONE },
-                right: { style: BorderStyle.NONE },
-              },
-              children: [
-                new Paragraph({
-                  alignment: AlignmentType.RIGHT,
-                  children: [
-                    new TextRun({
-                      text: dateRange,
-                      size: 22, // ~11pt font
-                      color: colors.medium,
-                      font: fonts.bodyFont,
-                    }),
-                  ],
-                }),
-              ],
-            }),
-          ],
-        }),
-      ],
-    });
-    
-    children.push(jobHeaderTable);
-    
-    // Add bullets with enhanced formatting and proper bullet points
-    bullets.forEach(bullet => {
-      children.push(
-        new Paragraph({
-          children: [
-            new TextRun({
-              text: "• ",
-              size: 22, // ~11pt font
-              color: colors.primary,
-              bold: true,
-              font: fonts.bodyFont,
-            }),
-            new TextRun({
-              text: bullet,
-              size: 22, // ~11pt font
-              color: colors.dark,
-              font: fonts.bodyFont,
-            }),
-          ],
-          indent: {
-            left: convertInchesToTwip(0.25)
-          },
-          spacing: {
-            before: 40,
-            after: 40
-          }
-        })
-      );
-    });
-  }
-  
-  /**
-   * Add an education entry to the document with premium styling
+   * Add an education entry to the document with enhanced styling
    */
   private static addEducationToDocument(
     children: any[], 
@@ -2301,7 +2176,7 @@ export class DocumentGenerator {
             }),
           ],
           indent: {
-            left: convertInchesToTwip(0.25)
+            left: 360 // ~0.25 inches
           },
           spacing: {
             before: 40,
@@ -2310,6 +2185,197 @@ export class DocumentGenerator {
         })
       );
     });
+  }
+
+  /**
+   * Create languages section with visual proficiency indicators
+   */
+  private static createLanguagesSection(
+    children: any[],
+    languagesText: string,
+    templateStyle: string,
+    fonts: any,
+    colors: any
+  ): void {
+    // Add section heading
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'LANGUAGES',
+            bold: true,
+            size: 28,
+            color: colors.primary,
+            font: fonts.headingFont,
+          }),
+        ],
+        spacing: { before: 240, after: 120 },
+        border: {
+          bottom: {
+            color: colors.ultraLight,
+            space: 1,
+            style: BorderStyle.SINGLE,
+            size: 6,
+          },
+        },
+      })
+    );
+    
+    // Process languages content - parse into language and proficiency
+    const languageLines = languagesText.split('\n');
+    const languageEntries: Array<{ language: string, proficiency?: string }> = [];
+    
+    languageLines.forEach(line => {
+      const trimmedLine = line.trim();
+      if (trimmedLine.length === 0) return;
+      
+      // Check if line contains a language and proficiency indicator
+      const colonIndex = trimmedLine.indexOf(':');
+      const dashIndex = trimmedLine.indexOf('-');
+      const commaIndex = trimmedLine.indexOf(',');
+      const parenthesisIndex = trimmedLine.indexOf('(');
+      
+      let separatorIndex = -1;
+      let separator = '';
+      
+      if (colonIndex > 0) {
+        separatorIndex = colonIndex;
+        separator = ':';
+      } else if (dashIndex > 0 && trimmedLine.charAt(dashIndex-1) === ' ' && trimmedLine.charAt(dashIndex+1) === ' ') {
+        separatorIndex = dashIndex;
+        separator = '-';
+      } else if (commaIndex > 0) {
+        separatorIndex = commaIndex;
+        separator = ',';
+      } else if (parenthesisIndex > 0) {
+        separatorIndex = parenthesisIndex;
+        separator = '(';
+      }
+      
+      if (separatorIndex > 0) {
+        // Split line into language and proficiency
+        const language = trimmedLine.substring(0, separatorIndex).trim();
+        let proficiency = '';
+        
+        if (separator === '(') {
+          const closingIndex = trimmedLine.indexOf(')', separatorIndex);
+          proficiency = closingIndex > 0 
+            ? trimmedLine.substring(separatorIndex + 1, closingIndex).trim()
+            : trimmedLine.substring(separatorIndex + 1).trim();
+        } else {
+          proficiency = trimmedLine.substring(separatorIndex + 1).trim();
+        }
+        
+        languageEntries.push({ language, proficiency });
+      } else {
+        // Just a language name
+        languageEntries.push({ language: trimmedLine });
+      }
+    });
+    
+    // Create a table for languages with proficiency indicators
+    if (languageEntries.length > 0) {
+      const languagesTable = new Table({
+        width: {
+          size: 100,
+          type: WidthType.PERCENTAGE,
+        },
+        borders: {
+          top: { style: BorderStyle.NONE },
+          bottom: { style: BorderStyle.NONE },
+          left: { style: BorderStyle.NONE },
+          right: { style: BorderStyle.NONE },
+          insideHorizontal: { style: BorderStyle.NONE },
+          insideVertical: { style: BorderStyle.NONE },
+        },
+        rows: languageEntries.map(entry => {
+          const proficiencyBar = entry.proficiency 
+            ? this.getLanguageLevelBar(entry.proficiency)
+            : '';
+            
+          return new TableRow({
+            children: [
+              // Language name
+              new TableCell({
+                width: {
+                  size: 40,
+                  type: WidthType.PERCENTAGE,
+                },
+                borders: {
+                  top: { style: BorderStyle.NONE },
+                  bottom: { style: BorderStyle.NONE },
+                  left: { style: BorderStyle.NONE },
+                  right: { style: BorderStyle.NONE },
+                },
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: entry.language,
+                        size: 22,
+                        bold: true,
+                        color: colors.dark,
+                        font: fonts.bodyFont,
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+              
+              // Proficiency level
+              new TableCell({
+                width: {
+                  size: 60,
+                  type: WidthType.PERCENTAGE,
+                },
+                borders: {
+                  top: { style: BorderStyle.NONE },
+                  bottom: { style: BorderStyle.NONE },
+                  left: { style: BorderStyle.NONE },
+                  right: { style: BorderStyle.NONE },
+                },
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: proficiencyBar,
+                        size: 22,
+                        color: colors.primary,
+                        font: fonts.bodyFont,
+                      }),
+                      entry.proficiency ? new TextRun({
+                        text: ` ${entry.proficiency}`,
+                        size: 22,
+                        color: colors.medium,
+                        italics: true,
+                        font: fonts.bodyFont,
+                      }) : new TextRun({ text: '' }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
+          });
+        }),
+      });
+      
+      children.push(languagesTable);
+    } else {
+      // Fallback to just adding the text if parsing fails
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: languagesText,
+              size: 22,
+              color: colors.dark,
+              font: fonts.bodyFont,
+            }),
+          ],
+          spacing: { before: 80, after: 80 },
+        })
+      );
+    }
   }
   
   /**
@@ -2357,6 +2423,126 @@ export class DocumentGenerator {
     
     // Default to middle level if we can't determine
     return '■■■□□';
+  }
+  
+  /**
+   * Create generic section with standard formatting
+   */
+  private static createGenericSection(
+    children: any[],
+    sectionName: string,
+    sectionText: string,
+    templateStyle: string,
+    fonts: any,
+    colors: any
+  ): void {
+    // Format section name for display (capitalize, replace underscores with spaces)
+    const formattedName = sectionName
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+      .toUpperCase();
+      
+    // Add section heading  
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: formattedName,
+            bold: true,
+            size: 28,
+            color: colors.primary,
+            font: fonts.headingFont,
+          }),
+        ],
+        spacing: { before: 240, after: 120 },
+        border: {
+          bottom: {
+            color: colors.ultraLight,
+            space: 1,
+            style: BorderStyle.SINGLE,
+            size: 6,
+          },
+        },
+      })
+    );
+    
+    // Process section content - parse bullet points
+    const lines = sectionText.split('\n');
+    let isInBulletList = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.length === 0) {
+        // Empty line - add some spacing
+        if (isInBulletList) {
+          isInBulletList = false;
+          children.push(
+            new Paragraph({
+              spacing: { before: 80, after: 80 },
+            })
+          );
+        }
+        continue;
+      }
+      
+      // Check if line is a bullet point
+      const isBullet = line.startsWith('-') || line.startsWith('•') || line.startsWith('*');
+      
+      if (isBullet) {
+        isInBulletList = true;
+        children.push(
+          new Paragraph({
+            bullet: { level: 0 },
+            children: [
+              new TextRun({
+                text: line.substring(1).trim(),
+                size: 22,
+                color: colors.dark,
+                font: fonts.bodyFont,
+              }),
+            ],
+            spacing: { before: 40, after: 40 },
+          })
+        );
+      } else {
+        // Regular paragraph - check if it might be a subheading
+        const isLikeySubheading = line.length < 50 && (i === 0 || lines[i-1].trim().length === 0);
+        
+        if (isLikeySubheading) {
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: line,
+                  size: 24,
+                  bold: true,
+                  color: colors.dark,
+                  font: fonts.bodyFont,
+                }),
+              ],
+              spacing: { before: 100, after: 40 },
+            })
+          );
+        } else {
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: line,
+                  size: 22,
+                  color: colors.dark,
+                  font: fonts.bodyFont,
+                }),
+              ],
+              spacing: { before: 40, after: 40 },
+            })
+          );
+        }
+        
+        isInBulletList = false;
+      }
+    }
   }
 
   /**
@@ -2455,489 +2641,5 @@ export class DocumentGenerator {
       'Leadership', 'Time Management', 'Critical Thinking', 'Adaptability',
       'Organization', 'Attention to Detail', 'Microsoft Office', 'Customer Service'
     ];
-  }
-
-  /**
-   * Generate an ATS-optimized DOCX CV with structured sections
-   * @param optimizedText The optimized CV text from GPT-4o
-   * @param atsAnalysis The ATS analysis metadata with scores and recommendations
-   * @param options Optional formatting options for the document
-   * @returns Buffer containing the generated DOCX file
-   */
-  static async generateATSOptimizedCV(
-    optimizedText: string,
-    atsAnalysis: {
-      atsScore: number;
-      originalAtsScore?: number;
-      sectionRecommendations?: Record<string, string[]>;
-      keywordRecommendations?: string[];
-      missingSections?: string[];
-      improvementSuggestions?: string[];
-    },
-    options?: {
-      templateStyle?: string;
-      photoOptions?: {
-        path?: string;
-        placement?: string;
-        size?: { width: number; height: number };
-        border?: boolean;
-        borderColor?: string;
-      },
-      fontOptions?: {
-        headingFont?: string;
-        bodyFont?: string;
-        nameFont?: string;
-        preset?: string;
-      },
-      colorOptions?: {
-        primary?: string;
-        accent?: string;
-      }
-    }
-  ): Promise<Buffer> {
-    try {
-      const startTime = Date.now();
-      
-      // Parse the optimized text into structured sections
-      // This should handle both raw text and pre-structured sections
-      const sections = this.parseATSOptimizedSections(optimizedText);
-      
-      // Process template style
-      const templateStyle = options?.templateStyle || this.TemplateStyles.MODERN;
-      
-      // Process font options
-      let fonts = {
-        headingFont: this.FontPresets.MODERN.headingFont,
-        bodyFont: this.FontPresets.MODERN.bodyFont,
-        nameFont: this.FontPresets.MODERN.nameFont
-      };
-
-      // Handle custom font presets
-      if (options?.fontOptions?.preset) {
-        const presetKey = options.fontOptions.preset.toUpperCase();
-        if (presetKey in DocumentGenerator.FontPresets) {
-          fonts = { ...DocumentGenerator.FontPresets[presetKey as keyof typeof DocumentGenerator.FontPresets] };
-        }
-      }
-
-      // Override individual font options if specified
-      if (options?.fontOptions?.headingFont) fonts.headingFont = options.fontOptions.headingFont;
-      if (options?.fontOptions?.bodyFont) fonts.bodyFont = options.fontOptions.bodyFont;
-      if (options?.fontOptions?.nameFont) fonts.nameFont = options.fontOptions.nameFont;
-
-      // Process color options
-      const colors = { ...this.colors };
-      if (options?.colorOptions?.primary) colors.primary = options.colorOptions.primary;
-      if (options?.colorOptions?.accent) colors.accent = options.colorOptions.accent;
-      
-      // Create document with ATS-optimized formatting - using a slightly more conservative approach
-      // for ATS compatibility while maintaining great visual design
-      const doc = new Document({
-        styles: {
-          paragraphStyles: [
-            {
-              id: "SectionHeading",
-              name: "Section Heading",
-              basedOn: "Normal",
-              next: "Normal",
-              quickFormat: true,
-              run: {
-                font: fonts.headingFont,
-                size: 28,
-                bold: true,
-                color: colors.primary,
-              },
-              paragraph: {
-                spacing: {
-                  after: 120,
-                  before: 240,
-                },
-              },
-            },
-            {
-              id: "BodyText",
-              name: "Body Text",
-              basedOn: "Normal",
-              next: "Normal",
-              quickFormat: true,
-              run: {
-                font: fonts.bodyFont,
-                size: 22,
-                color: colors.dark,
-              },
-              paragraph: {
-                spacing: {
-                  after: 80,
-                  line: 360, // 1.5 line spacing
-                },
-              },
-            },
-          ],
-        },
-        sections: [
-          {
-            properties: {
-              page: {
-                margin: {
-                  top: convertInchesToTwip(0.5),
-                  right: convertInchesToTwip(0.5),
-                  bottom: convertInchesToTwip(0.5),
-                  left: convertInchesToTwip(0.5),
-                },
-                size: {
-                  orientation: PageOrientation.PORTRAIT,
-                },
-              },
-            },
-            children: this.createATSOptimizedContent(
-              sections, 
-              atsAnalysis,
-              templateStyle,
-              options?.photoOptions,
-              fonts,
-              colors
-            )
-          }
-        ]
-      });
-      
-      // Generate buffer
-      const buffer = await Packer.toBuffer(doc);
-      
-      console.log(`ATS-optimized document generation completed in ${Date.now() - startTime}ms with score ${atsAnalysis.atsScore}%`);
-      return buffer;
-    } catch (error) {
-      console.error(`Error generating ATS-optimized document: ${error instanceof Error ? error.message : String(error)}`);
-      throw new Error(`ATS-optimized document generation failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-  
-  /**
-   * Parse optimized text into structured sections specifically for ATS optimization
-   * @param optimizedText The optimized CV text
-   * @returns Structured sections for document generation
-   */
-  private static parseATSOptimizedSections(optimizedText: string): Record<string, string> {
-    try {
-      // First, check if the text is already in JSON format (pre-structured)
-      try {
-        const parsedJSON = JSON.parse(optimizedText);
-        if (typeof parsedJSON === 'object' && parsedJSON !== null) {
-          return parsedJSON;
-        }
-      } catch {
-        // Not JSON, continue with text parsing
-      }
-      
-      // Initialize sections
-      const sections: Record<string, string> = {
-        header: "",
-        profile: "",
-        achievements: "",
-        experience: "",
-        skills: "",
-        education: "",
-        languages: ""
-      };
-      
-      // Try to extract sections based on common headers in the text
-      const sectionPatterns = {
-        profile: /\b(PROFILE|SUMMARY|ABOUT ME|PROFESSIONAL SUMMARY)\b/i,
-        achievements: /\b(ACHIEVEMENTS|KEY ACHIEVEMENTS|ACCOMPLISHMENTS)\b/i,
-        experience: /\b(EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY|PROFESSIONAL EXPERIENCE)\b/i,
-        skills: /\b(SKILLS|COMPETENCIES|TECHNICAL SKILLS|CORE COMPETENCIES)\b/i,
-        education: /\b(EDUCATION|EDUCATIONAL BACKGROUND|ACADEMIC QUALIFICATIONS)\b/i,
-        languages: /\b(LANGUAGES|LANGUAGE PROFICIENCY|LANGUAGE SKILLS)\b/i
-      };
-      
-      // Extract the header (assume first few lines before any section)
-      const headerEndMatch = optimizedText.match(new RegExp(`\\b(${Object.values(sectionPatterns).map(p => p.source.replace(/\\b/g, '')).join('|')})\\b`, 'i'));
-      if (headerEndMatch && headerEndMatch.index) {
-        sections.header = optimizedText.substring(0, headerEndMatch.index).trim();
-      } else {
-        // If no section headers found, extract first 5 lines as header
-        const lines = optimizedText.split('\n');
-        sections.header = lines.slice(0, Math.min(5, lines.length)).join('\n').trim();
-      }
-      
-      // Extract each section
-      for (const [sectionName, pattern] of Object.entries(sectionPatterns)) {
-        const sectionMatch = optimizedText.match(new RegExp(`\\b${pattern.source.replace(/\\b/g, '')}\\b.*?\\n(.*?)(?=\\n\\s*\\b(${Object.values(sectionPatterns).map(p => p.source.replace(/\\b/g, '')).join('|')})\\b|$)`, 'is'));
-        
-        if (sectionMatch && sectionMatch[1]) {
-          sections[sectionName] = sectionMatch[1].trim();
-        }
-      }
-      
-      return sections;
-    } catch (error) {
-      console.error(`Error parsing optimized sections: ${error instanceof Error ? error.message : String(error)}`);
-      // Fallback to basic section extraction
-      return this.splitIntoSections(optimizedText);
-    }
-  }
-  
-  /**
-   * Create ATS-optimized document content with professional formatting
-   * This specialized method ensures proper ATS compatibility while maintaining excellent design
-   */
-  private static createATSOptimizedContent(
-    sections: Record<string, string>,
-    atsAnalysis: any,
-    templateStyle: string,
-    photoOptions?: {
-      path?: string;
-      placement?: string;
-      size?: { width: number; height: number };
-      border?: boolean;
-      borderColor?: string;
-    },
-    fonts?: {
-      headingFont: string;
-      bodyFont: string;
-      nameFont: string;
-    },
-    colors?: {
-      primary: string;
-      accent: string;
-      dark: string;
-      medium: string;
-      light: string;
-      ultraLight: string;
-      white: string;
-    }
-  ): any[] {
-    // Default fonts and colors if not provided
-    const activeColors = colors || this.colors;
-    const activeFonts = fonts || {
-      headingFont: this.FontPresets.MODERN.headingFont,
-      bodyFont: this.FontPresets.MODERN.bodyFont,
-      nameFont: this.FontPresets.MODERN.nameFont
-    };
-    
-    // Use modern template as default
-    const activeTemplate = templateStyle || this.TemplateStyles.MODERN;
-    
-    const children: any[] = [];
-    
-    // Setup default photo options if not provided
-    const photo = {
-      path: photoOptions?.path || '',
-      placement: photoOptions?.placement || this.PhotoPlacement.TOP_RIGHT,
-      size: photoOptions?.size || this.PhotoSize.MEDIUM,
-      border: photoOptions?.border !== undefined ? photoOptions.border : true,
-      borderColor: photoOptions?.borderColor || activeColors.primary
-    };
-    
-    // Add header based on selected template
-    if (sections.header) {
-      switch (activeTemplate) {
-        case this.TemplateStyles.MODERN:
-          this.createModernHeader(children, sections.header, photo, activeFonts, activeColors);
-          break;
-        case this.TemplateStyles.CLASSIC:
-          this.createClassicHeader(children, sections.header, photo, activeFonts, activeColors);
-          break;
-        case this.TemplateStyles.MINIMAL:
-          this.createMinimalHeader(children, sections.header, photo, activeFonts, activeColors);
-          break;
-        case this.TemplateStyles.EXECUTIVE:
-          this.createExecutiveHeader(children, sections.header, photo, activeFonts, activeColors);
-          break;
-        case this.TemplateStyles.CREATIVE:
-          this.createCreativeHeader(children, sections.header, photo, activeFonts, activeColors);
-          break;
-        default:
-          this.createModernHeader(children, sections.header, photo, activeFonts, activeColors);
-          break;
-      }
-    }
-    
-    // Add profile section (About Me)
-    if (sections.profile) {
-      this.createATSSection(children, "PROFILE", sections.profile, activeFonts, activeColors);
-    }
-    
-    // Add achievements section (3 bullet points summarizing top accomplishments)
-    if (sections.achievements) {
-      this.createATSSection(children, "ACHIEVEMENTS", sections.achievements, activeFonts, activeColors);
-    }
-    
-    // Add experience section with enhanced formatting
-    if (sections.experience) {
-      this.createATSSection(children, "EXPERIENCE", sections.experience, activeFonts, activeColors);
-    }
-    
-    // Add skills section with modern formatting
-    if (sections.skills) {
-      this.createATSSection(children, "SKILLS", sections.skills, activeFonts, activeColors);
-    }
-    
-    // Add education section with enhanced formatting
-    if (sections.education) {
-      this.createATSSection(children, "EDUCATION", sections.education, activeFonts, activeColors);
-    }
-    
-    // Add languages section if available
-    if (sections.languages) {
-      this.createATSSection(children, "LANGUAGES", sections.languages, activeFonts, activeColors);
-    }
-    
-    // Add any remaining sections
-    for (const [sectionName, content] of Object.entries(sections)) {
-      if (!['header', 'profile', 'achievements', 'experience', 'skills', 'education', 'languages'].includes(sectionName)) {
-        this.createATSSection(children, sectionName.toUpperCase(), content, activeFonts, activeColors);
-      }
-    }
-    
-    return children;
-  }
-  
-  /**
-   * Creates an ATS-optimized section with clear heading and content
-   * Ensures proper formatting for ATS parsing while maintaining visual appeal
-   */
-  private static createATSSection(
-    children: any[], 
-    title: string, 
-    content: string,
-    fonts: any,
-    colors: any
-  ): void {
-    // Add section header with appropriate styling
-    children.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: title,
-            bold: true,
-            size: 28, // ~14pt font
-            color: colors.primary,
-            font: fonts.nameFont,
-          }),
-        ],
-        spacing: { before: 200, after: 120 },
-        border: {
-          bottom: {
-            color: colors.light,
-            space: 1,
-            style: BorderStyle.SINGLE,
-            size: 6,
-          },
-        },
-      })
-    );
-    
-    // Process content
-    const lines = content.split('\n');
-    let isInBulletList = false;
-    
-    lines.forEach((line, index) => {
-      const trimmedLine = line.trim();
-      if (trimmedLine.length === 0) {
-        // Add some spacing for empty lines to improve readability
-        if (isInBulletList) {
-          isInBulletList = false;
-          children.push(
-            new Paragraph({
-              spacing: { before: 80, after: 80 }
-            })
-          );
-        }
-        return;
-      }
-      
-      // Check if line starts with a bullet point
-      const isBullet = trimmedLine.startsWith('-') || 
-                      trimmedLine.startsWith('•') || 
-                      trimmedLine.startsWith('*') ||
-                      /^\d+\.\s/.test(trimmedLine);
-      
-      if (isBullet) {
-        isInBulletList = true;
-        
-        // Extract the content without the bullet character
-        let bulletContent = trimmedLine;
-        if (trimmedLine.startsWith('-') || trimmedLine.startsWith('•') || trimmedLine.startsWith('*')) {
-          bulletContent = trimmedLine.substring(1).trim();
-        } else if (/^\d+\.\s/.test(trimmedLine)) {
-          bulletContent = trimmedLine.replace(/^\d+\.\s/, '').trim();
-        }
-        
-        children.push(
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: "• ",
-                size: 22,
-                bold: true,
-                color: colors.primary,
-                font: fonts.nameFont,
-              }),
-              new TextRun({
-                text: bulletContent,
-                size: 22,
-                color: colors.dark,
-                font: fonts.bodyFont,
-              }),
-            ],
-            spacing: {
-              before: 40,
-              after: 40
-            },
-            indent: {
-              left: convertInchesToTwip(0.25)
-            }
-          })
-        );
-      } else {
-        // Check if this might be a subheading
-        const isSubheading = (
-          trimmedLine.length < 50 && 
-          index > 0 && 
-          lines[index - 1].trim().length === 0 &&
-          ((index < lines.length - 1 && lines[index + 1].trim().length === 0) || 
-          /\b(at|with|for)\b/i.test(trimmedLine))
-        ) || /\d{4}\s*-\s*(present|\d{4})/i.test(trimmedLine);
-        
-        if (isSubheading) {
-          // This is likely a job title, company name, or date range
-          children.push(
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: trimmedLine,
-                  size: 24,
-                  bold: true,
-                  color: colors.dark,
-                  font: fonts.bodyFont,
-                }),
-              ],
-              spacing: { before: 100, after: 40 }
-            })
-          );
-          isInBulletList = false;
-        } else {
-          // Regular paragraph
-          children.push(
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: trimmedLine,
-                  size: 22,
-                  color: colors.dark,
-                  font: fonts.bodyFont,
-                }),
-              ],
-              spacing: {
-                before: 40,
-                after: 40
-              }
-            })
-          );
-          isInBulletList = false;
-        }
-      }
-    });
   }
 } 
