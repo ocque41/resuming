@@ -86,20 +86,20 @@ async function getUserByEmail(email: string): Promise<any | null> {
 /**
  * Update the metadata for a CV
  */
-async function updateMetadata(cvId: string, updates: Record<string, any>): Promise<void> {
-  const id = parseInt(cvId, 10);
-  if (isNaN(id)) {
+async function updateMetadata(updates: { cvId: number; [key: string]: any }): Promise<void> {
+  const { cvId, ...otherUpdates } = updates;
+  if (isNaN(cvId)) {
     console.error(`Invalid CV ID: ${cvId}`);
     return;
   }
   
   try {
     const cvRecord = await db.query.cvs.findFirst({
-      where: eq(cvs.id, id)
+      where: eq(cvs.id, cvId)
     });
     
     if (!cvRecord) {
-      console.error(`CV not found for ID: ${id}`);
+      console.error(`CV not found for ID: ${cvId}`);
       return;
     }
     
@@ -109,7 +109,7 @@ async function updateMetadata(cvId: string, updates: Record<string, any>): Promi
     // Sanitize updates to prevent circular references and handle complex objects
     const sanitizedUpdates: Record<string, any> = {};
     
-    for (const [key, value] of Object.entries(updates)) {
+    for (const [key, value] of Object.entries(otherUpdates)) {
       if (value === undefined || value === null) {
         // Skip undefined or null values
         continue;
@@ -139,7 +139,7 @@ async function updateMetadata(cvId: string, updates: Record<string, any>): Promi
     try {
       JSON.stringify(updatedMetadata);
     } catch (jsonError) {
-      console.error(`Failed to serialize metadata for CV ${id}:`, jsonError);
+      console.error(`Failed to serialize metadata for CV ${cvId}:`, jsonError);
       throw new Error('Unable to serialize metadata');
     }
     
@@ -148,11 +148,11 @@ async function updateMetadata(cvId: string, updates: Record<string, any>): Promi
       .set({
         metadata: JSON.stringify(updatedMetadata)
       })
-      .where(eq(cvs.id, id));
+      .where(eq(cvs.id, cvId));
       
-    console.log(`Updated metadata for CV ${id}:`, Object.keys(sanitizedUpdates));
+    console.log(`Updated metadata for CV ${cvId}:`, Object.keys(sanitizedUpdates));
   } catch (error) {
-    console.error(`Failed to update metadata for CV ${id}:`, error);
+    console.error(`Failed to update metadata for CV ${cvId}:`, error);
   }
 }
 
@@ -208,7 +208,9 @@ export async function POST(req: Request) {
     const selectedTemplate = validTemplates.includes(template) ? template : 'professional';
     
     // Update metadata
-    await updateMetadata(cvId, {
+    await updateMetadata({
+      cvId: parseInt(cvId),
+      userId: user.id,
       optimizedDocStatus: 'processing',
       optimizedDocTimestamp: new Date().toISOString(),
       optimizedDocTemplate: selectedTemplate
@@ -246,146 +248,123 @@ export async function POST(req: Request) {
  */
 async function startBackgroundProcess(userId: string, cvId: string, optimizedText: string, optimizedAnalysisResult: any, options: any = {}) {
   const existingAnalysis = optimizedAnalysisResult;
-  let docGenParams: any = {
-    author: options.name || "CV Optimizer User",
-    title: `${options.name || 'Optimized'} - CV`,
-    description: "ATS Optimized CV from CV Optimizer",
-    atsScore: options.originalAtsScore || existingAnalysis?.atsScore || 0,
-    improvedAtsScore: options.improvedAtsScore || existingAnalysis?.improvedAtsScore || 0,
-    industry: options.industry || "General",
-    template: options.template || "professional" // Using the template system
-  };
-
-  // Process improvements made to the CV
-  const recommendations = existingAnalysis?.recommendations || [];
-  if (Array.isArray(recommendations) && recommendations.length > 0) {
-    docGenParams.improvements = recommendations
-      .filter(rec => typeof rec === 'string' && rec.trim())
-      .slice(0, 5); // Limit to top 5 to avoid overloading the document
-  }
 
   try {
-    // Extract experience entries for structured CV format
-    if (existingAnalysis?.experienceEntries && Array.isArray(existingAnalysis.experienceEntries)) {
-      // Format experience entries for document generator
-      docGenParams.experienceEntries = existingAnalysis.experienceEntries.map((entry: any) => {
-        return {
-          jobTitle: entry.jobTitle || "",
-          company: entry.company || "",
-          dateRange: entry.dateRange || "",
-          location: entry.location || "",
-          responsibilities: Array.isArray(entry.responsibilities) 
-            ? entry.responsibilities.filter((resp: any) => typeof resp === 'string' && resp.trim())
-            : []
-        };
-      }).filter((entry: any) => entry.jobTitle && entry.company);
-    }
-    
-    console.log(`Generating DOCX document for CV ${cvId} with template: ${docGenParams.template}`);
-    let docBuffer: Buffer;
-    
+    // Prepare document generation parameters
+    const docGenParams: any = {
+      title: options.name || 'Optimized CV',
+      atsScore: typeof existingAnalysis?.atsScore === 'number' ? existingAnalysis.atsScore : 0,
+      improvedAtsScore: typeof existingAnalysis?.improvedAtsScore === 'number' ? existingAnalysis.improvedAtsScore : 0,
+      industry: typeof existingAnalysis?.industry === 'string' ? existingAnalysis.industry : 'General',
+      template: typeof options.template === 'string' ? options.template : 'professional',
+      improvements: Array.isArray(existingAnalysis?.improvements) 
+        ? existingAnalysis.improvements.filter((imp: any) => typeof imp === 'string')
+        : []
+    };
+
     try {
-      // Try to generate the document with all parameters
-      docBuffer = await DocumentGenerator.generateDocx(optimizedText, docGenParams);
-      
-      // Verify the buffer is valid and has a reasonable size
-      if (!Buffer.isBuffer(docBuffer) || docBuffer.length === 0) {
-        throw new Error('Generated an empty document buffer');
+      // Extract experience entries for structured CV format
+      if (existingAnalysis?.experienceEntries && Array.isArray(existingAnalysis.experienceEntries)) {
+        // Format experience entries for document generator
+        docGenParams.experienceEntries = existingAnalysis.experienceEntries.map((entry: any) => {
+          return {
+            jobTitle: typeof entry.jobTitle === 'string' ? entry.jobTitle : "",
+            company: typeof entry.company === 'string' ? entry.company : "",
+            dateRange: typeof entry.dateRange === 'string' ? entry.dateRange : "",
+            location: typeof entry.location === 'string' ? entry.location : "",
+            responsibilities: Array.isArray(entry.responsibilities) 
+              ? entry.responsibilities.filter((resp: any) => typeof resp === 'string' && resp.trim())
+              : []
+          };
+        }).filter((entry: any) => entry.jobTitle && entry.company);
       }
       
-      console.log(`Successfully generated DOCX document of ${docBuffer.length} bytes`);
+      console.log(`Generating DOCX document for CV ${cvId} with template: ${docGenParams.template}`);
+      let docBuffer: Buffer;
       
-      // If document is suspiciously small, retry with minimal parameters
-      if (docBuffer.length < 1000) {
-        console.warn('Document size suspiciously small, retrying with minimal parameters');
-        docBuffer = await DocumentGenerator.generateDocx(optimizedText, { 
+      try {
+        // Try to generate the document with all parameters
+        docBuffer = await DocumentGenerator.generateDocx(optimizedText, docGenParams);
+        
+        // Verify the buffer is valid and has a reasonable size
+        if (!Buffer.isBuffer(docBuffer) || docBuffer.length === 0) {
+          throw new Error('Generated an empty document buffer');
+        }
+        
+        console.log(`Successfully generated DOCX document of ${docBuffer.length} bytes`);
+        
+        // If document is suspiciously small, retry with minimal parameters
+        if (docBuffer.length < 1000) {
+          console.warn('Document size suspiciously small, retrying with minimal parameters');
+          docBuffer = await DocumentGenerator.generateDocx(optimizedText, { 
+            title: 'Optimized CV',
+            template: 'minimal'
+          });
+          
+          if (!Buffer.isBuffer(docBuffer) || docBuffer.length === 0) {
+            throw new Error('Failed to generate document even with minimal parameters');
+          }
+          
+          console.log(`Retry successful, generated DOCX of ${docBuffer.length} bytes`);
+        }
+      } catch (docError) {
+        console.error('Error generating DOCX document:', docError);
+        // Fallback to most simple document generation possible
+        console.log('Attempting fallback document generation');
+        
+        // Create a minimal text-only document with sanitized text
+        // Strip any problematic formatting that might be causing issues
+        const sanitizedText = optimizedText
+          .replace(/[^\x20-\x7E\n]/g, '') // Remove non-ASCII characters
+          .replace(/\n{3,}/g, '\n\n'); // Reduce excessive line breaks
+          
+        docBuffer = await DocumentGenerator.generateDocx(sanitizedText, { 
           title: 'Optimized CV',
           template: 'minimal'
         });
         
         if (!Buffer.isBuffer(docBuffer) || docBuffer.length === 0) {
-          throw new Error('Failed to generate document even with minimal parameters');
+          throw new Error('Failed to generate document even with fallback approach');
         }
-        
-        console.log(`Retry successful, generated DOCX of ${docBuffer.length} bytes`);
       }
-    } catch (docError) {
-      console.error('Error generating DOCX document:', docError);
-      // Fallback to most simple document generation possible
-      console.log('Attempting fallback document generation');
-      docBuffer = await DocumentGenerator.generateDocx(optimizedText, { 
-        title: 'Optimized CV',
-        template: 'minimal'
-      });
-      
-      if (!Buffer.isBuffer(docBuffer) || docBuffer.length === 0) {
-        throw new Error('Failed to generate document even with fallback approach');
-      }
-    }
 
-    // Get the file path where we will save the file
-    const fileName = `${cvId}_optimized_${Date.now()}.docx`;
-    console.log('Saving optimized CV to Dropbox:', fileName);
+      // Get the file path where we will save the file
+      const fileName = `${cvId}_optimized_${Date.now()}.docx`;
+      console.log('Saving optimized CV to Dropbox:', fileName);
 
-    // Save to Dropbox
-    const dropboxPath = `/optimized/${fileName}`;
-    const dropboxLink = await saveFileToDropbox(docBuffer, dropboxPath);
+      // Save to Dropbox
+      const dropboxPath = `/optimized/${fileName}`;
+      const dropboxLink = await saveFileToDropbox(docBuffer, dropboxPath);
 
-    if (!dropboxLink) {
-      throw new Error('Failed to get shareable link from Dropbox');
-    }
-
-    console.log('File saved to Dropbox successfully:', dropboxPath);
-
-    // Create a record in the database
-    const docMetadata = {
-      userId,
-      cvId, 
-      fileName,
-      fileType: 'docx',
-      filePath: dropboxPath,
-      downloadUrl: dropboxLink,
-      status: 'completed',
-      meta: {
-        template: docGenParams.template,
-        industry: docGenParams.industry,
+      // Update the CV metadata with the Dropbox link
+      await updateMetadata({ 
+        cvId: parseInt(cvId), 
+        userId, 
+        docxBase64: docBuffer.toString('base64'),
+        dropboxLink,
+        optimizedDocxPath: dropboxPath,
+        optimizedText,
+        // Only include valid metadata properties to prevent serialization issues
         atsScore: docGenParams.atsScore,
         improvedAtsScore: docGenParams.improvedAtsScore,
-        timestamp: new Date().toISOString()
-      }
-    };
+        industry: docGenParams.industry,
+        template: docGenParams.template,
+        improvements: docGenParams.improvements,
+      });
 
-    // Update the document in the database
-    await updateMetadata(cvId, {
-      optimizedDocUrl: dropboxLink,
-      optimizedDocStatus: 'completed',
-      optimizedDocFilePath: dropboxPath,
-      optimizedDocTimestamp: new Date().toISOString(),
-      optimizedDocTemplate: docGenParams.template
-    });
-
-    console.log('Document metadata updated in database');
-    return {
-      success: true,
-      fileUrl: dropboxLink,
-      filePath: dropboxPath,
-      fileName: fileName,
-      template: docGenParams.template
-    };
+      console.log(`Completed optimization process for CV ${cvId}`);
+    } catch (analysisError) {
+      console.error('Error processing experience entries:', analysisError);
+      throw analysisError;
+    }
   } catch (error) {
-    console.error('Error in background process:', error);
-    
-    // Update the metadata to show the failure
-    await updateMetadata(cvId, {
-      optimizedDocStatus: 'failed',
-      optimizedDocError: error instanceof Error ? error.message : String(error),
-      optimizedDocTimestamp: new Date().toISOString()
+    console.error(`Background process error for CV ${cvId}:`, error);
+    // Here you would update the CV status to reflect the error
+    await updateMetadata({ 
+      cvId: parseInt(cvId), 
+      userId, 
+      error: error instanceof Error ? error.message : 'Unknown error during CV optimization'
     });
-    
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : String(error)
-    };
   }
 }
 
