@@ -213,7 +213,7 @@ export async function GET(request: NextRequest) {
 /**
  * Analyze a CV using the RAG approach with Mistral AI
  */
-export async function analyzeCV(rawText: string, cvId?: number): Promise<AnalysisResult> {
+async function analyzeCV(rawText: string, cvId?: number): Promise<AnalysisResult> {
   try {
     logger.info('Starting CV analysis with RAG service');
     

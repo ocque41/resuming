@@ -146,21 +146,18 @@ function startBackgroundProcess(cvRecord: any, templateId: string, userId: strin
       await updateMetadata(cvRecord.id, { progress: 80, step: "Generating optimized DOCX document" });
       
       // Use the new ATS-optimized document generator
-      const docxBuffer = await DocumentGenerator.generateATSOptimizedCV(
-        JSON.stringify(optimizedSections),
+      const docxBuffer = await DocumentGenerator.generateDocx(
+        optimizedText, 
         {
-          atsScore: improvedAtsScore,
-          originalAtsScore,
-          sectionRecommendations: optimizedAnalysisResult.sectionRecommendations || {},
-          keywordRecommendations: optimizedAnalysisResult.keywordRecommendations || [],
-          improvementSuggestions: optimizedAnalysisResult.improvementSuggestions || []
-        },
-        {
-          templateStyle: templateId || DocumentGenerator.TemplateStyles.MODERN,
-          colorOptions: {
-            primary: "#B4916C",  // Use brand color
-            accent: "#050505"    // Use main color
-          }
+          atsScore: originalAtsScore,
+          improvedAtsScore: improvedAtsScore,
+          industry: optimizedAnalysisResult.industry || 'General',
+          experienceEntries: optimizedAnalysisResult.experienceEntries || [],
+          improvements: [
+            ...(optimizedAnalysisResult.sectionRecommendations ? Object.values(optimizedAnalysisResult.sectionRecommendations) : []),
+            ...(optimizedAnalysisResult.keywordRecommendations || []),
+            ...(optimizedAnalysisResult.improvementSuggestions ? Object.values(optimizedAnalysisResult.improvementSuggestions) : [])
+          ].filter(item => typeof item === 'string').slice(0, 5)
         }
       );
       
