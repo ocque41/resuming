@@ -800,11 +800,15 @@ async function generateSpecificDocx(
     }
   }
           
-          // Add footer with date
+          // Add footer with company or job position information
   const footer = new Paragraph({
             children: [
               new TextRun({
-        text: `Generated on ${new Date().toLocaleDateString()}`,
+        text: companyName 
+            ? `For ${companyName}` 
+            : jobTitle 
+              ? `For ${jobTitle} Position`
+              : 'Curriculum Vitae',
                 size: 20,
         color: '666666',
       }),
