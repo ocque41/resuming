@@ -108,6 +108,14 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     skills: string;
     languages: string;
     education: string;
+    experience: Array<{
+      jobTitle: string;
+      company: string;
+      dateRange: string;
+      location?: string;
+      responsibilities: string[];
+    }>;
+    industry?: string;
   }>({
     header: "",
     profile: "",
@@ -115,7 +123,9 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     goals: [],
     skills: "",
     languages: "",
-    education: ""
+    education: "",
+    experience: [],
+    industry: ""
   });
   const [showStructuredView, setShowStructuredView] = useState<boolean>(true);
   const [improvements, setImprovements] = useState<Array<string | { improvement: string; impact?: string }>>([]);
@@ -520,7 +530,15 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
           goals: [] as string[],
           skills: "",
           languages: "",
-          education: ""
+          education: "",
+          experience: [] as Array<{
+            jobTitle: string;
+            company: string;
+            dateRange: string;
+            location?: string;
+            responsibilities: string[];
+          }>,
+          industry: ""
         };
         return emptyStructure;
       }
@@ -532,7 +550,15 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         goals: [] as string[],
         skills: "",
         languages: "",
-        education: ""
+        education: "",
+        experience: [] as Array<{
+          jobTitle: string;
+          company: string;
+          dateRange: string;
+          location?: string;
+          responsibilities: string[];
+        }>,
+        industry: ""
       };
       
       const improvements: string[] = [];
@@ -685,17 +711,18 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         }
       }
       
-      // Process experience content to extract achievements and goals if those sections are empty
-      if (experienceContent.length > 0 && (sections.achievements.length === 0 || sections.goals.length === 0)) {
-        const experienceText = experienceContent.join('\n');
+      // Process and structure experience content
+      if (experienceContent.length > 0) {
+        // Try to parse experience entries
+        sections.experience = parseExperienceEntries(experienceContent);
         
-        // Extract achievements from experience section
+        // Extract achievements from experience section if they're empty
         if (sections.achievements.length === 0) {
           // Look for bullet points with achievement indicators
           const achievementLines = experienceContent.filter(line => {
             const trimmed = line.trim();
             return (trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*')) && 
-                   /\d+%|\bincreased\b|\bimproved\b|\breduced\b|\bgenerated\b|\bsaved\b|\bdelivered\b|\bmanaged\b|\bled\b|\bsuccessfully\b/i.test(trimmed);
+                  /\d+%|\bincreased\b|\bimproved\b|\breduced\b|\bgenerated\b|\bsaved\b|\bdelivered\b|\bmanaged\b|\bled\b|\bsuccessfully\b/i.test(trimmed);
           });
           
           // Extract clean achievement text
@@ -708,6 +735,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
           
           // If we still don't have enough achievements, generate some with metrics
           if (sections.achievements.length < 3) {
+            const experienceText = experienceContent.join('\n');
             const keywords = extractKeywords(experienceText);
             const generatedAchievements = generateQuantifiedAchievements(keywords);
             
@@ -724,30 +752,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
           
           // Limit to top 3-5 achievements
           sections.achievements = sections.achievements.slice(0, 5);
-        }
-        
-        // Generate goals based on experience if none exist
-        if (sections.goals.length === 0) {
-          // Extract potential keywords from experience for goal generation
-          const experienceKeywords = extractKeywords(experienceText);
-          
-          // Generate goals based on experience keywords
-          if (experienceKeywords.length > 0) {
-            const generatedGoals = generateQuantifiedGoals(experienceKeywords);
-            sections.goals = generatedGoals;
-          } else {
-            // Generic goals if no keywords found
-            sections.goals = [
-              "Seeking to leverage my professional experience to contribute to organizational success with a target of 15% improvement in team performance",
-              "Aiming to increase team productivity by approximately 25% through implementation of streamlined processes and best practices",
-              "Planning to expand professional network by connecting with 50+ industry leaders and participating in at least 5 industry conferences annually"
-            ];
-          }
-        } else {
-          // Ensure existing goals have quantified metrics
-          sections.goals = sections.goals.map(goal => 
-            ensureQuantifiedMetrics(goal)
-          );
         }
       }
       
@@ -784,9 +788,171 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       // Update state with the structured CV and improvements
       setImprovements(improvements);
       
+      // Try to detect industry from content
+      const industries = {
+        'Technology': /\b(software|developer|web|app|programming|java|python|javascript|react|angular|node|full[-\s]?stack|front[-\s]?end|back[-\s]?end|devops|cloud|aws|azure|it)\b/i,
+        'Finance': /\b(finance|accounting|financial|investment|banking|loans|mortgage|audit|tax|budget|equity|portfolio|compliance|risk)\b/i,
+        'Healthcare': /\b(health|medical|healthcare|patient|doctor|physician|nurse|hospital|clinic|therapy|pharmaceutical|dental|medicine)\b/i,
+        'Marketing': /\b(marketing|digital|seo|sem|content|social media|campaign|brand|advertising|market research|analytics|engagement)\b/i,
+        'Sales': /\b(sales|customer|account manager|business development|revenue|pipeline|client|leads|prospects|closing|negotiation|territory)\b/i,
+        'Education': /\b(teaching|teacher|professor|instructor|curriculum|education|university|college|academic|faculty|student|course|classroom|learning)\b/i,
+        'Engineering': /\b(engineering|engineer|mechanical|electrical|civil|chemical|industrial|product|design|manufacturing|CAD|technical|specifications)\b/i,
+        'Human Resources': /\b(HR|human resources|recruitment|talent acquisition|hiring|onboarding|employee relations|benefits|compensation|training|development|retention)\b/i,
+        'Legal': /\b(legal|lawyer|attorney|law|counsel|litigation|corporate|contract|compliance|regulatory|paralegal|judicial|legislation)\b/i
+      };
+      
+      // Determine the industry with the most matches
+      let maxMatches = 0;
+      const fullText = text.toLowerCase();
+      for (const [industry, pattern] of Object.entries(industries)) {
+        const matches = (fullText.match(pattern) || []).length;
+        if (matches > maxMatches) {
+          maxMatches = matches;
+          sections.industry = industry;
+        }
+      }
+      
+      // Default to 'General' if no strong match
+      if (maxMatches === 0) {
+        sections.industry = 'General';
+      }
+      
       return sections;
     };
-  }, []); // Empty dependency array ensures this is only created once
+  }, []);
+  
+  /**
+   * Parse experience content into structured entries
+   */
+  const parseExperienceEntries = (experienceLines: string[]) => {
+    const entries: Array<{
+      jobTitle: string;
+      company: string;
+      dateRange: string;
+      location?: string;
+      responsibilities: string[];
+    }> = [];
+    
+    // Group the lines into potential job blocks
+    let currentLines: string[] = [];
+    let blocks: string[][] = [];
+    
+    // Split by empty lines or potential job title lines (short lines that might be job titles)
+    for (let i = 0; i < experienceLines.length; i++) {
+      const line = experienceLines[i].trim();
+      
+      // Check if this line might be a new job entry start
+      const isPotentialJobTitle = line.length > 0 && 
+                                 line.length < 60 && 
+                                 !line.startsWith('•') && 
+                                 !line.startsWith('-') && 
+                                 !line.startsWith('*') &&
+                                 !/^\s*\d+\./.test(line);
+      
+      const containsYear = /\b(19|20)\d{2}\b/.test(line);
+      
+      // If the line is empty or looks like a job title or contains a year, it might be a new block
+      if (line.length === 0 || (isPotentialJobTitle && (containsYear || currentLines.length === 0))) {
+        if (currentLines.length > 0) {
+          blocks.push([...currentLines]);
+          currentLines = [];
+        }
+        
+        if (line.length > 0) {
+          currentLines.push(line);
+        }
+      } else {
+        currentLines.push(line);
+      }
+    }
+    
+    // Add the last block if there's anything
+    if (currentLines.length > 0) {
+      blocks.push([...currentLines]);
+    }
+    
+    // Process each block to extract job details
+    for (const block of blocks) {
+      if (block.length === 0) continue;
+      
+      const entry = {
+        jobTitle: '',
+        company: '',
+        dateRange: '',
+        location: '',
+        responsibilities: [] as string[]
+      };
+      
+      // Try to identify job title, company, and date
+      let headerLinesProcessed = 0;
+      for (let i = 0; i < Math.min(5, block.length); i++) {
+        const line = block[i];
+        
+        // Check for date range (years like 2015-2020 or Jan 2015 - Dec 2020)
+        if (/\b(19|20)\d{2}\b.*?(?:\b(19|20)\d{2}\b|present|current|now\b)/i.test(line)) {
+          entry.dateRange = line;
+          headerLinesProcessed++;
+          continue;
+        }
+        
+        // Check for company name (often has LLC, Inc, Ltd, GmbH, etc.)
+        if (/\b(LLC|Inc|Ltd|Limited|GmbH|Corp|Corporation|Group|Company)\b/i.test(line)) {
+          entry.company = line;
+          headerLinesProcessed++;
+          continue;
+        }
+        
+        // Check for location (City, State or City, Country format)
+        if (/\b([A-Z][a-z]+(\s[A-Z][a-z]+)*,\s*[A-Z]{2}|[A-Z][a-z]+(\s[A-Z][a-z]+)*,\s*[A-Z][a-z]+)\b/.test(line)) {
+          entry.location = line;
+          headerLinesProcessed++;
+          continue;
+        }
+        
+        // If we haven't assigned the job title yet and this line is short, it's likely the job title
+        if (!entry.jobTitle && line.length < 60) {
+          entry.jobTitle = line;
+          headerLinesProcessed++;
+          continue;
+        }
+        
+        // If we haven't assigned the company yet and this line is short, it might be the company
+        if (!entry.company && line.length < 60) {
+          entry.company = line;
+          headerLinesProcessed++;
+          continue;
+        }
+        
+        // If this is a bullet point, it's part of responsibilities
+        if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
+          entry.responsibilities.push(line.substring(1).trim());
+          continue;
+        }
+        
+        // If none of the above, it might be just a plain responsibility line
+        entry.responsibilities.push(line);
+      }
+      
+      // Process remaining lines as responsibilities
+      for (let i = Math.min(5, block.length); i < block.length; i++) {
+        const line = block[i].trim();
+        if (line.length === 0) continue;
+        
+        if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
+          entry.responsibilities.push(line.substring(1).trim());
+        } else {
+          entry.responsibilities.push(line);
+        }
+      }
+      
+      // Only add entries that have at least a job title or company
+      if (entry.jobTitle || entry.company) {
+        entries.push(entry);
+      }
+    }
+    
+    return entries;
+  };
   
   // Process optimized text when it changes
   useEffect(() => {
@@ -811,7 +977,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     
     let formattedText = "";
     
-    // Follow the exact order: Header, Profile, Achievements, Goals, Skills, Languages, Education
+    // Follow the exact order: Header, Profile, Experience, Achievements, Goals, Skills, Languages, Education
     
     // Header
     if (structuredCV.header) {
@@ -821,6 +987,40 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     // Profile
     if (structuredCV.profile) {
       formattedText += "PROFILE\n" + structuredCV.profile + "\n\n";
+    }
+    
+    // Experience
+    if (structuredCV.experience && structuredCV.experience.length > 0) {
+      formattedText += "EXPERIENCE\n";
+      
+      structuredCV.experience.forEach(exp => {
+        // Format job title and company
+        if (exp.jobTitle) {
+          formattedText += exp.jobTitle + "\n";
+        }
+        
+        if (exp.company) {
+          formattedText += exp.company + "\n";
+        }
+        
+        // Format date range and location
+        if (exp.dateRange) {
+          formattedText += exp.dateRange + "\n";
+        }
+        
+        if (exp.location) {
+          formattedText += exp.location + "\n";
+        }
+        
+        // Format responsibilities
+        if (exp.responsibilities && exp.responsibilities.length > 0) {
+          exp.responsibilities.forEach(responsibility => {
+            formattedText += "• " + responsibility + "\n";
+          });
+        }
+        
+        formattedText += "\n";
+      });
     }
     
     // Achievements
@@ -1045,6 +1245,15 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         return;
       }
       
+      // Prepare metadata to include in the document generation
+      const metadata = {
+        atsScore: originalAtsScore,
+        improvedAtsScore: improvedAtsScore,
+        improvements: improvements,
+        experienceEntries: structuredCV.experience,
+        industry: structuredCV.industry || ''
+      };
+      
       const response = await fetch("/api/cv/generate-docx", {
         method: "POST",
         headers: {
@@ -1053,6 +1262,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         body: JSON.stringify({
           cvId: selectedCVId,
           optimizedText: textToUse,
+          metadata: metadata
         }),
       });
       
@@ -1232,6 +1442,38 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                             <h6 className="text-[#B4916C] font-medium mb-2 uppercase tracking-wider text-sm">Profile</h6>
                             <div className="text-gray-300 text-sm leading-relaxed">
                               {structuredCV.profile}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Experience */}
+                        {structuredCV.experience && structuredCV.experience.length > 0 && (
+                          <div className="mb-6">
+                            <h6 className="text-[#B4916C] font-medium mb-2 uppercase tracking-wider text-sm">Experience</h6>
+                            <div className="text-gray-300 text-sm">
+                              {structuredCV.experience.map((exp, index) => (
+                                <div key={index} className="mb-1">
+                                  {exp.jobTitle && (
+                                    <span className="text-[#B4916C] font-medium">{exp.jobTitle}</span>
+                                  )}
+                                  {exp.company && (
+                                    <span className="text-gray-400"> at {exp.company}</span>
+                                  )}
+                                  {exp.dateRange && (
+                                    <span className="text-gray-400"> ({exp.dateRange})</span>
+                                  )}
+                                  {exp.location && (
+                                    <span className="text-gray-400"> in {exp.location}</span>
+                                  )}
+                                  {exp.responsibilities && exp.responsibilities.length > 0 && (
+                                    <ul className="list-disc pl-5 space-y-1 text-gray-400 text-sm">
+                                      {exp.responsibilities.map((responsibility, responsibilityIndex) => (
+                                        <li key={responsibilityIndex}>{responsibility}</li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              ))}
                             </div>
                           </div>
                         )}

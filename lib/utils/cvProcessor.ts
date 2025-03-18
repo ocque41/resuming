@@ -990,7 +990,7 @@ ${analysis.weaknesses?.join(', ') || 'Improve overall ATS compatibility'}`
  * @param text The raw CV text to analyze
  * @returns Local analysis results
  */
-function performLocalAnalysis(text: string) {
+export function performLocalAnalysis(text: string) {
   // Normalize text for analysis
   const normalizedText = text.toLowerCase();
   
@@ -1058,6 +1058,35 @@ function performLocalAnalysis(text: string) {
     }
   });
   
+  // Parse experience entries - New functionality
+  let experienceEntries = [];
+  if (hasExperience) {
+    // Extract experience section from raw text to preserve case
+    const experienceSectionNames = ['experience', 'work experience', 'employment history', 'professional experience'];
+    let experienceSection = '';
+    
+    for (const name of experienceSectionNames) {
+      const regex = new RegExp(`(?:^|\\n)\\s*(${name})\\s*(?:\\:|\\n)`, 'i');
+      const match = text.match(regex);
+      if (match) {
+        const start = match.index || 0;
+        const nextSectionRegex = /(?:^|\n)\s*(education|skills|technical skills|certifications|achievements|projects|publications|languages|interests|references)\s*(?:\:|\n)/i;
+        const nextMatch = text.substring(start + match[0].length).match(nextSectionRegex);
+        
+        const end = nextMatch 
+          ? start + match[0].length + (nextMatch.index || 0) 
+          : text.length;
+        
+        experienceSection = text.substring(start + match[0].length, end).trim();
+        break;
+      }
+    }
+    
+    if (experienceSection) {
+      experienceEntries = parseExperienceEntries(experienceSection);
+    }
+  }
+  
   // Calculate rough ATS score based on local factors
   let localAtsScore = 50; // Start at 50
   
@@ -1087,8 +1116,100 @@ function performLocalAnalysis(text: string) {
     metricsCount,
     keywordsByIndustry,
     topIndustry,
-    localAtsScore
+    localAtsScore,
+    experienceEntries // Add the parsed experience entries to the result
   };
+}
+
+/**
+ * Parse experience section into structured entries
+ * @param experienceText The raw experience section text
+ * @returns Array of parsed experience entries
+ */
+function parseExperienceEntries(experienceText: string) {
+  const entries = [];
+  
+  // Split by potential job blocks (looking for patterns that might indicate a new job)
+  const jobBlocks = experienceText.split(/\n\s*\n/).filter(block => block.trim().length > 0);
+  
+  for (const block of jobBlocks) {
+    const lines = block.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    if (lines.length === 0) continue;
+    
+    const entry: any = {
+      jobTitle: '',
+      company: '',
+      dateRange: '',
+      location: '',
+      responsibilities: []
+    };
+    
+    // Try to identify job title, company, and date
+    let headerLinesProcessed = 0;
+    for (let i = 0; i < Math.min(5, lines.length); i++) {
+      const line = lines[i];
+      
+      // Check for date range (years like 2015-2020 or Jan 2015 - Dec 2020)
+      if (/\b(19|20)\d{2}\b.*?(?:\b(19|20)\d{2}\b|present|current|now\b)/i.test(line)) {
+        entry.dateRange = line;
+        headerLinesProcessed++;
+        continue;
+      }
+      
+      // Check for company name (often has LLC, Inc, Ltd, GmbH, etc.)
+      if (/\b(LLC|Inc|Ltd|Limited|GmbH|Corp|Corporation|Group|Company)\b/i.test(line)) {
+        entry.company = line;
+        headerLinesProcessed++;
+        continue;
+      }
+      
+      // Check for location (City, State or City, Country format)
+      if (/\b([A-Z][a-z]+(\s[A-Z][a-z]+)*,\s*[A-Z]{2}|[A-Z][a-z]+(\s[A-Z][a-z]+)*,\s*[A-Z][a-z]+)\b/.test(line)) {
+        entry.location = line;
+        headerLinesProcessed++;
+        continue;
+      }
+      
+      // If we haven't assigned the job title yet and this line is short, it's likely the job title
+      if (!entry.jobTitle && line.length < 60) {
+        entry.jobTitle = line;
+        headerLinesProcessed++;
+        continue;
+      }
+      
+      // If we haven't assigned the company yet and this line is short, it might be the company
+      if (!entry.company && line.length < 60) {
+        entry.company = line;
+        headerLinesProcessed++;
+        continue;
+      }
+      
+      // If this is a bullet point, it's part of responsibilities
+      if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
+        entry.responsibilities.push(line.substring(1).trim());
+        continue;
+      }
+      
+      // If none of the above, it might be just a plain responsibility line
+      entry.responsibilities.push(line);
+    }
+    
+    // Process remaining lines as responsibilities
+    for (let i = Math.min(5, lines.length); i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.length === 0) continue;
+      
+      if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
+        entry.responsibilities.push(line.substring(1).trim());
+      } else {
+        entry.responsibilities.push(line);
+      }
+    }
+    
+    entries.push(entry);
+  }
+  
+  return entries;
 }
 
 /**

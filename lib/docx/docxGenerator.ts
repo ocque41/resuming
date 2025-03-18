@@ -6,6 +6,17 @@ interface DocxGenerationOptions {
   subject?: string;
   keywords?: string[];
   description?: string;
+  atsScore?: number;
+  improvedAtsScore?: number;
+  improvements?: string[];
+  experienceEntries?: Array<{
+    jobTitle: string;
+    company: string;
+    dateRange: string;
+    location?: string;
+    responsibilities: string[];
+  }>;
+  industry?: string;
 }
 
 /**

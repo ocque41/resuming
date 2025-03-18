@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json();
-    const { cvId, optimizedText } = body;
+    const { cvId, optimizedText, metadata } = body;
 
     if (!cvId) {
       return NextResponse.json({ success: false, error: 'CV ID is required' }, { status: 400 });
@@ -51,8 +51,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate the DOCX file
-    const docxBuffer = await generateDocx(cvText);
+    // Generate the DOCX file with metadata if available
+    const docxBuffer = await generateDocx(cvText, metadata || undefined);
 
     // Convert buffer to base64 for response
     const base64Data = docxBuffer.toString('base64');
@@ -107,9 +107,27 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
+    
+    // Extract metadata from CV record if available
+    let metadata = null;
+    if (cvRecord.metadata) {
+      try {
+        const parsedMetadata = JSON.parse(cvRecord.metadata);
+        metadata = {
+          atsScore: parsedMetadata.atsScore,
+          improvedAtsScore: parsedMetadata.improvedAtsScore,
+          improvements: parsedMetadata.improvements,
+          experienceEntries: parsedMetadata.experienceEntries,
+          industry: parsedMetadata.industry
+        };
+      } catch (error) {
+        console.error('Failed to parse CV metadata:', error);
+        // Continue without metadata
+      }
+    }
 
-    // Generate the DOCX file
-    const docxBuffer = await generateDocx(cvRecord.rawText);
+    // Generate the DOCX file with metadata if available
+    const docxBuffer = await generateDocx(cvRecord.rawText, metadata || undefined);
 
     // Create a filename for the download
     const filename = cvRecord.fileName 
