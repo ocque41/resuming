@@ -195,16 +195,59 @@ async function generateSpecificDocx(
   // Parse the CV text into sections
   const sections = parseOptimizedText(cvText);
   
+  // Log all detected sections to help with debugging
+  logger.info(`Detected sections: ${Object.keys(sections).join(', ')}`);
+  
+  // Check for sections that might have been detected with slightly different names
+  // and normalize them to our expected section names
+  const normalizedSections: Record<string, string | string[]> = { ...sections };
+  
+  // Section name normalization map
+  const sectionNormalizationMap: Record<string, string> = {
+    'SUMMARY': 'PROFILE',
+    'PROFESSIONAL SUMMARY': 'PROFILE',
+    'EXECUTIVE SUMMARY': 'PROFILE',
+    'ABOUT ME': 'PROFILE',
+    'WORK EXPERIENCE': 'EXPERIENCE',
+    'EMPLOYMENT HISTORY': 'EXPERIENCE',
+    'PROFESSIONAL EXPERIENCE': 'EXPERIENCE',
+    'WORK HISTORY': 'EXPERIENCE',
+    'TECHNICAL EXPERTISE': 'TECHNICAL SKILLS',
+    'TECH SKILLS': 'TECHNICAL SKILLS',
+    'CORE SKILLS': 'SKILLS',
+    'KEY SKILLS': 'SKILLS',
+    'SOFT SKILLS': 'PROFESSIONAL SKILLS',
+    'INTERPERSONAL SKILLS': 'PROFESSIONAL SKILLS',
+    'LANGUAGE PROFICIENCY': 'LANGUAGES',
+    'LANGUAGE SKILLS': 'LANGUAGES',
+    'LANGUAGE KNOWLEDGE': 'LANGUAGES',
+    'LANGUAGE PROFICIENCIES': 'LANGUAGES',
+    'ACCOMPLISHMENTS': 'ACHIEVEMENTS',
+    'KEY ACHIEVEMENTS': 'ACHIEVEMENTS',
+    'CERTIFICATIONS': 'CERTIFICATES',
+    'QUALIFICATIONS': 'EDUCATION'
+  };
+  
+  // Normalize section names
+  Object.keys(sections).forEach(sectionName => {
+    const normalizedName = sectionNormalizationMap[sectionName];
+    if (normalizedName && !normalizedSections[normalizedName]) {
+      logger.info(`Normalizing section name from "${sectionName}" to "${normalizedName}"`);
+      normalizedSections[normalizedName] = sections[sectionName];
+      // Keep the original section too for now
+    }
+  });
+  
   // Merge PROFILE and SUMMARY sections to avoid duplication
-  if (sections['PROFILE'] || sections['SUMMARY']) {
+  if (normalizedSections['PROFILE'] || normalizedSections['SUMMARY']) {
     // Get content from both sections
-    const profileContent = typeof sections['PROFILE'] === 'string' 
-      ? sections['PROFILE'] 
-      : Array.isArray(sections['PROFILE']) ? sections['PROFILE'].join('\n') : '';
+    const profileContent = typeof normalizedSections['PROFILE'] === 'string' 
+      ? normalizedSections['PROFILE'] 
+      : Array.isArray(normalizedSections['PROFILE']) ? normalizedSections['PROFILE'].join('\n') : '';
     
-    const summaryContent = typeof sections['SUMMARY'] === 'string' 
-      ? sections['SUMMARY'] 
-      : Array.isArray(sections['SUMMARY']) ? sections['SUMMARY'].join('\n') : '';
+    const summaryContent = typeof normalizedSections['SUMMARY'] === 'string' 
+      ? normalizedSections['SUMMARY'] 
+      : Array.isArray(normalizedSections['SUMMARY']) ? normalizedSections['SUMMARY'].join('\n') : '';
     
     // Create a combined profile
     let combinedProfile = '';
@@ -237,18 +280,18 @@ async function generateSpecificDocx(
     }
     
     // Store the combined profile back to PROFILE
-    sections['PROFILE'] = combinedProfile;
+    normalizedSections['PROFILE'] = combinedProfile;
     
     // Remove SUMMARY to avoid duplication
-    if (sections['SUMMARY']) {
-      delete sections['SUMMARY'];
+    if (normalizedSections['SUMMARY']) {
+      delete normalizedSections['SUMMARY'];
     }
   }
   
   // Enhanced skills section deduplication logic
   // Step 1: Handle all skills-related sections together 
   const skillSectionNames = ['SKILLS', 'TECHNICAL SKILLS', 'PROFESSIONAL SKILLS'];
-  const presentSkillSections = skillSectionNames.filter(name => sections[name]);
+  const presentSkillSections = skillSectionNames.filter(name => normalizedSections[name]);
   
   if (presentSkillSections.length > 1) {
     logger.info(`Multiple skill sections detected: ${presentSkillSections.join(', ')}`);
@@ -259,18 +302,52 @@ async function generateSpecificDocx(
     
     for (const sectionName of presentSkillSections) {
       // Get content and convert to array
-      let skillsContent = sections[sectionName];
+      let skillsContent = normalizedSections[sectionName];
       let skillsArray = Array.isArray(skillsContent) ? [...skillsContent] : [skillsContent];
       
       // Process into individual skills
       skillsArray = skillsArray
         .flatMap(item => typeof item === 'string' ? item.split('\n') : item)
         .map(skill => typeof skill === 'string' ? skill.trim() : skill)
-        .filter(skill => 
-          typeof skill === 'string' && 
-          skill.length > 0 && 
-          !skill.toUpperCase().includes(sectionName.toUpperCase()) &&
-          !skill.toUpperCase().includes('SKILL'));
+        .filter(skill => {
+          if (typeof skill !== 'string' || skill.length === 0) {
+            return false;
+          }
+          
+          // Remove section headers, social media mentions, and fragments that don't look like skills
+          const isSkillLike = (
+            // Exclude section headers
+            !skill.toUpperCase().includes(sectionName) &&
+            !skill.toUpperCase().includes('TECHNICAL') &&
+            !skill.toUpperCase().includes('PROFESSIONAL') &&
+            !skill.toUpperCase().includes('SKILL') &&
+            
+            // Exclude social media references
+            !skill.match(/\b(facebook|twitter|instagram|linkedin|tiktok|threads|youtube)\b/i) &&
+            
+            // Exclude generic fragments
+            !skill.match(/\b(for yourself|including|or organizations|etc\.?|brands)\b/i) &&
+            
+            // Exclude long phrases that are likely job description fragments
+            skill.split(' ').length <= 6 &&
+            
+            // Skill should start with a letter or bullet point, not symbols or punctuation
+            skill.match(/^[•\-\*\s]*[a-z0-9]/i) &&
+            
+            // Should have at least 2 characters to be meaningful
+            skill.replace(/[•\-\*\s]/g, '').length >= 2
+          );
+          
+          return isSkillLike;
+        });
+      
+      // Further clean skill items - remove leading bullets if we'll add our own
+      skillsArray = skillsArray.map(skill => {
+        if (typeof skill === 'string') {
+          return skill.replace(/^[•\-\*\s]+/, '');
+        }
+        return skill;
+      });
       
       // Store processed array
       processedSkills[sectionName] = skillsArray as string[];
@@ -289,9 +366,9 @@ async function generateSpecificDocx(
     // Prioritizing specific skill sections over generic ones
     if (processedSkills['TECHNICAL SKILLS'] || processedSkills['PROFESSIONAL SKILLS']) {
       // If we have specific skill sections, remove the generic SKILLS section
-      if (sections['SKILLS']) {
+      if (normalizedSections['SKILLS']) {
         logger.info('Deleting generic SKILLS section since we have specific skill sections');
-        delete sections['SKILLS'];
+        delete normalizedSections['SKILLS'];
       }
     }
     
@@ -329,29 +406,29 @@ async function generateSpecificDocx(
       });
       
       // Update sections with deduplicated content
-      sections['TECHNICAL SKILLS'] = processedSkills['TECHNICAL SKILLS'];
-      sections['PROFESSIONAL SKILLS'] = processedSkills['PROFESSIONAL SKILLS'];
+      normalizedSections['TECHNICAL SKILLS'] = processedSkills['TECHNICAL SKILLS'];
+      normalizedSections['PROFESSIONAL SKILLS'] = processedSkills['PROFESSIONAL SKILLS'];
       
       logger.info(`After deduplication: TECHNICAL SKILLS has ${processedSkills['TECHNICAL SKILLS'].length} items, PROFESSIONAL SKILLS has ${processedSkills['PROFESSIONAL SKILLS'].length} items`);
       
       // If either section is now empty, remove it
       if (processedSkills['PROFESSIONAL SKILLS'].length === 0) {
         logger.info('Removed PROFESSIONAL SKILLS section as all items were duplicates of TECHNICAL SKILLS');
-        delete sections['PROFESSIONAL SKILLS'];
+        delete normalizedSections['PROFESSIONAL SKILLS'];
       }
       
       if (processedSkills['TECHNICAL SKILLS'].length === 0) {
         logger.info('Removed TECHNICAL SKILLS section as all items were duplicates');
-        delete sections['TECHNICAL SKILLS'];
+        delete normalizedSections['TECHNICAL SKILLS'];
       }
     }
   }
   
   // Rename 'SKILLS' to 'OTHER SKILLS' if we have both technical/professional and general skills
   // to better distinguish between them in the final document
-  if (sections['SKILLS'] && (sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS'])) {
-    sections['OTHER SKILLS'] = sections['SKILLS'];
-    delete sections['SKILLS'];
+  if (normalizedSections['SKILLS'] && (normalizedSections['TECHNICAL SKILLS'] || normalizedSections['PROFESSIONAL SKILLS'])) {
+    normalizedSections['OTHER SKILLS'] = normalizedSections['SKILLS'];
+    delete normalizedSections['SKILLS'];
     // Update section order to include OTHER SKILLS
     const otherSkillsIndex = sectionOrder.indexOf('SKILLS');
     if (otherSkillsIndex !== -1) {
@@ -382,11 +459,9 @@ async function generateSpecificDocx(
   
   // Create title with job title if available
   const pageTitle = new Paragraph({
-    text: jobTitle 
-      ? `Curriculum Vitae - ${jobTitle}${companyName ? ` at ${companyName}` : ''}`
-      : 'Curriculum Vitae',
-            heading: HeadingLevel.HEADING_1,
-            alignment: AlignmentType.CENTER,
+    text: 'Curriculum Vitae', // Always use simple title without including job info
+    heading: HeadingLevel.HEADING_1,
+    alignment: AlignmentType.CENTER,
   });
   paragraphs.push(pageTitle);
           
@@ -741,116 +816,133 @@ async function generateSpecificDocx(
       
       continue; // Skip the generic content handling
     }
-    // Special handling for Languages section
+    // Special handling for Languages
     else if (section === 'LANGUAGES') {
-      // Add languages header with special formatting
-      const languagesHeader = new Paragraph({
-        text: 'Languages',
-        heading: HeadingLevel.HEADING_2,
-        spacing: {
-          before: 400,
-          after: 200,
-        },
-        thematicBreak: true,
-        border: {
-          bottom: {
-            color: 'B4916C', // Brand color for visual separation
-            size: 1,
-            space: 4,
-            style: BorderStyle.SINGLE,
-          },
-        },
-      });
-      paragraphs.push(languagesHeader);
+      logger.info(`Processing languages section with content: ${typeof content === 'string' ? content.substring(0, 50) + '...' : 'array'}`);
       
-      // Process language content with enhanced formatting
+      paragraphs.push(
+        new Paragraph({
+          text: 'Languages',
+          heading: HeadingLevel.HEADING_2,
+          thematicBreak: true,
+          spacing: {
+            before: 200,
+            after: 120,
+          },
+        })
+      );
+      
+      // Normalize the content into an array
+      let languageItems: string[] = [];
+      
       if (typeof content === 'string') {
-        const contentLines = content.split('\n').filter(line => line.trim());
-        
-        for (const line of contentLines) {
-          if (!line.trim()) continue;
-          
-          // Check if this language line contains a proficiency level marker
-          const hasSeparator = line.includes(':') || line.includes('-') || line.includes('–');
-          
-          let languageName = line.trim();
-          let proficiencyLevel = '';
-          
-          // Try to separate language name from proficiency level
-          if (hasSeparator) {
-            const parts = line.split(/[:–-]/);
-            if (parts.length >= 2) {
-              languageName = parts[0].trim();
-              proficiencyLevel = parts.slice(1).join(' - ').trim();
-            }
-          }
-          
-          paragraphs.push(
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: languageName,
-                  bold: true,
-                  size: 24,
-                }),
-                ...(proficiencyLevel ? [
-                  new TextRun({
-                    text: ` - ${proficiencyLevel}`,
-                    italics: true,
-                    size: 24,
-                  }),
-                ] : []),
-              ],
-              spacing: {
-                before: 120,
-                after: 120,
-              },
-            })
-          );
-        }
+        // Split by common delimiters
+        languageItems = content
+          .split(/[,;\n]/)
+          .map(lang => lang.trim())
+          .filter(lang => lang.length > 0 && 
+                 !/^languages|language skills|language proficiency|fluent in/i.test(lang));
       } else if (Array.isArray(content)) {
-        // Handle array content for languages
-        for (const item of content) {
-          if (!item.trim()) continue;
-          
-          // Check if this language line contains a proficiency level marker
-          const hasSeparator = item.includes(':') || item.includes('-') || item.includes('–');
-          
-          let languageName = item.trim();
-          let proficiencyLevel = '';
-          
-          // Try to separate language name from proficiency level
-          if (hasSeparator) {
-            const parts = item.split(/[:–-]/);
+        languageItems = content
+          .filter(item => item.trim().length > 0 && 
+                 !/^languages|language skills|language proficiency|fluent in/i.test(item));
+      }
+      
+      // Log the number of language items found
+      logger.info(`Found ${languageItems.length} language items to process`);
+      
+      // Process each language
+      const processedLanguages = new Map<string, string>(); // Map of language name to proficiency
+      
+      // Common proficiency levels for normalization
+      const proficiencyLevels = [
+        'Native', 'Fluent', 'Proficient', 'Advanced', 'Intermediate', 'Basic', 'Beginner'
+      ];
+      
+      // Extract language name and proficiency from each item
+      for (const item of languageItems) {
+        // Check for common separators
+        const hasSeparator = item.includes(':') || item.includes('-') || item.includes('–') || 
+                            item.includes('(') || item.includes(',');
+        
+        let languageName = item.trim();
+        let proficiencyLevel = '';
+        
+        // Parse based on separator type
+        if (hasSeparator) {
+          if (item.includes(':')) {
+            const [name, level] = item.split(':', 2);
+            languageName = name.trim();
+            proficiencyLevel = level.trim();
+          } else if (item.includes('-') || item.includes('–')) {
+            const parts = item.split(/[-–]/);
             if (parts.length >= 2) {
               languageName = parts[0].trim();
               proficiencyLevel = parts.slice(1).join(' - ').trim();
             }
+          } else if (item.includes('(')) {
+            const match = item.match(/^(.*?)\s*\((.*?)\)$/);
+            if (match) {
+              languageName = match[1].trim();
+              proficiencyLevel = match[2].trim();
+            }
+          } else if (item.includes(',')) {
+            const parts = item.split(',');
+            if (parts.length >= 2) {
+              languageName = parts[0].trim();
+              proficiencyLevel = parts.slice(1).join(', ').trim();
+            }
           }
+        } else {
+          // Check if the item contains any known proficiency level
+          for (const level of proficiencyLevels) {
+            if (item.toLowerCase().includes(level.toLowerCase())) {
+              const levelIndex = item.toLowerCase().indexOf(level.toLowerCase());
+              languageName = item.substring(0, levelIndex).trim();
+              proficiencyLevel = item.substring(levelIndex).trim();
+              break;
+            }
+          }
+        }
+        
+        // If we have a recognized language, add or update it
+        if (languageName && languageName.length > 1) {
+          // Normalize the language name (capitalize first letter)
+          languageName = languageName.charAt(0).toUpperCase() + languageName.slice(1).toLowerCase();
           
-          paragraphs.push(
-            new Paragraph({
-              children: [
+          // Only add proficiency if it's not already in the language name
+          if (proficiencyLevel && !languageName.toLowerCase().includes(proficiencyLevel.toLowerCase())) {
+            processedLanguages.set(languageName, proficiencyLevel);
+          } else {
+            processedLanguages.set(languageName, '');
+          }
+        }
+      }
+      
+      // Add the processed languages to the document
+      for (const [language, proficiency] of processedLanguages.entries()) {
+        paragraphs.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: language,
+                bold: true,
+                size: 24,
+              }),
+              ...(proficiency ? [
                 new TextRun({
-                  text: languageName,
-                  bold: true,
+                  text: ` - ${proficiency}`,
+                  italics: true,
                   size: 24,
                 }),
-                ...(proficiencyLevel ? [
-                  new TextRun({
-                    text: ` - ${proficiencyLevel}`,
-                    italics: true,
-                    size: 24,
-                  }),
-                ] : []),
-              ],
-              spacing: {
-                before: 120,
-                after: 120,
-              },
-            })
-          );
-        }
+              ] : []),
+            ],
+            spacing: {
+              before: 120,
+              after: 120,
+            },
+          })
+        );
       }
       
       continue; // Skip the generic content handling
@@ -887,17 +979,49 @@ async function generateSpecificDocx(
       // Handle content based on type (array or string)
       let skillItems = Array.isArray(content) ? content : [content];
       
-      // Clean skill items to ensure they don't include section headers
+      // Clean skill items to ensure they don't include section headers or non-skills
       skillItems = skillItems
         .flatMap(item => typeof item === 'string' ? item.split('\n') : item)
         .map(skill => typeof skill === 'string' ? skill.trim() : skill)
-        .filter(skill => 
-          typeof skill === 'string' && 
-          skill.length > 0 && 
-          !skill.toUpperCase().includes(section) &&
-          !skill.toUpperCase().includes('TECHNICAL') &&
-          !skill.toUpperCase().includes('PROFESSIONAL') &&
-          !skill.toUpperCase().includes('SKILL'));
+        .filter(skill => {
+          if (typeof skill !== 'string' || skill.length === 0) {
+            return false;
+          }
+          
+          // Remove section headers, social media mentions, and fragments that don't look like skills
+          const isSkillLike = (
+            // Exclude section headers
+            !skill.toUpperCase().includes(section) &&
+            !skill.toUpperCase().includes('TECHNICAL') &&
+            !skill.toUpperCase().includes('PROFESSIONAL') &&
+            !skill.toUpperCase().includes('SKILL') &&
+            
+            // Exclude social media references
+            !skill.match(/\b(facebook|twitter|instagram|linkedin|tiktok|threads|youtube)\b/i) &&
+            
+            // Exclude generic fragments
+            !skill.match(/\b(for yourself|including|or organizations|etc\.?|brands)\b/i) &&
+            
+            // Exclude long phrases that are likely job description fragments
+            skill.split(' ').length <= 6 &&
+            
+            // Skill should start with a letter or bullet point, not symbols or punctuation
+            skill.match(/^[•\-\*\s]*[a-z0-9]/i) &&
+            
+            // Should have at least 2 characters to be meaningful
+            skill.replace(/[•\-\*\s]/g, '').length >= 2
+          );
+          
+          return isSkillLike;
+        });
+      
+      // Further clean skill items - remove leading bullets if we'll add our own
+      skillItems = skillItems.map(skill => {
+        if (typeof skill === 'string') {
+          return skill.replace(/^[•\-\*\s]+/, '');
+        }
+        return skill;
+      });
       
       // Create bullet points for each skill
       for (const skill of skillItems) {
@@ -1250,22 +1374,22 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
   // Define section detection patterns
   const sectionPatterns = [
     { name: 'SUMMARY', regex: /^[\s*•\-\|]*(?:SUMMARY|PROFESSIONAL\s+SUMMARY|EXECUTIVE\s+SUMMARY|PROFILE\s+SUMMARY)[\s:]*$/i, priority: 5 },
-    { name: 'PROFILE', regex: /^[\s*•\-\|]*(?:PROFILE|PROFESSIONAL\s+PROFILE|ABOUT(?:\s+ME)?)[\s:]*$/i, priority: 5 },
-    { name: 'EXPERIENCE', regex: /^[\s*•\-\|]*(?:EXPERIENCE|WORK\s+EXPERIENCE|EMPLOYMENT(?:\s+HISTORY)?|PROFESSIONAL\s+EXPERIENCE|CAREER|WORK\s+HISTORY)[\s:]*$/i, priority: 4 },
-    { name: 'EDUCATION', regex: /^[\s*•\-\|]*(?:EDUCATION|ACADEMIC\s+BACKGROUND|ACADEMIC\s+HISTORY|QUALIFICATIONS)[\s:]*$/i, priority: 4 },
-    { name: 'SKILLS', regex: /^[\s*•\-\|]*(?:SKILLS|CORE\s+SKILLS|KEY\s+SKILLS)[\s:]*$/i, priority: 3 },
-    { name: 'TECHNICAL SKILLS', regex: /^[\s*•\-\|]*(?:TECHNICAL\s+SKILLS|TECHNICAL\s+EXPERTISE|TECH\s+SKILLS|TECHNICAL\s+PROFICIENCIES)[\s:]*$/i, priority: 4 },
-    { name: 'PROFESSIONAL SKILLS', regex: /^[\s*•\-\|]*(?:PROFESSIONAL\s+SKILLS|SOFT\s+SKILLS|INTERPERSONAL\s+SKILLS|CORE\s+COMPETENCIES)[\s:]*$/i, priority: 4 },
-    { name: 'LANGUAGES', regex: /^[\s*•\-\|]*(?:LANGUAGES|LANGUAGE\s+SKILLS|LANGUAGE\s+PROFICIENCIES|LANGUAGE\s+KNOWLEDGE)[\s:]*$/i, priority: 3 },
-    { name: 'ACHIEVEMENTS', regex: /^[\s*•\-\|]*(?:ACHIEVEMENTS|ACCOMPLISHMENTS|KEY\s+ACHIEVEMENTS|MAJOR\s+ACCOMPLISHMENTS)[\s:]*$/i, priority: 3 },
-    { name: 'CERTIFICATIONS', regex: /^[\s*•\-\|]*(?:CERTIFICATIONS|CERTIFICATES|PROFESSIONAL\s+CERTIFICATIONS|CREDENTIALS)[\s:]*$/i, priority: 3 },
-    { name: 'PROJECTS', regex: /^[\s*•\-\|]*(?:PROJECTS|KEY\s+PROJECTS|MAJOR\s+PROJECTS|PROJECT\s+EXPERIENCE)[\s:]*$/i, priority: 3 },
-    { name: 'PUBLICATIONS', regex: /^[\s*•\-\|]*(?:PUBLICATIONS|PUBLISHED\s+WORKS|PAPERS|RESEARCH\s+PUBLICATIONS)[\s:]*$/i, priority: 2 },
-    { name: 'REFERENCES', regex: /^[\s*•\-\|]*(?:REFERENCES|PROFESSIONAL\s+REFERENCES|RECOMMENDATION)[\s:]*$/i, priority: 1 },
-    { name: 'VOLUNTEER', regex: /^[\s*•\-\|]*(?:VOLUNTEER(?:\s+EXPERIENCE)?|COMMUNITY\s+SERVICE|COMMUNITY\s+INVOLVEMENT)[\s:]*$/i, priority: 2 },
-    { name: 'INTERESTS', regex: /^[\s*•\-\|]*(?:INTERESTS|HOBBIES|ACTIVITIES|PERSONAL\s+INTERESTS)[\s:]*$/i, priority: 1 },
-    { name: 'GOALS', regex: /^[\s*•\-\|]*(?:GOALS|CAREER\s+GOALS|OBJECTIVES|CAREER\s+OBJECTIVES)[\s:]*$/i, priority: 3 },
-    { name: 'EXPECTATIONS', regex: /^[\s*•\-\|]*(?:EXPECTATIONS|SALARY\s+EXPECTATIONS|COMPENSATION\s+REQUIREMENTS)[\s:]*$/i, priority: 2 }
+    { name: 'PROFILE', regex: /^[\s*•\-\|]*(?:PROFILE|PROFESSIONAL\s+PROFILE|ABOUT(?:\s+ME)?|PERSONAL\s+STATEMENT)[\s:]*$/i, priority: 5 },
+    { name: 'EXPERIENCE', regex: /^[\s*•\-\|]*(?:EXPERIENCE|WORK\s+EXPERIENCE|EMPLOYMENT(?:\s+HISTORY)?|PROFESSIONAL\s+EXPERIENCE|CAREER|WORK\s+HISTORY|PROFESSIONAL\s+BACKGROUND)[\s:]*$/i, priority: 4 },
+    { name: 'EDUCATION', regex: /^[\s*•\-\|]*(?:EDUCATION|ACADEMIC\s+BACKGROUND|ACADEMIC\s+HISTORY|QUALIFICATIONS|EDUCATIONAL\s+BACKGROUND|ACADEMIC\s+QUALIFICATIONS)[\s:]*$/i, priority: 4 },
+    { name: 'SKILLS', regex: /^[\s*•\-\|]*(?:SKILLS|CORE\s+SKILLS|KEY\s+SKILLS|SKILL\s+SET|COMPETENCIES|AREAS\s+OF\s+EXPERTISE)[\s:]*$/i, priority: 3 },
+    { name: 'TECHNICAL SKILLS', regex: /^[\s*•\-\|]*(?:TECHNICAL\s+SKILLS|TECHNICAL\s+EXPERTISE|TECH\s+SKILLS|TECHNICAL\s+PROFICIENCIES|HARD\s+SKILLS|TECHNICAL\s+COMPETENCIES|IT\s+SKILLS)[\s:]*$/i, priority: 4 },
+    { name: 'PROFESSIONAL SKILLS', regex: /^[\s*•\-\|]*(?:PROFESSIONAL\s+SKILLS|SOFT\s+SKILLS|INTERPERSONAL\s+SKILLS|CORE\s+COMPETENCIES|TRANSFERABLE\s+SKILLS|PERSONAL\s+SKILLS)[\s:]*$/i, priority: 4 },
+    { name: 'LANGUAGES', regex: /^[\s*•\-\|]*(?:LANGUAGES?|LANGUAGE\s+SKILLS|LANGUAGE\s+PROFICIENCIES|LANGUAGE\s+KNOWLEDGE|FOREIGN\s+LANGUAGES|LANGUAGE\s+COMPETENCIES|LINGUISTIC\s+SKILLS)[\s:]*$/i, priority: 3 },
+    { name: 'ACHIEVEMENTS', regex: /^[\s*•\-\|]*(?:ACHIEVEMENTS|ACCOMPLISHMENTS|KEY\s+ACHIEVEMENTS|MAJOR\s+ACCOMPLISHMENTS|NOTABLE\s+ACHIEVEMENTS|KEY\s+ACCOMPLISHMENTS)[\s:]*$/i, priority: 3 },
+    { name: 'CERTIFICATIONS', regex: /^[\s*•\-\|]*(?:CERTIFICATIONS?|CERTIFICATES?|PROFESSIONAL\s+CERTIFICATIONS?|CREDENTIALS|ACCREDITATIONS|LICENSES|PROFESSIONAL\s+QUALIFICATIONS)[\s:]*$/i, priority: 3 },
+    { name: 'PROJECTS', regex: /^[\s*•\-\|]*(?:PROJECTS?|KEY\s+PROJECTS?|MAJOR\s+PROJECTS?|PROJECT\s+EXPERIENCE|SIGNIFICANT\s+PROJECTS?)[\s:]*$/i, priority: 3 },
+    { name: 'PUBLICATIONS', regex: /^[\s*•\-\|]*(?:PUBLICATIONS?|PUBLISHED\s+WORKS?|PAPERS|RESEARCH\s+PUBLICATIONS?|ARTICLES|JOURNALS)[\s:]*$/i, priority: 2 },
+    { name: 'REFERENCES', regex: /^[\s*•\-\|]*(?:REFERENCES?|PROFESSIONAL\s+REFERENCES?|RECOMMENDATION|REFEREES)[\s:]*$/i, priority: 1 },
+    { name: 'VOLUNTEER', regex: /^[\s*•\-\|]*(?:VOLUNTEER(?:\s+EXPERIENCE)?|COMMUNITY\s+SERVICE|COMMUNITY\s+INVOLVEMENT|VOLUNTEERING|VOLUNTARY\s+WORK)[\s:]*$/i, priority: 2 },
+    { name: 'INTERESTS', regex: /^[\s*•\-\|]*(?:INTERESTS?|HOBBIES|ACTIVITIES|PERSONAL\s+INTERESTS?|PASTIMES|LEISURE\s+ACTIVITIES)[\s:]*$/i, priority: 1 },
+    { name: 'GOALS', regex: /^[\s*•\-\|]*(?:GOALS|CAREER\s+GOALS|OBJECTIVES?|CAREER\s+OBJECTIVES?|PROFESSIONAL\s+GOALS|ASPIRATIONS)[\s:]*$/i, priority: 3 },
+    { name: 'EXPECTATIONS', regex: /^[\s*•\-\|]*(?:EXPECTATIONS|SALARY\s+EXPECTATIONS|COMPENSATION\s+REQUIREMENTS|SALARY\s+REQUIREMENTS|DESIRED\s+COMPENSATION)[\s:]*$/i, priority: 2 }
   ];
 
   // Process each line with improved content extraction, focusing on actual profile content
@@ -1766,7 +1890,890 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
     }
   }
   
-  return sections;
+  // If job description provided, we can optimize sections
+  if (jobDescription) {
+    logger.info('Job description provided, tailoring CV content');
+    try {
+      const startTime = Date.now();
+      const tailoredSections = await tailorCVContentForJob(
+        normalizedSections,
+        jobDescription,
+        jobTitle,
+        companyName
+      );
+      logger.info(`CV tailoring completed in ${Date.now() - startTime}ms`);
+      
+      // Use tailored sections instead of normalized sections
+      Object.assign(normalizedSections, tailoredSections);
+    } catch (optimizationError) {
+      logger.error('Error tailoring CV content:', optimizationError instanceof Error ? optimizationError.message : String(optimizationError));
+      // Continue with original sections
+    }
+  }
+
+  // Create a new Word document
+  logger.info('Creating new document');
+  const doc = new Document({
+    sections: [{
+      properties: {},
+      children: []
+    }]
+  });
+
+  // Get the document section
+  const docSection = doc.sections[0];
+  
+  // Set to track processed sections to avoid duplicates
+  const processedSections = new Set<string>();
+  
+  // Create the document title as CV for the role if specified
+  let title = "Curriculum Vitae";
+  
+  // Create paragraph for title with center alignment and heading style
+  logger.info('Adding title to document');
+  const titleParagraph = new Paragraph({
+    text: title,
+    heading: HeadingLevel.HEADING_1,
+    alignment: AlignmentType.CENTER,
+    spacing: {
+      after: 200,
+      before: 200
+    }
+  });
+  docSection.children.push(titleParagraph);
+  
+  // Add horizontal line
+  const horizontalLine = new Paragraph({
+            children: [
+              new TextRun({
+        text: '_______________________________________________________________',
+        color: '999999',
+      }),
+    ],
+    alignment: AlignmentType.CENTER,
+    spacing: {
+      after: 400,
+    },
+  });
+  docSection.children.push(horizontalLine);
+  
+  // Process each section in order with enhanced Profile formatting
+  for (const section of sectionOrder) {
+    // Skip if section doesn't exist
+    if (!tailoredSections[section]) {
+      logger.info(`Skipping ${section} section as it doesn't exist`);
+      continue;
+    }
+    
+    // Skip if we've already processed an equivalent section
+    if (processedSections.has(section)) {
+      logger.info(`Skipping ${section} section as it was already processed`);
+      continue;
+    }
+    
+    // Skip if this is SUMMARY and we already processed PROFILE
+    if (section === 'SUMMARY' && processedSections.has('PROFILE')) {
+      logger.info('Skipping SUMMARY section as PROFILE was already processed');
+      continue;
+    }
+    
+    // Skip SKILLS section if we have specific skills sections
+    if (section === 'SKILLS' && (tailoredSections['TECHNICAL SKILLS'] || tailoredSections['PROFESSIONAL SKILLS'])) {
+      logger.info('Skipping generic SKILLS section as specific skills sections exist');
+      continue;
+    }
+    
+    // Get content for this section
+    const content = tailoredSections[section];
+    
+    // Mark this section as processed
+    processedSections.add(section);
+    
+    // Special handling for Profile section with enhanced formatting
+    if (section === 'PROFILE') {
+      // Add profile header with special formatting
+      const profileHeader = new Paragraph({
+        text: 'Professional Profile',
+        heading: HeadingLevel.HEADING_2,
+        spacing: {
+          before: 400,
+          after: 200,
+        },
+        thematicBreak: true,
+            border: {
+              bottom: {
+            color: 'B4916C', // Brand color for visual separation
+            size: 1,
+            space: 4,
+                style: BorderStyle.SINGLE,
+          },
+        },
+      });
+      docSection.children.push(profileHeader);
+      
+      // Process profile content with enhanced formatting
+      if (typeof content === 'string') {
+        const contentLines = content.split('\n').filter(line => line.trim());
+        
+        // Remove any line that appears to be a header for "PROFILE" or "SUMMARY"
+        const filteredLines = contentLines.filter(line => 
+          !line.match(/^[\s*•\-\|\#]?PROFILE:?$/i) && 
+          !line.match(/^[\s*•\-\|\#]?SUMMARY:?$/i) && 
+          !line.match(/^[\s*•\-\|\#]?PROFESSIONAL\s+PROFILE:?$/i) &&
+          !line.match(/^[\s*•\-\|\#]?PROFESSIONAL\s+SUMMARY:?$/i) &&
+          !line.match(/^[\s*•\-\|\#]?ABOUT\s+ME:?$/i) &&
+          !line.match(/^[\s*•\-\|\#]?PROFILE\s*:$/i) &&
+          !line.match(/^SUMMARY\s*:$/i));
+        
+        // Clean the lines to remove any special formatting that might cause issues
+        const cleanedLines = filteredLines.map(line => {
+          // Remove colons at the end of a line if it appears to be just a label 
+          return line.replace(/^(.{1,20}):$/, '$1')
+                     // Clean up potential formatting characters
+                     .replace(/^[\s*•\-\|\#]+\s*/, '')
+                     // Remove any "PROFILE:" or "SUMMARY:" prefix that may be within a line
+                     .replace(/^(?:PROFILE|SUMMARY|PROFESSIONAL\s+PROFILE|PROFESSIONAL\s+SUMMARY):\s*/i, '');
+        });
+        
+        // Join all profile content into a single paragraph for better flow
+        const profileText = cleanedLines.join(' ');
+        
+        // Add profile content with enhanced formatting
+        const profileParagraph = new Paragraph({
+                  children: [
+                    new TextRun({
+              text: profileText,
+              size: 24, // Larger text for better visibility
+              font: "Calibri",
+              color: '333333', // Darker text for better readability
+            }),
+          ],
+            spacing: {
+            before: 200,
+            after: 300,
+            line: 360, // Increased line spacing
+            },
+          // Remove border from paragraph to maintain consistent styling with other sections
+        });
+        docSection.children.push(profileParagraph);
+          
+        // Add job-specific context if job title is provided, but with better styling
+        if (jobTitle) {
+          const contextParagraph = new Paragraph({
+            children: [
+              new TextRun({
+                text: `Seeking opportunities as a ${jobTitle}${companyName ? ` at ${companyName}` : ''} to leverage expertise and contribute to organizational success.`,
+                italics: true,
+                size: 22,
+                color: '333333', // Match the main text color for consistency
+              }),
+            ],
+            spacing: {
+              before: 100,
+              after: 200,
+            },
+            // No special alignment to match other content
+          });
+          docSection.children.push(contextParagraph);
+        }
+      }
+    } 
+    // Special handling for Experience section with enhanced formatting
+    else if (section === 'EXPERIENCE') {
+      // Add experience header with special formatting
+      const experienceHeader = new Paragraph({
+        text: 'Experience',
+        heading: HeadingLevel.HEADING_2,
+        spacing: {
+          before: 400,
+          after: 200,
+        },
+        thematicBreak: true,
+        border: {
+          bottom: {
+            color: 'B4916C', // Brand color for visual separation
+            size: 1,
+            space: 4,
+            style: BorderStyle.SINGLE,
+          },
+        },
+      });
+      docSection.children.push(experienceHeader);
+      
+      // Process experience content with enhanced formatting
+      if (typeof content === 'string') {
+        const contentLines = content.split('\n').filter(line => line.trim());
+        
+        let currentJobTitle = '';
+        let currentCompanyDates = '';
+        let inJobBlock = false;
+        
+        for (const line of contentLines) {
+          if (!line.trim()) continue;
+          
+          // Check if this is a likely job title or company+date line
+          const isLikelyTitleOrCompany = line.length < 60 && 
+                                      /^[A-Z]/.test(line) && 
+                                      !line.startsWith('•') && 
+                                      !line.startsWith('-') && 
+                                      !line.startsWith('*');
+          
+          // Check if this line contains a date (for experience entries)
+          const containsDate = line.match(/\b(19|20)\d{2}\b/) || 
+                              line.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i) ||
+                              line.match(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\b/i) ||
+                              line.match(/\bpresent\b/i) ||
+                              line.match(/\bcurrent\b/i);
+          
+          // Check if this is a bullet point or responsibility
+          const isBulletPoint = line.trim().match(/^[•\-\*]/) || line.match(/^[\s]{2,}/);
+          
+          if (isLikelyTitleOrCompany && containsDate) {
+            // This is likely a job title with dates or company with dates
+            if (inJobBlock) {
+              // Add some space between job entries
+              docSection.children.push(new Paragraph({ spacing: { before: 200, after: 0 } }));
+            }
+            
+            // Create bold paragraph for the job title/company line
+            docSection.children.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: line.trim(),
+                    bold: true,
+                    size: 26,
+                  }),
+                ],
+                spacing: {
+                  before: 240,
+                  after: 120,
+                },
+              })
+            );
+            
+            inJobBlock = true;
+            currentJobTitle = line.trim();
+          } 
+          else if (isLikelyTitleOrCompany && inJobBlock && currentJobTitle && !currentCompanyDates) {
+            // This might be a company name that follows the job title
+            docSection.children.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: line.trim(),
+                    bold: true,
+                    italics: true,
+                    size: 24,
+                  }),
+                ],
+                spacing: {
+                  before: 60,
+                  after: 120,
+                },
+              })
+            );
+            
+            currentCompanyDates = line.trim();
+          }
+          else if (isBulletPoint || (!isLikelyTitleOrCompany && inJobBlock)) {
+            // This is likely a responsibility or achievement under the job
+            // Clean up bullet points
+            const cleanContent = line.trim().replace(/^[•\-\*\s]+/, '').trim();
+            
+            docSection.children.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: cleanContent,
+                    size: 24,
+                  }),
+                ],
+                bullet: isBulletPoint ? { level: 0 } : undefined,
+                spacing: {
+                  before: 60,
+                  after: 60,
+                },
+                indent: {
+                  left: isBulletPoint ? 720 : 360,
+                  hanging: isBulletPoint ? 360 : 0,
+                },
+              })
+            );
+          }
+          else {
+            // Regular text - could be a standalone line
+            docSection.children.push(
+              new Paragraph({
+                text: line.trim(),
+                spacing: {
+                  before: 120,
+                  after: 120,
+                },
+              })
+            );
+          }
+        }
+      } else if (Array.isArray(content)) {
+        // Handle array content for experience
+        for (const item of content) {
+          if (!item.trim()) continue;
+          
+          // Similar logic as above but for array items
+          const isLikelyTitleOrCompany = item.length < 60 && 
+                                       /^[A-Z]/.test(item) && 
+                                       !item.startsWith('•') && 
+                                       !item.startsWith('-') && 
+                                       !item.startsWith('*');
+                                       
+          const containsDate = item.match(/\b(19|20)\d{2}\b/) || 
+                              item.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i) ||
+                              item.match(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\b/i) ||
+                              item.match(/\bpresent\b/i) ||
+                              item.match(/\bcurrent\b/i);
+                              
+          const isBulletPoint = item.trim().match(/^[•\-\*]/) || item.match(/^[\s]{2,}/);
+          
+          if (isLikelyTitleOrCompany && containsDate) {
+            // Job title with dates
+            docSection.children.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: item.trim(),
+                    bold: true,
+                    size: 26,
+                  }),
+                ],
+                spacing: {
+                  before: 240,
+                  after: 120,
+                },
+              })
+            );
+          } else if (isBulletPoint) {
+            // Bullet point responsibility
+            const cleanContent = item.trim().replace(/^[•\-\*\s]+/, '').trim();
+            
+            docSection.children.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: cleanContent,
+                    size: 24,
+                  }),
+                ],
+                bullet: { level: 0 },
+                spacing: {
+                  before: 60,
+                  after: 60,
+                },
+                indent: {
+                  left: 720,
+                  hanging: 360,
+                },
+              })
+            );
+          } else {
+            // Regular content
+            docSection.children.push(
+              new Paragraph({
+                text: item.trim(),
+                spacing: {
+                  before: 120,
+                  after: 120,
+                },
+              })
+            );
+          }
+        }
+      }
+      
+      continue; // Skip the generic content handling
+    }
+    // Special handling for Languages
+    else if (section === 'LANGUAGES') {
+      logger.info(`Processing languages section with content: ${typeof content === 'string' ? content.substring(0, 50) + '...' : 'array'}`);
+      
+      paragraphs.push(
+        new Paragraph({
+          text: 'Languages',
+          heading: HeadingLevel.HEADING_2,
+          thematicBreak: true,
+          spacing: {
+            before: 200,
+            after: 120,
+          },
+        })
+      );
+      
+      // Normalize the content into an array
+      let languageItems: string[] = [];
+      
+      if (typeof content === 'string') {
+        // Split by common delimiters
+        languageItems = content
+          .split(/[,;\n]/)
+          .map(lang => lang.trim())
+          .filter(lang => lang.length > 0 && 
+                 !/^languages|language skills|language proficiency|fluent in/i.test(lang));
+      } else if (Array.isArray(content)) {
+        languageItems = content
+          .filter(item => item.trim().length > 0 && 
+                 !/^languages|language skills|language proficiency|fluent in/i.test(item));
+      }
+      
+      // Log the number of language items found
+      logger.info(`Found ${languageItems.length} language items to process`);
+      
+      // Process each language
+      const processedLanguages = new Map<string, string>(); // Map of language name to proficiency
+      
+      // Common proficiency levels for normalization
+      const proficiencyLevels = [
+        'Native', 'Fluent', 'Proficient', 'Advanced', 'Intermediate', 'Basic', 'Beginner'
+      ];
+      
+      // Extract language name and proficiency from each item
+      for (const item of languageItems) {
+        // Check for common separators
+        const hasSeparator = item.includes(':') || item.includes('-') || item.includes('–') || 
+                            item.includes('(') || item.includes(',');
+        
+        let languageName = item.trim();
+        let proficiencyLevel = '';
+        
+        // Parse based on separator type
+        if (hasSeparator) {
+          if (item.includes(':')) {
+            const [name, level] = item.split(':', 2);
+            languageName = name.trim();
+            proficiencyLevel = level.trim();
+          } else if (item.includes('-') || item.includes('–')) {
+            const parts = item.split(/[-–]/);
+            if (parts.length >= 2) {
+              languageName = parts[0].trim();
+              proficiencyLevel = parts.slice(1).join(' - ').trim();
+            }
+          } else if (item.includes('(')) {
+            const match = item.match(/^(.*?)\s*\((.*?)\)$/);
+            if (match) {
+              languageName = match[1].trim();
+              proficiencyLevel = match[2].trim();
+            }
+          } else if (item.includes(',')) {
+            const parts = item.split(',');
+            if (parts.length >= 2) {
+              languageName = parts[0].trim();
+              proficiencyLevel = parts.slice(1).join(', ').trim();
+            }
+          }
+        } else {
+          // Check if the item contains any known proficiency level
+          for (const level of proficiencyLevels) {
+            if (item.toLowerCase().includes(level.toLowerCase())) {
+              const levelIndex = item.toLowerCase().indexOf(level.toLowerCase());
+              languageName = item.substring(0, levelIndex).trim();
+              proficiencyLevel = item.substring(levelIndex).trim();
+              break;
+            }
+          }
+        }
+        
+        // If we have a recognized language, add or update it
+        if (languageName && languageName.length > 1) {
+          // Normalize the language name (capitalize first letter)
+          languageName = languageName.charAt(0).toUpperCase() + languageName.slice(1).toLowerCase();
+          
+          // Only add proficiency if it's not already in the language name
+          if (proficiencyLevel && !languageName.toLowerCase().includes(proficiencyLevel.toLowerCase())) {
+            processedLanguages.set(languageName, proficiencyLevel);
+          } else {
+            processedLanguages.set(languageName, '');
+          }
+        }
+      }
+      
+      // Add the processed languages to the document
+      for (const [language, proficiency] of processedLanguages.entries()) {
+        paragraphs.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: language,
+                bold: true,
+                size: 24,
+              }),
+              ...(proficiency ? [
+                new TextRun({
+                  text: ` - ${proficiency}`,
+                  italics: true,
+                  size: 24,
+                }),
+              ] : []),
+            ],
+            spacing: {
+              before: 120,
+              after: 120,
+            },
+          })
+        );
+      }
+      
+      continue; // Skip the generic content handling
+    }
+    // Special formatting for Skills sections
+    else if (section === 'TECHNICAL SKILLS' || section === 'PROFESSIONAL SKILLS' || section === 'SKILLS' || section === 'OTHER SKILLS') {
+      // Determine section title based on section key
+      let sectionTitle;
+      if (section === 'TECHNICAL SKILLS') sectionTitle = 'Technical Skills';
+      else if (section === 'PROFESSIONAL SKILLS') sectionTitle = 'Professional Skills';
+      else if (section === 'OTHER SKILLS') sectionTitle = 'Other Skills';
+      else sectionTitle = 'Skills';
+      
+      // Enhanced formatting for skills sections
+      const skillsHeader = new Paragraph({
+        text: sectionTitle,
+        heading: HeadingLevel.HEADING_2,
+        spacing: {
+          before: 400,
+          after: 200,
+        },
+        thematicBreak: true,
+        border: {
+          bottom: {
+            color: 'B4916C',
+            size: 1, 
+            space: 4,
+            style: BorderStyle.SINGLE,
+          },
+        },
+      });
+      docSection.children.push(skillsHeader);
+      
+      // Handle content based on type (array or string)
+      let skillItems = Array.isArray(content) ? content : [content];
+      
+      // Clean skill items to ensure they don't include section headers or non-skills
+      skillItems = skillItems
+        .flatMap(item => typeof item === 'string' ? item.split('\n') : item)
+        .map(skill => typeof skill === 'string' ? skill.trim() : skill)
+        .filter(skill => {
+          if (typeof skill !== 'string' || skill.length === 0) {
+            return false;
+          }
+          
+          // Remove section headers, social media mentions, and fragments that don't look like skills
+          const isSkillLike = (
+            // Exclude section headers
+            !skill.toUpperCase().includes(section) &&
+            !skill.toUpperCase().includes('TECHNICAL') &&
+            !skill.toUpperCase().includes('PROFESSIONAL') &&
+            !skill.toUpperCase().includes('SKILL') &&
+            
+            // Exclude social media references
+            !skill.match(/\b(facebook|twitter|instagram|linkedin|tiktok|threads|youtube)\b/i) &&
+            
+            // Exclude generic fragments
+            !skill.match(/\b(for yourself|including|or organizations|etc\.?|brands)\b/i) &&
+            
+            // Exclude long phrases that are likely job description fragments
+            skill.split(' ').length <= 6 &&
+            
+            // Skill should start with a letter or bullet point, not symbols or punctuation
+            skill.match(/^[•\-\*\s]*[a-z0-9]/i) &&
+            
+            // Should have at least 2 characters to be meaningful
+            skill.replace(/[•\-\*\s]/g, '').length >= 2
+          );
+          
+          return isSkillLike;
+        });
+      
+      // Further clean skill items - remove leading bullets if we'll add our own
+      skillItems = skillItems.map(skill => {
+        if (typeof skill === 'string') {
+          return skill.replace(/^[•\-\*\s]+/, '');
+        }
+        return skill;
+      });
+      
+      // Create bullet points for each skill
+      for (const skill of skillItems) {
+        if (typeof skill === 'string' && skill.trim()) {
+          const cleanedSkill = skill.trim().replace(/^[•\-\*]+\s*/, '');
+          docSection.children.push(
+            new Paragraph({
+              text: cleanedSkill,
+              bullet: {
+                level: 0
+              },
+              spacing: {
+                before: 100,
+                after: 100,
+              }
+            })
+          );
+        }
+      }
+      
+      continue; // Skip the generic content handling for skills
+    }
+    // Standard handling for other sections
+    else {
+      // Add section header (except for Header section)
+      if (section !== 'Header') {
+        // Fix section title formatting - convert to proper case for display
+        let displaySectionTitle = section;
+        
+        // Handle special section name formatting
+        if (section === 'ACHIEVEMENTS') displaySectionTitle = 'Achievements';
+        else if (section === 'GOALS') displaySectionTitle = 'Goals';
+        else if (section === 'EXPECTATIONS') displaySectionTitle = 'What to Expect from the Job';
+        else if (section === 'EXPERIENCE') displaySectionTitle = 'Experience';
+        else if (section === 'LANGUAGES') displaySectionTitle = 'Languages';
+        else if (section === 'EDUCATION') displaySectionTitle = 'Education';
+        else if (section === 'SKILLS') displaySectionTitle = 'Skills';
+        else if (section === 'TECHNICAL SKILLS') displaySectionTitle = 'Technical Skills';
+        else if (section === 'PROFESSIONAL SKILLS') displaySectionTitle = 'Professional Skills';
+        else if (section === 'REFERENCES') displaySectionTitle = 'References';
+        
+        const sectionHeader = new Paragraph({
+          text: displaySectionTitle,
+          heading: HeadingLevel.HEADING_2,
+          thematicBreak: true,
+          spacing: {
+            before: 400,
+            after: 200,
+          },
+          border: {
+            bottom: {
+              color: 'B4916C', // Brand color for visual separation
+              size: 1,
+              space: 4,
+              style: BorderStyle.SINGLE,
+            },
+          },
+        });
+        docSection.children.push(sectionHeader);
+      }
+      
+      // Add content with improved formatting based on section type
+            if (typeof content === 'string') {
+        // Handle string content
+        const contentLines = content.split('\n');
+        
+        // Clean content by removing section headers within the content
+        const cleanedLines = contentLines
+          .filter(line => line.trim()) // Remove empty lines
+          .filter(line => {
+            // Skip lines that appear to be just the section name (to avoid duplication)
+            const sectionNamePattern = new RegExp(`^\\s*[\\*•\\-\\|\\#]?\\s*${section}\\s*:?$`, 'i');
+            return !sectionNamePattern.test(line);
+          })
+          .map(line => {
+            // Clean up formatting characters and section prefixes
+            return line
+              .replace(/^[\s*•\-\|\#]+\s*/, '') // Remove starting special characters
+              .replace(new RegExp(`^${section}\\s*:\\s*`, 'i'), ''); // Remove section name prefix
+          });
+        
+        for (const line of cleanedLines) {
+          // Skip empty lines
+          if (!line.trim()) continue;
+          
+          // Check if this line is a bullet point - expanded pattern matching
+          const isBulletPoint = line.trim().startsWith('•') || 
+                              line.trim().startsWith('-') ||
+                              line.trim().startsWith('*') ||
+                              line.trim().match(/^[\*•\-\|\#]\s/) !== null;
+          
+          // Extract the bullet content, properly handling the bullet character
+          const bulletContent = isBulletPoint 
+            ? line.trim().replace(/^[\*•\-\|\#]\s*/, '').trim() 
+            : line;
+          
+          // Check if this is likely a job title or education institution
+          const isLikelyTitle = line.length < 60 && 
+                              /^[A-Z]/.test(line) && 
+                              (section === 'EXPERIENCE' || section === 'EDUCATION') &&
+                              !isBulletPoint;
+          
+          // Check if this line contains a date (for experience or education)
+          const containsDate = line.includes('2023') || line.includes('2022') || 
+                              line.includes('2021') || line.includes('2020') ||
+                              line.includes('2019') || line.includes('2018');
+          
+          // Check if this is specifically education or experience content
+          const isEducationOrExperience = section === 'EXPERIENCE' || section === 'EDUCATION';
+          
+          // Check if this is a responsibility or achievement under a job
+          const isResponsibility = (section === 'EXPERIENCE' && isBulletPoint) || 
+                                  (section === 'EXPERIENCE' && line.trim().length > 10 && 
+                                   !isLikelyTitle && !containsDate);
+          
+          // Check if this is a certification or achievement under education
+          const isEducationDetail = (section === 'EDUCATION' && isBulletPoint) || 
+                                   (section === 'EDUCATION' && line.trim().length > 10 && 
+                                    !isLikelyTitle && !containsDate);
+          
+          // Check if this is an ACHIEVEMENTS entry that should be highlighted
+          const isAchievement = section === 'ACHIEVEMENTS' && 
+                              (isBulletPoint || !!line.match(/\d+%|\$\d+|\d+ million|\d+ thousand/i));
+          
+          const paragraph = new Paragraph({
+                      children: [
+                        new TextRun({
+                text: bulletContent,
+                // Use bold for headers, titles, and company names
+                bold: section === 'Header' || isLikelyTitle || 
+                      (isEducationOrExperience && containsDate),
+                // Use slightly larger size for different content types
+                size: section === 'Header' ? 28 : 
+                      isLikelyTitle ? 26 : 
+                      (isEducationOrExperience && containsDate) ? 24 : 
+                      undefined,
+                // Use italics for language proficiencies, dates, and expectations
+                italics: (section === 'LANGUAGES' && (line.includes(':') || line.includes('-'))) || 
+                         (isEducationOrExperience && containsDate) || 
+                         section === 'EXPECTATIONS',
+                // Use specific color for achievements and goals to make them stand out
+                color: section === 'ACHIEVEMENTS' && isBulletPoint ? 'B4916C' : 
+                      (section === 'GOALS' || section === 'EXPECTATIONS') && line.length > 30 ? '555555' : 
+                      undefined,
+              }),
+                      ],
+                      spacing: {
+              before: section === 'Header' ? 0 : 
+                      isLikelyTitle ? 240 : 
+                      (isEducationOrExperience && containsDate) ? 180 : 
+                      100,
+              after: section === 'Header' ? 0 : 
+                     isLikelyTitle ? 100 : 
+                     (isEducationOrExperience && containsDate) ? 120 : 
+                     100,
+              line: 300,
+            },
+            alignment: section === 'Header' ? AlignmentType.CENTER : 
+                      isLikelyTitle ? AlignmentType.LEFT : 
+                      undefined,
+            bullet: isBulletPoint ? {
+              level: 0,
+            } : undefined,
+            indent: isBulletPoint ? {
+              left: 720,
+              hanging: 360,
+            } : isResponsibility || isEducationDetail ? {
+              left: 360,
+            } : {
+              left: 0,
+            },
+          });
+          docSection.children.push(paragraph);
+              }
+            } else if (Array.isArray(content)) {
+        // Handle array content
+        // Clean content by removing section headers within the content
+        const cleanedItems = content
+          .filter(item => item.trim()) // Remove empty items
+          .filter(item => {
+            // Skip items that appear to be just the section name (to avoid duplication)
+            const sectionNamePattern = new RegExp(`^\\s*[\\*•\\-\\|\\#]?\\s*${section}\\s*:?$`, 'i');
+            return !sectionNamePattern.test(item);
+          })
+          .map(item => {
+            // Clean up formatting characters and section prefixes
+            return item
+              .replace(/^[\s*•\-\|\#]+\s*/, '') // Remove starting special characters
+              .replace(new RegExp(`^${section}\\s*:\\s*`, 'i'), ''); // Remove section name prefix
+          });
+        
+        for (const item of cleanedItems) {
+          // Skip empty lines
+          if (!item.trim()) continue;
+          
+          // Check if this item is a bullet point - expanded pattern matching
+          const isBulletPoint = item.trim().startsWith('•') || 
+                              item.trim().startsWith('-') ||
+                              item.trim().startsWith('*') ||
+                              item.trim().match(/^[\*•\-\|\#]\s/) !== null;
+          
+          // Extract the bullet content, properly handling the bullet character
+          const bulletContent = isBulletPoint 
+            ? item.trim().replace(/^[\*•\-\|\#]\s*/, '').trim() 
+            : item;
+          
+          const paragraph = new Paragraph({
+                    children: [
+                      new TextRun({
+                text: bulletContent,
+                // Use special formatting for languages
+                italics: section === 'LANGUAGES' ? true : undefined,
+                // Use specific color for achievements to make them stand out
+                color: section === 'ACHIEVEMENTS' && isBulletPoint ? 'B4916C' : undefined,
+              }),
+                    ],
+                    spacing: {
+              before: 100,
+              after: 100,
+              line: 300,
+            },
+            bullet: isBulletPoint ? {
+              level: 0,
+            } : undefined,
+            indent: isBulletPoint ? {
+              left: 720,
+              hanging: 360,
+            } : {
+              left: 0,
+            },
+          });
+          docSection.children.push(paragraph);
+        }
+      }
+    }
+  }
+          
+          // Add footer with company or job position information
+  const footer = new Paragraph({
+            children: [
+              new TextRun({
+        text: companyName 
+            ? `For ${companyName}` 
+            : jobTitle 
+              ? `For ${jobTitle} Position`
+              : 'Curriculum Vitae',
+                size: 20,
+        color: '666666',
+      }),
+            ],
+            spacing: {
+      before: 400,
+            },
+            alignment: AlignmentType.CENTER,
+            border: {
+              top: {
+        color: '999999',
+                space: 1,
+                style: BorderStyle.SINGLE,
+        size: 6,
+      },
+    },
+  });
+  docSection.children.push(footer);
+  
+  // We're using the tailored sections defined earlier in the function
+  
+  // Generate buffer with a try-catch to handle any errors
+  try {
+    logger.info('Packing document to buffer');
+    const buffer = await Packer.toBuffer(doc);
+    logger.info('Document successfully packed to buffer');
+    return buffer;
+  } catch (packError) {
+    logger.error('Error packing document to buffer:', packError instanceof Error ? packError.message : String(packError));
+    throw new Error(`Failed to pack document to buffer: ${packError instanceof Error ? packError.message : 'Unknown error'}`);
+  }
 }
 
 /**

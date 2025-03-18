@@ -20,10 +20,10 @@ interface DocumentData {
 // Create a fallback component with brand styling
 function EnhancePageFallback() {
   return (
-    <div className="h-full flex items-center justify-center bg-[#050505] text-white">
+    <div className="h-screen flex items-center justify-center bg-[#050505] text-white">
       <div className="text-center">
         <div className="w-16 h-16 border-t-4 border-[#B4916C] border-solid rounded-full animate-spin mx-auto mb-6"></div>
-        <p className="text-white font-borna text-lg">Loading document interface...</p>
+        <p className="text-white text-lg">Loading search interface...</p>
       </div>
     </div>
   );
@@ -34,5 +34,9 @@ interface ClientWrapperProps {
 }
 
 export default function ClientWrapper({ documentsData }: ClientWrapperProps) {
-  return <EnhancePageClient documentsData={documentsData} />;
+  return (
+    <Suspense fallback={<EnhancePageFallback />}>
+      <EnhancePageClient documentsData={documentsData} />
+    </Suspense>
+  );
 } 
