@@ -193,7 +193,7 @@ async function generateSpecificDocx(
   ];
   
   // Parse the CV text into sections
-  const sections = await parseOptimizedText(cvText);
+  const sections = parseOptimizedText(cvText);
   
   // Log all detected sections to help with debugging
   logger.info(`Detected sections: ${Object.keys(sections).join(', ')}`);
@@ -1323,7 +1323,7 @@ async function generateSpecificDocx(
 /**
  * Parse optimized text into sections
  */
-async function parseOptimizedText(text: string): Promise<Record<string, string | string[]>> {
+function parseOptimizedText(text: string): Record<string, string | string[]> {
   const sections: Record<string, string | string[]> = {};
   
   // Return empty sections if no text provided
@@ -1895,8 +1895,8 @@ async function parseOptimizedText(text: string): Promise<Record<string, string |
 } // End of parseOptimizedText function
 
 /**
- * Tailor CV content based on job description
- * This function enhances various sections of the CV to match job requirements
+ * Tailor CV content for job description
+ * This function enhances CV sections based on a job description
  */
 async function tailorCVContentForJob(
   sections: Record<string, string | string[]>,
