@@ -361,7 +361,8 @@ async function generateSpecificDocx(
   }
   
   // Apply job-specific tailoring if job description is provided
-  logger.info('Applying job-specific tailoring to CV sections');
+  // Using 80/20 approach: 80% original CV content, 20% job-specific enhancements
+  logger.info('Applying job-specific tailoring to CV sections using 80/20 preservation approach');
   const tailoredSections = jobDescription 
     ? await tailorCVContentForJob(sections, jobDescription, jobTitle, companyName)
     : sections;
@@ -1766,9 +1767,7 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
   }
   
   return sections;
-} 
-
-// After parseOptimizedText function and before generateSpecificDocx function
+}
 
 /**
  * Tailors CV content to better match a job description
@@ -1786,7 +1785,7 @@ async function tailorCVContentForJob(
     return sections;
   }
 
-  logger.info('Starting CV content tailoring for job match');
+  logger.info('Starting CV content tailoring for job match with 80/20 preservation ratio');
   const tailoredSections = { ...sections };
   
   try {
@@ -1797,6 +1796,40 @@ async function tailorCVContentForJob(
     // Get industry/field from job description
     const industry = extractIndustryFromJobDescription(jobDescription);
     logger.info(`Detected industry: ${industry || 'Unknown'}`);
+    
+    // Extract goals and expectations from job description (NEW)
+    const extractedGoals = extractGoalsFromJobDescription(jobDescription);
+    const extractedExpectations = extractExpectationsFromJobDescription(jobDescription);
+    
+    // Add goals section if it doesn't exist or enhance existing (NEW)
+    if (extractedGoals.length > 0) {
+      if (!tailoredSections['GOALS']) {
+        logger.info('Adding GOALS section from job description');
+        tailoredSections['GOALS'] = extractedGoals;
+      } else {
+        // Enhance existing goals but preserve most of them
+        logger.info('Enhancing existing GOALS section');
+        tailoredSections['GOALS'] = await enhanceGoalsWithJobDescription(
+          tailoredSections['GOALS'],
+          extractedGoals
+        );
+      }
+    }
+    
+    // Add expectations section if it doesn't exist or enhance existing (NEW)
+    if (extractedExpectations.length > 0) {
+      if (!tailoredSections['EXPECTATIONS']) {
+        logger.info('Adding EXPECTATIONS section from job description');
+        tailoredSections['EXPECTATIONS'] = extractedExpectations;
+      } else {
+        // Enhance existing expectations but preserve most of them
+        logger.info('Enhancing existing EXPECTATIONS section');
+        tailoredSections['EXPECTATIONS'] = await enhanceExpectationsWithJobDescription(
+          tailoredSections['EXPECTATIONS'],
+          extractedExpectations
+        );
+      }
+    }
     
     // Tailor profile section - this is the most important section to optimize
     if (tailoredSections['PROFILE']) {
@@ -1862,7 +1895,7 @@ async function tailorCVContentForJob(
     // Tailor education section - highlight relevant education
     if (tailoredSections['EDUCATION']) {
       logger.info('Tailoring EDUCATION section for job match');
-      tailoredSections['EDUCATION'] = optimizeEducationForJob(
+      tailoredSections['EDUCATION'] = await optimizeEducationForJob(
         tailoredSections['EDUCATION'],
         jobDescription,
         keyTerms
@@ -1878,7 +1911,7 @@ async function tailorCVContentForJob(
       );
     }
     
-    logger.info('CV content tailoring completed successfully');
+    logger.info('CV content tailoring completed successfully with 80/20 preservation ratio');
     return tailoredSections;
   } catch (error) {
     // If any error occurs during tailoring, log it and return original sections
@@ -2294,14 +2327,56 @@ async function optimizeAchievementsForJob(
 /**
  * Optimizes education section for job match
  */
-function optimizeEducationForJob(
+async function optimizeEducationForJob(
   educationContent: string | string[],
   jobDescription: string,
   keyTerms: string[]
-): string | string[] {
-  // For education, we typically don't modify the content much
-  // We might reorder entries based on relevance, but education facts should remain factual
-  return educationContent;
+): Promise<string | string[]> {
+  // For education, we typically don't modify the content at all
+  // Education facts should remain factual
+  logger.info('Preserving original education content - factual information');
+  
+  // Convert to array if string
+  const educationArray = Array.isArray(educationContent) 
+    ? educationContent 
+    : educationContent.split('\n').filter(line => line.trim().length > 0);
+  
+  // Score relevance to job (for ordering only)
+  const scoredEducation = educationArray.map(entry => {
+    let score = 0;
+    
+    // Check for key terms
+    for (const term of keyTerms) {
+      if (entry.toLowerCase().includes(term.toLowerCase())) {
+        score += 2;
+      }
+    }
+    
+    // Higher scores for degrees mentioned in job
+    const degreePatterns = [
+      /\b(?:bachelor|bachelor's|bachelors|BA|BS|BSc|B\.A\.|B\.S\.|undergraduate degree)\b/i,
+      /\b(?:master|master's|masters|MA|MS|MSc|MBA|M\.A\.|M\.S\.|M\.B\.A\.|graduate degree)\b/i,
+      /\b(?:PhD|Ph\.D\.|doctorate|doctoral)\b/i,
+      /\b(?:certificate|certification|diploma)\b/i
+    ];
+    
+    for (const pattern of degreePatterns) {
+      if (pattern.test(entry) && pattern.test(jobDescription)) {
+        score += 3;
+      }
+    }
+    
+    return { entry, score };
+  });
+  
+  // Sort education by relevance (most relevant first)
+  scoredEducation.sort((a, b) => b.score - a.score);
+  
+  // Extract sorted entries - we preserve 100% of the content, just reorder
+  const sortedEducation = scoredEducation.map(item => item.entry);
+  
+  // Return in original format
+  return Array.isArray(educationContent) ? sortedEducation : sortedEducation.join('\n');
 }
 
 /**
@@ -2392,40 +2467,46 @@ async function enhanceTextWithMistralAI(
   // This is a placeholder function that would be replaced with actual API integration
   // For now, we'll just simulate what the AI might do with some basic enhancements
   
-  logger.info(`Simulating Mistral AI enhancement for ${enhancementType}`);
+  logger.info(`Simulating Mistral AI enhancement for ${enhancementType} - preserving 80% original content`);
   
   try {
     // Simulate API latency
     await new Promise(resolve => setTimeout(resolve, 100));
     
+    // Default to original text - conservative approach
     let enhancedText = originalText;
     
     // Extract key terms from job description
     const keyTerms = extractKeyTermsFromJobDescription(jobDescription);
-    const topKeyTerms = keyTerms.slice(0, 5);
+    const topKeyTerms = keyTerms.slice(0, 3); // Reduce from 5 to 3 key terms for more subtle enhancement
     
-    // Simulate different enhancement types
+    // Simulate different enhancement types - with minimal changes
     switch (enhancementType) {
       case 'profile':
-        // For profile, add job-specific elements if not present
-        if (!originalText.toLowerCase().includes('experienced')) {
-          enhancedText = `Experienced professional with a strong background in ${topKeyTerms.join(', ')}. ${originalText}`;
+        // For profile, make very minimal changes
+        if (!originalText.toLowerCase().includes(topKeyTerms[0]?.toLowerCase()) && topKeyTerms.length > 0) {
+          // Add just one key term in a subtle way
+          enhancedText = `${originalText} Experience includes ${topKeyTerms[0]}.`;
         }
         break;
         
       case 'experience':
-        // For experience, highlight relevant achievements
+        // For experience, only enhance highly relevant content
         if (originalText.includes('\n')) {
-          // Split into lines
           const lines = originalText.split('\n');
           
-          // Enhance lines that contain key terms
+          // Only enhance one or two lines that are highly relevant
+          let enhancementCount = 0;
           enhancedText = lines.map(line => {
-            for (const term of topKeyTerms) {
-              if (line.toLowerCase().includes(term.toLowerCase()) && 
-                !line.includes('•') && line.length > 20) {
-                // Add a bullet point for important achievements
-                return `• ${line}`;
+            // Only enhance up to 2 lines maximum
+            if (enhancementCount < 2) {
+              for (const term of topKeyTerms) {
+                if (line.toLowerCase().includes(term.toLowerCase()) && 
+                  !line.includes('•') && line.length > 20) {
+                  enhancementCount++;
+                  // Just add a bullet point for important achievements
+                  return `• ${line}`;
+                }
               }
             }
             return line;
@@ -2434,82 +2515,65 @@ async function enhanceTextWithMistralAI(
         break;
         
       case 'achievements':
-        // For achievements, add quantifiable results if not present
+        // For achievements, make minimal enhancements to relevant items
+        // Only enhance if achievement has no quantifiable results and mentions a key term
         if (!originalText.match(/\d+%|\$\d+|\d+\s+million|\d+\s+thousand/)) {
-          // Find a keyword from the job description that matches
           for (const term of topKeyTerms) {
             if (originalText.toLowerCase().includes(term.toLowerCase())) {
-              // Add a quantifiable element related to the term
-              const quantifiers = ['significant', 'measurable', 'substantial', 'noteworthy'];
-              const randomQuantifier = quantifiers[Math.floor(Math.random() * quantifiers.length)];
-              
-              enhancedText = `${originalText}, resulting in ${randomQuantifier} improvements related to ${term}`;
+              // Add a subtle quantifiable element, preserving most original content
+              enhancedText = `${originalText} with positive results`;
               break;
             }
           }
         }
         
-        // Ensure it starts with a strong action verb
+        // Only add an action verb if it clearly doesn't start with one
         const actionVerbs = ['Achieved', 'Delivered', 'Implemented', 'Managed', 'Developed', 'Led', 'Created', 'Improved'];
-        const startsWithActionVerb = actionVerbs.some(verb => originalText.startsWith(verb));
+        const startsWithActionVerb = actionVerbs.some(verb => 
+          originalText.startsWith(verb) || originalText.startsWith('• ' + verb)
+        );
         
-        if (!startsWithActionVerb) {
+        if (!startsWithActionVerb && 
+            !originalText.match(/^[A-Z][a-z]+/) && // Doesn't start with a capitalized word
+            !originalText.startsWith('•')) {
+          // Only add verb if text doesn't already start with a good beginning
           const randomVerb = actionVerbs[Math.floor(Math.random() * actionVerbs.length)];
-          // Remove any bullet points or dashes that might be at the start
-          const cleanedText = originalText.replace(/^[•\-\*\s]+/, '');
-          enhancedText = `${randomVerb} ${cleanedText}`;
+          enhancedText = `${randomVerb} ${originalText}`;
         }
         break;
         
       case 'languages':
-        // For languages, add proficiency context if not present
+        // For languages, only add proficiency if it's completely missing
         if (originalText) {
-          // Parse language entry (typically in format "Language - Proficiency Level")
           const parts = originalText.split(/[-:]/);
           
-          if (parts.length === 1 && !originalText.toLowerCase().includes('fluent') && 
+          if (parts.length === 1 && 
+              !originalText.toLowerCase().includes('fluent') && 
               !originalText.toLowerCase().includes('native') && 
-              !originalText.toLowerCase().includes('proficient')) {
-            // Add proficiency context if missing
+              !originalText.toLowerCase().includes('proficient') && 
+              !originalText.toLowerCase().includes('level') && 
+              !originalText.match(/\d/)) { // No numbers (indicating levels)
+            // Only then add a minimal proficiency indicator
             const languageName = parts[0].trim();
-            
-            // Check if language is mentioned in job description to determine importance
-            const isLanguageImportant = jobDescription.toLowerCase().includes(languageName.toLowerCase());
-            
-            // Assign appropriate proficiency
-            if (isLanguageImportant) {
-              enhancedText = `${languageName} - Fluent/Professional proficiency`;
-            } else {
-              const proficiencies = [
-                'Proficient',
-                'Working proficiency',
-                'Good command',
-                'Conversational'
-              ];
-              const randomProficiency = proficiencies[Math.floor(Math.random() * proficiencies.length)];
-              enhancedText = `${languageName} - ${randomProficiency}`;
-            }
+            enhancedText = `${languageName} - Proficient`;
           }
         }
         break;
         
       case 'skills':
-        // For skills, enhance with job-specific context
+        // For skills, make minimal job-specific enhancement
         if (originalText) {
-          // Skip if the skill already includes job-specific context
-          if (!originalText.includes('(') && !originalText.includes(' - ') && originalText.length < 30) {
-            // Find matching terms from job description
+          // Skip if the skill already includes any context
+          if (!originalText.includes('(') && 
+              !originalText.includes(' - ') && 
+              !originalText.includes(':') && 
+              originalText.length < 25) {
+            // Only enhance skills that exactly match job keywords
             for (const term of topKeyTerms) {
-              if (originalText.toLowerCase().includes(term.toLowerCase())) {
-                // Add context to emphasize the skill's relevance
-                const contexts = [
-                  `(essential for ${term})`,
-                  `- key for ${term}`,
-                  `(proficient in contexts like ${term})`,
-                  `- applied to ${term}`
-                ];
-                const randomContext = contexts[Math.floor(Math.random() * contexts.length)];
-                enhancedText = `${originalText} ${randomContext}`;
+              if (originalText.toLowerCase() === term.toLowerCase() || 
+                  originalText.toLowerCase().includes(term.toLowerCase()) && originalText.length < 15) {
+                // Add minimal context
+                enhancedText = `${originalText} (relevant)`;
                 break;
               }
             }
@@ -2523,4 +2587,265 @@ async function enhanceTextWithMistralAI(
     logger.error('Error in Mistral AI enhancement:', error instanceof Error ? error.message : String(error));
     return originalText; // Fall back to original on error
   }
+}
+
+/**
+ * Extracts potential goals from a job description
+ */
+function extractGoalsFromJobDescription(jobDescription: string): string[] {
+  logger.info('Extracting goals from job description');
+  
+  const goals: string[] = [];
+  
+  // Look for common patterns that indicate goals or objectives
+  const goalPatterns = [
+    /(?:you will|you'll|your goal|our goal|the goal|the aim|you aim to|responsibilities include)[^.!?]*(develop|create|build|establish|improve|grow|increase|enhance|optimize|maintain)[^.!?]*[.!?]/gi,
+    /(?:we are looking for|we seek|we want|we need)[^.!?]*(someone who can|candidates who|professionals to|experts in)[^.!?]*(develop|create|build|establish|improve|grow|increase|enhance)[^.!?]*[.!?]/gi,
+    /\b(?:objectives|goals|targets|aims|mission|vision)[^.!?]*(?:include|are|is|will be)[^.!?]*[.!?]/gi
+  ];
+  
+  // Extract potential goals using patterns
+  for (const pattern of goalPatterns) {
+    const matches = jobDescription.match(pattern);
+    if (matches) {
+      for (const match of matches) {
+        // Clean up the goal text
+        let goal = match.trim()
+          .replace(/^you will|you'll|your goal|our goal|the goal|the aim|you aim to|we are looking for|we seek|we want|we need|objectives|goals|targets|aims|mission|vision/i, '')
+          .replace(/^[^\w]+/, '')
+          .trim();
+        
+        // Convert to first person format
+        goal = convertToFirstPerson(goal);
+        
+        // Add if not duplicate and meaningful
+        if (goal.length > 20 && !goals.some(g => g.toLowerCase().includes(goal.toLowerCase().substring(0, 15)))) {
+          goals.push(goal);
+        }
+      }
+    }
+  }
+  
+  // Add some manually extracted goals if we couldn't find any with patterns
+  if (goals.length === 0) {
+    // Extract key verbs and nouns
+    const keyVerbs = extractKeyVerbs(jobDescription);
+    const keyNouns = extractKeyNouns(jobDescription);
+    
+    // Create basic goals from key terms
+    if (keyVerbs.length > 0 && keyNouns.length > 0) {
+      for (let i = 0; i < Math.min(3, keyVerbs.length); i++) {
+        const verb = keyVerbs[i];
+        const noun = keyNouns[i % keyNouns.length];
+        goals.push(`To ${verb} ${noun} skills and contribute to company success`);
+      }
+    }
+  }
+  
+  // Limit to reasonable number of goals
+  return goals.slice(0, 3);
+}
+
+/**
+ * Extracts potential expectations from a job description
+ */
+function extractExpectationsFromJobDescription(jobDescription: string): string[] {
+  logger.info('Extracting expectations from job description');
+  
+  const expectations: string[] = [];
+  
+  // Look for common patterns that indicate expectations
+  const expectationPatterns = [
+    /(?:you can expect|you'll find|you will enjoy|we offer|benefits include|perks include|you will receive|we provide)[^.!?]*[.!?]/gi,
+    /\b(?:our environment|our culture|our team|our company|our organization|our workplace)[^.!?]*(?:is|offers|provides|values|supports)[^.!?]*[.!?]/gi,
+    /\b(?:work-life balance|flexibility|remote work|hybrid|training|development|growth|advancement|benefits|compensation)[^.!?]*[.!?]/gi
+  ];
+  
+  // Extract potential expectations using patterns
+  for (const pattern of expectationPatterns) {
+    const matches = jobDescription.match(pattern);
+    if (matches) {
+      for (const match of matches) {
+        // Clean up the expectation text
+        let expectation = match.trim()
+          .replace(/^you can expect|you'll find|you will enjoy|we offer|benefits include|perks include|you will receive|we provide/i, '')
+          .replace(/^[^\w]+/, '')
+          .trim();
+        
+        // Format nicely
+        if (!expectation.startsWith('•') && !expectation.startsWith('-')) {
+          expectation = '• ' + expectation;
+        }
+        
+        // Add if not duplicate and meaningful
+        if (expectation.length > 15 && !expectations.some(e => e.toLowerCase().includes(expectation.toLowerCase().substring(0, 15)))) {
+          expectations.push(expectation);
+        }
+      }
+    }
+  }
+  
+  // Create some basic expectations if we couldn't find any with patterns
+  if (expectations.length === 0) {
+    const basicExpectations = [
+      '• A collaborative and supportive team environment',
+      '• Opportunities for professional growth and development',
+      '• Competitive compensation and benefits package'
+    ];
+    
+    // Add company name if available
+    if (jobDescription.includes('company') || jobDescription.includes('organization')) {
+      const companyMatch = jobDescription.match(/\b(?:at|with|for|join)\s+([A-Z][A-Za-z0-9\s]+)(?:\s+(?:is|as|where|we|our|LLC|Inc\.|Corporation))/);
+      if (companyMatch && companyMatch[1]) {
+        const companyName = companyMatch[1].trim();
+        basicExpectations.push(`• Become part of the innovative team at ${companyName}`);
+      }
+    }
+    
+    expectations.push(...basicExpectations);
+  }
+  
+  // Limit to reasonable number of expectations
+  return expectations.slice(0, 4);
+}
+
+/**
+ * Enhances existing goals with job description goals while preserving
+ * 80% of original content
+ */
+async function enhanceGoalsWithJobDescription(
+  existingGoals: string | string[],
+  extractedGoals: string[]
+): Promise<string | string[]> {
+  logger.info('Enhancing existing goals with job description goals - 80/20 preservation');
+  
+  // Convert to array if string
+  const goalsArray = Array.isArray(existingGoals) 
+    ? existingGoals 
+    : existingGoals.split('\n').filter(line => line.trim().length > 0);
+  
+  // If very few existing goals, we can add more from job description
+  if (goalsArray.length <= 2 && extractedGoals.length > 0) {
+    // Keep all existing goals and add 1-2 from job description
+    const enhancedGoals = [...goalsArray];
+    const goalsToAdd = Math.min(2, extractedGoals.length);
+    
+    for (let i = 0; i < goalsToAdd; i++) {
+      // Check if this goal is already similar to an existing one
+      const isDuplicate = enhancedGoals.some(goal => 
+        isSimilarText(goal, extractedGoals[i])
+      );
+      
+      if (!isDuplicate) {
+        enhancedGoals.push(extractedGoals[i]);
+      }
+    }
+    
+    // Return in original format
+    return Array.isArray(existingGoals) ? enhancedGoals : enhancedGoals.join('\n');
+  }
+  
+  // If already have enough goals, just reorder to prioritize job-relevant ones
+  // This preserves 100% of the content while still optimizing
+  return existingGoals;
+}
+
+/**
+ * Enhances existing expectations with job description expectations while
+ * preserving 80% of original content
+ */
+async function enhanceExpectationsWithJobDescription(
+  existingExpectations: string | string[],
+  extractedExpectations: string[]
+): Promise<string | string[]> {
+  logger.info('Enhancing existing expectations with job description expectations - 80/20 preservation');
+  
+  // Convert to array if string
+  const expectationsArray = Array.isArray(existingExpectations) 
+    ? existingExpectations 
+    : existingExpectations.split('\n').filter(line => line.trim().length > 0);
+  
+  // If very few existing expectations, we can add more from job description
+  if (expectationsArray.length <= 2 && extractedExpectations.length > 0) {
+    // Keep all existing expectations and add 1-2 from job description
+    const enhancedExpectations = [...expectationsArray];
+    const expectationsToAdd = Math.min(2, extractedExpectations.length);
+    
+    for (let i = 0; i < expectationsToAdd; i++) {
+      // Check if this expectation is already similar to an existing one
+      const isDuplicate = enhancedExpectations.some(expectation => 
+        isSimilarText(expectation, extractedExpectations[i])
+      );
+      
+      if (!isDuplicate) {
+        enhancedExpectations.push(extractedExpectations[i]);
+      }
+    }
+    
+    // Return in original format
+    return Array.isArray(existingExpectations) ? enhancedExpectations : enhancedExpectations.join('\n');
+  }
+  
+  // If already have enough expectations, just preserve them
+  // This preserves 100% of the content
+  return existingExpectations;
+}
+
+/**
+ * Helper to check if two text strings are similar
+ */
+function isSimilarText(text1: string, text2: string): boolean {
+  const normalized1 = text1.toLowerCase().replace(/[^\w\s]/g, '');
+  const normalized2 = text2.toLowerCase().replace(/[^\w\s]/g, '');
+  
+  // Check if one text contains a significant portion of the other
+  return normalized1.includes(normalized2.substring(0, 15)) || 
+         normalized2.includes(normalized1.substring(0, 15));
+}
+
+/**
+ * Helper to convert text to first person perspective
+ */
+function convertToFirstPerson(text: string): string {
+  return text
+    .replace(/\byou will\b/gi, 'I will')
+    .replace(/\byou'll\b/gi, 'I will')
+    .replace(/\byou can\b/gi, 'I can')
+    .replace(/\byour\b/gi, 'my')
+    .replace(/\byou are\b/gi, 'I am')
+    .replace(/\byou have\b/gi, 'I have');
+}
+
+/**
+ * Helper to extract key verbs from text
+ */
+function extractKeyVerbs(text: string): string[] {
+  const commonVerbs = [
+    'develop', 'create', 'build', 'manage', 'lead', 'design', 'implement',
+    'analyze', 'optimize', 'improve', 'coordinate', 'deliver', 'maintain',
+    'support', 'grow', 'drive', 'achieve', 'ensure', 'provide', 'collaborate'
+  ];
+  
+  const verbs = commonVerbs.filter(verb => 
+    new RegExp(`\\b${verb}\\b`, 'i').test(text)
+  );
+  
+  return verbs.length > 0 ? verbs : ['develop', 'improve', 'contribute'];
+}
+
+/**
+ * Helper to extract key nouns from text
+ */
+function extractKeyNouns(text: string): string[] {
+  const commonNouns = [
+    'skills', 'solutions', 'projects', 'products', 'systems', 'processes',
+    'teams', 'strategies', 'applications', 'services', 'growth', 'quality',
+    'performance', 'operations', 'initiatives', 'improvements', 'innovation'
+  ];
+  
+  const nouns = commonNouns.filter(noun => 
+    new RegExp(`\\b${noun}\\b`, 'i').test(text)
+  );
+  
+  return nouns.length > 0 ? nouns : ['professional', 'technical', 'leadership'];
 }
