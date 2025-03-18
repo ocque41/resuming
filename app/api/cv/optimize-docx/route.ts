@@ -5,6 +5,7 @@ import { cvs, users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getDropboxClient } from '@/lib/dropboxAdmin';
 import { DocumentGenerator } from '@/lib/utils/documentGenerator';
+import { Document, Paragraph, HeadingLevel, Packer } from 'docx';
 
 // Define types
 interface User {
@@ -250,7 +251,13 @@ async function startBackgroundProcess(userId: string, cvId: string, optimizedTex
   const existingAnalysis = optimizedAnalysisResult;
 
   try {
-    // Prepare document generation parameters
+    console.log(`Starting background process to generate DOCX for CV ${cvId}`);
+    
+    // Add diagnostic logging for the input
+    console.log(`Text length: ${optimizedText?.length || 0} characters`);
+    console.log(`Using template: ${options.template || 'professional'}`);
+    
+    // Prepare document generation parameters with safe defaults
     const docGenParams: any = {
       title: options.name || 'Optimized CV',
       atsScore: typeof existingAnalysis?.atsScore === 'number' ? existingAnalysis.atsScore : 0,
@@ -262,11 +269,12 @@ async function startBackgroundProcess(userId: string, cvId: string, optimizedTex
         : []
     };
 
-    try {
-      // Extract experience entries for structured CV format
-      if (existingAnalysis?.experienceEntries && Array.isArray(existingAnalysis.experienceEntries)) {
-        // Format experience entries for document generator
-        docGenParams.experienceEntries = existingAnalysis.experienceEntries.map((entry: any) => {
+    // Extract experience entries for structured CV format if available
+    if (existingAnalysis?.experienceEntries && Array.isArray(existingAnalysis.experienceEntries)) {
+      // Format experience entries for document generator
+      docGenParams.experienceEntries = existingAnalysis.experienceEntries
+        .filter((entry: any) => typeof entry === 'object' && entry !== null)
+        .map((entry: any) => {
           return {
             jobTitle: typeof entry.jobTitle === 'string' ? entry.jobTitle : "",
             company: typeof entry.company === 'string' ? entry.company : "",
@@ -276,65 +284,122 @@ async function startBackgroundProcess(userId: string, cvId: string, optimizedTex
               ? entry.responsibilities.filter((resp: any) => typeof resp === 'string' && resp.trim())
               : []
           };
-        }).filter((entry: any) => entry.jobTitle && entry.company);
+        })
+        .filter((entry: any) => entry.jobTitle && entry.company);
+      
+      console.log(`Prepared ${docGenParams.experienceEntries.length} structured experience entries`);
+    }
+    
+    // Sanitize the CV text to remove problematic characters
+    const sanitizedText = optimizedText
+      .replace(/[^\x20-\x7E\r\n\t]/g, '') // Remove all non-ASCII and control characters
+      .replace(/\u2028/g, '\n') // Replace line separator with newline
+      .replace(/\u2029/g, '\n\n') // Replace paragraph separator with double newline
+      .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ') // Replace special space characters
+      .replace(/\n{3,}/g, '\n\n') // Replace excessive newlines
+      .substr(0, 30000); // Limit text size to prevent memory issues
+      
+    console.log(`Sanitized text: ${sanitizedText.length} characters`);
+    
+    // Generate the DOCX document
+    console.log(`Generating DOCX document for CV ${cvId} with template: ${docGenParams.template}`);
+    let docBuffer: Buffer;
+    
+    try {
+      // Try to generate the document with all parameters
+      docBuffer = await DocumentGenerator.generateDocx(sanitizedText, docGenParams);
+      
+      // Verify the buffer is valid and has a reasonable size
+      if (!Buffer.isBuffer(docBuffer) || docBuffer.length === 0) {
+        throw new Error('Generated an empty document buffer');
       }
       
-      console.log(`Generating DOCX document for CV ${cvId} with template: ${docGenParams.template}`);
-      let docBuffer: Buffer;
+      console.log(`Successfully generated DOCX document of ${docBuffer.length} bytes`);
       
-      try {
-        // Try to generate the document with all parameters
-        docBuffer = await DocumentGenerator.generateDocx(optimizedText, docGenParams);
-        
-        // Verify the buffer is valid and has a reasonable size
-        if (!Buffer.isBuffer(docBuffer) || docBuffer.length === 0) {
-          throw new Error('Generated an empty document buffer');
-        }
-        
-        console.log(`Successfully generated DOCX document of ${docBuffer.length} bytes`);
-        
-        // If document is suspiciously small, retry with minimal parameters
-        if (docBuffer.length < 1000) {
-          console.warn('Document size suspiciously small, retrying with minimal parameters');
-          docBuffer = await DocumentGenerator.generateDocx(optimizedText, { 
-            title: 'Optimized CV',
-            template: 'minimal'
-          });
-          
-          if (!Buffer.isBuffer(docBuffer) || docBuffer.length === 0) {
-            throw new Error('Failed to generate document even with minimal parameters');
-          }
-          
-          console.log(`Retry successful, generated DOCX of ${docBuffer.length} bytes`);
-        }
-      } catch (docError) {
-        console.error('Error generating DOCX document:', docError);
-        // Fallback to most simple document generation possible
-        console.log('Attempting fallback document generation');
-        
-        // Create a minimal text-only document with sanitized text
-        // Strip any problematic formatting that might be causing issues
-        const sanitizedText = optimizedText
-          .replace(/[^\x20-\x7E\n]/g, '') // Remove non-ASCII characters
-          .replace(/\n{3,}/g, '\n\n'); // Reduce excessive line breaks
-          
+      // If document is suspiciously small, retry with minimal parameters
+      if (docBuffer.length < 1000) {
+        console.warn('Document size suspiciously small, retrying with minimal parameters');
         docBuffer = await DocumentGenerator.generateDocx(sanitizedText, { 
           title: 'Optimized CV',
           template: 'minimal'
         });
         
         if (!Buffer.isBuffer(docBuffer) || docBuffer.length === 0) {
-          throw new Error('Failed to generate document even with fallback approach');
+          throw new Error('Failed to generate document even with minimal parameters');
         }
+        
+        console.log(`Retry successful, generated DOCX of ${docBuffer.length} bytes`);
       }
+    } catch (docError) {
+      console.error('Error generating DOCX document:', docError);
+      
+      // Log data about the error
+      console.error(`Error type: ${docError instanceof Error ? docError.constructor.name : typeof docError}`);
+      if (docError instanceof Error && docError.stack) {
+        console.error(`Stack trace: ${docError.stack}`);
+      }
+      
+      // Fallback to most simple document generation possible
+      console.log('Attempting fallback document generation with bare minimum formatting');
+      
+      try {
+        // Create a minimal text-only document with extremely simplified formatting
+        const simplifiedText = sanitizedText
+          .replace(/[^\x20-\x7E\n]/g, '') // Even more aggressive filtering - ASCII only
+          .replace(/\n{2,}/g, '\n\n'); // Normalize line breaks
+        
+        // Create the document with absolute minimal styling
+        const doc = new Document({
+          sections: [{
+            properties: {},
+            children: [
+              new Paragraph({
+                text: "Optimized CV",
+                heading: HeadingLevel.HEADING_1
+              }),
+              new Paragraph({
+                text: simplifiedText.substring(0, 15000) // Limit length further
+              })
+            ]
+          }]
+        });
+        
+        docBuffer = await Packer.toBuffer(doc);
+        
+        if (!Buffer.isBuffer(docBuffer) || docBuffer.length === 0) {
+          throw new Error('Failed to generate even simple fallback document');
+        }
+        
+        console.log(`Generated simplified fallback document of ${docBuffer.length} bytes`);
+      } catch (fallbackError) {
+        console.error('Fatal error generating document:', fallbackError);
+        
+        // Update metadata to show failure
+        await updateMetadata({ 
+          cvId: parseInt(cvId), 
+          userId, 
+          optimizedDocStatus: 'failed',
+          optimizedDocError: 'Document generation failed due to technical issues'
+        });
+        
+        return;
+      }
+    }
 
-      // Get the file path where we will save the file
-      const fileName = `${cvId}_optimized_${Date.now()}.docx`;
-      console.log('Saving optimized CV to Dropbox:', fileName);
+    // Get the file path where we will save the file
+    const fileName = `${cvId}_optimized_${Date.now()}.docx`;
+    console.log('Saving optimized CV to Dropbox:', fileName);
 
+    try {
       // Save to Dropbox
       const dropboxPath = `/optimized/${fileName}`;
       const dropboxLink = await saveFileToDropbox(docBuffer, dropboxPath);
+      
+      if (!dropboxLink) {
+        throw new Error('Failed to get shareable link from Dropbox');
+      }
+      
+      console.log(`Successfully saved document to Dropbox: ${dropboxPath}`);
 
       // Update the CV metadata with the Dropbox link
       await updateMetadata({ 
@@ -350,12 +415,23 @@ async function startBackgroundProcess(userId: string, cvId: string, optimizedTex
         industry: docGenParams.industry,
         template: docGenParams.template,
         improvements: docGenParams.improvements,
+        optimizedDocStatus: 'completed',
+        optimizedDocTimestamp: new Date().toISOString()
       });
 
       console.log(`Completed optimization process for CV ${cvId}`);
-    } catch (analysisError) {
-      console.error('Error processing experience entries:', analysisError);
-      throw analysisError;
+    } catch (saveError) {
+      console.error('Error saving document to Dropbox:', saveError);
+      
+      // Update metadata to show failure but include the base64 data for direct download
+      await updateMetadata({ 
+        cvId: parseInt(cvId), 
+        userId, 
+        docxBase64: docBuffer.toString('base64'),
+        optimizedDocStatus: 'completed_local', // Completed but only local download available
+        optimizedDocTimestamp: new Date().toISOString(),
+        optimizedDocError: 'Document saved locally but Dropbox upload failed'
+      });
     }
   } catch (error) {
     console.error(`Background process error for CV ${cvId}:`, error);
@@ -363,7 +439,8 @@ async function startBackgroundProcess(userId: string, cvId: string, optimizedTex
     await updateMetadata({ 
       cvId: parseInt(cvId), 
       userId, 
-      error: error instanceof Error ? error.message : 'Unknown error during CV optimization'
+      optimizedDocStatus: 'failed',
+      optimizedDocError: error instanceof Error ? error.message : 'Unknown error during CV optimization'
     });
   }
 }

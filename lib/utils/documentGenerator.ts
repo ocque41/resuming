@@ -131,96 +131,291 @@ export class DocumentGenerator {
     }
   ): Promise<Buffer> {
     try {
-      // Set default options
-      const templateStyle = options?.templateStyle || this.TemplateStyles.MODERN;
-      const photoOptions = options?.photoOptions || {};
+      // Sanity check input text
+      if (!cvText || typeof cvText !== 'string' || cvText.trim().length === 0) {
+        console.warn("Empty or invalid CV text provided to DOCX generator");
+        cvText = "No CV content provided.";
+      }
       
-      // Setup fonts - fix the preset handling
-      const presetName = options?.fontOptions?.preset?.toUpperCase() || 'MODERN';
-      const fontPreset = this.FontPresets[presetName as keyof typeof this.FontPresets] || this.FontPresets.MODERN;
+      // Sanitize CV text to prevent document corruption
+      const sanitizedText = cvText
+        .replace(/[^\x20-\x7E\r\n\t]/g, '') // Remove non-ASCII and control characters
+        .replace(/\u2028/g, '\n') // Replace line separator with newline
+        .replace(/\u2029/g, '\n\n') // Replace paragraph separator with double newline
+        .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ') // Replace special space characters
+        .replace(/\n{3,}/g, '\n\n'); // Replace excessive newlines
       
+      console.log(`Sanitized CV text from ${cvText.length} to ${sanitizedText.length} characters`);
+      
+      // Limit text size to prevent memory issues
+      const truncatedText = sanitizedText.length > 30000 
+        ? sanitizedText.substr(0, 30000) + "\n\n[Content truncated due to length]" 
+        : sanitizedText;
+      
+      // Set default template style
+      options = options || {};
+      const templateStyle = (options.templateStyle || 'professional').toLowerCase();
+      
+      // Set defaults for colors and fonts
       const fonts = {
-        headingFont: options?.fontOptions?.headingFont || fontPreset.headingFont,
-        bodyFont: options?.fontOptions?.bodyFont || fontPreset.bodyFont,
-        nameFont: options?.fontOptions?.nameFont || fontPreset.nameFont
+        headingFont: options.fontOptions?.headingFont || 'Calibri',
+        bodyFont: options.fontOptions?.bodyFont || 'Calibri',
+        nameFont: options.fontOptions?.nameFont || 'Calibri',
       };
-      
-      // Setup colors
-      const primaryColor = options?.colorOptions?.primary || '#333333';
-      const accentColor = options?.colorOptions?.accent || '#B4916C';
       
       const colors = {
-        primary: primaryColor,
-        accent: accentColor,
-        dark: '#333333',
-        medium: '#555555',
-        light: '#AAAAAA',
-        ultraLight: '#EEEEEE',
-        white: '#FFFFFF',
+        primary: options.colorOptions?.primary || '000000',
+        accent: options.colorOptions?.accent || '4472C4',
       };
       
-      // Split CV text into sections
-      const sections = this.splitIntoSections(cvText);
+      // Parse metadata (if any)
+      const title = metadata?.title || 'Optimized CV';
+      const atsScore = metadata?.atsScore || 0;
+      const improvedAtsScore = metadata?.improvedAtsScore || 0;
+      const industry = metadata?.industry || 'General';
       
-      // Create document content based on template style and sections
-      const docContent = this.createDocumentContent(
-        sections, 
-        metadata,
-        templateStyle,
-        photoOptions,
-        fonts,
-        colors
+      // Initialize document content array
+      const docContent: any[] = [];
+      
+      // Add header with document title
+      docContent.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: title,
+              bold: true,
+              size: 40,
+              font: fonts.nameFont
+            })
+          ],
+          spacing: {
+            after: 400,
+          },
+          alignment: AlignmentType.CENTER
+        })
       );
+      
+      // If we have structured experience entries from metadata, use them
+      if (metadata?.experienceEntries && Array.isArray(metadata.experienceEntries) && metadata.experienceEntries.length > 0) {
+        console.log(`Processing ${metadata.experienceEntries.length} structured experience entries`);
+        
+        // Add a section header for experience
+        docContent.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "EXPERIENCE",
+                bold: true,
+                size: 28,
+                font: fonts.headingFont
+              })
+            ],
+            spacing: { before: 400, after: 200 }
+          })
+        );
+        
+        // Add each experience entry
+        for (const entry of metadata.experienceEntries) {
+          if (!entry.jobTitle && !entry.company) continue;
+          
+          // Job title and company
+          docContent.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: `${entry.jobTitle || ''} ${entry.company ? 'at ' + entry.company : ''}`,
+                  bold: true,
+                  size: 24
+                })
+              ],
+              spacing: { before: 200, after: 100 }
+            })
+          );
+          
+          // Date range and location
+          if (entry.dateRange || entry.location) {
+            docContent.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: `${entry.dateRange || ''} ${entry.location ? '| ' + entry.location : ''}`,
+                    italics: true,
+                    size: 24
+                  })
+                ],
+                spacing: { after: 100 }
+              })
+            );
+          }
+          
+          // Responsibilities as bullet points
+          if (entry.responsibilities && Array.isArray(entry.responsibilities)) {
+            for (const resp of entry.responsibilities) {
+              if (typeof resp !== 'string' || !resp.trim()) continue;
+              
+              docContent.push(
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: `• ${resp.trim()}`,
+                      size: 24
+                    })
+                  ],
+                  indent: { left: 720 },
+                  spacing: { after: 100 }
+                })
+              );
+            }
+          }
+          
+          // Add spacing after each entry
+          docContent.push(
+            new Paragraph({
+              children: [new TextRun({ text: "" })],
+              spacing: { after: 200 }
+            })
+          );
+        }
+      } else {
+        // If no structured entries, just add the full CV text
+        console.log("No structured experience entries found, using plain text");
+        
+        // Split text into paragraphs
+        const paragraphs = truncatedText.split(/\n\n+/);
+        
+        for (const para of paragraphs) {
+          if (!para.trim()) continue;
+          
+          // Check if this is a header (all caps with no punctuation)
+          if (/^[A-Z\s]+$/.test(para.trim())) {
+            docContent.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: para.trim(),
+                    bold: true,
+                    size: 28,
+                    font: fonts.headingFont
+                  })
+                ],
+                spacing: { before: 400, after: 200 }
+              })
+            );
+          } 
+          // Check if this looks like a bullet point list
+          else if (para.includes('•') || para.includes('*') || para.includes('-')) {
+            // Split into lines and format as bullet points
+            const lines = para.split(/\n/);
+            for (const line of lines) {
+              const bulletText = line.trim()
+                .replace(/^[\s•*-]+/, '')  // Remove leading bullet characters
+                .trim();
+                
+              if (!bulletText) continue;
+              
+              docContent.push(
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: `• ${bulletText}`,
+                      size: 24
+                    })
+                  ],
+                  indent: { left: 720 },
+                  spacing: { after: 100 }
+                })
+              );
+            }
+          } 
+          // Regular paragraph
+          else {
+            docContent.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: para.trim(),
+                    size: 24
+                  })
+                ],
+                spacing: { after: 200 }
+              })
+            );
+          }
+        }
+      }
+      
+      // Add improvements if available
+      if (metadata?.improvements && Array.isArray(metadata.improvements) && metadata.improvements.length > 0) {
+        docContent.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "IMPROVEMENT SUGGESTIONS",
+                bold: true,
+                size: 28,
+                font: fonts.headingFont
+              })
+            ],
+            spacing: { before: 400, after: 200 },
+            pageBreakBefore: true
+          })
+        );
+        
+        // Add each improvement as a bullet point
+        for (const improvement of metadata.improvements) {
+          if (typeof improvement !== 'string' || !improvement.trim()) continue;
+          
+          docContent.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: `• ${improvement.trim()}`,
+                  size: 24
+                })
+              ],
+              indent: { left: 720 },
+              spacing: { after: 100 }
+            })
+          );
+        }
+      }
       
       // Create document with the content
       const doc = new Document({
-        title: "Optimized CV",
+        title: title,
         description: "Generated with CV Optimizer",
-        styles: {
-          paragraphStyles: [
-            {
-              id: "Heading1",
-              name: "Heading 1",
-              basedOn: "Normal",
-              next: "Normal",
-              run: {
-                font: fonts.nameFont,
-                size: 40,
-                bold: true,
-                color: colors.primary,
-              },
-              paragraph: {
-                spacing: {
-                  after: 240,
-                },
-              },
-            },
-          ],
-        },
         sections: [{
-            properties: {
-              page: {
-                margin: {
+          properties: {
+            page: {
+              margin: {
                 top: 1000,
                 right: 1000,
                 bottom: 1000,
                 left: 1000,
-                },
-                size: {
+              },
+              size: {
                 width: 12240, // 8.5"
                 height: 15840, // 11"
-                },
               },
             },
+          },
           children: docContent,
         }],
       });
       
       // Generate buffer
-      return await Packer.toBuffer(doc);
+      const buffer = await Packer.toBuffer(doc);
+      console.log(`Successfully generated DOCX file with size: ${buffer.length} bytes`);
+      
+      // Verify buffer size is reasonable
+      if (buffer.length < 1000) {
+        console.warn("Generated document is suspiciously small, may be corrupted");
+      }
+      
+      return buffer;
     } catch (error) {
       console.error("Error generating document:", error);
-      throw new Error("Failed to generate CV document");
+      throw new Error("Failed to generate CV document: " + (error instanceof Error ? error.message : "Unknown error"));
     }
   }
   
