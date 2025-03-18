@@ -34,6 +34,9 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
     // Log what we're processing
     console.log(`Generating DOCX document from ${cvText.length} characters of text`);
     
+    // Sanitize input text (remove potentially problematic characters)
+    cvText = sanitizeInputText(cvText);
+    
     // Validate options
     if (options.experienceEntries && !Array.isArray(options.experienceEntries)) {
       console.warn("Invalid experienceEntries format - expected array. Using empty array instead.");
@@ -85,15 +88,7 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
               alignment: AlignmentType.CENTER,
               spacing: {
                 after: 120,
-              },
-              border: {
-                bottom: {
-                  color: "#B4916C",
-                  space: 1,
-                  style: BorderStyle.SINGLE,
-                  size: 8,
-                },
-              },
+              }
             })
           );
           
@@ -144,15 +139,7 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
           spacing: {
             before: 240,
             after: 120,
-          },
-          border: {
-            bottom: {
-              color: "#DDDDDD",
-              space: 1,
-              style: BorderStyle.SINGLE,
-              size: 4,
-            },
-          },
+          }
         })
       );
 
@@ -162,88 +149,95 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
         if (options.experienceEntries && options.experienceEntries.length > 0) {
           // Render each experience entry in a structured format
           options.experienceEntries.forEach((entry, index) => {
-            // Job title and company
-            paragraphs.push(
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: entry.jobTitle,
-                    bold: true,
-                    size: 22,
-                  }),
-                  new TextRun({
-                    text: " | ",
-                    size: 22,
-                  }),
-                  new TextRun({
-                    text: entry.company,
-                    italics: true,
-                    size: 22,
-                  }),
-                ],
-                spacing: {
-                  before: 120,
-                  after: 40,
-                },
-              })
-            );
-            
-            // Date range and location
-            paragraphs.push(
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: entry.dateRange,
-                    size: 20,
-                    color: "666666",
-                  }),
-                  ...(entry.location ? [
-                    new TextRun({
-                      text: " | " + entry.location,
-                      size: 20,
-                      color: "666666",
-                    })
-                  ] : []),
-                ],
-                spacing: {
-                  after: 80,
-                },
-              })
-            );
-            
-            // Responsibilities as bullet points
-            if (entry.responsibilities && entry.responsibilities.length > 0) {
-              entry.responsibilities.forEach(resp => {
-                paragraphs.push(
-                  new Paragraph({
-                    bullet: {
-                      level: 0,
-                    },
-                    children: [
-                      new TextRun({
-                        text: resp,
-                        size: 22,
-                      }),
-                    ],
-                    spacing: {
-                      after: 40,
-                      line: 360,
-                      lineRule: "auto",
-                    },
-                  })
-                );
-              });
-            }
-            
-            // Add extra spacing between entries
-            if (index < (options.experienceEntries?.length ?? 0) - 1) {
+            try {
+              // Job title and company
               paragraphs.push(
                 new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: sanitizeText(entry.jobTitle || ""),
+                      bold: true,
+                      size: 22,
+                    }),
+                    new TextRun({
+                      text: " | ",
+                      size: 22,
+                    }),
+                    new TextRun({
+                      text: sanitizeText(entry.company || ""),
+                      italics: true,
+                      size: 22,
+                    }),
+                  ],
                   spacing: {
-                    after: 120,
+                    before: 120,
+                    after: 40,
                   },
                 })
               );
+              
+              // Date range and location
+              paragraphs.push(
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: sanitizeText(entry.dateRange || ""),
+                      size: 20,
+                      color: "666666",
+                    }),
+                    ...(entry.location ? [
+                      new TextRun({
+                        text: " | " + sanitizeText(entry.location),
+                        size: 20,
+                        color: "666666",
+                      })
+                    ] : []),
+                  ],
+                  spacing: {
+                    after: 80,
+                  },
+                })
+              );
+              
+              // Responsibilities as bullet points
+              if (entry.responsibilities && Array.isArray(entry.responsibilities) && entry.responsibilities.length > 0) {
+                entry.responsibilities.forEach(resp => {
+                  if (typeof resp === 'string') {
+                    paragraphs.push(
+                      new Paragraph({
+                        bullet: {
+                          level: 0,
+                        },
+                        children: [
+                          new TextRun({
+                            text: sanitizeText(resp),
+                            size: 22,
+                          }),
+                        ],
+                        spacing: {
+                          after: 40,
+                          line: 360,
+                          lineRule: "auto",
+                        },
+                      })
+                    );
+                  }
+                });
+              }
+              
+              // Add extra spacing between entries
+              if (index < (options.experienceEntries?.length ?? 0) - 1) {
+                paragraphs.push(
+                  new Paragraph({
+                    spacing: {
+                      after: 120,
+                    },
+                  })
+                );
+              }
+            } catch (entryError) {
+              console.error("Error processing experience entry:", entryError);
+              // Continue with next entry
             }
           });
         } else {
@@ -261,7 +255,7 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
                   },
                   children: [
                     new TextRun({
-                      text: line.replace(/^[•\-*]\s*/, ''),
+                      text: sanitizeText(line.replace(/^[•\-*]\s*/, '')),
                       size: 22,
                     }),
                   ],
@@ -277,7 +271,7 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
                 new Paragraph({
                   children: [
                     new TextRun({
-                      text: line,
+                      text: sanitizeText(line),
                       size: 22,
                     }),
                   ],
@@ -351,7 +345,7 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
               },
               children: [
                 new TextRun({
-                  text: item,
+                  text: sanitizeText(item),
                   size: 22,
                 }),
               ],
@@ -385,7 +379,7 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
                   size: 22,
                 }),
                 new TextRun({
-                  text: options.industry,
+                  text: sanitizeText(options.industry),
                   bold: true,
                   size: 22,
                   color: "#B4916C",
@@ -402,7 +396,8 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
         const contentText = sectionContent as string;
         const contentLines = contentText.split('\n').filter((line: string) => line.trim());
         
-        // For skills section, create a nicely formatted list
+        // For skills section, create a simple list instead of a table
+        // Tables can often cause compatibility issues
         const skillRegex = /^[•\-*]\s*(.+)$/;
         const skills: string[] = [];
         
@@ -420,63 +415,27 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
           }
         });
         
-        // Create a grid of skills (3 columns)
-        const skillRows = [];
-        const numCols = 3;
-        
-        for (let i = 0; i < skills.length; i += numCols) {
-          const rowSkills = skills.slice(i, i + numCols);
-          const row = new TableRow({
-            children: rowSkills.map(skill => 
-              new TableCell({
-                children: [
-                  new Paragraph({
-                    children: [
-                      new TextRun({
-                        text: skill,
-                        size: 22,
-                      }),
-                    ],
-                    spacing: {
-                      after: 40,
-                    },
-                  }),
-                ],
-                width: {
-                  size: 33,
-                  type: WidthType.PERCENTAGE,
-                },
-                margins: {
-                  top: 40,
-                  bottom: 40,
-                  left: 80,
-                  right: 80,
-                },
-              })
-            ),
-          });
-          
-          skillRows.push(row);
-        }
-        
-        const skillsTable = new Table({
-          rows: skillRows,
-          width: {
-            size: 100,
-            type: WidthType.PERCENTAGE,
-          },
-          borders: {
-            top: { style: BorderStyle.NONE },
-            bottom: { style: BorderStyle.NONE },
-            left: { style: BorderStyle.NONE },
-            right: { style: BorderStyle.NONE },
-            insideHorizontal: { style: BorderStyle.NONE },
-            insideVertical: { style: BorderStyle.NONE },
-          },
+        // Add skills as bullet points - more compatible than tables
+        skills.forEach(skill => {
+          paragraphs.push(
+            new Paragraph({
+              bullet: {
+                level: 0,
+              },
+              children: [
+                new TextRun({
+                  text: sanitizeText(skill),
+                  size: 22,
+                }),
+              ],
+              spacing: {
+                after: 40,
+                line: 360,
+                lineRule: "auto",
+              },
+            })
+          );
         });
-        
-        // Add the table to the document
-        paragraphs.push(new Paragraph({ children: [skillsTable] }));
         
         // Add extra spacing after skills section
         paragraphs.push(
@@ -497,7 +456,7 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
             new Paragraph({
               children: [
                 new TextRun({
-                  text: contentLines.join(' '),
+                  text: sanitizeText(contentLines.join(' ')),
                   size: 22,
                 }),
               ],
@@ -520,7 +479,7 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
                   },
                   children: [
                     new TextRun({
-                      text: line.replace(/^[•\-*]\s*/, ''),
+                      text: sanitizeText(line.replace(/^[•\-*]\s*/, '')),
                       size: 22,
                     }),
                   ],
@@ -536,7 +495,7 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
                 new Paragraph({
                   children: [
                     new TextRun({
-                      text: line,
+                      text: sanitizeText(line),
                       size: 22,
                     }),
                   ],
@@ -562,7 +521,7 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
       );
     }
     
-    // Add footer with ATS score if provided
+    // Add footer with ATS score if provided - use simple formatting
     if (options.atsScore !== undefined || options.improvedAtsScore !== undefined) {
       const scoreText = options.improvedAtsScore !== undefined
         ? `Original ATS Score: ${options.atsScore || 0} | Improved ATS Score: ${options.improvedAtsScore}`
@@ -580,15 +539,7 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
           alignment: AlignmentType.CENTER,
           spacing: {
             before: 240,
-          },
-          border: {
-            top: {
-              color: "#DDDDDD",
-              space: 1,
-              style: BorderStyle.SINGLE,
-              size: 4,
-            },
-          },
+          }
         })
       );
       
@@ -610,32 +561,12 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
       );
     }
     
-    // Create the document with the paragraphs
+    // Create the document with simplified structure
+    // Use minimal settings to improve compatibility
     const doc = new Document({
       creator: authorName,
       title: fileName,
       description: "Optimized CV generated by CV Optimizer",
-      styles: {
-        paragraphStyles: [
-          {
-            id: "Heading1",
-            name: "Heading 1",
-            basedOn: "Normal",
-            next: "Normal",
-            quickFormat: true,
-            run: {
-              size: 32,
-              bold: true,
-              color: "000000",
-            },
-            paragraph: {
-              spacing: {
-                after: 120,
-              },
-            },
-          },
-        ],
-      },
       sections: [{
         properties: {
           page: {
@@ -666,6 +597,50 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
     // Re-throw with more context to help debugging
     throw new Error(`Failed to generate DOCX document: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+/**
+ * Sanitize input text to remove potentially problematic characters
+ */
+function sanitizeInputText(text: string): string {
+  if (!text) return '';
+  
+  // Replace potentially problematic characters
+  return text
+    // Replace curly quotes with straight quotes
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    // Replace em dash and en dash with simple dash
+    .replace(/[\u2013\u2014]/g, '-')
+    // Replace other special characters
+    .replace(/[\u2022]/g, '*') // bullet
+    .replace(/[\u2026]/g, '...') // ellipsis
+    .replace(/[\u00A0]/g, ' ') // non-breaking space
+    // Remove other control characters that may cause issues
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+}
+
+/**
+ * Sanitize a single text string for use in document
+ */
+function sanitizeText(text: string): string {
+  if (!text) return '';
+  
+  // Similar to sanitizeInputText but for individual text elements
+  return text
+    // Replace curly quotes with straight quotes
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    // Replace em dash and en dash with simple dash
+    .replace(/[\u2013\u2014]/g, '-')
+    // Replace other special characters
+    .replace(/[\u2022]/g, '*') // bullet
+    .replace(/[\u2026]/g, '...') // ellipsis
+    .replace(/[\u00A0]/g, ' ') // non-breaking space
+    // Remove other control characters that may cause issues
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, '')
+    // Limit length to prevent oversized elements
+    .substring(0, 5000);
 }
 
 /**

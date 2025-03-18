@@ -103,6 +103,66 @@ function startBackgroundProcess(cvRecord: any, templateId: string, userId: strin
       // Extract sections using the module
       const sections = optimizeCVModule.extractSections(cvText);
       
+      /**
+       * Generate a minimal fallback document when standard generation fails
+       * Uses the absolute minimum formatting necessary to create a valid DOCX
+       */
+      async function generateFallbackDocument(text: string, options: any): Promise<Buffer> {
+        try {
+          console.log("Generating minimal fallback document");
+          
+          // Import docx library
+          const { Document, Packer, Paragraph, TextRun } = require("docx");
+          
+          // Sanitize text to remove problematic characters
+          const sanitizedText = text.replace(/[\u2018\u2019]/g, "'")
+            .replace(/[\u201C\u201D]/g, '"')
+            .replace(/[\u2013\u2014]/g, '-')
+            .replace(/[\u2022]/g, '*')
+            .replace(/[\u2026]/g, '...')
+            .replace(/[\u00A0]/g, ' ')
+            .replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+          
+          // Split text into lines
+          const lines = sanitizedText.split('\n');
+          
+          // Create a simple paragraph for each line
+          const paragraphs = lines.map(line => {
+            if (!line.trim()) {
+              // Empty paragraph for blank lines
+              return new Paragraph({});
+            }
+            
+            return new Paragraph({
+              children: [
+                new TextRun({
+                  text: line.trim().substring(0, 5000), // Limit length to prevent issues
+                  size: 24,
+                }),
+              ],
+              spacing: {
+                after: 120,
+              },
+            });
+          });
+          
+          // Create minimal document
+          const doc = new Document({
+            sections: [{
+              children: paragraphs,
+            }],
+          });
+          
+          // Generate buffer
+          const buffer = await Packer.toBuffer(doc);
+          
+          return buffer;
+        } catch (error) {
+          console.error("Error in fallback document generation:", error);
+          throw new Error(`Fallback document generation failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      
       // Perform ATS analysis to get initial score
       const atsAnalysisResult = await performATSAnalysis(cvText, sections);
       const originalAtsScore = atsAnalysisResult.atsScore || 60; // Default to 60% if not available
@@ -164,17 +224,37 @@ function startBackgroundProcess(cvRecord: any, templateId: string, userId: strin
           ].slice(0, 5)
         };
         
-        // Generate the document
-        docxBuffer = await DocumentGenerator.generateDocx(optimizedText, docGenParams);
-        
-        // Verify we got a valid buffer back
-        if (!Buffer.isBuffer(docxBuffer) || docxBuffer.length === 0) {
-          throw new Error("Generated document is empty or invalid");
+        try {
+          // Try the standard document generation first
+          console.log("Attempting standard document generation");
+          docxBuffer = await DocumentGenerator.generateDocx(optimizedText, docGenParams);
+          
+          // Verify we got a valid buffer back
+          if (!Buffer.isBuffer(docxBuffer) || docxBuffer.length === 0) {
+            throw new Error("Generated document is empty or invalid");
+          }
+          
+          console.log(`Successfully generated DOCX document with size: ${docxBuffer.length} bytes`);
+        } catch (mainGenError) {
+          // If standard generation fails, try fallback generation with minimal formatting
+          console.warn(`Standard document generation failed: ${mainGenError instanceof Error ? mainGenError.message : String(mainGenError)}`);
+          console.log("Falling back to minimal document generation");
+          
+          // Update metadata to indicate fallback is being used
+          await updateMetadata(cvRecord.id, { 
+            progress: 80, 
+            step: "Using fallback document generation",
+            generationWarning: "Using simplified formatting for better compatibility"
+          });
+          
+          // Generate document with fallback method
+          docxBuffer = await generateFallbackDocument(optimizedText, docGenParams);
+          
+          // Log fallback success
+          console.log(`Successfully generated fallback DOCX document with size: ${docxBuffer.length} bytes`);
         }
-        
-        console.log(`Successfully generated DOCX document with size: ${docxBuffer.length} bytes`);
       } catch (docxError) {
-        console.error("Error generating DOCX:", docxError);
+        console.error("All document generation methods failed:", docxError);
         await updateMetadata(cvRecord.id, { 
           error: `Failed to generate document: ${docxError instanceof Error ? docxError.message : String(docxError)}`,
           errorTimestamp: new Date().toISOString(),
@@ -186,6 +266,23 @@ function startBackgroundProcess(cvRecord: any, templateId: string, userId: strin
       // Save the generated DOCX to Dropbox
       console.log("Saving optimized DOCX to Dropbox");
       await updateMetadata(cvRecord.id, { progress: 90, step: "Saving optimized DOCX" });
+      
+      // Verify the docx buffer is valid
+      if (!isValidDocxBuffer(docxBuffer)) {
+        console.error("Generated DOCX buffer validation failed - attempting one more generation with fallback method");
+        
+        // Try the fallback method as a last resort
+        docxBuffer = await generateFallbackDocument(optimizedText, {
+          title: `Optimized_${cvRecord.fileName.replace('.pdf', '')}`
+        });
+        
+        // Verify again
+        if (!isValidDocxBuffer(docxBuffer)) {
+          throw new Error("Failed to generate a valid DOCX file after multiple attempts");
+        }
+        
+        console.log("Successfully generated valid DOCX using final fallback");
+      }
       
       // Use Dropbox client to save the file
       const dropboxClient = await getDropboxClient();
@@ -490,4 +587,55 @@ function extractNameAndContact(text: string): any {
   }
   
   return result;
+}
+
+/**
+ * Validate a buffer to ensure it contains a valid DOCX file
+ * Checks for the standard DOCX file signature (PK header for ZIP) and minimum size
+ */
+function isValidDocxBuffer(buffer: Buffer): boolean {
+  try {
+    // Check if buffer exists and has content
+    if (!buffer || !Buffer.isBuffer(buffer)) {
+      console.error("Invalid buffer provided for DOCX validation");
+      return false;
+    }
+    
+    // Check minimum size (a valid DOCX file should be at least 2KB)
+    const MIN_DOCX_SIZE = 2048; // 2KB
+    if (buffer.length < MIN_DOCX_SIZE) {
+      console.error(`Buffer too small to be a valid DOCX: ${buffer.length} bytes`);
+      return false;
+    }
+    
+    // Check for DOCX file signature (DOCX files are ZIP files starting with PK)
+    // The first 4 bytes of a ZIP file (and thus DOCX) should be: [0x50, 0x4B, 0x03, 0x04]
+    if (buffer[0] !== 0x50 || buffer[1] !== 0x4B || buffer[2] !== 0x03 || buffer[3] !== 0x04) {
+      console.error("Buffer does not have a valid DOCX/ZIP signature");
+      return false;
+    }
+    
+    // Check for common DOCX content types within the file
+    // This is a simple check to see if the buffer contains strings that should be in a DOCX
+    const bufferString = buffer.toString('utf8', 0, Math.min(buffer.length, 10000));
+    const docxMarkers = [
+      'word/document.xml',
+      'content-types',
+      'relationships',
+      'application/vnd.openxmlformats'
+    ];
+    
+    // Check if at least two of these markers are present
+    const markersFound = docxMarkers.filter(marker => bufferString.includes(marker));
+    if (markersFound.length < 2) {
+      console.error("Buffer doesn't contain required DOCX content markers");
+      return false;
+    }
+    
+    console.log(`DOCX validation passed: Buffer size ${buffer.length} bytes, valid signature and markers detected`);
+    return true;
+  } catch (error) {
+    console.error("Error during DOCX buffer validation:", error);
+    return false;
+  }
 } 
