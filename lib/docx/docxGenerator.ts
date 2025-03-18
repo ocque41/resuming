@@ -31,12 +31,31 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
   }
 
   try {
-    // Default options
+    // Log what we're processing
+    console.log(`Generating DOCX document from ${cvText.length} characters of text`);
+    
+    // Validate options
+    if (options.experienceEntries && !Array.isArray(options.experienceEntries)) {
+      console.warn("Invalid experienceEntries format - expected array. Using empty array instead.");
+      options.experienceEntries = [];
+    }
+    
+    if (options.improvements && !Array.isArray(options.improvements)) {
+      console.warn("Invalid improvements format - expected array. Using empty array instead.");
+      options.improvements = [];
+    }
+    
+    // Default options with safe defaults
     const fileName = options.title || "Optimized_CV";
     const authorName = options.author || "CV Optimizer";
     
     // Parse the optimized text to identify sections
     const sections = parseOptimizedText(cvText);
+    
+    // Validate that we extracted some sections
+    if (!sections || Object.keys(sections).length === 0) {
+      console.warn("No sections extracted from CV text - document may be incomplete");
+    }
     
     // Create paragraphs for each section
     const paragraphs: Paragraph[] = [];
@@ -633,10 +652,19 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
     });
     
     // Generate the document as a buffer
-    return await Packer.toBuffer(doc);
+    const buffer = await Packer.toBuffer(doc);
+    
+    // Validate the buffer
+    if (!buffer || buffer.length === 0) {
+      throw new Error("Generated an empty document buffer");
+    }
+    
+    console.log(`Successfully generated DOCX buffer of ${buffer.length} bytes`);
+    return buffer;
   } catch (error) {
     console.error("Error generating DOCX:", error);
-    throw new Error("Failed to generate DOCX document");
+    // Re-throw with more context to help debugging
+    throw new Error(`Failed to generate DOCX document: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 

@@ -141,61 +141,46 @@ function startBackgroundProcess(cvRecord: any, templateId: string, userId: strin
         improvedAtsScore
       });
       
-      // Validate and preprocess the optimized text
-      let processedText = optimizedText;
-      if (!processedText || processedText.trim().length === 0) {
-        console.warn("Optimized text is empty, using original CV text as fallback");
-        processedText = cvText;
-      }
-      
-      // Ensure proper section headers if they're missing
-      const requiredSections = ['PROFILE', 'EXPERIENCE', 'EDUCATION', 'SKILLS'];
-      for (const section of requiredSections) {
-        if (!processedText.includes(`${section}\n`)) {
-          // If the section content exists in optimizedSections but the header is missing
-          if (optimizedSections[section.toLowerCase()] && optimizedSections[section.toLowerCase()].trim().length > 0) {
-            processedText += `\n\n${section}\n${optimizedSections[section.toLowerCase()]}`;
-          }
-        }
-      }
-      
       // Generate the optimized DOCX document
       console.log("Generating optimized DOCX document");
       await updateMetadata(cvRecord.id, { progress: 80, step: "Generating optimized DOCX document" });
       
-      // Use the document generator with correct parameters
+      // Use the new ATS-optimized document generator
       let docxBuffer: Buffer;
       try {
-        docxBuffer = await DocumentGenerator.generateDocx(
-          processedText, 
-          // Pass analytics data as metadata parameter
-          {
-            atsScore: originalAtsScore,
-            improvedAtsScore: improvedAtsScore,
-            industry: optimizedAnalysisResult.industry || 'General',
-            experienceEntries: optimizedAnalysisResult.experienceEntries || [],
-            improvements: [
-              ...(optimizedAnalysisResult.sectionRecommendations ? Object.values(optimizedAnalysisResult.sectionRecommendations) : []),
-              ...(optimizedAnalysisResult.keywordRecommendations || []),
-              ...(optimizedAnalysisResult.improvementSuggestions ? Object.values(optimizedAnalysisResult.improvementSuggestions) : [])
-            ].filter(item => typeof item === 'string').slice(0, 5)
-          },
-          // Add template options as third parameter
-          {
-            templateStyle: 'modern',
-            fontOptions: {
-              preset: 'professional'
-            }
-          }
-        );
-        console.log(`Successfully generated DOCX document (${docxBuffer.length} bytes)`);
+        // Prepare document generation parameters
+        const docGenParams = {
+          atsScore: originalAtsScore,
+          improvedAtsScore: improvedAtsScore,
+          industry: optimizedAnalysisResult.industry || 'General',
+          title: `Optimized_${cvRecord.fileName.replace('.pdf', '')}`,
+          author: "CV Optimizer",
+          description: "ATS-optimized CV document",
+          experienceEntries: optimizedAnalysisResult.experienceEntries || [],
+          improvements: [
+            ...(optimizedAnalysisResult.sectionRecommendations ? Object.values(optimizedAnalysisResult.sectionRecommendations).filter(item => typeof item === 'string') : []),
+            ...(optimizedAnalysisResult.keywordRecommendations || []),
+            ...(optimizedAnalysisResult.improvementSuggestions ? Object.values(optimizedAnalysisResult.improvementSuggestions).filter(item => typeof item === 'string') : [])
+          ].slice(0, 5)
+        };
+        
+        // Generate the document
+        docxBuffer = await DocumentGenerator.generateDocx(optimizedText, docGenParams);
+        
+        // Verify we got a valid buffer back
+        if (!Buffer.isBuffer(docxBuffer) || docxBuffer.length === 0) {
+          throw new Error("Generated document is empty or invalid");
+        }
+        
+        console.log(`Successfully generated DOCX document with size: ${docxBuffer.length} bytes`);
       } catch (docxError) {
-        console.error("Error generating DOCX document:", docxError);
+        console.error("Error generating DOCX:", docxError);
         await updateMetadata(cvRecord.id, { 
-          docxGenerationError: docxError instanceof Error ? docxError.message : String(docxError),
-          docxGenerationErrorTimestamp: new Date().toISOString()
+          error: `Failed to generate document: ${docxError instanceof Error ? docxError.message : String(docxError)}`,
+          errorTimestamp: new Date().toISOString(),
+          optimizing: false
         });
-        throw new Error(`Failed to generate DOCX: ${docxError instanceof Error ? docxError.message : String(docxError)}`);
+        throw new Error(`Failed to generate optimized document: ${docxError instanceof Error ? docxError.message : String(docxError)}`);
       }
       
       // Save the generated DOCX to Dropbox
@@ -208,28 +193,15 @@ function startBackgroundProcess(cvRecord: any, templateId: string, userId: strin
       const dropboxPath = `/cvs/${userId}/${optimizedFileName}`;
       
       try {
-        // Save the buffer to Dropbox with proper content type
         await saveFileToDropbox(dropboxClient, dropboxPath, docxBuffer);
-        
-        console.log(`Successfully saved DOCX to Dropbox: ${dropboxPath}`);
-        
-        // Verify the file was saved by checking if it exists
-        try {
-          const fileMetadata = await dropboxClient.filesGetMetadata({
-            path: dropboxPath
-          });
-          
-          console.log(`Verified file saved to Dropbox: ${fileMetadata.result.path_display}, size: ${(fileMetadata.result as any).size || 'unknown'} bytes`);
-        } catch (verifyError) {
-          console.warn(`Could not verify file save, but continuing: ${verifyError}`);
-        }
       } catch (saveError) {
-        console.error("Error saving DOCX to Dropbox:", saveError);
-        await updateMetadata(cvRecord.id, {
-          dropboxSaveError: saveError instanceof Error ? saveError.message : String(saveError),
-          dropboxSaveErrorTimestamp: new Date().toISOString()
+        console.error("Error saving file to Dropbox:", saveError);
+        await updateMetadata(cvRecord.id, { 
+          error: `Failed to save document to storage: ${saveError instanceof Error ? saveError.message : String(saveError)}`,
+          errorTimestamp: new Date().toISOString(),
+          optimizing: false
         });
-        throw new Error(`Failed to save DOCX to Dropbox: ${saveError instanceof Error ? saveError.message : String(saveError)}`);
+        throw new Error(`Failed to save optimized document: ${saveError instanceof Error ? saveError.message : String(saveError)}`);
       }
       
       // Update CV record with optimized document reference
@@ -280,20 +252,54 @@ async function updateMetadata(cvId: number, updates: Record<string, any>): Promi
       return;
     }
     
+    // Parse existing metadata
     const metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
+    
+    // Sanitize updates to prevent circular references and handle complex objects
+    const sanitizedUpdates: Record<string, any> = {};
+    
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === undefined || value === null) {
+        // Skip undefined or null values
+        continue;
+      }
+      
+      if (typeof value === 'object') {
+        try {
+          // Test if the object can be serialized and deserialized properly
+          const testSerialization = JSON.parse(JSON.stringify(value));
+          sanitizedUpdates[key] = testSerialization;
+        } catch (err) {
+          console.warn(`Skipping non-serializable value for key: ${key}`);
+        }
+      } else {
+        sanitizedUpdates[key] = value;
+      }
+    }
+    
+    // Create updated metadata
     const updatedMetadata = {
       ...metadata,
-      ...updates,
+      ...sanitizedUpdates,
       lastUpdated: new Date().toISOString()
     };
     
+    // Verify that the updated metadata can be serialized
+    try {
+      JSON.stringify(updatedMetadata);
+    } catch (jsonError) {
+      console.error(`Failed to serialize metadata for CV ${cvId}:`, jsonError);
+      throw new Error('Unable to serialize metadata');
+    }
+    
+    // Update the database
     await db.update(cvs)
       .set({
         metadata: JSON.stringify(updatedMetadata)
       })
       .where(eq(cvs.id, cvId));
       
-    console.log(`Updated metadata for CV ${cvId}:`, updates);
+    console.log(`Updated metadata for CV ${cvId}:`, Object.keys(sanitizedUpdates));
   } catch (error) {
     console.error(`Failed to update metadata for CV ${cvId}:`, error);
   }
@@ -415,7 +421,10 @@ function formatOptimizedSections(sections: Record<string, string>): string {
   // Add any other sections
   for (const [sectionName, content] of Object.entries(sections)) {
     if (!['header', 'profile', 'achievements', 'experience', 'skills', 'education', 'languages'].includes(sectionName)) {
-      result += sectionName.toUpperCase() + "\n" + content + "\n\n";
+      // Check if the content is non-empty before adding
+      if (content && content.trim()) {
+        result += sectionName.toUpperCase() + "\n" + content + "\n\n";
+      }
     }
   }
   
