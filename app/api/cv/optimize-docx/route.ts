@@ -145,21 +145,66 @@ function startBackgroundProcess(cvRecord: any, templateId: string, userId: strin
       console.log("Generating optimized DOCX document");
       await updateMetadata(cvRecord.id, { progress: 80, step: "Generating optimized DOCX document" });
       
-      // Use the new ATS-optimized document generator
-      const docxBuffer = await DocumentGenerator.generateDocx(
-        optimizedText, 
-        {
-          atsScore: originalAtsScore,
-          improvedAtsScore: improvedAtsScore,
-          industry: optimizedAnalysisResult.industry || 'General',
-          experienceEntries: optimizedAnalysisResult.experienceEntries || [],
-          improvements: [
-            ...(optimizedAnalysisResult.sectionRecommendations ? Object.values(optimizedAnalysisResult.sectionRecommendations) : []),
-            ...(optimizedAnalysisResult.keywordRecommendations || []),
-            ...(optimizedAnalysisResult.improvementSuggestions ? Object.values(optimizedAnalysisResult.improvementSuggestions) : [])
-          ].filter(item => typeof item === 'string').slice(0, 5)
-        }
-      );
+      // Sanitize and clean data for document generation to prevent corruption
+      // Only pass primitive values and properly structured arrays to avoid document corruption
+      const docxOptions = {
+        atsScore: originalAtsScore,
+        improvedAtsScore: improvedAtsScore,
+        industry: optimizedAnalysisResult.industry || 'General',
+        // Ensure experienceEntries are properly formatted with all required fields
+        experienceEntries: (optimizedAnalysisResult.experienceEntries || []).map((entry: any) => ({
+          jobTitle: String(entry.jobTitle || ''),
+          company: String(entry.company || ''),
+          dateRange: String(entry.dateRange || ''),
+          location: entry.location ? String(entry.location) : undefined,
+          responsibilities: Array.isArray(entry.responsibilities) 
+            ? entry.responsibilities.map((r: any) => String(r)) 
+            : []
+        })),
+        // Simplify improvements to a simple string array limited to 5 items
+        improvements: [] as string[]
+      };
+      
+      // Extract improvements from various sources, ensuring they're all strings
+      let allImprovements: string[] = [];
+      
+      // Add section recommendations if they exist
+      if (optimizedAnalysisResult.sectionRecommendations) {
+        Object.values(optimizedAnalysisResult.sectionRecommendations).forEach((rec: any) => {
+          if (typeof rec === 'string') allImprovements.push(rec);
+          else if (Array.isArray(rec)) {
+            rec.forEach((r: any) => {
+              if (typeof r === 'string') allImprovements.push(r);
+            });
+          }
+        });
+      }
+      
+      // Add keyword recommendations if they exist
+      if (Array.isArray(optimizedAnalysisResult.keywordRecommendations)) {
+        optimizedAnalysisResult.keywordRecommendations.forEach((kw: any) => {
+          if (typeof kw === 'string') allImprovements.push(kw);
+        });
+      }
+      
+      // Add generic improvement suggestions if they exist
+      if (optimizedAnalysisResult.improvementSuggestions) {
+        Object.values(optimizedAnalysisResult.improvementSuggestions).forEach((sugg: any) => {
+          if (typeof sugg === 'string') allImprovements.push(sugg);
+        });
+      }
+      
+      // Only keep the first 5 improvements and ensure they're all strings
+      docxOptions.improvements = allImprovements
+        .filter(item => typeof item === 'string' && item.length > 0)
+        .slice(0, 5);
+        
+      console.log("Using document options:", JSON.stringify(docxOptions, null, 2));
+      
+      // Use the generateDocx from lib/docx/docxGenerator.ts, not DocumentGenerator
+      // Import the function directly to avoid using the static class method
+      const { generateDocx } = await import('@/lib/docx/docxGenerator');
+      const docxBuffer = await generateDocx(optimizedText, docxOptions);
       
       // Save the generated DOCX to Dropbox
       console.log("Saving optimized DOCX to Dropbox");

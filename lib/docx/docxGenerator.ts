@@ -31,15 +31,50 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
   }
 
   try {
+    console.log("Starting DOCX generation with text length:", cvText.length);
+    
     // Default options
     const fileName = options.title || "Optimized_CV";
     const authorName = options.author || "CV Optimizer";
+    
+    // Sanitize text input to remove any problematic characters
+    cvText = sanitizeTextForDocx(cvText);
     
     // Parse the optimized text to identify sections
     const sections = parseOptimizedText(cvText);
     
     // Create paragraphs for each section
     const paragraphs: Paragraph[] = [];
+    
+    // Add document metadata
+    const documentSettings = {
+      title: fileName,
+      description: "Generated with CV Optimizer",
+      creator: authorName,
+      subject: options.subject || "Optimized CV Document",
+      keywords: options.keywords?.join(", ") || "CV, Resume, Professional",
+      externalStyles: [],
+      numbering: {
+        config: [
+          {
+            reference: "bulletList",
+            levels: [
+              {
+                level: 0,
+                format: "bullet" as const,
+                text: "•",
+                alignment: AlignmentType.LEFT,
+                style: {
+                  paragraph: {
+                    indent: { left: 720, hanging: 360 },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    };
     
     // Preferred section order - strictly follow this order
     const sectionOrder = ["header", "profile", "experience", "achievements", "goals", "skills", "languages", "education"] as const;
@@ -55,13 +90,22 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
       // Handle header section specially
       if (sectionKey === "header") {
         const headerText = sectionContent as string;
-        const headerLines = headerText.split('\n').filter((line: string) => line.trim());
+        const headerLines = headerText.split('\n')
+          .filter((line: string) => line.trim())
+          .map((line: string) => line.trim());
         
         if (headerLines.length > 0) {
           // First line is the name - make it prominent
           paragraphs.push(
             new Paragraph({
-              text: headerLines[0],
+              children: [
+                new TextRun({
+                  text: headerLines[0],
+                  size: 40,
+                  bold: true,
+                  color: "2D5597"
+                })
+              ],
               heading: HeadingLevel.HEADING_1,
               alignment: AlignmentType.CENTER,
               spacing: {
@@ -137,27 +181,33 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
         })
       );
 
-      // Handle experience section
-      if (sectionKey === "experience") {
-        // Check if we have structured experience entries from analysis
-        if (options.experienceEntries && options.experienceEntries.length > 0) {
-          // Render each experience entry in a structured format
-          options.experienceEntries.forEach((entry, index) => {
+      // Handle experience section with structured data if available
+      if (sectionKey === "experience" && options.experienceEntries && options.experienceEntries.length > 0) {
+        // Render each experience entry in a structured format
+        options.experienceEntries.forEach((entry, index) => {
+          // Ensure all fields are valid strings
+          const jobTitle = (entry.jobTitle || '').trim();
+          const company = (entry.company || '').trim();
+          const dateRange = (entry.dateRange || '').trim();
+          const location = entry.location ? entry.location.trim() : '';
+          
+          // Only proceed if we have at least a job title
+          if (jobTitle) {
             // Job title and company
             paragraphs.push(
               new Paragraph({
                 children: [
                   new TextRun({
-                    text: entry.jobTitle,
+                    text: jobTitle,
                     bold: true,
                     size: 22,
                   }),
                   new TextRun({
-                    text: " | ",
+                    text: company ? " | " : "",
                     size: 22,
                   }),
                   new TextRun({
-                    text: entry.company,
+                    text: company,
                     italics: true,
                     size: 22,
                   }),
@@ -170,49 +220,58 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
             );
             
             // Date range and location
-            paragraphs.push(
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: entry.dateRange,
-                    size: 20,
-                    color: "666666",
-                  }),
-                  ...(entry.location ? [
+            if (dateRange || location) {
+              paragraphs.push(
+                new Paragraph({
+                  children: [
                     new TextRun({
-                      text: " | " + entry.location,
+                      text: dateRange,
                       size: 20,
                       color: "666666",
-                    })
-                  ] : []),
-                ],
-                spacing: {
-                  after: 80,
-                },
-              })
-            );
+                    }),
+                    ...(location ? [
+                      new TextRun({
+                        text: dateRange ? " | " : "",
+                        size: 20,
+                        color: "666666",
+                      }),
+                      new TextRun({
+                        text: location,
+                        size: 20,
+                        color: "666666",
+                      })
+                    ] : []),
+                  ],
+                  spacing: {
+                    after: 80,
+                  },
+                })
+              );
+            }
             
             // Responsibilities as bullet points
             if (entry.responsibilities && entry.responsibilities.length > 0) {
               entry.responsibilities.forEach(resp => {
-                paragraphs.push(
-                  new Paragraph({
-                    bullet: {
-                      level: 0,
-                    },
-                    children: [
-                      new TextRun({
-                        text: resp,
-                        size: 22,
-                      }),
-                    ],
-                    spacing: {
-                      after: 40,
-                      line: 360,
-                      lineRule: "auto",
-                    },
-                  })
-                );
+                if (resp && resp.trim()) {
+                  paragraphs.push(
+                    new Paragraph({
+                      bullet: {
+                        level: 0,
+                      },
+                      children: [
+                        new TextRun({
+                          text: resp.trim(),
+                          size: 22,
+                        }),
+                      ],
+                      spacing: {
+                        after: 40,
+                        line: 360,
+                        lineRule: "auto",
+                      },
+                    })
+                  );
+                }
               });
             }
             
@@ -226,344 +285,87 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
                 })
               );
             }
-          });
-        } else {
-          // Fallback to unstructured experience text
-          const contentText = sectionContent as string;
-          const contentLines = contentText.split('\n').filter((line: string) => line.trim());
-          
-          contentLines.forEach((line: string) => {
-            // Check if this line looks like a bullet point
-            if (line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*')) {
-              paragraphs.push(
-                new Paragraph({
-                  bullet: {
-                    level: 0,
-                  },
-                  children: [
-                    new TextRun({
-                      text: line.replace(/^[•\-*]\s*/, ''),
-                      size: 22,
-                    }),
-                  ],
-                  spacing: {
-                    after: 40,
-                    line: 360,
-                    lineRule: "auto",
-                  },
-                })
-              );
-            } else {
-              paragraphs.push(
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: line,
-                      size: 22,
-                    }),
-                  ],
-                  spacing: {
-                    after: 40,
-                    line: 360,
-                    lineRule: "auto",
-                  },
-                })
-              );
-            }
-          });
-        }
-        
-        // Add extra spacing after experience section
-        paragraphs.push(
-          new Paragraph({
-            spacing: {
-              after: 240,
-            },
-          })
-        );
-        
-        continue;
-      }
-      
-      // Handle different section types
-      if (sectionKey === "achievements" || sectionKey === "goals") {
-        // These are arrays of bullet points
-        const items = sectionContent as string[];
-        
-        // Add a brief introduction for these sections
-        if (sectionKey === "achievements") {
-          paragraphs.push(
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: "Key professional accomplishments with measurable results:",
-                  italics: true,
-                  size: 22,
-                }),
-              ],
-              spacing: {
-                after: 120,
-              },
-            })
-          );
-        } else if (sectionKey === "goals") {
-          paragraphs.push(
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: "Professional objectives and career aspirations:",
-                  italics: true,
-                  size: 22,
-                }),
-              ],
-              spacing: {
-                after: 120,
-              },
-            })
-          );
-        }
-        
-        // Add each item as a bullet point
-        items.forEach((item: string) => {
-          paragraphs.push(
-            new Paragraph({
-              bullet: {
-                level: 0,
-              },
-              children: [
-                new TextRun({
-                  text: item,
-                  size: 22,
-                }),
-              ],
-              spacing: {
-                after: 100,
-                line: 360,
-                lineRule: "auto",
-              },
-            })
-          );
-        });
-        
-        // Add extra spacing after these important sections
-        paragraphs.push(
-          new Paragraph({
-            spacing: {
-              after: 240,
-            },
-          })
-        );
-      } else if (sectionKey === "skills") {
-        // Check if we have skill keywords
-        if (options.industry) {
-          // Add industry tag at the top of skills section
-          paragraphs.push(
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: "Industry: ",
-                  italics: true,
-                  size: 22,
-                }),
-                new TextRun({
-                  text: options.industry,
-                  bold: true,
-                  size: 22,
-                  color: "#B4916C",
-                }),
-              ],
-              spacing: {
-                after: 120,
-              },
-            })
-          );
-        }
-        
-        // Regular text sections
-        const contentText = sectionContent as string;
-        const contentLines = contentText.split('\n').filter((line: string) => line.trim());
-        
-        // For skills section, create a nicely formatted list
-        const skillRegex = /^[•\-*]\s*(.+)$/;
-        const skills: string[] = [];
-        
-        contentLines.forEach((line: string) => {
-          const match = line.match(skillRegex);
-          if (match) {
-            skills.push(match[1].trim());
-          } else if (line.includes(',')) {
-            // Line with comma-separated skills
-            const commaSkills = line.split(',').map(s => s.trim()).filter(s => s);
-            skills.push(...commaSkills);
-          } else {
-            // Regular line, might be a skill
-            skills.push(line.trim());
           }
         });
+      } else {
+        // Generic section handling
+        const contentText = typeof sectionContent === 'string' 
+          ? sectionContent 
+          : Array.isArray(sectionContent) ? sectionContent.join('\n') : '';
+          
+        const contentLines = contentText.split('\n')
+          .filter((line: string) => line.trim() !== "")
+          .map((line: string) => line.trim());
         
-        // Create a grid of skills (3 columns)
-        const skillRows = [];
-        const numCols = 3;
-        
-        for (let i = 0; i < skills.length; i += numCols) {
-          const rowSkills = skills.slice(i, i + numCols);
-          const row = new TableRow({
-            children: rowSkills.map(skill => 
-              new TableCell({
+        contentLines.forEach((line: string) => {
+          // Check if this line looks like a bullet point
+          if (line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*')) {
+            paragraphs.push(
+              new Paragraph({
+                bullet: {
+                  level: 0,
+                },
                 children: [
-                  new Paragraph({
-                    children: [
-                      new TextRun({
-                        text: skill,
-                        size: 22,
-                      }),
-                    ],
-                    spacing: {
-                      after: 40,
-                    },
+                  new TextRun({
+                    text: line.replace(/^[•\-*]\s*/, '').trim(),
+                    size: 22,
                   }),
                 ],
-                width: {
-                  size: 33,
-                  type: WidthType.PERCENTAGE,
-                },
-                margins: {
-                  top: 40,
-                  bottom: 40,
-                  left: 80,
-                  right: 80,
+                spacing: {
+                  after: 40,
+                  line: 360,
+                  lineRule: "auto",
                 },
               })
-            ),
-          });
-          
-          skillRows.push(row);
-        }
-        
-        const skillsTable = new Table({
-          rows: skillRows,
-          width: {
-            size: 100,
-            type: WidthType.PERCENTAGE,
-          },
-          borders: {
-            top: { style: BorderStyle.NONE },
-            bottom: { style: BorderStyle.NONE },
-            left: { style: BorderStyle.NONE },
-            right: { style: BorderStyle.NONE },
-            insideHorizontal: { style: BorderStyle.NONE },
-            insideVertical: { style: BorderStyle.NONE },
-          },
+            );
+          } else {
+            paragraphs.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: line,
+                    size: 22,
+                  }),
+                ],
+                spacing: {
+                  after: 40,
+                  line: 360,
+                  lineRule: "auto",
+                },
+              })
+            );
+          }
         });
-        
-        // Add the table to the document
-        paragraphs.push(new Paragraph({ children: [skillsTable] }));
-        
-        // Add extra spacing after skills section
-        paragraphs.push(
-          new Paragraph({
-            spacing: {
-              after: 240,
-            },
-          })
-        );
-      } else {
-        // Regular text sections
-        const contentText = sectionContent as string;
-        const contentLines = contentText.split('\n').filter((line: string) => line.trim());
-        
-        // For profile section, format as a paragraph
-        if (sectionKey === "profile") {
-          paragraphs.push(
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: contentLines.join(' '),
-                  size: 22,
-                }),
-              ],
-              spacing: {
-                after: 240,
-                line: 360,
-                lineRule: "auto",
-              },
-            })
-          );
-        } else {
-          // For other sections, process line by line
-          contentLines.forEach((line: string) => {
-            // Check if this line looks like a bullet point
-            if (line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*')) {
-              paragraphs.push(
-                new Paragraph({
-                  bullet: {
-                    level: 0,
-                  },
-                  children: [
-                    new TextRun({
-                      text: line.replace(/^[•\-*]\s*/, ''),
-                      size: 22,
-                    }),
-                  ],
-                  spacing: {
-                    after: 80,
-                    line: 360,
-                    lineRule: "auto",
-                  },
-                })
-              );
-            } else {
-              paragraphs.push(
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: line,
-                      size: 22,
-                    }),
-                  ],
-                  spacing: {
-                    after: 80,
-                    line: 360,
-                    lineRule: "auto",
-                  },
-                })
-              );
-            }
-          });
-        }
       }
       
-      // Add extra spacing after each section
+      // Add extra spacing after section
       paragraphs.push(
         new Paragraph({
           spacing: {
-            after: 240,
+            after: 120,
           },
         })
       );
     }
     
-    // Add footer with ATS score if provided
-    if (options.atsScore !== undefined || options.improvedAtsScore !== undefined) {
-      const scoreText = options.improvedAtsScore !== undefined
-        ? `Original ATS Score: ${options.atsScore || 0} | Improved ATS Score: ${options.improvedAtsScore}`
-        : `ATS Score: ${options.atsScore || 0}`;
-        
+    // Add ATS improvement section if data is available
+    if (options.atsScore !== undefined && options.improvedAtsScore !== undefined) {
       paragraphs.push(
         new Paragraph({
           children: [
             new TextRun({
-              text: scoreText,
-              size: 18,
-              color: "999999",
+              text: "ATS OPTIMIZATION SUMMARY",
+              bold: true,
+              size: 24,
+              color: "#B4916C",
             }),
           ],
-          alignment: AlignmentType.CENTER,
           spacing: {
             before: 240,
+            after: 120,
           },
           border: {
-            top: {
+            bottom: {
               color: "#DDDDDD",
               space: 1,
               style: BorderStyle.SINGLE,
@@ -573,29 +375,71 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
         })
       );
       
-      // Add a small branding note
+      // ATS Score improvement
       paragraphs.push(
         new Paragraph({
           children: [
             new TextRun({
-              text: "Generated by CV Optimizer",
-              size: 16,
-              color: "BBBBBB",
+              text: `Original ATS Score: ${Math.round(options.atsScore)}% → Improved: ${Math.round(options.improvedAtsScore)}%`,
+              size: 22,
+              bold: true,
             }),
           ],
-          alignment: AlignmentType.CENTER,
           spacing: {
-            before: 120,
+            after: 120,
           },
         })
       );
+      
+      // Improvements
+      if (options.improvements && options.improvements.length > 0) {
+        paragraphs.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "Key Improvements:",
+                size: 22,
+                bold: true,
+              }),
+            ],
+            spacing: {
+              after: 40,
+            },
+          })
+        );
+        
+        options.improvements.forEach(improvement => {
+          if (improvement && improvement.trim()) {
+            paragraphs.push(
+              new Paragraph({
+                bullet: {
+                  level: 0,
+                },
+                children: [
+                  new TextRun({
+                    text: improvement.trim(),
+                    size: 22,
+                  }),
+                ],
+                spacing: {
+                  after: 40,
+                  line: 360,
+                  lineRule: "auto",
+                },
+              })
+            );
+          }
+        });
+      }
     }
     
-    // Create the document with the paragraphs
+    // Create document with the content
     const doc = new Document({
       creator: authorName,
-      title: fileName,
-      description: "Optimized CV generated by CV Optimizer",
+      description: documentSettings.description,
+      title: documentSettings.title,
+      subject: documentSettings.subject,
+      keywords: documentSettings.keywords,
       styles: {
         paragraphStyles: [
           {
@@ -603,41 +447,119 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
             name: "Heading 1",
             basedOn: "Normal",
             next: "Normal",
-            quickFormat: true,
             run: {
-              size: 32,
+              font: "Calibri",
+              size: 40,
               bold: true,
-              color: "000000",
+              color: "2D5597",
             },
             paragraph: {
               spacing: {
+                after: 240,
+              },
+            },
+          },
+          {
+            id: "Heading2",
+            name: "Heading 2",
+            basedOn: "Normal",
+            next: "Normal",
+            run: {
+              font: "Calibri",
+              size: 26,
+              bold: true,
+              color: "2D5597",
+            },
+            paragraph: {
+              spacing: {
+                before: 240,
                 after: 120,
               },
             },
           },
+          {
+            id: "Normal",
+            name: "Normal",
+            next: "Normal",
+            run: {
+              font: "Calibri",
+              size: 22,
+              color: "000000",
+            },
+            paragraph: {
+              spacing: {
+                line: 276,
+                before: 0,
+                after: 0,
+              },
+            },
+          },
         ],
-      },
-      sections: [{
-        properties: {
-          page: {
-            margin: {
-              top: 1000,
-              right: 1000,
-              bottom: 1000,
-              left: 1000,
+        default: {
+          document: {
+            run: {
+              font: "Calibri",
+              size: 22,
+            },
+            paragraph: {
+              spacing: {
+                line: 276,
+                before: 0,
+                after: 0,
+              },
             },
           },
         },
-        children: paragraphs,
-      }],
+      },
+      numbering: documentSettings.numbering,
+      sections: [
+        {
+          properties: {
+            page: {
+              margin: {
+                top: 1000,
+                right: 1000,
+                bottom: 1000,
+                left: 1000,
+              },
+            },
+          },
+          children: paragraphs,
+        },
+      ],
     });
     
-    // Generate the document as a buffer
-    return await Packer.toBuffer(doc);
+    console.log("Document created successfully, packing to buffer...");
+    
+    // Generate buffer with error handling
+    try {
+      const buffer = await Packer.toBuffer(doc);
+      console.log(`Successfully generated DOCX buffer of size: ${buffer.length} bytes`);
+      return buffer;
+    } catch (packError) {
+      console.error("Error packing document to buffer:", packError);
+      throw new Error(`Failed to create DOCX file: ${packError instanceof Error ? packError.message : String(packError)}`);
+    }
   } catch (error) {
-    console.error("Error generating DOCX:", error);
-    throw new Error("Failed to generate DOCX document");
+    console.error("Error generating document:", error);
+    throw new Error(`Failed to generate CV document: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+/**
+ * Sanitize text input to prevent docx generation issues
+ */
+function sanitizeTextForDocx(text: string): string {
+  // Replace problematic characters that might cause docx corruption
+  return text
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '') // Remove control characters
+    .replace(/\u00A0/g, ' ') // Replace non-breaking spaces with regular spaces
+    .replace(/[\u2018\u2019]/g, "'") // Replace smart quotes
+    .replace(/[\u201C\u201D]/g, '"') // Replace smart double quotes
+    .replace(/[\u2013\u2014]/g, '-') // Replace em/en dashes
+    .replace(/\u2026/g, '...') // Replace ellipsis
+    .replace(/[^\x20-\x7E\u00A0-\u00FF\u0100-\u017F\u0180-\u024F\u0370-\u03FF\u0400-\u04FF\u2000-\u206F\u2200-\u22FF]/g, '') // Allow basic Latin, Latin-1 Supplement, Latin Extended-A/B, Greek, Cyrillic, General Punctuation, Mathematical Operators
+    .replace(/\t/g, '    '); // Replace tabs with spaces
 }
 
 /**
