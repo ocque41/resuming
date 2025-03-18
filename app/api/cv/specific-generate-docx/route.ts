@@ -977,39 +977,107 @@ async function generateSpecificDocx(
       paragraphs.push(skillsHeader);
       
       // Handle content based on type (array or string)
-      let skillItems = Array.isArray(content) ? content : [content];
+      let skillItems = Array.isArray(content) ? [...content] : content.split('\n');
       
-      // Clean skill items to ensure they don't include section headers or non-skills
+      // Specifically exclude problematic strings that look like filter artifacts or job description fragments
+      const blacklistPhrases = [
+        'for yourself', 'including', 'or organizations', 'etc', 'brands', 
+        'currently pursuing', 'recently completed', 'undergraduate', 'graduate degree',
+        'passionate', 'join our team', 'initiatives', 'requirements'
+      ];
+      
+      // Enhanced skill filtering - only keep real skills
       skillItems = skillItems
-        .flatMap(item => typeof item === 'string' ? item.split('\n') : item)
-        .map(skill => typeof skill === 'string' ? skill.trim() : skill)
+        .map(skill => typeof skill === 'string' ? skill.trim() : '')
         .filter(skill => {
-          if (typeof skill !== 'string' || skill.length === 0) {
+          // Skip empty skills
+          if (!skill || skill.length < 2) return false;
+          
+          // Skip common section headers
+          if (/^(SKILLS?|TECHNICAL|PROFESSIONAL|COMPETENC(Y|IES)|QUALIFICATIONS?)$/i.test(skill)) {
             return false;
           }
           
-          // Only filter out obvious non-skills to be more inclusive
-          const isSkillLike = (
-            // Exclude exact section headers
-            !(skill.toUpperCase() === section || 
-              skill.toUpperCase() === 'TECHNICAL SKILLS' || 
-              skill.toUpperCase() === 'PROFESSIONAL SKILLS' || 
-              skill.toUpperCase() === 'SKILLS') &&
+          // Skip skills containing blacklisted phrases
+          for (const phrase of blacklistPhrases) {
+            if (skill.toLowerCase().includes(phrase.toLowerCase())) {
+              return false;
+            }
+          }
+          
+          // Keep only items that look like actual skills
+          const looksLikeSkill = (
+            // Not too long (real skills are typically concise)
+            skill.length < 50 &&
             
-            // Exclude obvious social media profiles
-            !skill.match(/^\s*(https?:\/\/)?(www\.)?([a-z]+\.(com|org|net)\/)/i) &&
+            // Not a URL
+            !skill.includes('http') &&
+            !skill.includes('www.') &&
             
-            // Keep phrases of reasonable length
-            skill.split(' ').length <= 8 &&
+            // Not a complete sentence (too long with spaces and ending punctuation)
+            !(skill.split(' ').length > 5 && skill.match(/[.!?]$/)) &&
             
-            // Should have at least 2 characters to be meaningful
-            skill.replace(/[•\-\*\s]/g, '').length >= 2
+            // Not a job description fragment
+            !skill.includes('required') &&
+            !skill.includes('preferred') &&
+            !skill.includes('seeking') &&
+            !skill.includes('looking for') &&
+            !skill.includes('join our') &&
+            !skill.includes('ideal candidate')
           );
           
-          return isSkillLike;
+          return looksLikeSkill;
         });
       
-      // If we ended up with no skills, try to extract some from job description
+      // If we have too few skills, add more from common skills or extract from job description
+      if (skillItems.length < 5 && jobDescription) {
+        logger.info(`Too few skills found (${skillItems.length}), extracting from job description`);
+        const extractedSkills = extractSkillsFromJobDescription(jobDescription);
+        
+        // Only add skills that aren't already in the list
+        for (const skill of extractedSkills) {
+          if (!skillItems.some(existingSkill => 
+              existingSkill.toLowerCase().includes(skill.toLowerCase()) || 
+              skill.toLowerCase().includes(existingSkill.toLowerCase()))) {
+            skillItems.push(skill);
+          }
+          
+          // Stop once we have a reasonable number of skills
+          if (skillItems.length >= 10) break;
+        }
+      }
+      
+      // Add parenthetical context to skills without it, to make them more specific
+      skillItems = skillItems.map(skill => {
+        // Skip skills that already have context
+        if (skill.includes('(') || skill.includes(' - ')) {
+          return skill;
+        }
+        
+        // Add context to plain skills if they're short enough
+        if (skill.length < 25) {
+          // Possible skill contexts based on the skill section type
+          const contexts = {
+            'TECHNICAL SKILLS': ['(Advanced)', '(Proficient)', '(Expert)', '(Intermediate)'],
+            'PROFESSIONAL SKILLS': ['(Highly Developed)', '(Strong)', '(Expert)', '(Advanced)'],
+            'SKILLS': ['(Proficient)', '(Advanced)', '(Experienced)', '(Expert)'],
+            'OTHER SKILLS': ['(Proficient)', '(Working Knowledge)', '(Competent)', '(Skilled)']
+          };
+          
+          // Get random context for the current section type
+          const sectionContexts = contexts[section] || contexts['SKILLS'];
+          const randomContext = sectionContexts[Math.floor(Math.random() * sectionContexts.length)];
+          
+          return `${skill} ${randomContext}`;
+        }
+        
+        return skill;
+      });
+      
+      // Clean up skill formatting - remove any remaining bullet points since we'll add our own
+      skillItems = skillItems.map(skill => skill.replace(/^[•\-\*\s]+/, ''));
+      
+      // If we still have no skills after all processing, try to extract some from job description
       if (skillItems.length === 0 && jobDescription) {
         logger.info('No skills found after filtering, extracting from job description');
         skillItems = extractSkillsFromJobDescription(jobDescription);
@@ -1904,16 +1972,16 @@ async function tailorCVContentForJob(
   jobTitle?: string,
   companyName?: string
 ): Promise<Record<string, string | string[]>> {
-  // If no job description provided, return sections as is
-  if (!jobDescription) {
-    logger.info('No job description provided, skipping content tailoring');
-    return sections;
-  }
-
   logger.info('Starting CV content tailoring for job match with 80/20 preservation ratio');
   const tailoredSections = { ...sections };
   
   try {
+    // If no job description provided, return sections as is
+    if (!jobDescription) {
+      logger.info('No job description provided, skipping content tailoring');
+      return sections;
+    }
+    
     // Extract key terms from job description
     const keyTerms = extractKeyTermsFromJobDescription(jobDescription);
     logger.info(`Extracted ${keyTerms.length} key terms from job description`);
@@ -1925,6 +1993,13 @@ async function tailorCVContentForJob(
     // Extract goals and expectations from job description (NEW)
     const extractedGoals = extractGoalsFromJobDescription(jobDescription);
     const extractedExpectations = extractExpectationsFromJobDescription(jobDescription);
+    
+    // Extract technical skills from job description to ensure we have them
+    const technicalSkills = extractSkillsFromJobDescription(jobDescription);
+    logger.info(`Extracted ${technicalSkills.length} technical skills from job description`);
+    
+    // Fix any problematic sections before tailoring
+    cleanupSections(tailoredSections);
     
     // Add goals section if it doesn't exist or enhance existing (NEW)
     if (extractedGoals.length > 0) {
@@ -1968,46 +2043,83 @@ async function tailorCVContentForJob(
       );
     }
     
-    // Tailor experience section - highlight relevant experiences
+    // Tailor experience section - reorder and enhance most relevant experience
     if (tailoredSections['EXPERIENCE']) {
       logger.info('Tailoring EXPERIENCE section for job match');
+      
+      // Ensure experience content is properly cleaned
+      let experienceContent = tailoredSections['EXPERIENCE'];
+      
+      // Check if experience content contains job description fragments
+      if (typeof experienceContent === 'string' && 
+          (experienceContent.includes('join our team') || 
+           experienceContent.includes('currently pursuing') ||
+           experienceContent.includes('intern to join'))) {
+        logger.warn('Experience section contains job description fragments - cleaning up');
+        // Clean it up and replace with extracted experience
+        experienceContent = 'Professional experience in ' + keyTerms.slice(0, 5).join(', ');
+      }
+      
+      // Now optimize the cleaned experience
       tailoredSections['EXPERIENCE'] = await optimizeExperienceForJob(
-        tailoredSections['EXPERIENCE'],
+        experienceContent,
         jobDescription,
         keyTerms
       );
     }
     
-    // Tailor skills section - reorder skills based on relevance to job
-    if (tailoredSections['SKILLS'] || tailoredSections['TECHNICAL SKILLS'] || tailoredSections['PROFESSIONAL SKILLS']) {
-      logger.info('Tailoring skills sections for job match');
-      
-      if (tailoredSections['SKILLS']) {
-        tailoredSections['SKILLS'] = await optimizeSkillsForJob(
-          tailoredSections['SKILLS'],
-          jobDescription,
-          keyTerms
-        );
-      }
-      
-      if (tailoredSections['TECHNICAL SKILLS']) {
-        tailoredSections['TECHNICAL SKILLS'] = await optimizeSkillsForJob(
-          tailoredSections['TECHNICAL SKILLS'],
-          jobDescription,
-          keyTerms
-        );
-      }
-      
-      if (tailoredSections['PROFESSIONAL SKILLS']) {
-        tailoredSections['PROFESSIONAL SKILLS'] = await optimizeSkillsForJob(
-          tailoredSections['PROFESSIONAL SKILLS'],
+    // Tailor skills sections - reorder and enhance skills based on relevance
+    const skillSections = ['SKILLS', 'TECHNICAL SKILLS', 'PROFESSIONAL SKILLS'];
+    
+    for (const section of skillSections) {
+      if (tailoredSections[section]) {
+        logger.info(`Tailoring ${section} section for job match`);
+        
+        // Check if skills content contains only job description fragments
+        let skillsContent = tailoredSections[section];
+        
+        // Clean up problematic skills content
+        if (typeof skillsContent === 'string' && 
+            (skillsContent.includes('for yourself') || 
+             skillsContent.includes('including') ||
+             skillsContent.includes('etc') ||
+             skillsContent.includes('brands'))) {
+          logger.warn(`${section} section contains problematic content - replacing with extracted skills`);
+          skillsContent = technicalSkills;
+        } else if (Array.isArray(skillsContent)) {
+          // Filter out problematic items
+          skillsContent = skillsContent.filter(skill => 
+            typeof skill === 'string' && 
+            !skill.includes('for yourself') && 
+            !skill.includes('including') &&
+            !skill.includes('etc') &&
+            !skill.includes('brands') &&
+            skill.length < 50
+          );
+          
+          // If we filtered too much, use extracted skills
+          if (skillsContent.length < 3) {
+            logger.warn(`${section} array has too few valid items - replacing with extracted skills`);
+            skillsContent = technicalSkills;
+          }
+        }
+        
+        // Now optimize the cleaned skills
+        tailoredSections[section] = await optimizeSkillsForJob(
+          skillsContent,
           jobDescription,
           keyTerms
         );
       }
     }
     
-    // Tailor achievements section - highlight relevant achievements
+    // Ensure we have at least one skills section
+    if (!tailoredSections['TECHNICAL SKILLS'] && !tailoredSections['SKILLS'] && !tailoredSections['PROFESSIONAL SKILLS']) {
+      logger.info('No skills sections found - adding TECHNICAL SKILLS from job description');
+      tailoredSections['TECHNICAL SKILLS'] = technicalSkills;
+    }
+    
+    // Tailor achievements section - reorder and enhance most relevant achievements
     if (tailoredSections['ACHIEVEMENTS']) {
       logger.info('Tailoring ACHIEVEMENTS section for job match');
       tailoredSections['ACHIEVEMENTS'] = await optimizeAchievementsForJob(
@@ -2035,17 +2147,7 @@ async function tailorCVContentForJob(
         jobDescription
       );
     }
-    
-    // Extract technical skills from job description to ensure we have them
-    const technicalSkills = extractSkillsFromJobDescription(jobDescription);
-    logger.info(`Extracted ${technicalSkills.length} technical skills from job description`);
-    
-    // Ensure TECHNICAL SKILLS section exists if job requires technical skills
-    if (technicalSkills.length > 0 && !tailoredSections['TECHNICAL SKILLS'] && !tailoredSections['SKILLS']) {
-      logger.info('Adding TECHNICAL SKILLS section from job description');
-      tailoredSections['TECHNICAL SKILLS'] = technicalSkills;
-    }
-    
+ 
     logger.info('CV content tailoring completed successfully with 80/20 preservation ratio');
     return tailoredSections;
   } catch (error) {
@@ -2053,6 +2155,69 @@ async function tailorCVContentForJob(
     logger.error('Error during CV content tailoring:', error instanceof Error ? error.message : String(error));
     return sections;
   }
+}
+
+/**
+ * Helper function to clean up problematic sections before tailoring
+ */
+function cleanupSections(sections: Record<string, string | string[]>): void {
+  // Check for common problematic section content
+  Object.keys(sections).forEach(section => {
+    const content = sections[section];
+    
+    // Clean string content
+    if (typeof content === 'string') {
+      // Check for common problems
+      if (content.includes('join our team') || 
+          content.includes('for yourself') ||
+          content.includes('currently pursuing') ||
+          content.includes('including') ||
+          content.includes('etc.') ||
+          content.includes('brands') ||
+          content.includes('intern to join')) {
+        
+        // This looks like it contains job description text rather than CV content
+        logger.warn(`Section ${section} contains job description fragments - cleaning`);
+        
+        // For skills sections, replace with empty array
+        if (section === 'SKILLS' || section === 'TECHNICAL SKILLS' || section === 'PROFESSIONAL SKILLS') {
+          sections[section] = [];
+        }
+        // For experience, clean it but leave skeleton
+        else if (section === 'EXPERIENCE') {
+          // Extract any useful information
+          const jobTitleMatch = content.match(/([A-Z][A-Za-z\s]+)(?:\s+at\s+|\s*[-–|]\s*)([A-Za-z0-9\s]+)/);
+          if (jobTitleMatch) {
+            sections[section] = `${jobTitleMatch[1]} at ${jobTitleMatch[2]}`;
+          } else {
+            sections[section] = 'Professional experience';
+          }
+        }
+      }
+    }
+    // Clean array content
+    else if (Array.isArray(content)) {
+      const cleanedContent = content.filter(item => {
+        if (typeof item !== 'string') return false;
+        
+        return !item.includes('join our team') && 
+               !item.includes('for yourself') &&
+               !item.includes('currently pursuing') &&
+               !item.includes('including') &&
+               !item.includes('etc.') &&
+               !item.includes('brands') &&
+               !item.includes('intern to join') &&
+               item.length < 100;
+      });
+      
+      // If we filtered out many items, log a warning
+      if (cleanedContent.length < content.length / 2 && content.length > 3) {
+        logger.warn(`Section ${section} had ${content.length - cleanedContent.length} problematic items removed`);
+      }
+      
+      sections[section] = cleanedContent;
+    }
+  });
 }
 
 /**
@@ -2210,112 +2375,52 @@ async function optimizeExperienceForJob(
   jobDescription: string,
   keyTerms: string[]
 ): Promise<string | string[]> {
-  // For array input, score and reorder entries
-  if (Array.isArray(experienceContent)) {
-    // Create a scored version of each entry
-    const scoredEntries = experienceContent.map(entry => {
-      let score = 0;
+  if (!experienceContent || (Array.isArray(experienceContent) && experienceContent.length === 0)) {
+    logger.info('No experience content provided for optimization');
+    return experienceContent;
+  }
+
+  try {
+    logger.info('Optimizing experience content for job');
+    
+    // Convert content to array for consistent handling
+    const experienceItems = Array.isArray(experienceContent) ? experienceContent : [experienceContent];
+    
+    // Enhanced experience optimization strategy
+    let enhancedExperience: string[] = [];
+    
+    for (let i = 0; i < experienceItems.length; i++) {
+      const item = experienceItems[i];
       
-      // Check for key terms
-      for (const term of keyTerms) {
-        if (entry.toLowerCase().includes(term.toLowerCase())) {
-          score += 2;
-        }
+      if (typeof item !== 'string' || item.trim().length === 0) {
+        continue;
       }
       
-      // Check for quantifiable results (usually important)
-      if (entry.match(/\d+%|\$\d+|\d+\s+million|\d+\s+thousand/)) {
-        score += 3;
+      logger.info(`Enhancing experience item ${i + 1} of ${experienceItems.length}`);
+      
+      // Check if it's a substantial experience item to enhance
+      if (item.length > 100) {
+        // This is likely a meaningful experience section, enhance it
+        const enhancedText = await enhanceTextWithMistralAI(item, jobDescription, 'experience');
+        enhancedExperience.push(enhancedText);
+      } else {
+        // For shorter items (like titles), keep as is
+        enhancedExperience.push(item);
       }
-      
-      return { entry, score };
-    });
-    
-    // Sort by score (highest first)
-    scoredEntries.sort((a, b) => b.score - a.score);
-    
-    // Get entries sorted by relevance
-    const sortedEntries = scoredEntries.map(item => item.entry);
-    
-    // Use Mistral AI to enhance the most relevant entries (top 3)
-    if (jobDescription && sortedEntries.length > 0) {
-      logger.info('Using Mistral AI to enhance experience entries');
-      
-      // Only enhance the top entries to be efficient
-      const enhancedEntries = [...sortedEntries]; // Make a copy
-      
-      for (let i = 0; i < Math.min(3, enhancedEntries.length); i++) {
-        enhancedEntries[i] = await enhanceTextWithMistralAI(
-          enhancedEntries[i],
-          jobDescription,
-          'experience'
-        );
-      }
-      
-      return enhancedEntries;
     }
     
-    // Return sorted entries
-    return sortedEntries;
-  }
-  
-  // For string input
-  const experience = experienceContent as string;
-  
-  // Try to split the content into job entries based on line breaks
-  const entries = experience.split(/\n{2,}/);
-  
-  if (entries.length > 1) {
-    // Score each entry
-    const scoredEntries = entries.map(entry => {
-      let score = 0;
-      
-      // Check for key terms
-      for (const term of keyTerms) {
-        if (entry.toLowerCase().includes(term.toLowerCase())) {
-          score += 2;
-        }
-      }
-      
-      return { entry, score };
-    });
-    
-    // Sort by score (highest first)
-    scoredEntries.sort((a, b) => b.score - a.score);
-    
-    // Get entries sorted by relevance
-    const sortedEntries = scoredEntries.map(item => item.entry);
-    
-    // Use Mistral AI to enhance the most relevant entry
-    if (jobDescription && sortedEntries.length > 0) {
-      logger.info('Using Mistral AI to enhance top experience entry');
-      
-      const enhancedEntries = [...sortedEntries];
-      enhancedEntries[0] = await enhanceTextWithMistralAI(
-        enhancedEntries[0],
-        jobDescription,
-        'experience'
-      );
-      
-      return enhancedEntries.join('\n\n');
+    // If we ended up with no enhanced experience, return original
+    if (enhancedExperience.length === 0) {
+      logger.info('No experience enhancements performed, returning original');
+      return experienceContent;
     }
     
-    // Join back together with double newlines
-    return sortedEntries.join('\n\n');
+    // Maintain original format (string or array)
+    return Array.isArray(experienceContent) ? enhancedExperience : enhancedExperience.join('\n');
+  } catch (error) {
+    logger.error(`Error optimizing experience: ${error}`);
+    return experienceContent;
   }
-  
-  // If it's a single continuous text, enhance it directly
-  if (jobDescription) {
-    logger.info('Using Mistral AI to enhance experience section');
-    return await enhanceTextWithMistralAI(
-      experience,
-      jobDescription,
-      'experience'
-    );
-  }
-  
-  // If we couldn't split it or there's only one entry, return as is
-  return experience;
 }
 
 /**
@@ -2326,92 +2431,83 @@ async function optimizeSkillsForJob(
   jobDescription: string,
   keyTerms: string[]
 ): Promise<string | string[]> {
-  // If skills content is empty or undefined, try to extract skills from job description
-  if (!skillsContent || (Array.isArray(skillsContent) && skillsContent.length === 0) || 
-      (typeof skillsContent === 'string' && !skillsContent.trim())) {
-    logger.info('Skills section is empty, extracting skills from job description');
-    
-    // Extract potential skills from job description
-    const extractedSkills = extractSkillsFromJobDescription(jobDescription);
-    
-    // Format as the original content type (array or string)
-    return Array.isArray(skillsContent) ? extractedSkills : extractedSkills.join('\n');
-  }
-
-  // Convert to array if string
-  const skillsArray = Array.isArray(skillsContent) 
-    ? skillsContent 
-    : skillsContent.split('\n').filter(line => line.trim());
+  logger.info('Starting skills optimization for job');
   
-  // Skip processing if no skills are found
-  if (skillsArray.length === 0) {
-    logger.info('No skills found after processing');
-    
-    // Extract skills from job description as fallback
-    const extractedSkills = extractSkillsFromJobDescription(jobDescription);
-    return Array.isArray(skillsContent) ? extractedSkills : extractedSkills.join('\n');
-  }
-  
-  // Calculate relevance score for each skill based on presence in job description and key terms
-  const scoredSkills = skillsArray.map(skill => {
-    let score = 0;
-    
-    // Check if skill is directly mentioned in job description
-    if (jobDescription.toLowerCase().includes(skill.toLowerCase())) {
-      score += 5;
-    }
-    
-    // Check if skill matches any key terms
-    for (const term of keyTerms) {
-      if (skill.toLowerCase().includes(term.toLowerCase()) || 
-          term.toLowerCase().includes(skill.toLowerCase())) {
-        score += 3;
-        break;
-      }
-    }
-    
-    return { skill, score };
-  });
-  
-  // Sort skills by relevance score (highest first)
-  scoredSkills.sort((a, b) => b.score - a.score);
-  
-  // Extract sorted skills
-  const sortedSkills = scoredSkills.map(item => item.skill);
-  
-  // Enhance the skills with Mistral AI
   try {
-    logger.info('Enhancing skills with Mistral AI');
-    
-    // For array input, enhance the top skills
-    if (Array.isArray(skillsContent)) {
-      const enhancedSkills = [...sortedSkills];
+    // Handle empty or missing skills
+    if (!skillsContent || (Array.isArray(skillsContent) && skillsContent.length === 0) || 
+        (typeof skillsContent === 'string' && skillsContent.trim().length === 0)) {
       
-      // Enhance more skills for better coverage
-      for (let i = 0; i < Math.min(10, enhancedSkills.length); i++) {
-        // Enhance all skills, not just the ones with high scores
-        enhancedSkills[i] = await enhanceTextWithMistralAI(
-          enhancedSkills[i],
-          jobDescription,
-          'skills'
+      logger.info('No skills content provided, extracting from job description');
+      
+      // Extract skills from job description as fallback
+      const extractedSkills = extractSkillsFromJobDescription(jobDescription);
+      logger.info(`Extracted ${extractedSkills.length} skills from job description`);
+      
+      // Format skills with appropriate context
+      return extractedSkills.map(skill => {
+        // Determine if skill matches key terms for context
+        const isKeySkill = keyTerms.some(term => 
+          skill.toLowerCase().includes(term.toLowerCase()) || 
+          term.toLowerCase().includes(skill.toLowerCase())
         );
-      }
-      
-      return enhancedSkills;
-    } else {
-      // For string input, enhance the whole skills section
-      const enhancedSkills = await enhanceTextWithMistralAI(
-        sortedSkills.join('\n'),
-        jobDescription,
-        'skills'
-      );
-      
-      return enhancedSkills;
+        
+        // Add appropriate context
+        if (isKeySkill) {
+          const keySkillContexts = ['(Advanced)', '(Expert)', '(Highly Relevant)', '(Key Competency)'];
+          return `${skill} ${keySkillContexts[Math.floor(Math.random() * keySkillContexts.length)]}`;
+        } else {
+          const generalContexts = ['(Proficient)', '(Experienced)', '(Skilled)', '(Competent)'];
+          return `${skill} ${generalContexts[Math.floor(Math.random() * generalContexts.length)]}`;
+        }
+      });
     }
+    
+    // Convert string to array if needed
+    let skillItems: string[] = [];
+    if (typeof skillsContent === 'string') {
+      // Split by newlines and filter empty items
+      skillItems = skillsContent.split('\n')
+        .map(item => item.trim())
+        .filter(item => item.length > 0);
+    } else {
+      // Filter out empty items from array
+      skillItems = skillsContent
+        .filter(item => typeof item === 'string' && item.trim().length > 0)
+        .map(item => item.trim());
+    }
+    
+    // If we still don't have skills, extract from job description
+    if (skillItems.length === 0) {
+      logger.info('Skills content is empty after processing, extracting from job description');
+      const extractedSkills = extractSkillsFromJobDescription(jobDescription);
+      return extractedSkills;
+    }
+    
+    logger.info(`Processing ${skillItems.length} skills`);
+    
+    // Use Mistral AI to enhance entire skills section at once
+    const skillsText = skillItems.join('\n');
+    const enhancedSkillsText = await enhanceTextWithMistralAI(
+      skillsText,
+      jobDescription,
+      'skills'
+    );
+    
+    // Convert back to array
+    const enhancedSkills = enhancedSkillsText
+      .split('\n')
+      .map(skill => skill.trim())
+      .filter(skill => skill.length > 0);
+    
+    logger.info(`Enhanced skills: ${enhancedSkills.length} items`);
+    
+    // Return in original format
+    return Array.isArray(skillsContent) ? enhancedSkills : enhancedSkillsText;
   } catch (error) {
-    logger.error('Error enhancing skills:', error instanceof Error ? error.message : String(error));
-    // Return in original format on error
-    return Array.isArray(skillsContent) ? sortedSkills : sortedSkills.join('\n');
+    logger.error(`Error in skills optimization: ${error}`);
+    // Fallback to original
+    return skillsContent;
   }
 }
 
@@ -2619,154 +2715,229 @@ async function enhanceTextWithMistralAI(
   jobDescription: string,
   enhancementType: 'profile' | 'experience' | 'achievements' | 'skills' | 'languages'
 ): Promise<string> {
-  // This is a placeholder function that would be replaced with actual API integration
-  // For now, we'll just simulate what the AI might do with some basic enhancements
-  
-  logger.info(`Simulating Mistral AI enhancement for ${enhancementType} - preserving 80% original content`);
-  
   try {
-    // Simulate API latency
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // Default to original text - conservative approach
-    let enhancedText = originalText;
-    
-    // Extract key terms from job description
-    const keyTerms = extractKeyTermsFromJobDescription(jobDescription);
-    const topKeyTerms = keyTerms.slice(0, 3); // Reduce from 5 to 3 key terms for more subtle enhancement
-    
-    // Simulate different enhancement types - with minimal changes
-    switch (enhancementType) {
-      case 'profile':
-        // For profile, make very minimal changes
-        if (!originalText.toLowerCase().includes(topKeyTerms[0]?.toLowerCase()) && topKeyTerms.length > 0) {
-          // Add just one key term in a subtle way
-          enhancedText = `${originalText} Experience includes ${topKeyTerms[0]}.`;
-        }
-        break;
-        
-      case 'experience':
-        // For experience, only enhance highly relevant content
-        if (originalText.includes('\n')) {
-          const lines = originalText.split('\n');
-          
-          // Only enhance one or two lines that are highly relevant
-          let enhancementCount = 0;
-          enhancedText = lines.map(line => {
-            // Only enhance up to 2 lines maximum
-            if (enhancementCount < 2) {
-              for (const term of topKeyTerms) {
-                if (line.toLowerCase().includes(term.toLowerCase()) && 
-                  !line.includes('•') && line.length > 20) {
-                  enhancementCount++;
-                  // Just add a bullet point for important achievements
-                  return `• ${line}`;
-                }
-              }
-            }
-            return line;
-          }).join('\n');
-        }
-        break;
-        
-      case 'achievements':
-        // For achievements, make minimal enhancements to relevant items
-        // Only enhance if achievement has no quantifiable results and mentions a key term
-        if (!originalText.match(/\d+%|\$\d+|\d+\s+million|\d+\s+thousand/)) {
-          for (const term of topKeyTerms) {
-            if (originalText.toLowerCase().includes(term.toLowerCase())) {
-              // Add a subtle quantifiable element, preserving most original content
-              enhancedText = `${originalText} with positive results`;
-              break;
-            }
-          }
-        }
-        
-        // Only add an action verb if it clearly doesn't start with one
-        const actionVerbs = ['Achieved', 'Delivered', 'Implemented', 'Managed', 'Developed', 'Led', 'Created', 'Improved'];
-        const startsWithActionVerb = actionVerbs.some(verb => 
-          originalText.startsWith(verb) || originalText.startsWith('• ' + verb)
-        );
-        
-        if (!startsWithActionVerb && 
-            !originalText.match(/^[A-Z][a-z]+/) && // Doesn't start with a capitalized word
-            !originalText.startsWith('•')) {
-          // Only add verb if text doesn't already start with a good beginning
-          const randomVerb = actionVerbs[Math.floor(Math.random() * actionVerbs.length)];
-          enhancedText = `${randomVerb} ${originalText}`;
-        }
-        break;
-        
-      case 'languages':
-        // For languages, only add proficiency if it's completely missing
-        if (originalText) {
-          const parts = originalText.split(/[-:]/);
-          
-          if (parts.length === 1 && 
-              !originalText.toLowerCase().includes('fluent') && 
-              !originalText.toLowerCase().includes('native') && 
-              !originalText.toLowerCase().includes('proficient') && 
-              !originalText.toLowerCase().includes('level') && 
-              !originalText.match(/\d/)) { // No numbers (indicating levels)
-            // Only then add a minimal proficiency indicator
-            const languageName = parts[0].trim();
-            enhancedText = `${languageName} - Proficient`;
-          }
-        }
-        break;
-        
-      case 'skills':
-        // For skills, make minimal job-specific enhancement
-        if (originalText) {
-          // Skip if the skill already includes any context
-          if (!originalText.includes('(') && 
-              !originalText.includes(' - ') && 
-              !originalText.includes(':') && 
-              originalText.length < 30) {
-              
-            // Check if skill matches job description terms
-            let hasMatch = false;
-            for (const term of keyTerms) {
-              if (originalText.toLowerCase().includes(term.toLowerCase()) ||
-                  term.toLowerCase().includes(originalText.toLowerCase())) {
-                hasMatch = true;
-                break;
-              }
-            }
+    if (!originalText || originalText.trim().length === 0) {
+      logger.info(`Empty ${enhancementType} provided for enhancement, returning original`);
+      return originalText;
+    }
 
-            // Add relevant context based on match
-            if (hasMatch) {
-              // Choose a more specific context phrase
-              const contextPhrases = [
-                `(highly relevant)`,
-                `(key requirement)`,
-                `(directly applicable)`,
-                `(core competency)`,
-                `(essential for role)`
-              ];
-              const randomPhrase = contextPhrases[Math.floor(Math.random() * contextPhrases.length)];
-              enhancedText = `${originalText} ${randomPhrase}`;
-            } 
-            // Even for non-matching skills, provide some context 
-            else if (originalText.length < 20) {
-              const generalPhrases = [
-                `(proficient)`,
-                `(experienced)`,
-                `(working knowledge)`,
-                `(transferable skill)`
-              ];
-              const randomPhrase = generalPhrases[Math.floor(Math.random() * generalPhrases.length)];
-              enhancedText = `${originalText} ${randomPhrase}`;
-            }
-          }
-        }
-        break;
+    // Only enhance if the original text is not too short or not too long
+    if (originalText.length < 25 || originalText.length > 5000) {
+      logger.info(`${enhancementType} text length (${originalText.length}) outside enhancement range, returning original`);
+      return originalText;
+    }
+
+    logger.info(`Enhancing ${enhancementType} with Mistral AI`);
+    
+    const enhancementPrompts = {
+      profile: 'Enhance this professional profile summary to highlight relevant experience and skills for the job description. Keep the same information but make it more impactful and targeted to the position.',
+      experience: 'Enhance this work experience to emphasize achievements and responsibilities relevant to the job description. Use action verbs and quantify achievements where possible. Maintain factual accuracy and do not invent new experience.',
+      achievements: 'Enhance these professional achievements to make them more impactful and relevant to the job description. Quantify results where possible and emphasize transferable skills.',
+      skills: 'Enhance these skills by highlighting those most relevant to the job description. Format them clearly and add appropriate proficiency levels if missing.',
+      languages: 'Format these language skills clearly, including proficiency levels if available.'
+    };
+
+    // Add job description key terms extraction for better targeting
+    const keyTerms = extractKeyTermsFromJobDescription(jobDescription);
+    logger.info(`Extracted ${keyTerms.length} key terms from job description`);
+
+    // Build the prompt
+    const prompt = `
+    ORIGINAL TEXT:
+    ${originalText.trim()}
+    
+    JOB DESCRIPTION:
+    ${jobDescription.trim()}
+    
+    KEY TERMS FROM JOB DESCRIPTION:
+    ${keyTerms.join(', ')}
+    
+    TASK: ${enhancementPrompts[enhancementType]}
+    
+    IMPORTANT GUIDELINES:
+    1. Preserve ALL factual information from the original text - do not remove or invent details
+    2. Maintain the same overall structure and type of content
+    3. Focus on enhancing relevance to the job description by emphasizing matching skills and experience
+    4. Format appropriately for a professional CV/resume
+    5. For experience, use past tense and action verbs
+    6. For profile/summary, use present tense
+    7. For skills, create a clean list with appropriate context about proficiency level
+    8. Do not introduce job description text as if it were the candidate's experience
+    
+    ENHANCED TEXT:
+    `;
+
+    // Special handling for skills to improve extraction
+    if (enhancementType === 'skills') {
+      // For skills, extract terms directly from job description too
+      const extractedSkills = extractSkillsFromJobDescription(jobDescription);
+      
+      return await callMistralRagAPIWithSkillsContext(originalText, jobDescription, extractedSkills, prompt);
     }
     
-    return enhancedText;
+    // Special handling for experience to improve accuracy
+    if (enhancementType === 'experience') {
+      return await callMistralRagAPIWithExperienceContext(originalText, jobDescription, prompt);
+    }
+
+    // Regular enhancement for other section types
+    const response = await callMistralRagAPI(originalText, jobDescription, prompt);
+    return response.trim();
   } catch (error) {
-    logger.error('Error in Mistral AI enhancement:', error instanceof Error ? error.message : String(error));
-    return originalText; // Fall back to original on error
+    logger.error(`Error enhancing ${enhancementType} with Mistral AI: ${error}`);
+    return originalText;
+  }
+}
+
+/**
+ * Call Mistral AI API with special handling for skills content
+ */
+async function callMistralRagAPIWithSkillsContext(
+  originalText: string, 
+  jobDescription: string,
+  extractedSkills: string[],
+  prompt: string
+): Promise<string> {
+  try {
+    // Enhance the prompt with specific skills extraction guidance
+    const enhancedPrompt = `${prompt}
+    
+    ADDITIONAL GUIDANCE FOR SKILLS:
+    1. The CV contains specific skills that should be preserved in your output
+    2. The following skills are directly relevant to the job description and should be emphasized:
+       ${extractedSkills.join(', ')}
+    3. Format each skill as a separate bullet point
+    4. Add context about proficiency level to skills that don't have it (e.g., "Expert", "Advanced", "Proficient")
+    5. Exclude any generic phrases that aren't specific skills
+    6. Don't include job duties or responsibilities as skills
+    
+    FINAL ENHANCED SKILLS LIST:
+    `;
+    
+    // Call Mistral API with enhanced prompt
+    const response = await callMistralRagAPI(originalText, jobDescription, enhancedPrompt);
+    
+    // Process the response to ensure it's well-formatted
+    let enhancedSkills = response.trim();
+    
+    // If there's no bullet points, add them
+    if (!enhancedSkills.includes('•') && !enhancedSkills.includes('-')) {
+      enhancedSkills = enhancedSkills
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0)
+        .map(line => `• ${line}`)
+        .join('\n');
+    }
+    
+    return enhancedSkills;
+  } catch (error) {
+    logger.error(`Error enhancing skills with Mistral AI: ${error}`);
+    return originalText;
+  }
+}
+
+/**
+ * Call Mistral AI API with special handling for experience content
+ */
+async function callMistralRagAPIWithExperienceContext(
+  originalText: string, 
+  jobDescription: string,
+  prompt: string
+): Promise<string> {
+  try {
+    // First, try to extract the job titles and companies from the original text
+    const jobTitleRegex = /(?:^|\n)([A-Z][A-Za-z\s]+)(?:\s+at\s+|\s*[-–|]\s*)([A-Za-z0-9\s]+)(?:,\s|\n|$)/g;
+    let match;
+    const jobMatches = [];
+    
+    while ((match = jobTitleRegex.exec(originalText)) !== null) {
+      jobMatches.push({
+        title: match[1].trim(),
+        company: match[2].trim()
+      });
+    }
+    
+    // Enhance the prompt with specific experience extraction guidance
+    const enhancedPrompt = `${prompt}
+    
+    ADDITIONAL GUIDANCE FOR WORK EXPERIENCE:
+    1. The CV contains specific job titles and employers that MUST be preserved exactly in your output
+    2. The following job positions were identified in the original CV and should be maintained:
+       ${jobMatches.map(m => `${m.title} at ${m.company}`).join('\n       ')}
+    3. Format each experience entry with the job title, company, and relevant responsibilities/achievements
+    4. Use bullet points for responsibilities and achievements
+    5. Focus on highlighting experiences most relevant to the job description
+    6. Use past tense and action verbs for all descriptions
+    7. DO NOT include text from the job description as if it were the candidate's experience
+    
+    FINAL ENHANCED EXPERIENCE:
+    `;
+    
+    // Call Mistral API with enhanced prompt
+    const response = await callMistralRagAPI(originalText, jobDescription, enhancedPrompt);
+    
+    return response.trim();
+  } catch (error) {
+    logger.error(`Error enhancing experience with Mistral AI: ${error}`);
+    return originalText;
+  }
+}
+
+/**
+ * Call Mistral AI RAG API with the given prompt
+ */
+async function callMistralRagAPI(originalText: string, jobDescription: string, prompt: string): Promise<string> {
+  try {
+    const url = process.env.MISTRAL_API_URL || 'https://api.mistral.ai/v1/chat/completions';
+    const apiKey = process.env.MISTRAL_API_KEY;
+    
+    if (!apiKey) {
+      logger.error('Mistral API key not found');
+      return originalText;
+    }
+    
+    logger.info('Calling Mistral AI API for RAG processing');
+    
+    const messages = [
+      {
+        role: 'system',
+        content: `You are an expert CV/resume writer specialized in tailoring resumes to job descriptions. 
+        Your task is to enhance CV content to better match job requirements while maintaining all original factual information.
+        You must never invent new experience or qualifications.
+        You must not mix job description text as if it were the candidate's own experience.`
+      },
+      {
+        role: 'user',
+        content: prompt
+      }
+    ];
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'mistral-large-latest',
+        messages,
+        temperature: 0.4,
+        max_tokens: 4000,
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error(`Mistral API error: ${response.status} ${errorText}`);
+      return originalText;
+    }
+    
+    const data = await response.json();
+    return data.choices[0].message.content;
+  } catch (error) {
+    logger.error(`Error calling Mistral AI: ${error}`);
+    return originalText;
   }
 }
 

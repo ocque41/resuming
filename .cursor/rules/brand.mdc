@@ -4,9 +4,9 @@ globs:
 ---
 Brand
 
-main color 050505
-second color (text) FFFFFF
+main color #050505
+second color (text) #F9F6EE
 brand color #333333
-minor touches #image.pngB4916C
+minor touches #B4916C
 mobile framework
 modern/minimalistic style
