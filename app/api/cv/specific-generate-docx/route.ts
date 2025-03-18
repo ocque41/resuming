@@ -181,7 +181,7 @@ async function generateSpecificDocx(
   
   // Enhanced deduplication - handle duplicate Profile and Summary sections
   if (sections['PROFILE'] && sections['SUMMARY']) {
-    logger.info('Found both PROFILE and SUMMARY sections - merging to avoid duplication');
+    logger.info('Found both PROFILE and SUMMARY sections - handling duplication');
     
     // Get content from both sections
     const profileContent = typeof sections['PROFILE'] === 'string' 
@@ -192,57 +192,79 @@ async function generateSpecificDocx(
       ? sections['SUMMARY'] 
       : Array.isArray(sections['SUMMARY']) ? sections['SUMMARY'].join(' ') : '';
     
+    logger.info(`PROFILE content length: ${profileContent.length}, SUMMARY content length: ${summaryContent.length}`);
+    
     // Check if they're not identical (to avoid redundancy)
     if (profileContent.toLowerCase().trim() !== summaryContent.toLowerCase().trim()) {
       // Only merge if they're different
       sections['PROFILE'] = profileContent + (profileContent && summaryContent ? '\n\n' : '') + summaryContent;
-      logger.info('Merged SUMMARY section into PROFILE to avoid duplication');
+      logger.info(`Merged SUMMARY section into PROFILE to create combined section of ${sections['PROFILE'].length} chars`);
+    } else {
+      logger.info('PROFILE and SUMMARY have identical content - keeping only PROFILE');
     }
     
     // Remove the SUMMARY section after merging
     delete sections['SUMMARY'];
-    logger.info('Removed SUMMARY section after merging with PROFILE');
+    logger.info('Removed SUMMARY section after handling - it will not appear separately in the document');
   }
   
-  // Handle section capitalization duplicates like "Profile" and "PROFILE"
-  Object.keys(sections).forEach(section => {
-    const uppercaseSection = section.toUpperCase();
-    if (section !== uppercaseSection && sections[uppercaseSection]) {
-      logger.info(`Found duplicate section with different capitalization: ${section} and ${uppercaseSection}`);
-      
-      // Merge content if needed
-      if (typeof sections[section] === 'string' && typeof sections[uppercaseSection] === 'string') {
-        sections[uppercaseSection] += '\n\n' + sections[section];
-      }
-      
-      // Delete the duplicate
-      delete sections[section];
-      logger.info(`Removed duplicate section ${section}, keeping ${uppercaseSection}`);
-    }
-  });
-
-  // Handle uppercase variants like "Skills" and "SKILLS"
+  // Normalize section names to standard uppercase format (e.g., "Skills" -> "SKILLS")
+  // This helps with deduplication of differently-cased section names
   const normalizedSectionNames: Record<string, string> = {
     'profile': 'PROFILE',
-    'summary': 'SUMMARY',
+    'summary': 'SUMMARY', 
     'skills': 'SKILLS',
     'technical skills': 'TECHNICAL SKILLS',
     'professional skills': 'PROFESSIONAL SKILLS',
     'experience': 'EXPERIENCE',
     'education': 'EDUCATION',
-    'achievements': 'ACHIEVEMENTS',
     'languages': 'LANGUAGES',
+    'achievements': 'ACHIEVEMENTS',
     'goals': 'GOALS',
-    'expectations': 'EXPECTATIONS'
+    'expectations': 'EXPECTATIONS',
+    'references': 'REFERENCES'
   };
 
-  // Normalize all section names to uppercase versions
-  Object.keys(sections).forEach(section => {
-    const sectionLower = section.toLowerCase();
-    if (normalizedSectionNames[sectionLower] && normalizedSectionNames[sectionLower] !== section) {
-      logger.info(`Normalizing section name from ${section} to ${normalizedSectionNames[sectionLower]}`);
-      sections[normalizedSectionNames[sectionLower]] = sections[section];
-      delete sections[section];
+  // Process each section with any non-standard capitalization
+  Object.keys(sections).forEach(sectionName => {
+    const lowerSection = sectionName.toLowerCase();
+    
+    // If this section name has a standard normalized form and it's not already in that form
+    if (normalizedSectionNames[lowerSection] && sectionName !== normalizedSectionNames[lowerSection]) {
+      const normalizedName = normalizedSectionNames[lowerSection];
+      
+      logger.info(`Normalizing section name from "${sectionName}" to "${normalizedName}"`);
+      
+      // If the normalized section already exists, merge the content
+      if (sections[normalizedName]) {
+        logger.info(`Found duplicate section with different capitalization: ${sectionName} and ${normalizedName}`);
+        
+        // Handle string or array content for merging
+        if (typeof sections[sectionName] === 'string' && typeof sections[normalizedName] === 'string') {
+          sections[normalizedName] += '\n\n' + sections[sectionName];
+          logger.info(`Merged content from ${sectionName} into ${normalizedName}`);
+        } else if (Array.isArray(sections[sectionName]) && Array.isArray(sections[normalizedName])) {
+          sections[normalizedName] = [...sections[normalizedName], ...sections[sectionName]];
+          logger.info(`Merged array content from ${sectionName} into ${normalizedName}`);
+        } else {
+          // Convert mixed types if needed
+          if (typeof sections[sectionName] === 'string' && Array.isArray(sections[normalizedName])) {
+            sections[normalizedName].push(sections[sectionName]);
+            logger.info(`Added string content from ${sectionName} to array in ${normalizedName}`);
+          } else if (Array.isArray(sections[sectionName]) && typeof sections[normalizedName] === 'string') {
+            sections[normalizedName] = [sections[normalizedName], ...sections[sectionName]].join('\n\n');
+            logger.info(`Merged array from ${sectionName} into string content in ${normalizedName}`);
+          }
+        }
+      } else {
+        // If the normalized section doesn't exist yet, just move this content to the normalized name
+        sections[normalizedName] = sections[sectionName];
+        logger.info(`Moved content from ${sectionName} to standard form ${normalizedName}`);
+      }
+      
+      // Remove the non-standard section name
+      delete sections[sectionName];
+      logger.info(`Removed non-standard section ${sectionName} after normalization`);
     }
   });
 
@@ -305,95 +327,13 @@ async function generateSpecificDocx(
         }
       }
     }
-  }
-  
-  // Finally, remove generic SKILLS if we have specific skill sections
-  if (sections['SKILLS']) {
-    // If we have specific skills sections, merge the generic skills into them
-    if (sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS']) {
-      const genericSkills = typeof sections['SKILLS'] === 'string'
-        ? sections['SKILLS'].split('\n')
-        : sections['SKILLS'];
-      
-      // Create a set of all existing skills from specific sections
-      const existingSkills = new Set<string>();
-      
-      // Add technical skills to the set if they exist
-      if (sections['TECHNICAL SKILLS']) {
-        const technicalSkills = typeof sections['TECHNICAL SKILLS'] === 'string'
-          ? sections['TECHNICAL SKILLS'].split('\n')
-          : sections['TECHNICAL SKILLS'];
-        
-        technicalSkills.forEach(skill => 
-          existingSkills.add(skill.toLowerCase().trim()));
-      }
-      
-      // Add professional skills to the set if they exist
-      if (sections['PROFESSIONAL SKILLS']) {
-        const professionalSkills = typeof sections['PROFESSIONAL SKILLS'] === 'string'
-          ? sections['PROFESSIONAL SKILLS'].split('\n')
-          : sections['PROFESSIONAL SKILLS'];
-        
-        professionalSkills.forEach(skill => 
-          existingSkills.add(skill.toLowerCase().trim()));
-      }
-      
-      // Clean generic skills and filter out duplicates
-      const cleanedGenericSkills = genericSkills
-        .filter(skill => skill.trim())
-        .map(skill => skill.replace(/^skills:?\s*/i, '').trim())
-        .filter(skill => !existingSkills.has(skill.toLowerCase().trim()));
-      
-      // If we have unique generic skills, add them to an appropriate section
-      if (cleanedGenericSkills.length > 0) {
-        logger.info(`Found ${cleanedGenericSkills.length} unique skills in generic SKILLS section`);
-        
-        // Prefer adding to technical skills if it exists
-        if (sections['TECHNICAL SKILLS']) {
-          const currentTechnical = typeof sections['TECHNICAL SKILLS'] === 'string'
-            ? sections['TECHNICAL SKILLS'].split('\n')
-            : sections['TECHNICAL SKILLS'];
-          
-          const updatedTechnicalSkills = [...currentTechnical, ...cleanedGenericSkills];
-          
-          sections['TECHNICAL SKILLS'] = Array.isArray(sections['TECHNICAL SKILLS'])
-            ? updatedTechnicalSkills
-            : updatedTechnicalSkills.join('\n');
-          
-          logger.info(`Added ${cleanedGenericSkills.length} unique skills from SKILLS to TECHNICAL SKILLS`);
-        }
-        // Otherwise add to professional skills
-        else if (sections['PROFESSIONAL SKILLS']) {
-          const currentProfessional = typeof sections['PROFESSIONAL SKILLS'] === 'string'
-            ? sections['PROFESSIONAL SKILLS'].split('\n')
-            : sections['PROFESSIONAL SKILLS'];
-          
-          const updatedProfessionalSkills = [...currentProfessional, ...cleanedGenericSkills];
-          
-          sections['PROFESSIONAL SKILLS'] = Array.isArray(sections['PROFESSIONAL SKILLS'])
-            ? updatedProfessionalSkills
-            : updatedProfessionalSkills.join('\n');
-          
-          logger.info(`Added ${cleanedGenericSkills.length} unique skills from SKILLS to PROFESSIONAL SKILLS`);
-        }
-        // If we don't have either specific section, create a technical skills section
-        else {
-          sections['TECHNICAL SKILLS'] = Array.isArray(sections['SKILLS'])
-            ? cleanedGenericSkills
-            : cleanedGenericSkills.join('\n');
-          
-          logger.info(`Created TECHNICAL SKILLS section with ${cleanedGenericSkills.length} skills from SKILLS`);
-        }
-      }
-      
-      // Remove the generic SKILLS section as its content is now in specific sections
+    
+    // Finally, remove generic SKILLS if we have specific skill sections
+    if (sections['SKILLS']) {
+      // We already have specific skills sections, we can safely remove the generic one
       delete sections['SKILLS'];
-      logger.info('Removed generic SKILLS section after processing its content');
+      logger.info('Removed generic SKILLS section as specific skill sections exist');
     }
-  }
-  // If we only have generic SKILLS section, keep it
-  else if (sections['SKILLS']) {
-    logger.info('Keeping generic SKILLS section as no specific skills sections exist');
   }
   
   // More detailed logging for debugging section parsing
@@ -436,15 +376,25 @@ async function generateSpecificDocx(
 
   // Process each section in order with enhanced Profile formatting
   for (const section of ['Header', 'PROFILE', 'ACHIEVEMENTS', 'GOALS', 'EXPECTATIONS', 'EXPERIENCE', 'LANGUAGES', 'EDUCATION', 'SKILLS', 'TECHNICAL SKILLS', 'PROFESSIONAL SKILLS', 'REFERENCES']) {
-    // Skip if section doesn't exist or was already processed (e.g., SUMMARY merged into PROFILE)
-    if (!sections[section]) continue;
-    
-    // Skip certain sections if their equivalents exist to prevent duplication
-    if ((section === 'SKILLS' && (sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS'])) ||
-        (section === 'SUMMARY' && sections['PROFILE'])) {
-      logger.info(`Skipping ${section} section to prevent duplication with more specific sections`);
+    // Skip if section doesn't exist
+    if (!sections[section]) {
+      logger.info(`Section ${section} does not exist, skipping`);
       continue;
     }
+    
+    // Skip SUMMARY section if PROFILE exists (redundant check, as we already merge these earlier)
+    if (section === 'SUMMARY' && sections['PROFILE']) {
+      logger.info(`Skipping SUMMARY section as PROFILE already exists - preventing duplication`);
+      continue;
+    }
+    
+    // Skip generic SKILLS section if specific skills sections exist
+    if (section === 'SKILLS' && (sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS'])) {
+      logger.info(`Skipping generic SKILLS section as specific skills sections exist - preventing duplication`);
+      continue;
+    }
+    
+    logger.info(`Processing section: ${section} (${typeof sections[section] === 'string' ? sections[section].length : 'array'} chars)`);
     
     // Get content for this section
     const content = sections[section];
