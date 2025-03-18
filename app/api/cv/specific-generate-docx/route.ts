@@ -176,28 +176,14 @@ async function generateSpecificDocx(
 ): Promise<Buffer> {
     logger.info('Starting document generation process');
     
-  // Order of sections to process
-    const sectionOrder = [
-      'Header',
-      'PROFILE', 
-      'ACHIEVEMENTS',
-      'GOALS', 
-      'EXPECTATIONS',
-      'EXPERIENCE',
-      'LANGUAGES',
-      'EDUCATION',
-      'SKILLS', 
-      'TECHNICAL SKILLS', 
-      'PROFESSIONAL SKILLS',
-      'REFERENCES'
-  ];
-  
   // Parse the CV text into sections
   const sections = parseOptimizedText(cvText);
   
-  // Merge PROFILE and SUMMARY sections to avoid duplication
+  // Enhanced deduplication - handle duplicate Profile and Summary sections
   if (sections['PROFILE'] && sections['SUMMARY']) {
-    // Extract and merge the content
+    logger.info('Found both PROFILE and SUMMARY sections - merging to avoid duplication');
+    
+    // Get content from both sections
     const profileContent = typeof sections['PROFILE'] === 'string' 
       ? sections['PROFILE'] 
       : Array.isArray(sections['PROFILE']) ? sections['PROFILE'].join(' ') : '';
@@ -206,64 +192,156 @@ async function generateSpecificDocx(
       ? sections['SUMMARY'] 
       : Array.isArray(sections['SUMMARY']) ? sections['SUMMARY'].join(' ') : '';
     
-    // Check if they're not identical to avoid redundancy
+    // Check if they're not identical (to avoid redundancy)
     if (profileContent.toLowerCase().trim() !== summaryContent.toLowerCase().trim()) {
       // Only merge if they're different
-      sections['PROFILE'] = profileContent + (profileContent && summaryContent ? ' ' : '') + summaryContent;
+      sections['PROFILE'] = profileContent + (profileContent && summaryContent ? '\n\n' : '') + summaryContent;
       logger.info('Merged SUMMARY section into PROFILE to avoid duplication');
     }
     
-    // Remove the SUMMARY section as its content is now in PROFILE
+    // Remove the SUMMARY section after merging
     delete sections['SUMMARY'];
     logger.info('Removed SUMMARY section after merging with PROFILE');
   }
   
-  // Special handling for Technical and Professional Skills to avoid duplications
+  // Handle section capitalization duplicates like "Profile" and "PROFILE"
+  Object.keys(sections).forEach(section => {
+    const uppercaseSection = section.toUpperCase();
+    if (section !== uppercaseSection && sections[uppercaseSection]) {
+      logger.info(`Found duplicate section with different capitalization: ${section} and ${uppercaseSection}`);
+      
+      // Merge content if needed
+      if (typeof sections[section] === 'string' && typeof sections[uppercaseSection] === 'string') {
+        sections[uppercaseSection] += '\n\n' + sections[section];
+      }
+      
+      // Delete the duplicate
+      delete sections[section];
+      logger.info(`Removed duplicate section ${section}, keeping ${uppercaseSection}`);
+    }
+  });
+
+  // Handle uppercase variants like "Skills" and "SKILLS"
+  const normalizedSectionNames: Record<string, string> = {
+    'profile': 'PROFILE',
+    'summary': 'SUMMARY',
+    'skills': 'SKILLS',
+    'technical skills': 'TECHNICAL SKILLS',
+    'professional skills': 'PROFESSIONAL SKILLS',
+    'experience': 'EXPERIENCE',
+    'education': 'EDUCATION',
+    'achievements': 'ACHIEVEMENTS',
+    'languages': 'LANGUAGES',
+    'goals': 'GOALS',
+    'expectations': 'EXPECTATIONS'
+  };
+
+  // Normalize all section names to uppercase versions
+  Object.keys(sections).forEach(section => {
+    const sectionLower = section.toLowerCase();
+    if (normalizedSectionNames[sectionLower] && normalizedSectionNames[sectionLower] !== section) {
+      logger.info(`Normalizing section name from ${section} to ${normalizedSectionNames[sectionLower]}`);
+      sections[normalizedSectionNames[sectionLower]] = sections[section];
+      delete sections[section];
+    }
+  });
+
+  // Enhanced skills section deduplication
+  // If we have TECHNICAL SKILLS or PROFESSIONAL SKILLS, remove generic SKILLS
+  if ((sections['TECHNICAL SKILLS'] || sections['PROFESSIONAL SKILLS']) && sections['SKILLS']) {
+    logger.info('Removing generic SKILLS section since specific skills sections exist');
+    delete sections['SKILLS'];
+  }
+
+  // Deduplicate content between Professional Skills and Technical Skills
   if (sections['TECHNICAL SKILLS'] && sections['PROFESSIONAL SKILLS']) {
+    logger.info('Deduplicating between TECHNICAL SKILLS and PROFESSIONAL SKILLS');
+    
     // Convert to arrays for easier processing
     let technicalSkills = Array.isArray(sections['TECHNICAL SKILLS']) 
       ? sections['TECHNICAL SKILLS'] 
-      : [sections['TECHNICAL SKILLS']];
-    
+      : typeof sections['TECHNICAL SKILLS'] === 'string'
+        ? sections['TECHNICAL SKILLS'].split('\n')
+        : [];
+        
     let professionalSkills = Array.isArray(sections['PROFESSIONAL SKILLS']) 
       ? sections['PROFESSIONAL SKILLS'] 
-      : [sections['PROFESSIONAL SKILLS']];
+      : typeof sections['PROFESSIONAL SKILLS'] === 'string'
+        ? sections['PROFESSIONAL SKILLS'].split('\n')
+        : [];
+    
+    // Clean skill entries
+    technicalSkills = technicalSkills.map(skill => 
+      typeof skill === 'string' ? skill.trim() : skill
+    ).filter(skill => 
+      typeof skill === 'string' && 
+      skill.length > 0 && 
+      !skill.toUpperCase().includes('TECHNICAL SKILLS') &&
+      !skill.toUpperCase().includes('SKILL'));
+    
+    professionalSkills = professionalSkills.map(skill => 
+      typeof skill === 'string' ? skill.trim() : skill
+    ).filter(skill => 
+      typeof skill === 'string' && 
+      skill.length > 0 && 
+      !skill.toUpperCase().includes('PROFESSIONAL SKILLS') &&
+      !skill.toUpperCase().includes('SKILL'));
+    
+    // Also remove any standalone labels that might be duplicated
+    // This specifically targets the "Blender" issue in the screenshot
+    const standaloneLabels = new Set<string>();
+    
+    // Identify standalone labels (usually applications or tools like "Blender")
+    [...technicalSkills, ...professionalSkills].forEach(skill => {
+      if (typeof skill === 'string' && skill.trim().length > 0 && skill.trim().split(/\s+/).length === 1) {
+        standaloneLabels.add(skill.trim().toLowerCase());
+      }
+    });
+    
+    // Filter out duplicate standalone labels
+    let hasProcessedLabel = new Set<string>();
+    
+    technicalSkills = technicalSkills.filter(skill => {
+      if (typeof skill !== 'string') return false;
+      const trimmed = skill.trim();
       
-    // Clean skills arrays
-    technicalSkills = technicalSkills
-      .flatMap(item => typeof item === 'string' ? item.split('\n') : item)
-      .map(skill => typeof skill === 'string' ? skill.trim() : skill)
-      .filter(skill => 
-        typeof skill === 'string' && 
-        skill.length > 0 && 
-        !skill.toUpperCase().includes('TECHNICAL SKILLS') &&
-        !skill.toUpperCase().includes('SKILL'));
-        
-    professionalSkills = professionalSkills
-      .flatMap(item => typeof item === 'string' ? item.split('\n') : item)
-      .map(skill => typeof skill === 'string' ? skill.trim() : skill)
-      .filter(skill => 
-        typeof skill === 'string' && 
-        skill.length > 0 && 
-        !skill.toUpperCase().includes('PROFESSIONAL SKILLS') &&
-        !skill.toUpperCase().includes('SKILL'));
+      // Check if it's a standalone label that we've seen before
+      if (trimmed.split(/\s+/).length === 1) {
+        const lower = trimmed.toLowerCase();
+        if (hasProcessedLabel.has(lower)) return false;
+        hasProcessedLabel.add(lower);
+      }
+      return true;
+    });
     
-    // Create a set of technical skills (case insensitive) for comparison
-    const technicalSkillsSet = new Set(technicalSkills.map(s => typeof s === 'string' ? s.toLowerCase() : ''));
+    professionalSkills = professionalSkills.filter(skill => {
+      if (typeof skill !== 'string') return false;
+      const trimmed = skill.trim();
+      
+      // Check if it's a standalone label that we've seen before
+      if (trimmed.split(/\s+/).length === 1) {
+        const lower = trimmed.toLowerCase();
+        if (hasProcessedLabel.has(lower)) return false;
+        hasProcessedLabel.add(lower);
+      }
+      return true;
+    });
     
-    // Filter professional skills to remove duplicates found in technical skills
+    // Create case-insensitive sets for comparison
+    const techSkillsSet = new Set(technicalSkills.map(s => 
+      typeof s === 'string' ? s.toLowerCase() : ''
+    ));
+    
+    // Remove any professional skills that are duplicated in technical skills
     professionalSkills = professionalSkills.filter(skill => 
-      typeof skill === 'string' && !technicalSkillsSet.has(skill.toLowerCase()));
+      typeof skill === 'string' && !techSkillsSet.has(skill.toLowerCase())
+    );
     
-    // Update sections with cleaned content
+    // Update sections with deduplicated content
     sections['TECHNICAL SKILLS'] = technicalSkills;
     sections['PROFESSIONAL SKILLS'] = professionalSkills;
     
-    // Remove generic SKILLS section if we have specific skill sections
-    if (sections['SKILLS']) {
-      logger.info('Deleting generic SKILLS section since we have specific skill sections');
-      delete sections['SKILLS'];
-    }
+    logger.info(`Deduplicated skills: Technical (${technicalSkills.length}), Professional (${professionalSkills.length})`);
   }
   
   // More detailed logging for debugging section parsing
@@ -305,7 +383,7 @@ async function generateSpecificDocx(
   paragraphs.push(horizontalLine);
 
   // Process each section in order with enhanced Profile formatting
-  for (const section of sectionOrder) {
+  for (const section of ['Header', 'PROFILE', 'ACHIEVEMENTS', 'GOALS', 'EXPECTATIONS', 'EXPERIENCE', 'LANGUAGES', 'EDUCATION', 'SKILLS', 'TECHNICAL SKILLS', 'PROFESSIONAL SKILLS', 'REFERENCES']) {
     // Skip if section doesn't exist or was already processed (e.g., SUMMARY merged into PROFILE)
     if (!sections[section]) continue;
     
@@ -356,8 +434,21 @@ async function generateSpecificDocx(
           !line.match(/^[\s*•\-\|\#]?PROFILE\s*:$/i) &&
           !line.match(/^SUMMARY\s*:$/i));
         
+        // Remove duplicate paragraphs that might have been merged from PROFILE and SUMMARY
+        const uniqueParagraphs: string[] = [];
+        const paragraphMap = new Set<string>();
+        
+        for (const line of filteredLines) {
+          // Case-insensitive comparison to catch duplications
+          const normalizedLine = line.toLowerCase().trim();
+          if (!paragraphMap.has(normalizedLine) && normalizedLine.length > 0) {
+            paragraphMap.add(normalizedLine);
+            uniqueParagraphs.push(line);
+          }
+        }
+        
         // Clean the lines to remove any special formatting that might cause issues
-        const cleanedLines = filteredLines.map(line => {
+        const cleanedLines = uniqueParagraphs.map(line => {
           // Remove colons at the end of a line if it appears to be just a label 
           return line.replace(/^(.{1,20}):$/, '$1')
                      // Clean up potential formatting characters
@@ -421,17 +512,17 @@ async function generateSpecificDocx(
       const skillsHeader = new Paragraph({
         text: sectionTitle,
         heading: HeadingLevel.HEADING_2,
-                  spacing: {
-                    before: 400,
+        spacing: {
+          before: 400,
           after: 200,
-                  },
+        },
         thematicBreak: true,
-                  border: {
-                    bottom: {
-                      color: 'B4916C',
+        border: {
+          bottom: {
+            color: 'B4916C',
             size: 1, 
             space: 4,
-                      style: BorderStyle.SINGLE,
+            style: BorderStyle.SINGLE,
           },
         },
       });
@@ -440,33 +531,46 @@ async function generateSpecificDocx(
       // Handle content based on type (array or string)
       let skillItems = Array.isArray(content) ? content : [content];
       
-      // Clean skill items to ensure they don't include section headers
-      skillItems = skillItems
-        .flatMap(item => typeof item === 'string' ? item.split('\n') : item)
-        .map(skill => typeof skill === 'string' ? skill.trim() : skill)
-        .filter(skill => 
-          typeof skill === 'string' && 
-          skill.length > 0 && 
-          !skill.toUpperCase().includes(section) &&
-          !skill.toUpperCase().includes('SKILL'));
+      // Convert to array of strings and split by lines
+      const skillLines = skillItems.flatMap(item => 
+        typeof item === 'string' ? item.split('\n') : item
+      );
       
-      // Create bullet points for each skill
-      for (const skill of skillItems) {
-        if (typeof skill === 'string' && skill.trim()) {
-          const cleanedSkill = skill.trim().replace(/^[•\-\*]+\s*/, '');
-                  paragraphs.push(
-                    new Paragraph({
-              text: cleanedSkill,
-              bullet: {
-                level: 0
-              },
-                      spacing: {
-                before: 100,
-                after: 100,
-                      }
-                    })
-                  );
-                }
+      // Process skill lines
+      const processedSkills: Set<string> = new Set();
+      
+      for (const skill of skillLines) {
+        if (typeof skill !== 'string' || !skill.trim()) continue;
+        
+        // Skip section headers and duplicates
+        const cleanedSkill = skill.trim()
+          .replace(/^[•\-\*]+\s*/, '')  // Remove bullet points
+          .replace(/^(Technical|Professional)?\s*Skills:?/i, '')  // Remove section headers
+          .trim();
+        
+        if (!cleanedSkill || 
+            cleanedSkill.toUpperCase().includes(section) || 
+            cleanedSkill.toUpperCase().includes('SKILL') ||
+            processedSkills.has(cleanedSkill.toLowerCase())) {
+          continue;
+        }
+        
+        // Add to processed set to avoid duplicates
+        processedSkills.add(cleanedSkill.toLowerCase());
+        
+        // Create bullet point for this skill
+        paragraphs.push(
+          new Paragraph({
+            text: cleanedSkill,
+            bullet: {
+              level: 0
+            },
+            spacing: {
+              before: 100,
+              after: 100,
+            }
+          })
+        );
       }
       
       continue; // Skip the generic content handling for skills
@@ -956,55 +1060,6 @@ function parseOptimizedText(text: string): Record<string, string | string[]> {
   if (potentialProfile && !sections['PROFILE']) {
     sections['PROFILE'] = potentialProfile;
     logger.info(`Added potential profile paragraph as PROFILE section, length: ${potentialProfile.length} characters`);
-  }
-  
-  // Special case for EXPERIENCE if not found but common patterns exist
-  if (!sections['EXPERIENCE']) {
-    // Look for patterns like "2020-2023: <Company>" or "Job Title - Company (2020-2023)"
-    const experienceLines = lines.filter(line => 
-      /\d{4}[—–-]\d{4}|[(]\d{4}[—–-]\d{4}[)]/.test(line) || // Date ranges
-      /(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d{4}\s+(?:to|–|—|-)\s+(?:present|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(line) // Month ranges
-    );
-    
-    if (experienceLines.length > 0) {
-      sections['EXPERIENCE'] = experienceLines.join('\n');
-      logger.info(`Created EXPERIENCE section from ${experienceLines.length} date-containing lines`);
-    }
-  }
-  
-  // Ensure key sections exist - especially PROFILE
-  if (!sections['PROFILE'] && !sections['SUMMARY']) {
-    // First try to find lines with "professional" or "experienced" near the beginning
-    const professionalLines = lines.filter(line => 
-      line.length > 50 && 
-      /^.{0,50}(?:professional|experienced|expert|specialist|background in)/i.test(line) &&
-      !line.includes('@') && 
-      !line.includes('http')
-    );
-    
-    if (professionalLines.length > 0) {
-      sections['PROFILE'] = professionalLines[0];
-      logger.info(`Created PROFILE section from line containing professional keywords: "${professionalLines[0].substring(0, 50)}..."`);
-    } else {
-      // Look through the first 15 lines for a substantial paragraph
-      for (let i = 0; i < Math.min(15, lines.length); i++) {
-        if (lines[i].length > 50 && !lines[i].includes('@') && !lines[i].includes('http')) {
-          sections['PROFILE'] = lines[i];
-          logger.info(`Created PROFILE section from substantial paragraph: "${lines[i].substring(0, 50)}..."`);
-          break;
-        }
-      }
-    }
-  }
-  
-  // If we still don't have a profile, create a simple one
-  if (!sections['PROFILE']) {
-    // Extract a name if possible
-    const nameMatch = text.match(/^([A-Z][a-z]+\s+[A-Z][a-z]+)(?:\n|$)/);
-    const name = nameMatch ? nameMatch[1] : "Professional";
-    
-    sections['PROFILE'] = `${name} with experience and skills seeking new opportunities to leverage expertise and contribute to organizational success.`;
-    logger.info('Created default PROFILE section');
   }
   
   // Additional check: If we have a SUMMARY but no PROFILE, use SUMMARY as PROFILE
