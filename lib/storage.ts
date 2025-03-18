@@ -211,67 +211,21 @@ export async function saveFileToDropbox(
   buffer: Buffer
 ): Promise<void> {
   try {
-    // Validate input parameters
-    if (!dbx) {
-      throw new Error("Dropbox client is not initialized");
-    }
-    
-    if (!dropboxPath || typeof dropboxPath !== 'string') {
-      throw new Error("Invalid Dropbox path provided");
-    }
-    
-    // Validate buffer
-    if (!Buffer.isBuffer(buffer)) {
-      console.error("Provided content is not a valid buffer");
-      throw new Error("Invalid buffer provided");
-    }
-    
-    if (buffer.length === 0) {
-      console.error("Provided buffer is empty");
-      throw new Error("Empty buffer provided");
-    }
-    
-    // Log the upload attempt details
-    console.log(`Attempting to upload file to Dropbox at: ${dropboxPath} (${buffer.length} bytes)`);
-    
-    // Create a fresh copy of the buffer to avoid reference issues
-    const safeBuffer = Buffer.from(buffer);
-    
-    // Upload the file using the Dropbox API
-    const uploadResult = await dbx.filesUpload({
+    await dbx.filesUpload({
       path: dropboxPath,
-      contents: safeBuffer,
+      contents: buffer,
       mode: { ".tag": "overwrite" }
     });
     
-    // Log success information
-    console.log(`File successfully saved to Dropbox at: ${dropboxPath}`);
-    console.log(`File ID: ${uploadResult.id}, Size: ${uploadResult.size} bytes`);
-    
-    return;
+    console.log(`File saved to Dropbox at: ${dropboxPath}`);
   } catch (error: any) {
-    // Handle token expiration
     if (error.status === 401) {
       console.error("Access token expired, refreshing token...");
       await updateDropboxAccessToken();
       const refreshedDbx = getDropboxClient();
       return await saveFileToDropbox(refreshedDbx, dropboxPath, buffer);
     }
-    
-    // Handle rate limiting
-    if (error.status === 429) {
-      console.error("Rate limited by Dropbox API, retrying in 5 seconds...");
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      return await saveFileToDropbox(dbx, dropboxPath, buffer);
-    }
-    
-    // Log detailed error information
     console.error(`Error saving file to Dropbox: ${error.message || error}`);
-    if (error.response) {
-      console.error(`Response status: ${error.response.status}`);
-      console.error(`Response data:`, error.response.data);
-    }
-    
     throw new Error(`Failed to save file to Dropbox: ${error.message || error}`);
   }
 }

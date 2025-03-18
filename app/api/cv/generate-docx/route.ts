@@ -52,7 +52,42 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate the DOCX file with metadata if available
-    const docxBuffer = await generateDocx(cvText, metadata || undefined);
+    let docxBuffer: Buffer;
+    try {
+      // Sanitize and prepare metadata
+      const safeMetadata = {
+        title: `CV_${new Date().toISOString().split('T')[0]}`,
+        author: user.name || 'CV Optimizer User',
+        description: 'Optimized CV document',
+        // Include only safe properties from metadata
+        ...(metadata && typeof metadata === 'object' ? {
+          atsScore: typeof metadata.atsScore === 'number' ? metadata.atsScore : undefined,
+          improvedAtsScore: typeof metadata.improvedAtsScore === 'number' ? metadata.improvedAtsScore : undefined,
+          industry: typeof metadata.industry === 'string' ? metadata.industry : undefined,
+          experienceEntries: Array.isArray(metadata.experienceEntries) ? metadata.experienceEntries : undefined,
+          improvements: Array.isArray(metadata.improvements) ? metadata.improvements : undefined
+        } : {})
+      };
+      
+      console.log(`Generating DOCX with ${cvText.length} characters of text`);
+      docxBuffer = await generateDocx(cvText, safeMetadata);
+      
+      if (!Buffer.isBuffer(docxBuffer) || docxBuffer.length === 0) {
+        throw new Error('Generated an empty document buffer');
+      }
+      
+      console.log(`Successfully generated DOCX buffer of ${docxBuffer.length} bytes`);
+    } catch (docError) {
+      console.error('Error generating DOCX:', docError);
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Failed to generate DOCX document',
+          details: docError instanceof Error ? docError.message : 'Unknown error during document generation'
+        },
+        { status: 500 }
+      );
+    }
 
     // Convert buffer to base64 for response
     const base64Data = docxBuffer.toString('base64');
@@ -63,7 +98,7 @@ export async function POST(request: NextRequest) {
       docxBase64: base64Data,
     });
   } catch (error) {
-    console.error('Error generating DOCX:', error);
+    console.error('Error handling DOCX generation request:', error);
     return NextResponse.json(
       { 
         success: false, 

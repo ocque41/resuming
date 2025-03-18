@@ -9,6 +9,7 @@ import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, Building, Brie
 import { Checkbox } from "@/components/ui/checkbox";
 import { cacheDocument, getCachedDocument, clearCachedDocument, getCacheAge } from "@/lib/cache/documentCache";
 import { toast } from "@/hooks/use-toast";
+import CVDocumentTemplateSelector from './CVDocumentTemplateSelector';
 
 // Modern SimpleFileDropdown component
 function ModernFileDropdown({ 
@@ -156,6 +157,9 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   
   // State for processing too long detection
   const [processingTooLong, setProcessingTooLong] = useState<boolean>(false);
+  
+  // State for template selection
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('professional');
   
   // Auto-select first CV if available
   useEffect(() => {
@@ -1226,6 +1230,11 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     };
   }, [isProcessing, processingStatus]);
   
+  // Handle template selection
+  const handleTemplateSelect = (template: string) => {
+    setSelectedTemplate(template);
+  };
+  
   // Handle DOCX download
   const handleDownloadDocx = async () => {
     if (!selectedCVId) {
@@ -1262,16 +1271,13 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         return;
       }
       
-      // Prepare metadata to include in the document generation
-      const metadata = {
-        atsScore: originalAtsScore,
-        improvedAtsScore: improvedAtsScore,
-        improvements: improvements,
-        experienceEntries: structuredCV.experience,
-        industry: structuredCV.industry || ''
-      };
+      toast({
+        title: "Generating document...",
+        description: "Your CV is being formatted with the selected template.",
+      });
       
-      const response = await fetch("/api/cv/generate-docx", {
+      // Use optimize-docx endpoint which uses the template system
+      const response = await fetch("/api/cv/optimize-docx", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1279,7 +1285,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         body: JSON.stringify({
           cvId: selectedCVId,
           optimizedText: textToUse,
-          metadata: metadata
+          template: selectedTemplate
         }),
       });
       
@@ -1290,39 +1296,84 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       
       const data = await response.json();
       
-      if (!data.success || !data.docxBase64) {
-        throw new Error('Failed to generate DOCX file');
+      if (!data.success) {
+        throw new Error('Failed to initiate DOCX generation');
       }
       
-      // Create a download link for the DOCX file
-      const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${data.docxBase64}`;
-      const downloadLink = document.createElement('a');
-      downloadLink.href = linkSource;
-      
-      // Use a more professional filename format
-      const timestamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0];
-      const cleanCVName = selectedCVName?.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9]/g, '_') || 'optimized';
-      downloadLink.download = `${cleanCVName}_CV_${timestamp}.docx`;
-      
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-      document.body.removeChild(downloadLink);
-      
+      // Success notification
       toast({
-        title: "DOCX file downloaded",
-        description: "Your optimized CV has been downloaded as a DOCX file",
-        variant: "default",
+        title: "Document generating",
+        description: "Your document is being generated and will be available for download shortly.",
       });
       
-      console.log('DOCX file downloaded successfully');
+      // Start checking for completion
+      const checkInterval = setInterval(async () => {
+        try {
+          const statusResponse = await fetch(`/api/cv/get?cvId=${selectedCVId}`);
+          if (!statusResponse.ok) {
+            clearInterval(checkInterval);
+            throw new Error('Failed to check document status');
+          }
+          
+          const statusData = await statusResponse.json();
+          
+          if (statusData.cv?.metadata) {
+            const metadata = typeof statusData.cv.metadata === 'string' 
+              ? JSON.parse(statusData.cv.metadata) 
+              : statusData.cv.metadata;
+            
+            if (metadata.optimizedDocStatus === 'completed' && metadata.optimizedDocUrl) {
+              clearInterval(checkInterval);
+              // Open the document in a new tab
+              window.open(metadata.optimizedDocUrl, '_blank');
+              setIsDownloadingDocx(false);
+              
+              toast({
+                title: "Document ready!",
+                description: "Your document has been generated successfully.",
+                variant: "default",
+              });
+            } else if (metadata.optimizedDocStatus === 'failed') {
+              clearInterval(checkInterval);
+              setIsDownloadingDocx(false);
+              throw new Error(metadata.optimizedDocError || 'Document generation failed');
+            }
+          }
+        } catch (checkError) {
+          clearInterval(checkInterval);
+          setIsDownloadingDocx(false);
+          console.error('Error checking document status:', checkError);
+          
+          toast({
+            title: "Document generation error",
+            description: checkError instanceof Error ? checkError.message : 'Failed to check document status',
+            variant: "destructive",
+          });
+        }
+      }, 2000); // Check every 2 seconds
+      
+      // Stop checking after 1 minute if no response
+      setTimeout(() => {
+        clearInterval(checkInterval);
+        if (isDownloadingDocx) {
+          setIsDownloadingDocx(false);
+          toast({
+            title: "Document generation timeout",
+            description: "The document is still processing. You can check your CV list later for the completed document.",
+            variant: "default",
+          });
+        }
+      }, 60000);
+      
     } catch (error) {
       console.error('Error downloading DOCX:', error);
+      
       toast({
-        title: "Download failed",
-        description: error instanceof Error ? error.message : 'An unknown error occurred',
+        title: "Download error",
+        description: error instanceof Error ? error.message : 'Failed to download document',
         variant: "destructive",
       });
-    } finally {
+      
       setIsDownloadingDocx(false);
     }
   };
@@ -1465,7 +1516,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         {/* Results Section */}
         {isProcessed && (
           <div className="mt-6">
-              <div className="space-y-6">
+            <div className="space-y-6">
               <div className="rounded-lg border border-gray-800 overflow-hidden mt-4">
                 <div className="bg-[#050505] p-4">
                   <h4 className="text-white font-medium mb-4">Optimization Results</h4>
@@ -1486,7 +1537,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                         Structured View
                       </button>
                     </div>
-                    </div>
+                  </div>
                   
                   {/* Content Display */}
                   <div className="mb-4">
@@ -1627,14 +1678,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                             <div className="text-gray-300 text-sm">
                               {structuredCV.education.split('\n').map((education, index) => (
                                 <div key={index} className="mb-1">
-                                  {education.startsWith('•') || education.startsWith('-') || education.startsWith('*') ? (
-                                    <div className="flex items-start">
-                                      <span className="text-[#B4916C] mr-2">•</span>
-                                      <span>{education.replace(/^[-•*]\s*/, '')}</span>
-                                    </div>
-                                  ) : (
-                                    <span>{education}</span>
-                                  )}
+                                  {education}
                                 </div>
                               ))}
                             </div>
@@ -1661,51 +1705,64 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                       </div>
                     ) : (
                       <div className="bg-[#121212] p-4 rounded-md">
-                        <h5 className="text-white font-medium mb-2">Optimized Content</h5>
-                        <div className="text-gray-300 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto p-2 bg-gray-900 rounded">
-                          {formatStructuredCV() || processedText || optimizedText || "No optimized content available yet."}
-                        </div>
+                        <h5 className="text-white font-medium mb-4">Raw Text</h5>
+                        <div className="text-gray-300 text-sm whitespace-pre-wrap">{optimizedText}</div>
                       </div>
                     )}
                   </div>
                   
-                  {/* Download DOCX Button */}
-                      <Button
-                    onClick={handleDownloadDocx}
-                    disabled={isDownloadingDocx || !optimizedText}
-                    className="w-full bg-[#121212] hover:bg-gray-800 text-white border border-gray-700 mb-4"
-                  >
-                    {isDownloadingDocx ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                        Generating DOCX...
+                  {/* ATS Score */}
+                  <div className="mb-4">
+                    <h5 className="text-white font-medium mb-2">ATS Compatibility Score</h5>
+                    <div className="flex items-center">
+                      <div className="flex-1">
+                        <Progress value={95} className="h-2 bg-gray-800" />
+                      </div>
+                      <span className="ml-2 text-white font-medium">95%</span>
+                    </div>
+                  </div>
+                  
+                  {/* Template Selection and Download Button */}
+                  <div className="mt-8">
+                    <h5 className="text-white font-medium mb-4">Document Template</h5>
+                    <CVDocumentTemplateSelector 
+                      onSelect={handleTemplateSelect}
+                      selectedTemplate={selectedTemplate}
+                    />
+                    <div className="mt-4 flex justify-end">
+                      <Button 
+                        onClick={handleDownloadDocx} 
+                        className="bg-[#B4916C] hover:bg-[#A27D59] text-black"
+                        disabled={isDownloadingDocx}
+                      >
+                        {isDownloadingDocx ? (
+                          <>
+                            <span className="animate-spin mr-2">◠</span>
+                            Generating...
                           </>
                         ) : (
                           <>
-                        <Download className="h-4 w-4 mr-2" />
-                        Download as DOCX
+                            <Download className="w-4 h-4 mr-2" />
+                            Download DOCX
                           </>
                         )}
                       </Button>
-                    
-                    <Button
-                    onClick={handleResetProcessing}
-                      className="bg-transparent hover:bg-gray-800 text-gray-400 border border-gray-700 flex items-center justify-center mt-4 w-full"
-                    >
-                      <RefreshCw className="h-5 w-5 mr-2" />
-                      Start Over
-                    </Button>
+                    </div>
                   </div>
                 </div>
               </div>
+            </div>
           </div>
         )}
-
+        
         {/* Experience Entries Preview */}
         {structuredCV.experience && structuredCV.experience.length > 0 && (
-          <ExperienceEntriesPreview experienceEntries={structuredCV.experience} />
+          <div className="mt-6">
+            <h5 className="text-white font-medium mb-2">Experience Summary</h5>
+            <ExperienceEntriesPreview experienceEntries={structuredCV.experience} />
+          </div>
         )}
-
+        
         {/* Improvements Display */}
         {showImprovements && improvements.length > 0 && (
           <div className="mt-6 bg-black/50 border border-gray-800 rounded-lg p-4">

@@ -1,351 +1,105 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { db } from '@/lib/db/drizzle';
-import { cvs } from '@/lib/db/schema';
+import { cvs, users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-
-// Import the entire module to avoid bundling issues
-import * as optimizeCVModule from '@/lib/optimizeCV.fixed';
-import { getOriginalPdfBytes, extractTextFromPdf, saveFileToDropbox, getDropboxClient } from '@/lib/storage';
+import { getDropboxClient } from '@/lib/dropboxAdmin';
 import { DocumentGenerator } from '@/lib/utils/documentGenerator';
 
-// Define a session type
-interface UserSession {
-  user?: {
-    id: string;
-    name?: string;
-    email?: string;
-  };
+// Define types
+interface User {
+  id: string;
+  name?: string;
+  email?: string;
 }
 
 /**
- * API endpoint to optimize a CV using the new DOCX-based workflow
+ * Save file to Dropbox and return a shareable link
  */
-export async function POST(request: NextRequest) {
+async function saveFileToDropbox(buffer: Buffer, path: string): Promise<string | null> {
   try {
-    // Authenticate user
-    const session = await auth();
+    const dbx = getDropboxClient();
     
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    
-    // Parse request body
-    const body = await request.json();
-    const { fileName, templateId } = body;
-    
-    if (!fileName) {
-      return NextResponse.json({ error: "Missing fileName parameter" }, { status: 400 });
-    }
-    
-    // Get the CV record
-    const cvRecord = await db.query.cvs.findFirst({
-      where: eq(cvs.fileName, fileName)
+    // Upload the file
+    await dbx.filesUpload({
+      path: path,
+      contents: buffer,
+      mode: { ".tag": "overwrite" }
     });
     
-    if (!cvRecord) {
-      return NextResponse.json({ error: "CV not found" }, { status: 404 });
-    }
+    console.log(`File uploaded to Dropbox at: ${path}`);
     
-    // Check if the CV belongs to the authenticated user
-    const userId = parseInt(session.user.id, 10);
-    if (cvRecord.userId !== userId) {
-      return NextResponse.json({ error: "Unauthorized access to CV" }, { status: 403 });
-    }
-    
-    // Update metadata to indicate optimization is in progress
-    let metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
-    metadata.optimizing = true;
-    metadata.progress = 10;
-    metadata.startTime = new Date().toISOString();
-    
-    await db.update(cvs)
-      .set({
-        metadata: JSON.stringify(metadata)
-      })
-      .where(eq(cvs.id, cvRecord.id));
-    
-    // Start the background process
-    startBackgroundProcess(cvRecord, templateId, session.user.id);
-    
-    // Return immediate response
-    return NextResponse.json({
-      message: "Optimization process started",
-      status: "optimizing",
-      progress: 10
+    // Create a shared link
+    const sharedLinkResponse = await dbx.sharingCreateSharedLinkWithSettings({
+      path: path,
+      settings: {
+        requested_visibility: { ".tag": "public" }
+      }
     });
     
+    console.log('Created shared link for file');
+    return sharedLinkResponse.result.url;
   } catch (error) {
-    console.error("Error starting optimization:", error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: `Failed to start optimization: ${errorMessage}` }, { status: 500 });
+    console.error('Error in saveFileToDropbox:', error);
+    return null;
   }
 }
 
 /**
- * Start the background optimization process
+ * Get CV by ID from the database
  */
-function startBackgroundProcess(cvRecord: any, templateId: string, userId: string) {
-  // Run this asynchronously
-  (async () => {
-    try {
-      // Get the PDF text
-      const pdfBytes = await getOriginalPdfBytes(cvRecord);
-      const cvText = await extractTextFromPdf(pdfBytes);
-      
-      // Update progress
-      await updateMetadata(cvRecord.id, { progress: 20 });
-      
-      // Extract sections and perform initial ATS analysis using GPT-4o
-      console.log("Analyzing CV with GPT-4o for ATS optimization");
-      await updateMetadata(cvRecord.id, { progress: 30, step: "Analyzing CV with GPT-4o" });
-      
-      // Extract sections using the module
-      const sections = optimizeCVModule.extractSections(cvText);
-      
-      /**
-       * Generate a minimal fallback document when standard generation fails
-       * Uses the absolute minimum formatting necessary to create a valid DOCX
-       */
-      async function generateFallbackDocument(text: string, options: any): Promise<Buffer> {
-        try {
-          console.log("Generating minimal fallback document");
-          
-          // Import docx library
-          const { Document, Packer, Paragraph, TextRun } = require("docx");
-          
-          // Sanitize text to remove problematic characters
-          const sanitizedText = text.replace(/[\u2018\u2019]/g, "'")
-            .replace(/[\u201C\u201D]/g, '"')
-            .replace(/[\u2013\u2014]/g, '-')
-            .replace(/[\u2022]/g, '*')
-            .replace(/[\u2026]/g, '...')
-            .replace(/[\u00A0]/g, ' ')
-            .replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
-          
-          // Split text into lines
-          const lines = sanitizedText.split('\n');
-          
-          // Create a simple paragraph for each line
-          const paragraphs = lines.map(line => {
-            if (!line.trim()) {
-              // Empty paragraph for blank lines
-              return new Paragraph({});
-            }
-            
-            return new Paragraph({
-              children: [
-                new TextRun({
-                  text: line.trim().substring(0, 5000), // Limit length to prevent issues
-                  size: 24,
-                }),
-              ],
-              spacing: {
-                after: 120,
-              },
-            });
-          });
-          
-          // Create minimal document
-          const doc = new Document({
-            sections: [{
-              children: paragraphs,
-            }],
-          });
-          
-          // Generate buffer
-          const buffer = await Packer.toBuffer(doc);
-          
-          return buffer;
-        } catch (error) {
-          console.error("Error in fallback document generation:", error);
-          throw new Error(`Fallback document generation failed: ${error instanceof Error ? error.message : String(error)}`);
-        }
-      }
-      
-      // Perform ATS analysis to get initial score
-      const atsAnalysisResult = await performATSAnalysis(cvText, sections);
-      const originalAtsScore = atsAnalysisResult.atsScore || 60; // Default to 60% if not available
-      
-      // Update progress with initial ATS score
-      await updateMetadata(cvRecord.id, { 
-        progress: 40,
-        step: "Completed initial ATS analysis",
-        originalAtsScore,
-        analyzedSections: JSON.stringify(sections)
-      });
-      
-      // Optimize CV content with GPT-4o
-      console.log("Optimizing CV content with GPT-4o");
-      await updateMetadata(cvRecord.id, { progress: 50, step: "Optimizing CV content with GPT-4o" });
-      
-      // Generate optimized content for each section
-      const optimizedSections = await optimizeSectionsWithGPT4o(sections, atsAnalysisResult);
-      
-      // Update progress
-      await updateMetadata(cvRecord.id, { 
-        progress: 60,
-        step: "Generated optimized content",
-        optimizedText: JSON.stringify(optimizedSections)
-      });
-      
-      // Re-analyze the optimized content for new ATS score
-      const optimizedText = formatOptimizedSections(optimizedSections);
-      const optimizedAnalysisResult = await performATSAnalysis(optimizedText, optimizedSections);
-      const improvedAtsScore = optimizedAnalysisResult.atsScore || originalAtsScore + 15; // Default to +15% improvement
-      
-      // Update progress with improved ATS score
-      await updateMetadata(cvRecord.id, { 
-        progress: 70,
-        step: "Completed ATS re-analysis",
-        improvedAtsScore
-      });
-      
-      // Generate the optimized DOCX document
-      console.log("Generating optimized DOCX document");
-      await updateMetadata(cvRecord.id, { progress: 80, step: "Generating optimized DOCX document" });
-      
-      // Use the new ATS-optimized document generator
-      let docxBuffer: Buffer;
-      try {
-        // Prepare document generation parameters
-        const docGenParams = {
-          atsScore: originalAtsScore,
-          improvedAtsScore: improvedAtsScore,
-          industry: optimizedAnalysisResult.industry || 'General',
-          title: `Optimized_${cvRecord.fileName.replace('.pdf', '')}`,
-          author: "CV Optimizer",
-          description: "ATS-optimized CV document",
-          experienceEntries: optimizedAnalysisResult.experienceEntries || [],
-          improvements: [
-            ...(optimizedAnalysisResult.sectionRecommendations ? Object.values(optimizedAnalysisResult.sectionRecommendations).filter(item => typeof item === 'string') : []),
-            ...(optimizedAnalysisResult.keywordRecommendations || []),
-            ...(optimizedAnalysisResult.improvementSuggestions ? Object.values(optimizedAnalysisResult.improvementSuggestions).filter(item => typeof item === 'string') : [])
-          ].slice(0, 5)
-        };
-        
-        try {
-          // Try the standard document generation first
-          console.log("Attempting standard document generation");
-          docxBuffer = await DocumentGenerator.generateDocx(optimizedText, docGenParams);
-          
-          // Verify we got a valid buffer back
-          if (!Buffer.isBuffer(docxBuffer) || docxBuffer.length === 0) {
-            throw new Error("Generated document is empty or invalid");
-          }
-          
-          console.log(`Successfully generated DOCX document with size: ${docxBuffer.length} bytes`);
-        } catch (mainGenError) {
-          // If standard generation fails, try fallback generation with minimal formatting
-          console.warn(`Standard document generation failed: ${mainGenError instanceof Error ? mainGenError.message : String(mainGenError)}`);
-          console.log("Falling back to minimal document generation");
-          
-          // Update metadata to indicate fallback is being used
-          await updateMetadata(cvRecord.id, { 
-            progress: 80, 
-            step: "Using fallback document generation",
-            generationWarning: "Using simplified formatting for better compatibility"
-          });
-          
-          // Generate document with fallback method
-          docxBuffer = await generateFallbackDocument(optimizedText, docGenParams);
-          
-          // Log fallback success
-          console.log(`Successfully generated fallback DOCX document with size: ${docxBuffer.length} bytes`);
-        }
-      } catch (docxError) {
-        console.error("All document generation methods failed:", docxError);
-        await updateMetadata(cvRecord.id, { 
-          error: `Failed to generate document: ${docxError instanceof Error ? docxError.message : String(docxError)}`,
-          errorTimestamp: new Date().toISOString(),
-          optimizing: false
-        });
-        throw new Error(`Failed to generate optimized document: ${docxError instanceof Error ? docxError.message : String(docxError)}`);
-      }
-      
-      // Save the generated DOCX to Dropbox
-      console.log("Saving optimized DOCX to Dropbox");
-      await updateMetadata(cvRecord.id, { progress: 90, step: "Saving optimized DOCX" });
-      
-      // Verify the docx buffer is valid
-      if (!isValidDocxBuffer(docxBuffer)) {
-        console.error("Generated DOCX buffer validation failed - attempting one more generation with fallback method");
-        
-        // Try the fallback method as a last resort
-        docxBuffer = await generateFallbackDocument(optimizedText, {
-          title: `Optimized_${cvRecord.fileName.replace('.pdf', '')}`
-        });
-        
-        // Verify again
-        if (!isValidDocxBuffer(docxBuffer)) {
-          throw new Error("Failed to generate a valid DOCX file after multiple attempts");
-        }
-        
-        console.log("Successfully generated valid DOCX using final fallback");
-      }
-      
-      // Use Dropbox client to save the file
-      const dropboxClient = await getDropboxClient();
-      const optimizedFileName = `optimized_${cvRecord.fileName.replace('.pdf', '.docx')}`;
-      const dropboxPath = `/cvs/${userId}/${optimizedFileName}`;
-      
-      try {
-        await saveFileToDropbox(dropboxClient, dropboxPath, docxBuffer);
-      } catch (saveError) {
-        console.error("Error saving file to Dropbox:", saveError);
-        await updateMetadata(cvRecord.id, { 
-          error: `Failed to save document to storage: ${saveError instanceof Error ? saveError.message : String(saveError)}`,
-          errorTimestamp: new Date().toISOString(),
-          optimizing: false
-        });
-        throw new Error(`Failed to save optimized document: ${saveError instanceof Error ? saveError.message : String(saveError)}`);
-      }
-      
-      // Update CV record with optimized document reference
-      await db.update(cvs)
-        .set({
-          optimizedDocxPath: dropboxPath
-        })
-        .where(eq(cvs.id, cvRecord.id));
-      
-      // Mark as complete with all metadata
-      await updateMetadata(cvRecord.id, {
-        progress: 100,
-        optimized: true,
-        optimizing: false,
-        completedAt: new Date().toISOString(),
-        originalAtsScore,
-        improvedAtsScore,
-        optimizedDocxPath: dropboxPath
-      });
-      
-      console.log(`Optimization completed for CV ${cvRecord.id}`);
-    } catch (error) {
-      console.error("Error in background process:", error);
-      
-      // Update metadata with error
-      await updateMetadata(cvRecord.id, {
-        error: error instanceof Error ? error.message : String(error),
-        errorTimestamp: new Date().toISOString(),
-        optimizing: false
-      });
-    }
-  })().catch(error => {
-    console.error("Unhandled error in background process:", error);
-  });
+async function getCvById(cvId: string): Promise<any | null> {
+  const id = parseInt(cvId, 10);
+  if (isNaN(id)) {
+    return null;
+  }
+  
+  try {
+    return await db.query.cvs.findFirst({
+      where: eq(cvs.id, id)
+    });
+  } catch (error) {
+    console.error(`Error retrieving CV with ID ${id}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Get user by email from the database
+ */
+async function getUserByEmail(email: string): Promise<any | null> {
+  if (!email) {
+    return null;
+  }
+  
+  try {
+    const user = await db.query.users.findFirst({
+      where: eq(users.email, email)
+    });
+    return user;
+  } catch (error) {
+    console.error(`Error retrieving user with email ${email}:`, error);
+    return null;
+  }
 }
 
 /**
  * Update the metadata for a CV
  */
-async function updateMetadata(cvId: number, updates: Record<string, any>): Promise<void> {
+async function updateMetadata(cvId: string, updates: Record<string, any>): Promise<void> {
+  const id = parseInt(cvId, 10);
+  if (isNaN(id)) {
+    console.error(`Invalid CV ID: ${cvId}`);
+    return;
+  }
+  
   try {
     const cvRecord = await db.query.cvs.findFirst({
-      where: eq(cvs.id, cvId)
+      where: eq(cvs.id, id)
     });
     
     if (!cvRecord) {
-      console.error(`CV not found for ID: ${cvId}`);
+      console.error(`CV not found for ID: ${id}`);
       return;
     }
     
@@ -385,7 +139,7 @@ async function updateMetadata(cvId: number, updates: Record<string, any>): Promi
     try {
       JSON.stringify(updatedMetadata);
     } catch (jsonError) {
-      console.error(`Failed to serialize metadata for CV ${cvId}:`, jsonError);
+      console.error(`Failed to serialize metadata for CV ${id}:`, jsonError);
       throw new Error('Unable to serialize metadata');
     }
     
@@ -394,11 +148,244 @@ async function updateMetadata(cvId: number, updates: Record<string, any>): Promi
       .set({
         metadata: JSON.stringify(updatedMetadata)
       })
-      .where(eq(cvs.id, cvId));
+      .where(eq(cvs.id, id));
       
-    console.log(`Updated metadata for CV ${cvId}:`, Object.keys(sanitizedUpdates));
+    console.log(`Updated metadata for CV ${id}:`, Object.keys(sanitizedUpdates));
   } catch (error) {
-    console.error(`Failed to update metadata for CV ${cvId}:`, error);
+    console.error(`Failed to update metadata for CV ${id}:`, error);
+  }
+}
+
+/**
+ * API endpoint to optimize a CV using the new DOCX-based workflow
+ */
+export async function POST(req: Request) {
+  try {
+    const session = await auth();
+    
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
+    const user = await getUserByEmail(session.user.email);
+    
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
+    const requestData = await req.json();
+    const { cvId, optimizedText, template } = requestData;
+    
+    if (!cvId) {
+      return NextResponse.json({ error: 'CV ID is required' }, { status: 400 });
+    }
+    
+    if (!optimizedText) {
+      return NextResponse.json({ error: 'Optimized text is required' }, { status: 400 });
+    }
+    
+    // Get the CV data
+    const cv = await getCvById(cvId);
+    
+    if (!cv) {
+      return NextResponse.json({ error: 'CV not found' }, { status: 404 });
+    }
+    
+    // Check if the CV belongs to the user
+    if (cv.userId !== user.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
+    // Get the analysis data
+    const analysisResult = cv.analysisResult;
+    
+    if (!analysisResult) {
+      return NextResponse.json({ error: 'CV has not been analyzed yet' }, { status: 400 });
+    }
+    
+    // Validate template value
+    const validTemplates = ['professional', 'modern', 'minimal', 'creative'];
+    const selectedTemplate = validTemplates.includes(template) ? template : 'professional';
+    
+    // Update metadata
+    await updateMetadata(cvId, {
+      optimizedDocStatus: 'processing',
+      optimizedDocTimestamp: new Date().toISOString(),
+      optimizedDocTemplate: selectedTemplate
+    });
+    
+    // Create parameters
+    const options = {
+      name: cv.name || 'Optimized CV',
+      originalAtsScore: analysisResult.atsScore,
+      improvedAtsScore: analysisResult.improvedAtsScore,
+      industry: analysisResult.industry || 'General',
+      template: selectedTemplate
+    };
+    
+    // Start processing in the background
+    void startBackgroundProcess(user.id, cvId, optimizedText, analysisResult, options);
+    
+    return NextResponse.json({
+      success: true,
+      message: 'DOCX generation started',
+      template: selectedTemplate,
+      status: 'processing'
+    });
+  } catch (error) {
+    console.error('Error in optimize-docx route:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unknown error occurred' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Start the background optimization process
+ */
+async function startBackgroundProcess(userId: string, cvId: string, optimizedText: string, optimizedAnalysisResult: any, options: any = {}) {
+  const existingAnalysis = optimizedAnalysisResult;
+  let docGenParams: any = {
+    author: options.name || "CV Optimizer User",
+    title: `${options.name || 'Optimized'} - CV`,
+    description: "ATS Optimized CV from CV Optimizer",
+    atsScore: options.originalAtsScore || existingAnalysis?.atsScore || 0,
+    improvedAtsScore: options.improvedAtsScore || existingAnalysis?.improvedAtsScore || 0,
+    industry: options.industry || "General",
+    template: options.template || "professional" // Using the template system
+  };
+
+  // Process improvements made to the CV
+  const recommendations = existingAnalysis?.recommendations || [];
+  if (Array.isArray(recommendations) && recommendations.length > 0) {
+    docGenParams.improvements = recommendations
+      .filter(rec => typeof rec === 'string' && rec.trim())
+      .slice(0, 5); // Limit to top 5 to avoid overloading the document
+  }
+
+  try {
+    // Extract experience entries for structured CV format
+    if (existingAnalysis?.experienceEntries && Array.isArray(existingAnalysis.experienceEntries)) {
+      // Format experience entries for document generator
+      docGenParams.experienceEntries = existingAnalysis.experienceEntries.map((entry: any) => {
+        return {
+          jobTitle: entry.jobTitle || "",
+          company: entry.company || "",
+          dateRange: entry.dateRange || "",
+          location: entry.location || "",
+          responsibilities: Array.isArray(entry.responsibilities) 
+            ? entry.responsibilities.filter((resp: any) => typeof resp === 'string' && resp.trim())
+            : []
+        };
+      }).filter((entry: any) => entry.jobTitle && entry.company);
+    }
+    
+    console.log(`Generating DOCX document for CV ${cvId} with template: ${docGenParams.template}`);
+    let docBuffer: Buffer;
+    
+    try {
+      // Try to generate the document with all parameters
+      docBuffer = await DocumentGenerator.generateDocx(optimizedText, docGenParams);
+      
+      // Verify the buffer is valid and has a reasonable size
+      if (!Buffer.isBuffer(docBuffer) || docBuffer.length === 0) {
+        throw new Error('Generated an empty document buffer');
+      }
+      
+      console.log(`Successfully generated DOCX document of ${docBuffer.length} bytes`);
+      
+      // If document is suspiciously small, retry with minimal parameters
+      if (docBuffer.length < 1000) {
+        console.warn('Document size suspiciously small, retrying with minimal parameters');
+        docBuffer = await DocumentGenerator.generateDocx(optimizedText, { 
+          title: 'Optimized CV',
+          template: 'minimal'
+        });
+        
+        if (!Buffer.isBuffer(docBuffer) || docBuffer.length === 0) {
+          throw new Error('Failed to generate document even with minimal parameters');
+        }
+        
+        console.log(`Retry successful, generated DOCX of ${docBuffer.length} bytes`);
+      }
+    } catch (docError) {
+      console.error('Error generating DOCX document:', docError);
+      // Fallback to most simple document generation possible
+      console.log('Attempting fallback document generation');
+      docBuffer = await DocumentGenerator.generateDocx(optimizedText, { 
+        title: 'Optimized CV',
+        template: 'minimal'
+      });
+      
+      if (!Buffer.isBuffer(docBuffer) || docBuffer.length === 0) {
+        throw new Error('Failed to generate document even with fallback approach');
+      }
+    }
+
+    // Get the file path where we will save the file
+    const fileName = `${cvId}_optimized_${Date.now()}.docx`;
+    console.log('Saving optimized CV to Dropbox:', fileName);
+
+    // Save to Dropbox
+    const dropboxPath = `/optimized/${fileName}`;
+    const dropboxLink = await saveFileToDropbox(docBuffer, dropboxPath);
+
+    if (!dropboxLink) {
+      throw new Error('Failed to get shareable link from Dropbox');
+    }
+
+    console.log('File saved to Dropbox successfully:', dropboxPath);
+
+    // Create a record in the database
+    const docMetadata = {
+      userId,
+      cvId, 
+      fileName,
+      fileType: 'docx',
+      filePath: dropboxPath,
+      downloadUrl: dropboxLink,
+      status: 'completed',
+      meta: {
+        template: docGenParams.template,
+        industry: docGenParams.industry,
+        atsScore: docGenParams.atsScore,
+        improvedAtsScore: docGenParams.improvedAtsScore,
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    // Update the document in the database
+    await updateMetadata(cvId, {
+      optimizedDocUrl: dropboxLink,
+      optimizedDocStatus: 'completed',
+      optimizedDocFilePath: dropboxPath,
+      optimizedDocTimestamp: new Date().toISOString(),
+      optimizedDocTemplate: docGenParams.template
+    });
+
+    console.log('Document metadata updated in database');
+    return {
+      success: true,
+      fileUrl: dropboxLink,
+      filePath: dropboxPath,
+      fileName: fileName,
+      template: docGenParams.template
+    };
+  } catch (error) {
+    console.error('Error in background process:', error);
+    
+    // Update the metadata to show the failure
+    await updateMetadata(cvId, {
+      optimizedDocStatus: 'failed',
+      optimizedDocError: error instanceof Error ? error.message : String(error),
+      optimizedDocTimestamp: new Date().toISOString()
+    });
+    
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
   }
 }
 
@@ -587,55 +574,4 @@ function extractNameAndContact(text: string): any {
   }
   
   return result;
-}
-
-/**
- * Validate a buffer to ensure it contains a valid DOCX file
- * Checks for the standard DOCX file signature (PK header for ZIP) and minimum size
- */
-function isValidDocxBuffer(buffer: Buffer): boolean {
-  try {
-    // Check if buffer exists and has content
-    if (!buffer || !Buffer.isBuffer(buffer)) {
-      console.error("Invalid buffer provided for DOCX validation");
-      return false;
-    }
-    
-    // Check minimum size (a valid DOCX file should be at least 2KB)
-    const MIN_DOCX_SIZE = 2048; // 2KB
-    if (buffer.length < MIN_DOCX_SIZE) {
-      console.error(`Buffer too small to be a valid DOCX: ${buffer.length} bytes`);
-      return false;
-    }
-    
-    // Check for DOCX file signature (DOCX files are ZIP files starting with PK)
-    // The first 4 bytes of a ZIP file (and thus DOCX) should be: [0x50, 0x4B, 0x03, 0x04]
-    if (buffer[0] !== 0x50 || buffer[1] !== 0x4B || buffer[2] !== 0x03 || buffer[3] !== 0x04) {
-      console.error("Buffer does not have a valid DOCX/ZIP signature");
-      return false;
-    }
-    
-    // Check for common DOCX content types within the file
-    // This is a simple check to see if the buffer contains strings that should be in a DOCX
-    const bufferString = buffer.toString('utf8', 0, Math.min(buffer.length, 10000));
-    const docxMarkers = [
-      'word/document.xml',
-      'content-types',
-      'relationships',
-      'application/vnd.openxmlformats'
-    ];
-    
-    // Check if at least two of these markers are present
-    const markersFound = docxMarkers.filter(marker => bufferString.includes(marker));
-    if (markersFound.length < 2) {
-      console.error("Buffer doesn't contain required DOCX content markers");
-      return false;
-    }
-    
-    console.log(`DOCX validation passed: Buffer size ${buffer.length} bytes, valid signature and markers detected`);
-    return true;
-  } catch (error) {
-    console.error("Error during DOCX buffer validation:", error);
-    return false;
-  }
 } 

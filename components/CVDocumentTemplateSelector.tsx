@@ -13,17 +13,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Check, FileText } from 'lucide-react';
 import { CVTemplate } from '@/types/templates';
-import { TemplatePreview } from './TemplatePreview';
 
 interface TemplateSelectorProps {
   onSelect: (template: string) => void;
   selectedTemplate?: string;
-  accentColor?: string;
-  darkMode?: boolean;
-  isOptimizing?: boolean;
 }
 
-const templates = [
+const templates: CVTemplate[] = [
   {
     id: 'professional',
     name: 'Professional',
@@ -54,64 +50,14 @@ const templates = [
   },
 ];
 
-export default function TemplateSelector({ 
-  onSelect, 
-  selectedTemplate = 'professional',
-  accentColor = "#B4916C",
-  darkMode = false,
-  isOptimizing = false
-}: TemplateSelectorProps) {
+export default function CVDocumentTemplateSelector({ onSelect, selectedTemplate = 'professional' }: TemplateSelectorProps) {
   const [selected, setSelected] = useState<string>(selectedTemplate);
-  const [templates, setTemplates] = useState<CVTemplate[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
-  // Fetch templates from API
-  React.useEffect(() => {
-    async function fetchTemplates() {
-      try {
-        setLoading(true);
-        const response = await fetch('/api/cv-templates');
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch templates');
-        }
-        
-        const data = await response.json();
-        setTemplates(data.templates);
-      } catch (err: any) {
-        console.error('Error fetching templates:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    }
-    
-    fetchTemplates();
-  }, []);
-  
+
   const handleSelect = (templateId: string) => {
     setSelected(templateId);
     onSelect(templateId);
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" 
-             style={{ borderColor: accentColor }}></div>
-      </div>
-    );
-  }
-  
-  if (error) {
-    return (
-      <div className="p-4 text-center">
-        <p className="text-red-500">Error: {error}</p>
-      </div>
-    );
-  }
-  
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-medium text-[#B4916C]">Select Document Template</h3>

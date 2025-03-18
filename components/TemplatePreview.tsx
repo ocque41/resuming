@@ -60,7 +60,7 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
       </div>
       <div className="p-3">
         <h3 className="text-sm font-medium text-gray-900">{template.name}</h3>
-        <p className="text-xs text-gray-500">{template.company}</p>
+        <p className="text-xs text-gray-500">{template.description}</p>
       </div>
     </div>
   );

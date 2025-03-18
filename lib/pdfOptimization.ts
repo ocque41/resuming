@@ -580,16 +580,13 @@ export async function modifyPDFWithOptimizedContent(
     if (template) {
       console.log(`Applying template: ${template.name}`);
       
-      // Get layout from template metadata
-      layout = template.metadata.layout || layout;
-      
       // Get template-specific layout from templateMatching
       const templateLayout = getTemplateLayout(template.id);
       headerStyle = templateLayout.headerStyle || headerStyle;
       
       // Set accent color from template
-      if (template.metadata.colorScheme && template.metadata.colorScheme.accent) {
-        const accentHex = template.metadata.colorScheme.accent;
+      if (template.colors && template.colors.accent) {
+        const accentHex = template.colors.accent;
         const accentRgb = hexToRgb(accentHex);
         accentColor = rgb(accentRgb.r / 255, accentRgb.g / 255, accentRgb.b / 255);
       }
