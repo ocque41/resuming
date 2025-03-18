@@ -1273,18 +1273,11 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       
       toast({
         title: "Generating document...",
-        description: "Your CV is being formatted with the selected template.",
+        description: "Your CV is being prepared for download.",
       });
       
-      // Prepare the improvements as plain string array
-      const improvementsForMetadata = improvements.map(improvement => 
-        typeof improvement === 'string' 
-          ? improvement 
-          : improvement.improvement + (improvement.impact ? ` (${improvement.impact})` : '')
-      );
-      
-      // Use the generate-docx endpoint for immediate download instead of optimize-docx
-      const response = await fetch("/api/cv/generate-docx", {
+      // Try direct document generation first with generate-docx endpoint
+      const generateResponse = await fetch("/api/cv/generate-docx", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1293,13 +1286,66 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
           cvId: selectedCVId,
           optimizedText: textToUse,
           metadata: {
-            atsScore: originalAtsScore,
-            improvedAtsScore: improvedAtsScore,
-            industry: structuredCV.industry || 'General',
             template: selectedTemplate,
             experienceEntries: structuredCV.experience || [],
-            improvements: improvementsForMetadata
+            improvements: improvements?.map(imp => typeof imp === 'string' ? imp : imp.improvement) || [],
+            atsScore: originalAtsScore || 0,
+            improvedAtsScore: improvedAtsScore || 0,
+            industry: structuredCV.industry || 'General'
           }
+        }),
+      });
+      
+      if (!generateResponse.ok) {
+        throw new Error('Failed to generate DOCX directly, falling back to background process');
+      }
+      
+      const generateData = await generateResponse.json();
+      
+      if (generateData.success && generateData.docxBase64) {
+        // Successfully generated DOCX directly - create a download link
+        const blob = base64ToBlob(generateData.docxBase64, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        const url = URL.createObjectURL(blob);
+        
+        // Create a download link and click it
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `cv-optimized-${selectedCVId}.docx`;
+        document.body.appendChild(a);
+        a.click();
+        
+        // Clean up
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 100);
+        
+        toast({
+          title: "Document ready!",
+          description: "Your document has been downloaded successfully.",
+          variant: "default",
+        });
+        
+        setIsDownloadingDocx(false);
+        return;
+      }
+      
+      // If direct generation failed, fall back to background process
+      toast({
+        title: "Using background processing",
+        description: "The document is being generated in the background. Please wait.",
+      });
+      
+      // Use optimize-docx endpoint as fallback
+      const response = await fetch("/api/cv/optimize-docx", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          cvId: selectedCVId,
+          optimizedText: textToUse,
+          template: selectedTemplate
         }),
       });
       
@@ -1310,28 +1356,95 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       
       const data = await response.json();
       
-      if (!data.success || !data.docxBase64) {
-        throw new Error('Failed to generate DOCX file');
+      if (!data.success) {
+        throw new Error('Failed to initiate DOCX generation');
       }
       
-      // Success notification
-      toast({
-        title: "Document ready!",
-        description: "Your document has been generated successfully.",
-      });
+      // Start checking for completion
+      let retryCount = 0;
+      const maxRetries = 30; // 30 * 2 seconds = 60 seconds maximum wait
       
-      // Create and trigger a download using the base64 data
-      const blob = base64ToBlob(data.docxBase64, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `CV_${new Date().toISOString().slice(0, 10)}.docx`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const checkInterval = setInterval(async () => {
+        try {
+          retryCount++;
+          if (retryCount > maxRetries) {
+            clearInterval(checkInterval);
+            setIsDownloadingDocx(false);
+            toast({
+              title: "Document generation timeout",
+              description: "The process is taking longer than expected. Please try again later.",
+              variant: "default",
+            });
+            return;
+          }
+          
+          const statusResponse = await fetch(`/api/cv/get?cvId=${selectedCVId}`);
+          if (!statusResponse.ok) {
+            throw new Error('Failed to check document status');
+          }
+          
+          const statusData = await statusResponse.json();
+          
+          if (statusData.cv?.metadata) {
+            const metadata = typeof statusData.cv.metadata === 'string' 
+              ? JSON.parse(statusData.cv.metadata) 
+              : statusData.cv.metadata;
+            
+            if (metadata.optimizedDocStatus === 'completed' && metadata.dropboxLink) {
+              clearInterval(checkInterval);
+              // Open the document link in a new tab
+              window.open(metadata.dropboxLink, '_blank');
+              setIsDownloadingDocx(false);
+              
+              toast({
+                title: "Document ready!",
+                description: "Your document has been generated successfully.",
+                variant: "default",
+              });
+              return;
+            } else if (metadata.optimizedDocStatus === 'failed') {
+              clearInterval(checkInterval);
+              setIsDownloadingDocx(false);
+              throw new Error(metadata.optimizedDocError || 'Document generation failed');
+            }
+            
+            // If base64 data is available, download it directly
+            if (metadata.docxBase64) {
+              clearInterval(checkInterval);
+              
+              // Convert base64 to blob and download
+              const blob = base64ToBlob(metadata.docxBase64, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+              const url = URL.createObjectURL(blob);
+              
+              // Create a download link and click it
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `cv-optimized-${selectedCVId}.docx`;
+              document.body.appendChild(a);
+              a.click();
+              
+              // Clean up
+              setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              }, 100);
+              
+              setIsDownloadingDocx(false);
+              
+              toast({
+                title: "Document ready!",
+                description: "Your document has been downloaded successfully.",
+                variant: "default",
+              });
+              return;
+            }
+          }
+        } catch (checkError) {
+          console.error('Error checking document status:', checkError);
+          // Don't clear the interval here, just log the error and continue trying
+        }
+      }, 2000); // Check every 2 seconds
       
-      setIsDownloadingDocx(false);
     } catch (error) {
       console.error('Error downloading DOCX:', error);
       
@@ -1344,25 +1457,18 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       setIsDownloadingDocx(false);
     }
   };
-  
+
   // Helper function to convert base64 to Blob
-  const base64ToBlob = (base64: string, mimeType: string) => {
-    const byteCharacters = atob(base64);
-    const byteArrays = [];
+  const base64ToBlob = (base64: string, mimeType: string = '') => {
+    const byteString = window.atob(base64);
+    const arrayBuffer = new ArrayBuffer(byteString.length);
+    const int8Array = new Uint8Array(arrayBuffer);
     
-    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-      const slice = byteCharacters.slice(offset, offset + 512);
-      const byteNumbers = new Array(slice.length);
-      
-      for (let i = 0; i < slice.length; i++) {
-        byteNumbers[i] = slice.charCodeAt(i);
-      }
-      
-      const byteArray = new Uint8Array(byteNumbers);
-      byteArrays.push(byteArray);
+    for (let i = 0; i < byteString.length; i++) {
+      int8Array[i] = byteString.charCodeAt(i);
     }
     
-    return new Blob(byteArrays, { type: mimeType });
+    return new Blob([int8Array], { type: mimeType });
   };
 
   // Add a new component for displaying experience entries if available

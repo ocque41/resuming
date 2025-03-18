@@ -268,48 +268,48 @@ function createEnhancedDocumentContent(sections: any, options: any, template: an
   // Add header (name and contact info)
   if (sections.header) {
     const headerLines = sections.header.split('\n').filter((line: string) => line.trim());
-    
-    if (headerLines.length > 0) {
-      // First line is the name - make it prominent
-      paragraphs.push(
-        new Paragraph({
-          text: headerLines[0],
-          heading: HeadingLevel.HEADING_1,
-          alignment: AlignmentType.CENTER,
-          spacing: {
-            after: 120,
-          },
-          border: {
-            bottom: {
+        
+        if (headerLines.length > 0) {
+          // First line is the name - make it prominent
+          paragraphs.push(
+            new Paragraph({
+              text: headerLines[0],
+              heading: HeadingLevel.HEADING_1,
+              alignment: AlignmentType.CENTER,
+              spacing: {
+                after: 120,
+              },
+              border: {
+                bottom: {
               color: template.accentColor,
-              space: 1,
-              style: BorderStyle.SINGLE,
+                  space: 1,
+                  style: BorderStyle.SINGLE,
               size: 4,
-            },
+                },
           }
-        })
-      );
-      
-      // Contact info on one line
-      if (headerLines.length > 1) {
-        const contactInfo = headerLines.slice(1).join(' | ');
-        paragraphs.push(
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            children: [
-              new TextRun({
-                text: contactInfo,
-                size: 20,
-                color: "666666",
+            })
+          );
+          
+          // Contact info on one line
+          if (headerLines.length > 1) {
+            const contactInfo = headerLines.slice(1).join(' | ');
+            paragraphs.push(
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                  new TextRun({
+                    text: contactInfo,
+                    size: 20,
+                    color: "666666",
                 font: template.bodyFont,
-              }),
-            ],
-            spacing: {
-              after: 240,
-            },
-          })
-        );
-      }
+                  }),
+                ],
+                spacing: {
+                  after: 240,
+                },
+              })
+            );
+          }
     }
   }
   
@@ -440,53 +440,53 @@ function createEnhancedDocumentContent(sections: any, options: any, template: an
         }) => {
           // Add job title and company
           if (entry.jobTitle || entry.company) {
-            paragraphs.push(
-              new Paragraph({
-                children: [
-                  new TextRun({
+          paragraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({
                     text: `${entry.jobTitle || ""}${entry.jobTitle && entry.company ? " at " : ""}${entry.company || ""}`,
                     size: 26,
                     bold: true,
                     font: template.headingFont,
                     color: template.accentColor,
-                  }),
-                ],
-                spacing: {
+                }),
+              ],
+              spacing: {
                   before: 200,
                   after: 80,
-                },
-              })
-            );
+              },
+            })
+          );
           }
           
           // Add date range and location if available
           if (entry.dateRange || entry.location) {
-            paragraphs.push(
-              new Paragraph({
-                children: [
-                  new TextRun({
+          paragraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({
                     text: `${entry.dateRange || ""}${entry.dateRange && entry.location ? " | " : ""}${entry.location || ""}`,
                     size: 24,
-                    italics: true,
+                  italics: true,
                     font: template.bodyFont,
-                  }),
-                ],
-                spacing: {
+                }),
+              ],
+              spacing: {
                   before: 0,
-                  after: 120,
-                },
-              })
-            );
-          }
-          
+                after: 120,
+              },
+            })
+          );
+        }
+        
           // Add responsibilities as bullet points
           if (entry.responsibilities && Array.isArray(entry.responsibilities)) {
             entry.responsibilities.forEach((responsibility: string) => {
               if (typeof responsibility === 'string' && responsibility.trim()) {
-                paragraphs.push(
-                  new Paragraph({
-                    children: [
-                      new TextRun({
+          paragraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({
                         text: "• ",
                         size: 24,
                         bold: true,
@@ -497,18 +497,18 @@ function createEnhancedDocumentContent(sections: any, options: any, template: an
                         text: responsibility.trim(),
                         size: 24,
                         font: template.bodyFont,
-                      }),
-                    ],
-                    spacing: {
+                }),
+              ],
+              spacing: {
                       before: 60,
                       after: 60,
                     },
                     indent: {
                       firstLine: 0,
                       left: 720, // About 0.5 inches
-                    },
-                  })
-                );
+              },
+            })
+          );
               }
             });
           }
@@ -528,7 +528,7 @@ function createEnhancedDocumentContent(sections: any, options: any, template: an
             })
           );
         });
-      } else {
+        } else {
         // Simple text-based experience section
         const lines = sections[sectionKey].split('\n');
         
@@ -602,10 +602,10 @@ function createEnhancedDocumentContent(sections: any, options: any, template: an
                 size: 22,
                 color: template.accentColor,
                 font: template.bodyFont,
-              }),
-            ],
-            spacing: {
-              after: 80,
+                    }),
+                  ],
+                  spacing: {
+                    after: 80,
             },
           })
         );
@@ -834,9 +834,9 @@ function createEnhancedDocumentContent(sections: any, options: any, template: an
     // Add extra spacing after section
     paragraphs.push(
       new Paragraph({
-        spacing: {
-          after: 120,
-        },
+              spacing: {
+                after: 120,
+              },
       })
     );
   }
