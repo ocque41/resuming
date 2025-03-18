@@ -9,7 +9,6 @@ import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, Building, Brie
 import { Checkbox } from "@/components/ui/checkbox";
 import { cacheDocument, getCachedDocument, clearCachedDocument, getCacheAge } from "@/lib/cache/documentCache";
 import { toast } from "@/hooks/use-toast";
-import CVDocumentTemplateSelector from './CVDocumentTemplateSelector';
 
 // Modern SimpleFileDropdown component
 function ModernFileDropdown({ 
@@ -157,9 +156,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   
   // State for processing too long detection
   const [processingTooLong, setProcessingTooLong] = useState<boolean>(false);
-  
-  // State for template selection
-  const [selectedTemplate, setSelectedTemplate] = useState<string>('professional');
   
   // Auto-select first CV if available
   useEffect(() => {
@@ -1230,11 +1226,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
     };
   }, [isProcessing, processingStatus]);
   
-  // Handle template selection
-  const handleTemplateSelect = (template: string) => {
-    setSelectedTemplate(template);
-  };
-  
   // Handle DOCX download
   const handleDownloadDocx = async () => {
     if (!selectedCVId) {
@@ -1271,13 +1262,16 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         return;
       }
       
-      toast({
-        title: "Generating document...",
-        description: "Your CV is being prepared for download.",
-      });
+      // Prepare metadata to include in the document generation
+      const metadata = {
+        atsScore: originalAtsScore,
+        improvedAtsScore: improvedAtsScore,
+        improvements: improvements,
+        experienceEntries: structuredCV.experience,
+        industry: structuredCV.industry || ''
+      };
       
-      // Try direct document generation first with generate-docx endpoint
-      const generateResponse = await fetch("/api/cv/generate-docx", {
+      const response = await fetch("/api/cv/generate-docx", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1285,67 +1279,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         body: JSON.stringify({
           cvId: selectedCVId,
           optimizedText: textToUse,
-          metadata: {
-            template: selectedTemplate,
-            experienceEntries: structuredCV.experience || [],
-            improvements: improvements?.map(imp => typeof imp === 'string' ? imp : imp.improvement) || [],
-            atsScore: originalAtsScore || 0,
-            improvedAtsScore: improvedAtsScore || 0,
-            industry: structuredCV.industry || 'General'
-          }
-        }),
-      });
-      
-      if (!generateResponse.ok) {
-        throw new Error('Failed to generate DOCX directly, falling back to background process');
-      }
-      
-      const generateData = await generateResponse.json();
-      
-      if (generateData.success && generateData.docxBase64) {
-        // Successfully generated DOCX directly - create a download link
-        const blob = base64ToBlob(generateData.docxBase64, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-        const url = URL.createObjectURL(blob);
-        
-        // Create a download link and click it
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `cv-optimized-${selectedCVId}.docx`;
-        document.body.appendChild(a);
-        a.click();
-        
-        // Clean up
-        setTimeout(() => {
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }, 100);
-        
-        toast({
-          title: "Document ready!",
-          description: "Your document has been downloaded successfully.",
-          variant: "default",
-        });
-        
-        setIsDownloadingDocx(false);
-        return;
-      }
-      
-      // If direct generation failed, fall back to background process
-      toast({
-        title: "Using background processing",
-        description: "The document is being generated in the background. Please wait.",
-      });
-      
-      // Use optimize-docx endpoint as fallback
-      const response = await fetch("/api/cv/optimize-docx", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          cvId: selectedCVId,
-          optimizedText: textToUse,
-          template: selectedTemplate
+          metadata: metadata
         }),
       });
       
@@ -1356,119 +1290,41 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       
       const data = await response.json();
       
-      if (!data.success) {
-        throw new Error('Failed to initiate DOCX generation');
+      if (!data.success || !data.docxBase64) {
+        throw new Error('Failed to generate DOCX file');
       }
       
-      // Start checking for completion
-      let retryCount = 0;
-      const maxRetries = 30; // 30 * 2 seconds = 60 seconds maximum wait
+      // Create a download link for the DOCX file
+      const linkSource = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${data.docxBase64}`;
+      const downloadLink = document.createElement('a');
+      downloadLink.href = linkSource;
       
-      const checkInterval = setInterval(async () => {
-        try {
-          retryCount++;
-          if (retryCount > maxRetries) {
-            clearInterval(checkInterval);
-            setIsDownloadingDocx(false);
-            toast({
-              title: "Document generation timeout",
-              description: "The process is taking longer than expected. Please try again later.",
-              variant: "default",
-            });
-            return;
-          }
-          
-          const statusResponse = await fetch(`/api/cv/get?cvId=${selectedCVId}`);
-          if (!statusResponse.ok) {
-            throw new Error('Failed to check document status');
-          }
-          
-          const statusData = await statusResponse.json();
-          
-          if (statusData.cv?.metadata) {
-            const metadata = typeof statusData.cv.metadata === 'string' 
-              ? JSON.parse(statusData.cv.metadata) 
-              : statusData.cv.metadata;
-            
-            if (metadata.optimizedDocStatus === 'completed' && metadata.dropboxLink) {
-              clearInterval(checkInterval);
-              // Open the document link in a new tab
-              window.open(metadata.dropboxLink, '_blank');
-              setIsDownloadingDocx(false);
-              
-              toast({
-                title: "Document ready!",
-                description: "Your document has been generated successfully.",
-                variant: "default",
-              });
-              return;
-            } else if (metadata.optimizedDocStatus === 'failed') {
-              clearInterval(checkInterval);
-              setIsDownloadingDocx(false);
-              throw new Error(metadata.optimizedDocError || 'Document generation failed');
-            }
-            
-            // If base64 data is available, download it directly
-            if (metadata.docxBase64) {
-              clearInterval(checkInterval);
-              
-              // Convert base64 to blob and download
-              const blob = base64ToBlob(metadata.docxBase64, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-              const url = URL.createObjectURL(blob);
-              
-              // Create a download link and click it
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `cv-optimized-${selectedCVId}.docx`;
-              document.body.appendChild(a);
-              a.click();
-              
-              // Clean up
-              setTimeout(() => {
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-              }, 100);
-              
-              setIsDownloadingDocx(false);
-              
-              toast({
-                title: "Document ready!",
-                description: "Your document has been downloaded successfully.",
-                variant: "default",
-              });
-              return;
-            }
-          }
-        } catch (checkError) {
-          console.error('Error checking document status:', checkError);
-          // Don't clear the interval here, just log the error and continue trying
-        }
-      }, 2000); // Check every 2 seconds
+      // Use a more professional filename format
+      const timestamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0];
+      const cleanCVName = selectedCVName?.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9]/g, '_') || 'optimized';
+      downloadLink.download = `${cleanCVName}_CV_${timestamp}.docx`;
       
-    } catch (error) {
-      console.error('Error downloading DOCX:', error);
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
       
       toast({
-        title: "Download error",
-        description: error instanceof Error ? error.message : 'Failed to download document',
-        variant: "destructive",
+        title: "DOCX file downloaded",
+        description: "Your optimized CV has been downloaded as a DOCX file",
+        variant: "default",
       });
       
+      console.log('DOCX file downloaded successfully');
+    } catch (error) {
+      console.error('Error downloading DOCX:', error);
+      toast({
+        title: "Download failed",
+        description: error instanceof Error ? error.message : 'An unknown error occurred',
+        variant: "destructive",
+      });
+    } finally {
       setIsDownloadingDocx(false);
     }
-  };
-
-  // Helper function to convert base64 to Blob
-  const base64ToBlob = (base64: string, mimeType: string = '') => {
-    const byteString = window.atob(base64);
-    const arrayBuffer = new ArrayBuffer(byteString.length);
-    const int8Array = new Uint8Array(arrayBuffer);
-    
-    for (let i = 0; i < byteString.length; i++) {
-      int8Array[i] = byteString.charCodeAt(i);
-    }
-    
-    return new Blob([int8Array], { type: mimeType });
   };
 
   // Add a new component for displaying experience entries if available
@@ -1609,7 +1465,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         {/* Results Section */}
         {isProcessed && (
           <div className="mt-6">
-            <div className="space-y-6">
+              <div className="space-y-6">
               <div className="rounded-lg border border-gray-800 overflow-hidden mt-4">
                 <div className="bg-[#050505] p-4">
                   <h4 className="text-white font-medium mb-4">Optimization Results</h4>
@@ -1630,7 +1486,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                         Structured View
                       </button>
                     </div>
-                  </div>
+                    </div>
                   
                   {/* Content Display */}
                   <div className="mb-4">
@@ -1771,7 +1627,14 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                             <div className="text-gray-300 text-sm">
                               {structuredCV.education.split('\n').map((education, index) => (
                                 <div key={index} className="mb-1">
-                                  {education}
+                                  {education.startsWith('•') || education.startsWith('-') || education.startsWith('*') ? (
+                                    <div className="flex items-start">
+                                      <span className="text-[#B4916C] mr-2">•</span>
+                                      <span>{education.replace(/^[-•*]\s*/, '')}</span>
+                                    </div>
+                                  ) : (
+                                    <span>{education}</span>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -1798,64 +1661,51 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                       </div>
                     ) : (
                       <div className="bg-[#121212] p-4 rounded-md">
-                        <h5 className="text-white font-medium mb-4">Raw Text</h5>
-                        <div className="text-gray-300 text-sm whitespace-pre-wrap">{optimizedText}</div>
+                        <h5 className="text-white font-medium mb-2">Optimized Content</h5>
+                        <div className="text-gray-300 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto p-2 bg-gray-900 rounded">
+                          {formatStructuredCV() || processedText || optimizedText || "No optimized content available yet."}
+                        </div>
                       </div>
                     )}
                   </div>
                   
-                  {/* ATS Score */}
-                  <div className="mb-4">
-                    <h5 className="text-white font-medium mb-2">ATS Compatibility Score</h5>
-                    <div className="flex items-center">
-                      <div className="flex-1">
-                        <Progress value={95} className="h-2 bg-gray-800" />
-                      </div>
-                      <span className="ml-2 text-white font-medium">95%</span>
-                    </div>
-                  </div>
-                  
-                  {/* Template Selection and Download Button */}
-                  <div className="mt-8">
-                    <h5 className="text-white font-medium mb-4">Document Template</h5>
-                    <CVDocumentTemplateSelector 
-                      onSelect={handleTemplateSelect}
-                      selectedTemplate={selectedTemplate}
-                    />
-                    <div className="mt-4 flex justify-end">
-                      <Button 
-                        onClick={handleDownloadDocx} 
-                        className="bg-[#B4916C] hover:bg-[#A27D59] text-black"
-                        disabled={isDownloadingDocx}
-                      >
-                        {isDownloadingDocx ? (
-                          <>
-                            <span className="animate-spin mr-2">◠</span>
-                            Generating...
+                  {/* Download DOCX Button */}
+                      <Button
+                    onClick={handleDownloadDocx}
+                    disabled={isDownloadingDocx || !optimizedText}
+                    className="w-full bg-[#121212] hover:bg-gray-800 text-white border border-gray-700 mb-4"
+                  >
+                    {isDownloadingDocx ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        Generating DOCX...
                           </>
                         ) : (
                           <>
-                            <Download className="w-4 h-4 mr-2" />
-                            Download DOCX
+                        <Download className="h-4 w-4 mr-2" />
+                        Download as DOCX
                           </>
                         )}
                       </Button>
-                    </div>
+                    
+                    <Button
+                    onClick={handleResetProcessing}
+                      className="bg-transparent hover:bg-gray-800 text-gray-400 border border-gray-700 flex items-center justify-center mt-4 w-full"
+                    >
+                      <RefreshCw className="h-5 w-5 mr-2" />
+                      Start Over
+                    </Button>
                   </div>
                 </div>
               </div>
-            </div>
           </div>
         )}
-        
+
         {/* Experience Entries Preview */}
         {structuredCV.experience && structuredCV.experience.length > 0 && (
-          <div className="mt-6">
-            <h5 className="text-white font-medium mb-2">Experience Summary</h5>
-            <ExperienceEntriesPreview experienceEntries={structuredCV.experience} />
-          </div>
+          <ExperienceEntriesPreview experienceEntries={structuredCV.experience} />
         )}
-        
+
         {/* Improvements Display */}
         {showImprovements && improvements.length > 0 && (
           <div className="mt-6 bg-black/50 border border-gray-800 rounded-lg p-4">
