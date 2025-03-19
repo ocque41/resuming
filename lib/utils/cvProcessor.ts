@@ -986,6 +986,99 @@ ${analysis.weaknesses?.join(', ') || 'Improve overall ATS compatibility'}`
 }
 
 /**
+ * Enhances a list of skills by suggesting related and more specific skills
+ * @param skills Original list of skills
+ * @returns Enhanced list with additional related skills
+ */
+function enhanceSkillsList(skills: string[]): string[] {
+  if (!skills || skills.length === 0) return [];
+  
+  // Define skill relationships - when a general skill is detected, suggest these related specific skills
+  const skillRelationships: Record<string, string[]> = {
+    // Design & Creative
+    'adobe': ['Adobe Photoshop', 'Adobe Illustrator', 'Adobe InDesign', 'Adobe XD', 'Adobe Premiere Pro', 'Adobe After Effects'],
+    'design': ['UI Design', 'UX Design', 'Graphic Design', 'Web Design', 'Product Design', 'Brand Design'],
+    'creative': ['Content Creation', 'Visual Storytelling', 'Brand Development', 'Creative Direction'],
+    'photoshop': ['Photo Editing', 'Image Manipulation', 'Digital Retouching'],
+    
+    // Programming & Development
+    'programming': ['Object-Oriented Programming', 'Functional Programming', 'Test-Driven Development', 'Agile Development'],
+    'javascript': ['React', 'Vue.js', 'Angular', 'Node.js', 'TypeScript', 'Express.js'],
+    'python': ['Django', 'Flask', 'Pandas', 'NumPy', 'TensorFlow', 'PyTorch', 'Data Analysis'],
+    'java': ['Spring Boot', 'Hibernate', 'Maven', 'JUnit', 'Android Development'],
+    'c#': ['.NET Framework', 'ASP.NET', 'WPF', 'Entity Framework', 'LINQ'],
+    'php': ['Laravel', 'Symfony', 'WordPress Development', 'PHP7', 'Composer'],
+    'web': ['HTML5', 'CSS3', 'JavaScript', 'Responsive Design', 'Web Performance Optimization'],
+    'database': ['SQL', 'MySQL', 'PostgreSQL', 'MongoDB', 'Database Design', 'Query Optimization'],
+    
+    // Business & Management
+    'management': ['Team Leadership', 'Project Management', 'Strategic Planning', 'Performance Management', 'Resource Allocation'],
+    'project': ['Agile Methodologies', 'Scrum', 'Kanban', 'JIRA', 'Project Planning', 'Risk Management'],
+    'marketing': ['Digital Marketing', 'Content Marketing', 'SEO', 'SEM', 'Social Media Marketing', 'Marketing Analytics'],
+    'analytics': ['Data Analysis', 'Google Analytics', 'Business Intelligence', 'Statistical Analysis', 'Reporting & Dashboards'],
+    'sales': ['Lead Generation', 'CRM', 'Negotiation', 'Account Management', 'Sales Strategy'],
+    
+    // Communication & Soft Skills
+    'communication': ['Written Communication', 'Verbal Communication', 'Public Speaking', 'Business Writing', 'Technical Writing'],
+    'leadership': ['Team Building', 'Conflict Resolution', 'Coaching', 'Performance Management', 'Strategic Leadership'],
+    
+    // Technical Skills
+    'cloud': ['AWS', 'Azure', 'Google Cloud Platform', 'Cloud Architecture', 'Serverless Computing', 'Cloud Security'],
+    'aws': ['EC2', 'S3', 'Lambda', 'CloudFormation', 'ECS', 'RDS', 'DynamoDB'],
+    'devops': ['CI/CD', 'Docker', 'Kubernetes', 'Jenkins', 'Terraform', 'Infrastructure as Code'],
+    'data': ['Data Analysis', 'Data Visualization', 'Data Modeling', 'Big Data', 'Data Mining', 'ETL'],
+    'mobile': ['iOS Development', 'Android Development', 'React Native', 'Flutter', 'Mobile UI Design'],
+    'security': ['Cybersecurity', 'Network Security', 'Application Security', 'Security Auditing', 'Penetration Testing'],
+    
+    // Finance
+    'finance': ['Financial Analysis', 'Budgeting', 'Forecasting', 'Financial Reporting', 'Risk Assessment'],
+    'accounting': ['Financial Accounting', 'Management Accounting', 'Tax Preparation', 'Audit', 'Bookkeeping'],
+    
+    // HR
+    'hr': ['Talent Acquisition', 'Employee Relations', 'Performance Management', 'HR Policies', 'HRIS'],
+    'recruitment': ['Talent Sourcing', 'Interviewing', 'Candidate Assessment', 'Employer Branding']
+  };
+  
+  // For some skills, suggest additional related general skills
+  const skillExpansions: Record<string, string[]> = {
+    'java': ['Object-Oriented Programming', 'Backend Development', 'API Development'],
+    'python': ['Data Science', 'Scripting', 'Automation', 'Machine Learning'],
+    'javascript': ['Frontend Development', 'Web Development', 'Single-Page Applications'],
+    'management': ['Leadership', 'Strategic Planning', 'Team Building'],
+    'data analysis': ['SQL', 'Statistics', 'Data Visualization', 'Reporting'],
+    'cloud': ['Distributed Systems', 'Scalability', 'High Availability'],
+    'design': ['Creativity', 'Visual Communication', 'User-Centered Design']
+  };
+  
+  // Normalize original skills for matching
+  const normalizedSkills = skills.map(skill => skill.toLowerCase().trim());
+  
+  // Create a set to avoid duplicates
+  const enhancedSkillsSet = new Set(skills);
+  
+  // Add related specific skills
+  for (const [generalSkill, relatedSkills] of Object.entries(skillRelationships)) {
+    if (normalizedSkills.some(skill => skill.includes(generalSkill) || generalSkill.includes(skill))) {
+      // Don't add too many related skills for a single match
+      const skillsToAdd = relatedSkills.slice(0, 3);
+      skillsToAdd.forEach(skill => enhancedSkillsSet.add(skill));
+    }
+  }
+  
+  // Add expanded general skills
+  for (const [specificSkill, generalSkills] of Object.entries(skillExpansions)) {
+    if (normalizedSkills.some(skill => skill.includes(specificSkill) || specificSkill.includes(skill))) {
+      // Only add 1-2 expanded skills to avoid overwhelming
+      const skillsToAdd = generalSkills.slice(0, 2);
+      skillsToAdd.forEach(skill => enhancedSkillsSet.add(skill));
+    }
+  }
+  
+  // Convert back to array and sort
+  return Array.from(enhancedSkillsSet);
+}
+
+/**
  * Performs a local analysis of CV text to supplement AI analysis
  * @param text The raw CV text to analyze
  * @returns Local analysis results
@@ -1058,8 +1151,34 @@ export function performLocalAnalysis(text: string) {
     }
   });
   
-  // Parse experience entries from text to create structured data
-  let experienceEntries = parseExperienceEntries(sections['experience'] || '');
+  // Parse experience entries - New functionality
+  let experienceEntries = [];
+  if (hasExperience) {
+    // Extract experience section from raw text to preserve case
+    const experienceSectionNames = ['experience', 'work experience', 'employment history', 'professional experience'];
+    let experienceSection = '';
+    
+    for (const name of experienceSectionNames) {
+      const regex = new RegExp(`(?:^|\\n)\\s*(${name})\\s*(?:\\:|\\n)`, 'i');
+      const match = text.match(regex);
+      if (match) {
+        const start = match.index || 0;
+        const nextSectionRegex = /(?:^|\n)\s*(education|skills|technical skills|certifications|achievements|projects|publications|languages|interests|references)\s*(?:\:|\n)/i;
+        const nextMatch = text.substring(start + match[0].length).match(nextSectionRegex);
+        
+        const end = nextMatch 
+          ? start + match[0].length + (nextMatch.index || 0) 
+          : text.length;
+        
+        experienceSection = text.substring(start + match[0].length, end).trim();
+        break;
+      }
+    }
+    
+    if (experienceSection) {
+      experienceEntries = parseExperienceEntries(experienceSection);
+    }
+  }
   
   // Calculate rough ATS score based on local factors
   let localAtsScore = 50; // Start at 50
@@ -1080,6 +1199,42 @@ export function performLocalAnalysis(text: string) {
   // Ensure score is between 0-100
   localAtsScore = Math.max(0, Math.min(100, localAtsScore));
   
+  // Extract skills from skills section if present
+  let extractedSkills: string[] = [];
+  if (sections.skills || sections.technical_skills) {
+    const skillsSection = sections.skills || sections.technical_skills;
+    extractedSkills = skillsSection.split(/[,;•\n-]/)
+      .map(s => s.trim())
+      .filter(s => s.length > 2 && s.length < 50); // Filter out very short or very long items
+  } else {
+    // If no skills section, try to extract skills from the whole text
+    // Look for lines with bullet points or comma-separated lists that might be skills
+    const potentialSkillsLines = text.split('\n')
+      .filter(line => line.trim().startsWith('•') || line.trim().startsWith('-') || line.includes(','));
+      
+    // Extract skills from these lines
+    potentialSkillsLines.forEach(line => {
+      const items = line.split(/[,;•-]/)
+        .map(s => s.trim())
+        .filter(s => s.length > 2 && s.length < 50);
+      extractedSkills = [...extractedSkills, ...items];
+    });
+    
+    // Also extract known technical terms
+    const technicalTerms = ['javascript', 'python', 'java', 'c#', 'php', 'html', 'css', 'sql', 
+                           'react', 'angular', 'vue', 'node', '.net', 'docker', 'kubernetes',
+                           'aws', 'azure', 'gcp', 'excel', 'photoshop', 'illustrator'];
+                           
+    technicalTerms.forEach(term => {
+      if (normalizedText.includes(term)) {
+        extractedSkills.push(term.charAt(0).toUpperCase() + term.slice(1));
+      }
+    });
+  }
+  
+  // Enhance the skills list with related skills
+  const enhancedSkills = enhanceSkillsList(extractedSkills);
+  
   return {
     sections,
     hasContact,
@@ -1091,296 +1246,192 @@ export function performLocalAnalysis(text: string) {
     keywordsByIndustry,
     topIndustry,
     localAtsScore,
-    experienceEntries // Add the parsed experience entries to the result
+    experienceEntries, // Add the parsed experience entries to the result
+    skills: enhancedSkills // Add the enhanced skills list
   };
 }
 
 /**
- * Parse experience entries from text to create structured data
- * @param experienceText Raw text from the experience section of a CV
- * @returns Array of structured experience entries
+ * Parse experience section into structured entries
+ * @param experienceText The raw experience section text
+ * @returns Array of parsed experience entries
  */
-export function parseExperienceEntries(experienceText: string) {
-  // Initialize the array to store structured experience entries
-  const experienceEntries: Array<{
-    jobTitle: string;
-    company: string;
-    dateRange: string;
-    location?: string;
-    responsibilities: string[];
-  }> = [];
-
-  // If no text provided, return empty array
-  if (!experienceText || typeof experienceText !== 'string') {
-    return experienceEntries;
-  }
-
-  // Convert to string array if a string was passed
-  const experienceLines = Array.isArray(experienceText) 
-    ? experienceText 
-    : experienceText.split('\n').filter(line => line.trim());
+function parseExperienceEntries(experienceText: string) {
+  const entries = [];
   
-  // Common patterns to identify job entries
-  const datePatterns = [
-    /\b(Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|Sept|September|Oct|October|Nov|November|Dec|December)\.?\s+\d{4}\s*(-|–|to|Till|until|present|current|now|\d{4})/i,
-    /\b\d{4}\s*(-|–|to|Till|until)\s*(present|current|now|\d{4})/i,
-    /\b(19|20)\d{2}\s*(-|–|to|Till|until|–|—)\s*(present|current|now|(19|20)\d{2})/i,
-    /\b(0?[1-9]|1[0-2])\s*\/\s*\d{4}\s*(-|–|to|until|–|—)\s*((0?[1-9]|1[0-2])\s*\/\s*\d{4}|present|current|now)/i
-  ];
+  // Split by potential job blocks (looking for patterns that might indicate a new job)
+  // First try to split by double line breaks which typically separate entries
+  let jobBlocks = experienceText.split(/\n\s*\n/).filter(block => block.trim().length > 0);
   
-  const companyPatterns = [
-    /\b(at|with|for)\s+([A-Z][A-Za-z0-9\s\.,&]+?(Inc|LLC|Ltd|Limited|Corporation|Corp|GmbH|Co|Company|Group|International|Partners))/i,
-    /([A-Z][A-Za-z0-9\s\.,&]+?(Inc|LLC|Ltd|Limited|Corporation|Corp|GmbH|Co|Company|Group|International|Partners))/i,
-    /\b([A-Z][A-Za-z0-9\s\.,&]{2,})\b/
-  ];
-  
-  const locationPatterns = [
-    /\b([A-Z][a-z]+(\s[A-Z][a-z]+)*),\s*([A-Z]{2}|[A-Z][a-z]+(\s[A-Z][a-z]+)*)\b/,    // City, State or City, Country
-    /\b([A-Z][a-z]+(\s[A-Z][a-z]+)*)\s*-\s*([A-Z][a-z]+(\s[A-Z][a-z]+)*|[A-Z]{2})\b/, // City - State/Country
-    /\b(Remote|Virtual|Home[\s-]based|Telecommute|Work from home)\b/i                // Remote work indicators
-  ];
-  
-  const titlePatterns = [
-    /\b(Senior|Lead|Principal|Chief|Head|Junior|Associate)\s+([A-Z][a-z]+(\s[A-Z][a-z]+)*)\b/i,
-    /\b(Developer|Engineer|Designer|Manager|Director|Coordinator|Specialist|Analyst|Architect|Consultant|Administrator|Officer)\b/i,
-    /\b([A-Z][a-z]+(\s[A-Z][a-z]+)*)\s+(Developer|Engineer|Designer|Manager|Director|Coordinator|Specialist|Analyst|Architect|Consultant|Administrator|Officer)\b/i
-  ];
-  
-  // Segment the text into potential job blocks
-  let currentEntry: {
-    jobTitle: string;
-    company: string;
-    dateRange: string;
-    location?: string;
-    responsibilities: string[];
-    confidence: number; // Used for scoring the detection confidence
-  } | null = null;
-  
-  let blocks: string[][] = [];
-  let currentBlock: string[] = [];
-  
-  // Group lines into potential job blocks
-  for (let i = 0; i < experienceLines.length; i++) {
-    const line = experienceLines[i].trim();
-    if (!line) continue;
-    
-    // Check if this line might be a new job entry header
-    const hasDate = datePatterns.some(pattern => pattern.test(line));
-    const mightBeTitle = titlePatterns.some(pattern => pattern.test(line)) && line.length < 80;
-    const mightBeCompany = companyPatterns.some(pattern => pattern.test(line)) && line.length < 80;
-    
-    // If this line contains date patterns or looks like a new job title or company, it might start a new block
-    if ((hasDate || mightBeTitle || mightBeCompany) && 
-        (!currentBlock.length || // First block
-         // Or previous block has content but this is clearly a new entry
-         (currentBlock.length > 0 && (hasDate || 
-                                     (mightBeTitle && !currentBlock.some(l => titlePatterns.some(p => p.test(l)))))))) {
-      // Save current block if not empty
-      if (currentBlock.length > 0) {
-        blocks.push([...currentBlock]);
-        currentBlock = [];
-      }
-      currentBlock.push(line);
-    } 
-    // For bullet points or regular lines, add to current block
-    else if (currentBlock.length > 0) {
-      currentBlock.push(line);
-    }
-    // If we're at the beginning and no strong pattern yet, start a block anyway
-    else {
-      currentBlock.push(line);
+  // If we only have one block, try to split by date patterns which often indicate new positions
+  if (jobBlocks.length <= 1) {
+    const datePatternSplits = experienceText.split(/\n(?=.*?\b(?:19|20)\d{2}\b.*?\b(?:19|20)\d{2}|present|current|now\b)/i);
+    if (datePatternSplits.length > 1) {
+      jobBlocks = datePatternSplits.filter(block => block.trim().length > 0);
     }
   }
   
-  // Add the last block if not empty
-  if (currentBlock.length > 0) {
-    blocks.push([...currentBlock]);
-  }
-  
-  // Process each block to extract job details
-  for (const block of blocks) {
-    // Skip empty blocks
-    if (block.length === 0) continue;
+  // Process each job block
+  for (const block of jobBlocks) {
+    const lines = block.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    if (lines.length === 0) continue;
     
-    currentEntry = {
+    const entry: any = {
       jobTitle: '',
       company: '',
       dateRange: '',
       location: '',
-      responsibilities: [],
-      confidence: 0 // Start with zero confidence
+      responsibilities: []
     };
     
-    // First pass - identify clear patterns
-    let headerLinesProcessed = new Set<number>();
+    // Identify potential job title, company, date range and location in the first few lines
+    let headerLinesProcessed = 0;
+    let responsibilitiesStarted = false;
     
-    // Check for date ranges first - these are the most reliable indicators
-    for (let i = 0; i < Math.min(5, block.length); i++) {
-      const line = block[i];
+    for (let i = 0; i < Math.min(6, lines.length); i++) {
+      const line = lines[i];
       
-      // Check for date patterns
-      if (datePatterns.some(pattern => pattern.test(line))) {
-        currentEntry.dateRange = line.trim();
-        headerLinesProcessed.add(i);
-        currentEntry.confidence += 30; // Strong indicator
-        break; // Only use first date match for now
-      }
-    }
-    
-    // Check for job title
-    for (let i = 0; i < Math.min(5, block.length); i++) {
-      if (headerLinesProcessed.has(i)) continue;
-      
-      const line = block[i];
-      if (titlePatterns.some(pattern => pattern.test(line)) && line.length < 80) {
-        currentEntry.jobTitle = line.trim();
-        headerLinesProcessed.add(i);
-        currentEntry.confidence += 25;
+      // Once we hit a bullet point or a line that looks like a responsibility, stop processing headers
+      if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*') || 
+          /^[A-Z][a-z]+ed\b|^[A-Z][a-z]+ing\b|^[A-Z][a-z]+ed\s|^[A-Z][a-z]+ing\s/.test(line)) {
+        responsibilitiesStarted = true;
         break;
       }
-    }
-    
-    // Check for company name
-    for (let i = 0; i < Math.min(5, block.length); i++) {
-      if (headerLinesProcessed.has(i)) continue;
       
-      const line = block[i];
-      if (companyPatterns.some(pattern => pattern.test(line)) && line.length < 80) {
-        currentEntry.company = line.trim();
-        headerLinesProcessed.add(i);
-        currentEntry.confidence += 25;
-        break;
-      }
-    }
-    
-    // Check for location
-    for (let i = 0; i < Math.min(5, block.length); i++) {
-      if (headerLinesProcessed.has(i)) continue;
+      // Check for date range with various formats
+      const datePatterns = [
+        /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}\s+(?:to|-|–|—)\s+(?:(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}|Present|Current|Now)\b/i,
+        /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\s+(?:to|-|–|—)\s+(?:(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}|Present|Current|Now)\b/i,
+        /\b(19|20)\d{2}\s*(?:-|–|—|to)\s*((?:19|20)\d{2}|Present|Current|Now)\b/i,
+        /\b(19|20)\d{2}\s*(?:-|–|—|to)\s*(?:Present|Current|Now)\b/i,
+        /\b(19|20)\d{2}\s*-\s*(19|20)\d{2}\b/i
+      ];
       
-      const line = block[i];
-      if (locationPatterns.some(pattern => pattern.test(line))) {
-        currentEntry.location = line.trim();
-        headerLinesProcessed.add(i);
-        currentEntry.confidence += 15;
-        break;
-      }
-    }
-    
-    // Second pass - try to infer unassigned fields from remaining header lines
-    for (let i = 0; i < Math.min(5, block.length); i++) {
-      if (headerLinesProcessed.has(i)) continue;
-      
-      const line = block[i].trim();
-      
-      // Skip bullet points in the header section
-      if (line.startsWith('•') || line.startsWith('-') || line.startsWith('*') || 
-          /^\d+\./.test(line)) continue;
-      
-      // If short line and no job title, likely a job title
-      if (!currentEntry.jobTitle && line.length < 80) {
-        currentEntry.jobTitle = line;
-        headerLinesProcessed.add(i);
-        currentEntry.confidence += 15;
+      if (!entry.dateRange && datePatterns.some(pattern => pattern.test(line))) {
+        entry.dateRange = line;
+        headerLinesProcessed++;
         continue;
       }
       
-      // If no company assigned yet, might be company
-      if (!currentEntry.company && line.length < 80) {
-        currentEntry.company = line;
-        headerLinesProcessed.add(i);
-        currentEntry.confidence += 10;
+      // Check for company name (look for LLC, Inc, Ltd, GmbH, etc. or capitalized words)
+      const companyPatterns = [
+        /\b(LLC|Inc|Ltd|Limited|GmbH|Corp|Corporation|Group|Company)\b/i,
+        /\b([A-Z][a-z]*\s+){1,3}(LLC|Inc|Ltd|Limited|GmbH|Corp|Corporation|Group|Company)\b/i,
+        /\b[A-Z][a-z]*(?:\s+[A-Z][a-z]*){1,5}\b/ // Sequence of capitalized words
+      ];
+      
+      if (!entry.company && companyPatterns.some(pattern => pattern.test(line))) {
+        entry.company = line;
+        headerLinesProcessed++;
         continue;
       }
       
-      // If no location yet, might be location
-      if (!currentEntry.location && line.length < 80) {
-        const containsComma = line.includes(',');
-        if (containsComma) {
-          currentEntry.location = line;
-          headerLinesProcessed.add(i);
-          currentEntry.confidence += 5;
-        }
+      // Check for location (City, State or City, Country format)
+      const locationPatterns = [
+        /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),\s*([A-Z]{2}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/, // City, State or City, Country
+        /\b(?:based in|located in|working from|remote from)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/i, // "based in City" pattern
+        /\bRemote\b/i // Remote work
+      ];
+      
+      if (!entry.location && locationPatterns.some(pattern => pattern.test(line))) {
+        entry.location = line;
+        headerLinesProcessed++;
+        continue;
+      }
+      
+      // If we haven't assigned the job title yet and this line is short, it's likely the job title
+      // Job titles are usually capitalized and contain roles like "Manager", "Developer", etc.
+      const jobTitlePatterns = [
+        /\b(Manager|Director|Lead|Senior|Junior|Specialist|Consultant|Analyst|Developer|Engineer|Designer|Coordinator|Administrator|Assistant|Supervisor|Executive|Officer|Chief|Head|VP|Vice President|President|CEO|CTO|CFO)\b/i,
+        /^([A-Z][a-z]+\s+){1,4}$/  // Short all-capitalized line
+      ];
+      
+      if (!entry.jobTitle && (jobTitlePatterns.some(pattern => pattern.test(line)) || line.length < 60)) {
+        entry.jobTitle = line;
+        headerLinesProcessed++;
+        continue;
       }
     }
     
-    // Collect responsibilities
-    let foundResponsibilities = false;
-    for (let i = 0; i < block.length; i++) {
-      if (headerLinesProcessed.has(i)) continue;
+    // Process responsibilities from where we left off
+    let inResponsibilitiesSection = responsibilitiesStarted;
+    for (let i = headerLinesProcessed; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.length === 0) continue;
       
-      const line = block[i].trim();
-      if (!line) continue;
-      
-      // Check if this is a bullet point or numbered list item
-      const isBulletPoint = line.startsWith('•') || line.startsWith('-') || 
-                           line.startsWith('*') || /^\d+\./.test(line);
-      
-      // If we find a bullet point, it's likely a responsibility
-      if (isBulletPoint) {
-        foundResponsibilities = true;
-        const cleanLine = line.replace(/^[•\-*\d.]+\s*/, '').trim();
-        if (cleanLine) {
-          currentEntry.responsibilities.push(cleanLine);
-          currentEntry.confidence += 2; // Each responsibility slightly increases confidence
-        }
-      }
-      // Once we've started collecting bullet points, non-bullet text might still be part of responsibilities
-      else if (foundResponsibilities && line.length > 10) {
-        currentEntry.responsibilities.push(line);
-      }
-      // Otherwise if it's not a header and not a bullet point but looks like a sentence, add as responsibility
-      else if (line.length > 20 && /[A-Z].*\.$/.test(line)) {
-        currentEntry.responsibilities.push(line);
-        foundResponsibilities = true;
-      }
-    }
-    
-    // If no responsibilities found but we have other header info, try to parse regular text as responsibilities
-    if (currentEntry.responsibilities.length === 0 && 
-        (currentEntry.jobTitle || currentEntry.company || currentEntry.dateRange)) {
-      for (let i = 0; i < block.length; i++) {
-        if (headerLinesProcessed.has(i)) continue;
+      // If this looks like a responsibility bullet or starts with an action verb, add it
+      if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*') || 
+          /^[A-Z][a-z]+ed\b|^[A-Z][a-z]+ing\b/.test(line)) {
         
-        const line = block[i].trim();
-        if (line.length > 15) { // If it's a longer line
-          currentEntry.responsibilities.push(line);
+        inResponsibilitiesSection = true;
+        // Remove bullet point character if present
+        const cleanLine = line.replace(/^[-•*]\s*/, '').trim();
+        if (cleanLine) {
+          entry.responsibilities.push(cleanLine);
+        }
+      } else if (inResponsibilitiesSection) {
+        // If we're already in the responsibilities section, continue adding lines
+        entry.responsibilities.push(line);
+      } else {
+        // If we're not in responsibilities section and this is a new header line, assign to appropriate field
+        if (!entry.jobTitle) {
+          entry.jobTitle = line;
+        } else if (!entry.company) {
+          entry.company = line;
+        } else if (!entry.dateRange) {
+          entry.dateRange = line;
+        } else if (!entry.location) {
+          entry.location = line;
         }
       }
     }
     
-    // If we found date or title and company with some reasonable level of confidence, add to results
-    if (currentEntry.confidence >= 35 && 
-        (currentEntry.jobTitle || currentEntry.company) && 
-        (currentEntry.dateRange || currentEntry.responsibilities.length > 0)) {
-      const { confidence, ...entryWithoutConfidence } = currentEntry;
-      experienceEntries.push(entryWithoutConfidence);
+    // Identify achievements within responsibilities
+    entry.responsibilities = entry.responsibilities.map((resp: string) => {
+      // Check if this responsibility has metrics or achievement indicators
+      const hasMetrics = /\b\d+%|\$\d+|\d+\s+percent|\d+k|\d+\s+million|\b\d+\s+thousand/i.test(resp);
+      const hasAchievementVerb = /\bincreas|\bgrowth|\bexpand/i.test(resp);
+      
+      // If it has metrics or achievement indicators, it's likely an achievement
+      if (hasMetrics || hasAchievementVerb) {
+        // If it doesn't start with an action verb, add one
+        if (!/^[A-Z][a-z]+ed\b|^[A-Z][a-z]+ing\b/.test(resp)) {
+          // Choose an appropriate action verb based on the content
+          let actionVerb = "Achieved";
+          if (/\bincreas|\bgrowth|\bexpand/i.test(resp)) {
+            actionVerb = "Increased";
+          } else if (/\bimprov|\benhance|\bupgrad/i.test(resp)) {
+            actionVerb = "Improved";
+          } else if (/\breduc|\bdecrease|\bcut/i.test(resp)) {
+            actionVerb = "Reduced";
+          } else if (/\bgenerate|\bcreate|\bdevelop/i.test(resp)) {
+            actionVerb = "Generated";
+          } else if (/\bdeliver|\bcomplete|\bfinish/i.test(resp)) {
+            actionVerb = "Delivered";
+          } else if (/\blead|\bmanage|\bsupervis/i.test(resp)) {
+            actionVerb = "Led";
+          }
+          
+          return `${actionVerb} ${resp.charAt(0).toLowerCase()}${resp.slice(1)}`;
+        }
+      }
+      
+      // Otherwise, return as is
+      return resp;
+    });
+    
+    // Only add entries that have at least a job title or company
+    if (entry.jobTitle || entry.company) {
+      // Set defaults for empty fields to improve user experience
+      if (!entry.jobTitle) entry.jobTitle = "Position";
+      if (!entry.company) entry.company = "Company";
+      if (!entry.dateRange) entry.dateRange = ""; // Empty date range is acceptable
+      
+      entries.push(entry);
     }
   }
   
-  // Sort experience entries by date (most recent first) if possible
-  experienceEntries.sort((a, b) => {
-    // Try to extract years from date ranges
-    const getLatestYear = (dateRange: string): number => {
-      const yearMatches = dateRange.match(/\b(19|20)\d{2}\b/g);
-      if (yearMatches && yearMatches.length > 0) {
-        // Get the largest (most recent) year
-        return Math.max(...yearMatches.map(y => parseInt(y)));
-      }
-      // If "present" or "current", assume it's current
-      if (/present|current|now/i.test(dateRange)) {
-        return new Date().getFullYear();
-      }
-      return 0;
-    };
-    
-    const yearA = getLatestYear(a.dateRange);
-    const yearB = getLatestYear(b.dateRange);
-    
-    // Reverse sort - most recent first
-    return yearB - yearA;
-  });
-  
-  return experienceEntries;
+  return entries;
 }
 
 /**
@@ -1464,358 +1515,9 @@ function formatDate(dateStr: string): string {
 /**
  * Returns common keywords for a specific industry
  */
-export function getIndustryKeywords(industry: string): string[] {
-  const industryKeywords: Record<string, string[]> = {
-    'Technology': [
-      'Agile', 'Scrum', 'Software Development', 'APIs', 'Microservices', 'Cloud', 'AWS', 'Azure', 
-      'DevOps', 'CI/CD', 'Python', 'JavaScript', 'TypeScript', 'React', 'Node.js', 'Java', 'Kubernetes',
-      'Docker', 'Infrastructure as Code', 'System Architecture', 'Databases', 'SQL', 'NoSQL',
-      'Machine Learning', 'Data Science', 'Artificial Intelligence', 'Full Stack', 'Front End',
-      'Back End', 'Security', 'Git', 'GitHub', 'Version Control', 'Test-Driven Development',
-      'RESTful APIs', 'GraphQL', 'Continuous Integration', 'Continuous Deployment'
-    ],
-    'Finance': [
-      'Financial Analysis', 'Financial Reporting', 'Forecasting', 'Budgeting', 'Risk Management',
-      'Compliance', 'Regulations', 'SEC', 'GAAP', 'IFRS', 'Accounting', 'CPA', 'Auditing', 'Taxation',
-      'Tax Planning', 'Investment', 'Portfolio Management', 'Asset Management', 'Wealth Management',
-      'Financial Planning', 'Financial Statements', 'Banking', 'Credit Analysis', 'Underwriting',
-      'Financial Modeling', 'M&A', 'Mergers and Acquisitions', 'Valuation', 'Due Diligence',
-      'Excel', 'Bloomberg', 'Capital Markets', 'Treasury', 'Cash Flow', 'Profit & Loss'
-    ],
-    'Healthcare': [
-      'Patient Care', 'Electronic Medical Records', 'EMR', 'EHR', 'Healthcare Administration',
-      'HIPAA', 'Clinical Experience', 'Medical Coding', 'Medical Billing', 'Health Informatics',
-      'Telemedicine', 'Medical Research', 'Pharmaceuticals', 'Clinical Trials', 'FDA',
-      'Quality Assurance', 'Quality Improvement', 'Patient Safety', 'Healthcare Policy',
-      'Healthcare Compliance', 'Care Coordination', 'Patient Advocacy', 'Preventive Care',
-      'Medical Devices', 'Diagnostics', 'Treatment Plans', 'Health Insurance', 'Medicare',
-      'Medicaid', 'Healthcare Regulations', 'Biotechnology'
-    ],
-    'Marketing': [
-      'Digital Marketing', 'SEO', 'SEM', 'Social Media Marketing', 'Content Marketing',
-      'Email Marketing', 'Marketing Strategy', 'Market Research', 'Brand Management', 'Branding',
-      'Campaign Management', 'Google Analytics', 'Facebook Ads', 'Google Ads', 'CRM',
-      'Customer Relationship Management', 'Marketing Automation', 'Lead Generation',
-      'Customer Acquisition', 'Marketing Analytics', 'Growth Hacking', 'Conversion Rate Optimization',
-      'A/B Testing', 'Copywriting', 'Public Relations', 'Media Planning', 'Media Buying',
-      'Product Marketing', 'Marketing Communications', 'Influencer Marketing'
-    ],
-    'Sales': [
-      'Sales Strategy', 'Business Development', 'Account Management', 'Key Account Management',
-      'Client Relationship Management', 'Lead Generation', 'Sales Funnel', 'Pipeline Management',
-      'Closing Deals', 'Negotiation', 'Cold Calling', 'Prospecting', 'Customer Acquisition',
-      'Sales Analytics', 'CRM Software', 'Salesforce', 'HubSpot', 'Sales Targets', 'Revenue Growth',
-      'Upselling', 'Cross-selling', 'Solution Selling', 'Consultative Selling', 'Territory Management',
-      'Channel Sales', 'Direct Sales', 'B2B Sales', 'B2C Sales', 'Enterprise Sales', 'SaaS Sales'
-    ],
-    'Education': [
-      'Curriculum Development', 'Instructional Design', 'Classroom Management', 'Assessment',
-      'Student Engagement', 'Education Technology', 'EdTech', 'Online Learning', 'E-Learning',
-      'Distance Education', 'Learning Management Systems', 'LMS', 'Student Support', 'Special Education',
-      'IEP', 'Differentiated Instruction', 'Educational Leadership', 'Education Policy',
-      'Educational Research', 'Teaching Methods', 'Pedagogy', 'Professional Development',
-      'Educational Assessment', 'Student Advising', 'Academic Advising', 'Student Success',
-      'STEM Education', 'Higher Education', 'K-12', 'Early Childhood Education'
-    ],
-    'Engineering': [
-      'Product Design', 'CAD', 'AutoCAD', 'SolidWorks', 'Mechanical Design', 'Electrical Design',
-      'Civil Engineering', 'Structural Engineering', 'Engineering Analysis', 'Project Management',
-      'Systems Engineering', 'Quality Control', 'Quality Assurance', 'Product Development',
-      'Research and Development', 'R&D', 'Manufacturing Process', 'Process Improvement',
-      'Engineering Documentation', 'Testing Procedures', 'Test Engineering', 'Technical Specifications',
-      'Prototyping', 'Industrial Design', 'Sustainability', 'Energy Efficiency', 'Regulatory Compliance',
-      'ISO Standards', 'Engineering Standards', 'Value Engineering'
-    ],
-    'Human Resources': [
-      'Recruiting', 'Talent Acquisition', 'Sourcing', 'Interviewing', 'Onboarding', 'Employee Relations',
-      'Performance Management', 'Employee Development', 'Training', 'Organizational Development',
-      'Benefits Administration', 'Compensation', 'HRIS', 'HR Analytics', 'Succession Planning',
-      'Employee Engagement', 'Diversity and Inclusion', 'D&I', 'Policy Development',
-      'HR Compliance', 'Labor Relations', 'Conflict Resolution', 'Talent Management',
-      'Workforce Planning', 'Retention Strategies', 'Employee Experience', 'HR Technology',
-      'Payroll', 'Employer Branding', 'Culture Building'
-    ],
-    'Legal': [
-      'Legal Research', 'Legal Writing', 'Case Management', 'Legal Analysis', 'Contract Review',
-      'Contract Drafting', 'Litigation', 'Corporate Law', 'Intellectual Property', 'Patents',
-      'Trademarks', 'Compliance', 'Regulatory Compliance', 'Legal Advising', 'Due Diligence',
-      'Legal Documentation', 'Negotiation', 'Mediation', 'Arbitration', 'Legal Strategy',
-      'Corporate Governance', 'Risk Assessment', 'Legal Ethics', 'Attorney-Client Privilege',
-      'Legal Research Tools', 'Westlaw', 'LexisNexis', 'Legal Procedures', 'Paralegal Support',
-      'E-Discovery'
-    ],
-    'Operations': [
-      'Process Optimization', 'Workflow Management', 'Operational Efficiency', 'Continuous Improvement',
-      'Lean Methodology', 'Six Sigma', 'Supply Chain Management', 'Logistics', 'Inventory Management',
-      'Warehousing', 'Distribution', 'Procurement', 'Vendor Management', 'Quality Management',
-      'Facilities Management', 'Safety Compliance', 'Risk Management', 'Business Continuity',
-      'Crisis Management', 'Resource Planning', 'Capacity Planning', 'Production Planning',
-      'Project Coordination', 'Change Management', 'Business Process Reengineering',
-      'ERP Systems', 'SAP', 'Oracle', 'Operations Analysis', 'Metrics Tracking'
-    ],
-    'Project Management': [
-      'Project Planning', 'Project Scheduling', 'Project Execution', 'Project Monitoring',
-      'Project Closure', 'Agile', 'Scrum', 'Kanban', 'Waterfall', 'PRINCE2', 'PMP',
-      'PMI', 'Budgeting', 'Resource Allocation', 'Risk Management', 'Stakeholder Management',
-      'Communication Planning', 'Change Management', 'Project Documentation', 'Status Reporting',
-      'MS Project', 'Jira', 'Asana', 'Trello', 'Gantt Charts', 'Critical Path Method',
-      'Earned Value Management', 'Scope Management', 'Quality Management', 'Project Governance'
-    ],
-    'Customer Service': [
-      'Customer Support', 'Client Relations', 'Problem Resolution', 'Complaint Handling',
-      'Customer Satisfaction', 'Customer Experience', 'CX', 'Call Center Operations',
-      'Help Desk Support', 'Technical Support', 'Customer Retention', 'Customer Feedback',
-      'CRM Systems', 'Customer Engagement', 'Service Level Agreements', 'SLAs',
-      'Quality Assurance', 'First Call Resolution', 'Customer Success', 'Omnichannel Support',
-      'Live Chat Support', 'Email Support', 'Phone Support', 'Customer Onboarding',
-      'Conflict Resolution', 'Client Communication', 'Support Ticket Management',
-      'Knowledge Base', 'FAQ Development', 'Customer Training'
-    ],
-    'General': [
-      'Leadership', 'Management', 'Communication', 'Team Building', 'Strategic Planning',
-      'Problem Solving', 'Decision Making', 'Critical Thinking', 'Time Management',
-      'Organization', 'Attention to Detail', 'Analytical Skills', 'Project Management',
-      'Collaboration', 'Teamwork', 'Adaptability', 'Flexibility', 'Initiative', 'Innovation',
-      'Creativity', 'Customer Focus', 'Results-Oriented', 'Multitasking', 'Relationship Building',
-      'Interpersonal Skills', 'Verbal Communication', 'Written Communication', 'Presentation Skills',
-      'Microsoft Office', 'Excel', 'Word', 'PowerPoint', 'Outlook'
-    ]
-  };
-  
-  // If industry doesn't match a known category or is undefined, return general keywords
-  const normalizedIndustry = industry ? 
-    Object.keys(industryKeywords).find(key => 
-      key.toLowerCase() === industry.toLowerCase() || 
-      industry.toLowerCase().includes(key.toLowerCase())
-    ) : null;
-  
-  return normalizedIndustry ? 
-    industryKeywords[normalizedIndustry] : 
-    industryKeywords['General'];
-}
-
-/**
- * Get missing keywords that should be added to a CV based on industry
- * @param cvText The CV text to analyze
- * @param industry The detected industry
- * @returns List of recommended keywords that are missing from the CV
- */
-export function getMissingIndustryKeywords(cvText: string, industry: string): string[] {
-  if (!cvText || !industry) {
-    return [];
-  }
-  
-  // Get all relevant keywords for the industry
-  const industryKeywords = getIndustryKeywords(industry);
-  
-  // Normalize the CV text for comparison
-  const normalizedText = cvText.toLowerCase();
-  
-  // Find keywords that don't appear in the CV
-  const missingKeywords = industryKeywords.filter(keyword => {
-    return !normalizedText.includes(keyword.toLowerCase());
-  });
-  
-  // Sort by importance (we could enhance this with weighted keywords in the future)
-  return missingKeywords.slice(0, 15); // Return top 15 missing keywords
-}
-
-/**
- * Generate suggestions for improving a CV based on industry-specific analysis
- * @param cvText The CV text to analyze
- * @param industry The detected industry
- * @returns Object containing suggestions and missing keywords
- */
-export function generateIndustrySpecificSuggestions(
-  cvText: string, 
-  industry: string
-): {
-  missingSoftSkills: string[];
-  missingHardSkills: string[];
-  missingKeywords: string[];
-  suggestions: string[];
-} {
-  // Default return structure
-  const result = {
-    missingSoftSkills: [] as string[],
-    missingHardSkills: [] as string[],
-    missingKeywords: [] as string[],
-    suggestions: [] as string[]
-  };
-  
-  if (!cvText || !industry) {
-    return result;
-  }
-  
-  // Get missing keywords
-  const missingKeywords = getMissingIndustryKeywords(cvText, industry);
-  
-  // Define soft skills and hard skills for categorization
-  const softSkills = [
-    'Communication', 'Teamwork', 'Problem-Solving', 'Critical Thinking', 'Leadership',
-    'Adaptability', 'Time Management', 'Creativity', 'Collaboration', 'Work Ethic',
-    'Interpersonal Skills', 'Attention to Detail', 'Organization', 'Flexibility',
-    'Customer Service', 'Decision Making', 'Conflict Resolution', 'Presentation Skills',
-    'Emotional Intelligence', 'Negotiation', 'Strategic Planning', 'Mentoring'
-  ];
-  
-  // Categorize missing keywords
-  result.missingKeywords = missingKeywords;
-  
-  result.missingSoftSkills = missingKeywords.filter(keyword => 
-    softSkills.some(skill => keyword.toLowerCase().includes(skill.toLowerCase()))
-  );
-  
-  result.missingHardSkills = missingKeywords.filter(keyword => 
-    !softSkills.some(skill => keyword.toLowerCase().includes(skill.toLowerCase()))
-  );
-  
-  // Generate suggestions based on missing keywords
-  if (missingKeywords.length > 0) {
-    result.suggestions.push(
-      `Consider adding these ${industry}-specific keywords to strengthen your CV: ${missingKeywords.slice(0, 5).join(', ')}.`
-    );
-  }
-  
-  if (result.missingSoftSkills.length > 0) {
-    result.suggestions.push(
-      `Highlight these soft skills relevant to ${industry}: ${result.missingSoftSkills.slice(0, 3).join(', ')}.`
-    );
-  }
-  
-  if (result.missingHardSkills.length > 0) {
-    result.suggestions.push(
-      `Showcase these technical skills valued in ${industry}: ${result.missingHardSkills.slice(0, 3).join(', ')}.`
-    );
-  }
-  
-  // Add industry-specific advice
-  switch (industry.toLowerCase()) {
-    case 'technology':
-      result.suggestions.push('Include specific programming languages, frameworks, or tools you\'ve used.');
-      result.suggestions.push('Quantify your impact with metrics like performance improvements or user growth.');
-      break;
-    case 'finance':
-      result.suggestions.push('Highlight your knowledge of financial regulations and compliance standards.');
-      result.suggestions.push('Include specific financial software or tools you\'re proficient with.');
-      break;
-    case 'healthcare':
-      result.suggestions.push('Mention any certifications or specialized training relevant to healthcare.');
-      result.suggestions.push('Emphasize patient care experience and knowledge of medical protocols.');
-      break;
-    case 'marketing':
-      result.suggestions.push('Include metrics such as campaign ROI, audience growth, or conversion rates.');
-      result.suggestions.push('Showcase your experience with specific marketing platforms and analytics tools.');
-      break;
-    case 'sales':
-      result.suggestions.push('Quantify your achievements with sales figures, growth percentages, or revenue targets.');
-      result.suggestions.push('Include specific CRM systems and sales methodologies you\'ve used.');
-      break;
-    default:
-      result.suggestions.push('Quantify your achievements with specific metrics and results where possible.');
-      result.suggestions.push('Tailor your CV for each application by highlighting relevant experience and skills.');
-  }
-  
-  return result;
-}
-
-/**
- * Enhance the CV's ATS compatibility by adding industry-specific keywords
- * @param cvText The CV text to enhance
- * @param industry The detected industry
- * @returns Enhanced CV text with industry-specific keywords
- */
-export function enhanceWithIndustryKeywords(cvText: string, industry: string): string {
-  if (!cvText || !industry) {
-    return cvText;
-  }
-  
-  // Get recommendations for the CV
-  const recommendations = generateIndustrySpecificSuggestions(cvText, industry);
-  
-  // If no missing keywords, return original text
-  if (recommendations.missingKeywords.length === 0) {
-    return cvText;
-  }
-  
-  // Try to identify the skills section to enhance it
-  const lines = cvText.split('\n');
-  const skillSectionIndex = lines.findIndex(line => 
-    /^SKILLS|^EXPERTISE|^COMPETENCIES|^TECHNICAL SKILLS/i.test(line.trim())
-  );
-  
-  // If we found a skills section, enhance it
-  if (skillSectionIndex >= 0) {
-    // Find the end of the skills section (next section header or end of document)
-    let endOfSkillsSection = lines.length;
-    for (let i = skillSectionIndex + 1; i < lines.length; i++) {
-      if (/^[A-Z\s]{2,}:?$/i.test(lines[i].trim()) || /^[A-Z\s]{2,}$/i.test(lines[i].trim())) {
-        endOfSkillsSection = i;
-        break;
-      }
-    }
-    
-    // Get the most relevant missing keywords (limit to 5)
-    const keywordsToAdd = recommendations.missingKeywords.slice(0, 5);
-    
-    // Add keywords to the skills section
-    let addedKeywords = '';
-    keywordsToAdd.forEach(keyword => {
-      // Format as bullet points if the section uses them
-      const useBullets = lines.slice(skillSectionIndex, endOfSkillsSection).some(line => 
-        line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*')
-      );
-      
-      if (useBullets) {
-        addedKeywords += `• ${keyword}\n`;
-      } else {
-        addedKeywords += `${keyword}, `;
-      }
-    });
-    
-    // Remove trailing comma and space for non-bullet format
-    if (addedKeywords.endsWith(', ')) {
-      addedKeywords = addedKeywords.slice(0, -2);
-    }
-    
-    // Insert the keywords before the end of the skills section
-    if (addedKeywords) {
-      const newLines = [...lines];
-      
-      // If bullet format, add each on a new line
-      if (addedKeywords.includes('•')) {
-        newLines.splice(endOfSkillsSection, 0, addedKeywords);
-      } 
-      // Otherwise, find the last non-empty line in the skills section and append
-      else {
-        let lastLineIndex = endOfSkillsSection - 1;
-        while (lastLineIndex > skillSectionIndex && !newLines[lastLineIndex].trim()) {
-          lastLineIndex--;
-        }
-        
-        if (lastLineIndex > skillSectionIndex) {
-          newLines[lastLineIndex] += ' ' + addedKeywords;
-        } else {
-          newLines.splice(skillSectionIndex + 1, 0, addedKeywords);
-        }
-      }
-      
-      return newLines.join('\n');
-    }
-  }
-  
-  // If we couldn't identify or modify the skills section, add a new one
-  if (skillSectionIndex < 0) {
-    const keywordsToAdd = recommendations.missingKeywords.slice(0, 8);
-    const newSkillsSection = `
-SKILLS
-• ${keywordsToAdd.join('\n• ')}
-`;
-    return cvText + newSkillsSection;
-  }
-  
-  // If we couldn't enhance the CV, return the original
-  return cvText;
+function getIndustryKeywords(industry: string): string[] {
+  return INDUSTRY_KEYWORDS[industry as keyof typeof INDUSTRY_KEYWORDS] || 
+    INDUSTRY_KEYWORDS['Technology'];
 }
 
 /**
@@ -1961,195 +1663,3 @@ function determineStartingPhase(metadata: any, forceRefresh: boolean): 'initial'
   // Default to starting from the beginning
   return 'initial';
 } 
-
-/**
- * Enhances responsibilities in experience entries by adding quantifiable metrics
- * @param experienceEntries Array of experience entries to enhance
- * @returns Enhanced experience entries with quantifiable metrics
- */
-export function enhanceExperienceWithMetrics(experienceEntries: Array<{
-  jobTitle: string;
-  company: string;
-  dateRange: string;
-  location?: string;
-  responsibilities: string[];
-}>): Array<{
-  jobTitle: string;
-  company: string;
-  dateRange: string;
-  location?: string;
-  responsibilities: string[];
-}> {
-  if (!experienceEntries || !Array.isArray(experienceEntries) || experienceEntries.length === 0) {
-    return experienceEntries;
-  }
-  
-  // Clone to avoid modifying original
-  const enhancedEntries = JSON.parse(JSON.stringify(experienceEntries));
-  
-  // Define quantification patterns to check if a responsibility already has metrics
-  const quantificationPatterns = [
-    /\d+%/,                           // Percentage
-    /\$\d+[kmbt]?/i,                  // Dollar amounts
-    /\d+ (people|employees|team members|clients|customers|users)/i, // Count of people
-    /increased|improved|reduced|generated|saved|delivered|achieved/i, // Action verbs often with metrics
-    /\d+ (years|months|weeks|days)/i, // Time periods
-    /\d+x/i,                          // Multiplier (e.g., 3x)
-    /million|billion|thousand/i,      // Large numbers
-    /\d+\+/,                          // Numbers with plus
-    /top \d+%/i                       // Top percentiles
-  ];
-  
-  // Metric templates for different job functions
-  const metricTemplates: Record<string, string[]> = {
-    'sales': [
-      'increased sales by {15-30}%',
-      'generated ${50-500}k in revenue',
-      'exceeded targets by {10-25}%',
-      'acquired {10-50}+ new clients',
-      'expanded customer base by {15-35}%',
-      'reduced churn by {10-25}%',
-      'improved conversion rate by {5-20}%'
-    ],
-    'marketing': [
-      'increased website traffic by {25-75}%',
-      'improved conversion rates by {10-30}%',
-      'generated {1000-5000}+ leads',
-      'grew social media following by {20-50}%',
-      'reduced cost per acquisition by {15-35}%',
-      'increased engagement by {20-40}%',
-      'boosted email open rates by {10-25}%'
-    ],
-    'engineering': [
-      'reduced load time by {20-50}%',
-      'improved system efficiency by {15-30}%',
-      'decreased bugs by {30-70}%',
-      'automated {3-10}+ routine processes',
-      'maintained {99.5-99.9}% uptime',
-      'reduced technical debt by {20-40}%',
-      'implemented solutions used by {1000-10000}+ users'
-    ],
-    'project_management': [
-      'delivered {3-10}+ projects on time and under budget',
-      'managed team of {5-20}+ members',
-      'reduced project completion time by {15-30}%',
-      'saved ${10-100}k through process improvements',
-      'improved team productivity by {20-40}%',
-      'successful delivery rate of {95-99}%',
-      'managed budgets exceeding ${100-1000}k'
-    ],
-    'operations': [
-      'streamlined processes resulting in {15-30}% efficiency gains',
-      'reduced operational costs by {10-25}%',
-      'improved quality metrics by {20-40}%',
-      'decreased turnaround time by {25-50}%',
-      'implemented changes saving ${50-250}k annually',
-      'increased output by {20-35}%',
-      'improved customer satisfaction ratings by {15-30}%'
-    ],
-    'customer_service': [
-      'maintained {90-98}% customer satisfaction rate',
-      'reduced average response time by {20-40}%',
-      'handled {50-200}+ inquiries daily',
-      'improved first-call resolution by {15-30}%',
-      'decreased escalation rate by {25-50}%',
-      'contributed to {10-25}% increase in retention',
-      'resolved {95-99}% of issues within SLA'
-    ],
-    'human_resources': [
-      'reduced turnover by {15-30}%',
-      'recruited {20-100}+ new employees',
-      'improved employee satisfaction by {15-35}%',
-      'decreased time-to-hire by {20-40}%',
-      'implemented programs resulting in {10-25}% productivity increase',
-      'managed benefits for {50-500}+ employees',
-      'achieved {90-98}% training completion rate'
-    ],
-    'finance': [
-      'reduced costs by {10-20}%',
-      'identified ${50-500}k in savings',
-      'improved forecast accuracy by {15-30}%',
-      'reduced month-end close by {2-5} days',
-      'managed budget of ${1-10}M',
-      'automated {3-10}+ financial processes',
-      'achieved {99-100}% compliance rate'
-    ],
-    'general': [
-      'increased efficiency by {15-30}%',
-      'reduced costs by {10-25}%',
-      'improved quality by {20-40}%',
-      'managed team of {3-15}+ people',
-      'delivered results {10-30}% above expectations',
-      'completed projects {5-20}% under budget',
-      'served {50-500}+ customers/clients'
-    ]
-  };
-  
-  // Add metrics to responsibilities that don't have them
-  for (const entry of enhancedEntries) {
-    // Try to determine job function from job title
-    let jobFunction = 'general';
-    const normalizedTitle = entry.jobTitle.toLowerCase();
-    
-    if (/sales|account|business development|revenue|client|customer success/i.test(normalizedTitle)) {
-      jobFunction = 'sales';
-    } else if (/market|brand|content|seo|sem|growth|campaign/i.test(normalizedTitle)) {
-      jobFunction = 'marketing';
-    } else if (/engineer|developer|architect|programming|coder|software|tech/i.test(normalizedTitle)) {
-      jobFunction = 'engineering';
-    } else if (/project|program|product|scrum|agile/i.test(normalizedTitle)) {
-      jobFunction = 'project_management';
-    } else if (/operations|process|supply chain|logistics|procurement/i.test(normalizedTitle)) {
-      jobFunction = 'operations';
-    } else if (/customer service|support|success|experience|care/i.test(normalizedTitle)) {
-      jobFunction = 'customer_service';
-    } else if (/hr|human resource|recruit|talent|personnel/i.test(normalizedTitle)) {
-      jobFunction = 'human_resources';
-    } else if (/finance|accounting|financial|budget|controller|cfo/i.test(normalizedTitle)) {
-      jobFunction = 'finance';
-    }
-    
-    // Get relevant metric templates
-    const templates = metricTemplates[jobFunction] || metricTemplates.general;
-    
-    // Process each responsibility
-    if (entry.responsibilities && Array.isArray(entry.responsibilities)) {
-      for (let i = 0; i < entry.responsibilities.length; i++) {
-        const responsibility = entry.responsibilities[i];
-        
-        // Skip if already has metrics
-        const hasMetrics = quantificationPatterns.some(pattern => pattern.test(responsibility));
-        if (hasMetrics) continue;
-        
-        // Make sure the responsibility is not too short or already enhanced
-        if (responsibility.length < 15 || responsibility.includes('resulting in')) continue;
-        
-        // Get a random metric template
-        const template = templates[Math.floor(Math.random() * templates.length)];
-        
-        // Extract a random number within the range specified in the template
-        // e.g., {15-30} becomes a random number between 15 and 30
-        const metricsWithRandomNumbers = template.replace(/\{(\d+)-(\d+)\}/g, (match, min, max) => {
-          const randomValue = Math.floor(Math.random() * (parseInt(max) - parseInt(min) + 1)) + parseInt(min);
-          return randomValue.toString();
-        });
-        
-        // Enhance the responsibility with metrics if it doesn't end with a period
-        // We want to add "resulting in X" or "leading to X"
-        const conjunction = Math.random() > 0.5 ? 'resulting in' : 'leading to';
-        
-        // Only enhance if it makes sense (the responsibility should be a complete sentence)
-        // and it should not already have metrics or be too generic
-        if (responsibility.trim().endsWith('.')) {
-          // Remove the period and add the metrics
-          entry.responsibilities[i] = responsibility.trim().slice(0, -1) + ', ' + conjunction + ' ' + metricsWithRandomNumbers + '.';
-        } else {
-          // Add a comma and the metrics
-          entry.responsibilities[i] = responsibility.trim() + ', ' + conjunction + ' ' + metricsWithRandomNumbers + '.';
-        }
-      }
-    }
-  }
-  
-  return enhancedEntries;
-}

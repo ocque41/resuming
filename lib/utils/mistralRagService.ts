@@ -1554,27 +1554,31 @@ Example response format:
     industry: string;
     language: string;
     sections: Array<{ name: string; content: string }>;
+    achievements?: string[];
+    goals?: string[];
   }> {
     logger.info('Starting comprehensive CV analysis with a single API call');
     
     // Default values in case of error
     const defaultResult = {
-      skills: [],
-      keywords: [],
-      keyRequirements: ['Professional experience', 'Relevant education', 'Technical skills', 'Communication skills', 'Problem-solving abilities'],
+      skills: [] as string[],
+      keywords: [] as string[],
+      keyRequirements: ['Professional experience', 'Relevant education', 'Technical skills', 'Communication skills', 'Problem-solving abilities'] as string[],
       formatAnalysis: {
-        strengths: ['Professional structure'],
-        weaknesses: ['Could improve formatting'],
-        recommendations: ['Enhance layout for better readability']
+        strengths: ['Professional structure'] as string[],
+        weaknesses: ['Could improve formatting'] as string[],
+        recommendations: ['Enhance layout for better readability'] as string[]
       },
       contentAnalysis: {
-        strengths: ['Experience clearly presented'],
-        weaknesses: ['Consider adding more accomplishments'],
-        recommendations: ['Quantify achievements with specific metrics']
+        strengths: ['Experience clearly presented'] as string[],
+        weaknesses: ['Consider adding more accomplishments'] as string[],
+        recommendations: ['Quantify achievements with specific metrics'] as string[]
       },
       industry: 'General',
       language: 'English',
-      sections: [{ name: 'Experience', content: '' }, { name: 'Education', content: '' }, { name: 'Skills', content: '' }]
+      sections: [{ name: 'Experience', content: '' }, { name: 'Education', content: '' }, { name: 'Skills', content: '' }] as Array<{ name: string; content: string }>,
+      achievements: [] as string[],
+      goals: [] as string[]
     };
     
     // If no CV text is available, return default values
@@ -1612,7 +1616,9 @@ Provide a comprehensive analysis with the following structure exactly (valid JSO
     {"name": "section1", "content": "brief summary of section"}, 
     {"name": "section2", "content": "brief summary of section"},
     ...
-  ] // 3-7 main sections identified in the CV with brief content summaries
+  ], // 3-7 main sections identified in the CV with brief content summaries
+  "achievements": ["achievement1", "achievement2", ...], // List of 3-5 achievements mentioned in the CV (if any), include quantified results when possible
+  "goals": ["goal1", "goal2", ...] // List of 1-3 career goals or objectives mentioned in the CV (if any)
 }
 
 You MUST return ONLY properly formatted JSON - no additional text, explanations, or markdown.
@@ -1635,6 +1641,31 @@ You MUST return ONLY properly formatted JSON - no additional text, explanations,
         if (!analysisResult.language) analysisResult.language = defaultResult.language;
         if (!analysisResult.sections) analysisResult.sections = defaultResult.sections;
         
+        // Check if achievements and goals were detected
+        const hasAchievements = analysisResult.achievements && Array.isArray(analysisResult.achievements) && analysisResult.achievements.length > 0;
+        const hasGoals = analysisResult.goals && Array.isArray(analysisResult.goals) && analysisResult.goals.length > 0;
+        
+        // Generate achievements and goals if they are missing or empty
+        if (!hasAchievements) {
+          logger.info('No achievements found in CV, generating them');
+          try {
+            analysisResult.achievements = await this.generateAchievements(5);
+          } catch (achievementsError) {
+            logger.error(`Error generating achievements: ${achievementsError instanceof Error ? achievementsError.message : String(achievementsError)}`);
+            analysisResult.achievements = defaultResult.achievements;
+          }
+        }
+        
+        if (!hasGoals) {
+          logger.info('No career goals found in CV, generating them');
+          try {
+            analysisResult.goals = await this.generateGoals(3);
+          } catch (goalsError) {
+            logger.error(`Error generating goals: ${goalsError instanceof Error ? goalsError.message : String(goalsError)}`);
+            analysisResult.goals = defaultResult.goals;
+          }
+        }
+        
         logger.info('Successfully completed comprehensive CV analysis');
         return analysisResult;
       } catch (parseError) {
@@ -1642,11 +1673,48 @@ You MUST return ONLY properly formatted JSON - no additional text, explanations,
         logger.error(`Response that couldn't be parsed: ${response.substring(0, 200)}...`);
         
         // Instead of returning default values immediately, attempt to extract structured data from the text response
-        return this.extractStructuredDataFromText(response) || defaultResult;
+        const structuredResult = this.extractStructuredDataFromText(response) || defaultResult;
+        
+        // Generate achievements and goals if needed
+        if (!structuredResult.achievements || structuredResult.achievements.length === 0) {
+          try {
+            structuredResult.achievements = await this.generateAchievements(5);
+          } catch (achievementsError) {
+            logger.error(`Error generating achievements: ${achievementsError instanceof Error ? achievementsError.message : String(achievementsError)}`);
+            structuredResult.achievements = defaultResult.achievements;
+          }
+        }
+        
+        if (!structuredResult.goals || structuredResult.goals.length === 0) {
+          try {
+            structuredResult.goals = await this.generateGoals(3);
+          } catch (goalsError) {
+            logger.error(`Error generating goals: ${goalsError instanceof Error ? goalsError.message : String(goalsError)}`);
+            structuredResult.goals = defaultResult.goals;
+          }
+        }
+        
+        return structuredResult;
       }
     } catch (error) {
       logger.error(`Error during comprehensive CV analysis: ${error instanceof Error ? error.message : String(error)}`);
-      return defaultResult;
+      
+      // Try to generate achievements and goals even if the main analysis failed
+      const result = { ...defaultResult };
+      
+      try {
+        result.achievements = await this.generateAchievements(5);
+      } catch (achievementsError) {
+        logger.error(`Error generating achievements after main analysis failed: ${achievementsError instanceof Error ? achievementsError.message : String(achievementsError)}`);
+      }
+      
+      try {
+        result.goals = await this.generateGoals(3);
+      } catch (goalsError) {
+        logger.error(`Error generating goals after main analysis failed: ${goalsError instanceof Error ? goalsError.message : String(goalsError)}`);
+      }
+      
+      return result;
     }
   }
   
@@ -1664,6 +1732,8 @@ You MUST return ONLY properly formatted JSON - no additional text, explanations,
     industry: string;
     language: string;
     sections: Array<{ name: string; content: string }>;
+    achievements?: string[];
+    goals?: string[];
   } {
     try {
       // Try to find JSON in the text (sometimes the model adds explanatory text around the JSON)
@@ -1684,6 +1754,171 @@ You MUST return ONLY properly formatted JSON - no additional text, explanations,
     } catch (error) {
       logger.error(`Error extracting structured data from text: ${error instanceof Error ? error.message : String(error)}`);
       return null;
+    }
+  }
+
+  /**
+   * Generates achievement statements based on the CV content
+   * @param count Number of achievements to generate
+   * @returns Array of achievement statements
+   */
+  public async generateAchievements(count: number = 5): Promise<string[]> {
+    logger.info(`Generating ${count} achievements based on CV content`);
+    
+    if (!this.originalCVText || this.originalCVText.trim() === '') {
+      logger.warn('No CV text available for generating achievements');
+      return [
+        "Increased operational efficiency by 30% through implementation of streamlined workflows",
+        "Reduced department costs by 25% while maintaining service quality standards",
+        "Led cross-functional team of 8 professionals to deliver project 15% under budget",
+        "Implemented new customer service protocol resulting in 40% improvement in satisfaction scores",
+        "Developed innovative marketing strategy that expanded client base by 35% in 12 months"
+      ];
+    }
+    
+    try {
+      const prompt = `
+You are a professional CV writer with expertise in creating compelling, achievement-oriented bullet points. Based on the CV content below, generate ${count} impressive professional achievements that are:
+
+1. Relevant to the person's career and industry
+2. Quantified with specific metrics (percentages, numbers, dollar amounts)
+3. Action-oriented, starting with strong impact verbs
+4. Focused on results and business impact
+5. Credible and realistic based on the career level
+
+CV CONTENT:
+${this.originalCVText}
+
+Generate ONLY a JSON array of ${count} achievement statements. Each achievement should be one sentence, properly formatted, and include specific metrics. Do not include explanations or additional text.
+
+Example format:
+["Increased department productivity by 27% through implementation of new workflow processes.", "Reduced customer service response time by 45% by introducing an automated ticketing system."]
+`;
+
+      const response = await this.generateDirectResponse(prompt);
+      
+      // Parse response as JSON
+      try {
+        const achievements = JSON.parse(response);
+        if (Array.isArray(achievements) && achievements.length > 0) {
+          // Take only the requested number and ensure they're strings
+          return achievements
+            .filter(item => typeof item === 'string')
+            .slice(0, count)
+            .map(achievement => {
+              // Ensure they start with action verbs
+              if (!/^[A-Z][a-z]+ed\b|^[A-Z][a-z]+ing\b/.test(achievement)) {
+                const actionVerbs = ["Achieved", "Increased", "Reduced", "Implemented", "Developed", "Led", "Created", "Launched", "Managed", "Delivered"];
+                const randomVerb = actionVerbs[Math.floor(Math.random() * actionVerbs.length)];
+                return `${randomVerb} ${achievement.charAt(0).toLowerCase()}${achievement.slice(1)}`;
+              }
+              return achievement;
+            });
+        }
+      } catch (parseError) {
+        logger.error(`Error parsing achievements JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+        // Try to extract achievements from the text response using regex
+        const achievementMatches = response.match(/"([^"]+)"/g);
+        if (achievementMatches && achievementMatches.length > 0) {
+          return achievementMatches
+            .map(match => match.replace(/"/g, ''))
+            .slice(0, count);
+        }
+      }
+      
+      logger.error('Failed to generate achievements from AI response');
+      return [
+        "Increased operational efficiency by 30% through implementation of streamlined workflows",
+        "Reduced department costs by 25% while maintaining service quality standards",
+        "Led cross-functional team of 8 professionals to deliver project 15% under budget",
+        "Implemented new customer service protocol resulting in 40% improvement in satisfaction scores",
+        "Developed innovative marketing strategy that expanded client base by 35% in 12 months"
+      ];
+    } catch (error) {
+      logger.error(`Error generating achievements: ${error instanceof Error ? error.message : String(error)}`);
+      return [
+        "Increased operational efficiency by 30% through implementation of streamlined workflows",
+        "Reduced department costs by 25% while maintaining service quality standards",
+        "Led cross-functional team of 8 professionals to deliver project 15% under budget",
+        "Implemented new customer service protocol resulting in 40% improvement in satisfaction scores",
+        "Developed innovative marketing strategy that expanded client base by 35% in 12 months"
+      ];
+    }
+  }
+
+  /**
+   * Generates career goals based on the CV content
+   * @param count Number of goals to generate
+   * @returns Array of goal statements
+   */
+  public async generateGoals(count: number = 3): Promise<string[]> {
+    logger.info(`Generating ${count} career goals based on CV content`);
+    
+    if (!this.originalCVText || this.originalCVText.trim() === '') {
+      logger.warn('No CV text available for generating goals');
+      return [
+        "Seeking to leverage my expertise in project management to transition into a senior leadership role",
+        "Aiming to expand my technical skills through professional certifications and hands-on experience",
+        "Working toward building a high-performing team that consistently exceeds organizational objectives"
+      ];
+    }
+    
+    try {
+      const industry = await this.determineIndustry();
+      
+      const prompt = `
+You are a career development expert. Based on the CV content below, generate ${count} forward-looking career goals that are:
+
+1. Relevant to the person's career trajectory and industry (${industry})
+2. Specific and action-oriented
+3. Forward-looking and aspirational yet realistic
+4. Aligned with current skills while showing growth ambition
+5. Professional in tone and focused on value contribution
+
+CV CONTENT:
+${this.originalCVText}
+
+Generate ONLY a JSON array of ${count} career goal statements. Each goal should be one sentence and be professionally phrased. Do not include explanations or additional text.
+
+Example format:
+["Seeking to leverage my expertise in digital marketing to lead innovative campaigns for global brands.", "Aiming to enhance my leadership capabilities through executive education and mentoring opportunities."]
+`;
+
+      const response = await this.generateDirectResponse(prompt);
+      
+      // Parse response as JSON
+      try {
+        const goals = JSON.parse(response);
+        if (Array.isArray(goals) && goals.length > 0) {
+          // Take only the requested number and ensure they're strings
+          return goals
+            .filter(item => typeof item === 'string')
+            .slice(0, count);
+        }
+      } catch (parseError) {
+        logger.error(`Error parsing goals JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+        // Try to extract goals from the text response using regex
+        const goalMatches = response.match(/"([^"]+)"/g);
+        if (goalMatches && goalMatches.length > 0) {
+          return goalMatches
+            .map(match => match.replace(/"/g, ''))
+            .slice(0, count);
+        }
+      }
+      
+      logger.error('Failed to generate goals from AI response');
+      return [
+        "Seeking to leverage my expertise in project management to transition into a senior leadership role",
+        "Aiming to expand my technical skills through professional certifications and hands-on experience",
+        "Working toward building a high-performing team that consistently exceeds organizational objectives"
+      ];
+    } catch (error) {
+      logger.error(`Error generating goals: ${error instanceof Error ? error.message : String(error)}`);
+      return [
+        "Seeking to leverage my expertise in project management to transition into a senior leadership role",
+        "Aiming to expand my technical skills through professional certifications and hands-on experience",
+        "Working toward building a high-performing team that consistently exceeds organizational objectives"
+      ];
     }
   }
 } 

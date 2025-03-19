@@ -42,7 +42,7 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
     const paragraphs: Paragraph[] = [];
     
     // Preferred section order - strictly follow this order
-    const sectionOrder = ["header", "profile", "experience", "achievements", "goals", "skills", "languages", "education"] as const;
+    const sectionOrder = ["header", "profile", "achievements", "goals", "skills", "languages", "education"] as const;
     
     // Process sections in the preferred order
     for (const sectionKey of sectionOrder) {
@@ -205,157 +205,6 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
             },
           })
         );
-      } else if (sectionKey === "experience") {
-        // Check if we have structured experience entries in the metadata
-        if (options.experienceEntries && options.experienceEntries.length > 0) {
-          // Add each experience entry in a professional format
-          options.experienceEntries.forEach((entry, index) => {
-            // Add Job Title - bold and slightly larger
-            paragraphs.push(
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: entry.jobTitle || "Position",
-                    bold: true,
-                    size: 24,
-                  }),
-                ],
-                spacing: {
-                  before: index > 0 ? 240 : 120,
-                  after: 60,
-                },
-              })
-            );
-            
-            // Add Company and Date on the same line with tab stop
-            paragraphs.push(
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: entry.company || "Company",
-                    italics: true,
-                    size: 22,
-                  }),
-                  new TextRun({
-                    text: "   " + (entry.dateRange || ""),
-                    size: 22,
-                    color: "666666",
-                  }),
-                ],
-                spacing: {
-                  after: 60,
-                },
-              })
-            );
-            
-            // Add Location if available
-            if (entry.location) {
-              paragraphs.push(
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: entry.location,
-                      size: 22,
-                      color: "666666",
-                    }),
-                  ],
-                  spacing: {
-                    after: 120,
-                  },
-                })
-              );
-            }
-            
-            // Add responsibilities as bullet points
-            if (entry.responsibilities && entry.responsibilities.length > 0) {
-              entry.responsibilities.forEach(responsibility => {
-                paragraphs.push(
-                  new Paragraph({
-                    bullet: {
-                      level: 0,
-                    },
-                    children: [
-                      new TextRun({
-                        text: responsibility,
-                        size: 22,
-                      }),
-                    ],
-                    spacing: {
-                      after: 60,
-                      line: 360,
-                      lineRule: "auto",
-                    },
-                  })
-                );
-              });
-            }
-            
-            // Add extra spacing after each experience entry except the last one
-            if (index < options.experienceEntries!.length - 1) {
-              paragraphs.push(
-                new Paragraph({
-                  spacing: {
-                    after: 120,
-                  },
-                })
-              );
-            }
-          });
-        } else {
-          // If no structured data, process text as usual
-          const contentText = sectionContent as string;
-          const contentLines = contentText.split('\n').filter((line: string) => line.trim());
-          
-          // Process line by line
-          contentLines.forEach((line: string) => {
-            // Check if this line looks like a bullet point
-            if (line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*')) {
-              paragraphs.push(
-                new Paragraph({
-                  bullet: {
-                    level: 0,
-                  },
-                  children: [
-                    new TextRun({
-                      text: line.replace(/^[•\-*]\s*/, ''),
-                      size: 22,
-                    }),
-                  ],
-                  spacing: {
-                    after: 80,
-                    line: 360,
-                    lineRule: "auto",
-                  },
-                })
-              );
-            } else {
-              paragraphs.push(
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: line,
-                      size: 22,
-                    }),
-                  ],
-                  spacing: {
-                    after: 80,
-                    line: 360,
-                    lineRule: "auto",
-                  },
-                })
-              );
-            }
-          });
-        }
-        
-        // Add extra spacing after experience section
-        paragraphs.push(
-          new Paragraph({
-            spacing: {
-              after: 240,
-            },
-          })
-        );
       } else {
         // Regular text sections
         const contentText = sectionContent as string;
@@ -432,6 +281,95 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
       );
     }
     
+    // Add Experience section from experienceEntries if provided in options
+    if (options.experienceEntries && options.experienceEntries.length > 0) {
+      // Add experience section heading
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: "EXPERIENCE",
+              bold: true,
+              size: 24,
+              color: "#B4916C",
+            }),
+          ],
+          spacing: {
+            before: 240,
+            after: 120,
+          },
+          border: {
+            bottom: {
+              color: "#DDDDDD",
+              space: 1,
+              style: BorderStyle.SINGLE,
+              size: 4,
+            },
+          },
+        })
+      );
+      
+      // Format each experience entry
+      formatExperienceEntries(paragraphs, options.experienceEntries);
+      
+      // Add extra spacing after experience section
+      paragraphs.push(
+        new Paragraph({
+          spacing: {
+            after: 240,
+          },
+        })
+      );
+    }
+    
+    // Add industry-specific section if provided
+    if (options.industry) {
+      // Add industry insights heading
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `INDUSTRY INSIGHTS: ${options.industry.toUpperCase()}`,
+              bold: true,
+              size: 24,
+              color: "#B4916C",
+            }),
+          ],
+          spacing: {
+            before: 240,
+            after: 120,
+          },
+          border: {
+            bottom: {
+              color: "#DDDDDD",
+              space: 1,
+              style: BorderStyle.SINGLE,
+              size: 4,
+            },
+          },
+        })
+      );
+      
+      // Add industry-specific content based on the industry
+      const industryContent = getIndustryContent(options.industry);
+      
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: industryContent,
+              size: 22,
+            }),
+          ],
+          spacing: {
+            after: 240,
+            line: 360,
+            lineRule: "auto",
+          },
+        })
+      );
+    }
+    
     // Create the document with the paragraphs
     const doc = new Document({
       creator: authorName,
@@ -492,7 +430,6 @@ function parseOptimizedText(text: string): {
   skills: string;
   languages: string;
   education: string;
-  experience?: string;
 } {
   // Default structure
   const sections = {
@@ -502,8 +439,7 @@ function parseOptimizedText(text: string): {
     goals: [] as string[],
     skills: "",
     languages: "",
-    education: "",
-    experience: ""
+    education: ""
   };
   
   // Check if the text is already in a structured format with section headers
@@ -517,7 +453,6 @@ function parseOptimizedText(text: string): {
     const skillsPatterns = [/^(SKILLS|TECHNICAL SKILLS|COMPETENCIES|CORE COMPETENCIES|KEY SKILLS|EXPERTISE|Skills)/i];
     const languagesPatterns = [/^(LANGUAGES|LANGUAGE PROFICIENCY|LANGUAGE SKILLS|Languages)/i];
     const educationPatterns = [/^(EDUCATION|ACADEMIC BACKGROUND|EDUCATIONAL QUALIFICATIONS|ACADEMIC QUALIFICATIONS|Education)/i];
-    const experiencePatterns = [/^(EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY|PROFESSIONAL EXPERIENCE|WORK HISTORY|Experience)/i];
     
     // Split text into lines
     const lines = text.split('\n').filter(line => line.trim() !== "");
@@ -541,7 +476,6 @@ function parseOptimizedText(text: string): {
       const isSkillsSection = skillsPatterns.some(pattern => pattern.test(line));
       const isLanguagesSection = languagesPatterns.some(pattern => pattern.test(line));
       const isEducationSection = educationPatterns.some(pattern => pattern.test(line));
-      const isExperienceSection = experiencePatterns.some(pattern => pattern.test(line));
       
       if (isProfileSection) {
         currentSection = "profile";
@@ -565,10 +499,6 @@ function parseOptimizedText(text: string): {
         continue;
       } else if (isEducationSection) {
         currentSection = "education";
-        sectionContent = [];
-        continue;
-      } else if (isExperienceSection) {
-        currentSection = "experience";
         sectionContent = [];
         continue;
       } else if (/^[A-Z\s]{2,}:?$/i.test(line) || /^[A-Z\s]{2,}$/i.test(line)) {
@@ -604,8 +534,6 @@ function parseOptimizedText(text: string): {
             sections.languages = sectionContent.join('\n');
           } else if (currentSection === "education") {
             sections.education = sectionContent.join('\n');
-          } else if (currentSection === "experience") {
-            sections.experience = sectionContent.join('\n');
           }
         }
       } else if (!currentSection && i >= 3) {
@@ -650,4 +578,121 @@ function getSectionTitle(sectionKey: string): string {
   };
   
   return titles[sectionKey] || sectionKey.toUpperCase();
+}
+
+/**
+ * Format experience entries into paragraphs
+ * @param paragraphs Array of paragraphs to append to
+ * @param entries Experience entries to format
+ */
+function formatExperienceEntries(paragraphs: Paragraph[], entries: Array<{
+  jobTitle: string;
+  company: string;
+  dateRange: string;
+  location?: string;
+  responsibilities: string[];
+}>): void {
+  entries.forEach((entry, index) => {
+    // Job Title (bold)
+    paragraphs.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: entry.jobTitle,
+            bold: true,
+            size: 24,
+          }),
+        ],
+        spacing: {
+          before: index > 0 ? 240 : 120,
+          after: 60,
+        },
+      })
+    );
+    
+    // Company
+    paragraphs.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: entry.company,
+            italics: true,
+            size: 22,
+          }),
+        ],
+        spacing: {
+          after: 60,
+        },
+      })
+    );
+    
+    // Date Range & Location (on same line if both exist)
+    const dateLocationText = entry.location 
+      ? `${entry.dateRange} | ${entry.location}`
+      : entry.dateRange;
+    
+    if (dateLocationText) {
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: dateLocationText,
+              size: 20,
+              color: "666666",
+            }),
+          ],
+          spacing: {
+            after: 120,
+          },
+        })
+      );
+    }
+    
+    // Responsibilities as bullet points
+    if (entry.responsibilities && entry.responsibilities.length > 0) {
+      entry.responsibilities.forEach(responsibility => {
+        paragraphs.push(
+          new Paragraph({
+            bullet: {
+              level: 0,
+            },
+            children: [
+              new TextRun({
+                text: responsibility,
+                size: 22,
+              }),
+            ],
+            spacing: {
+              after: 80,
+              line: 360,
+              lineRule: "auto",
+            },
+          })
+        );
+      });
+    }
+  });
+}
+
+/**
+ * Get industry-specific content for the document
+ * @param industry The industry name
+ * @returns A paragraph of industry-specific content
+ */
+function getIndustryContent(industry: string): string {
+  const industryContents: Record<string, string> = {
+    'Technology': 'The technology sector values professionals who demonstrate a strong technical foundation combined with innovative problem-solving abilities. Highlighting specific technical skills, successful projects, and measurable achievements will strengthen your position as a candidate in this competitive field.',
+    'Finance': 'Financial sector employers seek candidates with analytical skills, attention to detail, and demonstrated ability to work with complex financial data. Quantifying your achievements with specific metrics and highlighting relevant certifications will maximize your impact with potential employers.',
+    'Healthcare': 'The healthcare industry values professionals who balance technical expertise with compassion and patient-focused care. Emphasizing your experience with specific medical systems, compliance knowledge, and interpersonal skills will enhance your appeal to healthcare employers.',
+    'Marketing': 'Marketing professionals should demonstrate creativity, analytical capabilities, and results-driven achievements. Your CV effectively showcases your ability to develop and execute successful marketing strategies with measurable outcomes.',
+    'Sales': 'Sales professionals should emphasize revenue generation, relationship building, and consistent achievement of targets. Quantifying your accomplishments with specific sales figures and growth percentages will strengthen your appeal to potential employers.',
+    'Education': 'In education, employers value subject matter expertise, teaching methodology knowledge, and the ability to engage diverse learners. Highlighting your experience with specific educational frameworks and student success outcomes enhances your candidacy.',
+    'Engineering': 'Engineering employers seek candidates with strong technical skills, problem-solving abilities, and project experience. Detailing specific engineering challenges you have overcome and technologies you have mastered strengthens your position in this field.',
+    'Human Resources': 'HR professionals should demonstrate people management skills, compliance knowledge, and strategic thinking. Your experience in developing and implementing HR initiatives that positively impact organizational culture and performance is valuable to potential employers.',
+    'Legal': 'Legal sector employers value attention to detail, analytical thinking, and specialized knowledge of relevant legal domains. Highlighting your experience with specific types of cases or legal procedures enhances your professional profile.'
+  };
+  
+  // Return the industry-specific content or a generic one if not found
+  return industryContents[industry] || 
+    `Professionals in the ${industry} industry should highlight relevant technical skills, specific achievements, and industry knowledge. Your optimized CV effectively showcases your qualifications and experience in this field.`;
 } 
