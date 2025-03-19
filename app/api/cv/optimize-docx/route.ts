@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm';
 import * as optimizeCVModule from '@/lib/optimizeCV.fixed';
 import { getOriginalPdfBytes, extractTextFromPdf, saveFileToDropbox, getDropboxClient } from '@/lib/storage';
 import { DocumentGenerator } from '@/lib/utils/documentGenerator';
+import { generateDocx } from '@/lib/docx/docxGenerator';
 
 // Define a session type
 interface UserSession {
@@ -145,24 +146,22 @@ function startBackgroundProcess(cvRecord: any, templateId: string, userId: strin
       console.log("Generating optimized DOCX document");
       await updateMetadata(cvRecord.id, { progress: 80, step: "Generating optimized DOCX document" });
       
-      // Use the new ATS-optimized document generator
-      const docxBuffer = await DocumentGenerator.generateATSOptimizedCV(
-        JSON.stringify(optimizedSections),
-        {
-          atsScore: improvedAtsScore,
-          originalAtsScore,
-          sectionRecommendations: optimizedAnalysisResult.sectionRecommendations || {},
-          keywordRecommendations: optimizedAnalysisResult.keywordRecommendations || [],
-          improvementSuggestions: optimizedAnalysisResult.improvementSuggestions || []
-        },
-        {
-          templateStyle: templateId || DocumentGenerator.TemplateStyles.MODERN,
-          colorOptions: {
-            primary: "#B4916C",  // Use brand color
-            accent: "#050505"    // Use main color
-          }
-        }
-      );
+      // Use the standard document generator instead of the ATS-specific one
+      // Format the optimized text sections
+      const formattedText = formatOptimizedSections(optimizedSections);
+      
+      // Create document generation options
+      const docxOptions = {
+        title: `Optimized CV - ${cvRecord.fileName.replace('.pdf', '')}`,
+        atsScore: improvedAtsScore,
+        improvedAtsScore: improvedAtsScore,
+        industry: optimizedSections.industry || '',
+        improvements: optimizedAnalysisResult.improvementSuggestions || [],
+        experienceEntries: optimizedSections.experience ? JSON.parse(optimizedSections.experience) : []
+      };
+      
+      // Generate the document
+      const docxBuffer = await generateDocx(formattedText, docxOptions);
       
       // Save the generated DOCX to Dropbox
       console.log("Saving optimized DOCX to Dropbox");
@@ -315,54 +314,60 @@ async function optimizeSectionsWithGPT4o(sections: Record<string, string>, atsAn
 }
 
 /**
- * Format optimized sections into a single text
+ * Helper function to format optimized sections for document generation
  */
-function formatOptimizedSections(sections: Record<string, string>): string {
-  let result = "";
-  
-  // Add header if it exists
-  if (sections.header) {
-    result += sections.header + "\n\n";
-  }
-  
-  // Add profile if it exists
-  if (sections.profile) {
-    result += "PROFILE\n" + sections.profile + "\n\n";
-  }
-  
-  // Add achievements if they exist
-  if (sections.achievements) {
-    result += "ACHIEVEMENTS\n" + sections.achievements + "\n\n";
-  }
-  
-  // Add experience if it exists
-  if (sections.experience) {
-    result += "EXPERIENCE\n" + sections.experience + "\n\n";
-  }
-  
-  // Add skills if they exist
-  if (sections.skills) {
-    result += "SKILLS\n" + sections.skills + "\n\n";
-  }
-  
-  // Add education if it exists
-  if (sections.education) {
-    result += "EDUCATION\n" + sections.education + "\n\n";
-  }
-  
-  // Add languages if they exist
-  if (sections.languages) {
-    result += "LANGUAGES\n" + sections.languages + "\n\n";
-  }
-  
-  // Add any other sections
-  for (const [sectionName, content] of Object.entries(sections)) {
-    if (!['header', 'profile', 'achievements', 'experience', 'skills', 'education', 'languages'].includes(sectionName)) {
-      result += sectionName.toUpperCase() + "\n" + content + "\n\n";
+function formatOptimizedSections(sections: any): string {
+  try {
+    // If sections is a string, try to parse it
+    if (typeof sections === 'string') {
+      sections = JSON.parse(sections);
     }
+    
+    // Create a formatted text in alignment with what docxGenerator expects
+    let formattedText = '';
+    
+    // Header section (name and contact info)
+    if (sections.contactInfo) {
+      formattedText += `${sections.name || 'Professional Resume'}\n${sections.contactInfo}\n\n`;
+    }
+    
+    // Summary or Profile section
+    if (sections.summary || sections.profile) {
+      formattedText += `PROFILE\n${sections.summary || sections.profile}\n\n`;
+    }
+    
+    // Experience section
+    if (sections.experience) {
+      formattedText += `EXPERIENCE\n${sections.experience}\n\n`;
+    }
+    
+    // Education section
+    if (sections.education) {
+      formattedText += `EDUCATION\n${sections.education}\n\n`;
+    }
+    
+    // Skills section
+    if (sections.skills) {
+      formattedText += `SKILLS\n${sections.skills}\n\n`;
+    }
+    
+    // Additional sections using their original names
+    const processedSections = ['contactInfo', 'name', 'summary', 'profile', 'experience', 'education', 'skills'];
+    
+    // Add any remaining sections with their original names
+    Object.entries(sections).forEach(([key, value]) => {
+      if (!processedSections.includes(key) && value) {
+        formattedText += `${key.toUpperCase()}\n${value}\n\n`;
+      }
+    });
+    
+    // Return the formatted text
+    return formattedText.trim();
+  } catch (error) {
+    console.error('Error formatting optimized sections:', error);
+    // If there's an error, return the original sections as a string
+    return typeof sections === 'string' ? sections : JSON.stringify(sections);
   }
-  
-  return result.trim();
 }
 
 /**
