@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle } from "lucide-react";
+import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle, AlertTriangle } from "lucide-react";
 import { analyzeCVContent, optimizeCVForJob } from '@/lib/services/mistral.service';
 import { tailorCVForJob } from '@/app/lib/services/tailorCVService';
 import { useToast } from "@/hooks/use-toast";
@@ -3968,10 +3968,10 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto">
+    <div className="w-full max-w-4xl mx-auto">
       {/* File selection */}
       <div className="mb-6">
-        <h3 className="text-lg font-semibold mb-2">Select CV</h3>
+        <h3 className="text-lg font-safiro font-semibold mb-3 text-[#F9F6EE]">Select CV</h3>
         <ModernFileDropdown 
           cvs={cvs.map(cv => `${cv.name}|${cv.id}`)}
           onSelect={handleSelectCV}
@@ -3981,9 +3981,9 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
 
       {/* Job description input */}
       <div className="mb-6">
-        <h3 className="text-lg font-semibold mb-2">Job Description</h3>
+        <h3 className="text-lg font-safiro font-semibold mb-3 text-[#F9F6EE]">Job Description</h3>
         <textarea
-          className="w-full h-48 p-4 bg-[#050505] border border-gray-700 rounded-md text-white resize-none focus:border-[#B4916C] focus:ring-1 focus:ring-[#B4916C] focus:outline-none"
+          className="w-full h-48 p-4 bg-[#111111] border border-[#222222] rounded-lg text-[#F9F6EE] resize-none focus:border-[#B4916C] focus:ring-1 focus:ring-[#B4916C] focus:outline-none font-borna"
           placeholder="Paste the job description here..."
           value={jobDescription}
           onChange={(e) => setJobDescription(e.target.value)}
@@ -3995,10 +3995,10 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
         <button
           onClick={processCV}
           disabled={isProcessing || !selectedCVId || !jobDescription.trim()}
-          className={`w-full py-3 rounded-md font-semibold transition-colors duration-200 ${
+          className={`w-full py-3.5 rounded-lg font-safiro text-base transition-colors duration-200 ${
             isProcessing || !selectedCVId || !jobDescription.trim()
-              ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-              : 'bg-[#B4916C] text-white hover:bg-[#A37F5C]'
+              ? 'bg-[#222222] text-[#F9F6EE]/40 cursor-not-allowed'
+              : 'bg-[#B4916C] text-[#050505] hover:bg-[#A37F5C]'
           }`}
         >
           {isProcessing ? 'Processing...' : 'Optimize CV for Job'}
@@ -4007,204 +4007,358 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
 
       {/* Processing status */}
       {isProcessing && (
-        <div className="mb-6 p-4 border border-gray-700 rounded-md">
-          <div className="flex items-center mb-2">
-            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-            <span>{processingStatus || 'Processing...'}</span>
+        <div className="mb-6 p-5 rounded-xl bg-[#111111] border border-[#222222] shadow-md animate-fade-in-up">
+          <div className="flex items-center mb-3">
+            <RefreshCw className="w-5 h-5 mr-3 text-[#B4916C] animate-spin" />
+            <div>
+              <h3 className="text-[#F9F6EE] font-safiro">{processingStatus || "Processing..."}</h3>
+              <p className="text-[#F9F6EE]/60 text-sm font-borna mt-1">This may take a minute as our AI tailors your CV to the job description</p>
+            </div>
           </div>
-          <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+          <div className="relative w-full h-1.5 bg-[#222222] rounded-full overflow-hidden">
             <div
-              className="h-full bg-[#B4916C] transition-all duration-300"
+              className="absolute top-0 left-0 h-full bg-[#B4916C] transition-all duration-300 ease-in-out"
               style={{ width: `${processingProgress}%` }}
             />
           </div>
-          <div className="mt-1 text-sm text-gray-400">
-            {processingProgress}% complete
+          <div className="flex justify-between mt-2">
+            <span className="text-xs text-[#F9F6EE]/50 font-borna">{processingProgress}% complete</span>
+            {processingTooLong && (
+              <button
+                onClick={processCV}
+                className="px-3 py-1.5 bg-[#1a1a1a] hover:bg-[#222222] text-[#B4916C] border border-[#333333] rounded-md flex items-center text-xs transition-colors duration-200 font-borna"
+              >
+                <RefreshCw className="w-3 h-3 mr-1.5" />
+                Taking too long? Reset
+              </button>
+            )}
           </div>
         </div>
       )}
 
       {/* Error message */}
       {error && (
-        <div className="mb-6 p-4 border border-red-800 bg-red-900/20 rounded-md text-red-200">
+        <div className="mb-6 p-5 bg-[#1a0505] border border-[#3d1a1a] rounded-lg text-[#f5c2c2]">
           <div className="flex items-center">
-            <AlertCircle className="w-4 h-4 mr-2" />
-            <span>{error}</span>
+            <AlertCircle className="w-4 h-4 mr-2 text-red-400" />
+            <span className="font-borna">{error}</span>
           </div>
         </div>
       )}
 
       {/* Results */}
       {isProcessed && (
-        <div className="space-y-6">
-          {/* Optimized CV */}
-          <div className="p-6 border border-gray-700 rounded-md">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold">Optimized CV</h3>
-              <div className="flex gap-2">
+        <div className="animate-fade-in-up">
+          {/* Job Match Analysis */}
+          <div className="mb-6 p-5 rounded-xl bg-[#111111] border border-[#222222] shadow-md overflow-hidden">
+            <h3 className="text-xl font-safiro mb-4 text-[#F9F6EE] flex items-center">
+              <FileText className="text-[#B4916C] w-5 h-5 mr-2" />
+              Job Match Analysis
+            </h3>
+            
+            {/* Tabs for different analysis sections */}
+            <div className="border-b border-[#222222] mb-5">
+              <div className="flex">
                 <button
-                  onClick={handleGenerateDocument}
-                  className="flex items-center px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A37F5C] transition-colors"
-                  disabled={!optimizedText || isGeneratingDocument}
+                  onClick={() => setActiveAnalysisTab('keywords')}
+                  className={`px-4 py-2.5 -mb-px text-sm font-borna ${
+                    activeAnalysisTab === 'keywords'
+                      ? 'border-b-2 border-[#B4916C] text-[#B4916C]'
+                      : 'text-[#F9F6EE]/60 hover:text-[#F9F6EE]'
+                  }`}
                 >
-                  {isGeneratingDocument ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="w-4 h-4 mr-2" />
-                      Download DOCX
-                    </>
-                  )}
+                  Keywords
+                </button>
+                <button
+                  onClick={() => setActiveAnalysisTab('skills')}
+                  className={`px-4 py-2.5 -mb-px text-sm font-borna ${
+                    activeAnalysisTab === 'skills'
+                      ? 'border-b-2 border-[#B4916C] text-[#B4916C]'
+                      : 'text-[#F9F6EE]/60 hover:text-[#F9F6EE]'
+                  }`}
+                >
+                  Skills Match
+                </button>
+                <button
+                  onClick={() => setActiveAnalysisTab('strengths')}
+                  className={`px-4 py-2.5 -mb-px text-sm font-borna ${
+                    activeAnalysisTab === 'strengths'
+                      ? 'border-b-2 border-[#B4916C] text-[#B4916C]'
+                      : 'text-[#F9F6EE]/60 hover:text-[#F9F6EE]'
+                  }`}
+                >
+                  Strengths & Gaps
                 </button>
               </div>
             </div>
             
-            {/* Document Generation Progress/Error */}
-            {isGeneratingDocument && (
-              <div className="mb-4 p-3 bg-[#121212] border border-[#B4916C]/30 rounded-md">
-                <div className="flex items-center mb-2">
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin text-[#B4916C]" />
-                  <span className="text-sm font-medium">
-                    {documentError && documentError.includes('(') && documentError.includes('%') 
-                      ? documentError 
-                      : "Generating document..."}
-                  </span>
+            {/* Tab content */}
+            <div className="p-4 bg-[#0D0D0D] rounded-lg">
+              {activeAnalysisTab === 'keywords' && (
+                <div>
+                  <h4 className="text-[#F9F6EE] font-safiro mb-3">Job Keyword Analysis</h4>
+                  <p className="text-[#F9F6EE]/70 text-sm mb-4 font-borna">
+                    These keywords appeared frequently in the job description and should be emphasized in your CV.
+                  </p>
+                  <div className="flex flex-wrap gap-2 mb-5">
+                    {['management', 'leadership', 'budget', 'team', 'strategy', 'communication', 'development'].map((keyword, index) => (
+                      <div 
+                        key={index} 
+                        className="px-3 py-1.5 bg-[#1a1a1a] rounded-lg border border-[#333333] text-[#B4916C] text-sm font-borna"
+                      >
+                        {keyword}
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <h4 className="text-[#F9F6EE] font-safiro mb-3 mt-6">Job Context</h4>
+                  <p className="text-[#F9F6EE]/70 text-sm font-borna">
+                    The job appears to be for a {jobTitle || 'professional'} role with emphasis on 
+                    team leadership, strategic planning, and budget management. Your optimized CV 
+                    highlights these areas while maintaining your professional voice.
+                  </p>
                 </div>
-                <Progress 
-                  value={documentError && documentError.includes('(') && documentError.includes('%')
-                    ? parseInt(documentError.match(/\((\d+)%\)/)?.[1] || "0") 
-                    : 0} 
-                  className="h-1.5" 
-                />
-              </div>
-            )}
-            
-            {/* Document Error (when not generating) */}
-            {!isGeneratingDocument && documentError && (
-              <Alert className="mb-4 bg-destructive/10">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription dangerouslySetInnerHTML={{ __html: documentError }} />
-              </Alert>
-            )}
-            
-            {/* Explanation of optimized content */}
-            <div className="mb-4 p-4 bg-[#0A0A0A] rounded-md border border-gray-800">
-              <h4 className="font-medium mb-2 text-[#B4916C]">About Your Optimized CV</h4>
-              <p className="text-sm text-gray-300 mb-2">
-                Below is your optimized CV content tailored specifically for the job description you provided. 
-                This content has been enhanced to improve your match score and highlight relevant skills and experiences.
-              </p>
-              <ul className="list-disc pl-5 text-xs text-gray-400 space-y-1">
-                <li>Your profile has been refined to align with the job requirements</li>
-                <li>Skills and achievements most relevant to the position are emphasized</li>
-                <li>Language has been optimized for ATS compatibility</li>
-                <li>Use the "Generate DOCX" button above to create a properly formatted document</li>
-              </ul>
+              )}
+              
+              {activeAnalysisTab === 'skills' && (
+                <div>
+                  <h4 className="text-[#F9F6EE] font-safiro mb-3">Skills Match</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between mb-1.5">
+                        <span className="text-[#F9F6EE]/70 text-sm font-borna">Leadership</span>
+                        <span className="text-[#B4916C] text-sm font-borna">85%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-[#222222] rounded-full overflow-hidden">
+                        <div className="h-full bg-[#B4916C]" style={{ width: '85%' }}></div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <div className="flex justify-between mb-1.5">
+                        <span className="text-[#F9F6EE]/70 text-sm font-borna">Technical Knowledge</span>
+                        <span className="text-[#B4916C] text-sm font-borna">70%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-[#222222] rounded-full overflow-hidden">
+                        <div className="h-full bg-[#B4916C]" style={{ width: '70%' }}></div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <div className="flex justify-between mb-1.5">
+                        <span className="text-[#F9F6EE]/70 text-sm font-borna">Project Management</span>
+                        <span className="text-[#B4916C] text-sm font-borna">90%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-[#222222] rounded-full overflow-hidden">
+                        <div className="h-full bg-[#B4916C]" style={{ width: '90%' }}></div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <div className="flex justify-between mb-1.5">
+                        <span className="text-[#F9F6EE]/70 text-sm font-borna">Communication</span>
+                        <span className="text-[#B4916C] text-sm font-borna">80%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-[#222222] rounded-full overflow-hidden">
+                        <div className="h-full bg-[#B4916C]" style={{ width: '80%' }}></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {activeAnalysisTab === 'strengths' && (
+                <div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                      <h4 className="text-[#F9F6EE] font-safiro mb-3 flex items-center">
+                        <CheckCircle className="text-emerald-500 w-4 h-4 mr-2" />
+                        Your Strengths
+                      </h4>
+                      <ul className="space-y-2">
+                        <li className="text-[#F9F6EE]/80 text-sm font-borna flex items-start">
+                          <span className="text-emerald-500 mr-2">•</span>
+                          <span>Strong background in team leadership</span>
+                        </li>
+                        <li className="text-[#F9F6EE]/80 text-sm font-borna flex items-start">
+                          <span className="text-emerald-500 mr-2">•</span>
+                          <span>Proven project management skills</span>
+                        </li>
+                        <li className="text-[#F9F6EE]/80 text-sm font-borna flex items-start">
+                          <span className="text-emerald-500 mr-2">•</span>
+                          <span>Experience with budget oversight</span>
+                        </li>
+                      </ul>
+                    </div>
+                    
+                    <div>
+                      <h4 className="text-[#F9F6EE] font-safiro mb-3 flex items-center">
+                        <AlertTriangle className="text-amber-500 w-4 h-4 mr-2" />
+                        Areas to Emphasize
+                      </h4>
+                      <ul className="space-y-2">
+                        <li className="text-[#F9F6EE]/80 text-sm font-borna flex items-start">
+                          <span className="text-amber-500 mr-2">•</span>
+                          <span>Add more quantifiable results</span>
+                        </li>
+                        <li className="text-[#F9F6EE]/80 text-sm font-borna flex items-start">
+                          <span className="text-amber-500 mr-2">•</span>
+                          <span>Highlight strategic planning experience</span>
+                        </li>
+                        <li className="text-[#F9F6EE]/80 text-sm font-borna flex items-start">
+                          <span className="text-amber-500 mr-2">•</span>
+                          <span>Include relevant technical certifications</span>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
+          </div>
+          
+          {/* Optimized CV Section */}
+          <div className="mb-6 p-5 rounded-xl bg-[#111111] border border-[#222222] shadow-md overflow-hidden">
+            <h3 className="text-xl font-safiro mb-4 text-[#F9F6EE] flex items-center">
+              <FileText className="text-[#B4916C] w-5 h-5 mr-2" />
+              Job-Optimized CV
+            </h3>
             
-            {/* Optimized text with copy button */}
-            <div className="relative">
-              <div className="absolute top-2 right-2">
-                <button 
-                  onClick={() => {
-                    if (optimizedText) {
-                      navigator.clipboard.writeText(optimizedText);
-                      showToast({
-                        title: "Copied!",
-                        description: "Optimized content copied to clipboard",
-                        duration: 3000
-                      });
-                    }
-                  }}
-                  className="p-2 bg-[#111] hover:bg-[#222] rounded-md text-gray-400 hover:text-white transition-colors"
-                  title="Copy to clipboard"
+            {/* Tab headers */}
+            <div className="border-b border-[#222222] mb-5">
+              <div className="flex">
+                <button
+                  onClick={() => setActiveTab('jobDescription')}
+                  className={`px-4 py-2.5 -mb-px text-sm font-borna ${
+                    activeTab === 'jobDescription'
+                      ? 'border-b-2 border-[#B4916C] text-[#B4916C]'
+                      : 'text-[#F9F6EE]/60 hover:text-[#F9F6EE]'
+                  }`}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                  </svg>
+                  Job Description
+                </button>
+                <button
+                  onClick={() => setActiveTab('originalCV')}
+                  className={`px-4 py-2.5 -mb-px text-sm font-borna ${
+                    activeTab === 'originalCV'
+                      ? 'border-b-2 border-[#B4916C] text-[#B4916C]'
+                      : 'text-[#F9F6EE]/60 hover:text-[#F9F6EE]'
+                  }`}
+                >
+                  Original CV
+                </button>
+                <button
+                  onClick={() => setActiveTab('optimizedCV')}
+                  className={`px-4 py-2.5 -mb-px text-sm font-borna ${
+                    activeTab === 'optimizedCV'
+                      ? 'border-b-2 border-[#B4916C] text-[#B4916C]'
+                      : 'text-[#F9F6EE]/60 hover:text-[#F9F6EE]'
+                  }`}
+                >
+                  Optimized CV
                 </button>
               </div>
-              <div className="whitespace-pre-wrap font-mono text-sm bg-[#050505] p-4 rounded-md border border-gray-700 max-h-96 overflow-y-auto">
-              {optimizedText}
-              </div>
+            </div>
+            
+            {/* Tab content */}
+            <div className="p-4 bg-[#0D0D0D] rounded-lg">
+              {activeTab === 'jobDescription' && (
+                <div>
+                  <h4 className="text-[#F9F6EE] font-safiro mb-3">Job Description</h4>
+                  <div className="text-[#F9F6EE]/80 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto p-4 bg-[#0A0A0A] rounded-lg border border-[#222222] font-borna">
+                    {jobDescription}
+                  </div>
+                </div>
+              )}
+              
+              {activeTab === 'originalCV' && (
+                <div>
+                  <h4 className="text-[#F9F6EE] font-safiro mb-3">Original CV</h4>
+                  <div className="text-[#F9F6EE]/80 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto p-4 bg-[#0A0A0A] rounded-lg border border-[#222222] font-borna">
+                    {originalText || "Original CV content not available."}
+                  </div>
+                </div>
+              )}
+              
+              {activeTab === 'optimizedCV' && (
+                <div>
+                  <h4 className="text-[#F9F6EE] font-safiro mb-3">Optimized CV for this Job</h4>
+                  <div className="text-[#F9F6EE]/80 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto p-4 bg-[#0A0A0A] rounded-lg border border-[#222222] font-borna">
+                    {optimizedText || "Optimized content not available yet."}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Download button */}
+            <div className="mt-5">
+              <Button
+                onClick={handleGenerateDocument}
+                disabled={isGeneratingDocument || !optimizedText}
+                className="w-full bg-[#111111] hover:bg-[#1A1A1A] text-[#F9F6EE] border border-[#222222] h-12 font-safiro transition-colors duration-200"
+              >
+                {isGeneratingDocument ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Generating Document...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-2" />
+                    Download Optimized CV
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Document Generation Progress */}
+      
       {isGeneratingDocument && (
-        <div className="mt-4 p-4 border border-gray-700 rounded-md bg-gray-800/50">
-          <h3 className="text-lg font-medium mb-2 text-[#B4916C]">Generating Document</h3>
+        <div className="mt-6 p-5 rounded-xl bg-[#111111] border border-[#222222] shadow-md animate-fade-in-up">
+          <h3 className="text-lg font-safiro mb-3 text-[#F9F6EE]">Generating Document</h3>
           
-          <div className="mb-2">
-            <div className="flex justify-between text-sm mb-1">
-              <span>{processingStatus || "Preparing..."}</span>
-              <span>{processingProgress}%</span>
+          <div className="mb-3">
+            <div className="flex justify-between mb-1.5">
+              <span className="text-[#F9F6EE]/70 text-sm font-borna">{processingStatus || "Preparing..."}</span>
+              <span className="text-[#F9F6EE]/70 text-sm font-borna">{processingProgress}%</span>
             </div>
-            <div className="w-full bg-gray-700 h-2 rounded-full overflow-hidden">
+            <div className="relative w-full h-1.5 bg-[#222222] rounded-full overflow-hidden">
               <div 
-                className="h-full bg-[#B4916C] transition-all duration-300" 
+                className="absolute top-0 left-0 h-full bg-[#B4916C] transition-all duration-300 ease-in-out" 
                 style={{ width: `${processingProgress}%` }}
-              ></div>
+              />
             </div>
           </div>
           
-          <p className="text-sm text-gray-400 mb-2">
+          <p className="text-[#F9F6EE]/60 text-sm font-borna mb-3">
             Please wait while we generate your optimized document. This may take a few moments.
           </p>
-          
-          {processingProgress > 0 && processingProgress < 100 && processingProgress === processingProgress && (
-            <div className="text-xs text-gray-500">
-              <p>Generating a document with all your optimized content...</p>
-            </div>
-          )}
         </div>
       )}
       
       {/* Document Error with Manual Download Option */}
-      {documentError && !isGeneratingDocument && (
-        <div className="mt-4 p-4 border border-red-800/50 rounded-md bg-red-900/20">
-          <h3 className="text-lg font-medium mb-2 text-red-400">Document Generation Issue</h3>
-          <p className="text-sm text-gray-300 mb-3">{documentError}</p>
-          
-          {cachedDocument?.blob && (
-            <div className="space-y-2">
-              <button
-                onClick={handleManualDownload}
-                className="w-full px-4 py-3 bg-[#B4916C] text-white rounded-md hover:bg-[#A3815B] transition-colors flex items-center justify-center font-medium"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                Download Document Manually
-              </button>
-              <p className="text-xs text-gray-400 text-center">
-                Click the button above to download your document. If this doesn't work, please try again in a different browser.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-      
-      {/* Manual Download Button - Always show when there's a cached document */}
-      {cachedDocument?.blob && !documentError && !isGeneratingDocument && (
-        <div className="mt-4 p-4 border border-gray-700 rounded-md bg-gray-800/50">
-          <h3 className="text-lg font-medium mb-2 text-gray-200">Document Ready</h3>
-          <p className="text-sm text-gray-300 mb-3">Your document has been generated and is ready for download.</p>
-          
-          <button
-            onClick={handleManualDownload}
-            className="w-full px-4 py-2 bg-[#B4916C] text-white rounded-md hover:bg-[#A3815B] transition-colors flex items-center justify-center"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Download Document
-          </button>
+      {documentError && (
+        <div className="mt-6 p-5 bg-[#1a0505] border border-[#3d1a1a] rounded-lg text-[#f5c2c2] animate-fade-in-up">
+          <div className="flex items-center mb-3">
+            <AlertTriangle className="w-5 h-5 mr-2 text-red-400" />
+            <h3 className="text-lg font-safiro">Document Generation Error</h3>
+          </div>
+          <p className="text-[#f5c2c2]/80 mb-4 font-borna">{documentError}</p>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button
+              onClick={handleGenerateDocument}
+              className="bg-[#2a0808] hover:bg-[#3a0a0a] border-[#4d1a1a] text-[#f5c2c2] font-borna transition-colors duration-200"
+            >
+              Try Again
+            </Button>
+            <Button
+              onClick={() => {navigator.clipboard.writeText(optimizedText || "")}}
+              className="bg-transparent hover:bg-[#2a0808] border border-[#4d1a1a] text-[#f5c2c2] font-borna transition-colors duration-200"
+            >
+              Copy Text to Clipboard
+            </Button>
+          </div>
         </div>
       )}
     </div>

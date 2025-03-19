@@ -4,7 +4,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, BarChart2, Building, FileText, ArrowRight } from "lucide-react";
+import { AlertCircle, BarChart2, Building, FileText, ChevronDown, CheckCircle, ArrowRight } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getIndustrySpecificAtsInsights } from "@/lib/cvAnalyzer";
 
@@ -22,6 +22,7 @@ interface AnalysisResult {
   formattingStrengths?: string[];
   formattingWeaknesses?: string[];
   formattingRecommendations?: string[];
+  experienceEntries?: { jobTitle?: string; company?: string; dateRange?: string; location?: string; responsibilities?: string[] }[];
 }
 
 interface AnalyzeCVCardProps {
@@ -30,30 +31,25 @@ interface AnalyzeCVCardProps {
   children?: React.ReactNode;
 }
 
-// Updated SimpleFileDropdown component to match ModernFileDropdown
+// Updated SimpleFileDropdown component to match the brand style
 function SimpleFileDropdown({ cvs, onSelect, selectedCVName }: { cvs: string[]; onSelect: (cvId: string, cvName: string) => void; selectedCVName?: string; }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="relative w-full">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full px-4 py-3 bg-black border border-gray-700 hover:border-[#B4916C] text-gray-300 rounded-md flex justify-between items-center transition-colors duration-200"
+        className="w-full px-4 py-3.5 bg-[#111111] border border-[#222222] hover:border-[#B4916C] text-[#F9F6EE] rounded-lg flex justify-between items-center transition-colors duration-200 font-borna"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
         <span className="truncate">{selectedCVName || "Select a CV"}</span>
-        <svg 
-          className={`h-5 w-5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} 
-          xmlns="http://www.w3.org/2000/svg" 
-          viewBox="0 0 20 20" 
-          fill="currentColor"
-        >
-          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-        </svg>
+        <ChevronDown 
+          className={`h-5 w-5 text-[#B4916C] transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
+        />
       </button>
       
       {open && cvs.length > 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-[#121212] border border-gray-700 rounded-md shadow-lg max-h-60 overflow-auto">
+        <div className="absolute z-10 w-full mt-1 bg-[#111111] border border-[#222222] rounded-lg shadow-xl max-h-60 overflow-auto animate-fade-in">
           <ul className="py-1" role="listbox">
             {(cvs || []).map(cv => {
               const parts = cv.split('|');
@@ -61,7 +57,7 @@ function SimpleFileDropdown({ cvs, onSelect, selectedCVName }: { cvs: string[]; 
                 return (
                   <li
                     key={parts[1]}
-                    className="px-4 py-2 text-sm text-gray-300 hover:bg-[#1A1A1A] hover:text-white cursor-pointer"
+                    className="px-4 py-3 text-sm text-[#F9F6EE] hover:bg-[#1A1A1A] hover:text-[#B4916C] cursor-pointer transition-colors duration-150 font-borna"
                     role="option"
                     onClick={() => { setOpen(false); onSelect(parts[1].trim(), parts[0].trim()); }}
                   >
@@ -76,8 +72,8 @@ function SimpleFileDropdown({ cvs, onSelect, selectedCVName }: { cvs: string[]; 
       )}
       
       {open && cvs.length === 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-[#121212] border border-gray-700 rounded-md shadow-lg">
-          <div className="px-4 py-2 text-sm text-gray-500">No CVs available</div>
+        <div className="absolute z-10 w-full mt-1 bg-[#111111] border border-[#222222] rounded-lg shadow-xl animate-fade-in">
+          <div className="px-4 py-3 text-sm text-[#F9F6EE]/50 font-borna">No CVs available</div>
         </div>
       )}
     </div>
@@ -106,7 +102,7 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
   // Handle CV selection
   const handleCVSelect = useCallback((cvId: string, cvName: string) => {
     console.log("CV selected for analysis:", cvName, "ID:", cvId);
-      setSelectedCVId(cvId);
+    setSelectedCVId(cvId);
     setSelectedCVName(cvName);
   }, []);
 
@@ -154,15 +150,16 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
         sectionBreakdown: typeof data.analysis.sectionBreakdown === 'object' ? data.analysis.sectionBreakdown : {},
         industryInsight: typeof data.analysis.industryInsight === 'string' ? data.analysis.industryInsight : undefined,
         targetRoles: Array.isArray(data.analysis.targetRoles) ? data.analysis.targetRoles : undefined,
+        experienceEntries: Array.isArray(data.analysis.experienceEntries) ? data.analysis.experienceEntries : undefined,
       };
       
-        // If industry is detected but no industry insight is provided, get one
+      // If industry is detected but no industry insight is provided, get one
       if (safeData.industry && !safeData.industryInsight) {
-          try {
+        try {
           const insight = getIndustrySpecificAtsInsights(safeData.industry);
           safeData.industryInsight = insight;
-          } catch (error) {
-            console.error("Error getting industry insights:", error);
+        } catch (error) {
+          console.error("Error getting industry insights:", error);
           // Continue without insight
         }
       }
@@ -235,8 +232,8 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
       
       // Sort by count (descending) and take top 5
       return keywordEntries
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
         .map(([keyword]) => keyword);
     } catch (error) {
       console.error("Error processing keywords:", error);
@@ -287,103 +284,235 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
       return summary;
     } catch (error) {
       console.error("Error generating CV summary:", error);
-      return "Unable to generate summary. Please try analyzing again.";
+      return "CV summary unavailable.";
     }
   };
 
+  // Add a function to display experience entries
+  const getExperienceSection = () => {
+    if (!analysis || !analysis.experienceEntries || !Array.isArray(analysis.experienceEntries) || analysis.experienceEntries.length === 0) {
+      return null;
+    }
+    
+    return (
+      <div className="rounded-lg border border-[#222222] overflow-hidden mt-5">
+        <div className="bg-[#111111] p-5">
+          <h3 className="text-lg font-safiro font-semibold mb-4 flex items-center text-[#F9F6EE]">
+            <span className="text-[#B4916C] mr-2">
+              <Building size={20} />
+            </span>
+            Career Experience
+          </h3>
+          
+          <div className="space-y-4">
+            {analysis.experienceEntries.map((entry, index) => (
+              <div key={index} className="border-b border-[#222222] pb-4 mb-4 last:border-b-0 last:pb-0 last:mb-0">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="text-[#B4916C] font-safiro">{entry.jobTitle || "Position"}</h4>
+                    <p className="text-[#F9F6EE]/60 text-sm font-borna">{entry.company || "Company"}</p>
+                  </div>
+                  <div className="text-[#F9F6EE]/50 text-sm font-borna">{entry.dateRange || ""}</div>
+                </div>
+                
+                {entry.location && (
+                  <p className="text-[#F9F6EE]/50 text-sm mt-1 font-borna">{entry.location}</p>
+                )}
+                
+                {entry.responsibilities && entry.responsibilities.length > 0 && (
+                  <div className="mt-3">
+                    <ul className="list-disc list-inside text-[#F9F6EE]/80 text-sm space-y-1.5 font-borna">
+                      {entry.responsibilities.slice(0, 3).map((resp, idx) => (
+                        <li key={idx} className="ml-1">{resp}</li>
+                      ))}
+                      {entry.responsibilities.length > 3 && (
+                        <li className="text-[#F9F6EE]/40 text-xs italic font-borna">+ {entry.responsibilities.length - 3} more responsibilities</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <Card className="w-full shadow-lg border border-[#B4916C]/20 bg-[#121212]">
-      <CardHeader>
-        <CardTitle className="text-xl font-bold text-[#B4916C] flex items-center gap-2">
-          <BarChart2 className="w-5 h-5" />
-          <span>Analyze CV</span>
+    <Card className="w-full border border-[#222222] bg-[#111111] rounded-xl shadow-md overflow-hidden">
+      <CardHeader className="bg-[#0D0D0D] border-b border-[#222222] px-5 py-4">
+        <CardTitle className="text-xl font-safiro text-[#F9F6EE] flex items-center gap-2">
+          <BarChart2 className="w-5 h-5 text-[#B4916C]" />
+          <span>Analyze Your CV</span>
         </CardTitle>
-        <CardDescription className="text-gray-400">
-          Evaluate your CV against ATS systems and industry standards
+        <CardDescription className="text-[#F9F6EE]/60 font-borna mt-1">
+          Evaluate against ATS systems and industry standards
         </CardDescription>
       </CardHeader>
       
-      <CardContent className="p-4 md:p-6">
+      <CardContent className="p-5">
         {!analysis && !loading && (
           <div className="mb-6">
-            <div className="mb-2 text-gray-400 text-sm">Select a CV to analyze</div>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0 mb-4">
+            <div className="mb-3 text-[#F9F6EE]/70 text-sm font-borna">Select a CV to analyze</div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
               <div className="w-full">
                 <SimpleFileDropdown cvs={cvs} selectedCVName={selectedCVName || ""} onSelect={handleCVSelect} />
               </div>
               <Button
                 onClick={handleAnalyze}
                 disabled={!selectedCVId || loading}
-                className="bg-[#B4916C] hover:bg-[#A27D59] text-[#050505] font-medium whitespace-nowrap w-full sm:w-auto"
+                className="bg-[#B4916C] hover:bg-[#A27D59] text-[#050505] font-safiro whitespace-nowrap w-full sm:w-auto transition-colors duration-200 border-none h-12"
               >
                 {loading ? "Analyzing..." : "Analyze CV"}
               </Button>
             </div>
             
-            <div className="text-gray-400 text-sm">
-              Select your CV to begin the AI-powered analysis. Our system will evaluate your CV against ATS systems and industry standards.
+            <div className="text-[#F9F6EE]/50 text-sm font-borna">
+              Our AI will evaluate your CV against ATS systems and provide specific recommendations to improve your chances of getting an interview.
             </div>
           </div>
         )}
         
         {loading && (
-          <div className="flex flex-col items-center justify-center py-8">
-            <div className="w-16 h-16 border-4 border-[#B4916C] border-t-transparent rounded-full animate-spin mb-4"></div>
-            <p className="text-gray-300 text-center">Analyzing your CV...</p>
-            <p className="text-gray-500 text-sm text-center mt-2">This may take a minute or two.</p>
+          <div className="flex flex-col items-center justify-center py-10">
+            <div className="relative w-16 h-16 mb-5">
+              <div className="absolute inset-0 border-4 border-[#222222] rounded-full"></div>
+              <div className="absolute inset-0 border-4 border-t-[#B4916C] rounded-full animate-spin"></div>
+            </div>
+            <p className="text-[#F9F6EE] text-center font-safiro">Analyzing your CV...</p>
+            <p className="text-[#F9F6EE]/50 text-sm text-center mt-2 font-borna">This may take a minute as our AI evaluates your document.</p>
           </div>
         )}
         
         {error && (
-          <Alert className="mb-4 bg-red-950 border-red-900 text-red-200">
-            <AlertCircle className="h-4 w-4 mr-2" />
-            <AlertDescription>{error}</AlertDescription>
+          <Alert className="mb-5 bg-[#1a0505] border border-[#3d1a1a] text-[#f5c2c2] rounded-lg">
+            <AlertCircle className="h-4 w-4 mr-2 text-red-400" />
+            <AlertDescription className="font-borna">{error}</AlertDescription>
           </Alert>
         )}
         
-        {analysis && (
-          <div className="space-y-6 overflow-x-auto">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-              <div className="bg-[#050505] p-4 rounded-lg border border-gray-800">
-                <h3 className="text-lg text-white font-semibold mb-3">ATS Compatibility Score</h3>
-                <div className="flex items-center">
-                  <div className="text-[#B4916C] font-bold text-4xl">
-                    {formatAtsScore(analysis.atsScore)}
-                  </div>
-                  <div className="text-sm text-gray-400 ml-1">/&nbsp;100</div>
-                </div>
-              </div>
-              
-              <div className="bg-[#050505] p-4 rounded-lg border border-gray-800">
-                <h3 className="text-lg text-white font-semibold mb-3 flex items-center">
-                  <Building className="h-4 w-4 mr-2 text-[#B4916C]" />
-                  Industry
+        {analysis && !loading && (
+          <div className="space-y-6 animate-fade-in-up">
+            {/* ATS Score */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 md:p-5 rounded-xl bg-[#0D0D0D] border border-[#222222]">
+              <div className="space-y-1">
+                <h3 className="text-[#F9F6EE] font-safiro text-lg flex items-center">
+                  <FileText className="text-[#B4916C] w-5 h-5 mr-2" />
+                  ATS Compatibility Score
                 </h3>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-1 bg-[#B4916C]/10 text-[#B4916C] rounded-md">
-                    {analysis.industry || "General"}
-                  </span>
-                  {analysis.language && (
-                    <span className="px-2 py-1 bg-[#050505] text-gray-400 border border-gray-700 rounded-md text-xs uppercase">
-                      {getLanguageName(analysis.language)}
-                    </span>
-                  )}
-                </div>
+                <p className="text-[#F9F6EE]/60 text-sm font-borna">How well your CV performs against Applicant Tracking Systems</p>
+              </div>
+              <div className="flex items-center justify-center bg-[#111111] rounded-lg p-3 min-w-[90px]">
+                <span className="text-2xl font-bold font-safiro" style={{ 
+                  color: parseInt(formatAtsScore(analysis.atsScore)) > 80 
+                    ? '#4ade80' 
+                    : parseInt(formatAtsScore(analysis.atsScore)) > 60 
+                      ? '#facc15' 
+                      : '#f87171'
+                }}>
+                  {formatAtsScore(analysis.atsScore)}
+                </span>
               </div>
             </div>
             
-            <div className="rounded-lg border border-gray-800 overflow-hidden mt-4">
-              <div className="bg-[#050505] p-4">
-                <h3 className="text-xl font-semibold mb-4 flex items-center text-white">
-                  <span className="text-[#B4916C] mr-2">
-                    <FileText size={20} />
-                  </span>
-                  CV Summary
+            {/* Industry and Language */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-xl bg-[#0D0D0D] border border-[#222222]">
+                <h3 className="text-[#F9F6EE] font-safiro mb-1 flex items-center">
+                  <Building className="text-[#B4916C] w-4 h-4 mr-2" />
+                  Industry
                 </h3>
-                <div className="text-gray-300 text-sm">
-                  {getCVSummary()}
+                <p className="text-[#F9F6EE]/80 font-borna">{analysis.industry || "General"}</p>
+              </div>
+              
+              {analysis.language && (
+                <div className="p-4 rounded-xl bg-[#0D0D0D] border border-[#222222]">
+                  <h3 className="text-[#F9F6EE] font-safiro mb-1">Language</h3>
+                  <p className="text-[#F9F6EE]/80 font-borna">{getLanguageName(analysis.language)}</p>
+                </div>
+              )}
+            </div>
+            
+            {/* Keywords */}
+            {analysis.keywordAnalysis && Object.keys(analysis.keywordAnalysis).length > 0 && (
+              <div className="p-4 rounded-xl bg-[#0D0D0D] border border-[#222222]">
+                <h3 className="text-[#F9F6EE] font-safiro mb-3">Top Keywords</h3>
+                <div className="flex flex-wrap gap-2">
+                  {getTopKeywords().map((keyword, index) => (
+                    <span 
+                      key={index} 
+                      className="inline-block px-3 py-1.5 rounded-lg bg-[#1a1a1a] border border-[#333333] text-[#B4916C] text-sm font-borna"
+                    >
+                      {keyword}
+                    </span>
+                  ))}
                 </div>
               </div>
+            )}
+            
+            {/* Strengths, Weaknesses, Recommendations */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Strengths */}
+              <div className="p-4 rounded-xl bg-[#0D0D0D] border border-[#222222]">
+                <h3 className="text-[#F9F6EE] font-safiro mb-3 flex items-center">
+                  <CheckCircle className="text-emerald-500 w-4 h-4 mr-2" />
+                  Strengths
+                </h3>
+                <ul className="space-y-2">
+                  {analysis.strengths.map((strength, index) => (
+                    <li key={index} className="text-[#F9F6EE]/80 text-sm font-borna flex items-start">
+                      <span className="text-emerald-500 mr-2">•</span>
+                      <span>{strength}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              
+              {/* Weaknesses */}
+              <div className="p-4 rounded-xl bg-[#0D0D0D] border border-[#222222]">
+                <h3 className="text-[#F9F6EE] font-safiro mb-3 flex items-center">
+                  <AlertCircle className="text-amber-500 w-4 h-4 mr-2" />
+                  Areas to Improve
+                </h3>
+                <ul className="space-y-2">
+                  {analysis.weaknesses.map((weakness, index) => (
+                    <li key={index} className="text-[#F9F6EE]/80 text-sm font-borna flex items-start">
+                      <span className="text-amber-500 mr-2">•</span>
+                      <span>{weakness}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              
+              {/* Recommendations */}
+              <div className="p-4 rounded-xl bg-[#0D0D0D] border border-[#222222]">
+                <h3 className="text-[#F9F6EE] font-safiro mb-3 flex items-center">
+                  <ArrowRight className="text-[#B4916C] w-4 h-4 mr-2" />
+                  Recommendations
+                </h3>
+                <ul className="space-y-2">
+                  {analysis.recommendations.map((recommendation, index) => (
+                    <li key={index} className="text-[#F9F6EE]/80 text-sm font-borna flex items-start">
+                      <span className="text-[#B4916C] mr-2">•</span>
+                      <span>{recommendation}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            
+            {/* Experience Section */}
+            {getExperienceSection()}
+            
+            {/* Proceed Button */}
+            <div className="flex justify-center mt-6">
+              <Button
+                onClick={handleProceedToOptimize}
+                className="bg-[#B4916C] hover:bg-[#A27D59] text-[#050505] px-6 py-3 rounded-lg font-safiro text-base transition-colors duration-200 h-auto w-full md:w-auto"
+              >
+                Proceed to Optimization
+              </Button>
             </div>
           </div>
         )}

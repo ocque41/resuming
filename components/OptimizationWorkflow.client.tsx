@@ -4,11 +4,9 @@ import React, { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AnalyzeCVCard from "@/components/AnalyzeCVCard.client";
 import EnhancedOptimizeCVCard from "@/components/EnhancedOptimizeCVCard.client";
-import SpecificOptimizeCVCard from "./SpecificOptimizeCVCard.client";
 import EnhancedSpecificOptimizationWorkflow from "../app/components/EnhancedSpecificOptimizationWorkflow.client";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Info } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 // Toast functionality without using the use-toast hook
 function showToast(message: { title: string; description: string; duration: number }) {
@@ -101,48 +99,28 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
             // Check if processing is stuck
             if (data.isStuck) {
               console.warn(`Processing appears stuck at ${data.progress}% for ${data.stuckMinutes} minutes`);
-              
-              // If stuck for more than 3 minutes, show error and offer retry
-              if (data.stuckMinutes > 3) {
-                setError(`Processing appears stuck at ${data.progress}%. You can wait or try again.`);
-                
-                // If stuck for more than 5 minutes, automatically retry
-                if (data.stuckMinutes > 5) {
-                  console.log("Processing stuck for over 5 minutes, attempting automatic retry");
-                  
-                  try {
-                    // Attempt to restart the process with force refresh
-                    const retryResponse = await fetch(`/api/cv/process`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ cvId: selectedCVId, forceRefresh: true }),
-                    });
-                    
-                    if (retryResponse.ok) {
-                      showToast({
-                        title: "Processing Restarted",
-                        description: "We've automatically restarted the process due to a delay.",
-                        duration: 5000,
-                      });
-                      
-                      // Reset error since we're retrying
-                      setError(null);
-                    }
-                  } catch (retryError) {
-                    console.error("Error during automatic retry:", retryError);
-                  }
-                }
+              if (data.stuckMinutes > 5) {
+                // Processing is definitely stuck, show reset option
+                setProcessingTooLong(true);
               }
-            } else {
-              // Clear error if processing is moving again
-              setError(null);
             }
             
-            // Continue polling, but back off if progress is slow
-            // Use more aggressive polling for lower progress to catch issues earlier
-            const newInterval = data.progress > 80 ? 1000 :
-                               data.progress > 60 ? 2000 :
-                               data.progress > 40 ? 3000 : 2000; // Keep polling more frequently at lower progress
+            // Calculate next polling interval with exponential backoff
+            // More progress = longer intervals (less polling)
+            let newInterval = 1000; // 1s base
+            
+            if (data.progress > 90) {
+              newInterval = 5000; // 5s when nearly done
+            } else if (data.progress > 70) {
+              newInterval = 3000; // 3s when well on the way
+            } else if (data.progress > 40) {
+              newInterval = 2000; // 2s when making progress
+            }
+            
+            // Never let the interval get too long - cap at 5s
+            newInterval = Math.min(5000, newInterval);
+            
+            // Keep polling more frequently at lower progress
             
             setStatusPollingInterval(newInterval);
             timeoutId = setTimeout(checkStatus, newInterval);
@@ -363,52 +341,30 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
     const [name, id] = cv.split('|');
     return { id, name };
   });
-
+  
   return (
-    <div className="w-full max-w-6xl mx-auto">
-      {error && (
-        <Alert className="mb-4 bg-destructive/10">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      
-      {/* Document Generation Tips - Placed here so it's visible in both tabs */}
-      <div className="mb-4 p-4 border border-gray-700 rounded-md bg-gray-800/50">
-        <h4 className="flex items-center text-sm font-medium mb-2 text-gray-300">
-          <Info className="h-4 w-4 mr-2 text-blue-400" />
-          Document Generation Tips
-        </h4>
-        <ul className="text-xs text-gray-400 space-y-1 list-disc pl-5">
-          <li>The generated document will include all sections from your optimized CV</li>
-          <li>Document generation may take up to 30 seconds for complex CVs</li>
-          <li>If generation fails, try again or use a different browser</li>
-          <li>For best results, ensure your CV has clear section headers</li>
-        </ul>
-      </div>
-      
-      {/* Only show the processing indicator when no CV is selected or when we're in the analyze step */}
+    <div className="w-full max-w-4xl mx-auto">
+      {/* Processing Indicator - Stays at the top */}
       {isProcessing && (!selectedCVId || activeStep !== "general") && (
-        <div className="mb-4 p-4 border rounded-md bg-[#050505]">
-          <h3 className="text-lg font-semibold">Processing CV</h3>
-          <p className="text-sm text-muted-foreground">
+        <div className="mb-6 p-5 rounded-xl bg-[#111111] border border-[#222222] shadow-lg overflow-hidden animate-fade-in-up">
+          <h3 className="text-lg font-safiro font-semibold mb-2 text-[#F9F6EE]">Processing CV</h3>
+          <p className="text-sm text-[#F9F6EE]/70 mb-3 font-borna">
             {processingStatus || "Processing..."}. Might take a couple minutes, please wait for an accurate optimization.
           </p>
-          <div className="w-full h-2 bg-secondary mt-2 rounded-full overflow-hidden">
+          <div className="relative w-full h-1.5 bg-[#222222] mt-2 rounded-full overflow-hidden">
             <div 
-              className="h-full bg-primary transition-all duration-300 ease-in-out" 
+              className="absolute top-0 left-0 h-full bg-[#B4916C] transition-all duration-300 ease-in-out" 
               style={{ width: `${processingProgress || 0}%` }}
             />
           </div>
-          <div className="flex justify-between items-center mt-1">
-            <p className="text-sm">{processingProgress || 0}%</p>
+          <div className="flex justify-between items-center mt-2">
+            <p className="text-xs text-[#F9F6EE]/50">{processingProgress || 0}%</p>
             {processingTooLong && (
               <button
                 onClick={handleResetProcessing}
-                className="px-3 py-1 bg-red-900/30 hover:bg-red-800/50 text-red-300 border border-red-800 rounded-md flex items-center text-xs"
+                className="px-3 py-1.5 bg-[#1a1a1a] hover:bg-[#222222] text-[#B4916C] border border-[#333333] rounded-md flex items-center text-xs transition-colors duration-200"
               >
-                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
+                <RefreshCw className="w-3 h-3 mr-1.5" />
                 Taking too long? Reset
               </button>
             )}
@@ -416,7 +372,7 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
           {error && (
             <Button
               variant="outline"
-              className="mt-2 bg-[#050505] border-gray-700 text-white hover:bg-gray-800"
+              className="mt-3 bg-[#1a1a1a] border-[#333333] text-[#F9F6EE] hover:bg-[#222222] hover:text-[#B4916C] transition-colors duration-200"
               onClick={() => {
                 if (selectedCVId) {
                   handleAnalysisComplete(selectedCVId);
@@ -429,35 +385,60 @@ export default function OptimizationWorkflow(props: OptimizationWorkflowProps): 
         </div>
       )}
       
-      <Tabs defaultValue="general" onValueChange={handleTabChange} value={activeStep}>
-        <TabsList className="w-full grid grid-cols-2">
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="specific">
-            Specific
-          </TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="general" className="space-y-4 mt-4">
-          <h2 className="text-2xl font-bold">Optimize Your CV</h2>
-          <p className="text-muted-foreground">
-            Upload your CV to analyze and optimize it for better ATS compatibility.
-          </p>
+      {/* Tab Navigation - Clean and modern */}
+      <div className="mb-8">
+        <Tabs 
+          defaultValue="general" 
+          onValueChange={handleTabChange} 
+          value={activeStep}
+          className="w-full"
+        >
+          <TabsList className="w-full grid grid-cols-2 p-1 bg-[#111111] rounded-xl">
+            <TabsTrigger 
+              value="general" 
+              className="rounded-lg py-2.5 font-safiro data-[state=active]:bg-[#B4916C] data-[state=active]:text-[#050505] data-[state=inactive]:text-[#F9F6EE]/70 transition-all duration-200"
+            >
+              General Optimization
+            </TabsTrigger>
+            <TabsTrigger 
+              value="specific"
+              className="rounded-lg py-2.5 font-safiro data-[state=active]:bg-[#B4916C] data-[state=active]:text-[#050505] data-[state=inactive]:text-[#F9F6EE]/70 transition-all duration-200"
+            >
+              Job-Specific
+            </TabsTrigger>
+          </TabsList>
           
-          <AnalyzeCVCard onAnalysisComplete={handleAnalysisComplete} cvs={cvs} />
+          {/* General Tab Content */}
+          <TabsContent value="general" className="space-y-6 mt-6 animate-fade-in">
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold font-safiro text-[#F9F6EE] mb-2">Optimize Your CV</h2>
+              <p className="text-[#F9F6EE]/70 font-borna">
+                Upload your CV to analyze and optimize it for better ATS compatibility.
+              </p>
+            </div>
+            
+            <AnalyzeCVCard onAnalysisComplete={handleAnalysisComplete} cvs={cvs} />
+            
+            {selectedCVId && (
+              <div className="mt-8 animate-fade-in-up">
+                <EnhancedOptimizeCVCard cvs={getOptimizeCVs()} />
+              </div>
+            )}
+          </TabsContent>
           
-          {selectedCVId && (
-            <EnhancedOptimizeCVCard cvs={getOptimizeCVs()} />
-          )}
-        </TabsContent>
-        
-        <TabsContent value="specific" className="space-y-4 mt-4">
-          <h2 className="text-2xl font-bold">Job-Specific Optimization</h2>
-          <p className="text-muted-foreground">
-            Optimize your CV for a specific job by pasting the job description below. Our AI will tailor your CV to match the job requirements.
-          </p>
-          <EnhancedSpecificOptimizationWorkflow cvs={formattedCvsForSpecific} />
-        </TabsContent>
-      </Tabs>
+          {/* Specific Tab Content */}
+          <TabsContent value="specific" className="space-y-6 mt-6 animate-fade-in">
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold font-safiro text-[#F9F6EE] mb-2">Job-Specific Optimization</h2>
+              <p className="text-[#F9F6EE]/70 font-borna">
+                Optimize your CV for a specific job by pasting the job description. Our AI will tailor your CV to match the job requirements.
+              </p>
+            </div>
+            
+            <EnhancedSpecificOptimizationWorkflow cvs={formattedCvsForSpecific} />
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
 } 

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, Tag, CheckCircle } from "lucide-react";
+import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, ChevronDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cacheDocument, getCachedDocument, clearCachedDocument, getCacheAge } from "@/lib/cache/documentCache";
 import { toast } from "@/hooks/use-toast";
@@ -26,30 +26,25 @@ function ModernFileDropdown({
     <div className="relative w-full">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full px-4 py-3 bg-black border border-gray-700 hover:border-[#B4916C] text-gray-300 rounded-md flex justify-between items-center transition-colors duration-200"
+        className="w-full px-4 py-3.5 bg-[#111111] border border-[#222222] hover:border-[#B4916C] text-[#F9F6EE] rounded-lg flex justify-between items-center transition-colors duration-200 font-borna"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
         <span className="truncate">{selectedCVName || "Select a CV"}</span>
-        <svg 
-          className={`h-5 w-5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} 
-          xmlns="http://www.w3.org/2000/svg" 
-          viewBox="0 0 20 20" 
-          fill="currentColor"
-        >
-          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-        </svg>
+        <ChevronDown 
+          className={`h-5 w-5 text-[#B4916C] transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
+        />
       </button>
       
       {open && cvs.length > 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-[#121212] border border-gray-700 rounded-md shadow-lg max-h-60 overflow-auto">
+        <div className="absolute z-10 w-full mt-1 bg-[#111111] border border-[#222222] rounded-lg shadow-xl max-h-60 overflow-auto animate-fade-in">
           <ul className="py-1" role="listbox">
             {cvs.map((cv) => {
               const [name, id] = cv.split('|');
               return (
                 <li 
                   key={id}
-                  className="px-4 py-2 text-sm text-gray-300 hover:bg-[#1A1A1A] hover:text-white cursor-pointer"
+                  className="px-4 py-3 text-sm text-[#F9F6EE] hover:bg-[#1A1A1A] hover:text-[#B4916C] cursor-pointer transition-colors duration-150 font-borna"
                   role="option"
                   onClick={() => {
                     onSelect(id, name);
@@ -65,8 +60,8 @@ function ModernFileDropdown({
       )}
       
       {open && cvs.length === 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-[#121212] border border-gray-700 rounded-md shadow-lg">
-          <div className="px-4 py-2 text-sm text-gray-500">No CVs available</div>
+        <div className="absolute z-10 w-full mt-1 bg-[#111111] border border-[#222222] rounded-lg shadow-xl animate-fade-in">
+          <div className="px-4 py-3 text-sm text-[#F9F6EE]/50 font-borna">No CVs available</div>
         </div>
       )}
     </div>
@@ -1251,9 +1246,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         improvedAtsScore: improvedAtsScore,
         improvements: improvements,
         experienceEntries: structuredCV.experience,
-        industry: structuredCV.industry || '',
-        industryKeywords: extractKeywords(textToUse),
-        industrySuggestions: generateQuantifiedAchievements(extractKeywords(textToUse))
+        industry: structuredCV.industry || ''
       };
       
       const response = await fetch("/api/cv/generate-docx", {
@@ -1313,21 +1306,21 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   };
 
   return (
-    <Card className="w-full shadow-lg border border-[#B4916C]/20 bg-[#121212]">
-      <CardHeader>
-        <CardTitle className="text-xl font-bold text-[#B4916C] flex items-center gap-2">
-          <FileText className="w-5 h-5" />
-          <span>Optimize CV</span>
+    <Card className="w-full border border-[#222222] bg-[#111111] rounded-xl shadow-md overflow-hidden">
+      <CardHeader className="bg-[#0D0D0D] border-b border-[#222222] px-5 py-4">
+        <CardTitle className="text-xl font-safiro text-[#F9F6EE] flex items-center gap-2">
+          <FileText className="w-5 h-5 text-[#B4916C]" />
+          <span>Optimize Your CV</span>
         </CardTitle>
-        <CardDescription className="text-gray-400">
+        <CardDescription className="text-[#F9F6EE]/60 font-borna mt-1">
           Enhance your CV for better ATS compatibility and readability
         </CardDescription>
       </CardHeader>
       
-      <CardContent className="p-4 md:p-6">
+      <CardContent className="p-5">
         {/* CV Selection */}
         <div className="mb-6">
-          <div className="mb-2 text-gray-400 text-sm">Select a CV to optimize</div>
+          <div className="mb-3 text-[#F9F6EE]/70 text-sm font-borna">Select a CV to optimize</div>
           <ModernFileDropdown 
             cvs={cvs} 
             onSelect={handleSelectCV} 
@@ -1337,342 +1330,356 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         
         {/* Error Display */}
         {error && (
-          <Alert className="mb-6 bg-red-950 border-red-900 text-red-200">
-            <AlertCircle className="h-4 w-4 mr-2" />
-            <AlertDescription>
+          <Alert className="mb-5 bg-[#1a0505] border border-[#3d1a1a] text-[#f5c2c2] rounded-lg">
+            <AlertCircle className="h-4 w-4 mr-2 text-red-400" />
+            <AlertDescription className="font-borna">
               {error}
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="mt-2 bg-red-800 hover:bg-red-700 border-red-700 text-white" 
-                  onClick={() => processCV(true)}
-                >
-                  Retry
-                </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="mt-3 bg-[#2a0808] hover:bg-[#3a0a0a] border-[#4d1a1a] text-[#f5c2c2] font-borna transition-colors duration-200" 
+                onClick={() => processCV(true)}
+              >
+                Retry
+              </Button>
             </AlertDescription>
           </Alert>
         )}
         
-        {/* Process Button */}
-        {!isProcessed && !isProcessing && (
-          <Button 
-            onClick={() => processCV(false)} 
-            disabled={!selectedCVId || isProcessing}
-            className="w-full bg-[#B4916C] hover:bg-[#A27D59] text-black font-medium mb-4"
-          >
-            Optimize CV
-          </Button>
-        )}
-        
         {/* Processing Indicator */}
         {isProcessing && (
-          <div className="mb-4 p-4 border rounded-md bg-[#050505]">
-            <h3 className="text-lg font-semibold">Processing CV</h3>
-            <p className="text-sm text-muted-foreground">
-              {processingStatus || "Processing..."}. Might take a couple minutes, please wait for an accurate optimization.
+          <div className="mb-6 p-5 rounded-xl bg-[#0D0D0D] border border-[#222222] shadow-md animate-fade-in-up">
+            <div className="flex flex-col">
+              <div className="flex items-center mb-3">
+                <RefreshCw className="h-5 w-5 mr-3 text-[#B4916C] animate-spin" />
+                <div>
+                  <h3 className="text-[#F9F6EE] font-safiro">{processingStatus || "Optimizing your CV..."}</h3>
+                  <p className="text-[#F9F6EE]/60 text-sm font-borna mt-1">This may take a minute as our AI enhances your document</p>
+                </div>
+              </div>
+              
+              <div className="mb-4">
+                <div className="relative w-full h-1.5 bg-[#222222] rounded-full overflow-hidden">
+                  <div
+                    className="absolute top-0 left-0 h-full bg-[#B4916C] transition-all duration-300 ease-in-out"
+                    style={{ width: `${processingProgress}%` }}
+                  />
+                </div>
+                <div className="flex justify-between mt-2">
+                  <span className="text-xs text-[#F9F6EE]/50 font-borna">{processingProgress}% complete</span>
+                  
+                  {processingTooLong && (
+                    <button
+                      onClick={() => processCV(true)}
+                      className="px-3 py-1.5 bg-[#1a1a1a] hover:bg-[#222222] text-[#B4916C] border border-[#333333] rounded-md flex items-center text-xs transition-colors duration-200 font-borna"
+                    >
+                      <RefreshCw className="w-3 h-3 mr-1.5" />
+                      Taking too long? Reset
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Start Optimization Button */}
+        {!isProcessing && !isProcessed && selectedCVId && (
+          <div className="mb-6">
+            <Button
+              onClick={() => processCV(false)}
+              disabled={isProcessing || !selectedCVId}
+              className="w-full bg-[#B4916C] hover:bg-[#A27D59] text-[#050505] font-safiro py-3 h-12 rounded-lg transition-colors duration-200"
+            >
+              Start Optimization
+            </Button>
+            <p className="text-[#F9F6EE]/50 text-sm mt-3 font-borna text-center">
+              Our AI will optimize your CV to improve ATS compatibility and readability
             </p>
-            <div className="w-full h-2 bg-secondary mt-2 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-primary transition-all duration-300 ease-in-out" 
-                style={{ width: `${processingProgress || 0}%` }}
-              />
-            </div>
-            <div className="flex justify-between items-center mt-1">
-              <p className="text-sm">{processingProgress || 0}%</p>
-              {processingTooLong && (
-                <button
-                  onClick={handleResetProcessing}
-                  className="px-3 py-1 bg-red-900/30 hover:bg-red-800/50 text-red-300 border border-red-800 rounded-md flex items-center text-xs"
-                >
-                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Taking too long? Reset
-                </button>
-              )}
-            </div>
           </div>
         )}
         
         {/* Results Section */}
         {isProcessed && (
-          <div className="mt-6">
-              <div className="space-y-6">
-              <div className="rounded-lg border border-gray-800 overflow-hidden mt-4">
-                <div className="bg-[#050505] p-4">
-                  <h4 className="text-white font-medium mb-4">Optimization Results</h4>
-                  
-                  {/* View Toggle */}
-                  <div className="flex items-center justify-end mb-4">
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => setShowStructuredView(false)}
-                        className={`px-3 py-1 text-sm rounded-md ${!showStructuredView ? 'bg-[#B4916C] text-[#050505] font-medium' : 'bg-[#121212] text-gray-400'}`}
-                      >
-                        Raw Text
-                      </button>
-                      <button
-                        onClick={() => setShowStructuredView(true)}
-                        className={`px-3 py-1 text-sm rounded-md ${showStructuredView ? 'bg-[#B4916C] text-[#050505] font-medium' : 'bg-[#121212] text-gray-400'}`}
-                      >
-                        Structured View
-                      </button>
-                    </div>
-                    </div>
-                  
-                  {/* Content Display */}
-                  <div className="mb-4">
-                    {showStructuredView ? (
-                      <div className="bg-[#121212] p-4 rounded-md">
-                        <h5 className="text-white font-medium mb-4">Structured CV</h5>
-                        
-                        {/* Header */}
-                        {structuredCV.header && (
-                          <div className="mb-6 text-center border-b border-[#B4916C] pb-3">
-                            <div className="text-white font-bold text-xl">{structuredCV.header.split('\n')[0]}</div>
-                            {structuredCV.header.split('\n').length > 1 && (
-                              <div className="text-gray-400 text-sm mt-1">
-                                {structuredCV.header.split('\n').slice(1).join(' | ')}
-                  </div>
-                            )}
-                </div>
-                        )}
-                        
-                        {/* Profile */}
-                        {structuredCV.profile && (
-                          <div className="mb-6">
-                            <h6 className="text-[#B4916C] font-medium mb-2 uppercase tracking-wider text-sm">Profile</h6>
-                            <div className="text-gray-300 text-sm leading-relaxed">
-                              {structuredCV.profile}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Experience */}
-                        {structuredCV.experience && structuredCV.experience.length > 0 && (
-                          <div className="mb-6">
-                            <h6 className="text-[#B4916C] font-medium mb-2 uppercase tracking-wider text-sm">Experience</h6>
-                            <div className="text-gray-300 text-sm">
-                              {structuredCV.experience.map((exp, index) => (
-                                <div key={index} className="mb-1">
-                                  {exp.jobTitle && (
-                                    <span className="text-[#B4916C] font-medium">{exp.jobTitle}</span>
-                                  )}
-                                  {exp.company && (
-                                    <span className="text-gray-400"> at {exp.company}</span>
-                                  )}
-                                  {exp.dateRange && (
-                                    <span className="text-gray-400"> ({exp.dateRange})</span>
-                                  )}
-                                  {exp.location && (
-                                    <span className="text-gray-400"> in {exp.location}</span>
-                                  )}
-                                  {exp.responsibilities && exp.responsibilities.length > 0 && (
-                                    <ul className="list-disc pl-5 space-y-1 text-gray-400 text-sm">
-                                      {exp.responsibilities.map((responsibility, responsibilityIndex) => (
-                                        <li key={responsibilityIndex}>{responsibility}</li>
-                                      ))}
-                                    </ul>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Achievements */}
-                        {structuredCV.achievements.length > 0 && (
-                          <div className="mb-6 bg-[#0A0A0A] p-4 rounded-md border-l-2 border-[#B4916C]">
-                            <h6 className="text-[#B4916C] font-medium mb-3 uppercase tracking-wider text-sm">Achievements</h6>
-                            <ul className="space-y-3">
-                              {structuredCV.achievements.map((achievement, index) => (
-                                <li key={index} className="flex items-start">
-                                  <span className="text-[#B4916C] mr-2 mt-1">•</span>
-                                  <span className="text-gray-300 text-sm">{achievement}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        
-                        {/* Goals */}
-                        {structuredCV.goals.length > 0 && (
-                          <div className="mb-6 bg-[#0A0A0A] p-4 rounded-md border-l-2 border-[#B4916C]">
-                            <h6 className="text-[#B4916C] font-medium mb-3 uppercase tracking-wider text-sm">Goals</h6>
-                            <ul className="space-y-3">
-                              {structuredCV.goals.map((goal, index) => (
-                                <li key={index} className="flex items-start">
-                                  <span className="text-[#B4916C] mr-2 mt-1">•</span>
-                                  <span className="text-gray-300 text-sm">{goal}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        
-                        {/* Skills */}
-                        {structuredCV.skills && (
-                          <div className="mb-6">
-                            <h6 className="text-[#B4916C] font-medium mb-2 uppercase tracking-wider text-sm">Skills</h6>
-                            <div className="text-gray-300 text-sm">
-                              {structuredCV.skills.split('\n').map((skill, index) => (
-                                <div key={index} className="mb-1">
-                                  {skill.startsWith('•') || skill.startsWith('-') || skill.startsWith('*') ? (
-                                    <div className="flex items-start">
-                                      <span className="text-[#B4916C] mr-2">•</span>
-                                      <span>{skill.replace(/^[-•*]\s*/, '')}</span>
-                                    </div>
-                                  ) : (
-                                    <span>{skill}</span>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Languages */}
-                        {structuredCV.languages && (
-                          <div className="mb-6">
-                            <h6 className="text-[#B4916C] font-medium mb-2 uppercase tracking-wider text-sm">Languages</h6>
-                            <div className="text-gray-300 text-sm">
-                              {structuredCV.languages.split('\n').map((language, index) => (
-                                <div key={index} className="mb-1">
-                                  {language.startsWith('•') || language.startsWith('-') || language.startsWith('*') ? (
-                                    <div className="flex items-start">
-                                      <span className="text-[#B4916C] mr-2">•</span>
-                                      <span>{language.replace(/^[-•*]\s*/, '')}</span>
-                                    </div>
-                                  ) : (
-                                    <span>{language}</span>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Education */}
-                        {structuredCV.education && (
-                          <div className="mb-2">
-                            <h6 className="text-[#B4916C] font-medium mb-2 uppercase tracking-wider text-sm">Education</h6>
-                            <div className="text-gray-300 text-sm">
-                              {structuredCV.education.split('\n').map((education, index) => (
-                                <div key={index} className="mb-1">
-                                  {education.startsWith('•') || education.startsWith('-') || education.startsWith('*') ? (
-                                    <div className="flex items-start">
-                                      <span className="text-[#B4916C] mr-2">•</span>
-                                      <span>{education.replace(/^[-•*]\s*/, '')}</span>
-                                    </div>
-                                  ) : (
-                                    <span>{education}</span>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Improvement Suggestions */}
-                        {improvements.length > 0 && (
-                          <div className="mt-6 border-t border-gray-800 pt-4">
-                            <h6 className="text-white font-medium mb-2">Suggested Improvements</h6>
-                            <ul className="list-disc pl-5 space-y-1 text-gray-400 text-sm">
-                              {improvements.map((improvement, index) => (
-                                <li key={index} className="text-gray-300 text-sm flex items-start">
-                                  <CheckCircle className="w-4 h-4 text-[#B4916C] mr-2 mt-0.5 flex-shrink-0" />
-                                  <span>{typeof improvement === 'string' ? improvement : improvement.improvement}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="bg-[#121212] p-4 rounded-md">
-                        <h5 className="text-white font-medium mb-2">Optimized Content</h5>
-                        <div className="text-gray-300 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto p-2 bg-gray-900 rounded">
-                          {formatStructuredCV() || processedText || optimizedText || "No optimized content available yet."}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Download DOCX Button */}
-                      <Button
-                    onClick={handleDownloadDocx}
-                    disabled={isDownloadingDocx || !optimizedText}
-                    className="w-full bg-[#121212] hover:bg-gray-800 text-white border border-gray-700 mb-4"
-                  >
-                    {isDownloadingDocx ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                        Generating DOCX...
-                          </>
-                        ) : (
-                          <>
-                        <Download className="h-4 w-4 mr-2" />
-                        Download as DOCX
-                          </>
-                        )}
-                      </Button>
-                    
-                    <Button
-                    onClick={handleResetProcessing}
-                      className="bg-transparent hover:bg-gray-800 text-gray-400 border border-gray-700 flex items-center justify-center mt-4 w-full"
-                    >
-                      <RefreshCw className="h-5 w-5 mr-2" />
-                      Start Over
-                    </Button>
-                  </div>
+          <div className="animate-fade-in-up">
+            {/* Score Comparison */}
+            <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-5 rounded-xl bg-[#0D0D0D] border border-[#222222] shadow-md">
+                <h3 className="text-[#F9F6EE] font-safiro mb-2">Original ATS Score</h3>
+                <div className="flex items-center">
+                  <span className="text-3xl font-bold font-safiro" style={{ 
+                    color: originalAtsScore > 80 
+                      ? '#4ade80' 
+                      : originalAtsScore > 60 
+                        ? '#facc15' 
+                        : '#f87171'
+                  }}>
+                    {originalAtsScore}%
+                  </span>
                 </div>
               </div>
-          </div>
-        )}
-
-        {/* Industry-Specific Keywords */}
-        {structuredCV.industry && structuredCV.industry.length > 0 && (
-          <div className="bg-[#050505] p-4 rounded-lg border border-gray-800 mt-4">
-            <h3 className="text-lg font-semibold mb-3 text-white flex items-center">
-              <Tag className="w-5 h-5 text-[#B4916C] mr-2" />
-              Industry-Specific Keywords
-            </h3>
-            <p className="text-gray-400 text-sm mb-3">
-              Adding these keywords can improve your CV's relevance for {structuredCV.industry} roles.
-            </p>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {extractKeywords(formatStructuredCV()).map((keyword: string, index: number) => (
-                <span 
-                  key={index} 
-                  className="px-2 py-1 bg-[#121212] text-gray-300 rounded-md text-xs border border-gray-700 hover:border-[#B4916C] transition-colors cursor-pointer"
-                  onClick={() => {
-                    // When clicked, could implement functionality to add keyword to CV
-                    // For now just show which was clicked
-                    toast({
-                      title: "Keyword Selected",
-                      description: `"${keyword}" will be added to your optimized CV.`,
-                      variant: "default",
-                    });
-                  }}
-                >
-                  {keyword}
-                </span>
-              ))}
+              
+              <div className="p-5 rounded-xl bg-[#0D0D0D] border border-[#222222] shadow-md">
+                <h3 className="text-[#F9F6EE] font-safiro mb-2">Improved ATS Score</h3>
+                <div className="flex items-center">
+                  <span className="text-3xl font-bold font-safiro" style={{ 
+                    color: improvedAtsScore > 80 
+                      ? '#4ade80' 
+                      : improvedAtsScore > 60 
+                        ? '#facc15' 
+                        : '#f87171'
+                  }}>
+                    {improvedAtsScore}%
+                  </span>
+                  {improvedAtsScore > originalAtsScore && (
+                    <span className="ml-2 text-sm px-2 py-1 rounded-lg bg-emerald-900/30 text-emerald-300 font-borna">
+                      +{improvedAtsScore - originalAtsScore}%
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
-            
-            {improvements.length > 0 && (
-              <div className="mt-4">
-                <h4 className="text-md font-semibold text-white mb-2">Recommendations</h4>
-                <ul className="space-y-2">
-                  {improvements.map((improvement, index) => (
-                    <li key={index} className="text-gray-300 text-sm flex items-start">
-                      <CheckCircle className="w-4 h-4 text-[#B4916C] mr-2 mt-0.5 flex-shrink-0" />
-                      <span>{typeof improvement === 'string' ? improvement : improvement.improvement}</span>
-                    </li>
-                  ))}
-                </ul>
+
+            {/* CV Content */}
+            <div className="mb-6 rounded-xl bg-[#0D0D0D] border border-[#222222] shadow-md overflow-hidden">
+              <div className="p-5">
+                <h3 className="text-[#F9F6EE] font-safiro mb-4 flex items-center">
+                  <FileText className="text-[#B4916C] w-5 h-5 mr-2" />
+                  Optimization Results
+                </h3>
+                
+                {/* View Toggle */}
+                <div className="flex items-center justify-end mb-5">
+                  <div className="flex items-center bg-[#111111] rounded-lg p-1">
+                    <button
+                      onClick={() => setShowStructuredView(false)}
+                      className={`px-3 py-1.5 text-sm rounded-lg transition-colors duration-200 font-borna ${
+                        !showStructuredView 
+                          ? 'bg-[#B4916C] text-[#050505]' 
+                          : 'bg-transparent text-[#F9F6EE]/60 hover:text-[#F9F6EE]'
+                      }`}
+                    >
+                      Raw Text
+                    </button>
+                    <button
+                      onClick={() => setShowStructuredView(true)}
+                      className={`px-3 py-1.5 text-sm rounded-lg transition-colors duration-200 font-borna ${
+                        showStructuredView 
+                          ? 'bg-[#B4916C] text-[#050505]' 
+                          : 'bg-transparent text-[#F9F6EE]/60 hover:text-[#F9F6EE]'
+                      }`}
+                    >
+                      Structured View
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Content Display */}
+                <div className="mb-5">
+                  {showStructuredView ? (
+                    <div className="bg-[#111111] p-5 rounded-lg">
+                      {/* Header */}
+                      {structuredCV.header && (
+                        <div className="mb-6 text-center border-b border-[#222222] pb-4">
+                          <div className="text-[#F9F6EE] font-safiro text-xl">{structuredCV.header.split('\n')[0]}</div>
+                          {structuredCV.header.split('\n').length > 1 && (
+                            <div className="text-[#F9F6EE]/60 text-sm mt-1 font-borna">
+                              {structuredCV.header.split('\n').slice(1).join(' | ')}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* Profile */}
+                      {structuredCV.profile && (
+                        <div className="mb-6">
+                          <h6 className="text-[#B4916C] font-safiro mb-3 uppercase tracking-wider text-sm">Profile</h6>
+                          <div className="text-[#F9F6EE]/80 text-sm leading-relaxed font-borna">
+                            {structuredCV.profile}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Experience */}
+                      {structuredCV.experience && structuredCV.experience.length > 0 && (
+                        <div className="mb-6">
+                          <h6 className="text-[#B4916C] font-safiro mb-3 uppercase tracking-wider text-sm">Experience</h6>
+                          <div className="text-[#F9F6EE]/80 text-sm font-borna">
+                            {structuredCV.experience.map((exp, index) => (
+                              <div key={index} className="mb-4">
+                                {exp.jobTitle && (
+                                  <span className="text-[#B4916C] font-safiro">{exp.jobTitle}</span>
+                                )}
+                                {exp.company && (
+                                  <span className="text-[#F9F6EE]/60"> at {exp.company}</span>
+                                )}
+                                {exp.dateRange && (
+                                  <span className="text-[#F9F6EE]/60"> ({exp.dateRange})</span>
+                                )}
+                                {exp.location && (
+                                  <span className="text-[#F9F6EE]/60"> in {exp.location}</span>
+                                )}
+                                {exp.responsibilities && exp.responsibilities.length > 0 && (
+                                  <ul className="list-disc pl-5 space-y-1.5 text-[#F9F6EE]/70 text-sm mt-2">
+                                    {exp.responsibilities.map((responsibility, responsibilityIndex) => (
+                                      <li key={responsibilityIndex}>{responsibility}</li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Achievements */}
+                      {structuredCV.achievements.length > 0 && (
+                        <div className="mb-6 bg-[#0A0A0A] p-4 rounded-lg border-l-2 border-[#B4916C]">
+                          <h6 className="text-[#B4916C] font-safiro mb-3 uppercase tracking-wider text-sm">Achievements</h6>
+                          <ul className="space-y-3">
+                            {structuredCV.achievements.map((achievement, index) => (
+                              <li key={index} className="flex items-start">
+                                <span className="text-[#B4916C] mr-2 mt-1">•</span>
+                                <span className="text-[#F9F6EE]/80 text-sm font-borna">{achievement}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      
+                      {/* Goals */}
+                      {structuredCV.goals.length > 0 && (
+                        <div className="mb-6 bg-[#0A0A0A] p-4 rounded-lg border-l-2 border-[#B4916C]">
+                          <h6 className="text-[#B4916C] font-safiro mb-3 uppercase tracking-wider text-sm">Goals</h6>
+                          <ul className="space-y-3">
+                            {structuredCV.goals.map((goal, index) => (
+                              <li key={index} className="flex items-start">
+                                <span className="text-[#B4916C] mr-2 mt-1">•</span>
+                                <span className="text-[#F9F6EE]/80 text-sm font-borna">{goal}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      
+                      {/* Skills */}
+                      {structuredCV.skills && (
+                        <div className="mb-6">
+                          <h6 className="text-[#B4916C] font-safiro mb-3 uppercase tracking-wider text-sm">Skills</h6>
+                          <div className="text-[#F9F6EE]/80 text-sm font-borna">
+                            {structuredCV.skills.split('\n').map((skill, index) => (
+                              <div key={index} className="mb-1.5">
+                                {skill.startsWith('•') || skill.startsWith('-') || skill.startsWith('*') ? (
+                                  <div className="flex items-start">
+                                    <span className="text-[#B4916C] mr-2">•</span>
+                                    <span>{skill.replace(/^[-•*]\s*/, '')}</span>
+                                  </div>
+                                ) : (
+                                  <span>{skill}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Languages */}
+                      {structuredCV.languages && (
+                        <div className="mb-6">
+                          <h6 className="text-[#B4916C] font-safiro mb-3 uppercase tracking-wider text-sm">Languages</h6>
+                          <div className="text-[#F9F6EE]/80 text-sm font-borna">
+                            {structuredCV.languages.split('\n').map((language, index) => (
+                              <div key={index} className="mb-1.5">
+                                {language.startsWith('•') || language.startsWith('-') || language.startsWith('*') ? (
+                                  <div className="flex items-start">
+                                    <span className="text-[#B4916C] mr-2">•</span>
+                                    <span>{language.replace(/^[-•*]\s*/, '')}</span>
+                                  </div>
+                                ) : (
+                                  <span>{language}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Education */}
+                      {structuredCV.education && (
+                        <div className="mb-2">
+                          <h6 className="text-[#B4916C] font-safiro mb-3 uppercase tracking-wider text-sm">Education</h6>
+                          <div className="text-[#F9F6EE]/80 text-sm font-borna">
+                            {structuredCV.education.split('\n').map((education, index) => (
+                              <div key={index} className="mb-1.5">
+                                {education.startsWith('•') || education.startsWith('-') || education.startsWith('*') ? (
+                                  <div className="flex items-start">
+                                    <span className="text-[#B4916C] mr-2">•</span>
+                                    <span>{education.replace(/^[-•*]\s*/, '')}</span>
+                                  </div>
+                                ) : (
+                                  <span>{education}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Improvement Suggestions */}
+                      {improvements.length > 0 && (
+                        <div className="mt-6 border-t border-[#222222] pt-4">
+                          <h6 className="text-[#F9F6EE] font-safiro mb-3">Suggested Improvements</h6>
+                          <ul className="list-disc pl-5 space-y-2 text-[#F9F6EE]/70 text-sm font-borna">
+                            {improvements.map((improvement, index) => (
+                              <li key={index}>
+                                {typeof improvement === 'object' && improvement !== null 
+                                  ? (improvement.improvement || 'Improvement needed') + 
+                                    (improvement.impact ? ` - Impact: ${improvement.impact}` : '')
+                                  : improvement}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-[#111111] p-5 rounded-lg">
+                      <h5 className="text-[#F9F6EE] font-safiro mb-3">Optimized Content</h5>
+                      <div className="text-[#F9F6EE]/80 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto p-4 bg-[#0A0A0A] rounded-lg border border-[#222222] font-borna">
+                        {formatStructuredCV() || processedText || optimizedText || "No optimized content available yet."}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Download DOCX Button */}
+                <Button
+                  onClick={handleDownloadDocx}
+                  disabled={isDownloadingDocx || !optimizedText}
+                  className="w-full bg-[#111111] hover:bg-[#1A1A1A] text-[#F9F6EE] border border-[#222222] mb-4 h-12 font-safiro transition-colors duration-200"
+                >
+                  {isDownloadingDocx ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Generating DOCX...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4 mr-2" />
+                      Download as DOCX
+                    </>
+                  )}
+                </Button>
+                
+                <Button
+                  onClick={handleResetProcessing}
+                  className="w-full bg-transparent hover:bg-[#111111] text-[#F9F6EE]/60 hover:text-[#F9F6EE] border border-[#222222] h-10 font-borna transition-colors duration-200 text-sm"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Start Over
+                </Button>
               </div>
-            )}
+            </div>
           </div>
         )}
       </CardContent>
