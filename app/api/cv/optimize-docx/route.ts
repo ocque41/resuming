@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm';
 // Import the entire module to avoid bundling issues
 import * as optimizeCVModule from '@/lib/optimizeCV.fixed';
 import { getOriginalPdfBytes, extractTextFromPdf, saveFileToDropbox, getDropboxClient } from '@/lib/storage';
+import { generateDocx } from '@/lib/docx/docxGenerator';
 import { DocumentGenerator } from '@/lib/utils/documentGenerator';
 
 // Define a session type
@@ -146,17 +147,16 @@ function startBackgroundProcess(cvRecord: any, templateId: string, userId: strin
       await updateMetadata(cvRecord.id, { progress: 80, step: "Generating optimized DOCX document" });
       
       // Use the new ATS-optimized document generator
-      const docxBuffer = await DocumentGenerator.generateATSOptimizedCV(
+      const docxBuffer = await DocumentGenerator.generateDocx(
         JSON.stringify(optimizedSections),
         {
           atsScore: improvedAtsScore,
           originalAtsScore,
-          sectionRecommendations: optimizedAnalysisResult.sectionRecommendations || {},
-          keywordRecommendations: optimizedAnalysisResult.keywordRecommendations || [],
-          improvementSuggestions: optimizedAnalysisResult.improvementSuggestions || []
+          industry: cvRecord.metadata?.industry || 'General',
+          experienceEntries: cvRecord.metadata?.experienceEntries || []
         },
         {
-          templateStyle: templateId || DocumentGenerator.TemplateStyles.MODERN,
+          templateStyle: templateId || "modern",
           colorOptions: {
             primary: "#B4916C",  // Use brand color
             accent: "#050505"    // Use main color

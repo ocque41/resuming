@@ -1827,9 +1827,14 @@ export function getMissingIndustryKeywords(industry: string, existingKeywords: s
  * Generates industry-specific suggestions for CV improvement
  * @param industry The target industry
  * @param existingContent The current CV content
- * @returns Industry-specific suggestions
+ * @returns Object containing industry-specific suggestions and missing keywords
  */
-export function generateIndustrySpecificSuggestions(industry: string, existingContent: string): string[] {
+export function generateIndustrySpecificSuggestions(existingContent: string, industry: string): {
+  missingKeywords: string[];
+  missingSoftSkills: string[];
+  missingHardSkills: string[];
+  suggestions: string[];
+} {
   // Normalize industry name
   const normalizedIndustry = industry.trim().toLowerCase();
   
@@ -1881,6 +1886,98 @@ export function generateIndustrySpecificSuggestions(industry: string, existingCo
     'Include certifications and continuous learning relevant to your field'
   ];
   
-  // Return the suggestions
-  return suggestions;
+  // Industry-specific hard skills
+  const industryHardSkills: Record<string, string[]> = {
+    'technology': [
+      'Programming languages', 'Cloud platforms', 'Database management', 'DevOps tools',
+      'Front-end frameworks', 'Back-end frameworks', 'Mobile development', 'API development',
+      'Containerization', 'Version control systems', 'Data structures', 'Algorithms'
+    ],
+    'finance': [
+      'Financial modeling', 'Accounting software', 'Financial reporting', 'Budgeting', 
+      'Forecasting', 'Risk assessment', 'Investment analysis', 'Portfolio management',
+      'Financial regulations', 'Tax preparation', 'Audit procedures', 'Banking systems'
+    ],
+    'healthcare': [
+      'Medical coding', 'Electronic health records', 'Medical terminology', 'Clinical procedures',
+      'Healthcare compliance', 'Patient management systems', 'Medical billing', 'Healthcare analytics',
+      'Medical devices', 'Clinical trials', 'Pharmaceutical knowledge', 'Treatment planning'
+    ],
+    'marketing': [
+      'SEO/SEM', 'Social media platforms', 'Analytics tools', 'CRM systems',
+      'Content management systems', 'Digital advertising', 'Email marketing platforms',
+      'Graphic design software', 'Marketing automation', 'A/B testing', 'UI/UX design'
+    ],
+    'sales': [
+      'CRM software', 'Sales automation tools', 'Sales analytics', 'Lead management systems',
+      'Presentation software', 'Proposal creation', 'Sales forecasting', 'Territory management',
+      'Pipeline management', 'Pricing strategies', 'Competitive analysis', 'Account mapping'
+    ]
+  };
+  
+  // Industry-specific soft skills
+  const industrySoftSkills: Record<string, string[]> = {
+    'technology': [
+      'Problem-solving', 'Attention to detail', 'Adaptability', 'Continuous learning',
+      'Collaboration', 'Communication', 'Critical thinking', 'Time management'
+    ],
+    'finance': [
+      'Analytical thinking', 'Attention to detail', 'Ethical judgment', 'Confidentiality',
+      'Communication', 'Problem-solving', 'Reliability', 'Compliance-oriented'
+    ],
+    'healthcare': [
+      'Empathy', 'Communication', 'Attention to detail', 'Ethics', 'Patience',
+      'Stress management', 'Teamwork', 'Cultural sensitivity', 'Emotional intelligence'
+    ],
+    'marketing': [
+      'Creativity', 'Communication', 'Adaptability', 'Collaboration', 'Critical thinking',
+      'Customer focus', 'Storytelling', 'Trend awareness', 'Strategic thinking'
+    ],
+    'sales': [
+      'Communication', 'Persuasion', 'Relationship building', 'Active listening', 'Resilience',
+      'Emotional intelligence', 'Adaptability', 'Confidence', 'Goal orientation'
+    ]
+  };
+  
+  // Default skills if industry not recognized
+  const defaultHardSkills = [
+    'Microsoft Office', 'Project management', 'Data analysis', 'Research',
+    'Technical writing', 'Presentation skills', 'Process improvement', 'Performance tracking'
+  ];
+  
+  const defaultSoftSkills = [
+    'Communication', 'Problem-solving', 'Teamwork', 'Adaptability',
+    'Time management', 'Critical thinking', 'Attention to detail', 'Leadership'
+  ];
+  
+  // Get appropriate skills for the industry
+  const hardSkills = industryHardSkills[normalizedIndustry] || defaultHardSkills;
+  const softSkills = industrySoftSkills[normalizedIndustry] || defaultSoftSkills;
+  
+  // Check which skills are mentioned in the CV
+  const normalizedContent = existingContent.toLowerCase();
+  
+  // Find missing hard skills (skills not mentioned in the CV)
+  const missingHardSkills = hardSkills.filter(skill => 
+    !normalizedContent.includes(skill.toLowerCase())
+  ).slice(0, 5); // Limit to 5 missing hard skills
+  
+  // Find missing soft skills
+  const missingSoftSkills = softSkills.filter(skill => 
+    !normalizedContent.includes(skill.toLowerCase())
+  ).slice(0, 5); // Limit to 5 missing soft skills
+  
+  // Get missing industry keywords
+  const missingKeywords = getMissingIndustryKeywords(industry, 
+    // Extract existing keywords from content
+    normalizedContent.split(/[\s,\.;:]/).filter(word => word.length > 3)
+  );
+  
+  // Return the complete result object
+  return {
+    missingKeywords,
+    missingSoftSkills,
+    missingHardSkills,
+    suggestions
+  };
 } 
