@@ -1,7 +1,8 @@
 import { Suspense } from "react";
 import { getStripePrices, getStripeProducts } from "@/lib/payments/stripe";
 import ClientPricingPage from "./ClientPricingPage";
-import { ClientNavbar } from "./ClientNavbar";
+import { MobileNavbar } from "@/components/ui/mobile-navbar";
+import { PageTransition } from "@/components/ui/page-transition";
 
 // Define types for Stripe data
 interface StripePrice {
@@ -60,14 +61,16 @@ export default async function PricingPage() {
   }
 
   return (
-    <div className="flex flex-col bg-[#050505] min-h-screen text-[#F9F6EE]">
-      <ClientNavbar />
-      <main className="min-h-screen pt-24 pb-16 container mx-auto px-4 text-left flex-grow">
-        <Suspense fallback={<PricingPageSkeleton />}>
-          <ClientPricingPage prices={prices} products={products} />
-        </Suspense>
-      </main>
-    </div>
+    <PageTransition>
+      <div className="flex flex-col bg-[#050505] min-h-screen text-[#F9F6EE]">
+        <MobileNavbar />
+        <main className="min-h-screen pt-24 pb-16 container mx-auto px-4 text-left flex-grow">
+          <Suspense fallback={<PricingPageSkeleton />}>
+            <ClientPricingPage prices={prices} products={products} />
+          </Suspense>
+        </main>
+      </div>
+    </PageTransition>
   );
 }
 
