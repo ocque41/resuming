@@ -6,7 +6,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { AlertCircle, Upload, CheckCircle, File } from 'lucide-react';
+import { 
+  AlertCircle, Upload, CheckCircle, File, FileText, 
+  BarChart2, Archive, PieChart
+} from 'lucide-react';
+
+// Maximum file size in bytes (10MB)
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 export default function CVUploader() {
   const [files, setFiles] = useState<File[]>([]);
@@ -15,26 +21,62 @@ export default function CVUploader() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    setFiles(acceptedFiles);
-    setError(null);
-    setSuccess(null);
+  const onDrop = useCallback((acceptedFiles: File[], rejectedFiles: any[]) => {
+    // Handle size validation
+    if (rejectedFiles.length > 0) {
+      const sizeError = rejectedFiles.some(file => 
+        file.errors && file.errors.some((e: any) => e.code === 'file-too-large')
+      );
+      
+      if (sizeError) {
+        setError(`File size exceeds the 10MB limit`);
+        return;
+      }
+    }
+    
+    if (acceptedFiles.length > 0) {
+      setFiles(acceptedFiles);
+      setError(null);
+      setSuccess(null);
+    }
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: {
-      'application/pdf': ['.pdf'],
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-      'application/msword': ['.doc'],
-    },
     maxFiles: 1,
     multiple: false,
+    maxSize: MAX_FILE_SIZE,
   });
+
+  // Get file icon based on file type
+  const getFileIcon = (file: File) => {
+    const type = file.type.toLowerCase();
+    
+    if (type.includes('pdf')) return <File className="h-10 w-10 text-[#B4916C] mb-2" />;
+    if (type.includes('word') || type.includes('document') || type.includes('rtf') || type.includes('text')) 
+      return <FileText className="h-10 w-10 text-[#B4916C] mb-2" />;
+    if (type.includes('sheet') || type.includes('excel') || type.includes('csv')) 
+      return <BarChart2 className="h-10 w-10 text-[#B4916C] mb-2" />;
+    if (type.includes('image') || type.includes('jpg') || type.includes('jpeg') || type.includes('png')) 
+      return <FileText className="h-10 w-10 text-[#B4916C] mb-2" />;
+    if (type.includes('zip') || type.includes('archive') || type.includes('compressed')) 
+      return <Archive className="h-10 w-10 text-[#B4916C] mb-2" />;
+    if (type.includes('presentation') || type.includes('powerpoint')) 
+      return <PieChart className="h-10 w-10 text-[#B4916C] mb-2" />;
+    
+    // Default icon for unknown types
+    return <File className="h-10 w-10 text-[#B4916C] mb-2" />;
+  };
 
   const uploadFile = async () => {
     if (files.length === 0) {
       setError('Please select a file first');
+      return;
+    }
+
+    // Check file size
+    if (files[0].size > MAX_FILE_SIZE) {
+      setError(`File size exceeds the 10MB limit`);
       return;
     }
 
@@ -69,9 +111,9 @@ export default function CVUploader() {
       }
 
       setUploadProgress(100);
-      setSuccess('CV uploaded successfully!');
+      setSuccess('Document uploaded successfully!');
       
-      // Reload the page after 2 seconds to show the new CV
+      // Reload the page after 2 seconds to show the new document
       setTimeout(() => {
         window.location.reload();
       }, 2000);
@@ -81,6 +123,13 @@ export default function CVUploader() {
     } finally {
       setUploading(false);
     }
+  };
+
+  // Format file size to a human-readable format
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
   };
 
   return (
@@ -101,17 +150,19 @@ export default function CVUploader() {
               <>
                 <Upload className="h-10 w-10 text-[#B4916C] mb-2" />
                 <p className="text-base font-safiro font-medium text-[#F9F6EE]">
-                  {isDragActive ? 'Drop your CV here...' : 'Drag & drop your CV here'}
+                  {isDragActive ? 'Drop your document here...' : 'Drag & drop your document here'}
                 </p>
                 <p className="text-sm font-borna text-[#F9F6EE]/60">or click to browse files</p>
-                <p className="text-xs font-borna text-[#F9F6EE]/40 mt-2">Supported formats: PDF, DOCX, DOC</p>
+                <p className="text-xs font-borna text-[#F9F6EE]/40 mt-2">
+                  Supports all file types • Maximum size: 10MB
+                </p>
               </>
             ) : (
               <>
-                <File className="h-10 w-10 text-[#B4916C] mb-2" />
+                {getFileIcon(files[0])}
                 <p className="text-base font-safiro font-medium text-[#F9F6EE]">{files[0].name}</p>
                 <p className="text-sm font-borna text-[#F9F6EE]/60">
-                  {(files[0].size / (1024 * 1024)).toFixed(2)} MB
+                  {formatFileSize(files[0].size)}
                 </p>
               </>
             )}
@@ -132,7 +183,7 @@ export default function CVUploader() {
               variant="accent"
             >
               <Upload className="mr-2 h-4 w-4" />
-              Upload CV
+              Upload Document
             </Button>
           </div>
         )}

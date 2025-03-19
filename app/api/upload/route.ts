@@ -15,6 +15,9 @@ import { uploadFileToDropbox } from "@/lib/dropboxStorage"; // Dropbox upload fu
 import { processCVWithAI } from "@/lib/utils/cvProcessor"; // Import the CV processor
 import { logger } from "@/lib/logger"; // Import the logger
 
+// Maximum file size (10MB)
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
 export const config = {
   api: {
     bodyParser: false,
@@ -43,7 +46,7 @@ export async function POST(request: Request) {
   const session = await getSession();
   if (!session || !session.user || !session.user.id) {
     return NextResponse.json(
-      { message: "You must be logged in to upload your CV." },
+      { message: "You must be logged in to upload your document." },
       { status: 401 }
     );
   }
@@ -59,6 +62,15 @@ export async function POST(request: Request) {
 
   // Read the request body as a Buffer and convert it to a stream.
   const buffer = Buffer.from(await request.arrayBuffer());
+  
+  // Check file size
+  if (buffer.length > MAX_FILE_SIZE) {
+    return NextResponse.json(
+      { message: "File size exceeds the 10MB limit." },
+      { status: 400 }
+    );
+  }
+  
   const stream = bufferToStream(buffer);
 
   // Create a fake IncomingMessage by attaching headers/method.
@@ -70,6 +82,8 @@ export async function POST(request: Request) {
   const form = formidable({
     uploadDir: uploadDir,
     keepExtensions: true,
+    // Accept all file types - no restriction
+    filter: () => true,
   });
   const { fields, files } = await new Promise<any>((resolve, reject) => {
     form.parse(fakeReq, (err, fields, files) => {
@@ -96,35 +110,46 @@ export async function POST(request: Request) {
     );
   }
 
-  const fileName = uploadedFile.originalFilename || "UnnamedCV.pdf";
+  const fileName = uploadedFile.originalFilename || "UnnamedDocument";
   const localFilePath = uploadedFile.filepath;
-  console.log("File saved at:", localFilePath);
+  logger.info(`File saved at: ${localFilePath}, original name: ${fileName}`);
+  
+  // Get file type/extension
+  const fileExt = path.extname(fileName).toLowerCase();
+  const fileType = uploadedFile.mimetype || 'application/octet-stream';
   
   // **Dropbox Upload with Detailed Logging**
   let dropboxUrl = localFilePath;
-  console.log("Starting Dropbox upload for file:", localFilePath, "with filename:", fileName);
+  logger.info(`Starting Dropbox upload for file: ${localFilePath}, with filename: ${fileName}`);
   try {
     dropboxUrl = await uploadFileToDropbox(localFilePath, fileName);
-    console.log("Dropbox upload successful. Received URL:", dropboxUrl);
+    logger.info(`Dropbox upload successful. Received URL: ${dropboxUrl}`);
   } catch (err) {
-    console.error("Dropbox upload error:", err);
+    logger.error(`Dropbox upload error: ${err}`);
     // Optionally, you may choose to return an error instead of falling back.
     return NextResponse.json({ error: "Dropbox upload failed" }, { status: 500 });
   }
   
-  // Extract raw text from the PDF using the local file (if needed)
+  // Extract raw text from the file if it's a PDF
   let rawText = "";
   try {
-    rawText = await extractTextFromPdf(localFilePath);
-    console.log("Extracted raw text (first 200 chars):", rawText.slice(0, 200));
+    if (fileExt === '.pdf' || fileType.includes('pdf')) {
+      rawText = await extractTextFromPdf(localFilePath);
+      logger.info(`Extracted raw text (first 200 chars): ${rawText.slice(0, 200)}`);
+    } else {
+      logger.info(`Skipping text extraction for non-PDF file: ${fileName}`);
+    }
   } catch (err) {
-    console.error("Error extracting raw text:", err);
+    logger.error(`Error extracting text: ${err}`);
   }
 
   try {
-    // Insert the new CV record with rawText and default metadata.
+    // Insert the new document record with rawText and default metadata.
     // IMPORTANT: Use 'filepath' (all lowercase) to match your database schema.
     const initialMetadata = {
+      fileType: fileType,
+      fileExt: fileExt,
+      originalName: fileName,
       atsScore: "N/A", 
       optimized: "No", 
       sent: "No",
@@ -142,31 +167,35 @@ export async function POST(request: Request) {
       metadata: JSON.stringify(initialMetadata),
     }).returning();
     
-    console.log("CV record inserted successfully:", newCV);
+    logger.info(`Document record inserted successfully: ${JSON.stringify(newCV)}`);
     
-    // Start CV processing immediately, but don't wait for it to complete
+    // Start CV processing immediately, but only if it's a CV/resume (PDF, DOC, DOCX)
     const cvId = newCV.id;
-    if (rawText && rawText.length > 0) {
+    const isCV = fileExt === '.pdf' || fileExt === '.doc' || fileExt === '.docx' || 
+                fileType.includes('pdf') || fileType.includes('word');
+                
+    if (isCV && rawText && rawText.length > 0) {
       logger.info(`Starting immediate processing for CV ID: ${cvId}`);
       // Don't await this - let it run in the background
       processCVWithAI(cvId, rawText, initialMetadata, false, session.user.id)
         .catch(error => {
-          logger.error(`Error starting CV processing for CV ID ${cvId}:`, 
-                      error instanceof Error ? error.message : String(error));
+          logger.error(`Error starting CV processing for CV ID ${cvId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`);
         });
     } else {
-      logger.warn(`CV ID ${cvId} has no text content, skipping immediate processing`);
+      logger.info(`Document ID ${cvId} is not a CV or has no text content, skipping processing`);
     }
     
     return NextResponse.json({ 
-      message: "CV uploaded successfully!", 
-      cvId: newCV.id,
-      processingStarted: rawText && rawText.length > 0
+      message: "Document uploaded successfully!", 
+      documentId: newCV.id,
+      processingStarted: isCV && rawText && rawText.length > 0
     });
   } catch (dbError) {
-    console.error("Database error:", dbError);
+    logger.error(`Database error: ${dbError}`);
     return NextResponse.json(
-      { message: "Error saving CV to database." },
+      { message: "Error saving document to database." },
       { status: 500 }
     );
   }

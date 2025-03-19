@@ -21,3 +21,9 @@ Unified Document Interface: Build an abstraction layer over the document librari
 Streaming Responses: Implement streaming for the agent responses to improve user experience
 Context Management: Store conversation context in the database to maintain continuity between sessions
 Error Recovery: Add robust error handling that allows the agent to recover from failed operations
+
+
+
+# - I will give you complete freedom to enhance and optimize this implementation as much as you can, as much you like do whatever you want with them while keeping brand and system objective guidelines well in place lets not go overboard, but I trust you with everything you would like to implement that you are sure it will make it better or more beautiful or have a better design or have a more seamless path, etc.. as i said i trust you
+
+also you are free to take as much time as you want for what you would like to do, i know sometimes your incredible implementations can be difficult or long so do not stress there is no rush lets implement them perfectly so take as much time as you can

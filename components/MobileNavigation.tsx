@@ -43,6 +43,12 @@ export default function MobileNavigation() {
       description: "Edit with AI assistance",
     },
     {
+      href: "/dashboard/document-analyzer",
+      label: "Document Analyzer",
+      icon: PieChart,
+      description: "Analyze documents with Mistral AI",
+    },
+    {
       href: "/dashboard/analyze",
       label: "Document Analysis",
       icon: PieChart,

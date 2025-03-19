@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, currentUser } from "@/lib/mock-auth";
-import { db } from "@/lib/mock-db";
-import { cv } from "@/lib/mock-schema";
+import { auth } from "@/auth";
+import { db } from "@/lib/db/drizzle";
+import { cvs } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { formatError } from "@/lib/utils";
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import { logger } from "@/lib/logger";
+import path from "path";
+import { analyzeMistralAgent } from "@/lib/mistral/client";
+import { extractDocumentContent, DocumentDetails } from "@/lib/document/extractor";
+import { uploadFileToDropbox } from "@/lib/dropboxStorage";
 
 export const dynamic = "force-dynamic";
 
@@ -20,85 +22,219 @@ const SUPPORTED_CONTENT_TYPES = [
 
 export async function POST(request: NextRequest) {
   try {
-    // Authentication check
-    const { userId } = auth();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Authenticate the user
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
     }
-    
-    const user = await currentUser();
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-    
-    // Parse request body
+
+    // Parse the request body
     const body = await request.json();
-    const { documentId } = body;
-    
+    const { documentId, analysisType = 'general' } = body;
+
     if (!documentId) {
-      return NextResponse.json({ error: "Document ID is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Document ID is required' },
+        { status: 400 }
+      );
     }
-    
-    // Fetch document from database
-    const document = await db.query.cv.findFirst({
-      where: eq(cv.id, documentId),
+
+    logger.info(`Starting document analysis for document ID: ${documentId}, type: ${analysisType}`);
+
+    // Fetch the document from the database
+    const document = await db.query.cvs.findFirst({
+      where: eq(cvs.id, parseInt(documentId)),
     });
-    
+
     if (!document) {
-      return NextResponse.json({ error: "Document not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: 'Document not found' },
+        { status: 404 }
+      );
     }
-    
-    if (document.userId !== userId) {
-      return NextResponse.json({ error: "Document does not belong to this user" }, { status: 403 });
+
+    // Make sure the document belongs to the authenticated user
+    if (document.userId !== parseInt(session.user.id)) {
+      return NextResponse.json(
+        { error: 'Unauthorized access to document' },
+        { status: 403 }
+      );
     }
-    
-    // Extract document text from file or use stored raw text
-    let documentText = '';
-    if (document.rawText) {
-      documentText = document.rawText;
-    } else {
+
+    // If the document already has analysis results, return them
+    let metadata: Record<string, any> = {};
+    if (document.metadata) {
       try {
-        // In a real implementation, you would read from a file storage service
-        // Here we're using a mock implementation
-        // Note: We're being flexible with property names since the schema may vary
-        const filePath = typeof document === 'object' && 
-          ('filepath' in document || 'filePath' in document) ? 
-          (document as any).filepath || (document as any).filePath : null;
-          
-        if (!filePath) {
-          throw new Error("Document has no file path");
-        }
+        metadata = JSON.parse(document.metadata);
         
-        // For the purposes of this demo, we'll simulate file reading
-        // In a production app, this would connect to a real storage service
-        documentText = `This is simulated text content for document ${document.fileName}. 
-        In a real implementation, this would be extracted from the actual document file.
-        The document would be processed to extract text content for analysis.`;
-      } catch (error) {
-        console.error("Error reading document file:", error);
-        return NextResponse.json({ 
-          error: "Failed to read document content. Please try again." 
-        }, { status: 500 });
+        // Check if we already have analysis of the requested type
+        if (metadata.analysis && metadata.analysis[analysisType]) {
+          logger.info(`Returning cached analysis for document ID: ${documentId}, type: ${analysisType}`);
+          
+          return NextResponse.json({
+            documentId,
+            fileName: document.fileName,
+            analysis: metadata.analysis[analysisType],
+            cached: true
+          });
+        }
+      } catch (parseError) {
+        logger.error(`Error parsing document metadata: ${parseError}`);
+      }
+    }
+
+    // Get document file type
+    const fileExt = path.extname(document.fileName);
+    const fileType = getFileTypeFromExtension(fileExt);
+    
+    // Get document content
+    let documentContent = '';
+    
+    // If we already have raw text, use it
+    if (document.rawText) {
+      documentContent = document.rawText;
+      logger.info(`Using existing raw text for document ID: ${documentId}`);
+    } 
+    // Otherwise, extract content from the document
+    else {
+      logger.info(`Extracting content from document ID: ${documentId}`);
+      
+      // Get path or URL to the document
+      let documentPath = '';
+      let documentUrl = '';
+      
+      if (document.filepath) {
+        // If it's a Dropbox URL, convert to a direct download link
+        if (document.filepath.includes('dropbox.com')) {
+          // For now, we'll use the raw filepath
+          documentUrl = document.filepath;
+        } else {
+          documentPath = document.filepath;
+        }
+      }
+      
+      if (!documentPath && !documentUrl) {
+        return NextResponse.json(
+          { error: 'Document file path not found' },
+          { status: 404 }
+        );
+      }
+      
+      // Setup document details for extraction
+      const documentDetails: DocumentDetails = {
+        filePath: documentPath,
+        fileUrl: documentUrl,
+        fileName: document.fileName,
+        fileType: fileType,
+        fileSize: 0, // We don't have this information readily available
+        fileExtension: fileExt
+      };
+      
+      // Extract content from the document
+      const extractionResult = await extractDocumentContent(documentDetails);
+      
+      if (!extractionResult.success) {
+        logger.error(`Failed to extract content from document ID: ${documentId}, error: ${extractionResult.error}`);
+        
+        return NextResponse.json(
+          { error: `Failed to extract document content: ${extractionResult.error}` },
+          { status: 500 }
+        );
+      }
+      
+      documentContent = extractionResult.text;
+      
+      // If we don't have content, return an error
+      if (!documentContent || documentContent.trim().length === 0) {
+        return NextResponse.json(
+          { error: 'No content could be extracted from the document' },
+          { status: 400 }
+        );
       }
     }
     
-    // Perform document analysis (in a real app, this would use NLP, ML, etc.)
-    const analysisResults = await analyzeDocument(documentText, document.fileName);
+    // Analyze the document using Mistral AI
+    logger.info(`Analyzing document ID: ${documentId} with Mistral AI`);
     
-    // Return analysis results
+    const analysisResults = await analyzeMistralAgent(
+      documentContent,
+      {
+        filename: document.fileName,
+        fileType: fileType,
+        fileSize: documentContent.length // Use text length as a proxy for file size
+      },
+      analysisType
+    );
+    
+    // Update the document metadata with the analysis results
+    if (!metadata.analysis) {
+      metadata.analysis = {};
+    }
+    
+    metadata.analysis[analysisType] = {
+      ...analysisResults,
+      analyzedAt: new Date().toISOString()
+    };
+    
+    // Save the updated metadata
+    await db.update(cvs)
+      .set({
+        metadata: JSON.stringify(metadata)
+      })
+      .where(eq(cvs.id, parseInt(documentId)));
+    
+    logger.info(`Document analysis completed for document ID: ${documentId}`);
+    
+    // Return the analysis results
     return NextResponse.json({
-      success: true,
       documentId,
-      documentName: document.fileName,
-      analysis: analysisResults
+      fileName: document.fileName,
+      analysis: metadata.analysis[analysisType],
+      cached: false
     });
-    
   } catch (error) {
-    console.error("Error analyzing document:", error);
-    return NextResponse.json({ 
-      error: formatError(error) 
-    }, { status: 500 });
+    logger.error(`Error in document analysis: ${error}`);
+    
+    return NextResponse.json(
+      { error: `Document analysis failed: ${error instanceof Error ? error.message : String(error)}` },
+      { status: 500 }
+    );
   }
+}
+
+/**
+ * Get file type from extension
+ */
+function getFileTypeFromExtension(extension: string): string {
+  extension = extension.toLowerCase();
+  
+  const fileTypeMap: Record<string, string> = {
+    '.pdf': 'application/pdf',
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.ppt': 'application/vnd.ms-powerpoint',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    '.txt': 'text/plain',
+    '.csv': 'text/csv',
+    '.json': 'application/json',
+    '.xml': 'application/xml',
+    '.html': 'text/html',
+    '.htm': 'text/html',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.zip': 'application/zip',
+    '.rtf': 'application/rtf',
+    '.md': 'text/markdown'
+  };
+  
+  return fileTypeMap[extension] || 'application/octet-stream';
 }
 
 // Mock function to analyze document content
