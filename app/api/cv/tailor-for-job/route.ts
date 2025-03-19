@@ -72,6 +72,13 @@ Follow these guidelines:
 9. Do not fabricate experiences, skills, or qualifications
 10. Return the content in a structured format that preserves sections
 
+CRITICAL REQUIREMENT:
+- You MUST preserve all original work experience entries exactly as they appear in the CV
+- Keep all job titles, company names, dates, and locations exactly as written in the original
+- DO NOT rearrange, remove, or modify any work history items
+- Only enhance descriptions within experience entries without changing their core information
+- The chronology and basic structure of the experience section must remain unaltered
+
 Most importantly:
 - Identify and extract the name and contact details from the original CV and maintain them
 - Ensure the profile/summary is directly based on the actual content from the original CV, enhanced with relevant keywords from the job description`;
@@ -96,6 +103,8 @@ ${jobDescription}
 ${jobTitle ? `\nPosition: ${jobTitle}` : ''}
 
 Please tailor my CV for this job. First, locate my existing profile/summary/about me section in the CV and enhance it specifically to match this job's requirements. Use my actual profile content as the base for any enhancements.
+
+IMPORTANT: You must preserve ALL my original work experience entries exactly as they appear in the CV. Keep all job titles, company names, dates, and locations unchanged. Do not modify, remove, or rearrange my work history - only enhance descriptions while keeping the original structure intact.
 
 If there's no explicit profile section, use the first substantive paragraph that introduces my background and experience.
 

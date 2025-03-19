@@ -2637,6 +2637,97 @@ function SectionImprovementsPanel({
   );
 }
 
+// Add this function after extractExperienceData near line 157
+const validateExperiencePreservation = (originalText: string, optimizedText: string): boolean => {
+  const originalExperience = extractExperienceData(originalText);
+  
+  // If there's no original experience, nothing to validate
+  if (originalExperience.length === 0) {
+    return true;
+  }
+  
+  // Check if the key experience details from the original are in the optimized text
+  return originalExperience.every(entry => {
+    // Skip entries with missing data
+    if (!entry.title || (!entry.startDate && !entry.endDate)) {
+      return true;
+    }
+    
+    // Check if job title is preserved
+    const titlePresent = entry.title && optimizedText.includes(entry.title);
+    
+    // Check if date ranges are preserved
+    let datesPresent = true;
+    if (entry.startDate && entry.endDate) {
+      const datePattern = new RegExp(`${escapeRegExp(entry.startDate)}\\s*[-–—]\\s*${escapeRegExp(entry.endDate)}`, 'i');
+      datesPresent = datePattern.test(optimizedText);
+    } else if (entry.startDate) {
+      datesPresent = optimizedText.includes(entry.startDate);
+    } else if (entry.endDate) {
+      datesPresent = optimizedText.includes(entry.endDate);
+    }
+    
+    return titlePresent && datesPresent;
+  });
+};
+
+const ensureExperiencePreservation = (originalText: string, optimizedText: string): string => {
+  // Check if experience is preserved
+  if (validateExperiencePreservation(originalText, optimizedText)) {
+    return optimizedText;
+  }
+  
+  console.warn("Experience entries not preserved in the optimized text. Fixing...");
+  
+  // Extract the original experience section
+  const experiencePattern = /(?:experience|work history|employment)[:\s]+(.*?)(?=\n\s*\n|\n(?:[A-Z][a-z]+\s*(?:&\s*)?)+:|\n\s*$)/is;
+  const originalMatch = originalText.match(experiencePattern);
+  
+  if (!originalMatch || !originalMatch[1]) {
+    return optimizedText; // No experience section found, return as is
+  }
+  
+  const originalExperienceSection = originalMatch[1].trim();
+  
+  // Find where to insert the original experience in the optimized text
+  const optimizedMatch = optimizedText.match(experiencePattern);
+  
+  if (optimizedMatch && optimizedMatch.index !== undefined) {
+    // Replace the optimized experience section with the original one
+    const before = optimizedText.substring(0, optimizedMatch.index + optimizedMatch[0].length - optimizedMatch[1].length);
+    const after = optimizedText.substring(optimizedMatch.index + optimizedMatch[0].length);
+    
+    return before + originalExperienceSection + after;
+  } else {
+    // If no experience section found in optimized text, try to add it after the profile/summary
+    const sectionHeaders = ['profile', 'summary', 'objective', 'about me', 'skills', 'expertise'];
+    let insertIndex = -1;
+    
+    // Find the position after one of the typical section headers
+    for (const header of sectionHeaders) {
+      const sectionPattern = new RegExp(`${header}[:\\s]+.*?(?=\\n\\s*\\n|$)`, 'is');
+      const sectionMatch = optimizedText.match(sectionPattern);
+      
+      if (sectionMatch && sectionMatch.index !== undefined) {
+        const endOfSection = sectionMatch.index + sectionMatch[0].length;
+        if (endOfSection > insertIndex) {
+          insertIndex = endOfSection;
+        }
+      }
+    }
+    
+    if (insertIndex >= 0) {
+      // Insert the experience section after the found section
+      return optimizedText.substring(0, insertIndex) + 
+        "\n\nEXPERIENCE:\n" + originalExperienceSection + 
+        (insertIndex >= optimizedText.length ? "" : optimizedText.substring(insertIndex));
+    } else {
+      // Last resort: append to the end
+      return optimizedText + "\n\nEXPERIENCE:\n" + originalExperienceSection;
+    }
+  }
+};
+
 export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: EnhancedSpecificOptimizationWorkflowProps): JSX.Element {
   const { toast } = useToast();
   
@@ -2875,11 +2966,14 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
               throw new Error("Failed to optimize CV content");
             }
             
+            // Ensure experience entries are preserved
+            const validatedContent = ensureExperiencePreservation(originalText || '', optimizationResult.optimizedContent);
+            
             // Store the optimized text
-            setOptimizedText(optimizationResult.optimizedContent);
+            setOptimizedText(validatedContent);
             
             // Generate structured CV
-            const structuredCV = generateStructuredCV(optimizationResult.optimizedContent, jobDescription);
+            const structuredCV = generateStructuredCV(validatedContent, jobDescription);
             setStructuredCV(structuredCV);
             
           } catch (optimizationError) {
@@ -2887,10 +2981,14 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
             
             // Use client-side optimization as final fallback
             const fallbackText = generateOptimizedText(originalText || '', jobDescription);
-            setOptimizedText(fallbackText);
+            
+            // Ensure experience entries are preserved in the fallback as well
+            const validatedFallbackText = ensureExperiencePreservation(originalText || '', fallbackText);
+            
+            setOptimizedText(validatedFallbackText);
             
             // Generate structured CV
-            const structuredCV = generateStructuredCV(fallbackText, jobDescription);
+            const structuredCV = generateStructuredCV(validatedFallbackText, jobDescription);
             setStructuredCV(structuredCV);
           }
         }

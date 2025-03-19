@@ -218,6 +218,15 @@ export async function optimizeCVForJob(cvText: string, jobDescription: string): 
     2. Match score (0-100)
     3. List of recommendations for improvement
 
+    IMPORTANT: You MUST preserve all original experience entries including job titles, companies, dates, and locations exactly as they appear in the original CV. Only enhance descriptions and responsibilities without changing the core experience information.
+
+    When optimizing:
+    - Keep all original work experience entries (job titles, companies, dates) intact
+    - Maintain the same chronological order of experience
+    - Do not remove or alter any dates or company names
+    - Only enhance descriptions by adding details or relevant keywords
+    - Use existing information as the foundation and build upon it
+
     CV Text:
     ${cvText}
 
