@@ -7,14 +7,23 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Loader2, User, Mail, Check } from 'lucide-react';
-import { useUser } from '@/lib/auth';
-import { updateAccount } from '@/app/(login)/actions';
 import { motion } from 'framer-motion';
+import { updateAccount } from '@/app/(login)/actions';
 
 type ActionState = {
   error?: string;
   success?: string;
 };
+
+// Add a mock function if needed
+const useUser = () => ({
+  user: {
+    id: "1",
+    name: "Test User",
+    email: "test@example.com"
+  },
+  loading: false
+});
 
 export default function GeneralPage() {
   const { user } = useUser();

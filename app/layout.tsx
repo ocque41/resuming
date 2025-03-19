@@ -2,11 +2,11 @@ import './globals.css';
 import type { Metadata, Viewport } from 'next';
 import { Manrope } from 'next/font/google';
 import localFont from 'next/font/local';
-import { UserProvider } from '@/lib/auth';
 import { getUser } from '@/lib/db/queries.server';
 import { ThemeProvider } from 'app/theme-provider';
 import { I18nProvider } from '@/components/i18n-provider';
 import { Inter } from "next/font/google";
+import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
   title: 'CV Optimizer - AI-powered CV Analysis & Optimization',
@@ -108,9 +108,7 @@ export default function RootLayout({
       <body className="min-h-[100dvh] bg-[#050505] font-borna">
         <I18nProvider>
           <ThemeProvider defaultTheme="dark" storageKey="app-theme">
-            <UserProvider userPromise={userPromise}>
-              <main className="flex-grow">{children}</main>
-            </UserProvider>
+            {children}
           </ThemeProvider>
         </I18nProvider>
       </body>

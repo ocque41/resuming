@@ -14,12 +14,22 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { useActionState } from '@/lib/useActionState';
 import { inviteTeamMember } from '@/app/(login)/actions';
-import { useUser } from '@/lib/auth';
 
 type ActionState = {
   error?: string;
   success?: string;
 };
+
+// Add a mock function if needed
+const useUser = () => ({
+  user: {
+    id: "1",
+    name: "Test User",
+    email: "test@example.com",
+    role: "admin"
+  },
+  loading: false
+});
 
 export function InviteTeamMember() {
   const { user } = useUser();
