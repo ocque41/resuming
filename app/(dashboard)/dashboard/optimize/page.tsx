@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
-import { getUser, getTeamForUser, getCVsForUser } from "@/lib/db/queries.server";
+import { getUser, getTeamForUser, getCVsForUser, getActivityLogs } from "@/lib/db/queries.server";
 import ErrorBoundaryWrapper from "@/components/ErrorBoundaryWrapper";
 import OptimizationWorkflow from "@/components/OptimizationWorkflow.client";
-import PageLayout from "@/components/PageLayout";
+import PremiumPageLayout from "@/components/PremiumPageLayout";
 
 export default async function OptimizePage() {
   const user = await getUser();
@@ -17,12 +17,22 @@ export default async function OptimizePage() {
   
   const cvs = await getCVsForUser(user.id);
   const formattedCvs = cvs.map((cv: any) => `${cv.fileName}|${cv.id}`);
+  const activityLogs = await getActivityLogs();
   
   return (
-    <PageLayout title="Optimize Your CV">
+    <PremiumPageLayout 
+      title="Optimize Your CV" 
+      subtitle="Analyze and enhance your CV with AI-driven feedback"
+      backUrl="/dashboard"
+      withGradientBackground
+      withScrollIndicator
+      animation="slide"
+      teamData={teamData}
+      activityLogs={activityLogs}
+    >
       <ErrorBoundaryWrapper>
         <OptimizationWorkflow cvs={formattedCvs} />
       </ErrorBoundaryWrapper>
-    </PageLayout>
+    </PremiumPageLayout>
   );
 } 
