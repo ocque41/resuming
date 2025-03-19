@@ -2,7 +2,7 @@
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from './ui/button';
 
 interface Props {
@@ -43,26 +43,27 @@ class ErrorBoundaryWrapper extends Component<Props, State> {
       }
 
       return (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-6 dark:border-red-900/30 dark:bg-red-900/10">
-          <div className="flex items-start space-x-4">
-            <AlertCircle className="h-5 w-5 text-red-500 mt-0.5" />
-            <div className="space-y-3">
-              <h3 className="font-medium text-red-900 dark:text-red-400">
-                Something went wrong
+        <div className="rounded-xl border border-red-900/30 bg-[#1A0A0A] p-6 text-[#F9F6EE]">
+          <div className="flex flex-col items-center space-y-4 text-center">
+            <AlertTriangle className="h-8 w-8 text-red-500" />
+            <div className="space-y-2">
+              <h3 className="font-medium text-[#F9F6EE] font-safiro text-lg">
+                Component Error
               </h3>
-              <div className="text-sm text-red-800 dark:text-red-300">
+              <div className="text-sm text-[#C5C2BA] font-borna">
                 <AlertDescription>
                   {this.state.error?.message || 'An unexpected error occurred'}
                 </AlertDescription>
               </div>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="border-red-300 bg-white text-red-700 hover:bg-red-50 dark:border-red-800 dark:bg-gray-900 dark:text-red-400 dark:hover:bg-gray-800"
-                onClick={() => this.setState({ hasError: false, error: null })}
-              >
-                Try again
-              </Button>
+              <div className="pt-3">
+                <Button 
+                  className="bg-[#111111] hover:bg-[#1A1A1A] text-[#F9F6EE] font-borna border border-[#222222] hover:border-[#333333] transition-colors"
+                  onClick={() => this.setState({ hasError: false, error: null })}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Try again
+                </Button>
+              </div>
             </div>
           </div>
         </div>

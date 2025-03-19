@@ -10,7 +10,8 @@ import {
   Activity, 
   Shield, 
   ArrowLeft,
-  Loader2
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 import { ArticleTitle } from '@/components/ui/article';
 import BillingButton from '@/app/(dashboard)/dashboard/billing-button';
@@ -23,20 +24,39 @@ import dynamic from 'next/dynamic';
 
 const GeneralPage = dynamic(() => import('@/app/(dashboard)/dashboard/general/page'), {
   ssr: false,
-  loading: () => <ComponentLoader />
+  loading: () => <ComponentLoader label="Loading account information..." />
 });
 
 const SecurityPage = dynamic(() => import('@/app/(dashboard)/dashboard/security/page'), {
   ssr: false,
-  loading: () => <ComponentLoader />
+  loading: () => <ComponentLoader label="Loading security settings..." />
 });
 
 // Loading component
-function ComponentLoader() {
+function ComponentLoader({ label = "Loading component..." }) {
   return (
-    <div className="w-full h-40 flex items-center justify-center">
-      <Loader2 className="h-8 w-8 animate-spin text-[#B4916C]" />
-      <span className="ml-2 text-[#F9F6EE] font-borna">Loading component...</span>
+    <div className="w-full h-40 flex flex-col items-center justify-center p-6 bg-[#0A0A0A] border border-[#222222] rounded-xl">
+      <Loader2 className="h-8 w-8 animate-spin text-[#B4916C] mb-3" />
+      <span className="text-[#F9F6EE] font-borna">{label}</span>
+    </div>
+  );
+}
+
+// Error fallback component
+function ErrorFallback({ message = "Failed to load component" }) {
+  return (
+    <div className="w-full p-6 bg-[#0A0A0A] border border-red-900/30 rounded-xl flex flex-col items-center justify-center space-y-3">
+      <AlertTriangle className="h-8 w-8 text-red-500" />
+      <div className="text-center">
+        <h3 className="text-[#F9F6EE] font-safiro font-medium">Component Error</h3>
+        <p className="text-[#C5C2BA] font-borna">{message}</p>
+      </div>
+      <button 
+        onClick={() => window.location.reload()}
+        className="px-4 py-2 bg-[#111111] hover:bg-[#1A1A1A] text-[#F9F6EE] rounded-lg transition-colors font-borna mt-2"
+      >
+        Reload Page
+      </button>
     </div>
   );
 }
@@ -75,6 +95,8 @@ export default function ClientSettingsDialogContent({
   activityLogs,
   onClose,
 }: ClientSettingsDialogContentProps) {
+  const [activeSection, setActiveSection] = useState('account');
+
   return (
     <motion.section 
       className="flex-1 p-4 lg:p-8 bg-[#050505] text-[#F9F6EE] min-h-screen rounded-xl overflow-hidden"
@@ -108,8 +130,8 @@ export default function ClientSettingsDialogContent({
             <FileText className="h-5 w-5 text-[#B4916C] mr-2" />
             <h2 className="text-lg font-medium text-[#F9F6EE] font-safiro">Account Information</h2>
           </div>
-          <ErrorBoundaryWrapper>
-            <Suspense fallback={<ComponentLoader />}>
+          <ErrorBoundaryWrapper fallback={<ErrorFallback message="Failed to load account settings" />}>
+            <Suspense fallback={<ComponentLoader label="Loading account information..." />}>
               <GeneralPage />
             </Suspense>
           </ErrorBoundaryWrapper>
@@ -174,8 +196,8 @@ export default function ClientSettingsDialogContent({
             <Shield className="h-5 w-5 text-[#B4916C] mr-2" />
             <h2 className="text-lg font-medium text-[#F9F6EE] font-safiro">Security Settings</h2>
           </div>
-          <ErrorBoundaryWrapper>
-            <Suspense fallback={<ComponentLoader />}>
+          <ErrorBoundaryWrapper fallback={<ErrorFallback message="Failed to load security settings" />}>
+            <Suspense fallback={<ComponentLoader label="Loading security settings..." />}>
               <SecurityPage />
             </Suspense>
           </ErrorBoundaryWrapper>

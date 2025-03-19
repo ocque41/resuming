@@ -4,7 +4,7 @@ import { Check, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertTriangle } from "lucide-react";
 
 interface PricingCardClientProps {
   name: string;
@@ -45,10 +45,14 @@ export default function PricingCardClient({
       const response = await fetch('/api/stripe/checkout', {
         method: 'POST',
         body: formData,
+        headers: {
+          'Accept': 'application/json',
+        },
       });
 
       if (!response.ok) {
-        throw new Error('Failed to initiate checkout');
+        const errorData = await response.json().catch(() => ({ message: 'Failed to initiate checkout' }));
+        throw new Error(errorData.message || 'Failed to initiate checkout');
       }
 
       const data = await response.json();
@@ -165,8 +169,9 @@ export default function PricingCardClient({
         </ul>
         
         {error && (
-          <div className="text-red-500 text-sm mb-4 p-2 bg-red-500/10 rounded-lg">
-            {error}
+          <div className="text-red-400 text-sm mb-4 p-3 bg-red-500/10 rounded-lg flex items-start border border-red-900/30">
+            <AlertTriangle className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
+            <span>{error}</span>
           </div>
         )}
         
@@ -174,10 +179,10 @@ export default function PricingCardClient({
           <Button
             type="submit"
             disabled={isLoading}
-            className={`w-full font-medium ${
+            className={`w-full font-medium font-safiro ${
               highlight
-                ? "bg-[#B4916C] hover:bg-[#A3815B] text-white"
-                : "bg-[#222222] hover:bg-[#333333] text-white border border-[#333333]"
+                ? "bg-[#B4916C] hover:bg-[#A3815B] text-[#050505]"
+                : "bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"
             }`}
           >
             {isLoading ? (
