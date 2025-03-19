@@ -40,12 +40,27 @@ export async function GET(request: NextRequest) {
     let metadata = {};
     if (cvRecord.metadata) {
       try {
-        metadata = typeof cvRecord.metadata === 'string' 
-          ? JSON.parse(cvRecord.metadata) 
-          : cvRecord.metadata;
+        console.log("Metadata type:", typeof cvRecord.metadata);
+        // Handle different formats of metadata
+        if (typeof cvRecord.metadata === 'string') {
+          // Try to parse JSON string
+          try {
+            metadata = JSON.parse(cvRecord.metadata);
+          } catch (parseError) {
+            console.error("Error parsing metadata JSON:", parseError);
+            metadata = { error: "Invalid metadata format", raw: cvRecord.metadata };
+          }
+        } else if (typeof cvRecord.metadata === 'object') {
+          // Already an object
+          metadata = cvRecord.metadata;
+        } else {
+          // Unknown format
+          console.error("Unexpected metadata format:", typeof cvRecord.metadata);
+          metadata = { error: "Unexpected metadata format", type: typeof cvRecord.metadata };
+        }
       } catch (error) {
-        console.error("Error parsing metadata:", error);
-        metadata = { error: "Invalid metadata format" };
+        console.error("Error processing metadata:", error);
+        metadata = { error: "Error processing metadata" };
       }
     }
 

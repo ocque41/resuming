@@ -73,6 +73,48 @@ const MOCK_ANALYSIS_RESULT = {
   timestamp: new Date().toISOString()
 };
 
+/**
+ * GET handler for document analyze API - handles query parameter based requests
+ */
+export async function GET(req: NextRequest) {
+  try {
+    // Get parameters from URL
+    const { searchParams } = new URL(req.url);
+    const documentId = searchParams.get('documentId');
+    const type = searchParams.get('type') || 'general';
+
+    if (!documentId) {
+      return NextResponse.json({ error: 'Document ID is required' }, { status: 400 });
+    }
+
+    console.log(`Document analysis request: documentId=${documentId}, type=${type}`);
+
+    // In a real implementation, we would get the document from the database
+    // For now, we'll just create a mock document
+    const mockDocument = {
+      id: documentId,
+      fileName: "document.pdf",
+      userId: "1",
+      filepath: "/path/to/document.pdf",
+      metadata: null
+    };
+
+    // Return mock analysis results
+    const mockResult = {
+      ...MOCK_ANALYSIS_RESULT,
+      documentId
+    };
+      
+    return NextResponse.json(mockResult);
+  } catch (error) {
+    console.error('Error in document analysis endpoint:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' }, 
+      { status: 500 }
+    );
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     // Check authentication - in a simplified version, we'll skip actual auth

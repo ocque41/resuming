@@ -140,17 +140,26 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
     setAnalysisError(null);
     
     try {
-      const response = await fetch(`/api/document/analyze?documentId=${selectedDocumentId}&type=${analysisType}`);
+      console.log(`Initiating document analysis: documentId=${selectedDocumentId}, type=${analysisType}`);
+      
+      const url = `/api/document/analyze?documentId=${selectedDocumentId}&type=${analysisType}`;
+      console.log(`Sending request to: ${url}`);
+      
+      const response = await fetch(url);
+      console.log(`Analysis response status: ${response.status}`);
       
       if (!response.ok) {
-        throw new Error('Failed to analyze document');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Error response:', errorData);
+        throw new Error(errorData.error || `Failed to analyze document: ${response.status} ${response.statusText}`);
       }
       
       const data = await response.json();
+      console.log('Analysis completed successfully:', data);
       setAnalysisResults(data);
     } catch (error) {
       console.error('Analysis error:', error);
-      setAnalysisError('An error occurred while analyzing the document. Please try again.');
+      setAnalysisError(`An error occurred while analyzing the document: ${error instanceof Error ? error.message : String(error)}. Please try again.`);
     } finally {
       setIsAnalyzing(false);
     }
