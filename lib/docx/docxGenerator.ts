@@ -35,6 +35,11 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
     const fileName = options.title || "Optimized_CV";
     const authorName = options.author || "CV Optimizer";
     
+    // Check if we have structured experience entries
+    const hasStructuredExperience = options.experienceEntries && 
+                                 Array.isArray(options.experienceEntries) && 
+                                 options.experienceEntries.length > 0;
+    
     // Parse the optimized text to identify sections
     const sections = parseOptimizedText(cvText);
     
@@ -42,10 +47,11 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
     const paragraphs: Paragraph[] = [];
     
     // Preferred section order - strictly follow this order
-    const sectionOrder = ["header", "profile", "achievements", "goals", "skills", "languages", "education"] as const;
+    // Modify order based on whether we have structured experience
+    const defaultSectionOrder = ["header", "profile", "achievements", "goals", "skills", "languages", "education"] as const;
     
     // Process sections in the preferred order
-    for (const sectionKey of sectionOrder) {
+    for (const sectionKey of defaultSectionOrder) {
       const sectionContent = sections[sectionKey];
       
       if (!sectionContent || (Array.isArray(sectionContent) && sectionContent.length === 0)) {
@@ -136,7 +142,7 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
           },
         })
       );
-      
+
       // Handle different section types
       if (sectionKey === "achievements" || sectionKey === "goals") {
         // These are arrays of bullet points
@@ -282,7 +288,7 @@ export async function generateDocx(cvText: string, options: DocxGenerationOption
     }
     
     // Add Experience section from experienceEntries if provided in options
-    if (options.experienceEntries && options.experienceEntries.length > 0) {
+    if (hasStructuredExperience && options.experienceEntries) {
       // Add experience section heading
       paragraphs.push(
         new Paragraph({
@@ -442,6 +448,9 @@ function parseOptimizedText(text: string): {
     education: ""
   };
   
+  // Check if there's a special marker for structured experience
+  const useStructuredExperience = text.includes("<!-- USE_STRUCTURED_EXPERIENCE_IF_AVAILABLE -->");
+  
   // Check if the text is already in a structured format with section headers
   if (text.includes("PROFILE") || text.includes("ACHIEVEMENTS") || text.includes("GOALS") || 
       text.includes("Profile") || text.includes("Achievements") || text.includes("Goals")) {
@@ -453,6 +462,9 @@ function parseOptimizedText(text: string): {
     const skillsPatterns = [/^(SKILLS|TECHNICAL SKILLS|COMPETENCIES|CORE COMPETENCIES|KEY SKILLS|EXPERTISE|Skills)/i];
     const languagesPatterns = [/^(LANGUAGES|LANGUAGE PROFICIENCY|LANGUAGE SKILLS|Languages)/i];
     const educationPatterns = [/^(EDUCATION|ACADEMIC BACKGROUND|EDUCATIONAL QUALIFICATIONS|ACADEMIC QUALIFICATIONS|Education)/i];
+    
+    // We'll explicitly ignore the experience section since it will be handled separately
+    const experiencePatterns = [/^(EXPERIENCE|WORK HISTORY|PROFESSIONAL EXPERIENCE|EMPLOYMENT HISTORY|Experience)/i];
     
     // Split text into lines
     const lines = text.split('\n').filter(line => line.trim() !== "");
@@ -469,6 +481,11 @@ function parseOptimizedText(text: string): {
     for (let i = 3; i < lines.length; i++) {
       const line = lines[i].trim();
       
+      // Skip special marker for structured experience
+      if (line === "<!-- USE_STRUCTURED_EXPERIENCE_IF_AVAILABLE -->") {
+        continue;
+      }
+      
       // Check for section headers using the defined patterns
       const isProfileSection = profilePatterns.some(pattern => pattern.test(line));
       const isAchievementsSection = achievementsPatterns.some(pattern => pattern.test(line));
@@ -476,6 +493,7 @@ function parseOptimizedText(text: string): {
       const isSkillsSection = skillsPatterns.some(pattern => pattern.test(line));
       const isLanguagesSection = languagesPatterns.some(pattern => pattern.test(line));
       const isEducationSection = educationPatterns.some(pattern => pattern.test(line));
+      const isExperienceSection = experiencePatterns.some(pattern => pattern.test(line));
       
       if (isProfileSection) {
         currentSection = "profile";
@@ -500,6 +518,15 @@ function parseOptimizedText(text: string): {
       } else if (isEducationSection) {
         currentSection = "education";
         sectionContent = [];
+        continue;
+      } else if (isExperienceSection) {
+        // Skip the experience section entirely if we found the special marker
+        if (useStructuredExperience) {
+          currentSection = "";
+        } else {
+          currentSection = "experience";
+          sectionContent = [];
+        }
         continue;
       } else if (/^[A-Z\s]{2,}:?$/i.test(line) || /^[A-Z\s]{2,}$/i.test(line)) {
         // This looks like a new section header we don't explicitly handle

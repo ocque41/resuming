@@ -541,9 +541,10 @@ function formatOptimizedSections(sections: Record<string, string>): string {
     result += "ACHIEVEMENTS\n" + sections.achievements + "\n\n";
   }
   
-  // Add experience if it exists
+  // Add experience if it exists, but with a special marker
   if (sections.experience) {
-    result += "EXPERIENCE\n" + sections.experience + "\n\n";
+    // Add a special marker to indicate experience should be handled by structured data if available
+    result += "EXPERIENCE\n" + "<!-- USE_STRUCTURED_EXPERIENCE_IF_AVAILABLE -->\n" + sections.experience + "\n\n";
   }
   
   // Add skills if they exist
