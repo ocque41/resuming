@@ -7,7 +7,8 @@ import { useRouter } from "next/navigation";
 import { MicroCard } from "@/components/ui/micro-card";
 import MyDialog from "@/components/ui/dialogui";
 import ClientSettingsDialogContent from "@/components/ClientSettingsPage";
-import { customerPortalAction } from "@/lib/payments/actions";
+import { motion } from "framer-motion";
+import { Settings, LogOut, DollarSign, ChevronDown } from "lucide-react";
 
 interface UserMenuProps {
   teamData: any;
@@ -17,69 +18,76 @@ interface UserMenuProps {
 export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
   const router = useRouter();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isBillingLoading, setIsBillingLoading] = useState(false);
 
   const handleLogout = () => {
     window.location.href = "/";
   };
 
   const handleManageSubscription = () => {
-    // Navigate to the in-app pricing page instead of using the customer portal
     router.push("/dashboard/pricing");
   };
+
+  const menuItems = [
+    {
+      label: "Manage Subscription",
+      icon: DollarSign,
+      onClick: handleManageSubscription
+    },
+    {
+      label: "Settings",
+      icon: Settings,
+      onClick: () => setIsSettingsOpen(true)
+    },
+    {
+      label: "Log Out",
+      icon: LogOut,
+      onClick: handleLogout
+    }
+  ];
 
   return (
     <>
       <Menu as="div" className="relative inline-block text-left">
         <Menu.Button as={Fragment}>
-          <MicroCard variant="custom" className="cursor-pointer ml-auto bg-[#B4916C] hover:bg-[#B4916C]/90 transition-colors duration-200">
-            <span className="flex items-center justify-center h-full w-full rounded-full text-white font-safiro">
-              U
-            </span>
-          </MicroCard>
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="flex items-center gap-2 cursor-pointer"
+          >
+            <MicroCard variant="custom" className="cursor-pointer ml-auto bg-[#B4916C] hover:bg-[#B4916C]/90 transition-colors duration-200">
+              <span className="flex items-center justify-center h-full w-full rounded-full text-white font-safiro">
+                U
+              </span>
+            </MicroCard>
+            <ChevronDown className="h-4 w-4 text-[#8A8782]" />
+          </motion.div>
         </Menu.Button>
         <Transition
           as={Fragment}
-          enter="transition ease-out duration-100"
+          enter="transition ease-out duration-200"
           enterFrom="transform opacity-0 scale-95"
           enterTo="transform opacity-100 scale-100"
-          leave="transition ease-in duration-75"
+          leave="transition ease-in duration-150"
           leaveFrom="transform opacity-100 scale-100"
           leaveTo="transform opacity-0 scale-95"
         >
-          <Menu.Items className="absolute right-4 mt-2 w-56 origin-top-right bg-[#050505] border border-[#B4916C]/20 rounded-md shadow-lg focus:outline-none z-50">
-            <div className="py-1">
-              <Menu.Item>
+          <Menu.Items className="absolute right-0 mt-2 w-56 origin-top-right bg-[#111111] border border-[#222222] rounded-lg shadow-lg focus:outline-none z-50 py-1">
+            {menuItems.map((item, index) => (
+              <Menu.Item key={item.label}>
                 {({ active }) => (
-                  <button
-                    onClick={handleManageSubscription}
-                    className={`${active ? "bg-[#B4916C]/20" : ""} block w-full text-left px-4 py-2 text-sm text-white`}
+                  <motion.button
+                    whileHover={{ x: 4 }}
+                    onClick={item.onClick}
+                    className={`${
+                      active ? "bg-[#161616]" : ""
+                    } flex items-center w-full px-4 py-3 text-sm text-[#F9F6EE] font-borna`}
                   >
-                    Manage Subscription
-                  </button>
+                    <item.icon className="h-4 w-4 mr-3 text-[#B4916C]" />
+                    {item.label}
+                  </motion.button>
                 )}
               </Menu.Item>
-              <Menu.Item>
-                {({ active }) => (
-                  <button
-                    onClick={() => setIsSettingsOpen(true)}
-                    className={`${active ? "bg-[#B4916C]/20" : ""} block w-full text-left px-4 py-2 text-sm text-white`}
-                  >
-                    Settings
-                  </button>
-                )}
-              </Menu.Item>
-              <Menu.Item>
-                {({ active }) => (
-                  <button
-                    onClick={handleLogout}
-                    className={`${active ? "bg-[#B4916C]/20" : ""} block w-full text-left px-4 py-2 text-sm text-white`}
-                  >
-                    Log Out
-                  </button>
-                )}
-              </Menu.Item>
-            </div>
+            ))}
           </Menu.Items>
         </Transition>
       </Menu>

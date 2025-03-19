@@ -1,12 +1,15 @@
 import { redirect } from "next/navigation";
 import { getUser, getTeamForUser, getActivityLogs } from "@/lib/db/queries.server";
-import { Check, ArrowLeft } from "lucide-react";
+import { Check, ArrowLeft, Star } from "lucide-react";
 import { getStripePrices, getStripeProducts } from "@/lib/payments/stripe";
 import { checkoutAction } from "@/lib/payments/actions";
 import { ArticleTitle } from "@/components/ui/article";
-import { Card } from "@/components/ui/card";
+import { PremiumCard, PremiumCardHeader, PremiumCardTitle, PremiumCardContent } from "@/components/ui/premium-card";
 import PricingPageUserMenu from "@/components/PricingPageUserMenu";
+import PremiumPageLayout from "@/components/PremiumPageLayout";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { motion } from "framer-motion";
 
 // Revalidate prices every hour
 export const revalidate = 3600;
@@ -39,101 +42,120 @@ export default async function DashboardPricingPage() {
   const ceoPrice = prices.find((price) => price.productId === ceoPlan?.id);
 
   return (
-    <>
-      <header className="flex items-center justify-between p-4 lg:p-8 mx-auto max-w-6xl">
-        <div className="flex items-center">
-          <Link 
-            href="/dashboard" 
-            className="mr-4 p-2 rounded-full hover:bg-[#B4916C]/10 transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5 text-[#FFFFFF]" />
-          </Link>
-          <ArticleTitle className="text-md lg:text-xl font-medium text-[#FFFFFF]">
-            Upgrade Your Plan
-          </ArticleTitle>
-        </div>
-        <PricingPageUserMenu teamData={teamData} activityLogs={activityLogs} />
-      </header>
-      
-      <Card className="py-8 px-4 mb-8 mx-auto max-w-6xl border border-[#B4916C]/20 bg-[#050505] shadow-lg">
-        <div className="max-w-5xl mx-auto space-y-8">
-          <section className="space-y-6">
-            <h2 className="text-4xl font-bold text-[#B4916C]">
-              Choose Your Plan
-            </h2>
-            <p className="text-lg text-white font-medium">
-              Upgrade your subscription to unlock more features and capabilities
-            </p>
-            <p className="text-lg text-white font-medium">
-              Change plans as you grow.
-            </p>
-          </section>
+    <PremiumPageLayout
+      title="Upgrade Your Plan"
+      subtitle="Choose the plan that fits your needs"
+      backUrl="/dashboard"
+      withGradientBackground
+      withScrollIndicator
+      animation="fade"
+      teamData={teamData}
+      activityLogs={activityLogs}
+      maxWidth="6xl"
+    >
+      <PremiumCard className="mb-8 border border-[#222222] bg-[#0D0D0D]">
+        <PremiumCardContent className="px-6 py-8">
+          <div className="max-w-5xl mx-auto space-y-8">
+            <section className="space-y-6">
+              <motion.h2 
+                className="text-4xl font-bold font-safiro text-[#F9F6EE] tracking-tight"
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+              >
+                Choose Your <span className="text-[#B4916C]">Premium</span> Plan
+              </motion.h2>
+              <motion.p 
+                className="text-lg text-[#C5C2BA] font-borna"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.1 }}
+              >
+                Upgrade your subscription to unlock more features and capabilities.
+                Change plans as you grow.
+              </motion.p>
+            </section>
 
-          <div className="grid md:grid-cols-3 gap-8 justify-center">
-            <PricingCard
-              name="Pro"
-              price={proPrice?.unitAmount || 799}
-              interval="month"
-              features={[
-                "20 CV uploads/month ⓘ",
-                "10 ATS analyses/month ⓘ",
-                "7 Optimizations/month ⓘ",
-                "Priority 2 in AI processing ⓘ",
-              ]}
-              tooltips={{
-                "20 CV uploads/month ⓘ": "Upload up to 20 different CVs each month",
-                "10 ATS analyses/month ⓘ": "Get ATS compatibility analysis for 10 CVs monthly",
-                "7 Optimizations/month ⓘ": "Receive AI-powered optimization suggestions 7 times per month",
-                "Priority 2 in AI processing ⓘ": "Your requests are processed with priority level 2",
-              }}
-              highlight={false}
-              priceId="price_1QoUP9FYYYXM77wGBUVqTaiE"
-            />
-            <PricingCard
-              name="Moonlighting"
-              price={moonlightingPrice?.unitAmount || 1499}
-              interval="month"
-              features={[
-                "Unlimited CV uploads/month ⓘ",
-                "20 ATS analyses/month ⓘ",
-                "15 Optimizations/month ⓘ",
-                "Access to Analytics Suite ⓘ",
-              ]}
-              tooltips={{
-                "Unlimited CV uploads/month ⓘ": "Upload as many CVs as you need without any monthly limits",
-                "20 ATS analyses/month ⓘ": "Get detailed analysis of how your CV performs against ATS systems",
-                "15 Optimizations/month ⓘ": "AI-powered suggestions to improve your CV structure and content",
-                "Access to Analytics Suite ⓘ": "Advanced metrics and insights about your CV performance",
-              }}
-              highlight={true}
-              priceId={moonlightingPrice?.id}
-            />
-            <PricingCard
-              name="CEO"
-              price={ceoPrice?.unitAmount || 9999}
-              interval="month"
-              features={[
-                "Unlimited CV uploads ⓘ",
-                "Unlimited ATS analyses ⓘ",
-                "Unlimited Optimizations ⓘ",
-                "Access to Analytics Suite ⓘ",
-                "Early access to new features ⓘ",
-              ]}
-              tooltips={{
-                "Unlimited CV uploads ⓘ": "No monthly limit on CV uploads",
-                "Unlimited ATS analyses ⓘ": "Analyze your CVs against ATS systems as many times as you need",
-                "Unlimited Optimizations ⓘ": "Get unlimited AI-powered optimization suggestions",
-                "Access to Analytics Suite ⓘ": "Full access to advanced analytics and insights",
-                "Early access to new features ⓘ": "Be the first to try new platform features",
-              }}
-              highlight={false}
-              priceId="price_1QoYTrFYYYXM77wGffciG20i"
-            />
+            <div className="grid md:grid-cols-3 gap-8 justify-center">
+              <PricingCard
+                name="Pro"
+                price={proPrice?.unitAmount || 799}
+                interval="month"
+                features={[
+                  "20 CV uploads/month ⓘ",
+                  "10 ATS analyses/month ⓘ",
+                  "7 Optimizations/month ⓘ",
+                  "Priority 2 in AI processing ⓘ",
+                ]}
+                tooltips={{
+                  "20 CV uploads/month ⓘ": "Upload up to 20 different CVs each month",
+                  "10 ATS analyses/month ⓘ": "Get ATS compatibility analysis for 10 CVs monthly",
+                  "7 Optimizations/month ⓘ": "Receive AI-powered optimization suggestions 7 times per month",
+                  "Priority 2 in AI processing ⓘ": "Your requests are processed with priority level 2",
+                }}
+                highlight={false}
+                priceId={proPrice?.id}
+                animationDelay={0.2}
+              />
+              <PricingCard
+                name="Moonlighting"
+                price={moonlightingPrice?.unitAmount || 1499}
+                interval="month"
+                features={[
+                  "Unlimited CV uploads/month ⓘ",
+                  "20 ATS analyses/month ⓘ",
+                  "15 Optimizations/month ⓘ",
+                  "Access to Analytics Suite ⓘ",
+                ]}
+                tooltips={{
+                  "Unlimited CV uploads/month ⓘ": "Upload as many CVs as you need without any monthly limits",
+                  "20 ATS analyses/month ⓘ": "Get detailed analysis of how your CV performs against ATS systems",
+                  "15 Optimizations/month ⓘ": "AI-powered suggestions to improve your CV structure and content",
+                  "Access to Analytics Suite ⓘ": "Advanced metrics and insights about your CV performance",
+                }}
+                highlight={true}
+                priceId={moonlightingPrice?.id}
+                animationDelay={0.3}
+              />
+              <PricingCard
+                name="CEO"
+                price={ceoPrice?.unitAmount || 9999}
+                interval="month"
+                features={[
+                  "Unlimited CV uploads ⓘ",
+                  "Unlimited ATS analyses ⓘ",
+                  "Unlimited Optimizations ⓘ",
+                  "Access to Analytics Suite ⓘ",
+                  "Early access to new features ⓘ",
+                ]}
+                tooltips={{
+                  "Unlimited CV uploads ⓘ": "No monthly limit on CV uploads",
+                  "Unlimited ATS analyses ⓘ": "Analyze your CVs against ATS systems as many times as you need",
+                  "Unlimited Optimizations ⓘ": "Get unlimited AI-powered optimization suggestions",
+                  "Access to Analytics Suite ⓘ": "Full access to advanced analytics and insights",
+                  "Early access to new features ⓘ": "Be the first to try new platform features",
+                }}
+                highlight={false}
+                priceId={ceoPrice?.id}
+                animationDelay={0.4}
+              />
+            </div>
           </div>
-        </div>
-      </Card>
-    </>
+        </PremiumCardContent>
+      </PremiumCard>
+    </PremiumPageLayout>
   );
+}
+
+interface PricingCardProps {
+  name: string;
+  price: number;
+  interval: string;
+  features: string[];
+  highlight: boolean;
+  priceId?: string;
+  tooltips?: Record<string, string>;
+  animationDelay?: number;
 }
 
 function PricingCard({
@@ -144,47 +166,101 @@ function PricingCard({
   highlight,
   priceId,
   tooltips,
-}: {
-  name: string;
-  price: number;
-  interval: string;
-  features: string[];
-  highlight: boolean;
-  priceId?: string;
-  tooltips?: Record<string, string>;
-}) {
-  // For standard cards use #050505 background with #B4916C accent
-  // For highlighted card, use a different style to make it stand out
-  const cardClass = highlight
-    ? "border border-[#B4916C] bg-[#B4916C]/10 shadow-lg hover:shadow-xl"
-    : "border border-[#B4916C]/20 bg-[#050505] shadow-lg hover:shadow-xl";
+  animationDelay = 0
+}: PricingCardProps) {
+  const cardVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: {
+        duration: 0.5,
+        delay: animationDelay,
+        ease: [0.22, 1, 0.36, 1]
+      }
+    },
+    hover: { 
+      y: -8,
+      transition: {
+        duration: 0.3,
+        ease: "easeOut"
+      }
+    }
+  };
 
   return (
-    <div className={`rounded-lg transition-all duration-300 ${cardClass}`}>
-      <div className={`${highlight ? 'bg-[#B4916C]/20' : 'bg-[#B4916C]/10'} py-4 px-6 rounded-t-lg`}>
-        <h2 className="text-2xl font-bold text-[#B4916C] mb-2">
+    <motion.div
+      className={`rounded-xl overflow-hidden transition-all duration-300 ${
+        highlight 
+          ? "border border-[#B4916C] bg-[#0A0A0A]" 
+          : "border border-[#222222] bg-[#111111]"
+      }`}
+      variants={cardVariants}
+      initial="hidden"
+      animate="visible"
+      whileHover="hover"
+    >
+      <div className={`${
+        highlight 
+          ? "bg-gradient-to-r from-[#B4916C]/30 to-[#B4916C]/10" 
+          : "bg-[#0D0D0D]"
+        } py-6 px-6 relative overflow-hidden`}
+      >
+        {highlight && (
+          <Star className="absolute top-3 right-3 h-5 w-5 text-[#B4916C]" />
+        )}
+        <h2 className="text-2xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
           {name}
-          {highlight && <span className="ml-2 text-sm bg-[#B4916C]/20 text-[#B4916C] px-2 py-1 rounded-full">Most Popular</span>}
+          {highlight && (
+            <span className="ml-2 text-xs bg-[#B4916C]/20 text-[#B4916C] px-2 py-1 rounded-full font-borna">
+              Most Popular
+            </span>
+          )}
         </h2>
-        <p className="text-4xl font-semibold text-white mb-1">
+        <p className="text-4xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
           ${price / 100}
-          <span className="text-xl font-normal text-gray-300 ml-1">
+          <span className="text-xl font-normal text-[#8A8782] ml-1 font-borna">
             /{interval}
           </span>
         </p>
+        
+        {highlight && (
+          <div className="absolute inset-0 opacity-20 overflow-hidden pointer-events-none">
+            <motion.div
+              className="absolute h-[200%] w-[25%] bg-white top-[-120%] left-[-10%] transform rotate-45 blur-lg"
+              animate={{
+                left: ["0%", "120%"],
+              }}
+              transition={{
+                repeat: Infinity,
+                repeatDelay: 3,
+                duration: 2.5,
+                ease: "easeInOut",
+              }}
+            />
+          </div>
+        )}
       </div>
       
       <div className="p-6">
         <ul className="space-y-4 mb-8">
           {features.map((feature, index) => (
             <li key={index} className="flex items-start group relative">
-              <Check className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0 text-[#B4916C]" />
-              <span className="text-gray-300">
+              <div className={`h-5 w-5 mr-3 rounded-full flex items-center justify-center flex-shrink-0 ${
+                highlight ? "text-[#B4916C] bg-[#B4916C]/10" : "text-[#8A8782] bg-[#222222]"
+              }`}>
+                <Check className="h-3 w-3" />
+              </div>
+              <span className="text-[#C5C2BA] font-borna text-sm">
                 {feature.replace(" ⓘ", "")}
                 {tooltips?.[feature] && (
-                  <span className="opacity-0 group-hover:opacity-100 absolute left-0 -top-12 w-64 bg-[#050505] border border-[#B4916C]/20 text-gray-300 text-sm p-2 rounded z-10 transition-opacity duration-300">
+                  <motion.span 
+                    className="opacity-0 group-hover:opacity-100 absolute left-0 -top-12 w-64 bg-[#111111] border border-[#222222] text-[#8A8782] text-xs p-2 rounded-lg z-10 transition-opacity duration-200"
+                    initial={{ opacity: 0, y: 10 }}
+                    whileHover={{ opacity: 1, y: 0 }}
+                  >
                     {tooltips[feature]}
-                  </span>
+                  </motion.span>
                 )}
               </span>
             </li>
@@ -193,18 +269,18 @@ function PricingCard({
         <form action={checkoutAction} className="w-full mt-auto">
           <input type="hidden" name="priceId" value={priceId} />
           <input type="hidden" name="returnUrl" value="/dashboard" />
-          <button
+          <Button
             type="submit"
-            className={`w-full py-2 rounded-md ${
+            className={`w-full font-medium ${
               highlight
-                ? "bg-[#B4916C] hover:bg-[#B4916C]/90 text-white"
-                : "bg-[#B4916C]/20 hover:bg-[#B4916C]/30 text-[#B4916C]"
-            } transition-colors duration-200 font-medium`}
+                ? "bg-[#B4916C] hover:bg-[#A3815B] text-white"
+                : "bg-[#222222] hover:bg-[#333333] text-white border border-[#333333]"
+            }`}
           >
-            Upgrade Now
-          </button>
+            {highlight ? "Upgrade Now" : "Select Plan"}
+          </Button>
         </form>
       </div>
-    </div>
+    </motion.div>
   );
 } 

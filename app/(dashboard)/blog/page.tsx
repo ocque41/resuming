@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Navbar } from "@/components/ui/navbar";
 import { Article, ArticleTitle, ArticleContent } from "@/components/ui/article";
 import { Button } from "@/components/ui/button";
+import { PremiumCard, PremiumCardContent } from "@/components/ui/premium-card";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Calendar, Clock, ArrowRight, Search } from "lucide-react";
@@ -76,12 +77,12 @@ export default function BlogPage() {
   }, [searchTerm, currentPlaceholder]);
 
   return (
-    <div className="flex flex-col bg-[#050505] min-h-screen">
+    <div className="flex flex-col bg-[#050505] min-h-screen text-[#F9F6EE]">
       <Navbar />
       
       <div className="container mx-auto px-4 pt-24 pb-16">
-        <h1 className="text-4xl md:text-5xl font-bold text-white mb-8 text-center">Blogs & Articles</h1>
-        <p className="text-gray-300 text-center max-w-2xl mx-auto mb-12">
+        <h1 className="text-4xl md:text-5xl font-bold text-[#F9F6EE] mb-8 text-center font-safiro tracking-tight">Blogs & Articles</h1>
+        <p className="text-[#C5C2BA] text-center max-w-2xl mx-auto mb-12 font-borna">
           Explore our latest insights, tips, and strategies for optimizing your career journey and making the most of our AI-powered tools.
         </p>
         
@@ -103,7 +104,7 @@ export default function BlogPage() {
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-[#1A1A1A] text-white border border-[#333333] rounded-full py-3 px-5 pl-12 focus:outline-none focus:ring-2 focus:ring-[#B4916C] transition-all"
+                className="w-full bg-[#111111] text-[#F9F6EE] border border-[#222222] rounded-full py-3 px-5 pl-12 focus:outline-none focus:ring-2 focus:ring-[#B4916C] transition-all font-borna"
                 placeholder={currentPlaceholder}
               />
               <AnimatePresence mode="wait">
@@ -118,7 +119,7 @@ export default function BlogPage() {
                   {/* This span is just for the animation */}
                 </motion.span>
               </AnimatePresence>
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-[#8A8782] w-5 h-5" />
             </motion.div>
           </motion.div>
         </div>
@@ -129,11 +130,11 @@ export default function BlogPage() {
             <div className="md:col-span-2">
               <Link href={`/blog/${filteredPosts[0].slug}`}>
                 <motion.div 
-                  className="group relative h-[400px] rounded-lg overflow-hidden"
+                  className="group relative h-[400px] rounded-xl overflow-hidden"
                   whileHover={{ scale: 1.02 }}
                   transition={{ duration: 0.3 }}
                 >
-                  <div className="absolute inset-0 bg-black/50 z-10"></div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#000000] via-[#00000080] to-transparent z-10"></div>
                   <img 
                     src={filteredPosts[0].image} 
                     alt={filteredPosts[0].title} 
@@ -143,16 +144,16 @@ export default function BlogPage() {
                     }}
                   />
                   <div className="absolute inset-0 z-20 flex flex-col justify-end p-6">
-                    <span className="inline-block bg-[#1A1A1A]/80 text-[#B4916C] px-3 py-1 rounded text-sm mb-4">
+                    <span className="inline-block bg-[#111111]/80 text-[#B4916C] px-3 py-1 rounded-lg text-sm mb-4 font-borna">
                       {filteredPosts[0].category}
                     </span>
-                    <h2 className="text-2xl md:text-3xl font-bold text-white mb-3 group-hover:text-[#B4916C] transition-colors">
+                    <h2 className="text-2xl md:text-3xl font-bold text-[#F9F6EE] mb-3 group-hover:text-[#B4916C] transition-colors font-safiro tracking-tight">
                       {filteredPosts[0].title}
                     </h2>
-                    <p className="text-gray-300 mb-4">
+                    <p className="text-[#C5C2BA] mb-4 font-borna">
                       {filteredPosts[0].excerpt}
                     </p>
-                    <div className="flex items-center text-sm text-gray-400">
+                    <div className="flex items-center text-sm text-[#8A8782] font-borna">
                       <Calendar className="w-4 h-4 mr-2" />
                       <span>{filteredPosts[0].date}</span>
                       <span className="mx-3">•</span>
@@ -169,7 +170,7 @@ export default function BlogPage() {
               {filteredPosts.slice(1, 3).map((post) => (
                 <Link href={`/blog/${post.slug}`} key={post.id}>
                   <motion.div 
-                    className="group flex flex-col h-[190px] bg-[#0A0A0A] rounded-lg overflow-hidden border border-[#1A1A1A] hover:border-[#B4916C] transition-colors"
+                    className="group flex flex-col h-[190px] bg-[#111111] rounded-xl overflow-hidden border border-[#222222] hover:border-[#B4916C] transition-colors"
                     whileHover={{ y: -5 }}
                     transition={{ duration: 0.3 }}
                   >
@@ -184,11 +185,11 @@ export default function BlogPage() {
                       />
                     </div>
                     <div className="p-4 flex-1 flex flex-col">
-                      <span className="text-xs text-[#B4916C] mb-1">{post.category}</span>
-                      <h3 className="text-white font-semibold mb-1 line-clamp-1 group-hover:text-[#B4916C] transition-colors">
+                      <span className="text-xs text-[#B4916C] mb-1 font-borna">{post.category}</span>
+                      <h3 className="text-[#F9F6EE] font-semibold mb-1 line-clamp-1 group-hover:text-[#B4916C] transition-colors font-safiro">
                         {post.title}
                       </h3>
-                      <div className="flex items-center text-xs text-gray-400 mt-auto">
+                      <div className="flex items-center text-xs text-[#8A8782] mt-auto font-borna">
                         <Calendar className="w-3 h-3 mr-1" />
                         <span>{post.date}</span>
                         <span className="mx-2">•</span>
@@ -206,46 +207,51 @@ export default function BlogPage() {
         {/* More Articles */}
         {filteredPosts.length > 3 && (
           <div>
-            <h2 className="text-2xl font-bold text-white mb-8">More Articles</h2>
+            <h2 className="text-2xl font-bold text-[#F9F6EE] mb-8 font-safiro tracking-tight">More Articles</h2>
             <div className="grid md:grid-cols-3 gap-6">
               {filteredPosts.slice(3).map((post) => (
                 <Link href={`/blog/${post.slug}`} key={post.id}>
                   <motion.div 
-                    className="group bg-[#0A0A0A] rounded-lg overflow-hidden border border-[#1A1A1A] hover:border-[#B4916C] transition-colors"
                     whileHover={{ y: -5 }}
                     transition={{ duration: 0.3 }}
+                    className="group overflow-hidden h-full"
                   >
-                    <div className="h-48 overflow-hidden">
-                      <img 
-                        src={post.image} 
-                        alt={post.title} 
-                        className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-500"
-                        onError={(e) => {
-                          e.currentTarget.src = post.fallbackImage;
-                        }}
-                      />
-                    </div>
-                    <div className="p-6">
-                      <span className="inline-block text-[#B4916C] text-sm mb-2">{post.category}</span>
-                      <h3 className="text-xl font-bold text-white mb-3 group-hover:text-[#B4916C] transition-colors">
-                        {post.title}
-                      </h3>
-                      <p className="text-gray-300 mb-4 line-clamp-2">
-                        {post.excerpt}
-                      </p>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center text-sm text-gray-400">
-                          <Calendar className="w-4 h-4 mr-2" />
-                          <span>{post.date}</span>
-                          <span className="mx-3">•</span>
-                          <Clock className="w-4 h-4 mr-2" />
-                          <span>{post.readTime}</span>
-                        </div>
-                        <span className="text-[#B4916C] flex items-center group-hover:translate-x-1 transition-transform">
-                          Read more <ArrowRight className="ml-1 w-4 h-4" />
-                        </span>
+                    <PremiumCard className="h-full">
+                      <div className="h-48 overflow-hidden">
+                        <img 
+                          src={post.image} 
+                          alt={post.title} 
+                          className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-500"
+                          onError={(e) => {
+                            e.currentTarget.src = post.fallbackImage;
+                          }}
+                        />
                       </div>
-                    </div>
+                      <PremiumCardContent className="p-6">
+                        <span className="inline-block text-[#B4916C] text-sm mb-2 font-borna">{post.category}</span>
+                        <h3 className="text-xl font-bold text-[#F9F6EE] mb-3 group-hover:text-[#B4916C] transition-colors font-safiro tracking-tight">
+                          {post.title}
+                        </h3>
+                        <p className="text-[#C5C2BA] mb-4 line-clamp-2 font-borna">
+                          {post.excerpt}
+                        </p>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center text-sm text-[#8A8782] font-borna">
+                            <Calendar className="w-4 h-4 mr-2" />
+                            <span>{post.date}</span>
+                            <span className="mx-3">•</span>
+                            <Clock className="w-4 h-4 mr-2" />
+                            <span>{post.readTime}</span>
+                          </div>
+                          <motion.span 
+                            className="text-[#B4916C] flex items-center font-borna"
+                            whileHover={{ x: 5 }}
+                          >
+                            Read more <ArrowRight className="ml-1 w-4 h-4" />
+                          </motion.span>
+                        </div>
+                      </PremiumCardContent>
+                    </PremiumCard>
                   </motion.div>
                 </Link>
               ))}
@@ -256,11 +262,11 @@ export default function BlogPage() {
         {/* No Results */}
         {filteredPosts.length === 0 && (
           <div className="text-center py-16">
-            <h2 className="text-2xl font-bold text-white mb-4">No articles found</h2>
-            <p className="text-gray-300 mb-8">Try adjusting your search terms or browse all our articles.</p>
+            <h2 className="text-2xl font-bold text-[#F9F6EE] mb-4 font-safiro">No articles found</h2>
+            <p className="text-[#C5C2BA] mb-8 font-borna">Try adjusting your search terms or browse all our articles.</p>
             <Button 
               onClick={() => setSearchTerm("")}
-              className="bg-[#B4916C] text-white hover:bg-[#B4916C]/90 transition"
+              className="bg-[#B4916C] text-[#050505] hover:bg-[#A3815B] transition font-safiro"
             >
               View All Articles
             </Button>
@@ -269,17 +275,17 @@ export default function BlogPage() {
       </div>
       
       {/* Footer */}
-      <footer className="bg-[#050505] border-t border-[#1A1A1A] py-12">
+      <footer className="bg-[#0A0A0A] border-t border-[#222222] py-12">
         <div className="container mx-auto px-4 text-center">
-          <p className="text-gray-400 mb-6">© 2025 Resuming. All rights reserved.</p>
+          <p className="text-[#8A8782] mb-6 font-borna">© 2025 CV Optimizer. All rights reserved.</p>
           <div className="flex justify-center space-x-6">
-            <a href="https://chromad.vercel.app/docs/products/resuming/terms-of-service" className="text-gray-400 hover:text-[#B4916C] transition-colors">
+            <a href="/terms" className="text-[#8A8782] hover:text-[#B4916C] transition-colors font-borna">
               Terms
             </a>
-            <a href="https://chromad.vercel.app/docs/products/resuming/privacy-policy" className="text-gray-400 hover:text-[#B4916C] transition-colors">
+            <a href="/privacy" className="text-[#8A8782] hover:text-[#B4916C] transition-colors font-borna">
               Privacy
             </a>
-            <a href="https://chromad.vercel.app/" className="text-gray-400 hover:text-[#B4916C] transition-colors">
+            <a href="/contact" className="text-[#8A8782] hover:text-[#B4916C] transition-colors font-borna">
               Contact
             </a>
           </div>

@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Loader2 } from "lucide-react";
+import { motion } from "framer-motion";
 
 interface DeleteCVButtonProps {
   cvId: string;
@@ -39,12 +41,21 @@ export default function DeleteCVButton({ cvId }: DeleteCVButtonProps) {
   }
 
   return (
-    <button
+    <motion.button
       onClick={handleDelete}
       disabled={isDeleting}
-      className="text-red-600 hover:underline"
+      className="flex items-center w-full text-red-400 hover:text-red-300 transition-colors duration-200 disabled:opacity-50"
+      whileHover={{ x: 2 }}
+      whileTap={{ scale: 0.98 }}
     >
-      {isDeleting ? "Deleting..." : "Delete"}
-    </button>
+      {isDeleting ? (
+        <>
+          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          Deleting...
+        </>
+      ) : (
+        "Delete"
+      )}
+    </motion.button>
   );
 } 
