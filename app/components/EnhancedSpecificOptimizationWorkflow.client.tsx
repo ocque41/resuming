@@ -4002,7 +4002,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
             <div>
               <h3 className="text-[#F9F6EE] font-safiro">{processingStatus || "Processing..."}</h3>
               <p className="text-[#F9F6EE]/60 text-sm font-borna mt-1">This may take a minute as our AI tailors your CV to the job description</p>
-            </div>
+          </div>
           </div>
           <div className="relative w-full h-1.5 bg-[#222222] rounded-full overflow-hidden">
             <div
@@ -4096,7 +4096,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
                         className="px-3 py-1.5 bg-[#1a1a1a] rounded-lg border border-[#333333] text-[#B4916C] text-sm font-borna"
                       >
                         {keyword}
-                      </div>
+                </div>
                     ))}
                   </div>
                   
@@ -4106,9 +4106,9 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
                     team leadership, strategic planning, and budget management. Your optimized CV 
                     highlights these areas while maintaining your professional voice.
                   </p>
-                </div>
-              )}
-              
+              </div>
+            )}
+            
               {activeAnalysisTab === 'skills' && (
                 <div>
                   <h4 className="text-[#F9F6EE] font-safiro mb-3">Skills Match</h4>
@@ -4177,9 +4177,9 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
                           <span className="text-emerald-500 mr-2">•</span>
                           <span>Experience with budget oversight</span>
                         </li>
-                      </ul>
-                    </div>
-                    
+              </ul>
+            </div>
+            
                     <div>
                       <h4 className="text-[#F9F6EE] font-safiro mb-3 flex items-center">
                         <AlertTriangle className="text-amber-500 w-4 h-4 mr-2" />
@@ -4216,7 +4216,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
             {/* Tab headers */}
             <div className="border-b border-[#222222] mb-5">
               <div className="flex">
-                <button
+                <button 
                   onClick={() => setActiveTab('jobDescription')}
                   className={`px-4 py-2.5 -mb-px text-sm font-borna ${
                     activeTab === 'jobDescription'
@@ -4247,7 +4247,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
                   Optimized CV
                 </button>
               </div>
-            </div>
+              </div>
             
             {/* Tab content */}
             <div className="p-4 bg-[#0D0D0D] rounded-lg">
@@ -4256,7 +4256,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
                   <h4 className="text-[#F9F6EE] font-safiro mb-3">Job Description</h4>
                   <div className="text-[#F9F6EE]/80 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto p-4 bg-[#0A0A0A] rounded-lg border border-[#222222] font-borna">
                     {jobDescription}
-                  </div>
+            </div>
                 </div>
               )}
               
@@ -4265,10 +4265,10 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
                   <h4 className="text-[#F9F6EE] font-safiro mb-3">Original CV</h4>
                   <div className="text-[#F9F6EE]/80 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto p-4 bg-[#0A0A0A] rounded-lg border border-[#222222] font-borna">
                     {originalText || "Original CV content not available."}
-                  </div>
-                </div>
-              )}
-              
+          </div>
+        </div>
+      )}
+
               {activeTab === 'optimizedCV' && (
                 <div>
                   <h4 className="text-[#F9F6EE] font-safiro mb-3">Optimized CV for this Job</h4>
@@ -4347,7 +4347,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
             >
               Copy Text to Clipboard
             </Button>
-          </div>
+            </div>
         </div>
       )}
     </div>
