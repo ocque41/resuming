@@ -170,7 +170,7 @@ export default function DashboardClient({
       >
         <div className="flex items-center mb-4">
           <Search className="h-5 w-5 text-[#B4916C] mr-2" />
-          <h2 className="text-lg font-safiro font-semibold text-[#F9F6EE]">Tools & Features</h2>
+          <h2 className="text-lg font-safiro font-semibold text-[#F9F6EE]">Suites</h2>
         </div>
         
         <motion.div 

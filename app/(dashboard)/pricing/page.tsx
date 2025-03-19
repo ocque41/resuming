@@ -1,10 +1,11 @@
 import { Navbar } from "@/components/ui/navbar";
 import { checkoutAction } from "@/lib/payments/actions";
-import { Check } from "lucide-react";
+import { Check, Star } from "lucide-react";
 import { getStripePrices, getStripeProducts } from "@/lib/payments/stripe";
 import { SubmitButton } from "./submit-button";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { motion } from "framer-motion";
 
 // Revalidate prices every hour
 export const revalidate = 3600;
@@ -23,23 +24,49 @@ export default async function PricingPage() {
   const moonlightingPrice = prices.find((price) => price.productId === moonlightingPlan?.id);
   const ceoPrice = prices.find((price) => price.productId === ceoPlan?.id);
 
+  // Animation variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { 
+      opacity: 1,
+      transition: { 
+        staggerChildren: 0.2,
+        delayChildren: 0.3
+      }
+    }
+  };
+  
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: { duration: 0.5 }
+    }
+  };
+
   return (
-    <div className="flex flex-col bg-[#050505] min-h-screen">
+    <div className="flex flex-col bg-[#050505] min-h-screen text-[#F9F6EE]">
       <Navbar />
       {/* Use a full-screen container with extra top padding to separate from the sticky navbar */}
       <div className="min-h-screen pt-40 pb-16 container mx-auto px-4 text-left flex-grow">
-        <div className="max-w-5xl mx-auto space-y-16">
-          <section className="space-y-8">
-            <h2 className="text-6xl font-bold text-white animate-fade-in">
-              Product Plans
+        <motion.div 
+          className="max-w-5xl mx-auto space-y-16"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <motion.section className="space-y-8" variants={itemVariants}>
+            <h2 className="text-5xl md:text-6xl font-bold text-[#F9F6EE] font-safiro tracking-tight">
+              Choose Your <span className="text-[#B4916C]">Premium</span> Plan
             </h2>
-            <p className="text-xl text-white font-semibold animate-fade-in-up mt-4">
-              Enjoy a 1 day free trial to see if you found your solution
+            <p className="text-xl text-[#C5C2BA] font-borna mt-4">
+              Enjoy a 1-day free trial to experience the full power of our platform
             </p>
-            <p className="text-xl text-white font-semibold animate-fade-in-up">
-              Change plans as you grow.
+            <p className="text-lg text-[#C5C2BA] font-borna">
+              Upgrade or downgrade your plan anytime as your needs evolve.
             </p>
-          </section>
+          </motion.section>
 
           <div className="grid md:grid-cols-3 gap-8 justify-center mb-8">
             <PricingCard
@@ -60,6 +87,7 @@ export default async function PricingPage() {
               }}
               highlight={false}
               priceId="price_1QoUP9FYYYXM77wGBUVqTaiE"
+              animationDelay={0.2}
             />
             <PricingCard
               name="Moonlighting"
@@ -79,6 +107,7 @@ export default async function PricingPage() {
               }}
               highlight={true}
               priceId={moonlightingPrice?.id}
+              animationDelay={0.3}
             />
             <PricingCard
               name="CEO"
@@ -90,7 +119,6 @@ export default async function PricingPage() {
                 "Unlimited Optimizations ⓘ",
                 "Access to Analytics Suite ⓘ",
                 "Early access to new features ⓘ",
-                
               ]}
               tooltips={{
                 "Unlimited CV uploads ⓘ": "No monthly limit on CV uploads",
@@ -101,12 +129,42 @@ export default async function PricingPage() {
               }}
               highlight={false}
               priceId="price_1QoYTrFYYYXM77wGffciG20i"
+              animationDelay={0.4}
             />
           </div>
-        </div>
+          
+          <motion.div 
+            className="text-center mt-12 p-8 border border-[#222222] rounded-xl bg-[#111111]"
+            variants={itemVariants}
+          >
+            <h3 className="text-2xl font-safiro text-[#F9F6EE] mb-4">Still have questions?</h3>
+            <p className="text-[#C5C2BA] font-borna mb-6 max-w-2xl mx-auto">
+              Our team is here to help you select the right plan for your needs. 
+              Contact us for custom enterprise solutions or bulk discounts.
+            </p>
+            <Button 
+              className="bg-transparent hover:bg-[#1A1A1A] text-[#B4916C] border border-[#B4916C] px-6 py-2 rounded-lg transition-all duration-300"
+              size="lg"
+              asChild
+            >
+              <a href="/contact">Contact Sales</a>
+            </Button>
+          </motion.div>
+        </motion.div>
       </div>
     </div>
   );
+}
+
+interface PricingCardProps {
+  name: string;
+  price: number;
+  interval: string;
+  features: string[];
+  highlight: boolean;
+  priceId?: string;
+  tooltips?: Record<string, string>;
+  animationDelay?: number;
 }
 
 function PricingCard({
@@ -117,53 +175,101 @@ function PricingCard({
   highlight,
   priceId,
   tooltips,
-}: {
-  name: string;
-  price: number;
-  interval: string;
-  features: string[];
-  highlight: boolean;
-  priceId?: string;
-  tooltips?: Record<string, string>;
-}) {
-  // For standard cards use #050505 background with #B4916C accent
-  // For highlighted card, use a different style to make it stand out
-  const cardClass = highlight
-    ? "border border-[#B4916C] bg-[#B4916C]/10 shadow-lg hover:shadow-xl"
-    : "border border-[#B4916C]/20 bg-[#050505] shadow-lg hover:shadow-xl";
+  animationDelay = 0
+}: PricingCardProps) {
+  const cardVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: {
+        duration: 0.5,
+        delay: animationDelay,
+        ease: [0.22, 1, 0.36, 1]
+      }
+    },
+    hover: { 
+      y: -8,
+      transition: {
+        duration: 0.3,
+        ease: "easeOut"
+      }
+    }
+  };
 
   return (
-    <div className={`rounded-lg transition-all duration-300 ${cardClass}`}>
-      <div className={`${highlight ? 'bg-[#B4916C]/20' : 'bg-[#B4916C]/10'} py-4 px-6 rounded-t-lg`}>
-        <h2 className="text-2xl font-bold text-[#B4916C] mb-1">
+    <motion.div
+      className={`rounded-xl overflow-hidden transition-all duration-300 ${
+        highlight 
+          ? "border border-[#B4916C] bg-[#0A0A0A]" 
+          : "border border-[#222222] bg-[#111111]"
+      }`}
+      variants={cardVariants}
+      initial="hidden"
+      animate="visible"
+      whileHover="hover"
+    >
+      <div className={`${
+        highlight 
+          ? "bg-gradient-to-r from-[#B4916C]/30 to-[#B4916C]/10" 
+          : "bg-[#0D0D0D]"
+        } py-6 px-6 relative overflow-hidden`}
+      >
+        {highlight && (
+          <Star className="absolute top-3 right-3 h-5 w-5 text-[#B4916C]" />
+        )}
+        <h2 className="text-2xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
           {name}
-        </h2>
-        {highlight && 
-          <div className="mb-3">
-            <span className="inline-block text-sm bg-[#B4916C]/20 text-[#B4916C] px-2 py-1 rounded-full">
+          {highlight && (
+            <span className="ml-2 text-xs bg-[#B4916C]/20 text-[#B4916C] px-2 py-1 rounded-full font-borna">
               Most Popular
             </span>
-          </div>
-        }
-        <p className="text-4xl font-semibold text-white mb-1">
+          )}
+        </h2>
+        <p className="text-4xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
           ${price / 100}
-          <span className="text-xl font-normal text-gray-300 ml-1">
+          <span className="text-xl font-normal text-[#8A8782] ml-1 font-borna">
             /{interval}
           </span>
         </p>
+        
+        {highlight && (
+          <div className="absolute inset-0 opacity-20 overflow-hidden pointer-events-none">
+            <motion.div
+              className="absolute h-[200%] w-[25%] bg-white top-[-120%] left-[-10%] transform rotate-45 blur-lg"
+              animate={{
+                left: ["0%", "120%"],
+              }}
+              transition={{
+                repeat: Infinity,
+                repeatDelay: 3,
+                duration: 2.5,
+                ease: "easeInOut",
+              }}
+            />
+          </div>
+        )}
       </div>
       
       <div className="p-6">
         <ul className="space-y-4 mb-8">
           {features.map((feature, index) => (
             <li key={index} className="flex items-start group relative">
-              <Check className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0 text-[#B4916C]" />
-              <span className="text-gray-300">
+              <div className={`h-5 w-5 mr-3 rounded-full flex items-center justify-center flex-shrink-0 ${
+                highlight ? "text-[#B4916C] bg-[#B4916C]/10" : "text-[#8A8782] bg-[#222222]"
+              }`}>
+                <Check className="h-3 w-3" />
+              </div>
+              <span className="text-[#C5C2BA] font-borna text-sm">
                 {feature.replace(" ⓘ", "")}
                 {tooltips?.[feature] && (
-                  <span className="opacity-0 group-hover:opacity-100 absolute left-0 -top-12 w-64 bg-[#050505] border border-[#B4916C]/20 text-gray-300 text-sm p-2 rounded z-10 transition-opacity duration-300">
+                  <motion.span 
+                    className="opacity-0 group-hover:opacity-100 absolute left-0 -top-12 w-64 bg-[#111111] border border-[#222222] text-[#8A8782] text-xs p-2 rounded-lg z-10 transition-opacity duration-200"
+                    initial={{ opacity: 0, y: 10 }}
+                    whileHover={{ opacity: 1, y: 0 }}
+                  >
                     {tooltips[feature]}
-                  </span>
+                  </motion.span>
                 )}
               </span>
             </li>
@@ -171,19 +277,20 @@ function PricingCard({
         </ul>
         <form action="/api/stripe/checkout" method="POST">
           <input type="hidden" name="priceId" value={priceId} />
-          <Button
-            className={cn(
-              "w-full",
+          <motion.button
+            type="submit"
+            className={`w-full font-medium px-4 py-3 rounded-lg transition-all duration-300 font-safiro ${
               highlight
-                ? "bg-gradient-to-r from-[#B4916C] to-[#A3815C] text-white hover:from-[#A3815C] hover:to-[#B4916C]"
-                : "bg-primary"
-            )}
-            size="lg"
+                ? "bg-[#B4916C] hover:bg-[#A3815B] text-[#050505]"
+                : "bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"
+            }`}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
           >
-            {highlight ? "Upgrade to Pro" : "Subscribe"}
-          </Button>
+            {highlight ? "Upgrade Now" : "Select Plan"}
+          </motion.button>
         </form>
       </div>
-    </div>
+    </motion.div>
   );
 }

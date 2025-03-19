@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
-import { getUser, getTeamForUser, getCVsForUser } from "@/lib/db/queries.server";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { getUser, getTeamForUser, getCVsForUser, getActivityLogs } from "@/lib/db/queries.server";
+import { PremiumCard, PremiumCardContent, PremiumCardHeader, PremiumCardTitle } from "@/components/ui/premium-card";
 import Link from "next/link";
 import { ArrowLeft, FileText, BarChart2, PieChart, LineChart, List, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import dynamic from "next/dynamic";
+import PremiumPageLayout from "@/components/PremiumPageLayout";
 
 // Dynamically import client components
 const DocumentAnalyzer = dynamic(() => import("@/components/DocumentAnalyzer.client"));
@@ -23,6 +24,7 @@ export default async function DocumentAnalysisPage() {
     }
     
     const documents = await getCVsForUser(user.id);
+    const activityLogs = await getActivityLogs();
     
     // Map documents to the format needed by the client component
     const mappedDocuments = documents.map(doc => ({
@@ -32,78 +34,91 @@ export default async function DocumentAnalysisPage() {
     }));
     
     return (
-      <div className="min-h-screen bg-[#050505] text-white">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 relative">
-          {/* Header with back button and title */}
-          <header className="flex items-center mb-8">
-            <Link 
-              href="/dashboard" 
-              className="flex items-center justify-center h-10 w-10 rounded-md bg-black hover:bg-[#1D1D1D] text-[#B4916C] mr-4 transition-colors"
-              aria-label="Back to dashboard"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-            <h1 className="text-2xl font-bold text-white">
-              Document Analysis
-            </h1>
-          </header>
+      <PremiumPageLayout
+        title="Document Analysis"
+        subtitle="Extract insights and visualize data from your documents"
+        backUrl="/dashboard"
+        withGradientBackground
+        withScrollIndicator
+        animation="fade"
+        teamData={teamData}
+        activityLogs={activityLogs}
+      >
+        <div className="space-y-6 mb-6">
+          <p className="text-[#C5C2BA] font-borna text-lg max-w-3xl">
+            Our AI-powered analytics engine extracts meaningful insights from your documents, 
+            helping you better understand content, sentiment, and key information.
+          </p>
           
-          <div className="mt-6">
-            <Card className="border border-[#B4916C]/20 bg-[#121212] shadow-lg">
-              <CardHeader>
-                <CardTitle className="text-xl font-bold text-[#B4916C]">Advanced Document Analytics</CardTitle>
-                <CardDescription className="text-gray-400">
-                  Extract insights and visualize data from your documents
-                </CardDescription>
-              </CardHeader>
-              
-              <CardContent className="p-4 md:p-6">
-                <p className="mb-6 text-gray-300">
-                  Our AI-powered analytics engine extracts meaningful insights from your documents, 
-                  helping you better understand content, sentiment, and key information.
+          <PremiumCard className="border border-[#222222] bg-[#111111] shadow-lg hover:border-[#333333] transition-all duration-300">
+            <PremiumCardHeader>
+              <PremiumCardTitle className="font-safiro text-[#F9F6EE]">
+                Advanced Document <span className="text-[#B4916C]">Analytics</span>
+              </PremiumCardTitle>
+              <p className="text-[#8A8782] font-borna mt-1">
+                Select a document to analyze and visualize its content
+              </p>
+            </PremiumCardHeader>
+            
+            <PremiumCardContent className="p-4 md:p-6">
+              {/* Pass documents to client-side component */}
+              <DocumentAnalyzer documents={mappedDocuments} />
+            </PremiumCardContent>
+          </PremiumCard>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+            <PremiumCard className="border border-[#222222] bg-[#111111] shadow-lg hover:border-[#333333] transition-all duration-300">
+              <PremiumCardHeader>
+                <div className="flex items-center mb-2">
+                  <PieChart className="h-5 w-5 text-[#B4916C] mr-2" />
+                  <PremiumCardTitle className="font-safiro text-[#F9F6EE]">Content Breakdown</PremiumCardTitle>
+                </div>
+                <p className="text-[#8A8782] font-borna text-sm">
+                  Visualize the structure and composition of your document
                 </p>
-                
-                {/* Pass documents to client-side component */}
-                <DocumentAnalyzer documents={mappedDocuments} />
-              </CardContent>
-            </Card>
+              </PremiumCardHeader>
+            </PremiumCard>
+            
+            <PremiumCard className="border border-[#222222] bg-[#111111] shadow-lg hover:border-[#333333] transition-all duration-300">
+              <PremiumCardHeader>
+                <div className="flex items-center mb-2">
+                  <BarChart2 className="h-5 w-5 text-[#B4916C] mr-2" />
+                  <PremiumCardTitle className="font-safiro text-[#F9F6EE]">Keyword Analysis</PremiumCardTitle>
+                </div>
+                <p className="text-[#8A8782] font-borna text-sm">
+                  Identify key terms and their frequency in your document
+                </p>
+              </PremiumCardHeader>
+            </PremiumCard>
           </div>
         </div>
-      </div>
+      </PremiumPageLayout>
     );
   } catch (error) {
     console.error("Error in DocumentAnalysisPage:", error);
     
     // Return fallback UI
     return (
-      <div className="min-h-screen bg-[#050505] text-white">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 relative">
-          {/* Header with back button and title */}
-          <header className="flex items-center mb-8">
-            <Link 
-              href="/dashboard" 
-              className="flex items-center justify-center h-10 w-10 rounded-md bg-black hover:bg-[#1D1D1D] text-[#B4916C] mr-4 transition-colors"
-              aria-label="Back to dashboard"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-            <h1 className="text-2xl font-bold text-white">
-              Document Analysis
-            </h1>
-          </header>
+      <PremiumPageLayout
+        title="Document Analysis"
+        subtitle="An error occurred while loading your data"
+        backUrl="/dashboard"
+        withGradientBackground={false}
+        animation="fade"
+      >
+        <div className="mt-6">
+          <Alert variant="destructive" className="bg-[#3A1F24] border border-[#E57373]/30 rounded-xl">
+            <AlertCircle className="h-5 w-5 text-[#E57373]" />
+            <AlertDescription className="text-[#F9F6EE] ml-2 font-borna">
+              We encountered an error loading your documents. Please try refreshing the page or contact support if the issue persists.
+            </AlertDescription>
+          </Alert>
           
-          <div className="mt-6">
-            <Alert variant="destructive" className="bg-red-900/20 border-red-900/30">
-              <AlertCircle className="h-4 w-4 text-red-400" />
-              <AlertDescription className="text-red-300">
-                We encountered an error loading your documents. Please try refreshing the page or contact support if the issue persists.
-              </AlertDescription>
-            </Alert>
-            
+          <div className="mt-6 flex justify-center">
             <ErrorRefreshButton />
           </div>
         </div>
-      </div>
+      </PremiumPageLayout>
     );
   }
 } 
