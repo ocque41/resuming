@@ -1,19 +1,11 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart2, FileText } from 'lucide-react';
+import { DocumentInsights, DocumentTopic } from './types';
 
 interface AnalysisInsightsProps {
-  insights: {
-    clarity: number;
-    relevance: number;
-    completeness?: number;
-    conciseness?: number;
-    overallScore?: number;
-  };
-  topics?: Array<{
-    name: string;
-    relevance: number;
-  }>;
+  insights: DocumentInsights;
+  topics?: DocumentTopic[];
 }
 
 export default function AnalysisInsights({ insights, topics = [] }: AnalysisInsightsProps) {
@@ -84,6 +76,20 @@ export default function AnalysisInsights({ insights, topics = [] }: AnalysisInsi
                     <div 
                       className="bg-[#B4916C] h-full rounded-full" 
                       style={{ width: `${insights.conciseness}%` }} 
+                    />
+                  </div>
+                </div>
+              )}
+              {insights.overallScore !== undefined && (
+                <div className="bg-[#080808] rounded-lg p-3 border border-[#222222]">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-[#E2DFD7] text-sm font-medium">Overall Score</span>
+                    <span className="text-[#8A8782] text-xs">{insights.overallScore}%</span>
+                  </div>
+                  <div className="w-full bg-[#161616] h-1.5 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-[#B4916C] h-full rounded-full" 
+                      style={{ width: `${insights.overallScore}%` }} 
                     />
                   </div>
                 </div>

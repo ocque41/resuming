@@ -1,4 +1,4 @@
-import { Metadata } from 'next';
+import type { Metadata } from 'next';
 import { redirect } from "next/navigation";
 import { getUser, getTeamForUser, getActivityLogs } from "@/lib/db/queries.server";
 import { getDocumentById } from "@/lib/document/queries.server";
@@ -35,13 +35,11 @@ import dynamic from "next/dynamic";
 // Dynamically import client components to avoid SSR issues
 const DeleteDocument = dynamic(() => import("@/components/delete-document"));
 
-interface DocumentPageProps {
-  params: {
-    id: string;
-  };
-}
-
-export async function generateMetadata({ params }: DocumentPageProps): Promise<Metadata> {
+export async function generateMetadata({ 
+  params 
+}: { 
+  params: { id: string } 
+}): Promise<Metadata> {
   const document = await getDocumentById(parseInt(params.id));
   
   if (!document) {
@@ -57,7 +55,11 @@ export async function generateMetadata({ params }: DocumentPageProps): Promise<M
   };
 }
 
-export default async function DocumentDetailPage({ params }: DocumentPageProps) {
+export default async function DocumentDetailPage({ 
+  params 
+}: {
+  params: { id: string }
+}) {
   const user = await getUser();
   if (!user) {
     redirect("/sign-in");

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, FileText, BarChart2 } from 'lucide-react';
 import DocumentAnalyzerClient from '@/components/advanced-document-analyzer/DocumentAnalyzer.client';
@@ -15,7 +15,8 @@ interface Document {
   metadata?: any;
 }
 
-export default function DocumentAnalyzerPage() {
+// Component that uses useSearchParams
+function DocumentAnalyzerContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const documentId = searchParams.get('documentId');
@@ -96,5 +97,18 @@ export default function DocumentAnalyzerPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// Main page component with suspense boundary
+export default function DocumentAnalyzerPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center">
+        <div className="animate-pulse text-[#8A8782]">Loading document analyzer...</div>
+      </div>
+    }>
+      <DocumentAnalyzerContent />
+    </Suspense>
   );
 } 

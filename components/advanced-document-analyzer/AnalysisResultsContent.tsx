@@ -4,9 +4,14 @@ import { FileText, BarChart2, ArrowRight } from 'lucide-react';
 import AnalysisKeyPoints from './AnalysisKeyPoints';
 import AnalysisRecommendations from './AnalysisRecommendations';
 import AnalysisInsights from './AnalysisInsights';
+import AnalysisSentiment from './AnalysisSentiment';
+import AnalysisLanguageQuality from './AnalysisLanguageQuality';
+import AnalysisEntities from './AnalysisEntities';
+import AnalysisTimeline from './AnalysisTimeline';
+import { AnalysisResult } from './types';
 
 interface AnalysisResultsContentProps {
-  result: any;
+  result: AnalysisResult | null;
   documentId: string;
 }
 
@@ -27,8 +32,21 @@ export default function AnalysisResultsContent({ result, documentId }: AnalysisR
     topics,
     entities,
     sentiment,
-    languageQuality
+    sentimentBySection,
+    languageQuality,
+    timeline
   } = result;
+
+  // Convert API topic format to component format if needed
+  const formattedTopics = topics?.map(topic => {
+    if ('topic' in topic) {
+      return {
+        name: topic.topic,
+        relevance: topic.relevance
+      };
+    }
+    return topic;
+  });
 
   return (
     <div className="space-y-6">
@@ -48,7 +66,19 @@ export default function AnalysisResultsContent({ result, documentId }: AnalysisR
         <AnalysisRecommendations recommendations={recommendations} />
       </div>
 
-      <AnalysisInsights insights={insights} topics={topics} />
+      <AnalysisInsights insights={insights} topics={formattedTopics} />
+      
+      {/* Add sentiment analysis component if sentiment data is available */}
+      {sentiment && <AnalysisSentiment sentiment={sentiment} sentimentBySection={sentimentBySection} />}
+      
+      {/* Add language quality component if language quality data is available */}
+      {languageQuality && <AnalysisLanguageQuality languageQuality={languageQuality} />}
+      
+      {/* Add entities component if entities data is available */}
+      {entities && entities.length > 0 && <AnalysisEntities entities={entities} />}
+      
+      {/* Add timeline component if timeline data is available */}
+      {timeline && timeline.length > 0 && <AnalysisTimeline timeline={timeline} />}
     </div>
   );
 }
