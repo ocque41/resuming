@@ -146,99 +146,34 @@ function startBackgroundProcess(cvRecord: any, templateId: string, userId: strin
       await updateMetadata(cvRecord.id, { progress: 80, step: "Generating optimized DOCX document" });
       
       // Use the new ATS-optimized document generator
-      let docxBuffer: Buffer;
-      try {
-        // Prepare document generation parameters - with simplified structure
-        const docGenParams = {
-          atsScore: originalAtsScore,
-          improvedAtsScore: improvedAtsScore,
-          industry: optimizedAnalysisResult.industry || 'General',
-          title: `Optimized_${cvRecord.fileName.replace(/[^a-zA-Z0-9-_]/g, '_').replace('.pdf', '')}`,
-          author: "CV Optimizer",
-          description: "ATS-optimized CV document",
-          // Simplify experience entries structure to avoid complexity
-          experienceEntries: optimizedAnalysisResult.experienceEntries 
-            ? optimizedAnalysisResult.experienceEntries
-                .filter((entry: any) => entry && typeof entry === 'object')
-                .map((entry: any) => ({
-                  jobTitle: entry.jobTitle ? String(entry.jobTitle).substring(0, 100) : 'Position',
-                  company: entry.company ? String(entry.company).substring(0, 100) : 'Company',
-                  dateRange: entry.dateRange ? String(entry.dateRange).substring(0, 50) : '',
-                  location: entry.location ? String(entry.location).substring(0, 100) : undefined,
-                  responsibilities: Array.isArray(entry.responsibilities)
-                    ? entry.responsibilities
-                        .filter((resp: any) => typeof resp === 'string')
-                        .map((resp: string) => String(resp).substring(0, 300))
-                        .slice(0, 10)
-                    : []
-                }))
-                .slice(0, 15)
-            : [],
-          // Simplify improvements structure
-          improvements: [
-            ...(optimizedAnalysisResult.sectionRecommendations 
-              ? Object.values(optimizedAnalysisResult.sectionRecommendations)
-                  .filter((item: any) => typeof item === 'string')
-                  .map((item: string) => String(item).substring(0, 300))
-              : []),
-            ...(optimizedAnalysisResult.keywordRecommendations || []),
-            ...(optimizedAnalysisResult.improvementSuggestions 
-              ? Object.values(optimizedAnalysisResult.improvementSuggestions)
-                  .filter((item: any) => typeof item === 'string')
-                  .map((item: string) => String(item).substring(0, 300))
-              : [])
-          ].slice(0, 5)
-        };
-        
-        // Use simplified text content - avoid complex structures
-        const simplifiedText = optimizedText.length > 50000 
-          ? optimizedText.substring(0, 50000) // Limit text size
-          : optimizedText;
-        
-        // Generate with explicit error handling
-        docxBuffer = await DocumentGenerator.generateDocx(simplifiedText, docGenParams);
-        
-        // Verify we got a valid buffer back
-        if (!Buffer.isBuffer(docxBuffer) || docxBuffer.length === 0) {
-          throw new Error("Generated document is empty or invalid");
+      const docxBuffer = await DocumentGenerator.generateATSOptimizedCV(
+        JSON.stringify(optimizedSections),
+        {
+          atsScore: improvedAtsScore,
+          originalAtsScore,
+          sectionRecommendations: optimizedAnalysisResult.sectionRecommendations || {},
+          keywordRecommendations: optimizedAnalysisResult.keywordRecommendations || [],
+          improvementSuggestions: optimizedAnalysisResult.improvementSuggestions || []
+        },
+        {
+          templateStyle: templateId || DocumentGenerator.TemplateStyles.MODERN,
+          colorOptions: {
+            primary: "#B4916C",  // Use brand color
+            accent: "#050505"    // Use main color
+          }
         }
-        
-        console.log(`Successfully generated DOCX document with size: ${docxBuffer.length} bytes`);
-      } catch (docxError) {
-        console.error("Error generating DOCX:", docxError);
-        await updateMetadata(cvRecord.id, { 
-          error: `Failed to generate document: ${docxError instanceof Error ? docxError.message : String(docxError)}`,
-          errorTimestamp: new Date().toISOString(),
-          optimizing: false
-        });
-        throw new Error(`Failed to generate optimized document: ${docxError instanceof Error ? docxError.message : String(docxError)}`);
-      }
+      );
       
       // Save the generated DOCX to Dropbox
       console.log("Saving optimized DOCX to Dropbox");
       await updateMetadata(cvRecord.id, { progress: 90, step: "Saving optimized DOCX" });
       
-      // Create a safe filename for the DOCX
-      const sanitizedFileName = cvRecord.fileName
-        .replace(/[^a-zA-Z0-9-_.]/g, '_') // Replace unsafe characters
-        .replace(/\.pdf$/i, ''); // Remove pdf extension
-      
       // Use Dropbox client to save the file
       const dropboxClient = await getDropboxClient();
-      const optimizedFileName = `optimized_${sanitizedFileName}.docx`;
+      const optimizedFileName = `optimized_${cvRecord.fileName.replace('.pdf', '.docx')}`;
       const dropboxPath = `/cvs/${userId}/${optimizedFileName}`;
       
-      try {
-        await saveFileToDropbox(dropboxClient, dropboxPath, docxBuffer);
-      } catch (saveError) {
-        console.error("Error saving file to Dropbox:", saveError);
-        await updateMetadata(cvRecord.id, { 
-          error: `Failed to save document to storage: ${saveError instanceof Error ? saveError.message : String(saveError)}`,
-          errorTimestamp: new Date().toISOString(),
-          optimizing: false
-        });
-        throw new Error(`Failed to save optimized document: ${saveError instanceof Error ? saveError.message : String(saveError)}`);
-      }
+      await saveFileToDropbox(dropboxClient, dropboxPath, docxBuffer);
       
       // Update CV record with optimized document reference
       await db.update(cvs)
@@ -288,54 +223,20 @@ async function updateMetadata(cvId: number, updates: Record<string, any>): Promi
       return;
     }
     
-    // Parse existing metadata
     const metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
-    
-    // Sanitize updates to prevent circular references and handle complex objects
-    const sanitizedUpdates: Record<string, any> = {};
-    
-    for (const [key, value] of Object.entries(updates)) {
-      if (value === undefined || value === null) {
-        // Skip undefined or null values
-        continue;
-      }
-      
-      if (typeof value === 'object') {
-        try {
-          // Test if the object can be serialized and deserialized properly
-          const testSerialization = JSON.parse(JSON.stringify(value));
-          sanitizedUpdates[key] = testSerialization;
-        } catch (err) {
-          console.warn(`Skipping non-serializable value for key: ${key}`);
-        }
-      } else {
-        sanitizedUpdates[key] = value;
-      }
-    }
-    
-    // Create updated metadata
     const updatedMetadata = {
       ...metadata,
-      ...sanitizedUpdates,
+      ...updates,
       lastUpdated: new Date().toISOString()
     };
     
-    // Verify that the updated metadata can be serialized
-    try {
-      JSON.stringify(updatedMetadata);
-    } catch (jsonError) {
-      console.error(`Failed to serialize metadata for CV ${cvId}:`, jsonError);
-      throw new Error('Unable to serialize metadata');
-    }
-    
-    // Update the database
     await db.update(cvs)
       .set({
         metadata: JSON.stringify(updatedMetadata)
       })
       .where(eq(cvs.id, cvId));
       
-    console.log(`Updated metadata for CV ${cvId}:`, Object.keys(sanitizedUpdates));
+    console.log(`Updated metadata for CV ${cvId}:`, updates);
   } catch (error) {
     console.error(`Failed to update metadata for CV ${cvId}:`, error);
   }
@@ -457,10 +358,7 @@ function formatOptimizedSections(sections: Record<string, string>): string {
   // Add any other sections
   for (const [sectionName, content] of Object.entries(sections)) {
     if (!['header', 'profile', 'achievements', 'experience', 'skills', 'education', 'languages'].includes(sectionName)) {
-      // Check if the content is non-empty before adding
-      if (content && content.trim()) {
-        result += sectionName.toUpperCase() + "\n" + content + "\n\n";
-      }
+      result += sectionName.toUpperCase() + "\n" + content + "\n\n";
     }
   }
   
