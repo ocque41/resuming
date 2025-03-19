@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getCVByFileName } from "@/lib/db/queries.server";
 import { getOriginalPdfBytes } from "@/lib/storage";
+import path from "path";
+import fs from "fs/promises";
 
 export async function GET(request: Request) {
   console.log("download-cv API called");
@@ -24,7 +26,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "CV not found" }, { status: 404 });
     }
     
-    console.log(`CV record found: id=${cvRecord.id}, filepath=${cvRecord.filepath}`);
+    console.log(`CV record found: id=${cvRecord.id}, filepath=${cvRecord.filepath || 'undefined'}`);
 
     let pdfBytes;
     
@@ -44,21 +46,50 @@ export async function GET(request: Request) {
       // Convert base64 to bytes
       pdfBytes = Buffer.from(metadata.optimizedPDFBase64, 'base64');
     } else {
-      // Get the original PDF
-      console.log(`Fetching original PDF using: ${JSON.stringify({
-        id: cvRecord.id,
-        filepath: cvRecord.filepath,
-        fileName: cvRecord.fileName
-      })}`);
-      
-      try {
-        pdfBytes = await getOriginalPdfBytes(cvRecord);
-        console.log(`Successfully retrieved PDF, size: ${pdfBytes.length} bytes`);
-      } catch (pdfError) {
-        console.error("Error retrieving original PDF:", pdfError);
-        return NextResponse.json({ 
-          error: `Failed to retrieve original PDF: ${pdfError instanceof Error ? pdfError.message : String(pdfError)}` 
-        }, { status: 500 });
+      // Check if filepath is valid
+      if (!cvRecord.filepath || cvRecord.filepath.trim() === "") {
+        console.error("CV record has no valid filepath");
+        
+        // Try to look for a local file with the same name in the public directory
+        try {
+          console.log("Attempting to find local file as fallback");
+          const publicPath = path.join(process.cwd(), "public", "uploads", fileName);
+          pdfBytes = await fs.readFile(publicPath);
+          console.log(`Successfully read file from local path: ${publicPath}`);
+        } catch (localError) {
+          console.error("Failed to read local file:", localError);
+          return NextResponse.json({ 
+            error: "CV file not found. The file path is missing in the database." 
+          }, { status: 404 });
+        }
+      } else {
+        // Get the original PDF using filepath
+        console.log(`Fetching original PDF using: ${JSON.stringify({
+          id: cvRecord.id,
+          filepath: cvRecord.filepath,
+          fileName: cvRecord.fileName
+        })}`);
+        
+        try {
+          pdfBytes = await getOriginalPdfBytes(cvRecord);
+          console.log(`Successfully retrieved PDF, size: ${pdfBytes.length} bytes`);
+        } catch (pdfError) {
+          console.error("Error retrieving original PDF:", pdfError);
+          
+          // Try to get file from local path as fallback
+          try {
+            console.log("Attempting to find local file as fallback after Dropbox error");
+            const publicPath = path.join(process.cwd(), "public", "uploads", fileName);
+            pdfBytes = await fs.readFile(publicPath);
+            console.log(`Successfully read file from local path: ${publicPath}`);
+          } catch (localError) {
+            console.error("Failed to read local file:", localError);
+            return NextResponse.json({ 
+              error: `Failed to retrieve PDF: ${pdfError instanceof Error ? pdfError.message : String(pdfError)}`,
+              detail: "Both Dropbox and local storage fallback failed."
+            }, { status: 500 });
+          }
+        }
       }
     }
 

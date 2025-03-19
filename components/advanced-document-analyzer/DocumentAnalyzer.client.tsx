@@ -14,6 +14,8 @@ import {
 import AnalysisRecommendations from './AnalysisRecommendations';
 import AnalysisKeyPoints from './AnalysisKeyPoints';
 import AnalysisInsights from './AnalysisInsights';
+import AnalysisResultsContent from './AnalysisResultsContent';
+import { AnalysisResult } from './types';
 
 // Define types
 interface Document {
@@ -26,38 +28,6 @@ interface DocumentAnalyzerProps {
   documents: Document[];
 }
 
-// Define the expected structure of analysis results
-interface AnalysisResult {
-  summary: string;
-  keyPoints: string[];
-  recommendations: string[];
-  insights: {
-    clarity: number;
-    relevance: number;
-    completeness?: number;
-    conciseness?: number;
-    overallScore?: number;
-  };
-  topics?: Array<{
-    name: string;
-    relevance: number;
-  }>;
-  entities?: Array<{
-    name: string;
-    type: string;
-  }>;
-  sentiment?: {
-    overall: string;
-    score: number;
-  };
-  languageQuality?: {
-    grammar: number;
-    spelling: number;
-    readability: number;
-    overall: number;
-  };
-}
-
 // Analysis types
 const ANALYSIS_TYPES = [
   { id: 'general', label: 'General Analysis', description: 'Overall document analysis and insights' },
@@ -66,50 +36,6 @@ const ANALYSIS_TYPES = [
   { id: 'report', label: 'Report Analysis', description: 'Business report quality assessment' },
   { id: 'spreadsheet', label: 'Spreadsheet Analysis', description: 'Data organization and quality evaluation' },
 ];
-
-// Create a simple AnalysisResultsContent component directly in this file
-function AnalysisResultsContent({ result, documentId }: { result: AnalysisResult | null; documentId: string }) {
-  if (!result) {
-    return (
-      <div className="p-6 bg-[#111111] rounded-xl border border-[#222222]">
-        <p className="text-[#8A8782] text-center">No analysis results available</p>
-      </div>
-    );
-  }
-
-  const {
-    summary,
-    keyPoints,
-    recommendations,
-    insights,
-    topics,
-    entities,
-    sentiment,
-    languageQuality
-  } = result;
-
-  return (
-    <div className="space-y-6">
-      <Card className="border border-[#222222] bg-[#111111] shadow-lg overflow-hidden">
-        <CardHeader className="bg-[#0A0A0A] border-b border-[#222222]">
-          <CardTitle className="text-lg font-medium text-[#F9F6EE]">
-            Document Analysis Summary
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-5">
-          <p className="text-[#E2DFD7] text-sm leading-relaxed whitespace-pre-line">{summary}</p>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <AnalysisKeyPoints keyPoints={keyPoints} />
-        <AnalysisRecommendations recommendations={recommendations} />
-      </div>
-
-      <AnalysisInsights insights={insights} topics={topics} />
-    </div>
-  );
-}
 
 export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   const [selectedDocumentId, setSelectedDocumentId] = React.useState<string>('');
@@ -134,13 +60,17 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   };
 
   const analyzeDocument = async () => {
-    if (!selectedDocumentId) return;
+    if (!selectedDocumentId) {
+      setAnalysisError("Please select a document to analyze");
+      return;
+    }
     
     setIsAnalyzing(true);
     setAnalysisError(null);
+    setAnalysisResults(null);
     
     try {
-      console.log(`Initiating document analysis: documentId=${selectedDocumentId}, type=${analysisType}`);
+      console.log(`Starting document analysis for documentId=${selectedDocumentId}, type=${analysisType}`);
       
       const url = `/api/document/analyze?documentId=${selectedDocumentId}&type=${analysisType}`;
       console.log(`Sending request to: ${url}`);
@@ -148,18 +78,37 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
       const response = await fetch(url);
       console.log(`Analysis response status: ${response.status}`);
       
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        console.error('Non-JSON response received:', contentType);
+        throw new Error(`Unexpected response format: ${contentType}`);
+      }
+      
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = await response.json();
         console.error('Error response:', errorData);
         throw new Error(errorData.error || `Failed to analyze document: ${response.status} ${response.statusText}`);
       }
       
       const data = await response.json();
-      console.log('Analysis completed successfully:', data);
+      console.log('Analysis completed successfully, results:', data);
+      
+      // Validate that the response contains the expected fields
+      if (!data.summary || !data.keyPoints || !data.recommendations || !data.insights) {
+        console.error('Invalid analysis result format:', data);
+        throw new Error('The analysis result format is invalid. Some required fields are missing.');
+      }
+      
+      // Update the state with the results
       setAnalysisResults(data);
+      
+      // Show a success message (optional)
+      console.log('Document analysis completed successfully');
+      
     } catch (error) {
       console.error('Analysis error:', error);
       setAnalysisError(`An error occurred while analyzing the document: ${error instanceof Error ? error.message : String(error)}. Please try again.`);
+      setAnalysisResults(null);
     } finally {
       setIsAnalyzing(false);
     }
@@ -168,8 +117,8 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   return (
     <div className="space-y-6">
       <Card className="border border-[#222222] bg-[#111111] shadow-lg overflow-hidden">
-        <CardHeader>
-          <CardTitle className="text-lg font-safiro text-[#F9F6EE]">
+        <CardHeader className="bg-[#0A0A0A] border-b border-[#222222]">
+          <CardTitle className="text-lg font-medium text-[#F9F6EE]">
             Document Analyzer
           </CardTitle>
         </CardHeader>
@@ -233,7 +182,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                 {isAnalyzing ? (
                   <>
                     <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Analyzing...
+                    Analyzing Document...
                   </>
                 ) : (
                   <>
@@ -245,58 +194,43 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
             </div>
           </div>
           
+          {/* Loading state for analysis */}
+          {isAnalyzing && (
+            <div className="mt-6 p-5 border border-[#222222] rounded-lg bg-[#080808] space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[#F9F6EE] font-medium flex items-center">
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin text-[#B4916C]" />
+                  Analyzing your document
+                </h3>
+                <span className="text-[#8A8782] text-sm">This may take a moment</span>
+              </div>
+              
+              <div className="space-y-2">
+                <div className="w-full h-1.5 bg-[#161616] rounded-full overflow-hidden">
+                  <div className="h-full bg-[#B4916C] rounded-full animate-pulse" style={{ width: '75%' }}></div>
+                </div>
+                <div className="flex justify-between text-xs text-[#8A8782]">
+                  <span>Processing document</span>
+                  <span>Extracting insights</span>
+                  <span>Finalizing results</span>
+                </div>
+              </div>
+              
+              <p className="text-[#8A8782] text-sm italic">
+                Our AI is analyzing your document to extract key insights, topics, and recommendations.
+              </p>
+            </div>
+          )}
+          
           {/* Analysis results */}
           {analysisResults && (
             <div className="mt-8 pt-6 border-t border-[#222222]">
               <h3 className="text-lg font-safiro text-[#F9F6EE] mb-4">Analysis Results</h3>
               
-              <Tabs defaultValue="overview" className="w-full">
-                <TabsList className="bg-[#080808] border border-[#222222] mb-4">
-                  <TabsTrigger value="overview">Overview</TabsTrigger>
-                  <TabsTrigger value="keyPoints">Key Points</TabsTrigger>
-                  <TabsTrigger value="recommendations">Recommendations</TabsTrigger>
-                  <TabsTrigger value="insights">Insights</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="overview">
-                  <div className="bg-[#080808] rounded-lg border border-[#222222] p-4">
-                    <div className="mb-4">
-                      <h4 className="text-[#F9F6EE] font-medium mb-2">Document Summary</h4>
-                      <p className="text-[#E2DFD7] text-sm">{analysisResults.summary}</p>
-                    </div>
-                    
-                    <h4 className="text-[#F9F6EE] font-medium mb-2">Document Quality</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-[#111111] p-3 rounded-md border border-[#222222]">
-                        <div className="flex justify-between text-sm mb-1">
-                          <span className="text-[#8A8782]">Clarity</span>
-                          <span className="text-[#F9F6EE]">{analysisResults.insights.clarity}%</span>
-                        </div>
-                        <Progress value={analysisResults.insights.clarity} className="h-1 bg-gray-800" />
-                      </div>
-                      <div className="bg-[#111111] p-3 rounded-md border border-[#222222]">
-                        <div className="flex justify-between text-sm mb-1">
-                          <span className="text-[#8A8782]">Relevance</span>
-                          <span className="text-[#F9F6EE]">{analysisResults.insights.relevance}%</span>
-                        </div>
-                        <Progress value={analysisResults.insights.relevance} className="h-1 bg-gray-800" />
-                      </div>
-                    </div>
-                  </div>
-                </TabsContent>
-                
-                <TabsContent value="keyPoints">
-                  <AnalysisKeyPoints keyPoints={analysisResults.keyPoints} />
-                </TabsContent>
-                
-                <TabsContent value="recommendations">
-                  <AnalysisRecommendations recommendations={analysisResults.recommendations} />
-                </TabsContent>
-                
-                <TabsContent value="insights">
-                  <AnalysisInsights insights={analysisResults.insights} topics={analysisResults.topics} />
-                </TabsContent>
-              </Tabs>
+              <AnalysisResultsContent 
+                result={analysisResults} 
+                documentId={selectedDocumentId}
+              />
             </div>
           )}
           

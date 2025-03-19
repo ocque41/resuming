@@ -84,32 +84,48 @@ export async function GET(req: NextRequest) {
     const type = searchParams.get('type') || 'general';
 
     if (!documentId) {
+      console.error("Missing documentId parameter in analyze API");
       return NextResponse.json({ error: 'Document ID is required' }, { status: 400 });
     }
 
-    console.log(`Document analysis request: documentId=${documentId}, type=${type}`);
+    console.log(`Document analysis request received: documentId=${documentId}, type=${type}`);
 
-    // In a real implementation, we would get the document from the database
-    // For now, we'll just create a mock document
-    const mockDocument = {
-      id: documentId,
-      fileName: "document.pdf",
-      userId: "1",
-      filepath: "/path/to/document.pdf",
-      metadata: null
-    };
-
-    // Return mock analysis results
-    const mockResult = {
-      ...MOCK_ANALYSIS_RESULT,
-      documentId
-    };
+    // Try to get the actual document from the database
+    try {
+      const document = await getDocumentById(Number(documentId));
       
-    return NextResponse.json(mockResult);
+      if (!document) {
+        console.error(`Document with ID ${documentId} not found`);
+        return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+      }
+      
+      console.log(`Found document: ${document.fileName}`);
+      
+      // If we have access to the document content, we could analyze it here
+      // For now, return the mock result
+      console.log("Returning mock analysis result");
+      
+      const mockResult = {
+        ...MOCK_ANALYSIS_RESULT,
+        documentId
+      };
+        
+      return NextResponse.json(mockResult);
+    } catch (dbError) {
+      console.error("Database error when fetching document:", dbError);
+      
+      // If we can't get the document, fall back to mock data
+      console.log("Falling back to mock data due to database error");
+      return NextResponse.json({
+        ...MOCK_ANALYSIS_RESULT,
+        documentId,
+        _note: "This is mock data due to database error"
+      });
+    }
   } catch (error) {
     console.error('Error in document analysis endpoint:', error);
     return NextResponse.json(
-      { error: 'Internal server error' }, 
+      { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) }, 
       { status: 500 }
     );
   }
