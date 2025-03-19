@@ -109,7 +109,7 @@ export default function RootLayout({
         <I18nProvider>
           <ThemeProvider defaultTheme="dark" storageKey="app-theme">
             <UserProvider userPromise={userPromise}>
-              <main className="flex-grow">{children}</main>
+              {children}
             </UserProvider>
           </ThemeProvider>
         </I18nProvider>

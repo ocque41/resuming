@@ -4,10 +4,10 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import BillingButton from "app/(dashboard)/dashboard/billing-button";
 import { ArticleTitle } from "@/components/ui/article";
 import { InviteTeamMember } from "app/(dashboard)/dashboard/invite-team";
-import GeneralPage from "app/(dashboard)/dashboard/general/page";
-import SecurityPage from "app/(dashboard)/dashboard/security/page";
-import ActivityLogClient from "@/components/ActivityLogClient";
 import { ArrowLeft, DollarSign, Users, FileText, Shield, Activity } from "lucide-react";
+import ClientGeneralPage from "@/components/ClientGeneralPage";
+import ClientSecurityPage from "@/components/ClientSecurityPage";
+import ActivityLogClient from "@/components/ActivityLogClient";
 
 interface ClientSettingsDialogContentProps {
   teamData: any;
@@ -42,7 +42,7 @@ export default function ClientSettingsDialogContent({
           <FileText className="h-5 w-5 text-[#B4916C] mr-2" />
           <h2 className="text-lg font-medium text-white">Account Information</h2>
         </div>
-        <GeneralPage />
+        <ClientGeneralPage />
         
         <div className="flex items-center mb-4 mt-8">
           <DollarSign className="h-5 w-5 text-[#B4916C] mr-2" />
@@ -80,7 +80,7 @@ export default function ClientSettingsDialogContent({
           <Shield className="h-5 w-5 text-[#B4916C] mr-2" />
           <h2 className="text-lg font-medium text-white">Security Settings</h2>
         </div>
-        <SecurityPage />
+        <ClientSecurityPage />
       </div>
     </section>
   );
