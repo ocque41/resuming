@@ -38,18 +38,18 @@ function SimpleFileDropdown({ cvs, onSelect, selectedCVName }: { cvs: string[]; 
     <div className="relative w-full">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full px-4 py-3.5 bg-[#111111] border border-[#222222] hover:border-[#B4916C] text-[#F9F6EE] rounded-lg flex justify-between items-center transition-colors duration-200 font-borna"
+        className="w-full px-4 py-3.5 bg-[#050505] border border-[#333333] hover:border-[#111111] text-[#F9F6EE] rounded-lg flex justify-between items-center transition-colors duration-200 font-borna"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
         <span className="truncate">{selectedCVName || "Select a CV"}</span>
         <ChevronDown 
-          className={`h-5 w-5 text-[#B4916C] transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
+          className={`h-5 w-5 text-[#F9F6EE] transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
         />
       </button>
       
       {open && cvs.length > 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-[#111111] border border-[#222222] rounded-lg shadow-xl max-h-60 overflow-auto animate-fade-in">
+        <div className="absolute z-10 w-full mt-1 bg-[#050505] border border-[#333333] rounded-lg shadow-xl max-h-60 overflow-auto animate-fade-in">
           <ul className="py-1" role="listbox">
             {(cvs || []).map(cv => {
               const parts = cv.split('|');
@@ -57,7 +57,7 @@ function SimpleFileDropdown({ cvs, onSelect, selectedCVName }: { cvs: string[]; 
                 return (
                   <li
                     key={parts[1]}
-                    className="px-4 py-3 text-sm text-[#F9F6EE] hover:bg-[#1A1A1A] hover:text-[#B4916C] cursor-pointer transition-colors duration-150 font-borna"
+                    className="px-4 py-3 text-sm text-[#F9F6EE] hover:bg-[#333333] hover:text-[#111111] cursor-pointer transition-colors duration-150 font-borna"
                     role="option"
                     onClick={() => { setOpen(false); onSelect(parts[1].trim(), parts[0].trim()); }}
                   >
@@ -72,7 +72,7 @@ function SimpleFileDropdown({ cvs, onSelect, selectedCVName }: { cvs: string[]; 
       )}
       
       {open && cvs.length === 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-[#111111] border border-[#222222] rounded-lg shadow-xl animate-fade-in">
+        <div className="absolute z-10 w-full mt-1 bg-[#333333] border border-[#111111] rounded-lg shadow-xl animate-fade-in">
           <div className="px-4 py-3 text-sm text-[#F9F6EE]/50 font-borna">No CVs available</div>
         </div>
       )}
@@ -298,7 +298,7 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
       <div className="rounded-lg border border-[#222222] overflow-hidden mt-5">
         <div className="bg-[#111111] p-5">
           <h3 className="text-lg font-safiro font-semibold mb-4 flex items-center text-[#F9F6EE]">
-            <span className="text-[#B4916C] mr-2">
+            <span className="text-[#F9F6EE] mr-2">
               <Building size={20} />
             </span>
             Career Experience
@@ -309,7 +309,7 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
               <div key={index} className="border-b border-[#222222] pb-4 mb-4 last:border-b-0 last:pb-0 last:mb-0">
                 <div className="flex justify-between items-start">
                   <div>
-                    <h4 className="text-[#B4916C] font-safiro">{entry.jobTitle || "Position"}</h4>
+                    <h4 className="text-[#F9F6EE] font-safiro">{entry.jobTitle || "Position"}</h4>
                     <p className="text-[#F9F6EE]/60 text-sm font-borna">{entry.company || "Company"}</p>
                   </div>
                   <div className="text-[#F9F6EE]/50 text-sm font-borna">{entry.dateRange || ""}</div>
@@ -362,7 +362,7 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
               <Button
                 onClick={handleAnalyze}
                 disabled={!selectedCVId || loading}
-                className="bg-[#B4916C] hover:bg-[#A27D59] text-[#050505] font-safiro whitespace-nowrap w-full sm:w-auto transition-colors duration-200 border-none h-12"
+                className="bg-[#333333] hover:bg-[#111111] text-[#F9F6EE] font-safiro whitespace-nowrap w-full sm:w-auto transition-colors duration-200 border-none h-12"
               >
                 {loading ? "Analyzing..." : "Analyze CV"}
               </Button>
@@ -377,8 +377,8 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
         {loading && (
           <div className="flex flex-col items-center justify-center py-10">
             <div className="relative w-16 h-16 mb-5">
-              <div className="absolute inset-0 border-4 border-[#222222] rounded-full"></div>
-              <div className="absolute inset-0 border-4 border-t-[#B4916C] rounded-full animate-spin"></div>
+              <div className="absolute inset-0 border-4 border-[#111111] rounded-full"></div>
+              <div className="absolute inset-0 border-4 border-t-[#333333] rounded-full animate-spin"></div>
             </div>
             <p className="text-[#F9F6EE] text-center font-safiro">Analyzing your CV...</p>
             <p className="text-[#F9F6EE]/50 text-sm text-center mt-2 font-borna">This may take a minute as our AI evaluates your document.</p>
@@ -398,12 +398,12 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 md:p-5 rounded-xl bg-[#0D0D0D] border border-[#222222]">
               <div className="space-y-1">
                 <h3 className="text-[#F9F6EE] font-safiro text-lg flex items-center">
-                  <FileText className="text-[#B4916C] w-5 h-5 mr-2" />
+                  <FileText className="text-[#333333] w-5 h-5 mr-2" />
                   ATS Compatibility Score
                 </h3>
                 <p className="text-[#F9F6EE]/60 text-sm font-borna">How well your CV performs against Applicant Tracking Systems</p>
               </div>
-              <div className="flex items-center justify-center bg-[#111111] rounded-lg p-3 min-w-[90px]">
+              <div className="flex items-center justify-center bg-[#050505] rounded-lg p-3 min-w-[90px]">
                 <span className="text-2xl font-bold font-safiro" style={{ 
                   color: parseInt(formatAtsScore(analysis.atsScore)) > 80 
                     ? '#4ade80' 
@@ -420,14 +420,14 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-4 rounded-xl bg-[#0D0D0D] border border-[#222222]">
                 <h3 className="text-[#F9F6EE] font-safiro mb-1 flex items-center">
-                  <Building className="text-[#B4916C] w-4 h-4 mr-2" />
+                  <Building className="text-[#F9F6EE] w-4 h-4 mr-2" />
                   Industry
                 </h3>
                 <p className="text-[#F9F6EE]/80 font-borna">{analysis.industry || "General"}</p>
               </div>
               
               {analysis.language && (
-                <div className="p-4 rounded-xl bg-[#0D0D0D] border border-[#222222]">
+                <div className="p-4 rounded-xl bg-[#050505] border border-[#333333]">
                   <h3 className="text-[#F9F6EE] font-safiro mb-1">Language</h3>
                   <p className="text-[#F9F6EE]/80 font-borna">{getLanguageName(analysis.language)}</p>
                 </div>
@@ -436,7 +436,7 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
             
             {/* Keywords */}
             {analysis.keywordAnalysis && Object.keys(analysis.keywordAnalysis).length > 0 && (
-              <div className="p-4 rounded-xl bg-[#0D0D0D] border border-[#222222]">
+              <div className="p-4 rounded-xl bg-[#050505] border border-[#333333]">
                 <h3 className="text-[#F9F6EE] font-safiro mb-3">Top Keywords</h3>
                 <div className="flex flex-wrap gap-2">
                   {getTopKeywords().map((keyword, index) => (
@@ -470,7 +470,7 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
               </div>
               
               {/* Weaknesses */}
-              <div className="p-4 rounded-xl bg-[#0D0D0D] border border-[#222222]">
+              <div className="p-4 rounded-xl bg-[#050505] border border-[#333333]">
                 <h3 className="text-[#F9F6EE] font-safiro mb-3 flex items-center">
                   <AlertCircle className="text-amber-500 w-4 h-4 mr-2" />
                   Areas to Improve
@@ -486,15 +486,15 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
               </div>
               
               {/* Recommendations */}
-              <div className="p-4 rounded-xl bg-[#0D0D0D] border border-[#222222]">
+              <div className="p-4 rounded-xl bg-[#050505] border border-[#333333]">
                 <h3 className="text-[#F9F6EE] font-safiro mb-3 flex items-center">
-                  <ArrowRight className="text-[#B4916C] w-4 h-4 mr-2" />
+                  <ArrowRight className="text-[#F9F6EE] w-4 h-4 mr-2" />
                   Recommendations
                 </h3>
                 <ul className="space-y-2">
                   {analysis.recommendations.map((recommendation, index) => (
                     <li key={index} className="text-[#F9F6EE]/80 text-sm font-borna flex items-start">
-                      <span className="text-[#B4916C] mr-2">•</span>
+                      <span className="text-[#F9F6EE] mr-2">•</span>
                       <span>{recommendation}</span>
                     </li>
                   ))}
@@ -509,7 +509,7 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
             <div className="flex justify-center mt-6">
               <Button
                 onClick={handleProceedToOptimize}
-                className="bg-[#B4916C] hover:bg-[#A27D59] text-[#050505] px-6 py-3 rounded-lg font-safiro text-base transition-colors duration-200 h-auto w-full md:w-auto"
+                className="bg-[#333333] hover:bg-[#111111] text-[#F9F6EE] px-6 py-3 rounded-lg font-safiro text-base transition-colors duration-200 h-auto w-full md:w-auto"
               >
                 Proceed to Optimization
               </Button>
