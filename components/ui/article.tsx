@@ -1,4 +1,7 @@
+"use client";
+
 import * as React from "react"
+import { cn } from "@/lib/utils"
 
 interface ArticleProps extends React.HTMLAttributes<HTMLElement> {
   children?: React.ReactNode
@@ -6,7 +9,7 @@ interface ArticleProps extends React.HTMLAttributes<HTMLElement> {
 
 export function Article({ className, children, ...props }: ArticleProps) {
   return (
-    <article className={`uk-article ${className}`} {...props}>
+    <article className={cn("prose prose-invert max-w-none", className)} {...props}>
       {children}
     </article>
   )
@@ -14,7 +17,7 @@ export function Article({ className, children, ...props }: ArticleProps) {
 
 export function ArticleTitle({ className, children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
   return (
-    <h1 className={`uk-article-title ${className}`} {...props}>
+    <h1 className={cn("text-3xl font-bold tracking-tight mb-4 font-safiro", className)} {...props}>
       {children}
     </h1>
   )
@@ -22,7 +25,7 @@ export function ArticleTitle({ className, children, ...props }: React.HTMLAttrib
 
 export function ArticleMeta({ className, children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
   return (
-    <p className={`uk-article-meta uk-margin ${className}`} {...props}>
+    <p className={cn("text-sm text-[#C5C2BA] mb-4 font-borna", className)} {...props}>
       {children}
     </p>
   )
@@ -30,7 +33,7 @@ export function ArticleMeta({ className, children, ...props }: React.HTMLAttribu
 
 export function ArticleLead({ className, children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
   return (
-    <p className={`uk-margin uk-text-lead ${className}`} {...props}>
+    <p className={cn("text-xl mb-6 text-[#F9F6EE] font-borna", className)} {...props}>
       {children}
     </p>
   )
@@ -38,7 +41,7 @@ export function ArticleLead({ className, children, ...props }: React.HTMLAttribu
 
 export function ArticleContent({ className, children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
   return (
-    <p className={`uk-margin ${className}`} {...props}>
+    <p className={cn("mb-4 font-borna", className)} {...props}>
       {children}
     </p>
   )
@@ -46,7 +49,7 @@ export function ArticleContent({ className, children, ...props }: React.HTMLAttr
 
 export function ArticleActions({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={`uk-grid uk-grid-small uk-margin uk-child-width-auto ${className}`} data-uk-grid {...props}>
+    <div className={cn("flex flex-wrap gap-2 items-center mt-6", className)} {...props}>
       {children}
     </div>
   )
@@ -55,7 +58,7 @@ export function ArticleActions({ className, children, ...props }: React.HTMLAttr
 export function ArticleButton({ className, href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
   return (
     <div>
-      <a className={`uk-button uk-button-text ${className}`} href={href} {...props}>
+      <a className={cn("text-[#B4916C] hover:underline font-borna", className)} href={href} {...props}>
         {children}
       </a>
     </div>
