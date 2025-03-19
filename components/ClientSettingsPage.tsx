@@ -1,13 +1,28 @@
 "use client";
 
+import React, { Suspense, lazy } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import BillingButton from "app/(dashboard)/dashboard/billing-button";
 import { ArticleTitle } from "@/components/ui/article";
 import { InviteTeamMember } from "app/(dashboard)/dashboard/invite-team";
-import { ArrowLeft, DollarSign, Users, FileText, Shield, Activity } from "lucide-react";
-import ClientGeneralPage from "@/components/ClientGeneralPage";
-import ClientSecurityPage from "@/components/ClientSecurityPage";
 import ActivityLogClient from "@/components/ActivityLogClient";
+import { ArrowLeft, DollarSign, Users, FileText, Shield, Activity } from "lucide-react";
+import { SkeletonText, SkeletonCard } from "./ui/skeleton";
+import ErrorBoundaryWrapper from "@/components/ErrorBoundaryWrapper";
+
+// Dynamically import the pages with React.lazy
+const GeneralPage = lazy(() => import("app/(dashboard)/dashboard/general/page"));
+const SecurityPage = lazy(() => import("app/(dashboard)/dashboard/security/page"));
+
+// Loading component for when the lazy loaded components are loading
+const ComponentLoader = () => (
+  <div className="space-y-4">
+    <SkeletonText className="h-8 w-1/2" />
+    <SkeletonCard className="h-52 w-full" />
+    <SkeletonText className="h-4 w-full" />
+    <SkeletonText className="h-4 w-3/4" />
+  </div>
+);
 
 interface ClientSettingsDialogContentProps {
   teamData: any;
@@ -42,7 +57,11 @@ export default function ClientSettingsDialogContent({
           <FileText className="h-5 w-5 text-[#B4916C] mr-2" />
           <h2 className="text-lg font-medium text-white">Account Information</h2>
         </div>
-        <ClientGeneralPage />
+        <ErrorBoundaryWrapper>
+          <Suspense fallback={<ComponentLoader />}>
+            <GeneralPage />
+          </Suspense>
+        </ErrorBoundaryWrapper>
         
         <div className="flex items-center mb-4 mt-8">
           <DollarSign className="h-5 w-5 text-[#B4916C] mr-2" />
@@ -80,7 +99,11 @@ export default function ClientSettingsDialogContent({
           <Shield className="h-5 w-5 text-[#B4916C] mr-2" />
           <h2 className="text-lg font-medium text-white">Security Settings</h2>
         </div>
-        <ClientSecurityPage />
+        <ErrorBoundaryWrapper>
+          <Suspense fallback={<ComponentLoader />}>
+            <SecurityPage />
+          </Suspense>
+        </ErrorBoundaryWrapper>
       </div>
     </section>
   );
