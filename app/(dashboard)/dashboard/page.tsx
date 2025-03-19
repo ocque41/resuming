@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import ErrorBoundaryWrapper from "@/components/ErrorBoundaryWrapper";
 import CVUploader from "@/components/CVUploader.client";
+import FeatureCard from "@/components/FeatureCard";
+import AnimatedContainer from "@/components/AnimatedContainer";
 
 // Add a CV type definition
 interface CV {
@@ -50,182 +52,130 @@ export default async function DashboardPage() {
   return (
     <>
       <header className="flex items-center justify-between p-4 mx-auto max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl">
-        <ArticleTitle className="text-md lg:text-xl font-medium ml-2 text-white">
+        <ArticleTitle className="text-md lg:text-xl font-safiro font-medium ml-2 text-[#F9F6EE]">
           Dashboard
         </ArticleTitle>
         <UserMenu teamData={teamData} activityLogs={activityLogs} />
       </header>
       
       <div className="flex flex-col space-y-6 mx-auto max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl px-2 sm:px-4 md:px-6 pb-12">
-        <Card className="border border-[#B4916C]/20 bg-black shadow-lg">
-          <CardHeader className="bg-black pb-4">
-            <CardTitle className="text-xl font-bold text-[#B4916C]">Your CV Collection</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 md:p-6">
-            <Table className="w-full">
-              <TableHeader>
-                <TableRow className="border-b border-[#B4916C]/20">
-                  <TableHead className="text-[#B4916C] font-semibold">Name</TableHead>
-                  <TableHead className="text-[#B4916C] font-semibold">ATS Score</TableHead>
-                  <TableHead className="text-[#B4916C] font-semibold">Optimized</TableHead>
-                  <TableHead className="text-[#B4916C] font-semibold">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {cvs.map((cv: any) => {
-                  let metadata = null;
-                  try {
-                    metadata = cv.metadata ? JSON.parse(cv.metadata) : null;
-                  } catch (err) {
-                    console.error("Error parsing metadata:", err);
-                  }
-                  return (
-                    <TableRow key={cv.id} className="border-b border-gray-800 hover:bg-[#B4916C]/5">
-                      <TableCell className="text-sm text-gray-300 font-medium">
-                        {cv.fileName}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {metadata?.atsScore ? (
-                          <span className="px-2 py-1 bg-[#B4916C]/10 rounded-full text-[#B4916C] font-medium text-sm">
-                            {metadata.atsScore}
-                          </span>
-                        ) : "-"}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {metadata?.optimized ? (
-                          <span className="px-2 py-1 bg-green-500/10 rounded-full text-green-500 font-medium text-sm">
-                            Yes
-                          </span>
-                        ) : (
-                          <span className="px-2 py-1 bg-gray-500/10 rounded-full text-gray-500 font-medium text-sm">
-                            No
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <ActionsDropdown cv={cv} />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <AnimatedContainer animationType="slide" duration={0.4}>
+          <Card className="border-[#222222] bg-[#111111] shadow-lg rounded-xl overflow-hidden">
+            <CardHeader className="bg-[#0D0D0D] border-b border-[#222222] pb-4">
+              <CardTitle className="text-xl font-safiro font-bold text-[#F9F6EE]">Your CV Collection</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 md:p-5">
+              <Table className="w-full">
+                <TableHeader>
+                  <TableRow className="border-b border-[#222222]">
+                    <TableHead className="text-[#F9F6EE] font-safiro font-semibold">Name</TableHead>
+                    <TableHead className="text-[#F9F6EE] font-safiro font-semibold">ATS Score</TableHead>
+                    <TableHead className="text-[#F9F6EE] font-safiro font-semibold">Optimized</TableHead>
+                    <TableHead className="text-[#F9F6EE] font-safiro font-semibold">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {cvs.map((cv: any) => {
+                    let metadata = null;
+                    try {
+                      metadata = cv.metadata ? JSON.parse(cv.metadata) : null;
+                    } catch (err) {
+                      console.error("Error parsing metadata:", err);
+                    }
+                    return (
+                      <TableRow key={cv.id} className="border-b border-[#222222] hover:bg-[#050505]">
+                        <TableCell className="text-sm text-[#F9F6EE]/90 font-borna font-medium">
+                          {cv.fileName}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {metadata?.atsScore ? (
+                            <span className="px-2.5 py-1 bg-[#333333] rounded-lg text-[#F9F6EE] font-borna text-sm">
+                              {metadata.atsScore}
+                            </span>
+                          ) : "-"}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {metadata?.optimized ? (
+                            <span className="px-2.5 py-1 bg-[#0D3A22] rounded-lg text-emerald-400 font-borna text-sm">
+                              Yes
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 bg-[#222222] rounded-lg text-[#F9F6EE]/50 font-borna text-sm">
+                              No
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <ActionsDropdown cv={cv} />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </AnimatedContainer>
         
         {/* CV Upload Area */}
-        <ErrorBoundaryWrapper>
-          <div className="flex items-center mb-2">
-            <Upload className="h-5 w-5 text-[#B4916C] mr-2" />
-            <h2 className="text-lg font-medium text-white">Upload New CV</h2>
-          </div>
-          <CVUploader />
-        </ErrorBoundaryWrapper>
+        <AnimatedContainer animationType="slide" delay={0.2} duration={0.4}>
+          <ErrorBoundaryWrapper>
+            <div className="flex items-center mb-2">
+              <Upload className="h-5 w-5 text-[#B4916C] mr-2" />
+              <h2 className="text-lg font-safiro font-medium text-[#F9F6EE]">Upload New CV</h2>
+            </div>
+            <CVUploader />
+          </ErrorBoundaryWrapper>
+        </AnimatedContainer>
         
         {/* Feature Links */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Optimize CV Link */}
-          <Link 
-            href="/dashboard/optimize" 
-            className="flex items-center justify-between p-4 md:p-6 bg-black border border-[#B4916C]/20 rounded-lg shadow-lg hover:bg-[#1D1D1D] transition-colors"
-          >
-            <div className="flex items-center">
-              <div className="flex items-center justify-center h-10 w-10 rounded-full bg-[#B4916C]/10 text-[#B4916C] mr-3">
-                <BarChart2 className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-base md:text-lg font-medium text-[#B4916C]">Optimize CV</h3>
-                <p className="text-sm text-gray-400">Analyze & optimize for ATS</p>
-              </div>
-            </div>
-            <ChevronRight className="h-5 w-5 text-[#B4916C]" />
-          </Link>
-          
-          {/* Document Editor Link */}
-          <Link 
-            href="/dashboard/enhance" 
-            className="flex items-center justify-between p-4 md:p-6 bg-black border border-[#B4916C]/20 rounded-lg shadow-lg hover:bg-[#1D1D1D] transition-colors"
-          >
-            <div className="flex items-center">
-              <div className="flex items-center justify-center h-10 w-10 rounded-full bg-[#B4916C]/10 text-[#B4916C] mr-3">
-                <FileText className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-base md:text-lg font-medium text-[#B4916C]">Document Editor</h3>
-                <p className="text-sm text-gray-400">Edit with AI assistance</p>
-              </div>
-            </div>
-            <ChevronRight className="h-5 w-5 text-[#B4916C]" />
-          </Link>
-          
-          {/* Document Analysis Link */}
-          <Link 
-            href="/dashboard/analyze" 
-            className="flex items-center justify-between p-4 md:p-6 bg-black border border-[#B4916C]/20 rounded-lg shadow-lg hover:bg-[#1D1D1D] transition-colors"
-          >
-            <div className="flex items-center">
-              <div className="flex items-center justify-center h-10 w-10 rounded-full bg-[#B4916C]/10 text-[#B4916C] mr-3">
-                <PieChart className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-base md:text-lg font-medium text-[#B4916C]">Document Analysis</h3>
-                <p className="text-sm text-gray-400">Extract insights & visualize data</p>
-              </div>
-            </div>
-            <ChevronRight className="h-5 w-5 text-[#B4916C]" />
-          </Link>
-          
-          {/* Job Description Generator Link - NEW */}
-          <Link 
-            href="/job-description" 
-            className="flex items-center justify-between p-4 md:p-6 bg-black border border-[#B4916C]/20 rounded-lg shadow-lg hover:bg-[#1D1D1D] transition-colors"
-          >
-            <div className="flex items-center">
-              <div className="flex items-center justify-center h-10 w-10 rounded-full bg-[#B4916C]/10 text-[#B4916C] mr-3">
-                <FileText className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-base md:text-lg font-medium text-[#B4916C]">Job Description Generator</h3>
-                <p className="text-sm text-gray-400">Create detailed job descriptions</p>
-              </div>
-            </div>
-            <ChevronRight className="h-5 w-5 text-[#B4916C]" />
-          </Link>
-          
-          {/* Job Match Analysis Link - NEW */}
-          <Link 
-            href="/job-match" 
-            className="flex items-center justify-between p-4 md:p-6 bg-black border border-[#B4916C]/20 rounded-lg shadow-lg hover:bg-[#1D1D1D] transition-colors"
-          >
-            <div className="flex items-center">
-              <div className="flex items-center justify-center h-10 w-10 rounded-full bg-[#B4916C]/10 text-[#B4916C] mr-3">
-                <BarChart2 className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-base md:text-lg font-medium text-[#B4916C]">CV to Job Match</h3>
-                <p className="text-sm text-gray-400">Analyze CV against job descriptions</p>
-              </div>
-            </div>
-            <ChevronRight className="h-5 w-5 text-[#B4916C]" />
-          </Link>
-          
-          {/* Job Matching Link */}
-          <Link 
-            href="/dashboard/jobs" 
-            className="flex items-center justify-between p-4 md:p-6 bg-black border border-[#B4916C]/20 rounded-lg shadow-lg hover:bg-[#1D1D1D] transition-colors md:col-span-2"
-          >
-            <div className="flex items-center">
-              <div className="flex items-center justify-center h-10 w-10 rounded-full bg-[#B4916C]/10 text-[#B4916C] mr-3">
-                <Briefcase className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-base md:text-lg font-medium text-[#B4916C]">Find Matching Jobs</h3>
-                <p className="text-sm text-gray-400">Discover jobs that match your CV</p>
-              </div>
-            </div>
-            <ChevronRight className="h-5 w-5 text-[#B4916C]" />
-          </Link>
-        </div>
+        <AnimatedContainer animationType="slide" delay={0.3} duration={0.4}>
+          <h2 className="text-lg font-safiro font-medium text-[#F9F6EE] mb-3">Tools & Features</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FeatureCard 
+              href="/dashboard/optimize"
+              icon={BarChart2}
+              title="Optimize CV"
+              description="Analyze & optimize for ATS"
+            />
+            
+            <FeatureCard 
+              href="/dashboard/enhance"
+              icon={FileText}
+              title="Document Editor"
+              description="Edit with AI assistance"
+            />
+            
+            <FeatureCard 
+              href="/dashboard/analyze"
+              icon={PieChart}
+              title="Document Analysis"
+              description="Extract insights & visualize data"
+            />
+            
+            <FeatureCard 
+              href="/job-description"
+              icon={FileText}
+              title="Job Description Generator"
+              description="Create detailed job descriptions"
+            />
+            
+            <FeatureCard 
+              href="/job-match"
+              icon={BarChart2}
+              title="CV to Job Match"
+              description="Analyze CV against job descriptions"
+            />
+            
+            <FeatureCard 
+              href="/dashboard/jobs"
+              icon={Briefcase}
+              title="Find Matching Jobs"
+              description="Discover jobs that match your CV"
+              fullWidth
+            />
+          </div>
+        </AnimatedContainer>
       </div>
     </>
   );

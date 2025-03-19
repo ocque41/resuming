@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle, AlertTriangle } from "lucide-react";
+import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle, AlertTriangle, ChevronDown } from "lucide-react";
 import { analyzeCVContent, optimizeCVForJob } from '@/lib/services/mistral.service';
 import { tailorCVForJob } from '@/app/lib/services/tailorCVService';
 import { useToast } from "@/hooks/use-toast";
@@ -492,37 +492,29 @@ function ModernFileDropdown({
     <div className="relative w-full">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full px-4 py-3 bg-[#050505] border border-gray-700 hover:border-[#B4916C] text-white rounded-md flex justify-between items-center transition-colors duration-200"
+        className="w-full px-4 py-3.5 bg-[#050505] border border-[#333333] hover:border-[#B4916C] text-[#F9F6EE] rounded-lg flex justify-between items-center transition-colors duration-200 font-borna"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
         <span className="truncate">{selectedCVName || "Select a CV"}</span>
-        <svg 
-          className={`h-5 w-5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} 
-          xmlns="http://www.w3.org/2000/svg" 
-          viewBox="0 0 20 20" 
-          fill="currentColor"
-        >
-          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-        </svg>
+        <ChevronDown
+          className={`h-5 w-5 text-[#F9F6EE] transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
+        />
       </button>
       
       {open && cvs.length > 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-[#050505] border border-gray-700 rounded-md shadow-lg max-h-60 overflow-auto">
+        <div className="absolute z-10 w-full mt-1 bg-[#050505] border border-[#333333] rounded-lg shadow-xl max-h-60 overflow-auto animate-fade-in">
           <ul className="py-1" role="listbox">
             {cvs.map((cv) => {
               const [name, id] = cv.split('|');
               return (
                 <li 
                   key={id}
-                  className="px-4 py-2 text-sm text-white hover:bg-[#1A1A1A] hover:text-[#B4916C] cursor-pointer"
+                  className="px-4 py-3 text-sm text-[#F9F6EE] hover:bg-[#111111] hover:text-[#B4916C] cursor-pointer transition-colors duration-150 font-borna"
                   role="option"
-                  onClick={() => {
-                    onSelect(id, name);
-                    setOpen(false);
-                  }}
+                  onClick={() => { setOpen(false); onSelect(id.trim(), name.trim()); }}
                 >
-                  {name}
+                  {name.trim()}
                 </li>
               );
             })}
@@ -531,11 +523,8 @@ function ModernFileDropdown({
       )}
       
       {open && cvs.length === 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-[#050505] border border-gray-700 rounded-md shadow-lg">
-          <div className="px-4 py-3 text-sm text-gray-400">
-            <p className="mb-2">No CVs available</p>
-            <p className="text-xs">Please upload a CV in the General tab first, then return here to optimize it for a specific job.</p>
-          </div>
+        <div className="absolute z-10 w-full mt-1 bg-[#050505] border border-[#333333] rounded-lg shadow-xl animate-fade-in">
+          <div className="px-4 py-3 text-sm text-[#F9F6EE]/50 font-borna">No CVs available</div>
         </div>
       )}
     </div>
