@@ -1,3 +1,5 @@
+"use client";
+
 import PageHeader from "./PageHeader";
 import AnimatedContainer from "./AnimatedContainer";
 
