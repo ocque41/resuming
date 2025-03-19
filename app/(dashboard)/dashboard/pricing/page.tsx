@@ -2,10 +2,8 @@ import { redirect } from "next/navigation";
 import { getUser, getTeamForUser, getActivityLogs } from "@/lib/db/queries.server";
 import { Check, ArrowLeft, Star } from "lucide-react";
 import { getStripePrices, getStripeProducts } from "@/lib/payments/stripe";
-import { checkoutAction } from "@/lib/payments/actions";
 import { ArticleTitle } from "@/components/ui/article";
 import { PremiumCard, PremiumCardHeader, PremiumCardTitle, PremiumCardContent } from "@/components/ui/premium-card";
-import PricingPageUserMenu from "@/components/PricingPageUserMenu";
 import PremiumPageLayout from "@/components/PremiumPageLayout";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -49,6 +47,9 @@ const fallbackProducts: StripeProduct[] = [
   { id: "moonlighting-fallback", name: "Moonlighting" },
   { id: "ceo-fallback", name: "CEO" }
 ];
+
+// Import the checkout client component
+import PricingCardClient from "./PricingCardClient";
 
 // Revalidate prices every hour
 export const revalidate = 3600;
@@ -149,7 +150,7 @@ export default async function DashboardPricingPage() {
                 </section>
 
                 <div className="grid md:grid-cols-3 gap-8 justify-center">
-                  <PricingCard
+                  <PricingCardClient
                     name="Pro"
                     price={proPrice?.unitAmount || 799}
                     interval="month"
@@ -169,7 +170,7 @@ export default async function DashboardPricingPage() {
                     priceId={proPrice?.id}
                     animationDelay={0.2}
                   />
-                  <PricingCard
+                  <PricingCardClient
                     name="Moonlighting"
                     price={moonlightingPrice?.unitAmount || 1499}
                     interval="month"
@@ -189,7 +190,7 @@ export default async function DashboardPricingPage() {
                     priceId={moonlightingPrice?.id}
                     animationDelay={0.3}
                   />
-                  <PricingCard
+                  <PricingCardClient
                     name="CEO"
                     price={ceoPrice?.unitAmount || 9999}
                     interval="month"
@@ -236,144 +237,6 @@ export default async function DashboardPricingPage() {
       </div>
     );
   }
-}
-
-interface PricingCardProps {
-  name: string;
-  price: number;
-  interval: string;
-  features: string[];
-  highlight: boolean;
-  priceId?: string;
-  tooltips?: Record<string, string>;
-  animationDelay?: number;
-}
-
-function PricingCard({
-  name,
-  price,
-  interval,
-  features,
-  highlight,
-  priceId,
-  tooltips,
-  animationDelay = 0
-}: PricingCardProps) {
-  const cardVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { 
-      opacity: 1, 
-      y: 0,
-      transition: {
-        duration: 0.5,
-        delay: animationDelay,
-        ease: [0.22, 1, 0.36, 1]
-      }
-    },
-    hover: { 
-      y: -8,
-      transition: {
-        duration: 0.3,
-        ease: "easeOut"
-      }
-    }
-  };
-
-  return (
-    <motion.div
-      className={`rounded-xl overflow-hidden transition-all duration-300 ${
-        highlight 
-          ? "border border-[#B4916C] bg-[#0A0A0A]" 
-          : "border border-[#222222] bg-[#111111]"
-      }`}
-      variants={cardVariants}
-      initial="hidden"
-      animate="visible"
-      whileHover="hover"
-    >
-      <div className={`${
-        highlight 
-          ? "bg-gradient-to-r from-[#B4916C]/30 to-[#B4916C]/10" 
-          : "bg-[#0D0D0D]"
-        } py-6 px-6 relative overflow-hidden`}
-      >
-        {highlight && (
-          <Star className="absolute top-3 right-3 h-5 w-5 text-[#B4916C]" />
-        )}
-        <h2 className="text-2xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
-          {name}
-          {highlight && (
-            <span className="ml-2 text-xs bg-[#B4916C]/20 text-[#B4916C] px-2 py-1 rounded-full font-borna">
-              Most Popular
-            </span>
-          )}
-        </h2>
-        <p className="text-4xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
-          ${(price || 0) / 100}
-          <span className="text-xl font-normal text-[#8A8782] ml-1 font-borna">
-            /{interval}
-          </span>
-        </p>
-        
-        {highlight && (
-          <div className="absolute inset-0 opacity-20 overflow-hidden pointer-events-none">
-            <motion.div
-              className="absolute h-[200%] w-[25%] bg-white top-[-120%] left-[-10%] transform rotate-45 blur-lg"
-              animate={{
-                left: ["0%", "120%"],
-              }}
-              transition={{
-                repeat: Infinity,
-                repeatDelay: 3,
-                duration: 2.5,
-                ease: "easeInOut",
-              }}
-            />
-          </div>
-        )}
-      </div>
-      
-      <div className="p-6">
-        <ul className="space-y-4 mb-8">
-          {features.map((feature, index) => (
-            <li key={index} className="flex items-start group relative">
-              <div className={`h-5 w-5 mr-3 rounded-full flex items-center justify-center flex-shrink-0 ${
-                highlight ? "text-[#B4916C] bg-[#B4916C]/10" : "text-[#8A8782] bg-[#222222]"
-              }`}>
-                <Check className="h-3 w-3" />
-              </div>
-              <span className="text-[#C5C2BA] font-borna text-sm">
-                {feature.replace(" ⓘ", "")}
-                {tooltips?.[feature] && (
-                  <motion.span 
-                    className="opacity-0 group-hover:opacity-100 absolute left-0 -top-12 w-64 bg-[#111111] border border-[#222222] text-[#8A8782] text-xs p-2 rounded-lg z-10 transition-opacity duration-200"
-                    initial={{ opacity: 0, y: 10 }}
-                    whileHover={{ opacity: 1, y: 0 }}
-                  >
-                    {tooltips[feature]}
-                  </motion.span>
-                )}
-              </span>
-            </li>
-          ))}
-        </ul>
-        <form action={checkoutAction} className="w-full mt-auto">
-          <input type="hidden" name="priceId" value={priceId || ""} />
-          <input type="hidden" name="returnUrl" value="/dashboard" />
-          <Button
-            type="submit"
-            className={`w-full font-medium ${
-              highlight
-                ? "bg-[#B4916C] hover:bg-[#A3815B] text-white"
-                : "bg-[#222222] hover:bg-[#333333] text-white border border-[#333333]"
-            }`}
-          >
-            {highlight ? "Upgrade Now" : "Select Plan"}
-          </Button>
-        </form>
-      </div>
-    </motion.div>
-  );
 }
 
 // Simple skeleton loader for the pricing page

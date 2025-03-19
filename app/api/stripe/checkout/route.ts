@@ -5,6 +5,8 @@ import { setSession } from '@/lib/auth/session';
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/payments/stripe';
 import Stripe from 'stripe';
+import { getUser } from '@/lib/db/queries.server';
+import { createCheckoutSession } from '@/lib/payments/stripe';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -94,5 +96,98 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error handling successful checkout:', error);
     return NextResponse.redirect(new URL('/error', request.url));
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    // Get the current user
+    const user = await getUser();
+    if (!user) {
+      return NextResponse.json(
+        { error: 'User not authenticated' },
+        { status: 401 }
+      );
+    }
+
+    // Get the user's team
+    const userTeam = await db
+      .select({
+        teamId: teamMembers.teamId,
+      })
+      .from(teamMembers)
+      .where(eq(teamMembers.userId, user.id))
+      .limit(1);
+
+    if (userTeam.length === 0) {
+      return NextResponse.json(
+        { error: 'User is not associated with any team' },
+        { status: 400 }
+      );
+    }
+
+    const team = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, userTeam[0].teamId))
+      .limit(1);
+
+    if (team.length === 0) {
+      return NextResponse.json(
+        { error: 'Team not found' },
+        { status: 400 }
+      );
+    }
+
+    // Parse the request
+    const formData = await request.formData();
+    const priceId = formData.get('priceId') as string;
+    if (!priceId) {
+      return NextResponse.json(
+        { error: 'Price ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Get the returnUrl from the form
+    const returnUrl = formData.get('returnUrl') as string || '/dashboard';
+
+    // Create a checkout session directly with Stripe
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      mode: 'subscription',
+      success_url: `${process.env.BASE_URL}/api/stripe/checkout?session_id={CHECKOUT_SESSION_ID}&return_to=${encodeURIComponent(returnUrl)}`,
+      cancel_url: `${process.env.BASE_URL}${returnUrl}`,
+      customer: team[0].stripeCustomerId || undefined,
+      client_reference_id: user.id.toString(),
+      allow_promotion_codes: true,
+      subscription_data: {
+        trial_period_days: 1, // 24 hours trial
+        metadata: {
+          tier: 'pro',
+          features: JSON.stringify({
+            cv_uploads: 20,
+            ats_analyses: 10,
+            optimizations: 7,
+            priority: 2
+          })
+        }
+      },
+    });
+
+    // Return the checkout URL
+    return NextResponse.json({ url: session.url });
+  } catch (error) {
+    console.error('Error creating checkout session:', error);
+    return NextResponse.json(
+      { error: 'Failed to create checkout session' },
+      { status: 500 }
+    );
   }
 }

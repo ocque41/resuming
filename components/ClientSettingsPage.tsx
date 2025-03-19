@@ -1,29 +1,45 @@
 "use client";
 
-import React, { Suspense, lazy } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import BillingButton from "app/(dashboard)/dashboard/billing-button";
-import { ArticleTitle } from "@/components/ui/article";
-import { InviteTeamMember } from "app/(dashboard)/dashboard/invite-team";
-import ActivityLogClient from "@/components/ActivityLogClient";
-import { ArrowLeft, DollarSign, Users, FileText, Shield, Activity } from "lucide-react";
-import { SkeletonText, SkeletonCard } from "./ui/skeleton";
-import ErrorBoundaryWrapper from "@/components/ErrorBoundaryWrapper";
-import { motion } from "framer-motion";
+import { useState, Suspense } from 'react';
+import { motion } from 'framer-motion';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { 
+  FileText, 
+  DollarSign, 
+  Users, 
+  Activity, 
+  Shield, 
+  ArrowLeft,
+  Loader2
+} from 'lucide-react';
+import { ArticleTitle } from '@/components/ui/article';
+import BillingButton from '@/app/(dashboard)/dashboard/billing-button';
+import { InviteTeamMember } from '@/app/(dashboard)/dashboard/invite-team';
+import ActivityLogClient from '@/components/ActivityLogClient';
+import ErrorBoundaryWrapper from './ErrorBoundaryWrapper';
 
-// Dynamically import the pages with React.lazy
-const GeneralPage = lazy(() => import("app/(dashboard)/dashboard/general/page"));
-const SecurityPage = lazy(() => import("app/(dashboard)/dashboard/security/page"));
+// Dynamically import pages to prevent server/client component conflicts
+import dynamic from 'next/dynamic';
 
-// Loading component for when the lazy loaded components are loading
-const ComponentLoader = () => (
-  <div className="space-y-4">
-    <div className="h-8 w-1/2 bg-[#111111] rounded-lg animate-pulse"></div>
-    <div className="h-52 w-full bg-[#111111] rounded-lg animate-pulse"></div>
-    <div className="h-4 w-full bg-[#111111] rounded-lg animate-pulse"></div>
-    <div className="h-4 w-3/4 bg-[#111111] rounded-lg animate-pulse"></div>
-  </div>
-);
+const GeneralPage = dynamic(() => import('@/app/(dashboard)/dashboard/general/page'), {
+  ssr: false,
+  loading: () => <ComponentLoader />
+});
+
+const SecurityPage = dynamic(() => import('@/app/(dashboard)/dashboard/security/page'), {
+  ssr: false,
+  loading: () => <ComponentLoader />
+});
+
+// Loading component
+function ComponentLoader() {
+  return (
+    <div className="w-full h-40 flex items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin text-[#B4916C]" />
+      <span className="ml-2 text-[#F9F6EE] font-borna">Loading component...</span>
+    </div>
+  );
+}
 
 interface ClientSettingsDialogContentProps {
   teamData: any;

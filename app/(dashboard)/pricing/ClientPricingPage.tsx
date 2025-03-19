@@ -2,6 +2,7 @@
 
 import { Check, Star } from "lucide-react";
 import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 
 interface StripePrice {
   id: string;
@@ -26,6 +27,7 @@ interface PricingCardProps {
   priceId?: string;
   tooltips?: Record<string, string>;
   animationDelay?: number;
+  onCheckout: (priceId: string) => void;
 }
 
 interface ClientPricingPageProps {
@@ -34,6 +36,14 @@ interface ClientPricingPageProps {
 }
 
 export default function ClientPricingPage({ prices, products }: ClientPricingPageProps) {
+  const router = useRouter();
+  
+  // Handle checkout client-side
+  const handleCheckout = (priceId: string) => {
+    // Redirect to the dashboard pricing page with the priceId
+    router.push(`/dashboard/pricing?priceId=${priceId}`);
+  };
+
   // Ensure we have fallbacks for all data
   const proPlan = products.find((product) => product.name === "Pro") || { id: "pro-fallback", name: "Pro" };
   const moonlightingPlan = products.find((product) => product.name === "Moonlighting") || { id: "moonlighting-fallback", name: "Moonlighting" };
@@ -104,6 +114,7 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
             highlight={false}
             priceId="price_1QoUP9FYYYXM77wGBUVqTaiE"
             animationDelay={0.2}
+            onCheckout={handleCheckout}
           />
           <PricingCard
             name="Moonlighting"
@@ -124,6 +135,7 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
             highlight={true}
             priceId={moonlightingPrice?.id}
             animationDelay={0.3}
+            onCheckout={handleCheckout}
           />
           <PricingCard
             name="CEO"
@@ -146,6 +158,7 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
             highlight={false}
             priceId="price_1QoYTrFYYYXM77wGffciG20i"
             animationDelay={0.4}
+            onCheckout={handleCheckout}
           />
         </div>
         
@@ -178,7 +191,8 @@ function PricingCard({
   highlight,
   priceId,
   tooltips,
-  animationDelay = 0
+  animationDelay = 0,
+  onCheckout
 }: PricingCardProps) {
   const cardVariants = {
     hidden: { opacity: 0, y: 20 },
@@ -278,21 +292,18 @@ function PricingCard({
             </li>
           ))}
         </ul>
-        <form action="/api/stripe/checkout" method="POST">
-          <input type="hidden" name="priceId" value={priceId} />
-          <motion.button
-            type="submit"
-            className={`w-full font-medium px-4 py-3 rounded-lg transition-all duration-300 font-safiro ${
-              highlight
-                ? "bg-[#B4916C] hover:bg-[#A3815B] text-[#050505]"
-                : "bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"
-            }`}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            {highlight ? "Upgrade Now" : "Select Plan"}
-          </motion.button>
-        </form>
+        <motion.button
+          onClick={() => onCheckout(priceId || "")}
+          className={`w-full font-medium px-4 py-3 rounded-lg transition-all duration-300 font-safiro ${
+            highlight
+              ? "bg-[#B4916C] hover:bg-[#A3815B] text-[#050505]"
+              : "bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"
+          }`}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+        >
+          {highlight ? "Upgrade Now" : "Select Plan"}
+        </motion.button>
       </div>
     </motion.div>
   );
