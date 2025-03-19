@@ -2399,3 +2399,2110 @@ export function detectIndustryAndSubspecialty(text: string): {
   
   return result;
 }
+
+/**
+ * Analyzes the gap between skills in a CV and those required for a job
+ * @param cvText The CV text to analyze
+ * @param jobDescription Optional job description to extract required skills
+ * @param industry Optional industry to suggest skills from if no job description
+ * @returns Analysis of skill gaps and recommendations
+ */
+export function analyzeSkillsGap(
+  cvText: string,
+  jobDescription?: string,
+  industry?: string
+): {
+  existingSkills: string[];
+  missingCriticalSkills: string[];
+  missingRecommendedSkills: string[];
+  skillRecommendations: Record<string, string>;
+} {
+  // Normalize text for consistent processing
+  const normalizedCVText = cvText.toLowerCase();
+  
+  // Extract existing skills from CV
+  const existingSkills: string[] = extractSkillsFromText(normalizedCVText);
+  
+  // Required skills will come from either job description or industry
+  let requiredSkills: string[] = [];
+  let recommendedSkills: string[] = [];
+  
+  if (jobDescription) {
+    // If job description is provided, extract required skills from it
+    const normalizedJobText = jobDescription.toLowerCase();
+    
+    // Extract explicit skill requirements
+    const skillsRegex = /(?:required|key|essential|necessary|must have|strong)\s+(?:skills|qualifications|requirements)(?:[:\s-]+)([\s\S]*?)(?:\n\n|\n\s*\n|$)/i;
+    const skillsMatch = normalizedJobText.match(skillsRegex);
+    
+    if (skillsMatch && skillsMatch[1]) {
+      // Extract skills from the matched section
+      const skillsSection = skillsMatch[1];
+      const skillsList = extractSkillsFromText(skillsSection);
+      requiredSkills = [...requiredSkills, ...skillsList];
+    }
+    
+    // Extract tech stack/tools mentioned
+    const techRegex = /(?:tech(?:nical)? stack|technologies|tools|platforms|frameworks|languages)(?:[:\s-]+)([\s\S]*?)(?:\n\n|\n\s*\n|$)/i;
+    const techMatch = normalizedJobText.match(techRegex);
+    
+    if (techMatch && techMatch[1]) {
+      const techSection = techMatch[1];
+      const techList = extractSkillsFromText(techSection);
+      requiredSkills = [...requiredSkills, ...techList];
+    }
+    
+    // Extract all potential skills from job description
+    const allPotentialSkills = extractSkillsFromText(normalizedJobText);
+    
+    // Skills mentioned in job description but not in the specific sections
+    // are considered recommended but not required
+    recommendedSkills = allPotentialSkills.filter(
+      skill => !requiredSkills.includes(skill)
+    );
+  } 
+  else if (industry) {
+    // If only industry is provided, use industry keywords as recommended skills
+    recommendedSkills = suggestIndustryKeywords(industry, [], 20);
+    
+    // Take top 5 as "required" for the industry
+    requiredSkills = recommendedSkills.slice(0, 5);
+    recommendedSkills = recommendedSkills.slice(5);
+  }
+  
+  // Remove duplicates
+  requiredSkills = [...new Set(requiredSkills)];
+  recommendedSkills = [...new Set(recommendedSkills)];
+  
+  // Identify missing skills
+  const missingCriticalSkills = requiredSkills.filter(
+    skill => !hasSkill(normalizedCVText, skill)
+  );
+  
+  const missingRecommendedSkills = recommendedSkills.filter(
+    skill => !hasSkill(normalizedCVText, skill)
+  );
+  
+  // Generate recommendations for each missing skill
+  const skillRecommendations: Record<string, string> = {};
+  
+  // Recommendations for critical skills
+  missingCriticalSkills.forEach(skill => {
+    skillRecommendations[skill] = generateSkillRecommendation(skill, industry || 'general', true);
+  });
+  
+  // Recommendations for recommended skills
+  missingRecommendedSkills.forEach(skill => {
+    skillRecommendations[skill] = generateSkillRecommendation(skill, industry || 'general', false);
+  });
+  
+  return {
+    existingSkills,
+    missingCriticalSkills,
+    missingRecommendedSkills,
+    skillRecommendations
+  };
+}
+
+/**
+ * Extracts skills from text using NLP-inspired techniques
+ * @param text The text to extract skills from
+ * @returns Array of extracted skills
+ */
+function extractSkillsFromText(text: string): string[] {
+  const skills: string[] = [];
+  
+  // Common skill-related terms
+  const skillIndicators = [
+    "experience with", "experience in", "knowledge of", "skilled in", "proficient in",
+    "expertise in", "familiar with", "background in", "trained in", "certified in"
+  ];
+  
+  // Technical terms that are likely skills
+  const techTerms = [
+    "java", "python", "javascript", "typescript", "react", "angular", "vue", "node.js",
+    "aws", "azure", "gcp", "docker", "kubernetes", "devops", "ci/cd", "git", "agile",
+    "scrum", "sql", "nosql", "mongodb", "mysql", "postgresql", "rest", "graphql",
+    "html", "css", "sass", "webpack", "babel", "jenkins", "terraform", "ansible",
+    "php", "ruby", "c#", ".net", "c++", "swift", "kotlin", "flutter", "react native",
+    "django", "flask", "spring", "laravel", "symfony", "express", "jquery", "bootstrap",
+    "material ui", "figma", "sketch", "adobe", "photoshop", "illustrator", "indesign",
+    "tableau", "power bi", "excel", "word", "powerpoint", "jira", "confluence", "trello",
+    "asana", "slack", "microsoft teams", "seo", "sem", "ppc", "google analytics",
+    "facebook ads", "instagram", "social media", "content marketing", "email marketing"
+  ];
+  
+  // Check for explicit skill lists
+  const bulletListSkills = extractBulletListSkills(text);
+  if (bulletListSkills.length > 0) {
+    skills.push(...bulletListSkills);
+  }
+  
+  // Check for skill indicators followed by potential skills
+  skillIndicators.forEach(indicator => {
+    const regex = new RegExp(`${indicator}\\s+([\\w\\s,&/\\-\\+]+)(?:\\.|,|;|\\n|$)`, "gi");
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      if (match[1]) {
+        // Split by common separators
+        const skillParts = match[1].split(/,|;|and|\s+/).map(s => s.trim());
+        skills.push(...skillParts.filter(s => s.length > 2));
+      }
+    }
+  });
+  
+  // Add any explicit tech terms found
+  techTerms.forEach(term => {
+    if (text.includes(term)) {
+      skills.push(term);
+    }
+  });
+  
+  // Clean up and deduplicate skills
+  const cleanedSkills = skills
+    .map(skill => skill.toLowerCase().trim())
+    .filter(skill => skill.length > 1)
+    .filter((skill, index, self) => self.indexOf(skill) === index);
+  
+  return cleanedSkills;
+}
+
+/**
+ * Extracts skills from bullet point lists
+ * @param text The text to extract from
+ * @returns Array of skills
+ */
+function extractBulletListSkills(text: string): string[] {
+  const skills: string[] = [];
+  
+  // Look for sections that might contain skills
+  const skillsSectionRegex = /(?:skills|technical skills|technologies|core competencies|expertise|proficiencies)(?:[\s:]*)([\s\S]*?)(?:\n\n|\n\s*\n|$)/i;
+  const match = text.match(skillsSectionRegex);
+  
+  if (match && match[1]) {
+    const skillsSection = match[1];
+    
+    // Look for bullet points
+    const bulletItems = skillsSection.split(/\n\s*[-•*]\s+|\n\s*\d+\.\s+/);
+    
+    // Each bullet point is potentially a skill or skill set
+    bulletItems.forEach(item => {
+      const trimmed = item.trim();
+      if (trimmed.length > 1) {
+        // Split by commas for multiple skills per bullet
+        const subSkills = trimmed.split(/,|;|and/).map(s => s.trim());
+        skills.push(...subSkills.filter(s => s.length > 1));
+      }
+    });
+  }
+  
+  return skills;
+}
+
+/**
+ * Checks if a skill is present in the text
+ * @param text The text to check
+ * @param skill The skill to look for
+ * @returns True if the skill is found
+ */
+function hasSkill(text: string, skill: string): boolean {
+  // Convert skill to regex-safe string
+  const escapedSkill = skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  
+  // Create a regex that matches the skill as a whole word
+  const skillRegex = new RegExp(`\\b${escapedSkill}\\b`, 'i');
+  
+  // Check variations of the skill
+  return skillRegex.test(text) || 
+         text.includes(skill.toLowerCase()) ||
+         text.includes(skill.toUpperCase()) ||
+         text.includes(skill.charAt(0).toUpperCase() + skill.slice(1).toLowerCase());
+}
+
+/**
+ * Generates a recommendation for adding a missing skill
+ * @param skill The missing skill
+ * @param industry The industry context
+ * @param isCritical Whether this is a critical skill
+ * @returns A recommendation string
+ */
+function generateSkillRecommendation(skill: string, industry: string, isCritical: boolean): string {
+  const priority = isCritical ? "Critical" : "Recommended";
+  
+  // Generic recommendations
+  const genericRecommendations = [
+    `${priority}: Add ${skill} to your Skills section.`,
+    `${priority}: Include ${skill} experience in your work history.`,
+    `${priority}: Highlight any projects or achievements involving ${skill}.`
+  ];
+  
+  // Industry-specific recommendations
+  const industryRecommendations: Record<string, string[]> = {
+    'technology': [
+      `${priority}: Mention ${skill} in your technical skills section.`,
+      `${priority}: Include projects that used ${skill} in your work experience.`,
+      `${priority}: Reference ${skill} proficiency level (e.g., expert, proficient, familiar).`
+    ],
+    'finance': [
+      `${priority}: Add ${skill} to your professional qualifications.`,
+      `${priority}: Mention experience with ${skill} in relevant transactions or analyses.`,
+      `${priority}: Reference ${skill} in context of financial reporting or analysis achievements.`
+    ],
+    'healthcare': [
+      `${priority}: Include ${skill} in your clinical competencies.`,
+      `${priority}: Highlight patient care experiences involving ${skill}.`,
+      `${priority}: Add any certifications or training related to ${skill}.`
+    ],
+    'marketing': [
+      `${priority}: Add ${skill} to your digital marketing toolkit.`,
+      `${priority}: Mention campaigns or results achieved using ${skill}.`,
+      `${priority}: Include metrics or KPIs related to your work with ${skill}.`
+    ],
+    'sales': [
+      `${priority}: Include ${skill} in your sales approach or methodology.`,
+      `${priority}: Highlight revenue or quota achievements related to ${skill}.`,
+      `${priority}: Add client success stories that showcase your ${skill} abilities.`
+    ]
+  };
+  
+  // Use industry-specific recommendations if available, otherwise use generic
+  const recommendations = industryRecommendations[industry.toLowerCase()] || genericRecommendations;
+  
+  // Return a random recommendation
+  return recommendations[Math.floor(Math.random() * recommendations.length)];
+}
+
+/**
+ * Enhances the readability and professional quality of CV content
+ * @param text The CV text to enhance
+ * @returns Improved text with better readability and professional tone
+ */
+export function enhanceReadability(text: string): string {
+  if (!text || text.trim().length === 0) {
+    return text;
+  }
+  
+  // Split into paragraphs for processing
+  const paragraphs = text.split(/\n\s*\n/);
+  const enhancedParagraphs = paragraphs.map(paragraph => {
+    // Skip empty paragraphs
+    if (!paragraph || paragraph.trim().length === 0) {
+      return paragraph;
+    }
+    
+    // Replace passive voice with active voice
+    let enhanced = replacePassiveVoice(paragraph);
+    
+    // Replace weak verbs with stronger action verbs
+    enhanced = replaceWeakVerbs(enhanced);
+    
+    // Reduce wordiness
+    enhanced = reduceWordiness(enhanced);
+    
+    // Fix common grammar issues
+    enhanced = fixGrammarIssues(enhanced);
+    
+    // Ensure consistent tense (prefer past tense for experience)
+    enhanced = ensureConsistentTense(enhanced);
+    
+    return enhanced;
+  });
+  
+  // Join paragraphs back together
+  return enhancedParagraphs.join('\n\n');
+}
+
+/**
+ * Replaces passive voice with active voice
+ * @param text Text to process
+ * @returns Text with reduced passive voice
+ */
+function replacePassiveVoice(text: string): string {
+  // Common passive voice patterns
+  const passivePatterns = [
+    { regex: /was (responsible for|tasked with) ([\w\s]+)/gi, replacement: 'managed $2' },
+    { regex: /was (assigned|given) ([\w\s]+)/gi, replacement: 'handled $2' },
+    { regex: /(was|were) (developed|created|built|implemented)/gi, replacement: 'developed' },
+    { regex: /(was|were) (managed|supervised|overseen)/gi, replacement: 'managed' },
+    { regex: /(was|were) (analyzed|reviewed|evaluated)/gi, replacement: 'analyzed' },
+    { regex: /(was|were) (designed|planned|structured)/gi, replacement: 'designed' },
+    { regex: /(was|were) (improved|enhanced|optimized)/gi, replacement: 'improved' },
+    { regex: /(was|were) (selected|chosen|picked)/gi, replacement: 'selected' },
+    { regex: /(has been|have been|had been) (involved in|part of)/gi, replacement: 'contributed to' }
+  ];
+  
+  let result = text;
+  passivePatterns.forEach(pattern => {
+    result = result.replace(pattern.regex, pattern.replacement);
+  });
+  
+  return result;
+}
+
+/**
+ * Replaces weak verbs with stronger action verbs
+ * @param text Text to process
+ * @returns Text with stronger verbs
+ */
+function replaceWeakVerbs(text: string): string {
+  // Weak verb mappings
+  const weakVerbReplacements: Record<string, string[]> = {
+    'worked on': ['developed', 'executed', 'implemented', 'delivered', 'spearheaded'],
+    'helped': ['assisted', 'supported', 'facilitated', 'enabled', 'collaborated on'],
+    'did': ['performed', 'executed', 'accomplished', 'conducted', 'completed'],
+    'made': ['created', 'produced', 'developed', 'designed', 'constructed'],
+    'got': ['obtained', 'secured', 'acquired', 'attained', 'achieved'],
+    'used': ['utilized', 'employed', 'applied', 'leveraged', 'implemented'],
+    'thought about': ['analyzed', 'evaluated', 'assessed', 'examined', 'considered'],
+    'looked at': ['examined', 'reviewed', 'analyzed', 'inspected', 'evaluated'],
+    'talked to': ['communicated with', 'consulted with', 'collaborated with', 'engaged with', 'coordinated with'],
+    'put in': ['implemented', 'incorporated', 'integrated', 'introduced', 'established'],
+    'put together': ['assembled', 'compiled', 'constructed', 'formulated', 'developed'],
+    'took care of': ['managed', 'handled', 'administered', 'coordinated', 'oversaw'],
+    'was able to': ['successfully', 'effectively', 'efficiently', ''],
+    'had to': [''],
+    'tried to': [''],
+    'began to': ['initiated', 'started', 'launched', 'established', 'commenced']
+  };
+  
+  let result = text;
+  
+  Object.entries(weakVerbReplacements).forEach(([weakVerb, replacements]) => {
+    const regex = new RegExp(`\\b${weakVerb}\\b`, 'gi');
+    if (regex.test(result)) {
+      // Select a random replacement
+      const replacement = replacements[Math.floor(Math.random() * replacements.length)];
+      if (replacement) {
+        result = result.replace(regex, replacement);
+      } else {
+        // If replacement is empty, just remove the weak phrase
+        result = result.replace(regex, '');
+      }
+    }
+  });
+  
+  return result;
+}
+
+/**
+ * Reduces wordiness in text
+ * @param text Text to process
+ * @returns Less wordy text
+ */
+function reduceWordiness(text: string): string {
+  // Wordy phrase mappings
+  const wordyPhraseReplacements: Record<string, string> = {
+    'in order to': 'to',
+    'for the purpose of': 'for',
+    'in the event that': 'if',
+    'in the process of': '',
+    'due to the fact that': 'because',
+    'on a regular basis': 'regularly',
+    'on the grounds that': 'because',
+    'in the near future': 'soon',
+    'a majority of': 'most',
+    'a number of': 'several',
+    'the reason why is that': 'because',
+    'on account of': 'because',
+    'as a means of': 'to',
+    'in spite of the fact that': 'although',
+    'during the course of': 'during',
+    'at the present time': 'now',
+    'in a timely manner': 'promptly',
+    'at this point in time': 'now',
+    'in regards to': 'regarding',
+    'with reference to': 'about',
+    'in conjunction with': 'with',
+    'in the field of': 'in',
+    'in the capacity of': 'as',
+    'in the framework of': 'in',
+    'taking into consideration': 'considering',
+    'in a manner of speaking': ''
+  };
+  
+  let result = text;
+  
+  Object.entries(wordyPhraseReplacements).forEach(([wordyPhrase, replacement]) => {
+    const regex = new RegExp(`\\b${wordyPhrase}\\b`, 'gi');
+    result = result.replace(regex, replacement);
+  });
+  
+  return result;
+}
+
+/**
+ * Fixes common grammar issues
+ * @param text Text to process
+ * @returns Text with improved grammar
+ */
+function fixGrammarIssues(text: string): string {
+  // Common grammar corrections
+  const grammarCorrections: [RegExp, string][] = [
+    [/\b(i|we|they) was\b/gi, '$1 were'],
+    [/\b(he|she|it) were\b/gi, '$1 was'],
+    [/\b(a)\s+([aeiou])/gi, 'an $2'],
+    [/\b(an)\s+([^aeiou])/gi, 'a $2'],
+    [/\b(less)\s+(people|employees|staff|members|workers)/gi, 'fewer $2'],
+    [/\b(amount)\s+of\s+(people|employees|staff|members|workers)/gi, 'number of $2'],
+    [/\b(alot)\b/gi, 'a lot'],
+    [/\b(its)\s+(a|an|the)/gi, "it's $2"],
+    [/\b(your)\s+(welcome)\b/gi, "you're $2"],
+    [/\b(there)\s+(go|goes|going)/gi, "they're $2"],
+    [/\b(their)\s+(go|goes|going)/gi, "they're $2"],
+    [/\b(to)\s+(much|many|fast|slow|big|small)/gi, "too $2"],
+    [/\b(would|could|should|must|can|will) of\b/gi, "$1 have"]
+  ];
+  
+  let result = text;
+  
+  grammarCorrections.forEach(([regex, replacement]) => {
+    result = result.replace(regex, replacement);
+  });
+  
+  return result;
+}
+
+/**
+ * Ensures consistent tense in CV bullet points (prefers past tense for experience)
+ * @param text Text to process
+ * @returns Text with consistent tense
+ */
+function ensureConsistentTense(text: string): string {
+  // Common present tense verbs to convert to past tense
+  const presentToPastTense: Record<string, string> = {
+    'manage': 'managed',
+    'lead': 'led',
+    'develop': 'developed',
+    'create': 'created',
+    'implement': 'implemented',
+    'design': 'designed',
+    'build': 'built',
+    'coordinate': 'coordinated',
+    'organize': 'organized',
+    'analyze': 'analyzed',
+    'prepare': 'prepared',
+    'present': 'presented',
+    'research': 'researched',
+    'train': 'trained',
+    'supervise': 'supervised',
+    'maintain': 'maintained',
+    'support': 'supported',
+    'increase': 'increased',
+    'decrease': 'decreased',
+    'improve': 'improved',
+    'enhance': 'enhanced',
+    'optimize': 'optimized',
+    'generate': 'generated',
+    'secure': 'secured',
+    'establish': 'established',
+    'launch': 'launched',
+    'collaborate': 'collaborated',
+    'communicate': 'communicated',
+    'negotiate': 'negotiated',
+    'facilitate': 'facilitated',
+    'achieve': 'achieved',
+    'exceed': 'exceeded',
+    'deliver': 'delivered',
+    'streamline': 'streamlined',
+    'transform': 'transformed',
+    'resolve': 'resolved',
+    'produce': 'produced',
+    'monitor': 'monitored',
+    'evaluate': 'evaluated',
+    'review': 'reviewed',
+    'oversee': 'oversaw',
+    'conduct': 'conducted'
+  };
+  
+  // Only apply to lines that look like bullet points or list items
+  const lines = text.split('\n');
+  const enhancedLines = lines.map(line => {
+    // Check if this line is likely a bullet point or starts with a verb
+    if (/^\s*[-•*]\s+/.test(line) || /^\s*\d+\.\s+/.test(line) || /^\s*[A-Z][a-z]+\b/.test(line)) {
+      // Process to ensure past tense
+      let processed = line;
+      
+      Object.entries(presentToPastTense).forEach(([present, past]) => {
+        // Match present tense verbs at the start of bullet points
+        const regex = new RegExp(`(^\\s*[-•*\\d\\.]*\\s+)${present}\\b`, 'i');
+        if (regex.test(processed)) {
+          processed = processed.replace(regex, `$1${past}`);
+        }
+      });
+      
+      return processed;
+    }
+    
+    return line;
+  });
+  
+  return enhancedLines.join('\n');
+}
+
+/**
+ * Calculate a detailed ATS compatibility score with breakdown of individual factors
+ * @param cvText The full CV text
+ * @param industry The detected industry (optional)
+ * @param jobDescription Optional job description to match against
+ * @returns Detailed ATS score with breakdown and improvement suggestions
+ */
+export function calculateDetailedATSScore(
+  cvText: string,
+  industry?: string,
+  jobDescription?: string
+): {
+  overallScore: number;
+  categoryScores: {
+    keywords: number;
+    experience: number;
+    education: number;
+    skills: number;
+    formatting: number;
+    contactInfo: number;
+    achievements: number;
+    readability: number;
+  };
+  missingElements: string[];
+  improvementSuggestions: string[];
+} {
+  // Default result structure
+  const result = {
+    overallScore: 0,
+    categoryScores: {
+      keywords: 0,
+      experience: 0,
+      education: 0,
+      skills: 0,
+      formatting: 0,
+      contactInfo: 0,
+      achievements: 0,
+      readability: 0
+    },
+    missingElements: [] as string[],
+    improvementSuggestions: [] as string[]
+  };
+  
+  // Normalize text for consistent processing
+  const normalizedText = cvText.toLowerCase();
+  
+  // 1. Keyword Analysis
+  const keywordScore = evaluateKeywordScore(normalizedText, industry, jobDescription);
+  result.categoryScores.keywords = keywordScore.score;
+  result.missingElements.push(...keywordScore.missingKeywords.map(k => `Keyword: ${k}`));
+  result.improvementSuggestions.push(...keywordScore.suggestions);
+  
+  // 2. Experience Section Analysis
+  const experienceScore = evaluateExperienceScore(cvText);
+  result.categoryScores.experience = experienceScore.score;
+  if (experienceScore.missingElements.length > 0) {
+    result.missingElements.push(...experienceScore.missingElements);
+  }
+  result.improvementSuggestions.push(...experienceScore.suggestions);
+  
+  // 3. Education Section Analysis
+  const educationScore = evaluateEducationScore(cvText);
+  result.categoryScores.education = educationScore.score;
+  if (educationScore.missingElements.length > 0) {
+    result.missingElements.push(...educationScore.missingElements);
+  }
+  result.improvementSuggestions.push(...educationScore.suggestions);
+  
+  // 4. Skills Section Analysis
+  const skillsScore = evaluateSkillsScore(cvText, industry);
+  result.categoryScores.skills = skillsScore.score;
+  if (skillsScore.missingSkills.length > 0) {
+    result.missingElements.push(...skillsScore.missingSkills.map(s => `Skill: ${s}`));
+  }
+  result.improvementSuggestions.push(...skillsScore.suggestions);
+  
+  // 5. Formatting Analysis
+  const formattingScore = evaluateFormattingScore(cvText);
+  result.categoryScores.formatting = formattingScore.score;
+  result.improvementSuggestions.push(...formattingScore.suggestions);
+  
+  // 6. Contact Information Analysis
+  const contactScore = evaluateContactInfoScore(cvText);
+  result.categoryScores.contactInfo = contactScore.score;
+  if (contactScore.missingElements.length > 0) {
+    result.missingElements.push(...contactScore.missingElements);
+  }
+  result.improvementSuggestions.push(...contactScore.suggestions);
+  
+  // 7. Achievements Analysis
+  const achievementsScore = evaluateAchievementsScore(cvText);
+  result.categoryScores.achievements = achievementsScore.score;
+  result.improvementSuggestions.push(...achievementsScore.suggestions);
+  
+  // 8. Readability Analysis
+  const readabilityScore = evaluateReadabilityScore(cvText);
+  result.categoryScores.readability = readabilityScore.score;
+  result.improvementSuggestions.push(...readabilityScore.suggestions);
+  
+  // Calculate weighted overall score
+  result.overallScore = calculateWeightedScore(result.categoryScores);
+  
+  // Deduplicate and limit suggestion count
+  result.improvementSuggestions = [...new Set(result.improvementSuggestions)].slice(0, 12);
+  
+  return result;
+}
+
+/**
+ * Evaluate the keyword score based on industry-relevant terms
+ */
+function evaluateKeywordScore(
+  text: string, 
+  industry?: string,
+  jobDescription?: string
+): { 
+  score: number;
+  missingKeywords: string[];
+  suggestions: string[];
+} {
+  const result = {
+    score: 0,
+    missingKeywords: [] as string[],
+    suggestions: [] as string[]
+  };
+  
+  // Start with a base score
+  let score = 40;
+  
+  // Get industry-specific keywords if available
+  let industryKeywords: string[] = [];
+  if (industry) {
+    industryKeywords = getIndustryKeywords(industry);
+  }
+  
+  // Get job description keywords if available
+  let jobKeywords: string[] = [];
+  if (jobDescription) {
+    // Simple extraction - could be made more sophisticated
+    jobKeywords = jobDescription.toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .split(/\s+/)
+      .filter(word => word.length > 3)
+      .filter(word => !commonWords.includes(word));
+      
+    // Keep only unique keywords
+    jobKeywords = [...new Set(jobKeywords)];
+  }
+  
+  // Combine all relevant keywords
+  const allKeywords = [...new Set([...industryKeywords, ...jobKeywords])];
+  
+  if (allKeywords.length === 0) {
+    // If no specific keywords available, use general professional keywords
+    const generalKeywords = [
+      "managed", "developed", "created", "implemented", "coordinated", 
+      "analyzed", "designed", "increased", "decreased", "improved",
+      "resolved", "negotiated", "led", "directed", "organized",
+      "established", "achieved", "maintained", "generated", "streamlined"
+    ];
+    
+    // Count matches
+    const matchCount = generalKeywords.filter(keyword => 
+      text.includes(keyword.toLowerCase())
+    ).length;
+    
+    // Score based on general keyword matches
+    score += Math.min(30, matchCount * 3);
+    
+    // Identify missing important keywords
+    const missingKeywords = generalKeywords
+      .filter(keyword => !text.includes(keyword.toLowerCase()))
+      .slice(0, 5); // Limit to 5 missing keywords
+    
+    result.missingKeywords = missingKeywords;
+    
+    if (missingKeywords.length > 0) {
+      result.suggestions.push(
+        `Add more action verbs like: ${missingKeywords.join(', ')}`
+      );
+    }
+  } else {
+    // Count matches for industry/job specific keywords
+    const matchCount = allKeywords.filter(keyword => 
+      text.includes(keyword.toLowerCase())
+    ).length;
+    
+    // Calculate match percentage
+    const matchPercentage = allKeywords.length > 0 
+      ? (matchCount / allKeywords.length) * 100 
+      : 0;
+    
+    // Score based on keyword matches
+    if (matchPercentage >= 80) {
+      score += 60; // Excellent keyword match
+    } else if (matchPercentage >= 60) {
+      score += 45; // Good keyword match
+    } else if (matchPercentage >= 40) {
+      score += 30; // Moderate keyword match
+    } else if (matchPercentage >= 20) {
+      score += 15; // Poor keyword match
+    } else {
+      score += 0; // Very poor keyword match
+    }
+    
+    // Identify important missing keywords
+    const missingKeywords = allKeywords
+      .filter(keyword => !text.includes(keyword.toLowerCase()))
+      .slice(0, 7); // Limit to 7 missing keywords
+    
+    result.missingKeywords = missingKeywords;
+    
+    if (missingKeywords.length > 0) {
+      if (industry) {
+        result.suggestions.push(
+          `Add more ${industry}-relevant keywords like: ${missingKeywords.join(', ')}`
+        );
+      } else {
+        result.suggestions.push(
+          `Add more relevant keywords like: ${missingKeywords.join(', ')}`
+        );
+      }
+    }
+  }
+  
+  // Bonus for keyword density (avoid keyword stuffing but reward good density)
+  const words = text.split(/\s+/).length;
+  const uniqueWords = new Set(text.split(/\s+/)).size;
+  const wordVariety = uniqueWords / words;
+  
+  if (wordVariety > 0.6 && wordVariety < 0.8) {
+    score += 10; // Good word variety
+  } else if (wordVariety <= 0.6) {
+    score -= 5; // Too much repetition
+    result.suggestions.push("Reduce repetitive language and add more varied terms");
+  }
+  
+  // Ensure score is within 0-100 range
+  result.score = Math.max(0, Math.min(100, score));
+  
+  return result;
+}
+
+/**
+ * Evaluate the experience section score
+ */
+function evaluateExperienceScore(text: string): { 
+  score: number;
+  missingElements: string[];
+  suggestions: string[];
+} {
+  const result = {
+    score: 0,
+    missingElements: [] as string[],
+    suggestions: [] as string[]
+  };
+  
+  // Check if experience section exists
+  const experienceSectionPattern = /\b(experience|work|employment|career)\b/i;
+  const hasExperienceSection = experienceSectionPattern.test(text);
+  
+  if (!hasExperienceSection) {
+    result.score = 20; // Minimal score for missing experience section
+    result.missingElements.push("Experience section");
+    result.suggestions.push("Add a dedicated 'Experience' or 'Work History' section");
+    return result;
+  }
+  
+  // Start with a base score
+  let score = 50;
+  
+  // Check for job titles, companies, and dates
+  const jobTitlePattern = /\b(manager|director|coordinator|specialist|analyst|engineer|developer|consultant|assistant|supervisor|lead|head|chief|officer|designer|administrator|associate)\b/i;
+  const hasJobTitles = jobTitlePattern.test(text);
+  
+  const datePattern = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)[\s\S]{1,15}(20\d{2}|19\d{2})/i;
+  const hasDates = datePattern.test(text);
+  
+  // Check for quantifiable achievements
+  const quantifiablePattern = /\b(increased|decreased|reduced|improved|achieved|won|saved|generated|delivered|managed|led|completed|created|developed|implemented)[\s\S]{1,30}(by|of|from|to)[\s\S]{1,15}(\d+)[\s\S]{1,5}(%|percent|million|billion|thousand)/i;
+  const hasQuantifiableResults = quantifiablePattern.test(text);
+  
+  // Add points based on what's found
+  if (hasJobTitles) {
+    score += 10;
+  } else {
+    result.missingElements.push("Clear job titles");
+    result.suggestions.push("Include specific job titles in your experience section");
+  }
+  
+  if (hasDates) {
+    score += 10;
+  } else {
+    result.missingElements.push("Employment dates");
+    result.suggestions.push("Include clear employment dates in month/year format");
+  }
+  
+  if (hasQuantifiableResults) {
+    score += 20;
+  } else {
+    result.suggestions.push("Add quantifiable achievements with specific metrics (%, $, etc.)");
+  }
+  
+  // Check for bullet points in experience section
+  const bulletPattern = /\b(experience|work|employment|career)\b[\s\S]{1,100}([•\-\*]|(\d+\.))/i;
+  const hasBulletPoints = bulletPattern.test(text);
+  
+  if (hasBulletPoints) {
+    score += 10;
+  } else {
+    result.suggestions.push("Format experience achievements as bullet points for better readability");
+  }
+  
+  // Ensure score is within 0-100 range
+  result.score = Math.max(0, Math.min(100, score));
+  
+  return result;
+}
+
+/**
+ * Evaluate the education section score
+ */
+function evaluateEducationScore(text: string): { 
+  score: number;
+  missingElements: string[];
+  suggestions: string[];
+} {
+  const result = {
+    score: 0,
+    missingElements: [] as string[],
+    suggestions: [] as string[]
+  };
+  
+  // Check if education section exists
+  const educationSectionPattern = /\b(education|academic|degree|university|college|school)\b/i;
+  const hasEducationSection = educationSectionPattern.test(text);
+  
+  if (!hasEducationSection) {
+    result.score = 40; // Give some points even if missing
+    result.missingElements.push("Education section");
+    result.suggestions.push("Add a dedicated 'Education' section");
+    return result;
+  }
+  
+  // Start with a base score
+  let score = 60;
+  
+  // Check for degree information
+  const degreePattern = /\b(bachelor|master|phd|doctorate|mba|bs|ba|ms|ma|associate|diploma|certificate)\b/i;
+  const hasDegree = degreePattern.test(text);
+  
+  // Check for institution name
+  const institutionPattern = /\b(university|college|institute|school|academy)\b/i;
+  const hasInstitution = institutionPattern.test(text);
+  
+  // Check for graduation years
+  const graduationPattern = /\b(graduated|graduation|class of|20\d{2}|19\d{2})\b/i;
+  const hasGraduationInfo = graduationPattern.test(text);
+  
+  // Add points based on what's found
+  if (hasDegree) {
+    score += 15;
+  } else {
+    result.missingElements.push("Degree information");
+    result.suggestions.push("Include specific degree names/types in your education section");
+  }
+  
+  if (hasInstitution) {
+    score += 15;
+  } else {
+    result.missingElements.push("Institution names");
+    result.suggestions.push("Add the names of educational institutions you attended");
+  }
+  
+  if (hasGraduationInfo) {
+    score += 10;
+  } else {
+    result.missingElements.push("Graduation dates");
+    result.suggestions.push("Include graduation dates or attendance periods");
+  }
+  
+  // Ensure score is within 0-100 range
+  result.score = Math.max(0, Math.min(100, score));
+  
+  return result;
+}
+
+/**
+ * Evaluate the skills section score
+ */
+function evaluateSkillsScore(text: string, industry?: string): { 
+  score: number;
+  missingSkills: string[];
+  suggestions: string[];
+} {
+  const result = {
+    score: 0,
+    missingSkills: [] as string[],
+    suggestions: [] as string[]
+  };
+  
+  // Check if skills section exists
+  const skillsSectionPattern = /\b(skills|competencies|expertise|proficiencies|capabilities|qualifications)\b/i;
+  const hasSkillsSection = skillsSectionPattern.test(text);
+  
+  if (!hasSkillsSection) {
+    result.score = 30;
+    result.suggestions.push("Add a dedicated 'Skills' section that clearly lists your abilities");
+    return result;
+  }
+  
+  // Start with a base score
+  let score = 50;
+  
+  // Extract skills from the text
+  const extractedSkills = extractSkillsFromText(text);
+  
+  // Bonus points for number of skills (up to a reasonable limit)
+  if (extractedSkills.length >= 15) {
+    score += 20;
+  } else if (extractedSkills.length >= 10) {
+    score += 15;
+  } else if (extractedSkills.length >= 5) {
+    score += 10;
+  } else {
+    result.suggestions.push("List more specific skills (aim for at least 10 relevant skills)");
+  }
+  
+  // Check for industry-specific skills
+  if (industry) {
+    const industrySkills = getIndustryKeywords(industry).filter(k => 
+      k.length > 3 && !commonWords.includes(k.toLowerCase())
+    );
+    
+    // Count matches
+    const matchingSkills = industrySkills.filter(skill => 
+      text.toLowerCase().includes(skill.toLowerCase())
+    );
+    
+    const matchPercentage = industrySkills.length > 0 
+      ? (matchingSkills.length / industrySkills.length) * 100 
+      : 0;
+    
+    // Bonus for industry-relevant skills
+    if (matchPercentage >= 70) {
+      score += 30; // Excellent industry match
+    } else if (matchPercentage >= 50) {
+      score += 20; // Good industry match
+    } else if (matchPercentage >= 30) {
+      score += 10; // Moderate industry match
+    }
+    
+    // Identify missing important skills
+    const importantMissingSkills = industrySkills
+      .filter(skill => !text.toLowerCase().includes(skill.toLowerCase()))
+      .slice(0, 5); // Limit to 5 missing skills
+    
+    result.missingSkills = importantMissingSkills;
+    
+    if (importantMissingSkills.length > 0) {
+      result.suggestions.push(
+        `Add more ${industry}-relevant skills like: ${importantMissingSkills.join(', ')}`
+      );
+    }
+  }
+  
+  // Check for skill categorization
+  const categorizedSkillsPattern = /(technical|soft|hard|interpersonal|management|leadership|communication|computer|language|software|hardware|design|analytical)\s+skills/i;
+  const hasSkillCategorization = categorizedSkillsPattern.test(text);
+  
+  if (hasSkillCategorization) {
+    score += 10;
+  } else {
+    result.suggestions.push("Organize skills into categories (e.g., Technical, Soft, Language)");
+  }
+  
+  // Ensure score is within 0-100 range
+  result.score = Math.max(0, Math.min(100, score));
+  
+  return result;
+}
+
+/**
+ * Evaluate the formatting score
+ */
+function evaluateFormattingScore(text: string): { 
+  score: number;
+  suggestions: string[];
+} {
+  const result = {
+    score: 0,
+    suggestions: [] as string[]
+  };
+  
+  // Start with a base score
+  let score = 50;
+  
+  // Check for clear section headers
+  const sectionHeadersPattern = /^[A-Z][A-Z\s]+$/m;
+  const hasSectionHeaders = sectionHeadersPattern.test(text);
+  
+  // Check for consistent formatting
+  const bulletPointsPattern = /[•\-\*]|(\d+\.)/g;
+  const bulletPoints = text.match(bulletPointsPattern) || [];
+  
+  // Check for reasonable line length
+  const lines = text.split('\n');
+  const longLines = lines.filter(line => line.length > 100).length;
+  const lineLengthRatio = lines.length > 0 ? longLines / lines.length : 0;
+  
+  // Check for excessive spacing
+  const excessiveSpacingPattern = /\n{3,}/g;
+  const hasExcessiveSpacing = excessiveSpacingPattern.test(text);
+  
+  // Check for reasonable text length
+  const wordCount = text.split(/\s+/).length;
+  const isReasonableLength = wordCount >= 300 && wordCount <= 1000;
+  
+  // Add points based on formatting quality
+  if (hasSectionHeaders) {
+    score += 15;
+  } else {
+    result.suggestions.push("Add clear ALL-CAPS section headers for better organization");
+  }
+  
+  if (bulletPoints.length >= 10) {
+    score += 15;
+  } else {
+    result.suggestions.push("Use more bullet points to highlight achievements and responsibilities");
+  }
+  
+  if (lineLengthRatio < 0.1) {
+    score += 10;
+  } else {
+    result.suggestions.push("Keep line lengths shorter for better readability (under 100 characters)");
+  }
+  
+  if (!hasExcessiveSpacing) {
+    score += 5;
+  } else {
+    result.suggestions.push("Remove excessive blank lines between sections");
+  }
+  
+  if (isReasonableLength) {
+    score += 5;
+  } else if (wordCount < 300) {
+    result.suggestions.push("Add more content to reach at least 300 words");
+  } else if (wordCount > 1000) {
+    result.suggestions.push("Consider shortening your CV to stay under 1000 words for better ATS processing");
+  }
+  
+  // Ensure score is within 0-100 range
+  result.score = Math.max(0, Math.min(100, score));
+  
+  return result;
+}
+
+/**
+ * Evaluate the contact information score
+ */
+function evaluateContactInfoScore(text: string): { 
+  score: number;
+  missingElements: string[];
+  suggestions: string[];
+} {
+  const result = {
+    score: 0,
+    missingElements: [] as string[],
+    suggestions: [] as string[]
+  };
+  
+  // Start with a base score
+  let score = 50;
+  
+  // Check for essential contact information
+  const emailPattern = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
+  const phonePattern = /\b(\+\d{1,2}\s?)?(\(?\d{3}\)?[\s.-]?)?\d{3}[\s.-]?\d{4}\b/;
+  const linkedInPattern = /\b(linkedin\.com\/in\/|linkedin:)[a-zA-Z0-9_-]+\b/i;
+  const locationPattern = /\b([A-Za-z\s]+,\s*[A-Za-z]{2}|[A-Za-z\s]+,\s*[A-Za-z\s]+)\b/;
+  
+  const hasEmail = emailPattern.test(text);
+  const hasPhone = phonePattern.test(text);
+  const hasLinkedIn = linkedInPattern.test(text);
+  const hasLocation = locationPattern.test(text);
+  
+  // Add points for each contact element
+  if (hasEmail) {
+    score += 15;
+  } else {
+    result.missingElements.push("Email address");
+    result.suggestions.push("Add your email address to your contact information");
+  }
+  
+  if (hasPhone) {
+    score += 10;
+  } else {
+    result.missingElements.push("Phone number");
+    result.suggestions.push("Include your phone number in your contact information");
+  }
+  
+  if (hasLinkedIn) {
+    score += 15;
+  } else {
+    result.missingElements.push("LinkedIn profile");
+    result.suggestions.push("Add your LinkedIn profile URL to your contact information");
+  }
+  
+  if (hasLocation) {
+    score += 10;
+  } else {
+    result.missingElements.push("Location information");
+    result.suggestions.push("Include your location (city, state/province) in your contact information");
+  }
+  
+  // Ensure score is within 0-100 range
+  result.score = Math.max(0, Math.min(100, score));
+  
+  return result;
+}
+
+/**
+ * Evaluate the achievements score
+ */
+function evaluateAchievementsScore(text: string): { 
+  score: number;
+  suggestions: string[];
+} {
+  const result = {
+    score: 0,
+    suggestions: [] as string[]
+  };
+  
+  // Start with a base score
+  let score = 40;
+  
+  // Check for quantifiable achievements
+  const quantifiablePattern = /\b(increased|decreased|reduced|improved|achieved|won|saved|generated|delivered|managed|led|completed|created|developed|implemented)[\s\S]{1,30}(by|of|from|to)[\s\S]{1,15}(\d+)[\s\S]{1,5}(%|percent|million|billion|thousand)/gi;
+  const quantifiableMatches = text.match(quantifiablePattern) || [];
+  
+  // Check for awards and recognition
+  const awardsPattern = /\b(award|recognition|honor|prize|scholarship|fellowship|grant|nominated|selected|chosen|recipient|won|received)\b/i;
+  const hasAwards = awardsPattern.test(text);
+  
+  // Check for results-oriented language
+  const resultsPattern = /\b(result|outcome|impact|effect|success|accomplishment|achievement|goal|target|objective|delivered|completed|finished|produced)\b/i;
+  const hasResultsLanguage = resultsPattern.test(text);
+  
+  // Add points based on achievements quality
+  if (quantifiableMatches.length >= 5) {
+    score += 30;
+  } else if (quantifiableMatches.length >= 3) {
+    score += 20;
+  } else if (quantifiableMatches.length >= 1) {
+    score += 10;
+    result.suggestions.push("Add more quantifiable achievements with specific metrics");
+  } else {
+    result.suggestions.push("Include quantifiable achievements with numbers (%, $, etc.)");
+  }
+  
+  if (hasAwards) {
+    score += 15;
+  } else {
+    result.suggestions.push("Consider adding awards, recognitions, or notable achievements");
+  }
+  
+  if (hasResultsLanguage) {
+    score += 15;
+  } else {
+    result.suggestions.push("Use more results-oriented language to describe your accomplishments");
+  }
+  
+  // Ensure score is within 0-100 range
+  result.score = Math.max(0, Math.min(100, score));
+  
+  return result;
+}
+
+/**
+ * Evaluate the readability score
+ */
+function evaluateReadabilityScore(text: string): { 
+  score: number;
+  suggestions: string[];
+} {
+  const result = {
+    score: 0,
+    suggestions: [] as string[]
+  };
+  
+  // Start with a base score
+  let score = 50;
+  
+  // Check for sentence length
+  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  const avgWordsPerSentence = sentences.reduce((sum, sentence) => 
+    sum + sentence.split(/\s+/).length, 0) / Math.max(1, sentences.length);
+  
+  // Check for paragraph length
+  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+  const avgLinesPerParagraph = paragraphs.reduce((sum, paragraph) => 
+    sum + paragraph.split('\n').length, 0) / Math.max(1, paragraphs.length);
+  
+  // Check for passive voice (simple check)
+  const passiveVoicePattern = /\b(is|are|was|were|have been|has been|had been)\s+(\w+ed)\b/gi;
+  const passiveMatches = text.match(passiveVoicePattern) || [];
+  const passivePercentage = text.split(/\s+/).length > 0 
+    ? (passiveMatches.length / text.split(/\s+/).length) * 100 
+    : 0;
+  
+  // Check for weak verb usage
+  const weakVerbPattern = /\b(is|are|was|were|am|be|being|been|have|has|had|do|does|did|get|got|make|made|go|went|see|saw|use|used|work|worked)\b/gi;
+  const weakVerbMatches = text.match(weakVerbPattern) || [];
+  const weakVerbPercentage = text.split(/\s+/).length > 0 
+    ? (weakVerbMatches.length / text.split(/\s+/).length) * 100 
+    : 0;
+  
+  // Add points based on readability metrics
+  if (avgWordsPerSentence <= 15) {
+    score += 15; // Good sentence length
+  } else if (avgWordsPerSentence <= 20) {
+    score += 10; // Acceptable sentence length
+  } else {
+    result.suggestions.push("Use shorter sentences (aim for 15 words or less per sentence)");
+  }
+  
+  if (avgLinesPerParagraph <= 4) {
+    score += 10; // Good paragraph length
+  } else {
+    result.suggestions.push("Keep paragraphs short (4 lines or less)");
+  }
+  
+  if (passivePercentage < 5) {
+    score += 15; // Minimal passive voice
+  } else if (passivePercentage < 10) {
+    score += 5; // Acceptable passive voice usage
+  } else {
+    result.suggestions.push("Reduce passive voice constructions in your writing");
+  }
+  
+  if (weakVerbPercentage < 15) {
+    score += 10; // Good strong verb usage
+  } else {
+    result.suggestions.push("Replace weak verbs with stronger action verbs");
+  }
+  
+  // Ensure score is within 0-100 range
+  result.score = Math.max(0, Math.min(100, score));
+  
+  return result;
+}
+
+/**
+ * Calculate weighted score from category scores
+ */
+function calculateWeightedScore(categoryScores: {
+  keywords: number;
+  experience: number;
+  education: number;
+  skills: number;
+  formatting: number;
+  contactInfo: number;
+  achievements: number;
+  readability: number;
+}): number {
+  // Weights for each category (sum: 100)
+  const weights = {
+    keywords: 20,
+    experience: 25,
+    education: 10,
+    skills: 15,
+    formatting: 10,
+    contactInfo: 5,
+    achievements: 10,
+    readability: 5
+  };
+  
+  // Calculate weighted sum
+  let weightedSum = 0;
+  let totalWeight = 0;
+  
+  for (const [category, score] of Object.entries(categoryScores)) {
+    const weight = weights[category as keyof typeof weights];
+    weightedSum += score * weight;
+    totalWeight += weight;
+  }
+  
+  // Normalize to 0-100 scale
+  const normalizedScore = totalWeight > 0 ? weightedSum / totalWeight : 0;
+  
+  // Round to nearest integer
+  return Math.round(normalizedScore);
+}
+
+/**
+ * Common English words to filter out of keyword analysis
+ */
+const commonWords = [
+  "the", "and", "that", "have", "for", "not", "with", "you", "this", "but",
+  "his", "from", "they", "she", "will", "would", "there", "their", "what",
+  "about", "which", "when", "make", "like", "time", "just", "know", "take",
+  "into", "year", "your", "good", "some", "could", "them", "than", "then",
+  "now", "look", "only", "come", "over", "think", "also", "back", "after",
+  "work", "first", "well", "even", "want", "because", "these", "give", "most"
+];
+
+/**
+ * Extract and format contact information from CV text
+ * @param text The CV text to extract contact information from
+ * @returns Structured contact information
+ */
+export function extractContactInformation(text: string): {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  linkedin: string | null;
+  website: string | null;
+  location: string | null;
+  formattedBlock: string;
+} {
+  // Initialize result object
+  const result = {
+    name: null as string | null,
+    email: null as string | null,
+    phone: null as string | null,
+    linkedin: null as string | null,
+    website: null as string | null,
+    location: null as string | null,
+    formattedBlock: ""
+  };
+  
+  // Extract name (typically at the beginning of the CV)
+  const lines = text.split('\n').filter(line => line.trim().length > 0);
+  if (lines.length > 0) {
+    // First non-empty line is often the name
+    const nameLine = lines[0].trim();
+    
+    // Check if line resembles a name (one or two words, all caps or title case, no typical email/web patterns)
+    if (
+      !nameLine.includes('@') && 
+      !nameLine.includes('http') &&
+      !nameLine.includes('/') &&
+      !/\d{3}/.test(nameLine) && // No series of 3+ digits (like phone numbers)
+      (
+        // ALL CAPS name
+        /^[A-Z][A-Z\s,.'-]{2,40}$/.test(nameLine) ||
+        // Title Case name
+        /^[A-Z][a-z]+(?:\s[A-Z][a-z]+){0,3}$/.test(nameLine) ||
+        // Mixed case name with potential middle names/initials
+        /^[A-Z][a-z]+(?:\s[A-Z](?:\.|[a-z]+)){0,3}$/.test(nameLine)
+      )
+    ) {
+      result.name = nameLine;
+    }
+  }
+  
+  // Extract email
+  const emailPattern = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
+  const emailMatch = text.match(emailPattern);
+  if (emailMatch) {
+    result.email = emailMatch[0];
+  }
+  
+  // Extract phone (various formats)
+  const phonePatterns = [
+    // (123) 456-7890
+    /\(\d{3}\)\s*\d{3}[-.\s]?\d{4}/,
+    // 123-456-7890
+    /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/,
+    // +1 123-456-7890
+    /\+\d{1,2}\s?\(\d{3}\)\s*\d{3}[-.\s]?\d{4}/,
+    // +1 123 456 7890
+    /\+\d{1,2}\s?\d{3}\s?\d{3}\s?\d{4}/
+  ];
+  
+  for (const pattern of phonePatterns) {
+    const phoneMatch = text.match(pattern);
+    if (phoneMatch) {
+      result.phone = phoneMatch[0];
+      break;
+    }
+  }
+  
+  // Extract LinkedIn profile
+  const linkedinPatterns = [
+    // https://www.linkedin.com/in/username
+    /https?:\/\/(?:www\.)?linkedin\.com\/in\/[a-zA-Z0-9_-]+\/?/i,
+    // linkedin.com/in/username
+    /linkedin\.com\/in\/[a-zA-Z0-9_-]+\/?/i,
+    // LinkedIn: username
+    /linkedin:?\s*[a-zA-Z0-9_-]+/i
+  ];
+  
+  for (const pattern of linkedinPatterns) {
+    const linkedinMatch = text.match(pattern);
+    if (linkedinMatch) {
+      result.linkedin = linkedinMatch[0];
+      break;
+    }
+  }
+  
+  // Extract website/portfolio URL
+  const websitePatterns = [
+    // http(s)://example.com
+    /https?:\/\/(?!(?:www\.)?linkedin\.com)[a-zA-Z0-9][-a-zA-Z0-9]{0,62}(?:\.[a-zA-Z0-9][-a-zA-Z0-9]{0,62})+(?::\d+)?(?:\/\S*)?/i,
+    // example.com
+    /\b(?!(?:www\.)?linkedin\.com)[a-zA-Z0-9][-a-zA-Z0-9]{0,62}(?:\.[a-zA-Z0-9][-a-zA-Z0-9]{0,62})+(?::\d+)?(?:\/\S*)?\b/i,
+    // Portfolio: http(s)://example.com
+    /portfolio:?\s*https?:\/\/[^\s]+/i,
+    // Website: http(s)://example.com
+    /website:?\s*https?:\/\/[^\s]+/i
+  ];
+  
+  for (const pattern of websitePatterns) {
+    const websiteMatch = text.match(pattern);
+    if (websiteMatch && !websiteMatch[0].includes('linkedin.com')) {
+      result.website = websiteMatch[0];
+      break;
+    }
+  }
+  
+  // Extract location
+  const locationPatterns = [
+    // City, State ZIP
+    /\b[A-Z][a-zA-Z\s]+,\s*[A-Z]{2}\s*\d{5}(?:-\d{4})?\b/,
+    // City, State
+    /\b[A-Z][a-zA-Z\s]+,\s*[A-Z]{2}\b/,
+    // City, Country
+    /\b[A-Z][a-zA-Z\s]+,\s*[A-Z][a-zA-Z\s]+\b/
+  ];
+  
+  for (const pattern of locationPatterns) {
+    const locationMatch = text.match(pattern);
+    if (locationMatch) {
+      result.location = locationMatch[0];
+      break;
+    }
+  }
+  
+  // If no structured location found, try looking for lines containing common location terms
+  if (!result.location) {
+    const locationTerms = ['location:', 'address:', 'city:', 'based in:', 'residing in:'];
+    for (const line of lines) {
+      const lowerLine = line.toLowerCase();
+      for (const term of locationTerms) {
+        if (lowerLine.includes(term)) {
+          // Extract what comes after the location term
+          result.location = line.substring(lowerLine.indexOf(term) + term.length).trim();
+          break;
+        }
+      }
+      if (result.location) break;
+    }
+  }
+  
+  // Create a formatted contact information block
+  let formattedBlock = '';
+  
+  // Add name at the top, larger and bold
+  if (result.name) {
+    formattedBlock += `${result.name}\n\n`;
+  }
+  
+  // Add contact details in a structured format
+  const contactLines = [];
+  
+  if (result.email) {
+    contactLines.push(`Email: ${result.email}`);
+  }
+  
+  if (result.phone) {
+    contactLines.push(`Phone: ${result.phone}`);
+  }
+  
+  if (result.linkedin) {
+    contactLines.push(`LinkedIn: ${result.linkedin}`);
+  }
+  
+  if (result.website) {
+    contactLines.push(`Website: ${result.website}`);
+  }
+  
+  if (result.location) {
+    contactLines.push(`Location: ${result.location}`);
+  }
+  
+  // Join all contact lines with appropriate separators
+  if (contactLines.length > 0) {
+    formattedBlock += contactLines.join(' | ');
+  }
+  
+  result.formattedBlock = formattedBlock;
+  
+  return result;
+}
+
+/**
+ * Format contact information in a professional style
+ * @param contactInfo Extracted contact information
+ * @param style Style for formatting ("minimal", "classic", "modern")
+ * @returns Formatted contact information string
+ */
+export function formatContactInformation(
+  contactInfo: {
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+    linkedin: string | null;
+    website: string | null;
+    location: string | null;
+  },
+  style: "minimal" | "classic" | "modern" = "modern"
+): string {
+  if (!contactInfo.name && !contactInfo.email && !contactInfo.phone) {
+    return ""; // No basic contact info available
+  }
+  
+  switch (style) {
+    case "minimal":
+      return formatMinimalContactStyle(contactInfo);
+      
+    case "classic":
+      return formatClassicContactStyle(contactInfo);
+      
+    case "modern":
+    default:
+      return formatModernContactStyle(contactInfo);
+  }
+}
+
+/**
+ * Format contact info in a minimal style (single line with separators)
+ */
+function formatMinimalContactStyle(contactInfo: any): string {
+  const contactParts = [];
+  
+  if (contactInfo.name) {
+    contactParts.push(contactInfo.name);
+  }
+  
+  const details = [];
+  if (contactInfo.email) details.push(contactInfo.email);
+  if (contactInfo.phone) details.push(contactInfo.phone);
+  if (contactInfo.location) details.push(contactInfo.location);
+  if (contactInfo.linkedin) details.push(contactInfo.linkedin);
+  if (contactInfo.website) details.push(contactInfo.website);
+  
+  if (details.length > 0) {
+    contactParts.push(details.join(" | "));
+  }
+  
+  return contactParts.join("\n");
+}
+
+/**
+ * Format contact info in a classic style (centered, detailed)
+ */
+function formatClassicContactStyle(contactInfo: any): string {
+  const lines = [];
+  
+  if (contactInfo.name) {
+    lines.push(contactInfo.name);
+    lines.push(""); // Empty line after name
+  }
+  
+  const row1 = [];
+  const row2 = [];
+  
+  if (contactInfo.email) row1.push(`Email: ${contactInfo.email}`);
+  if (contactInfo.phone) row1.push(`Phone: ${contactInfo.phone}`);
+  if (contactInfo.location) row2.push(`Location: ${contactInfo.location}`);
+  if (contactInfo.linkedin) row2.push(`LinkedIn: ${contactInfo.linkedin}`);
+  if (contactInfo.website) row2.push(`Website: ${contactInfo.website}`);
+  
+  if (row1.length > 0) lines.push(row1.join(" | "));
+  if (row2.length > 0) lines.push(row2.join(" | "));
+  
+  return lines.join("\n");
+}
+
+/**
+ * Format contact info in a modern style (compact with icons)
+ */
+function formatModernContactStyle(contactInfo: any): string {
+  const lines = [];
+  
+  if (contactInfo.name) {
+    lines.push(contactInfo.name);
+  }
+  
+  const contacts = [];
+  if (contactInfo.email) contacts.push(contactInfo.email);
+  if (contactInfo.phone) contacts.push(contactInfo.phone);
+  if (contactInfo.location) contacts.push(contactInfo.location);
+  
+  if (contacts.length > 0) {
+    lines.push(contacts.join(" • "));
+  }
+  
+  const links = [];
+  if (contactInfo.linkedin) links.push(contactInfo.linkedin);
+  if (contactInfo.website) links.push(contactInfo.website);
+  
+  if (links.length > 0) {
+    lines.push(links.join(" • "));
+  }
+  
+  return lines.join("\n");
+}
+
+/**
+ * Extract education information from CV text
+ * @param text The CV text to extract education information from
+ * @returns Array of education entries
+ */
+export function extractEducationEntries(text: string): Array<{
+  degree: string;
+  institution: string;
+  dateRange: string;
+  gpa?: string;
+  location?: string;
+  achievements?: string[];
+}> {
+  // Find the education section
+  const educationSectionPattern = /\b(EDUCATION|ACADEMIC BACKGROUND|EDUCATIONAL QUALIFICATIONS|Education)\b[\s\S]+?(?=\n\s*\n\s*[A-Z][A-Z\s]+|\n\s*\n|$)/i;
+  const educationMatch = text.match(educationSectionPattern);
+  
+  if (!educationMatch) {
+    return [];
+  }
+  
+  const educationText = educationMatch[0];
+  
+  // Split into potential education entries - look for institution names or dates as separators
+  const lines = educationText.split('\n').filter(line => line.trim().length > 0);
+  const educationEntries: Array<{
+    degree: string;
+    institution: string;
+    dateRange: string;
+    gpa?: string;
+    location?: string;
+    achievements?: string[];
+  }> = [];
+  
+  let currentEntry: {
+    degree: string;
+    institution: string;
+    dateRange: string;
+    gpa?: string;
+    location?: string;
+    achievements: string[];
+  } | null = null;
+  
+  // Common patterns
+  const degreePattern = /\b(Bachelor|Master|MBA|Ph\.?D\.?|Doctorate|Associate|B\.S\.|B\.A\.|M\.S\.|M\.A\.|M\.Eng\.|B\.Eng\.|BSc|MSc|BA|MA|BS)\b\.?\s*(of|in|'?s)?\s*([A-Za-z\s,]+?)(?=\s*,|\s*-|\s*\(|\s*\d|\s*from|\s*$)/i;
+  const yearPattern = /\b(19|20)\d{2}\b/g;
+  const gpaPattern = /\bGPA\s*(?:of|:)?\s*([\d\.]+)(?:\/[\d\.]+)?/i;
+  const institutionPattern = /\b(?:at|from)?\s*((?:University|College|Institute|School)(?:\s+of)?\s+[A-Za-z\s]+|[A-Za-z\s]+(?:University|College|Institute|School))\b/i;
+  
+  let skipHeader = true;
+  
+  // Process each line
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    
+    // Skip the section header
+    if (skipHeader && /\b(EDUCATION|ACADEMIC|EDUCATIONAL)\b/i.test(line)) {
+      skipHeader = false;
+      continue;
+    }
+    
+    // Check if this is the start of a new entry
+    const degreeMatch = line.match(degreePattern);
+    const yearMatches = [...line.matchAll(yearPattern)].map(m => m[0]);
+    const institutionMatch = line.match(institutionPattern);
+    
+    const isNewEntry = 
+      (degreeMatch && institutionMatch) ||
+      (degreeMatch && yearMatches.length > 0) ||
+      (institutionMatch && yearMatches.length > 0);
+    
+    if (isNewEntry) {
+      // Save the previous entry if it exists
+      if (currentEntry && currentEntry.degree && currentEntry.institution) {
+        educationEntries.push({...currentEntry});
+      }
+      
+      // Start a new entry
+      currentEntry = {
+        degree: degreeMatch ? extractDegree(degreeMatch[0]) : "",
+        institution: institutionMatch ? institutionMatch[1].trim() : "",
+        dateRange: yearMatches.length > 0 ? formatYearsToDateRange(yearMatches) : "",
+        achievements: []
+      };
+      
+      // Check for GPA
+      const gpaMatch = line.match(gpaPattern);
+      if (gpaMatch) {
+        currentEntry.gpa = gpaMatch[1];
+      }
+      
+      // Extract location (usually after the institution)
+      if (currentEntry.institution) {
+        const locationMatch = line.match(new RegExp(`${escapeRegExp(currentEntry.institution)}\\s*,\\s*([A-Za-z\\s,]+)`, 'i'));
+        if (locationMatch) {
+          currentEntry.location = locationMatch[1].trim();
+        }
+      }
+    } else if (currentEntry) {
+      // This line is part of the current entry
+      
+      // Check if this line contains degree information
+      if (!currentEntry.degree) {
+        const degreeMatch = line.match(degreePattern);
+        if (degreeMatch) {
+          currentEntry.degree = extractDegree(degreeMatch[0]);
+        }
+      }
+      
+      // Check if this line contains institution information
+      if (!currentEntry.institution) {
+        const institutionMatch = line.match(institutionPattern);
+        if (institutionMatch) {
+          currentEntry.institution = institutionMatch[1].trim();
+        }
+      }
+      
+      // Check if this line contains date information
+      if (!currentEntry.dateRange) {
+        const yearMatches = [...line.matchAll(yearPattern)].map(m => m[0]);
+        if (yearMatches.length > 0) {
+          currentEntry.dateRange = formatYearsToDateRange(yearMatches);
+        }
+      }
+      
+      // Check if this line contains GPA information
+      if (!currentEntry.gpa) {
+        const gpaMatch = line.match(gpaPattern);
+        if (gpaMatch) {
+          currentEntry.gpa = gpaMatch[1];
+        }
+      }
+      
+      // Check if this line is an achievement bullet
+      if (line.startsWith('•') || line.startsWith('-') || line.startsWith('*') || /^\d+\./.test(line)) {
+        currentEntry.achievements.push(line.replace(/^[•\-\*\d\.]+\s*/, '').trim());
+      }
+    }
+  }
+  
+  // Add the last entry if it exists
+  if (currentEntry && currentEntry.degree && currentEntry.institution) {
+    educationEntries.push({...currentEntry});
+  }
+  
+  // If no structured entries found, try to extract basic information
+  if (educationEntries.length === 0) {
+    const fallbackEntry = extractFallbackEducationInfo(educationText);
+    if (fallbackEntry.degree && fallbackEntry.institution) {
+      educationEntries.push(fallbackEntry);
+    }
+  }
+  
+  return educationEntries;
+}
+
+/**
+ * Extract basic education information when structured parsing fails
+ */
+function extractFallbackEducationInfo(text: string): {
+  degree: string;
+  institution: string;
+  dateRange: string;
+  gpa?: string;
+  location?: string;
+  achievements: string[];
+} {
+  const result = {
+    degree: "",
+    institution: "",
+    dateRange: "",
+    gpa: undefined as string | undefined,
+    location: undefined as string | undefined,
+    achievements: [] as string[]
+  };
+  
+  // Extract degree
+  const degreePattern = /\b(Bachelor|Master|MBA|Ph\.?D\.?|Doctorate|Associate|B\.S\.|B\.A\.|M\.S\.|M\.A\.|M\.Eng\.|B\.Eng\.|BSc|MSc|BA|MA|BS)\b\.?\s*(of|in|'?s)?\s*([A-Za-z\s,]+?)(?=\s*,|\s*-|\s*\(|\s*\d|\s*from|\s*$)/i;
+  const degreeMatch = text.match(degreePattern);
+  if (degreeMatch) {
+    result.degree = extractDegree(degreeMatch[0]);
+  }
+  
+  // Extract institution
+  const institutionPattern = /\b(?:at|from)?\s*((?:University|College|Institute|School)(?:\s+of)?\s+[A-Za-z\s]+|[A-Za-z\s]+(?:University|College|Institute|School))\b/i;
+  const institutionMatch = text.match(institutionPattern);
+  if (institutionMatch) {
+    result.institution = institutionMatch[1].trim();
+  }
+  
+  // Extract years
+  const yearPattern = /\b(19|20)\d{2}\b/g;
+  const yearMatches = [...text.matchAll(yearPattern)].map(m => m[0]);
+  if (yearMatches.length > 0) {
+    result.dateRange = formatYearsToDateRange(yearMatches);
+  }
+  
+  // Extract GPA
+  const gpaPattern = /\bGPA\s*(?:of|:)?\s*([\d\.]+)(?:\/[\d\.]+)?/i;
+  const gpaMatch = text.match(gpaPattern);
+  if (gpaMatch) {
+    result.gpa = gpaMatch[1];
+  }
+  
+  return result;
+}
+
+/**
+ * Helper to escape special characters in regex
+ */
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Extract clean degree name from a match
+ */
+function extractDegree(degreeText: string): string {
+  // Clean up the degree text
+  return degreeText
+    .replace(/\s+/g, ' ')
+    .replace(/\s*,\s*$/, '')
+    .replace(/\s*\(\s*expected\s*\)\s*/i, '')
+    .trim();
+}
+
+/**
+ * Format years into a date range
+ */
+function formatYearsToDateRange(years: string[]): string {
+  if (years.length === 0) return "";
+  
+  // Sort the years
+  const sortedYears = [...years].sort();
+  
+  if (years.length === 1) {
+    return sortedYears[0];
+  } else {
+    return `${sortedYears[0]} - ${sortedYears[sortedYears.length - 1]}`;
+  }
+}
+
+/**
+ * Enhance education entries with better formatting and additional details
+ */
+export function enhanceEducationEntries(entries: Array<{
+  degree: string;
+  institution: string;
+  dateRange: string;
+  gpa?: string;
+  location?: string;
+  achievements?: string[];
+}>): Array<{
+  degree: string;
+  institution: string;
+  dateRange: string;
+  gpa?: string;
+  location?: string;
+  achievements?: string[];
+}> {
+  return entries.map(entry => {
+    const enhanced = {...entry};
+    
+    // Standardize degree names
+    enhanced.degree = standardizeDegree(enhanced.degree);
+    
+    // Clean up institution names
+    enhanced.institution = cleanInstitutionName(enhanced.institution);
+    
+    // Format date range
+    if (enhanced.dateRange) {
+      enhanced.dateRange = standardizeDateRange(enhanced.dateRange);
+    }
+    
+    // Format GPA if available
+    if (enhanced.gpa) {
+      enhanced.gpa = formatGPA(enhanced.gpa);
+    }
+    
+    // Enhance achievements if available
+    if (enhanced.achievements && enhanced.achievements.length > 0) {
+      enhanced.achievements = enhanced.achievements.map(achievement => 
+        enhanceAchievementText(achievement)
+      );
+    }
+    
+    return enhanced;
+  });
+}
+
+/**
+ * Standardize degree names for consistency
+ */
+function standardizeDegree(degree: string): string {
+  let standardized = degree;
+  
+  // Map abbreviations to full degree names
+  const degreeMap: Record<string, string> = {
+    'BS': 'Bachelor of Science',
+    'B.S.': 'Bachelor of Science',
+    'BA': 'Bachelor of Arts',
+    'B.A.': 'Bachelor of Arts',
+    'MS': 'Master of Science',
+    'M.S.': 'Master of Science',
+    'MA': 'Master of Arts',
+    'M.A.': 'Master of Arts',
+    'BSc': 'Bachelor of Science',
+    'MSc': 'Master of Science',
+    'B.Eng.': 'Bachelor of Engineering',
+    'M.Eng.': 'Master of Engineering',
+    'PhD': 'Doctor of Philosophy',
+    'Ph.D.': 'Doctor of Philosophy',
+    'MBA': 'Master of Business Administration'
+  };
+  
+  // Replace abbreviations with full names
+  for (const [abbr, full] of Object.entries(degreeMap)) {
+    if (standardized === abbr || standardized.startsWith(`${abbr} `)) {
+      standardized = standardized.replace(abbr, full);
+      break;
+    }
+  }
+  
+  // Ensure proper capitalization
+  standardized = standardized
+    .replace(/\b\w/g, l => l.toUpperCase())
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  return standardized;
+}
+
+/**
+ * Clean and standardize institution names
+ */
+function cleanInstitutionName(institution: string): string {
+  return institution
+    .replace(/\s+/g, ' ')
+    .replace(/\s*,\s*$/, '')
+    .trim();
+}
+
+/**
+ * Standardize date range format
+ */
+function standardizeDateRange(dateRange: string): string {
+  // If already in a standard format, return as is
+  if (/^\d{4}\s*[-–—]\s*\d{4}$/.test(dateRange) || 
+      /^\d{4}\s*[-–—]\s*(present|current|now)$/i.test(dateRange)) {
+    return dateRange;
+  }
+  
+  // Extract years
+  const years = dateRange.match(/\b(19|20)\d{2}\b/g) || [];
+  
+  if (years.length === 0) return dateRange;
+  
+  if (years.length === 1) {
+    // Check if "present" or similar is mentioned
+    if (/\b(present|current|now|ongoing)\b/i.test(dateRange)) {
+      return `${years[0]} - Present`;
+    } else {
+      return years[0];
+    }
+  } else {
+    // Sort the years
+    const sortedYears = [...years].sort();
+    return `${sortedYears[0]} - ${sortedYears[sortedYears.length - 1]}`;
+  }
+}
+
+/**
+ * Format GPA to a standard format
+ */
+function formatGPA(gpa: string): string {
+  // Try to convert to a number
+  const gpaNum = parseFloat(gpa);
+  
+  if (isNaN(gpaNum)) return gpa;
+  
+  // Format to one decimal place if it's a valid number
+  return `GPA: ${gpaNum.toFixed(1)}/4.0`;
+}
+
+/**
+ * Enhance achievement text for education entries
+ */
+function enhanceAchievementText(achievement: string): string {
+  // Replace weak verbs with stronger alternatives
+  let enhanced = achievement;
+  
+  // Make sure achievements start with a capital letter
+  if (enhanced.length > 0) {
+    enhanced = enhanced.charAt(0).toUpperCase() + enhanced.slice(1);
+  }
+  
+  // Make sure achievements end with a period
+  if (enhanced.length > 0 && !enhanced.endsWith('.')) {
+    enhanced += '.';
+  }
+  
+  return enhanced;
+}
+
+/**
+ * Format the complete education section based on extracted entries
+ */
+export function formatEducationSection(entries: Array<{
+  degree: string;
+  institution: string;
+  dateRange: string;
+  gpa?: string;
+  location?: string;
+  achievements?: string[];
+}>): string {
+  if (entries.length === 0) {
+    return "";
+  }
+  
+  let formattedSection = "EDUCATION\n\n";
+  
+  entries.forEach((entry, index) => {
+    // Main entry details
+    formattedSection += `${entry.degree}\n`;
+    formattedSection += `${entry.institution}`;
+    
+    if (entry.location) {
+      formattedSection += `, ${entry.location}`;
+    }
+    
+    formattedSection += '\n';
+    
+    // Date range and GPA on the same line
+    const detailsLine = [
+      entry.dateRange,
+      entry.gpa
+    ].filter(Boolean).join(' | ');
+    
+    if (detailsLine) {
+      formattedSection += `${detailsLine}\n`;
+    }
+    
+    // Add achievements if available
+    if (entry.achievements && entry.achievements.length > 0) {
+      formattedSection += '\n';
+      entry.achievements.forEach(achievement => {
+        formattedSection += `• ${achievement}\n`;
+      });
+    }
+    
+    // Add spacing between entries
+    if (index < entries.length - 1) {
+      formattedSection += '\n';
+    }
+  });
+  
+  return formattedSection;
+}
