@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { Menu } from "@headlessui/react";
 // Update the import path for Heroicons v2
-import { ChevronDownIcon, TrashIcon, ArrowDownTrayIcon } from "@heroicons/react/24/outline";
+import { ChevronDown, Trash, Download } from "lucide-react";
 import DeleteCVButton from "@/components/delete-cv";
 
 interface ActionsDropdownProps {
@@ -67,7 +67,7 @@ export default function ActionsDropdown({ cv }: ActionsDropdownProps) {
       <div>
         <Menu.Button className="inline-flex justify-center items-center px-3 py-1.5 text-sm font-medium text-[#B4916C] bg-[#B4916C]/10 rounded-md hover:bg-[#B4916C]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B4916C] focus-visible:ring-opacity-75 transition-colors duration-200">
           Actions
-          <ChevronDownIcon
+          <ChevronDown
             className="w-4 h-4 ml-1 text-[#B4916C]"
             aria-hidden="true"
           />
@@ -83,7 +83,7 @@ export default function ActionsDropdown({ cv }: ActionsDropdownProps) {
                 } group flex rounded-md items-center w-full px-2 py-2 text-sm text-white`}
                 onClick={handleDownload}
               >
-                <ArrowDownTrayIcon className="w-5 h-5 mr-2 text-[#B4916C]" aria-hidden="true" />
+                <Download className="w-5 h-5 mr-2 text-[#B4916C]" aria-hidden="true" />
                 Download
               </button>
             )}
@@ -95,7 +95,7 @@ export default function ActionsDropdown({ cv }: ActionsDropdownProps) {
                   active ? 'bg-red-900/20' : ''
                 } group flex rounded-md items-center w-full px-2 py-2 text-sm text-gray-700`}
               >
-                <TrashIcon className="w-5 h-5 mr-2 text-red-500" aria-hidden="true" />
+                <Trash className="w-5 h-5 mr-2 text-red-500" aria-hidden="true" />
                 <DeleteCVButton cvId={cv.id} />
               </div>
             )}
