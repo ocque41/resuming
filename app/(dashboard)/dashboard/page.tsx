@@ -10,7 +10,7 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import DeleteCVButton from "@/components/delete-cv";
+import DeleteCVButton from "@/components/DeleteCVButton";
 import UserMenu from "@/components/UserMenu";
 import ActionsDropdown from "@/components/ActionsDropdown";
 import Link from "next/link";

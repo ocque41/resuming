@@ -7,7 +7,7 @@ import { useState } from "react";
 import { Menu } from "@headlessui/react";
 // Update the import path for Heroicons v2
 import { ChevronDown, Trash, Download } from "lucide-react";
-import DeleteCVButton from "@/components/delete-cv";
+import DeleteCVButton from "@/components/DeleteCVButton";
 
 interface ActionsDropdownProps {
   cv: any;
