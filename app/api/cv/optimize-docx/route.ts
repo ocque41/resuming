@@ -97,12 +97,35 @@ function startBackgroundProcess(cvRecord: any, templateId: string, userId: strin
       // Update progress
       await updateMetadata(cvRecord.id, { progress: 20 });
       
+      // First perform local analysis to extract structured data
+      console.log("Performing local analysis to extract structured data");
+      await updateMetadata(cvRecord.id, { progress: 25, step: "Extracting structured CV data" });
+      
+      // Import the performLocalAnalysis function from cvProcessor
+      const { performLocalAnalysis } = await import('@/lib/utils/cvProcessor');
+      const localAnalysis = performLocalAnalysis(cvText);
+      
+      // Extract experience entries and other structured data
+      const experienceEntries = localAnalysis.experienceEntries || [];
+      const detectedIndustry = localAnalysis.topIndustry || 'General';
+      
+      console.log(`Extracted ${experienceEntries.length} experience entries and detected ${detectedIndustry} industry`);
+      
+      // Update metadata with the extracted structured data
+      await updateMetadata(cvRecord.id, { 
+        extractedExperienceEntries: JSON.stringify(experienceEntries),
+        detectedIndustry
+      });
+      
       // Extract sections and perform initial ATS analysis using GPT-4o
       console.log("Analyzing CV with GPT-4o for ATS optimization");
       await updateMetadata(cvRecord.id, { progress: 30, step: "Analyzing CV with GPT-4o" });
       
       // Extract sections using the module
       const sections = optimizeCVModule.extractSections(cvText);
+      
+      // Add the detected industry to the sections
+      sections.industry = detectedIndustry;
       
       // Perform ATS analysis to get initial score
       const atsAnalysisResult = await performATSAnalysis(cvText, sections);
@@ -122,6 +145,9 @@ function startBackgroundProcess(cvRecord: any, templateId: string, userId: strin
       
       // Generate optimized content for each section
       const optimizedSections = await optimizeSectionsWithGPT4o(sections, atsAnalysisResult);
+      
+      // Store the experience entries in the optimized sections
+      optimizedSections.experienceEntries = JSON.stringify(experienceEntries);
       
       // Update progress
       await updateMetadata(cvRecord.id, { 
@@ -155,9 +181,9 @@ function startBackgroundProcess(cvRecord: any, templateId: string, userId: strin
         title: `Optimized CV - ${cvRecord.fileName.replace('.pdf', '')}`,
         atsScore: improvedAtsScore,
         improvedAtsScore: improvedAtsScore,
-        industry: optimizedSections.industry || '',
+        industry: optimizedSections.industry || detectedIndustry,
         improvements: optimizedAnalysisResult.improvementSuggestions || [],
-        experienceEntries: optimizedSections.experience ? JSON.parse(optimizedSections.experience) : []
+        experienceEntries: experienceEntries // Pass the structured experience entries directly
       };
       
       // Generate the document
@@ -189,7 +215,8 @@ function startBackgroundProcess(cvRecord: any, templateId: string, userId: strin
         completedAt: new Date().toISOString(),
         originalAtsScore,
         improvedAtsScore,
-        optimizedDocxPath: dropboxPath
+        optimizedDocxPath: dropboxPath,
+        experienceEntries: JSON.stringify(experienceEntries) // Store the structured experience entries in the final metadata
       });
       
       console.log(`Optimization completed for CV ${cvRecord.id}`);
@@ -274,6 +301,9 @@ async function optimizeSectionsWithGPT4o(sections: Record<string, string>, atsAn
   // In a real implementation, this would call GPT-4o
   console.log("Optimizing CV sections with GPT-4o");
   
+  // Import the enhanceExperienceWithMetrics function for enhancing experience entries
+  const { enhanceExperienceWithMetrics } = await import('@/lib/utils/cvProcessor');
+  
   // For demonstration, return enhanced sections
   const optimizedSections: Record<string, string> = { ...sections };
   
@@ -287,13 +317,96 @@ async function optimizeSectionsWithGPT4o(sections: Record<string, string>, atsAn
     optimizedSections.achievements = "• Successfully led a team that increased company revenue by 20% in one year\n• Implemented process improvements that reduced operational costs by 15%\n• Delivered projects on time and under budget, resulting in high client satisfaction";
   }
   
-  // Enhance the experience section if it exists
-  if (optimizedSections.experience) {
-    // Just simulate enhancement for demonstration
-    optimizedSections.experience = optimizedSections.experience
-      .replace(/worked/gi, "Collaborated")
-      .replace(/helped/gi, "Facilitated")
-      .replace(/made/gi, "Implemented");
+  // Enhance the experience section using the structured experience entries
+  try {
+    // If we have experience entries data in JSON format, parse it
+    let experienceEntries = [];
+    if (optimizedSections.experienceEntries) {
+      try {
+        experienceEntries = JSON.parse(optimizedSections.experienceEntries);
+      } catch (error) {
+        console.error("Error parsing experience entries:", error);
+      }
+    }
+    
+    // If we have experience entries data, use it to construct an enhanced experience section
+    if (experienceEntries && experienceEntries.length > 0) {
+      console.log(`Enhancing ${experienceEntries.length} experience entries`);
+      
+      // Enhance experience entries with metrics and stronger language
+      const enhancedEntries = enhanceExperienceWithMetrics(experienceEntries);
+      
+      // Format experience entries into a nicely structured text with proper formatting
+      let formattedExperience = "";
+      
+      enhancedEntries.forEach((entry, index) => {
+        // Format job title and company on one line
+        formattedExperience += `${entry.jobTitle} at ${entry.company}\n`;
+        
+        // Add date range and location on the next line
+        formattedExperience += `${entry.dateRange}${entry.location ? ` | ${entry.location}` : ''}\n\n`;
+        
+        // Add responsibilities as bullet points
+        if (entry.responsibilities && entry.responsibilities.length > 0) {
+          entry.responsibilities.forEach(responsibility => {
+            formattedExperience += `• ${responsibility}\n`;
+          });
+        }
+        
+        // Add spacing between entries
+        if (index < enhancedEntries.length - 1) {
+          formattedExperience += "\n\n";
+        }
+      });
+      
+      // Update the experience section with the formatted content
+      optimizedSections.experience = formattedExperience;
+      console.log("Successfully enhanced experience section with structured data");
+    } 
+    // If we don't have structured entries but do have an experience section, enhance it with action verbs
+    else if (optimizedSections.experience) {
+      console.log("Enhancing experience section with action verbs");
+      
+      // Enhance the experience text with stronger language
+      let enhancedExperience = optimizedSections.experience
+        .replace(/\b(worked|did|made|helped)\b/gi, (match) => {
+          const improvements = {
+            'worked': ['Collaborated', 'Partnered', 'Contributed'],
+            'did': ['Executed', 'Performed', 'Accomplished'],
+            'made': ['Developed', 'Created', 'Implemented'],
+            'helped': ['Assisted', 'Supported', 'Facilitated']
+          };
+          const options = improvements[match.toLowerCase() as keyof typeof improvements] || [];
+          return options.length > 0 ? options[Math.floor(Math.random() * options.length)] : match;
+        });
+      
+      // Add quantifiable metrics if they're not present
+      if (!/\d+%|\d+ percent|\d+ million|\$\d+/.test(enhancedExperience)) {
+        const lines = enhancedExperience.split('\n');
+        const enhancedLines = lines.map(line => {
+          // Add metrics to lines that look like accomplishments
+          if (line.startsWith('•') && 
+              /\b(increased|improved|reduced|saved|generated|delivered|managed|led)\b/i.test(line) && 
+              !/\d+%|\d+ percent|\d+ million|\$\d+/.test(line)) {
+            // Generate a realistic metric
+            const metrics = [
+              'by 15%', 'by 20%', 'by over 25%', 'resulting in 30% improvement',
+              'saving $50K annually', 'increasing efficiency by 18%',
+              'reducing costs by 12%', 'for 15+ team members'
+            ];
+            const randomMetric = metrics[Math.floor(Math.random() * metrics.length)];
+            return `${line} ${randomMetric}`;
+          }
+          return line;
+        });
+        enhancedExperience = enhancedLines.join('\n');
+      }
+      
+      optimizedSections.experience = enhancedExperience;
+    }
+  } catch (error) {
+    console.error("Error enhancing experience section:", error);
+    // Keep the original experience section if enhancement fails
   }
   
   // Enhance the skills section if it exists
@@ -336,9 +449,48 @@ function formatOptimizedSections(sections: any): string {
       formattedText += `PROFILE\n${sections.summary || sections.profile}\n\n`;
     }
     
-    // Experience section
+    // Experience section - specially formatted for ATS optimization
     if (sections.experience) {
-      formattedText += `EXPERIENCE\n${sections.experience}\n\n`;
+      formattedText += `EXPERIENCE\n`;
+      
+      // Check if we have parsed experienceEntries
+      let experienceEntries = [];
+      try {
+        if (sections.experienceEntries && typeof sections.experienceEntries === 'string') {
+          experienceEntries = JSON.parse(sections.experienceEntries);
+        } else if (Array.isArray(sections.experienceEntries)) {
+          experienceEntries = sections.experienceEntries;
+        }
+      } catch (error) {
+        console.error("Error parsing experience entries:", error);
+      }
+      
+      // If we have structured experience entries, format them for optimal ATS readability
+      if (experienceEntries && experienceEntries.length > 0) {
+        let experienceText = '';
+        
+        experienceEntries.forEach((entry: any) => {
+          // Include job title and company on the first line
+          experienceText += `${entry.jobTitle || ''} at ${entry.company || ''}\n`;
+          
+          // Include date range and location on the next line
+          experienceText += `${entry.dateRange || ''}${entry.location ? ` | ${entry.location}` : ''}\n\n`;
+          
+          // Include responsibilities as bullet points
+          if (entry.responsibilities && Array.isArray(entry.responsibilities)) {
+            entry.responsibilities.forEach((responsibility: string) => {
+              experienceText += `• ${responsibility}\n`;
+            });
+          }
+          
+          experienceText += '\n';
+        });
+        
+        formattedText += experienceText + '\n';
+      } else {
+        // Use regular experience section text
+        formattedText += `${sections.experience}\n\n`;
+      }
     }
     
     // Education section
@@ -352,7 +504,7 @@ function formatOptimizedSections(sections: any): string {
     }
     
     // Additional sections using their original names
-    const processedSections = ['contactInfo', 'name', 'summary', 'profile', 'experience', 'education', 'skills'];
+    const processedSections = ['contactInfo', 'name', 'summary', 'profile', 'experience', 'experienceEntries', 'education', 'skills', 'industry'];
     
     // Add any remaining sections with their original names
     Object.entries(sections).forEach(([key, value]) => {
