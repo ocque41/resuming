@@ -1,7 +1,16 @@
 // lib/db/queries.server.ts
-import { desc, and, eq, isNull, like, ilike } from 'drizzle-orm';
+import { desc, and, eq, isNull, like, ilike, not, isNotNull } from 'drizzle-orm';
 import { db } from './drizzle';
-import { activityLogs, teamMembers, teams, users, cvs } from './schema';
+import { 
+  activityLogs, 
+  teamMembers, 
+  teams, 
+  users, 
+  cvs, 
+  documentAnalyses, 
+  DocumentAnalysis, 
+  NewDocumentAnalysis 
+} from './schema';
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth/session';
 
@@ -230,6 +239,168 @@ export async function getCVByFileName(fileName: string) {
 export async function updateCVAnalysis(cvId: number, metadata: string): Promise<boolean> {
   await db.update(cvs).set({ metadata }).where(eq(cvs.id, cvId));
   return true;
+}
+
+/**
+ * Save a new document analysis result to the database
+ * @param cvId The CV ID this analysis is for
+ * @param analysisData The complete analysis result
+ * @param analysisType The type of analysis (default: 'general')
+ * @returns The created analysis record
+ */
+export async function saveDocumentAnalysis(
+  cvId: number,
+  analysisData: any,
+  analysisType: string = "general"
+): Promise<DocumentAnalysis | undefined> {
+  try {
+    // First check if we already have a version for this CV
+    const existingVersions = await db
+      .select({ version: documentAnalyses.version })
+      .from(documentAnalyses)
+      .where(eq(documentAnalyses.cvId, cvId))
+      .orderBy(desc(documentAnalyses.version))
+      .limit(1);
+
+    // Calculate the new version number
+    const newVersion = existingVersions.length > 0 ? existingVersions[0].version + 1 : 1;
+    
+    // Extract structured data for the indexed fields
+    const overallScore = analysisData.summary?.overallScore || 0;
+    const sentimentScore = Math.round((analysisData.sentimentAnalysis?.overallScore || 0) * 100);
+    const keywordCount = analysisData.contentAnalysis?.topKeywords?.length || 0;
+    const entityCount = analysisData.keyInformation?.entities?.length || 0;
+    
+    // Insert the new analysis
+    const result = await db
+      .insert(documentAnalyses)
+      .values({
+        cvId,
+        version: newVersion,
+        analysisType,
+        overallScore,
+        sentimentScore,
+        keywordCount,
+        entityCount,
+        contentAnalysis: analysisData.contentAnalysis || null,
+        sentimentAnalysis: analysisData.sentimentAnalysis || null,
+        keyInformation: analysisData.keyInformation || null,
+        summary: analysisData.summary || null,
+        rawAnalysisResponse: analysisData
+      })
+      .returning();
+      
+    // Also update the CV's metadata field for backward compatibility
+    await updateCVAnalysis(cvId, JSON.stringify(analysisData));
+      
+    console.log(`Document analysis saved with ID ${result[0].id}, version ${newVersion}`);
+    return result[0];
+  } catch (error) {
+    console.error("Error saving document analysis:", error);
+    return undefined;
+  }
+}
+
+/**
+ * Get the latest analysis for a CV
+ * @param cvId The CV ID to get analysis for
+ * @returns The latest analysis or undefined if none exists
+ */
+export async function getLatestDocumentAnalysis(
+  cvId: number
+): Promise<DocumentAnalysis | undefined> {
+  try {
+    const analyses = await db
+      .select()
+      .from(documentAnalyses)
+      .where(eq(documentAnalyses.cvId, cvId))
+      .orderBy(desc(documentAnalyses.version))
+      .limit(1);
+      
+    return analyses.length > 0 ? analyses[0] : undefined;
+  } catch (error) {
+    console.error(`Error getting latest analysis for CV ${cvId}:`, error);
+    return undefined;
+  }
+}
+
+/**
+ * Get all analyses for a CV
+ * @param cvId The CV ID to get analyses for
+ * @returns Array of analyses, ordered by version descending
+ */
+export async function getAllDocumentAnalyses(
+  cvId: number
+): Promise<DocumentAnalysis[]> {
+  try {
+    return await db
+      .select()
+      .from(documentAnalyses)
+      .where(eq(documentAnalyses.cvId, cvId))
+      .orderBy(desc(documentAnalyses.version));
+  } catch (error) {
+    console.error(`Error getting analyses for CV ${cvId}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Migrate existing CV analyses from metadata to the new table
+ * This function can be called to populate the new table with existing data
+ */
+export async function migrateExistingAnalyses(): Promise<number> {
+  try {
+    let migratedCount = 0;
+    
+    // Get all CVs with metadata
+    const cvsWithMetadata = await db
+      .select()
+      .from(cvs)
+      .where(
+        and(
+          isNotNull(cvs.metadata),
+          not(eq(cvs.metadata, '{}')),
+          not(eq(cvs.metadata, 'null'))
+        )
+      );
+      
+    console.log(`Found ${cvsWithMetadata.length} CVs with metadata to migrate`);
+    
+    // Migrate each CV's analysis data
+    for (const cv of cvsWithMetadata) {
+      try {
+        if (!cv.metadata) continue;
+        
+        // Try to parse the metadata JSON
+        let metadata;
+        try {
+          metadata = typeof cv.metadata === 'string' ? JSON.parse(cv.metadata) : cv.metadata;
+        } catch (e) {
+          console.error(`Error parsing metadata for CV ${cv.id}:`, e);
+          continue;
+        }
+        
+        // Check if metadata contains analysis data
+        if (metadata.analysis || metadata.contentAnalysis || metadata.sentimentAnalysis) {
+          // Extract the analysis data
+          const analysisData = metadata.analysis || metadata;
+          
+          // Save to the new table
+          await saveDocumentAnalysis(cv.id, analysisData, 'migrated');
+          migratedCount++;
+          console.log(`Migrated analysis data for CV ${cv.id}`);
+        }
+      } catch (cvError) {
+        console.error(`Error migrating analysis for CV ${cv.id}:`, cvError);
+      }
+    }
+    
+    console.log(`Successfully migrated ${migratedCount} analysis records`);
+    return migratedCount;
+  } catch (error) {
+    console.error("Error migrating existing analyses:", error);
+    return 0;
+  }
 }
 
 // If there's no db import available, we'll need to create the connectToDatabase function

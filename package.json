@@ -12,7 +12,9 @@
     "db:studio": "drizzle-kit studio",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "lint": "next lint",
+    "migrate-analyses": "npx ts-node --project tsconfig.json scripts/migrate-document-analyses.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.1.9",
@@ -77,6 +79,7 @@
     "dotenv": "^16.3.1",
     "drizzle-kit": "^0.18.1",
     "drizzle-orm": "^0.39.3",
+    "drizzle-zod": "^0.7.0",
     "dropbox": "^10.34.0",
     "embla-carousel-react": "^8.5.2",
     "faiss-node": "^0.5.1",

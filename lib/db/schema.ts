@@ -7,8 +7,16 @@ import {
   integer,
   bigint,
   jsonb,
+  boolean,
+  foreignKey,
+  primaryKey,
+  json,
+  uniqueIndex,
+  pgEnum,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+import { z } from "zod";
 
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
@@ -94,11 +102,63 @@ export const documents = pgTable('documents', {
   metadata: jsonb('metadata'),
 });
 
-export const cvsRelations = relations(cvs, ({ one }) => ({
+export const documentAnalyses = pgTable(
+  "document_analyses",
+  {
+    id: serial("id").primaryKey(),
+    cvId: integer("cv_id").notNull().references(() => cvs.id, { onDelete: "cascade" }),
+    version: integer("version").notNull().default(1),
+    analysisType: varchar("analysis_type", { length: 50 }).notNull().default("general"),
+    
+    // Analysis components as structured data (allows better querying)
+    overallScore: integer("overall_score"),
+    sentimentScore: integer("sentiment_score"),
+    keywordCount: integer("keyword_count"),
+    entityCount: integer("entity_count"),
+    
+    // Store the timestamp when the analysis was performed
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    
+    // Store the full analysis result as JSON
+    contentAnalysis: json("content_analysis").$type<{
+      contentDistribution: { name: string; value: number }[];
+      topKeywords: { text: string; value: number }[];
+    }>(),
+    
+    sentimentAnalysis: json("sentiment_analysis").$type<{
+      overallScore: number;
+      sentimentBySection: { section: string; score: number }[];
+    }>(),
+    
+    keyInformation: json("key_information").$type<{
+      contactInfo: { type: string; value: string }[];
+      keyDates: { description: string; date: string }[];
+      entities: { type: string; name: string; occurrences: number }[];
+    }>(),
+    
+    summary: json("summary").$type<{
+      highlights: string[];
+      suggestions: string[];
+      overallScore: number;
+    }>(),
+    
+    // Raw analysis data that might be used for future AI training
+    rawAnalysisResponse: json("raw_analysis_response"),
+  },
+  (table) => {
+    return {
+      // Create an index on cvId for faster lookups of analyses for a specific CV
+      cvIdIdx: uniqueIndex("document_analyses_cv_id_version_idx").on(table.cvId, table.version),
+    };
+  }
+);
+
+export const cvsRelations = relations(cvs, ({ one, many }) => ({
   user: one(users, {
     fields: [cvs.userId],
     references: [users.id],
   }),
+  analyses: many(documentAnalyses),
 }));
 
 export const teamsRelations = relations(teams, ({ many }) => ({
@@ -142,6 +202,13 @@ export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
   user: one(users, {
     fields: [activityLogs.userId],
     references: [users.id],
+  }),
+}));
+
+export const documentAnalysesRelations = relations(documentAnalyses, ({ one }) => ({
+  cv: one(cvs, {
+    fields: [documentAnalyses.cvId],
+    references: [cvs.id],
   }),
 }));
 
@@ -190,3 +257,11 @@ export enum ActivityType {
 
 export type Document = typeof documents.$inferSelect;
 export type CV = typeof cvs.$inferSelect;
+
+export const insertDocumentAnalysisSchema = createInsertSchema(documentAnalyses);
+export const selectDocumentAnalysisSchema = createSelectSchema(documentAnalyses);
+export const documentAnalysisIdSchema = z.object({ id: z.number() });
+
+export type DocumentAnalysis = typeof documentAnalyses.$inferSelect;
+export type NewDocumentAnalysis = typeof documentAnalyses.$inferInsert;
+export type DocumentAnalysisId = z.infer<typeof documentAnalysisIdSchema>["id"];

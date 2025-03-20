@@ -1,12 +1,43 @@
 "use client";
 
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { BarChart2, PieChart, AlertCircle, FileText } from 'lucide-react';
-import DebugViewer from './DebugViewer.client';
+import React, { useState } from "react";
+import { Select, Button, Alert, Spin, Tabs, Card, Progress, Collapse, Empty, Tooltip } from "antd";
+import { 
+  PieChart, 
+  Pie, 
+  BarChart, 
+  Bar, 
+  Cell, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip as RechartsTooltip, 
+  Legend, 
+  ResponsiveContainer,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  Radar,
+  LineChart,
+  Line,
+  AreaChart,
+  Area
+} from "recharts";
+import { 
+  FileTextOutlined, 
+  FileExcelOutlined, 
+  FilePptOutlined, 
+  DownloadOutlined, 
+  ShareAltOutlined 
+} from "@ant-design/icons";
+import { detectFileType, getAnalysisTypeForFile, FileTypeInfo } from "@/lib/file-utils/file-type-detector";
+
+// Define TabPane and Panel using destructuring
+const { TabPane } = Tabs;
+const { Panel } = Collapse;
+
+// Color palette for charts
+const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8"];
 
 interface Document {
   id: string;
@@ -19,371 +50,666 @@ interface DocumentAnalyzerProps {
 }
 
 export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
-  const [selectedDocumentId, setSelectedDocumentId] = useState<string>('');
-  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isPdfExporting, setIsPdfExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [analysisResults, setAnalysisResults] = useState<any>(null);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
-
-  // Function to handle document analysis
+  const [analysisResult, setAnalysisResult] = useState<any | null>(null);
+  const [activeTab, setActiveTab] = useState("1");
+  
+  // Get the selected document's file name
+  const selectedDocument = documents.find(doc => doc.id === selectedDocumentId);
+  
+  // Detect file type if we have a selected document
+  const fileType = selectedDocument ? detectFileType(selectedDocument.fileName) : undefined;
+  const analysisType = fileType ? getAnalysisTypeForFile(fileType) : "general";
+  
   const handleAnalyze = async () => {
     if (!selectedDocumentId) {
       setError("Please select a document to analyze");
       return;
     }
-
+    
     setIsAnalyzing(true);
     setError(null);
-    setAnalysisResults(null);
-    setDebugInfo(null);
-
+    
     try {
-      console.log(`Analyzing document with ID: ${selectedDocumentId}`);
-      
-      const response = await fetch('/api/document/analyze', {
+      const response = await fetch(`/api/document/analyze`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ documentId: selectedDocumentId }),
       });
-
-      const responseData = await response.json();
-      console.log("Response data:", responseData);
-      setDebugInfo(responseData);
-
+      
       if (!response.ok) {
-        throw new Error(responseData.error || 'Failed to analyze document');
+        throw new Error("Failed to analyze document");
       }
-
-      if (!responseData.analysis) {
-        throw new Error('Analysis results not found in response');
-      }
-
-      setAnalysisResults(responseData.analysis);
-    } catch (error) {
-      console.error('Error analyzing document:', error);
-      setError(`Analysis error: ${error instanceof Error ? error.message : String(error)}`);
+      
+      const data = await response.json();
+      setAnalysisResult(data.analysis);
+    } catch (err) {
+      console.error("Analysis error:", err);
+      setError("An error occurred while analyzing the document");
     } finally {
       setIsAnalyzing(false);
     }
   };
-
-  return (
-    <div>
-      {/* Document Selection */}
-      <div className="mb-8">
-        <label className="block text-sm font-medium text-gray-300 mb-2">
-          Select a Document to Analyze
-        </label>
-        <div className="flex gap-4">
-          <select 
-            className="flex-1 bg-black border border-gray-700 rounded-md p-2.5 text-gray-300 focus:ring-[#B4916C] focus:border-[#B4916C]"
-            value={selectedDocumentId}
-            onChange={(e) => setSelectedDocumentId(e.target.value)}
-          >
-            <option value="">Select a document...</option>
-            {documents.map((doc) => (
-              <option key={doc.id} value={doc.id}>{doc.fileName}</option>
-            ))}
-          </select>
-          <Button 
-            className="bg-[#B4916C] hover:bg-[#A3815C] text-white"
-            onClick={handleAnalyze}
-            disabled={isAnalyzing || !selectedDocumentId}
-          >
-            {isAnalyzing ? 'Analyzing...' : 'Analyze'}
-          </Button>
-        </div>
-      </div>
-
-      {/* Debug information */}
-      {debugInfo && <DebugViewer data={debugInfo} title="API Response" />}
-
-      {/* Error message if any */}
-      {error && (
-        <Alert className="mb-6 bg-red-900/20 border-red-900/30">
-          <AlertCircle className="h-4 w-4 text-red-400" />
-          <AlertDescription className="text-red-300">
-            {error}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Analytics Tabs */}
-      {!analysisResults && !isAnalyzing && (
-        <Alert className="mb-6 bg-[#B4916C]/10 border-[#B4916C]/20 text-[#B4916C]">
-          <AlertCircle className="h-4 w-4 text-[#B4916C]" />
-          <AlertDescription className="text-gray-300">
-            Select a document and click "Analyze" to generate insights. Our AI will process the document and extract meaningful information.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {isAnalyzing && (
-        <div className="text-center py-12">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#B4916C] mb-4"></div>
-          <p className="text-gray-300">Analyzing your document. This may take a moment...</p>
-        </div>
-      )}
-
-      {analysisResults && (
-        <Tabs defaultValue="content" className="mb-6">
-          <TabsList className="bg-black border border-gray-800 mb-6">
-            <TabsTrigger value="content" className="data-[state=active]:bg-[#B4916C]/20 data-[state=active]:text-[#B4916C]">
-              Content Analysis
-            </TabsTrigger>
-            <TabsTrigger value="sentiment" className="data-[state=active]:bg-[#B4916C]/20 data-[state=active]:text-[#B4916C]">
-              Sentiment Analysis
-            </TabsTrigger>
-            <TabsTrigger value="information" className="data-[state=active]:bg-[#B4916C]/20 data-[state=active]:text-[#B4916C]">
-              Key Information
-            </TabsTrigger>
-            <TabsTrigger value="summary" className="data-[state=active]:bg-[#B4916C]/20 data-[state=active]:text-[#B4916C]">
-              Summary
-            </TabsTrigger>
-          </TabsList>
-          
-          {/* Content Analysis Tab */}
-          <TabsContent value="content" className="mt-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Content Distribution Chart */}
-              <Card className="border border-gray-800 bg-black/20 shadow-lg">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg text-[#B4916C]">Content Distribution</CardTitle>
-                  <CardDescription className="text-gray-500">
-                    Breakdown of document content by category
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="h-80 flex items-center justify-center">
-                    {/* Placeholder for PieChart - In a real implementation, use a charting library */}
-                    <div className="w-64 h-64 rounded-full border-8 border-[#B4916C]/30 relative">
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="text-center">
-                          <div className="text-2xl font-bold text-[#B4916C]">
-                            {analysisResults.contentAnalysis?.contentDistribution?.[0]?.value || 0}%
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            {analysisResults.contentAnalysis?.contentDistribution?.[0]?.name || 'Primary Content'}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="absolute top-0 right-0 w-6 h-6 rounded-full bg-[#B4916C]"></div>
-                      <div className="absolute top-1/4 right-0 w-5 h-5 rounded-full bg-[#B4916C]/80"></div>
-                      <div className="absolute bottom-1/4 right-0 w-4 h-4 rounded-full bg-[#B4916C]/60"></div>
-                      <div className="absolute bottom-0 right-1/4 w-4 h-4 rounded-full bg-[#B4916C]/40"></div>
-                      <div className="absolute bottom-0 left-1/4 w-3 h-3 rounded-full bg-[#B4916C]/20"></div>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-2 mt-4">
-                    {analysisResults.contentAnalysis?.contentDistribution?.map((item: any, index: number) => (
-                      <div key={index} className="flex items-center">
-                        <div className={`w-3 h-3 rounded-full bg-[#B4916C]/${90 - index * 15} mr-2`}></div>
-                        <div className="text-sm">
-                          <span className="text-gray-300">{item.name}</span>
-                          <span className="text-[#B4916C] ml-2">{item.value}%</span>
-                        </div>
-                      </div>
+  
+  const handleExportPDF = async () => {
+    if (!selectedDocumentId) {
+      setError("Please select a document to export");
+      return;
+    }
+    
+    setIsPdfExporting(true);
+    setError(null);
+    
+    try {
+      // Open the PDF download endpoint in a new tab
+      window.open(`/api/reports/analysis?documentId=${selectedDocumentId}`, '_blank');
+      
+      // Show success message
+      // Note: We don't wait for the download to complete since it opens in a new tab
+      setTimeout(() => {
+        setIsPdfExporting(false);
+      }, 1000);
+    } catch (err) {
+      console.error("PDF export error:", err);
+      setError("An error occurred while exporting the PDF");
+      setIsPdfExporting(false);
+    }
+  };
+  
+  const handleShare = async () => {
+    if (!selectedDocumentId) {
+      setError("Please select a document to share");
+      return;
+    }
+    
+    // Generate share URL
+    const shareUrl = `${window.location.origin}/share/analysis/${selectedDocumentId}`;
+    
+    // Try to use the Web Share API if available
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Document Analysis: ${selectedDocument?.fileName}`,
+          text: "Check out this document analysis",
+          url: shareUrl
+        });
+        return;
+      } catch (err) {
+        console.log("Share API error, falling back to clipboard", err);
+      }
+    }
+    
+    // Fallback: Copy to clipboard
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      alert("Share link copied to clipboard!");
+    } catch (err) {
+      console.error("Clipboard error:", err);
+      alert("Share URL: " + shareUrl);
+    }
+  };
+  
+  // Get the file type icon
+  const getFileTypeIcon = () => {
+    if (!fileType) return <FileTextOutlined />;
+    
+    switch (fileType.category) {
+      case 'spreadsheet':
+        return <FileExcelOutlined style={{ color: '#217346' }} />;
+      case 'presentation':
+        return <FilePptOutlined style={{ color: '#D24726' }} />;
+      case 'document':
+      default:
+        return <FileTextOutlined style={{ color: '#2B579A' }} />;
+    }
+  };
+  
+  // Get a component to render based on the file type and analysis section
+  const renderAnalysisSection = (section: string) => {
+    if (!analysisResult) return null;
+    
+    switch (section) {
+      case "content":
+        return renderContentAnalysis();
+      case "sentiment":
+        return renderSentimentAnalysis();
+      case "keyinfo":
+        return renderKeyInformation();
+      case "summary":
+      default:
+        return renderSummary();
+    }
+  };
+  
+  // Render content analysis based on file type
+  const renderContentAnalysis = () => {
+    if (!analysisResult?.contentAnalysis) {
+      return <Empty description="No content analysis available" />;
+    }
+    
+    switch (analysisType) {
+      case 'spreadsheet':
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card title="Data Structure">
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={analysisResult.contentAnalysis.dataStructure || analysisResult.contentAnalysis.contentDistribution}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={true}
+                    outerRadius={100}
+                    fill="#8884d8"
+                    dataKey="value"
+                    nameKey="name"
+                    label={({ name, percent }: { name: string, percent: number }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  >
+                    {(analysisResult.contentAnalysis.dataStructure || analysisResult.contentAnalysis.contentDistribution)?.map((_: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
-                  </div>
-                </CardContent>
-              </Card>
-              
-              {/* Top Keywords */}
-              <Card className="border border-gray-800 bg-black/20 shadow-lg">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg text-[#B4916C]">Top Keywords</CardTitle>
-                  <CardDescription className="text-gray-500">
-                    Most frequent terminology in your document
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="h-80 p-4 bg-black/30 rounded-lg border border-gray-800 flex flex-wrap items-center justify-center gap-3">
-                    {analysisResults.contentAnalysis?.topKeywords?.map((keyword: any, index: number) => (
-                      <div 
-                        key={index} 
-                        className="px-3 py-1.5 rounded-full bg-[#B4916C]/20 text-[#B4916C] border border-[#B4916C]/30"
-                        style={{ fontSize: `${0.8 + (keyword.value / 10)}rem` }}
-                      >
-                        {keyword.text}
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-          
-          {/* Sentiment Analysis Tab */}
-          <TabsContent value="sentiment" className="mt-0">
-            <Card className="border border-gray-800 bg-black/20 shadow-lg mb-8">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg text-[#B4916C]">Document Sentiment Score</CardTitle>
-                <CardDescription className="text-gray-500">
-                  Overall sentiment analysis of your document content
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="flex items-center justify-center py-8">
-                  <div className="relative w-48 h-48">
-                    <div className="absolute inset-0 rounded-full border-8 border-gray-800"></div>
-                    <div 
-                      className="absolute inset-0 rounded-full border-8 border-[#B4916C]"
-                      style={{ 
-                        clipPath: 'polygon(0 0, 100% 0, 100% 100%, 0% 100%)', 
-                        clip: 'rect(0px, 96px, 192px, 0px)' 
-                      }}
-                    ></div>
-                    <div className="absolute inset-0 flex items-center justify-center flex-col">
-                      <div className="text-4xl font-bold text-[#B4916C]">
-                        {analysisResults.sentimentAnalysis?.overallScore?.toFixed(2) || '0.00'}
-                      </div>
-                      <div className="text-sm text-gray-400">Positive Sentiment</div>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="space-y-4 mt-2">
-                  <div className="text-white font-medium mb-2">Sentiment by Section</div>
-                  {analysisResults.sentimentAnalysis?.sentimentBySection?.map((item: any, index: number) => (
-                    <div key={index} className="space-y-1">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-300">{item.section}</span>
-                        <span className="text-[#B4916C]">{item.score.toFixed(2)}</span>
-                      </div>
-                      <div className="w-full bg-gray-800 rounded-full h-2">
-                        <div 
-                          className="bg-[#B4916C] h-2 rounded-full" 
-                          style={{ width: `${item.score * 100}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          {/* Key Information Tab */}
-          <TabsContent value="information" className="mt-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <Card className="border border-gray-800 bg-black/20 shadow-lg">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg text-[#B4916C]">Contact Information</CardTitle>
-                  <CardDescription className="text-gray-500">
-                    Detected contact details in your document
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="space-y-3 mt-2">
-                    {analysisResults.keyInformation?.contactInfo?.map((item: any, index: number) => (
-                      <div key={index} className="flex justify-between items-center p-2 border-b border-gray-800">
-                        <span className="text-gray-400">{item.type}</span>
-                        <span className="text-[#F9F6EE] font-medium">{item.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card className="border border-gray-800 bg-black/20 shadow-lg">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg text-[#B4916C]">Key Entities</CardTitle>
-                  <CardDescription className="text-gray-500">
-                    Important elements identified in your document
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="mt-2">
-                    <div className="grid grid-cols-3 p-2 border-b border-gray-800 text-gray-400 text-sm">
-                      <span>Type</span>
-                      <span>Name</span>
-                      <span className="text-right">Occurrences</span>
-                    </div>
-                    {analysisResults.keyInformation?.entities?.map((entity: any, index: number) => (
-                      <div key={index} className="grid grid-cols-3 p-2 border-b border-gray-800 text-sm">
-                        <span className="text-gray-400">{entity.type}</span>
-                        <span className="text-[#F9F6EE]">{entity.name}</span>
-                        <span className="text-[#B4916C] text-right">{entity.occurrences}</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-          
-          {/* Summary Tab */}
-          <TabsContent value="summary" className="mt-0">
-            <Card className="border border-gray-800 bg-black/20 shadow-lg mb-8">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg text-[#B4916C]">Document Highlights</CardTitle>
-                <CardDescription className="text-gray-500">
-                  Key strengths identified in your document
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="mt-2">
-                  <ul className="space-y-2">
-                    {analysisResults.summary?.highlights?.map((highlight: string, index: number) => (
-                      <li key={index} className="flex items-start">
-                        <div className="w-5 h-5 rounded-full bg-[#B4916C]/20 flex items-center justify-center text-[#B4916C] mr-3 mt-0.5">
-                          <span className="text-xs">✓</span>
-                        </div>
-                        <span className="text-[#F9F6EE]">{highlight}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </CardContent>
+                  </Pie>
+                  <RechartsTooltip formatter={(value: any) => `${value}%`} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
             </Card>
             
-            <Card className="border border-gray-800 bg-black/20 shadow-lg">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg text-[#B4916C]">Improvement Suggestions</CardTitle>
-                <CardDescription className="text-gray-500">
-                  Recommendations to enhance your document
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="mt-2">
-                  <ul className="space-y-2">
-                    {analysisResults.summary?.suggestions?.map((suggestion: string, index: number) => (
-                      <li key={index} className="flex items-start">
-                        <div className="w-5 h-5 rounded-full bg-[#B4916C]/20 flex items-center justify-center text-[#B4916C] mr-3 mt-0.5">
-                          <span className="text-xs">↑</span>
-                        </div>
-                        <span className="text-[#F9F6EE]">{suggestion}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                
-                <div className="mt-6 bg-[#222222] rounded-lg p-4 flex items-center justify-between">
-                  <div>
-                    <div className="text-sm text-gray-400">Overall Score</div>
-                    <div className="text-2xl font-bold text-[#B4916C]">{analysisResults.summary?.overallScore || 0}/100</div>
-                  </div>
-                  <div className="w-24 h-24 relative">
-                    <div className="absolute inset-0 rounded-full border-8 border-gray-800"></div>
-                    <div 
-                      className="absolute inset-0 rounded-full border-8 border-[#B4916C]"
-                      style={{ 
-                        clipPath: `polygon(0 0, 100% 0, 100% 100%, 0% 100%)`,
-                        clip: `rect(0px, ${(analysisResults.summary?.overallScore / 100) * 48 + 48}px, 96px, 0px)` 
-                      }}
-                    ></div>
-                    <div className="absolute inset-0 flex items-center justify-center text-lg font-bold text-white">
-                      {analysisResults.summary?.overallScore || 0}%
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
+            <Card title="Data Quality">
+              <ResponsiveContainer width="100%" height={300}>
+                <RadarChart outerRadius={90} width={500} height={300} data={analysisResult.contentAnalysis.dataQuality || []}>
+                  <PolarGrid />
+                  <PolarAngleAxis dataKey="attribute" />
+                  <PolarGrid />
+                  <Radar name="Score" dataKey="score" stroke="#8884d8" fill="#8884d8" fillOpacity={0.6} />
+                  <RechartsTooltip />
+                  <Legend />
+                </RadarChart>
+              </ResponsiveContainer>
             </Card>
-          </TabsContent>
-        </Tabs>
+          </div>
+        );
+        
+      case 'presentation':
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card title="Slide Distribution">
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={analysisResult.contentAnalysis.slideDistribution || analysisResult.contentAnalysis.contentDistribution}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={true}
+                    outerRadius={100}
+                    fill="#8884d8"
+                    dataKey="value"
+                    nameKey="name"
+                    label={({ name, percent }: { name: string, percent: number }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  >
+                    {(analysisResult.contentAnalysis.slideDistribution || analysisResult.contentAnalysis.contentDistribution)?.map((_: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip formatter={(value: any) => `${value}%`} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </Card>
+            
+            <Card title="Content Flow">
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={analysisResult.contentAnalysis.contentFlow || []}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="slide" />
+                  <YAxis />
+                  <RechartsTooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="contentDensity" stroke="#8884d8" name="Content Density" />
+                  <Line type="monotone" dataKey="complexityScore" stroke="#82ca9d" name="Complexity" />
+                </LineChart>
+              </ResponsiveContainer>
+            </Card>
+          </div>
+        );
+        
+      case 'document':
+      default:
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card title="Content Distribution">
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={analysisResult.contentAnalysis.contentDistribution || []}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={true}
+                    outerRadius={100}
+                    fill="#8884d8"
+                    dataKey="value"
+                    nameKey="name"
+                    label={({ name, percent }: { name: string, percent: number }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  >
+                    {analysisResult.contentAnalysis.contentDistribution?.map((_: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip formatter={(value: any) => `${value}%`} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </Card>
+            
+            <Card title="Top Keywords">
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart
+                  data={analysisResult.contentAnalysis.topKeywords || []}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="text" />
+                  <YAxis label={{ value: 'Relevance', angle: -90, position: 'insideLeft' }} />
+                  <RechartsTooltip />
+                  <Legend />
+                  <Bar dataKey="value" name="Relevance Score" fill="#8884d8">
+                    {analysisResult.contentAnalysis.topKeywords?.map((_: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+          </div>
+        );
+    }
+  };
+  
+  // Render sentiment analysis based on file type
+  const renderSentimentAnalysis = () => {
+    if (!analysisResult?.sentimentAnalysis) {
+      return <Empty description="No sentiment analysis available" />;
+    }
+    
+    // For now, sentiment analysis is similar across all file types
+    return (
+      <div className="grid grid-cols-1 gap-6">
+        <Card title="Overall Sentiment">
+          <div className="flex justify-center mb-6">
+            <Progress
+              type="dashboard"
+              percent={Math.round((analysisResult.sentimentAnalysis.overallScore || 0) * 100)}
+              format={(percent) => `${percent}%`}
+              strokeColor={{
+                '0%': '#ff4d4f',
+                '50%': '#faad14',
+                '100%': '#52c41a',
+              }}
+            />
+          </div>
+          
+          <div className="text-center mb-4">
+            <h3 className="text-lg font-bold mb-1">
+              {(analysisResult.sentimentAnalysis.overallScore || 0) >= 0.8 
+                ? "Very Positive" 
+                : (analysisResult.sentimentAnalysis.overallScore || 0) >= 0.6 
+                  ? "Positive" 
+                  : (analysisResult.sentimentAnalysis.overallScore || 0) >= 0.4 
+                    ? "Neutral" 
+                    : "Needs Improvement"}
+            </h3>
+            <p className="text-gray-600">
+              {(analysisResult.sentimentAnalysis.overallScore || 0) >= 0.7 
+                ? "Your document uses strong, positive language that effectively communicates your message." 
+                : (analysisResult.sentimentAnalysis.overallScore || 0) >= 0.5 
+                  ? "Your document has a positive tone but could be strengthened in some areas." 
+                  : "Consider revising to use more positive and confident language."}
+            </p>
+          </div>
+        </Card>
+        
+        <Card title="Sentiment by Section">
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart
+              data={analysisResult.sentimentAnalysis.sentimentBySection || []}
+              margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+              layout="vertical"
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" domain={[0, 1]} tickFormatter={(value) => `${(value * 100).toFixed(0)}%`} />
+              <YAxis dataKey="section" type="category" width={150} />
+              <RechartsTooltip formatter={(value: any) => `${(Number(value) * 100).toFixed(0)}%`} />
+              <Legend />
+              <Bar dataKey="score" name="Sentiment Score" fill="#8884d8">
+                {analysisResult.sentimentAnalysis.sentimentBySection?.map((entry: any) => (
+                  <Cell 
+                    key={`cell-${entry.section}`} 
+                    fill={
+                      entry.score >= 0.8 ? "#52c41a" : 
+                      entry.score >= 0.6 ? "#85d13a" : 
+                      entry.score >= 0.4 ? "#faad14" : 
+                      "#ff4d4f"
+                    } 
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+      </div>
+    );
+  };
+  
+  // Render key information based on file type
+  const renderKeyInformation = () => {
+    if (!analysisResult?.keyInformation) {
+      return <Empty description="No key information available" />;
+    }
+    
+    switch (analysisType) {
+      case 'spreadsheet':
+        return (
+          <div className="grid grid-cols-1 gap-4">
+            <Card title="Data Insights">
+              <Collapse className="bg-transparent border-0">
+                {analysisResult.keyInformation.dataInsights?.map((insight: any, index: number) => (
+                  <Panel header={insight.title} key={`insight-${index}`}>
+                    <p>{insight.description}</p>
+                    {insight.metrics && (
+                      <div className="mt-4 grid grid-cols-2 gap-4">
+                        {Object.entries(insight.metrics).map(([key, value]: [string, any]) => (
+                          <div key={key} className="bg-gray-50 p-3 rounded">
+                            <div className="text-xs text-gray-500">{key}</div>
+                            <div className="text-lg font-semibold">{value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </Panel>
+                ))}
+              </Collapse>
+            </Card>
+            
+            <Card title="Data Distribution">
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart
+                  data={analysisResult.keyInformation.dataDistribution || []}
+                  margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <RechartsTooltip />
+                  <Area type="monotone" dataKey="value" stroke="#8884d8" fill="#8884d8" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </Card>
+          </div>
+        );
+        
+      case 'presentation':
+        return (
+          <div className="grid grid-cols-1 gap-4">
+            <Card title="Presentation Clarity">
+              <ResponsiveContainer width="100%" height={300}>
+                <RadarChart outerRadius={90} width={500} height={300} data={analysisResult.keyInformation.clarityMetrics || []}>
+                  <PolarGrid />
+                  <PolarAngleAxis dataKey="metric" />
+                  <PolarGrid />
+                  <Radar name="Score" dataKey="score" stroke="#8884d8" fill="#8884d8" fillOpacity={0.6} />
+                  <RechartsTooltip />
+                  <Legend />
+                </RadarChart>
+              </ResponsiveContainer>
+            </Card>
+            
+            <Card title="Key Messages">
+              <ul className="space-y-4">
+                {analysisResult.keyInformation.keyMessages?.map((message: any, index: number) => (
+                  <li key={`message-${index}`} className="border-l-4 border-blue-500 pl-4 py-2">
+                    <div className="font-semibold">{message.title}</div>
+                    <div className="text-gray-600">{message.description}</div>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </div>
+        );
+        
+      case 'document':
+      default:
+        return (
+          <div className="grid grid-cols-1 gap-4">
+            <Card title="Contact Information">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Value</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {analysisResult.keyInformation.contactInfo?.map((item: any, index: number) => (
+                    <tr key={`contact-${index}`}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.type}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              
+              {(!analysisResult.keyInformation.contactInfo || analysisResult.keyInformation.contactInfo.length === 0) && (
+                <p className="text-gray-500 p-4 text-center">No contact information detected</p>
+              )}
+            </Card>
+            
+            <Card title="Key Entities">
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart
+                  data={(analysisResult.keyInformation.entities || []).slice(0, 10)}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <RechartsTooltip />
+                  <Legend />
+                  <Bar dataKey="occurrences" name="Occurrences" fill="#8884d8" />
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+          </div>
+        );
+    }
+  };
+  
+  // Render summary based on file type
+  const renderSummary = () => {
+    if (!analysisResult?.summary) {
+      return <Empty description="No summary available" />;
+    }
+    
+    // The summary section is similar for all file types
+    return (
+      <div>
+        <Card title="Document Analysis Summary" className="mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h3 className="text-lg font-bold mb-3">Key Highlights</h3>
+              <ul className="list-disc pl-5">
+                {analysisResult.summary.highlights?.map((highlight: string, index: number) => (
+                  <li key={`highlight-${index}`} className="mb-2">
+                    {highlight}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            
+            <div>
+              <h3 className="text-lg font-bold mb-3">Improvement Suggestions</h3>
+              <ul className="list-disc pl-5">
+                {analysisResult.summary.suggestions?.map((suggestion: string, index: number) => (
+                  <li key={`suggestion-${index}`} className="mb-2">
+                    {suggestion}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </Card>
+        
+        <Card title="Overall Quality Score">
+          <div className="flex justify-center mb-6">
+            <Progress
+              type="circle"
+              percent={analysisResult.summary.overallScore || 0}
+              format={(percent) => `${percent}`}
+              strokeColor={{
+                '0%': '#108ee9',
+                '100%': '#87d068',
+              }}
+              width={120}
+            />
+          </div>
+          <p className="text-center text-gray-600">
+            {(analysisResult.summary.overallScore || 0) >= 80 
+              ? "Excellent quality! Your document is well-structured and effective." 
+              : (analysisResult.summary.overallScore || 0) >= 60 
+                ? "Good quality with some room for improvement." 
+                : "Several improvements could enhance your document's effectiveness."}
+          </p>
+        </Card>
+      </div>
+    );
+  };
+  
+  return (
+    <div className="document-analyzer">
+      <div className="mb-6 flex flex-col md:flex-row items-start md:items-center gap-4">
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-2">
+            <Select
+              placeholder="Select a document to analyze"
+              style={{ width: "100%" }}
+              onChange={(value: string) => {
+                setSelectedDocumentId(value);
+                setError(null);
+              }}
+              value={selectedDocumentId}
+              className="mb-1"
+            >
+              {documents.map((doc) => (
+                <Select.Option key={doc.id} value={doc.id}>
+                  <div className="flex items-center">
+                    {getFileTypeIcon()}
+                    <span className="ml-2">{doc.fileName}</span>
+                  </div>
+                </Select.Option>
+              ))}
+            </Select>
+            {fileType && (
+              <Tooltip title={fileType.name}>
+                <span className="text-xs px-2 py-1 bg-gray-100 rounded-full">
+                  {fileType.extension.toUpperCase()}
+                </span>
+              </Tooltip>
+            )}
+          </div>
+          
+          {error && (
+            <Alert
+              message={error}
+              type="error"
+              showIcon
+              className="mb-4"
+              closable
+              onClose={() => setError(null)}
+            />
+          )}
+        </div>
+        
+        <div className="flex gap-2">
+          <Button
+            type="primary"
+            onClick={handleAnalyze}
+            loading={isAnalyzing}
+            disabled={!selectedDocumentId}
+          >
+            {isAnalyzing ? "Analyzing..." : "Analyze Document"}
+          </Button>
+          
+          {analysisResult && (
+            <>
+              <Tooltip title="Export as PDF report">
+                <Button
+                  onClick={handleExportPDF}
+                  icon={<DownloadOutlined />}
+                  loading={isPdfExporting}
+                >
+                  Export
+                </Button>
+              </Tooltip>
+              
+              <Tooltip title="Share analysis results">
+                <Button
+                  onClick={handleShare}
+                  icon={<ShareAltOutlined />}
+                >
+                  Share
+                </Button>
+              </Tooltip>
+            </>
+          )}
+        </div>
+      </div>
+      
+      {isAnalyzing ? (
+        <div className="text-center py-12">
+          <Spin size="large" />
+          <p className="mt-4 text-gray-500">Analyzing your document...</p>
+        </div>
+      ) : analysisResult ? (
+        <div>
+          <Tabs activeKey={activeTab} onChange={setActiveTab}>
+            <TabPane tab="Summary" key="1">
+              {renderAnalysisSection("summary")}
+            </TabPane>
+            <TabPane tab="Content Analysis" key="2">
+              {renderAnalysisSection("content")}
+            </TabPane>
+            <TabPane tab="Sentiment Analysis" key="3">
+              {renderAnalysisSection("sentiment")}
+            </TabPane>
+            <TabPane tab="Key Information" key="4">
+              {renderAnalysisSection("keyinfo")}
+            </TabPane>
+          </Tabs>
+          
+          {/* Debug view in development mode */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mt-8 border-t pt-4">
+              <details className="text-xs">
+                <summary className="cursor-pointer font-medium mb-2">Debug: Analysis Result</summary>
+                <pre className="bg-gray-50 p-4 rounded overflow-auto max-h-96">
+                  {JSON.stringify(analysisResult, null, 2)}
+                </pre>
+              </details>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
+          <div className="text-gray-400 mb-4 text-6xl">{getFileTypeIcon()}</div>
+          <h3 className="text-lg font-medium text-gray-600 mb-2">Select a document and click "Analyze"</h3>
+          <p className="text-gray-500 max-w-md mx-auto">
+            Our AI will analyze your document and provide insights on content, sentiment, and key information.
+          </p>
+        </div>
       )}
     </div>
   );
