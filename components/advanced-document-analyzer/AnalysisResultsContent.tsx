@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, BarChart2, ArrowRight } from 'lucide-react';
+import { FileText, BarChart2, ArrowRight, AlertCircle } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import AnalysisKeyPoints from './AnalysisKeyPoints';
 import AnalysisRecommendations from './AnalysisRecommendations';
@@ -17,24 +17,92 @@ interface AnalysisResultsContentProps {
 }
 
 export default function AnalysisResultsContent({ result, documentId }: AnalysisResultsContentProps) {
-  // Log a message when the component is rendered with its props
+  // Track component mount state
+  const isMounted = React.useRef(true);
+  
+  // Track result changes
+  const [processedResult, setProcessedResult] = React.useState<any>(null);
+  const resultRef = React.useRef<any>(null);
+  
+  // Log component lifecycle and result changes
   React.useEffect(() => {
-    console.log("AnalysisResultsContent rendered with:", 
-      result ? "Result provided" : "No result", 
-      "DocumentId:", documentId);
+    console.log("AnalysisResultsContent mounted");
+    return () => {
+      console.log("AnalysisResultsContent unmounting");
+      isMounted.current = false;
+    };
+  }, []);
+
+  // Process and validate result when it changes
+  React.useEffect(() => {
+    console.log("AnalysisResultsContent received new result:", {
+      hasResult: !!result,
+      resultType: result ? typeof result : 'null',
+      documentId
+    });
+
     if (result) {
-      console.log("Result structure:", Object.keys(result));
+      try {
+        // Store in ref for comparison
+        resultRef.current = result;
+        
+        // Validate result structure
+        const isValidResult = (
+          typeof result === 'object' &&
+          result !== null &&
+          (
+            'summary' in result ||
+            'keyPoints' in result ||
+            'insights' in result
+          )
+        );
+
+        if (!isValidResult) {
+          console.error("Invalid result structure:", result);
+          throw new Error("Invalid analysis result structure");
+        }
+
+        // Process the result if component is still mounted
+        if (isMounted.current) {
+          console.log("Setting processed result");
+          setProcessedResult(result);
+        }
+      } catch (error) {
+        console.error("Error processing analysis result:", error);
+        // Set error state in processed result
+        if (isMounted.current) {
+          setProcessedResult({
+            error: true,
+            message: error instanceof Error ? error.message : "Failed to process analysis result"
+          });
+        }
+      }
+    } else {
+      // Clear processed result if input is null
+      if (isMounted.current) {
+        setProcessedResult(null);
+      }
     }
   }, [result, documentId]);
 
-  // If result is null, show a fallback message
-  if (!result) {
-    console.warn("AnalysisResultsContent: No result data provided");
+  // If we have no result or an error result, show appropriate message
+  if (!processedResult) {
+    console.warn("AnalysisResultsContent: No processed result available");
     return (
       <div className="p-6 border border-dashed border-[#333333] rounded-lg bg-[#0A0A0A] text-center">
         <FileText className="h-6 w-6 text-[#8A8782] mx-auto mb-3" />
         <h3 className="text-[#F9F6EE] font-medium">No Analysis Results</h3>
         <p className="text-[#8A8782] text-sm mt-1">Analysis results will appear here.</p>
+      </div>
+    );
+  }
+
+  if (processedResult.error) {
+    return (
+      <div className="p-6 border border-dashed border-[#333333] rounded-lg bg-[#0A0A0A] text-center">
+        <AlertCircle className="h-6 w-6 text-[#EF4444] mx-auto mb-3" />
+        <h3 className="text-[#EF4444] font-medium">Error Processing Results</h3>
+        <p className="text-[#8A8782] text-sm mt-1">{processedResult.message}</p>
       </div>
     );
   }
@@ -74,7 +142,7 @@ export default function AnalysisResultsContent({ result, documentId }: AnalysisR
         entities = [];
       }
       
-      return {
+      const normalized = {
         summary: result.summary || "No summary available",
         keyPoints: Array.isArray(result.keyPoints) ? result.keyPoints : [],
         recommendations,
@@ -85,35 +153,40 @@ export default function AnalysisResultsContent({ result, documentId }: AnalysisR
         languageQuality: result.languageQuality || null,
         timeline: Array.isArray(result.timeline) ? result.timeline : []
       };
+
+      console.log("Normalized data:", {
+        hasSummary: !!normalized.summary,
+        keyPointsCount: normalized.keyPoints.length,
+        recommendationsCount: normalized.recommendations.length,
+        hasInsights: !!normalized.insights,
+        topicsCount: normalized.topics.length,
+        entitiesCount: normalized.entities.length,
+        hasSentiment: !!normalized.sentiment,
+        hasLanguageQuality: !!normalized.languageQuality,
+        timelineCount: normalized.timeline.length
+      });
+
+      return normalized;
     } catch (error) {
       console.error("Error normalizing analysis data:", error);
-      // Return a safe default
-      return {
-        summary: "Error processing analysis results",
-        keyPoints: [],
-        recommendations: [],
-        insights: {},
-        topics: [],
-        entities: [],
-        sentiment: { overall: "neutral", score: 0.5 },
-        languageQuality: null,
-        timeline: []
-      };
+      throw error;
     }
   };
 
-  // Normalize the data
-  const data = normalizeData(result);
-  
-  // Log the normalized data for debugging
-  console.log("Using normalized data with sections:", {
-    keyPointsCount: data.keyPoints.length,
-    recommendationsCount: data.recommendations.length,
-    hasTopics: data.topics && data.topics.length > 0,
-    hasEntities: data.entities && data.entities.length > 0,
-    hasLanguageQuality: !!data.languageQuality,
-    hasTimeline: data.timeline && data.timeline.length > 0
-  });
+  // Try to normalize the data, with error boundary
+  let data;
+  try {
+    data = normalizeData(processedResult);
+  } catch (error) {
+    console.error("Failed to normalize result data:", error);
+    return (
+      <div className="p-6 border border-dashed border-[#333333] rounded-lg bg-[#0A0A0A] text-center">
+        <AlertCircle className="h-6 w-6 text-[#EF4444] mx-auto mb-3" />
+        <h3 className="text-[#EF4444] font-medium">Error Processing Results</h3>
+        <p className="text-[#8A8782] text-sm mt-1">Failed to process analysis results. Please try again.</p>
+      </div>
+    );
+  }
 
   return (
     <>

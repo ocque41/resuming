@@ -186,10 +186,54 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
     };
   };
 
+  // Add result caching mechanism
+  const saveResultToCache = (documentId: string, result: AnalysisResult) => {
+    try {
+      const cacheKey = `analysis_result_${documentId}`;
+      localStorage.setItem(cacheKey, JSON.stringify(result));
+      console.log(`Saved analysis result to localStorage cache with key: ${cacheKey}`);
+      return true;
+    } catch (error) {
+      console.error("Failed to cache analysis result:", error);
+      return false;
+    }
+  };
+
+  const getResultFromCache = (documentId: string): AnalysisResult | null => {
+    try {
+      const cacheKey = `analysis_result_${documentId}`;
+      const cachedData = localStorage.getItem(cacheKey);
+      
+      if (!cachedData) {
+        console.log(`No cached result found for document ID: ${documentId}`);
+        return null;
+      }
+      
+      const result = JSON.parse(cachedData) as AnalysisResult;
+      console.log(`Retrieved cached analysis result for document ID: ${documentId}`);
+      return result;
+    } catch (error) {
+      console.error("Failed to retrieve cached analysis result:", error);
+      return null;
+    }
+  };
+
+  // Update analyze function to use caching
   const analyzeDocument = async () => {
     if (!selectedDocumentId) {
       console.error("No document selected for analysis");
       setAnalysisError("Please select a document to analyze");
+      return;
+    }
+
+    // Before starting analysis, check if we have cached results
+    const cachedResult = getResultFromCache(selectedDocumentId);
+    if (cachedResult) {
+      console.log("Using cached analysis result:", cachedResult);
+      analysisResultsRef.current = cachedResult;
+      setAnalysisResults(cachedResult);
+      setActiveTab("summary");
+      forceUpdate();
       return;
     }
 
@@ -403,23 +447,46 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
         hasSentiment: !!analysisResult.sentiment
       });
       
-      // Store results in both state and ref for redundancy
-      analysisResultsRef.current = analysisResult;
+      // Create a DOM event to notify the result was received
+      const resultEvent = new CustomEvent('analysis-result-received', { 
+        detail: { 
+          documentId: selectedDocumentId,
+          success: true 
+        } 
+      });
+      window.dispatchEvent(resultEvent);
       
-      // Update state immediately with the results
+      // Save to cache
+      saveResultToCache(selectedDocumentId, analysisResult);
+      
+      // Immediate UI update approach - set state in multiple ways for redundancy
+      analysisResultsRef.current = analysisResult;
       setAnalysisResults(analysisResult);
       setActiveTab("summary");
       
-      // Force a UI update after a short delay to ensure the results are displayed
-      window.setTimeout(() => {
-        console.log("Forcing UI update to ensure results display");
-        // Double-check that results are still available
-        if (analysisResultsRef.current && !analysisResults) {
-          console.log("Recovering results from ref and updating state");
-          setAnalysisResults({...analysisResultsRef.current});
-        }
-        forceUpdate();
-      }, 50);
+      // Force update through counter
+      forceUpdate();
+      
+      // Schedule multiple update attempts to ensure UI refresh
+      const scheduleUpdates = () => {
+        // Update once immediately
+        setAnalysisResults(curr => curr || analysisResult);
+        
+        // Schedule a few attempts with increasing delays
+        [50, 100, 500, 1000].forEach(delay => {
+          setTimeout(() => {
+            console.log(`Update attempt at ${delay}ms`);
+            if (!analysisResults && analysisResultsRef.current) {
+              console.log(`Restoring results at ${delay}ms check`);
+              setAnalysisResults({...analysisResultsRef.current});
+              forceUpdate();
+            }
+          }, delay);
+        });
+      };
+      
+      // Trigger updates
+      scheduleUpdates();
     } catch (error) {
       console.error("Document analysis failed:", error);
       
@@ -458,6 +525,33 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
       setAnalysisResults({...analysisResultsRef.current});
     }
   }, [isAnalyzing, analysisResults]);
+
+  // Add effect to handle the DOM event approach
+  React.useEffect(() => {
+    // Handler for the custom event
+    const handleAnalysisCompleted = (event: CustomEvent) => {
+      const { documentId, success } = event.detail;
+      console.log(`Analysis completion event received for document ${documentId}, success: ${success}`);
+      
+      // If the event is for the currently selected document, ensure we show results
+      if (documentId === selectedDocumentId && success) {
+        const cachedResult = getResultFromCache(documentId);
+        if (cachedResult && !analysisResults) {
+          console.log("Applying cached results from event handler");
+          setAnalysisResults(cachedResult);
+          forceUpdate();
+        }
+      }
+    };
+
+    // Add event listener
+    window.addEventListener('analysis-result-received', handleAnalysisCompleted as EventListener);
+    
+    // Clean up
+    return () => {
+      window.removeEventListener('analysis-result-received', handleAnalysisCompleted as EventListener);
+    };
+  }, [selectedDocumentId, analysisResults]);
 
   // Modified results section with debug info and double check
   const hasResults = analysisResults || analysisResultsRef.current;
