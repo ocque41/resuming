@@ -307,7 +307,7 @@ export default async function DocumentDetailPage({
                       <Scrollable 
                         className="bg-[#080808] border border-[#222222] rounded-lg p-4" 
                         maxHeight="16rem"
-                        variant="minimal"
+                        variant="modern"
                       >
                         <p className="text-[#E2DFD7] whitespace-pre-wrap text-sm">
                           {document.rawText}

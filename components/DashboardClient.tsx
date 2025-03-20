@@ -78,7 +78,7 @@ export default function DashboardClient({
             <PremiumCardTitle>Your CV Collection</PremiumCardTitle>
           </PremiumCardHeader>
           <PremiumCardContent className="p-0">
-            <Scrollable orientation="horizontal" variant="premium">
+            <Scrollable orientation="horizontal" variant="modern">
               <Table className="w-full">
                 <TableHeader>
                   <TableRow className="border-b border-[#1A1A1A]">

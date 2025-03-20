@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 interface ScrollableProps extends React.HTMLAttributes<HTMLDivElement> {
   orientation?: 'vertical' | 'horizontal' | 'both';
-  variant?: 'default' | 'premium' | 'minimal';
+  variant?: 'default' | 'premium' | 'minimal' | 'modern';
   height?: string;
   maxHeight?: string;
   minHeight?: string;
@@ -19,7 +19,7 @@ interface ScrollableProps extends React.HTMLAttributes<HTMLDivElement> {
  * Scrollable component with styled scrollbars that match the branding.
  * 
  * @example
- * <Scrollable height="300px" variant="premium">
+ * <Scrollable height="300px" variant="modern">
  *   <YourContent />
  * </Scrollable>
  */
@@ -55,6 +55,8 @@ export function Scrollable({
         return 'premium-scrollbar';
       case 'minimal':
         return 'minimal-scrollbar';
+      case 'modern':
+        return 'modern-scrollbar';
       default:
         return 'custom-scrollbar';
     }
@@ -63,8 +65,7 @@ export function Scrollable({
   return (
     <div
       className={cn(
-        getScrollbarClass(),
-        getOverflowClass(),
+        "relative",
         className
       )}
       style={{
@@ -75,9 +76,17 @@ export function Scrollable({
         maxWidth,
         minWidth,
       }}
-      {...props}
     >
-      {children}
+      <div
+        className={cn(
+          getScrollbarClass(),
+          getOverflowClass(),
+          "w-full h-full"
+        )}
+        {...props}
+      >
+        {children}
+      </div>
     </div>
   );
 }
