@@ -64,6 +64,14 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
     // Find the complete document object to get access to file name and other properties
     const document = documents.find(doc => doc.id === documentId) || null;
     console.log("Selected document details:", document);
+    
+    // Log detailed info about the selected document's fileName
+    if (document) {
+      console.log(`Document fileName: "${document.fileName}", type: ${typeof document.fileName}, exists: ${!!document.fileName}`);
+    } else {
+      console.error(`Could not find document with ID ${documentId} in the documents list:`, documents);
+    }
+    
     setSelectedDocument(document);
     
     // Reset the analysis results and errors when changing documents
@@ -162,24 +170,39 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
       return;
     }
     
-    // Check for missing fileName - a valid document must have a fileName
-    if (!selectedDocument.fileName) {
-      console.error("Selected document is missing fileName");
-      setAnalysisError("The selected document is missing required information. Please try selecting it again or choose a different document.");
-      return;
-    }
+    // Log detailed information about the document being analyzed
+    console.log("Analyzing document:", {
+      id: selectedDocumentId,
+      fileName: selectedDocument.fileName,
+      fileNameType: typeof selectedDocument.fileName,
+      fileNameExists: !!selectedDocument.fileName,
+      fileNameLength: selectedDocument.fileName ? selectedDocument.fileName.length : 0
+    });
     
-    // Check if the file type is supported
-    if (!isSupportedFileType(selectedDocument.fileName)) {
-      console.error(`Unsupported file type: ${getFileExtension(selectedDocument.fileName)}`);
-      setAnalysisError(`File type "${getFileExtension(selectedDocument.fileName)}" is not supported for analysis. Please select a supported document type (PDF, DOCX, TXT, etc).`);
-      return;
+    // Check for missing fileName - a valid document must have a fileName
+    // Note: We now allow proceeding even without fileName as our enhanced API endpoint
+    // will attempt to retrieve it from the database
+    if (!selectedDocument.fileName) {
+      console.warn("Selected document may be missing fileName - proceeding anyway as backend will attempt to fetch it");
+      
+      // Log all available documents to check if there's a mismatch
+      console.log("All available documents:", documents.map(doc => ({
+        id: doc.id,
+        fileName: doc.fileName
+      })));
+    } else {
+      // Only check file type if we have a fileName
+      if (!isSupportedFileType(selectedDocument.fileName)) {
+        console.error(`Unsupported file type: ${getFileExtension(selectedDocument.fileName)}`);
+        setAnalysisError(`File type "${getFileExtension(selectedDocument.fileName)}" is not supported for analysis. Please select a supported document type (PDF, DOCX, TXT, etc).`);
+        return;
+      }
     }
     
     setIsAnalyzing(true);
     setAnalysisError(null);
     console.log('Starting document analysis for document ID:', selectedDocumentId, 'Type:', analysisType);
-    console.log('Document filename:', selectedDocument.fileName);
+    console.log('Document filename:', selectedDocument.fileName || 'Not available (will be fetched by API)');
     
     try {
       // If fallback mode is already enabled, use the client-side analysis
@@ -196,11 +219,20 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
       console.log('Sending analysis request to API endpoint');
       
       try {
-        const requestBody = {
+        const requestBody: {
+          documentId: string;
+          type: string;
+          fileName?: string; // Make fileName optional
+        } = {
           documentId: selectedDocumentId,
-          type: analysisType,
-          fileName: selectedDocument.fileName
+          type: analysisType
         };
+        
+        // Only include fileName if it exists to avoid sending undefined
+        if (selectedDocument.fileName) {
+          requestBody.fileName = selectedDocument.fileName;
+        }
+        
         console.log('Request payload:', JSON.stringify(requestBody));
         
         // Create a timeout promise to handle API timeout

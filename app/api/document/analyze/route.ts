@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { getDocumentById } from "@/lib/document/queries.server";
 
 export const dynamic = "force-dynamic";
 
@@ -270,15 +272,61 @@ export async function POST(req: NextRequest) {
     
     // Validate required fields
     const { documentId, type } = body;
-    const fileName = body.fileName;
+    let fileName = body.fileName;
     
     if (!documentId) {
       console.error("Missing documentId in request");
       return NextResponse.json({ error: "Document ID is required for analysis" }, { status: 400 });
     }
     
+    // If fileName is missing, try to fetch it from the database
     if (!fileName) {
-      console.error("Missing fileName in request");
+      console.log(`fileName is missing in request, attempting to fetch from database for document ID: ${documentId}`);
+      
+      try {
+        // Get auth session to check user permissions
+        const session = await auth();
+        if (!session?.user?.id) {
+          console.error("Unauthorized access attempt");
+          return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+        }
+        
+        // Fetch the document from the database
+        console.log(`Fetching document ID ${documentId} from database to get fileName`);
+        const document = await getDocumentById(documentId);
+        
+        if (!document) {
+          console.error(`Document not found with ID: ${documentId}`);
+          return NextResponse.json({ error: "Document not found" }, { status: 404 });
+        }
+        
+        // Check if this document belongs to the authenticated user
+        if (document.userId !== parseInt(session.user.id)) {
+          console.error(`User ${session.user.id} does not have permission to access document ${documentId}`);
+          return NextResponse.json({ error: "You don't have permission to access this document" }, { status: 403 });
+        }
+        
+        // Get the fileName from the document
+        fileName = document.fileName;
+        
+        if (!fileName) {
+          console.error(`Document ${documentId} exists but has no fileName in the database`);
+          return NextResponse.json({ error: "Document has no fileName in the database" }, { status: 400 });
+        }
+        
+        console.log(`Successfully retrieved fileName '${fileName}' from database for document ID: ${documentId}`);
+      } catch (dbError) {
+        console.error("Error fetching document from database:", dbError);
+        return NextResponse.json({ 
+          error: "Failed to retrieve document information",
+          details: dbError instanceof Error ? dbError.message : "Unknown database error"
+        }, { status: 500 });
+      }
+    }
+    
+    // Now we should have a fileName, either from the request or from the database
+    if (!fileName) {
+      console.error("Missing fileName in request and could not retrieve from database");
       return NextResponse.json({ error: "File name is required for analysis" }, { status: 400 });
     }
     

@@ -99,11 +99,16 @@ function DocumentAnalyzerContent() {
   }, [documentId]);
 
   // Transform documents to the format expected by the DocumentAnalyzerClient
-  const transformedDocuments = documents.map(doc => ({
-    id: doc.id.toString(),
-    fileName: doc.fileName,
-    createdAt: String(doc.createdAt), // Ensure it's a string
-  }));
+  const transformedDocuments = documents.map(doc => {
+    // Add detailed logging about each document
+    console.log(`Transforming document: ID=${doc.id}, fileName=${doc.fileName}, type=${typeof doc.createdAt}`);
+    
+    return {
+      id: doc.id.toString(),
+      fileName: doc.fileName,
+      createdAt: String(doc.createdAt), // Ensure it's a string
+    };
+  });
 
   // If we have a specific document from the URL, make sure it has all required fields
   const preSelectedDocumentId = document ? document.id.toString() : undefined;
@@ -113,8 +118,15 @@ function DocumentAnalyzerContent() {
     console.log('Pre-selecting document for analysis:', { 
       id: preSelectedDocumentId, 
       fileName: document?.fileName,
+      fileNameType: typeof document?.fileName,
+      fileNameExists: !!document?.fileName,
       createdAt: document?.createdAt
     });
+    
+    // Double-check if the preselected document exists in the transformed documents list
+    const selectedDocInList = transformedDocuments.find(doc => doc.id === preSelectedDocumentId);
+    console.log('Is preselected document in the transformed list?', 
+      selectedDocInList ? `Yes, with fileName=${selectedDocInList.fileName}` : 'No, document not found in list');
   }
 
   return (
