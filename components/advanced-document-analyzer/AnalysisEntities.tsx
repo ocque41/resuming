@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { User, Building, MapPin, Calendar, Tag } from 'lucide-react';
+import { User, Building, MapPin, Calendar, Tag, FileText, Briefcase } from 'lucide-react';
 import { DocumentEntity } from './types';
 
 interface AnalysisEntitiesProps {
@@ -15,20 +15,26 @@ export default function AnalysisEntities({ entities = [] }: AnalysisEntitiesProp
   // Function to get icon based on entity type
   const getEntityIcon = (type: string) => {
     const iconClassName = "h-4 w-4 text-[#B4916C]";
+    type = type.toUpperCase();
     
-    switch (type.toLowerCase()) {
-      case 'person':
-      case 'people':
+    switch (type) {
+      case 'PERSON':
+      case 'PEOPLE':
         return <User className={iconClassName} />;
-      case 'organization':
-      case 'company':
+      case 'ORGANIZATION':
+      case 'COMPANY':
         return <Building className={iconClassName} />;
-      case 'location':
-      case 'place':
+      case 'LOCATION':
+      case 'PLACE':
         return <MapPin className={iconClassName} />;
-      case 'date':
-      case 'time':
+      case 'DATE':
+      case 'TIME':
         return <Calendar className={iconClassName} />;
+      case 'DOCUMENT':
+        return <FileText className={iconClassName} />;
+      case 'WORK_OF_ART':
+      case 'PROJECT':
+        return <Briefcase className={iconClassName} />;
       default:
         return <Tag className={iconClassName} />;
     }
@@ -36,27 +42,58 @@ export default function AnalysisEntities({ entities = [] }: AnalysisEntitiesProp
 
   // Function to get background color based on entity type
   const getEntityBgColor = (type: string) => {
-    switch (type.toLowerCase()) {
-      case 'person':
-      case 'people':
+    type = type.toUpperCase();
+    
+    switch (type) {
+      case 'PERSON':
+      case 'PEOPLE':
         return 'bg-[#334155]'; // Slate
-      case 'organization':
-      case 'company':
+      case 'ORGANIZATION':
+      case 'COMPANY':
         return 'bg-[#1e293b]'; // Slate darker
-      case 'location':
-      case 'place':
+      case 'LOCATION':
+      case 'PLACE':
         return 'bg-[#0f172a]'; // Slate darkest
-      case 'date':
-      case 'time':
+      case 'DATE':
+      case 'TIME':
         return 'bg-[#262626]'; // Neutral
+      case 'DOCUMENT':
+        return 'bg-[#2d2117]'; // Brown-ish
+      case 'WORK_OF_ART':
+      case 'PROJECT':
+        return 'bg-[#1a2e35]'; // Cyan-ish dark
       default:
         return 'bg-[#171717]'; // Neutral darker
     }
   };
 
+  // Function to get display label for entity types
+  const getEntityTypeLabel = (type: string): string => {
+    type = type.toUpperCase();
+    
+    switch (type) {
+      case 'PERSON':
+        return 'People';
+      case 'ORGANIZATION':
+        return 'Organizations';
+      case 'LOCATION':
+        return 'Locations';
+      case 'DATE':
+        return 'Dates';
+      case 'DOCUMENT':
+        return 'Documents';
+      case 'WORK_OF_ART':
+        return 'Projects';
+      default:
+        // Make plural by appending 's' and capitalize first letter
+        return type.charAt(0) + type.slice(1).toLowerCase() + 's';
+    }
+  };
+
   // Group entities by type
   const entityGroups = entities.reduce((groups, entity) => {
-    const type = entity.type.toLowerCase();
+    // Ensure type is a string and not undefined
+    const type = (entity.type || 'Unknown').toString();
     if (!groups[type]) {
       groups[type] = [];
     }
@@ -77,23 +114,28 @@ export default function AnalysisEntities({ entities = [] }: AnalysisEntitiesProp
             <div key={type} className="space-y-2">
               <h3 className="text-[#E2DFD7] text-sm font-medium flex items-center gap-2">
                 {getEntityIcon(type)}
-                <span className="capitalize">{type}s</span>
+                <span>{getEntityTypeLabel(type)}</span>
                 <span className="text-[#8A8782] text-xs">({entitiesOfType.length})</span>
               </h3>
               <div className="flex flex-wrap gap-2">
-                {entitiesOfType.map((entity, index) => (
-                  <div 
-                    key={`${entity.name}-${index}`} 
-                    className={`${getEntityBgColor(type)} px-3 py-1.5 rounded-lg border border-[#333333] flex items-center gap-2`}
-                  >
-                    <span className="text-[#E2DFD7] text-sm">{entity.name}</span>
-                    {entity.count && (
-                      <span className="text-[#8A8782] text-xs bg-[#222222] px-1.5 py-0.5 rounded-full">
-                        {entity.count}
-                      </span>
-                    )}
-                  </div>
-                ))}
+                {entitiesOfType.map((entity, index) => {
+                  // Get either mentions or count, whichever is available
+                  const occurrences = entity.mentions || entity.count;
+                  
+                  return (
+                    <div 
+                      key={`${entity.name}-${index}`} 
+                      className={`${getEntityBgColor(type)} px-3 py-1.5 rounded-lg border border-[#333333] flex items-center gap-2`}
+                    >
+                      <span className="text-[#E2DFD7] text-sm">{entity.name}</span>
+                      {occurrences && (
+                        <span className="text-[#8A8782] text-xs bg-[#222222] px-1.5 py-0.5 rounded-full">
+                          {occurrences}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ))}

@@ -162,6 +162,7 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
       return;
     }
     
+    // Check for missing fileName - a valid document must have a fileName
     if (!selectedDocument.fileName) {
       console.error("Selected document is missing fileName");
       setAnalysisError("The selected document is missing required information. Please try selecting it again or choose a different document.");
@@ -181,8 +182,9 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
     console.log('Document filename:', selectedDocument.fileName);
     
     try {
+      // If fallback mode is already enabled, use the client-side analysis
       if (useFallbackMode) {
-        console.log('Using fallback mode for analysis');
+        console.log('Using client-side fallback mode for analysis');
         // Simulate API delay
         await new Promise(resolve => setTimeout(resolve, 1500));
         const fallbackResults = generateFallbackAnalysis();
@@ -192,54 +194,91 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
       }
       
       console.log('Sending analysis request to API endpoint');
-      const requestBody = {
-        documentId: selectedDocumentId,
-        type: analysisType,
-        fileName: selectedDocument.fileName
-      };
-      console.log('Request payload:', JSON.stringify(requestBody));
       
-      // Create a timeout promise to handle API timeout
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Request timeout - API did not respond in time')), 15000);
-      });
-      
-      // Create the fetch promise
-      const fetchPromise = fetch('/api/document/analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      });
-      
-      // Race between the fetch and the timeout
-      const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
-      
-      console.log('API response status:', response.status);
-      console.log('API response status text:', response.statusText);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response text:', errorText);
+      try {
+        const requestBody = {
+          documentId: selectedDocumentId,
+          type: analysisType,
+          fileName: selectedDocument.fileName
+        };
+        console.log('Request payload:', JSON.stringify(requestBody));
         
-        let errorData;
-        try {
-          errorData = JSON.parse(errorText);
-        } catch (e) {
-          console.error('Failed to parse error response as JSON:', e);
-          throw new Error(`Server error: ${response.status} ${response.statusText}`);
-        }
+        // Create a timeout promise to handle API timeout
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Request timeout - API did not respond in time')), 20000); // Increase timeout to 20 seconds
+        });
         
-        console.error('Parsed error data:', errorData);
-        throw new Error(errorData.error || `Failed to analyze document: ${response.status}`);
+        // Function to make the API request with retries
+        const makeRequestWithRetry = async (retryCount = 0, maxRetries = 2) => {
+          try {
+            console.log(`Making API request (attempt ${retryCount + 1} of ${maxRetries + 1})`);
+            
+            // Create the fetch promise
+            const fetchPromise = fetch('/api/document/analyze', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(requestBody),
+            });
+            
+            // Race between the fetch and the timeout
+            const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
+            
+            console.log('API response status:', response.status);
+            console.log('API response status text:', response.statusText);
+            
+            if (!response.ok) {
+              const errorText = await response.text();
+              console.error('Error response text:', errorText);
+              
+              let errorData;
+              try {
+                errorData = JSON.parse(errorText);
+              } catch (e) {
+                console.error('Failed to parse error response as JSON:', e);
+                throw new Error(`Server error: ${response.status} ${response.statusText}`);
+              }
+              
+              console.error('Parsed error data:', errorData);
+              throw new Error(errorData.error || `Failed to analyze document: ${response.status}`);
+            }
+            
+            console.log('Successfully received response from API');
+            const data = await response.json();
+            console.log('Analysis result data structure:', Object.keys(data));
+            return data;
+          } catch (error) {
+            console.error(`Request attempt ${retryCount + 1} failed:`, error);
+            
+            // If we've reached the max retries, throw the error
+            if (retryCount >= maxRetries) {
+              throw error;
+            }
+            
+            // Otherwise, wait and retry
+            const retryDelay = Math.pow(2, retryCount) * 1000; // Exponential backoff
+            console.log(`Retrying in ${retryDelay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            return makeRequestWithRetry(retryCount + 1, maxRetries);
+          }
+        };
+        
+        // Make the request with retry logic
+        const data = await makeRequestWithRetry();
+        console.log('Analysis result:', data);
+        setAnalysisResults(data);
+      } catch (apiError) {
+        console.error('All API request attempts failed:', apiError);
+        
+        // If the API completely fails after retries, switch to fallback mode
+        console.log('Switching to client-side fallback mode');
+        setUseFallbackMode(true);
+        
+        // Ask user if they want to try fallback mode
+        setAnalysisError(`Unable to reach the document analysis service. Would you like to use a simplified client-side analysis instead?`);
+        setIsAnalyzing(false);
       }
-      
-      console.log('Successfully received response from API');
-      const data = await response.json();
-      console.log('Analysis result data structure:', Object.keys(data));
-      console.log('Analysis result:', data);
-      setAnalysisResults(data);
     } catch (error) {
       console.error('Analysis error details:', error);
       if (error instanceof Error) {

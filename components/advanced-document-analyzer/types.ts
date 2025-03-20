@@ -2,10 +2,16 @@
  * TypeScript type definitions for Document Analyzer components
  */
 
-// Type for document insights metrics
+// Type for document insights metrics (array-based version)
+export interface InsightMetric {
+  name: string;
+  value: number;
+}
+
+// Type for document insights metrics (object-based version)
 export interface DocumentInsights {
-  clarity: number;
-  relevance: number;
+  clarity?: number;
+  relevance?: number;
   completeness?: number;
   conciseness?: number;
   overallScore?: number;
@@ -28,32 +34,45 @@ export interface DocumentEntity {
   name: string;
   type: string;
   count?: number;
+  mentions?: number;
+}
+
+// Type for sentiment section
+export interface SentimentSection {
+  section: string;
+  sentiment: string;
+  score: number;
 }
 
 // Type for sentiment analysis
 export interface DocumentSentiment {
   overall: string;
   score: number;
+  sentimentBySection?: SentimentSection[];
 }
 
 // Type for section sentiment
 export interface SectionSentiment {
   section: string;
   score: number;
+  sentiment?: string;
 }
 
 // Type for language quality metrics
 export interface LanguageQuality {
   grammar: number;
   spelling: number;
-  readability: number;
-  overall: number;
+  readability?: number;
+  clarity?: number;
+  overall?: number;
 }
 
 // Type for document timeline entry
 export interface TimelineEntry {
-  period: string;
-  entity: string;
+  period?: string;
+  entity?: string;
+  date?: string;
+  event?: string;
 }
 
 // Type for skill assessment
@@ -66,10 +85,12 @@ export interface Skill {
 // Complete analysis result type
 export interface AnalysisResult {
   documentId: string | number;
+  fileName?: string;
+  analysisType?: string;
   summary: string;
   keyPoints: string[];
   recommendations: string[];
-  insights: DocumentInsights;
+  insights: DocumentInsights | InsightMetric[];
   topics?: DocumentTopic[] | ApiDocumentTopic[];
   entities?: DocumentEntity[];
   sentiment?: DocumentSentiment;
@@ -78,4 +99,5 @@ export interface AnalysisResult {
   timeline?: TimelineEntry[];
   skills?: Skill[];
   timestamp?: string;
+  createdAt?: string;
 } 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, Check, BarChart2 } from 'lucide-react';
+import { FileText, Check, BarChart2, AlertCircle } from 'lucide-react';
 import { LanguageQuality } from './types';
 
 interface AnalysisLanguageQualityProps {
@@ -36,12 +36,48 @@ export default function AnalysisLanguageQuality({ languageQuality }: AnalysisLan
     return 'Needs Improvement';
   };
 
-  const metrics = [
-    { name: 'Grammar', score: languageQuality.grammar, icon: <Check className="h-4 w-4 text-[#B4916C]" /> },
-    { name: 'Spelling', score: languageQuality.spelling, icon: <Check className="h-4 w-4 text-[#B4916C]" /> },
-    { name: 'Readability', score: languageQuality.readability, icon: <FileText className="h-4 w-4 text-[#B4916C]" /> },
-    { name: 'Overall', score: languageQuality.overall, icon: <BarChart2 className="h-4 w-4 text-[#B4916C]" /> }
-  ];
+  // Build metrics array based on available properties
+  const metrics = [];
+  
+  // Always add grammar and spelling which are required
+  metrics.push({ 
+    name: 'Grammar', 
+    score: languageQuality.grammar, 
+    icon: <Check className="h-4 w-4 text-[#B4916C]" /> 
+  });
+  
+  metrics.push({ 
+    name: 'Spelling', 
+    score: languageQuality.spelling, 
+    icon: <Check className="h-4 w-4 text-[#B4916C]" /> 
+  });
+  
+  // Add readability if available
+  if (languageQuality.readability !== undefined) {
+    metrics.push({ 
+      name: 'Readability', 
+      score: languageQuality.readability, 
+      icon: <FileText className="h-4 w-4 text-[#B4916C]" /> 
+    });
+  }
+  
+  // Add clarity if available
+  if (languageQuality.clarity !== undefined) {
+    metrics.push({ 
+      name: 'Clarity', 
+      score: languageQuality.clarity, 
+      icon: <AlertCircle className="h-4 w-4 text-[#B4916C]" /> 
+    });
+  }
+  
+  // Add overall if available
+  if (languageQuality.overall !== undefined) {
+    metrics.push({ 
+      name: 'Overall', 
+      score: languageQuality.overall, 
+      icon: <BarChart2 className="h-4 w-4 text-[#B4916C]" /> 
+    });
+  }
 
   return (
     <Card className="border border-[#222222] bg-[#111111] shadow-lg overflow-hidden">
