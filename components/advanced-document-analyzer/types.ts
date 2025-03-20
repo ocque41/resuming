@@ -14,7 +14,11 @@ export interface DocumentInsights {
   relevance?: number;
   completeness?: number;
   conciseness?: number;
+  structure?: number;
+  engagement?: number;
+  contentquality?: number;
   overallScore?: number;
+  [key: string]: number | undefined; // Add index signature for dynamic properties
 }
 
 // Type for document topics
@@ -65,6 +69,7 @@ export interface LanguageQuality {
   readability?: number;
   clarity?: number;
   overall?: number;
+  [key: string]: number | undefined; // Add index signature for dynamic properties
 }
 
 // Type for document timeline entry
@@ -90,10 +95,10 @@ export interface AnalysisResult {
   summary: string;
   keyPoints: string[];
   recommendations: string[];
-  insights: DocumentInsights | InsightMetric[];
-  topics?: DocumentTopic[] | ApiDocumentTopic[];
+  insights: DocumentInsights | InsightMetric[] | any; // Make more flexible
+  topics?: (DocumentTopic | ApiDocumentTopic | any)[]; // Make more flexible
   entities?: DocumentEntity[];
-  sentiment?: DocumentSentiment;
+  sentiment?: DocumentSentiment | any; // Make more flexible
   sentimentBySection?: SectionSentiment[];
   languageQuality?: LanguageQuality;
   timeline?: TimelineEntry[];

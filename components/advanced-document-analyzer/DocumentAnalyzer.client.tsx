@@ -248,7 +248,7 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
         try {
           // Set up request with timeout
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000);
+          const timeoutId = setTimeout(() => controller.abort(), 20000); // Increased timeout
 
           console.log(`API request attempt ${retryCount + 1}/${maxRetries + 1}`);
           
@@ -260,6 +260,12 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
           });
 
           clearTimeout(timeoutId);
+          
+          console.log("Received response:", {
+            status: response.status,
+            statusText: response.statusText,
+            headers: Object.fromEntries([...response.headers.entries()])
+          });
 
           // Handle error responses
           if (!response.ok) {
@@ -287,9 +293,20 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
           }
 
           // Success - parse response
-          const result = await response.json();
-          console.log("Analysis results received:", Object.keys(result));
-          return result;
+          console.log("Attempting to parse JSON response...");
+          
+          try {
+            const text = await response.text();
+            console.log("Response text sample:", text.substring(0, 200) + "...");
+            
+            // Try to parse JSON from text
+            const result = JSON.parse(text);
+            console.log("Analysis results received successfully. Keys:", Object.keys(result));
+            return result;
+          } catch (parseError) {
+            console.error("Failed to parse response JSON:", parseError);
+            throw new Error("Failed to parse analysis results from server");
+          }
         } catch (error) {
           // Handle AbortError (timeout)
           if (error instanceof Error && error.name === 'AbortError') {
@@ -319,7 +336,7 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
 
       // Execute request with retries
       const analysisResult = await makeRequestWithRetry();
-      console.log("Document analysis completed successfully");
+      console.log("Document analysis completed successfully, result:", analysisResult);
       
       // Validate and process results
       if (!analysisResult || typeof analysisResult !== 'object') {
@@ -327,9 +344,32 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
         throw new Error("Invalid analysis result received from server");
       }
       
+      // Log detailed structure of the result
+      console.log("Analysis result structure:", {
+        keys: Object.keys(analysisResult),
+        docId: analysisResult.documentId,
+        summaryLength: analysisResult.summary ? analysisResult.summary.length : 0,
+        keyPointsCount: Array.isArray(analysisResult.keyPoints) ? analysisResult.keyPoints.length : 'not an array',
+        hasInsights: !!analysisResult.insights,
+        insights: analysisResult.insights,
+        hasTopics: Array.isArray(analysisResult.topics) ? analysisResult.topics.length : 'not an array',
+        hasSentiment: !!analysisResult.sentiment
+      });
+      
       // Update state with results
+      console.log("Setting analysis results state...");
       setAnalysisResults(analysisResult);
+      console.log("Setting active tab to 'summary'...");
       setActiveTab("summary");
+      
+      // Force a refresh after a short delay to ensure state updates are reflected
+      setTimeout(() => {
+        console.log("Checking if results are stored in state:", !!analysisResults);
+        if (!analysisResults) {
+          console.log("Results not in state yet, forcing update");
+          setAnalysisResults({...analysisResult});
+        }
+      }, 100);
     } catch (error) {
       console.error("Document analysis failed:", error);
       
@@ -343,8 +383,10 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
       // Generate fallback analysis as a last resort
       console.log("Generating fallback analysis due to API failure");
       const fallbackResult = generateFallbackAnalysis();
+      console.log("Setting fallback results:", fallbackResult);
       setAnalysisResults(fallbackResult);
     } finally {
+      console.log("Analysis process complete, setting isAnalyzing to false");
       setIsAnalyzing(false);
     }
   };
@@ -476,8 +518,16 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
           {/* Analysis results */}
           {analysisResults && (
             <div className="mt-8 pt-6 border-t border-[#222222]">
-              <h3 className="text-lg font-safiro text-[#F9F6EE] mb-4">Analysis Results</h3>
-              <AnalysisResultsContent result={analysisResults} documentId={selectedDocumentId} />
+              <h3 className="text-lg font-safiro text-[#F9F6EE] mb-4">
+                Analysis Results
+                <span className="ml-2 text-sm text-[#8A8782]">
+                  {analysisResults.fileName ? `(${analysisResults.fileName})` : ''}
+                </span>
+              </h3>
+              <AnalysisResultsContent 
+                result={analysisResults} 
+                documentId={selectedDocumentId} 
+              />
             </div>
           )}
           
