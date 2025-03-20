@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { BarChart2, PieChart, LineChart, List, AlertCircle, FileText } from 'lucide-react';
+import { BarChart2, PieChart, AlertCircle, FileText } from 'lucide-react';
+import DebugViewer from './DebugViewer.client';
 
 interface Document {
   id: string;
@@ -22,6 +23,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [analysisResults, setAnalysisResults] = useState<any>(null);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
 
   // Function to handle document analysis
   const handleAnalyze = async () => {
@@ -33,8 +35,11 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
     setIsAnalyzing(true);
     setError(null);
     setAnalysisResults(null);
+    setDebugInfo(null);
 
     try {
+      console.log(`Analyzing document with ID: ${selectedDocumentId}`);
+      
       const response = await fetch('/api/document/analyze', {
         method: 'POST',
         headers: {
@@ -43,13 +48,19 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
         body: JSON.stringify({ documentId: selectedDocumentId }),
       });
 
+      const responseData = await response.json();
+      console.log("Response data:", responseData);
+      setDebugInfo(responseData);
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to analyze document');
+        throw new Error(responseData.error || 'Failed to analyze document');
       }
 
-      const data = await response.json();
-      setAnalysisResults(data.analysis);
+      if (!responseData.analysis) {
+        throw new Error('Analysis results not found in response');
+      }
+
+      setAnalysisResults(responseData.analysis);
     } catch (error) {
       console.error('Error analyzing document:', error);
       setError(`Analysis error: ${error instanceof Error ? error.message : String(error)}`);
@@ -85,6 +96,9 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
           </Button>
         </div>
       </div>
+
+      {/* Debug information */}
+      {debugInfo && <DebugViewer data={debugInfo} title="API Response" />}
 
       {/* Error message if any */}
       {error && (
@@ -148,10 +162,10 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                       <div className="absolute inset-0 flex items-center justify-center">
                         <div className="text-center">
                           <div className="text-2xl font-bold text-[#B4916C]">
-                            {analysisResults.contentAnalysis.contentDistribution[0].value}%
+                            {analysisResults.contentAnalysis?.contentDistribution?.[0]?.value || 0}%
                           </div>
                           <div className="text-xs text-gray-400">
-                            {analysisResults.contentAnalysis.contentDistribution[0].name}
+                            {analysisResults.contentAnalysis?.contentDistribution?.[0]?.name || 'Primary Content'}
                           </div>
                         </div>
                       </div>
@@ -164,7 +178,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                   </div>
                   
                   <div className="grid grid-cols-2 gap-2 mt-4">
-                    {analysisResults.contentAnalysis.contentDistribution.map((item: any, index: number) => (
+                    {analysisResults.contentAnalysis?.contentDistribution?.map((item: any, index: number) => (
                       <div key={index} className="flex items-center">
                         <div className={`w-3 h-3 rounded-full bg-[#B4916C]/${90 - index * 15} mr-2`}></div>
                         <div className="text-sm">
@@ -187,7 +201,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                 </CardHeader>
                 <CardContent className="pt-0">
                   <div className="h-80 p-4 bg-black/30 rounded-lg border border-gray-800 flex flex-wrap items-center justify-center gap-3">
-                    {analysisResults.contentAnalysis.topKeywords.map((keyword: any, index: number) => (
+                    {analysisResults.contentAnalysis?.topKeywords?.map((keyword: any, index: number) => (
                       <div 
                         key={index} 
                         className="px-3 py-1.5 rounded-full bg-[#B4916C]/20 text-[#B4916C] border border-[#B4916C]/30"
@@ -224,7 +238,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                     ></div>
                     <div className="absolute inset-0 flex items-center justify-center flex-col">
                       <div className="text-4xl font-bold text-[#B4916C]">
-                        {analysisResults.sentimentAnalysis.overallScore.toFixed(2)}
+                        {analysisResults.sentimentAnalysis?.overallScore?.toFixed(2) || '0.00'}
                       </div>
                       <div className="text-sm text-gray-400">Positive Sentiment</div>
                     </div>
@@ -233,7 +247,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                 
                 <div className="space-y-4 mt-2">
                   <div className="text-white font-medium mb-2">Sentiment by Section</div>
-                  {analysisResults.sentimentAnalysis.sentimentBySection.map((item: any, index: number) => (
+                  {analysisResults.sentimentAnalysis?.sentimentBySection?.map((item: any, index: number) => (
                     <div key={index} className="space-y-1">
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-300">{item.section}</span>
@@ -250,110 +264,24 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                 </div>
               </CardContent>
             </Card>
-            
-            <Card className="border border-gray-800 bg-black/20 shadow-lg">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg text-[#B4916C]">Emotional Tone Analysis</CardTitle>
-                <CardDescription className="text-gray-500">
-                  Distribution of emotional tone throughout the document
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="rounded-lg border border-gray-800 p-6 bg-black/30">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                    <div className="p-4 rounded-lg bg-green-900/20 border border-green-800/40">
-                      <div className="text-2xl font-bold text-green-500">
-                        {analysisResults.sentimentAnalysis.emotionalTone.professional}%
-                      </div>
-                      <div className="text-sm text-gray-400">Professional</div>
-                    </div>
-                    <div className="p-4 rounded-lg bg-blue-900/20 border border-blue-800/40">
-                      <div className="text-2xl font-bold text-blue-500">
-                        {analysisResults.sentimentAnalysis.emotionalTone.confident}%
-                      </div>
-                      <div className="text-sm text-gray-400">Confident</div>
-                    </div>
-                    <div className="p-4 rounded-lg bg-purple-900/20 border border-purple-800/40">
-                      <div className="text-2xl font-bold text-purple-500">
-                        {analysisResults.sentimentAnalysis.emotionalTone.innovative}%
-                      </div>
-                      <div className="text-sm text-gray-400">Innovative</div>
-                    </div>
-                    <div className="p-4 rounded-lg bg-orange-900/20 border border-orange-800/40">
-                      <div className="text-2xl font-bold text-orange-500">
-                        {analysisResults.sentimentAnalysis.emotionalTone.cautious}%
-                      </div>
-                      <div className="text-sm text-gray-400">Cautious</div>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-6 pt-6 border-t border-gray-800">
-                    <div className="text-white font-medium mb-3">Key Findings</div>
-                    <ul className="space-y-2 text-sm text-gray-300">
-                      <li className="flex items-start">
-                        <div className="text-green-500 mr-2">•</div>
-                        Document maintains a consistently professional tone appropriate for business contexts
-                      </li>
-                      <li className="flex items-start">
-                        <div className="text-blue-500 mr-2">•</div>
-                        Strong confident language in experience and achievements sections
-                      </li>
-                      <li className="flex items-start">
-                        <div className="text-purple-500 mr-2">•</div>
-                        Some innovative language when discussing projects and technologies
-                      </li>
-                      <li className="flex items-start">
-                        <div className="text-orange-500 mr-2">•</div>
-                        Minimal cautious language, primarily in legal or compliance contexts
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </TabsContent>
           
           {/* Key Information Tab */}
           <TabsContent value="information" className="mt-0">
-            <Card className="border border-gray-800 bg-black/20 shadow-lg mb-8">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg text-[#B4916C]">Key Entities</CardTitle>
-                <CardDescription className="text-gray-500">
-                  Organizations, people, locations, and other entities mentioned
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="rounded-lg border border-gray-800 bg-black/30 divide-y divide-gray-800">
-                  {analysisResults.keyInformation.entities.map((entity: any, index: number) => (
-                    <div key={index} className="p-3 flex items-center justify-between">
-                      <div>
-                        <span className="text-gray-300">{entity.name}</span>
-                        <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-gray-800 text-gray-400">{entity.type}</span>
-                      </div>
-                      <div className="text-[#B4916C]">
-                        Mentioned {entity.count} {entity.count === 1 ? 'time' : 'times'}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <Card className="border border-gray-800 bg-black/20 shadow-lg">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-lg text-[#B4916C]">Document Timeline</CardTitle>
+                  <CardTitle className="text-lg text-[#B4916C]">Contact Information</CardTitle>
                   <CardDescription className="text-gray-500">
-                    Key dates and time periods mentioned
+                    Detected contact details in your document
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <div className="relative pl-8 space-y-6 before:absolute before:inset-0 before:h-full before:w-[2px] before:bg-gray-800 before:left-3 py-4">
-                    {analysisResults.keyInformation.timeline.map((item: any, index: number) => (
-                      <div key={index} className="relative">
-                        <div className={`absolute left-[-30px] w-5 h-5 rounded-full bg-[#B4916C]/${100 - index * 20}`}></div>
-                        <div className="text-white font-medium">{item.period}</div>
-                        <div className="text-sm text-gray-400">{item.entity}</div>
+                  <div className="space-y-3 mt-2">
+                    {analysisResults.keyInformation?.contactInfo?.map((item: any, index: number) => (
+                      <div key={index} className="flex justify-between items-center p-2 border-b border-gray-800">
+                        <span className="text-gray-400">{item.type}</span>
+                        <span className="text-[#F9F6EE] font-medium">{item.value}</span>
                       </div>
                     ))}
                   </div>
@@ -362,25 +290,23 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
               
               <Card className="border border-gray-800 bg-black/20 shadow-lg">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-lg text-[#B4916C]">Skill Assessment</CardTitle>
+                  <CardTitle className="text-lg text-[#B4916C]">Key Entities</CardTitle>
                   <CardDescription className="text-gray-500">
-                    Skills mentioned and their prominence
+                    Important elements identified in your document
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <div className="space-y-3">
-                    {analysisResults.keyInformation.skills.map((skill: any, index: number) => (
-                      <div key={index}>
-                        <div className="flex items-center justify-between text-sm mb-1">
-                          <span className="text-white">{skill.name}</span>
-                          <span className="text-[#B4916C]">{skill.level}</span>
-                        </div>
-                        <div className="w-full bg-gray-800 rounded-full h-2">
-                          <div 
-                            className="bg-[#B4916C] h-2 rounded-full" 
-                            style={{ width: `${skill.score}%` }}
-                          ></div>
-                        </div>
+                  <div className="mt-2">
+                    <div className="grid grid-cols-3 p-2 border-b border-gray-800 text-gray-400 text-sm">
+                      <span>Type</span>
+                      <span>Name</span>
+                      <span className="text-right">Occurrences</span>
+                    </div>
+                    {analysisResults.keyInformation?.entities?.map((entity: any, index: number) => (
+                      <div key={index} className="grid grid-cols-3 p-2 border-b border-gray-800 text-sm">
+                        <span className="text-gray-400">{entity.type}</span>
+                        <span className="text-[#F9F6EE]">{entity.name}</span>
+                        <span className="text-[#B4916C] text-right">{entity.occurrences}</span>
                       </div>
                     ))}
                   </div>
@@ -393,92 +319,64 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
           <TabsContent value="summary" className="mt-0">
             <Card className="border border-gray-800 bg-black/20 shadow-lg mb-8">
               <CardHeader className="pb-2">
-                <CardTitle className="text-lg text-[#B4916C]">Document Summary</CardTitle>
+                <CardTitle className="text-lg text-[#B4916C]">Document Highlights</CardTitle>
                 <CardDescription className="text-gray-500">
-                  AI-generated summary of the key points and content
+                  Key strengths identified in your document
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="rounded-lg border border-gray-800 bg-black/30 p-4 text-gray-300">
-                  <p>{analysisResults.summary.text}</p>
+                <div className="mt-2">
+                  <ul className="space-y-2">
+                    {analysisResults.summary?.highlights?.map((highlight: string, index: number) => (
+                      <li key={index} className="flex items-start">
+                        <div className="w-5 h-5 rounded-full bg-[#B4916C]/20 flex items-center justify-center text-[#B4916C] mr-3 mt-0.5">
+                          <span className="text-xs">✓</span>
+                        </div>
+                        <span className="text-[#F9F6EE]">{highlight}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </CardContent>
             </Card>
             
             <Card className="border border-gray-800 bg-black/20 shadow-lg">
               <CardHeader className="pb-2">
-                <CardTitle className="text-lg text-[#B4916C]">Document Insights</CardTitle>
+                <CardTitle className="text-lg text-[#B4916C]">Improvement Suggestions</CardTitle>
                 <CardDescription className="text-gray-500">
-                  Key takeaways and improvement suggestions
+                  Recommendations to enhance your document
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="space-y-6">
-                  <div className="rounded-lg border border-gray-800 bg-black/30 p-4">
-                    <h3 className="text-[#B4916C] font-medium mb-2 flex items-center">
-                      <BarChart2 className="h-4 w-4 mr-2" />
-                      Key Strengths
-                    </h3>
-                    <ul className="space-y-2 text-sm text-gray-300">
-                      {analysisResults.summary.strengths.map((strength: string, index: number) => (
-                        <li key={index} className="flex items-start">
-                          <div className="text-green-500 mr-2">•</div>
-                          {strength}
-                        </li>
-                      ))}
-                    </ul>
+                <div className="mt-2">
+                  <ul className="space-y-2">
+                    {analysisResults.summary?.suggestions?.map((suggestion: string, index: number) => (
+                      <li key={index} className="flex items-start">
+                        <div className="w-5 h-5 rounded-full bg-[#B4916C]/20 flex items-center justify-center text-[#B4916C] mr-3 mt-0.5">
+                          <span className="text-xs">↑</span>
+                        </div>
+                        <span className="text-[#F9F6EE]">{suggestion}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                
+                <div className="mt-6 bg-[#222222] rounded-lg p-4 flex items-center justify-between">
+                  <div>
+                    <div className="text-sm text-gray-400">Overall Score</div>
+                    <div className="text-2xl font-bold text-[#B4916C]">{analysisResults.summary?.overallScore || 0}/100</div>
                   </div>
-                  
-                  <div className="rounded-lg border border-gray-800 bg-black/30 p-4">
-                    <h3 className="text-[#B4916C] font-medium mb-2 flex items-center">
-                      <LineChart className="h-4 w-4 mr-2" />
-                      Improvement Suggestions
-                    </h3>
-                    <ul className="space-y-2 text-sm text-gray-300">
-                      {analysisResults.summary.improvements.map((improvement: string | { improvement: string; impact?: string }, index: number) => (
-                        <li key={index} className="flex items-start">
-                          <div className="text-amber-500 mr-2">•</div>
-                          {typeof improvement === 'object' && improvement !== null 
-                            ? (improvement.improvement || 'Improvement needed') + 
-                              (improvement.impact ? ` - Impact: ${improvement.impact}` : '')
-                            : improvement}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  
-                  <div className="rounded-lg border border-gray-800 bg-black/30 p-4">
-                    <h3 className="text-[#B4916C] font-medium mb-2 flex items-center">
-                      <FileText className="h-4 w-4 mr-2" />
-                      Document Readability
-                    </h3>
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-sm text-gray-400">Overall Score</span>
-                      <span className="text-lg font-medium text-[#B4916C]">{analysisResults.summary.readability.score}/100</span>
-                    </div>
-                    <div className="w-full bg-gray-800 rounded-full h-3 mb-4">
-                      <div 
-                        className="bg-[#B4916C] h-3 rounded-full" 
-                        style={{ width: `${analysisResults.summary.readability.score}%` }}
-                      ></div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Sentence Structure</span>
-                        <span className="text-white">{analysisResults.summary.readability.sentenceStructure}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Vocabulary</span>
-                        <span className="text-white">{analysisResults.summary.readability.vocabulary}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Grammar</span>
-                        <span className="text-white">{analysisResults.summary.readability.grammar}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Formatting</span>
-                        <span className="text-white">{analysisResults.summary.readability.formatting}</span>
-                      </div>
+                  <div className="w-24 h-24 relative">
+                    <div className="absolute inset-0 rounded-full border-8 border-gray-800"></div>
+                    <div 
+                      className="absolute inset-0 rounded-full border-8 border-[#B4916C]"
+                      style={{ 
+                        clipPath: `polygon(0 0, 100% 0, 100% 100%, 0% 100%)`,
+                        clip: `rect(0px, ${(analysisResults.summary?.overallScore / 100) * 48 + 48}px, 96px, 0px)` 
+                      }}
+                    ></div>
+                    <div className="absolute inset-0 flex items-center justify-center text-lg font-bold text-white">
+                      {analysisResults.summary?.overallScore || 0}%
                     </div>
                   </div>
                 </div>
