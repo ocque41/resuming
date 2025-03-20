@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getDocumentById } from "@/lib/document/queries.server";
+import { db } from "@/lib/db/drizzle";
+import { cvs } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -291,9 +293,14 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: "Authentication required" }, { status: 401 });
         }
         
-        // Fetch the document from the database
-        console.log(`Fetching document ID ${documentId} from database to get fileName`);
-        const document = await getDocumentById(documentId);
+        // Convert string to number if needed
+        const numericDocId = typeof documentId === 'string' ? parseInt(documentId, 10) : documentId;
+        
+        // Directly query the database instead of using the helper function
+        console.log(`Querying database directly for document ID ${numericDocId}`);
+        const document = await db.query.cvs.findFirst({
+          where: eq(cvs.id, numericDocId),
+        });
         
         if (!document) {
           console.error(`Document not found with ID: ${documentId}`);
@@ -317,6 +324,16 @@ export async function POST(req: NextRequest) {
         console.log(`Successfully retrieved fileName '${fileName}' from database for document ID: ${documentId}`);
       } catch (dbError) {
         console.error("Error fetching document from database:", dbError);
+        
+        // More detailed error reporting
+        const errorDetails = dbError instanceof Error ? {
+          name: dbError.name,
+          message: dbError.message,
+          stack: dbError.stack
+        } : 'Unknown database error';
+        
+        console.error("Detailed error information:", errorDetails);
+        
         return NextResponse.json({ 
           error: "Failed to retrieve document information",
           details: dbError instanceof Error ? dbError.message : "Unknown database error"
@@ -352,6 +369,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     console.error("Error in document analysis API:", error);
+    
+    // More detailed error reporting
+    const errorDetails = error instanceof Error ? {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    } : 'Unknown error';
+    
+    console.error("Detailed error information:", errorDetails);
     
     // Return error response
     return NextResponse.json({ 

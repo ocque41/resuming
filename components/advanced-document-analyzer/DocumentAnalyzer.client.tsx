@@ -164,172 +164,148 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
   };
 
   const analyzeDocument = async () => {
-    if (!selectedDocumentId || !selectedDocument) {
-      console.error("No document selected for analysis");
-      setAnalysisError("Please select a document to analyze");
+    if (!selectedDocumentId) {
+      console.error("No document selected");
+      setAnalysisError("Please select a document to analyze.");
       return;
     }
-    
-    // Log detailed information about the document being analyzed
-    console.log("Analyzing document:", {
-      id: selectedDocumentId,
+
+    // Find the selected document in the documents array
+    const selectedDocument = documents.find(doc => doc.id === selectedDocumentId);
+    if (!selectedDocument) {
+      console.error("Selected document not found in documents array");
+      console.log("Available documents:", documents.map(doc => `${doc.id}: ${doc.fileName}`));
+      setAnalysisError("Selected document information could not be found. Please try selecting it again.");
+      return;
+    }
+
+    // Log document info for debugging
+    console.log("Selected document for analysis:", {
+      id: selectedDocument.id,
       fileName: selectedDocument.fileName,
-      fileNameType: typeof selectedDocument.fileName,
       fileNameExists: !!selectedDocument.fileName,
       fileNameLength: selectedDocument.fileName ? selectedDocument.fileName.length : 0
     });
-    
-    // Check for missing fileName - a valid document must have a fileName
-    // Note: We now allow proceeding even without fileName as our enhanced API endpoint
-    // will attempt to retrieve it from the database
-    if (!selectedDocument.fileName) {
-      console.warn("Selected document may be missing fileName - proceeding anyway as backend will attempt to fetch it");
-      
-      // Log all available documents to check if there's a mismatch
-      console.log("All available documents:", documents.map(doc => ({
-        id: doc.id,
-        fileName: doc.fileName
-      })));
-    } else {
-      // Only check file type if we have a fileName
-      if (!isSupportedFileType(selectedDocument.fileName)) {
-        console.error(`Unsupported file type: ${getFileExtension(selectedDocument.fileName)}`);
-        setAnalysisError(`File type "${getFileExtension(selectedDocument.fileName)}" is not supported for analysis. Please select a supported document type (PDF, DOCX, TXT, etc).`);
+
+    const fileName = selectedDocument.fileName;
+    if (!fileName) {
+      console.warn("Selected document is missing fileName, but we'll continue and let the server try to fetch it");
+    }
+
+    // Only check file type if fileName is available
+    if (fileName) {
+      const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
+      if (!isSupportedFileType(fileName)) {
+        console.error(`Unsupported file type: ${fileExtension}`);
+        setAnalysisError(`Unsupported file type: .${fileExtension}. Please select a different document.`);
         return;
       }
     }
-    
+
     setIsAnalyzing(true);
+    setAnalysisResults(null);
     setAnalysisError(null);
-    console.log('Starting document analysis for document ID:', selectedDocumentId, 'Type:', analysisType);
-    console.log('Document filename:', selectedDocument.fileName || 'Not available (will be fetched by API)');
-    
+
     try {
-      // If fallback mode is already enabled, use the client-side analysis
-      if (useFallbackMode) {
-        console.log('Using client-side fallback mode for analysis');
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        const fallbackResults = generateFallbackAnalysis();
-        console.log('Generated fallback analysis results:', fallbackResults);
-        setAnalysisResults(fallbackResults);
-        return;
+      // Create a request body, only including fileName if it exists
+      const requestBody: {
+        documentId: string;
+        type: string;
+        fileName?: string;
+      } = {
+        documentId: selectedDocumentId,
+        type: analysisType,
+      };
+
+      // Only add fileName if it exists
+      if (fileName) {
+        requestBody.fileName = fileName;
       }
-      
-      console.log('Sending analysis request to API endpoint');
-      
-      try {
-        const requestBody: {
-          documentId: string;
-          type: string;
-          fileName?: string; // Make fileName optional
-        } = {
-          documentId: selectedDocumentId,
-          type: analysisType
-        };
-        
-        // Only include fileName if it exists to avoid sending undefined
-        if (selectedDocument.fileName) {
-          requestBody.fileName = selectedDocument.fileName;
-        }
-        
-        console.log('Request payload:', JSON.stringify(requestBody));
-        
-        // Create a timeout promise to handle API timeout
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Request timeout - API did not respond in time')), 20000); // Increase timeout to 20 seconds
-        });
-        
-        // Function to make the API request with retries
-        const makeRequestWithRetry = async (retryCount = 0, maxRetries = 2) => {
-          try {
-            console.log(`Making API request (attempt ${retryCount + 1} of ${maxRetries + 1})`);
+
+      console.log("Sending analysis request with payload:", requestBody);
+
+      // Timeout promise to handle API timeout
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Analysis request timed out after 20 seconds")), 20000);
+      });
+
+      // Create a function that handles retries
+      const makeRequestWithRetry = async (retryCount = 0, maxRetries = 2) => {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+          console.log(`Making request (attempt ${retryCount + 1}/${maxRetries + 1})...`);
+          const response = await fetch("/api/document/analyze", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(requestBody),
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+            console.error("Analysis API error response:", errorData);
             
-            // Create the fetch promise
-            const fetchPromise = fetch('/api/document/analyze', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(requestBody),
-            });
-            
-            // Race between the fetch and the timeout
-            const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
-            
-            console.log('API response status:', response.status);
-            console.log('API response status text:', response.statusText);
-            
-            if (!response.ok) {
-              const errorText = await response.text();
-              console.error('Error response text:', errorText);
+            if (response.status === 500 && retryCount < maxRetries) {
+              // Implement exponential backoff
+              const backoffTime = Math.min(1000 * Math.pow(2, retryCount), 8000);
+              console.log(`Request failed, retrying in ${backoffTime}ms...`);
               
-              let errorData;
-              try {
-                errorData = JSON.parse(errorText);
-              } catch (e) {
-                console.error('Failed to parse error response as JSON:', e);
-                throw new Error(`Server error: ${response.status} ${response.statusText}`);
-              }
-              
-              console.error('Parsed error data:', errorData);
-              throw new Error(errorData.error || `Failed to analyze document: ${response.status}`);
+              await new Promise(resolve => setTimeout(resolve, backoffTime));
+              return makeRequestWithRetry(retryCount + 1, maxRetries);
             }
             
-            console.log('Successfully received response from API');
-            const data = await response.json();
-            console.log('Analysis result data structure:', Object.keys(data));
-            return data;
-          } catch (error) {
-            console.error(`Request attempt ${retryCount + 1} failed:`, error);
+            throw new Error(errorData.error || `Server error: ${response.status}`);
+          }
+
+          const data = await response.json();
+          console.log("Analysis complete, received data:", data);
+          return data;
+        } catch (error) {
+          if (error instanceof Error && error.name === 'AbortError') {
+            throw new Error("Analysis request timed out");
+          }
+          
+          if (retryCount < maxRetries) {
+            // Implement exponential backoff
+            const backoffTime = Math.min(1000 * Math.pow(2, retryCount), 8000);
+            console.log(`Request failed with error: ${error instanceof Error ? error.message : error}`);
+            console.log(`Retrying in ${backoffTime}ms...`);
             
-            // If we've reached the max retries, throw the error
-            if (retryCount >= maxRetries) {
-              throw error;
-            }
-            
-            // Otherwise, wait and retry
-            const retryDelay = Math.pow(2, retryCount) * 1000; // Exponential backoff
-            console.log(`Retrying in ${retryDelay}ms...`);
-            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            await new Promise(resolve => setTimeout(resolve, backoffTime));
             return makeRequestWithRetry(retryCount + 1, maxRetries);
           }
-        };
-        
-        // Make the request with retry logic
-        const data = await makeRequestWithRetry();
-        console.log('Analysis result:', data);
-        setAnalysisResults(data);
-      } catch (apiError) {
-        console.error('All API request attempts failed:', apiError);
-        
-        // If the API completely fails after retries, switch to fallback mode
-        console.log('Switching to client-side fallback mode');
-        setUseFallbackMode(true);
-        
-        // Ask user if they want to try fallback mode
-        setAnalysisError(`Unable to reach the document analysis service. Would you like to use a simplified client-side analysis instead?`);
-        setIsAnalyzing(false);
-      }
-    } catch (error) {
-      console.error('Analysis error details:', error);
-      if (error instanceof Error) {
-        console.error('Error name:', error.name);
-        console.error('Error message:', error.message);
-        console.error('Error stack:', error.stack);
-        
-        // Check if it's a timeout error
-        if (error.message.includes('timeout')) {
-          setAnalysisError(`The analysis service is taking too long to respond. Would you like to use a simplified analysis instead?`);
-          setUseFallbackMode(true);
-        } else {
-          setAnalysisError(`An error occurred while analyzing the document: ${error.message}. Please try again.`);
+          
+          throw error;
         }
-      } else {
-        setAnalysisError(`An unknown error occurred. Please try again.`);
-      }
+      };
+
+      // Use Promise.race to handle timeouts
+      const result = await Promise.race([
+        makeRequestWithRetry(),
+        timeoutPromise
+      ]) as AnalysisResult;
+
+      setAnalysisResults(result);
+      setActiveTab("summary");
+    } catch (error) {
+      console.error("Error analyzing document:", error);
+      setAnalysisError(
+        error instanceof Error 
+          ? error.message 
+          : "An unexpected error occurred during analysis. Please try again later."
+      );
+      
+      // Fall back to a client-side generated analysis in case of API failure
+      console.log("Falling back to client-side generated analysis");
+      const fallbackResult = generateFallbackAnalysis();
+      setAnalysisResults(fallbackResult);
     } finally {
-      console.log('Analysis process completed, isAnalyzing set to false');
       setIsAnalyzing(false);
     }
   };

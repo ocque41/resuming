@@ -101,12 +101,17 @@ function DocumentAnalyzerContent() {
   // Transform documents to the format expected by the DocumentAnalyzerClient
   const transformedDocuments = documents.map(doc => {
     // Add detailed logging about each document
-    console.log(`Transforming document: ID=${doc.id}, fileName=${doc.fileName}, type=${typeof doc.createdAt}`);
+    console.log(`Transforming document: ID=${doc.id}, fileName=${doc.fileName}, createdAt=${doc.createdAt}`);
+    
+    // Check if fileName exists
+    if (!doc.fileName) {
+      console.warn(`Document ID=${doc.id} is missing fileName!`);
+    }
     
     return {
       id: doc.id.toString(),
       fileName: doc.fileName,
-      createdAt: String(doc.createdAt), // Ensure it's a string
+      createdAt: typeof doc.createdAt === 'string' ? doc.createdAt : String(doc.createdAt), // Ensure it's a string
     };
   });
 
@@ -120,13 +125,20 @@ function DocumentAnalyzerContent() {
       fileName: document?.fileName,
       fileNameType: typeof document?.fileName,
       fileNameExists: !!document?.fileName,
-      createdAt: document?.createdAt
+      createdAt: document?.createdAt,
+      rawDocument: document // Log the entire document object for inspection
     });
     
     // Double-check if the preselected document exists in the transformed documents list
     const selectedDocInList = transformedDocuments.find(doc => doc.id === preSelectedDocumentId);
     console.log('Is preselected document in the transformed list?', 
       selectedDocInList ? `Yes, with fileName=${selectedDocInList.fileName}` : 'No, document not found in list');
+      
+    // Alert if the document doesn't have a fileName
+    if (document && !document.fileName) {
+      console.error(`⚠️ IMPORTANT: Pre-selected document ID=${preSelectedDocumentId} is missing fileName!`);
+      console.log('Original document properties:', Object.keys(document));
+    }
   }
 
   return (
