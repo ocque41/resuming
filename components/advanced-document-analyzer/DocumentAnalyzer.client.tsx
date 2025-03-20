@@ -66,10 +66,30 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
     console.log("Selected document details:", document);
     setSelectedDocument(document);
     
+    // Reset the analysis results and errors when changing documents
     setAnalysisResults(null);
     setAnalysisError(null);
     setUseFallbackMode(false);
   };
+
+  // Effect to ensure we have the full document information when we have a selected document ID
+  React.useEffect(() => {
+    // If we have a selected document ID but not the document object, fetch the document
+    if (selectedDocumentId && !selectedDocument) {
+      console.log('Have document ID but not document object, trying to find in documents list');
+      
+      // Try to find the document in the list
+      const document = documents.find(doc => doc.id === selectedDocumentId);
+      if (document) {
+        console.log('Found document in list:', document);
+        setSelectedDocument(document);
+      } else {
+        console.error('Could not find document with ID:', selectedDocumentId);
+        // This could happen if the documents list is not yet loaded
+        // We'll let the parent component handle loading the document
+      }
+    }
+  }, [selectedDocumentId, selectedDocument, documents]);
 
   const handleAnalysisTypeChange = (type: string) => {
     console.log(`Analysis type changed to: ${type}`);
@@ -139,6 +159,12 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
     if (!selectedDocumentId || !selectedDocument) {
       console.error("No document selected for analysis");
       setAnalysisError("Please select a document to analyze");
+      return;
+    }
+    
+    if (!selectedDocument.fileName) {
+      console.error("Selected document is missing fileName");
+      setAnalysisError("The selected document is missing required information. Please try selecting it again or choose a different document.");
       return;
     }
     

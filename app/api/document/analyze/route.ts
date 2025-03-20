@@ -10,7 +10,7 @@ import { extractDocumentContent, DocumentDetails } from "@/lib/document/extracto
 import { uploadFileToDropbox } from "@/lib/dropboxStorage";
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { getDocumentById } from '@/lib/db/document.server';
+import { getDocumentById } from '@/lib/document/queries.server';
 
 export const dynamic = "force-dynamic";
 
@@ -265,13 +265,47 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Document ID is required' }, { status: 400 });
     }
     
-    if (!fileName) {
-      console.log('Missing fileName in request');
-      return NextResponse.json({ error: 'File name is required for analysis' }, { status: 400 });
+    // Get the authenticated user
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+    
+    let documentFileName = fileName;
+    
+    // If fileName is not provided, try to get it from the database
+    if (!documentFileName) {
+      console.log('Fetching fileName from database for document ID:', documentId);
+      try {
+        // Get the document from the database
+        const document = await getDocumentById(documentId);
+        
+        if (!document) {
+          console.error('Document not found in database:', documentId);
+          return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+        }
+        
+        // Check if the user has access to this document
+        if (document.userId !== parseInt(session.user.id)) {
+          console.error('User does not have access to this document');
+          return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+        }
+        
+        documentFileName = document.fileName;
+        console.log('Retrieved fileName from database:', documentFileName);
+      } catch (dbError) {
+        console.error('Error fetching document from database:', dbError);
+        return NextResponse.json({ error: 'Failed to retrieve document information' }, { status: 500 });
+      }
+    }
+    
+    if (!documentFileName) {
+      console.log('Still missing fileName after database lookup');
+      return NextResponse.json({ error: 'File name is required for analysis and could not be retrieved' }, { status: 400 });
     }
     
     // Check if file type is supported
-    const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
+    const fileExtension = documentFileName.split('.').pop()?.toLowerCase() || '';
     const supportedExtensions = Object.keys(SUPPORTED_FILE_TYPES);
     
     if (!supportedExtensions.includes(fileExtension)) {
@@ -284,13 +318,13 @@ export async function POST(req: NextRequest) {
     try {
       // In a real implementation, we'd get the document from the database and analyze it
       // For now, we'll generate a mock analysis based on the file name and type
-      console.log('Generating mock analysis for document:', documentId, 'type:', type, 'filename:', fileName);
+      console.log('Generating mock analysis for document:', documentId, 'type:', type, 'filename:', documentFileName);
       
       // Simulate processing delay
       await new Promise(resolve => setTimeout(resolve, 1500));
       
       // Generate mock analysis result
-      const mockResult = generateMockAnalysisResult(documentId, fileName, type);
+      const mockResult = generateMockAnalysisResult(documentId, documentFileName, type);
       
       console.log('Analysis completed successfully, returning results');
       

@@ -102,11 +102,20 @@ function DocumentAnalyzerContent() {
   const transformedDocuments = documents.map(doc => ({
     id: doc.id.toString(),
     fileName: doc.fileName,
-    createdAt: doc.createdAt,
+    createdAt: String(doc.createdAt), // Ensure it's a string
   }));
 
-  // If we have a specific document from the URL, pre-select it in the analyzer
+  // If we have a specific document from the URL, make sure it has all required fields
   const preSelectedDocumentId = document ? document.id.toString() : undefined;
+  
+  // Log the pre-selected document for debugging
+  if (preSelectedDocumentId) {
+    console.log('Pre-selecting document for analysis:', { 
+      id: preSelectedDocumentId, 
+      fileName: document?.fileName,
+      createdAt: document?.createdAt
+    });
+  }
 
   return (
     <div className="min-h-screen bg-[#0A0A0A]">
