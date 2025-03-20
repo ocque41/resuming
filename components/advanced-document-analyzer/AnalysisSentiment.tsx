@@ -1,132 +1,123 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BarChart2, CheckCircle, AlertCircle, Minus } from 'lucide-react';
-import { DocumentSentiment, SectionSentiment, SentimentSection } from './types';
+import { Heart, TrendingUp, TrendingDown } from 'lucide-react';
+import { DocumentSentiment, SectionSentiment } from './types';
 
 interface AnalysisSentimentProps {
-  sentiment?: DocumentSentiment;
+  sentiment: DocumentSentiment | any;
 }
 
 export default function AnalysisSentiment({ sentiment }: AnalysisSentimentProps) {
-  if (!sentiment) {
+  console.log("Rendering AnalysisSentiment with:", sentiment);
+  
+  // Safety check - ensure we have valid sentiment data
+  if (!sentiment || typeof sentiment !== 'object') {
+    console.warn("Invalid sentiment data provided:", sentiment);
     return null;
   }
 
-  // Get any sentiment by section data - could be in multiple formats
-  const sentimentBySection = sentiment.sentimentBySection || [];
-
-  // Function to get the appropriate icon based on sentiment value
-  const getSentimentIcon = (sentimentValue: number | string) => {
-    // Handle string values
-    if (typeof sentimentValue === 'string') {
-      const val = sentimentValue.toLowerCase();
-      if (val === 'positive') return <CheckCircle className="h-5 w-5 text-[#4ADE80]" />;
-      if (val === 'neutral') return <Minus className="h-5 w-5 text-[#B4916C]" />;
-      if (val === 'negative') return <AlertCircle className="h-5 w-5 text-[#F87171]" />;
-    }
-    
-    // Handle numeric values
-    const score = typeof sentimentValue === 'number' ? sentimentValue : 0;
-    if (score >= 0.2) return <CheckCircle className="h-5 w-5 text-[#4ADE80]" />;
-    if (score >= -0.2 && score < 0.2) return <Minus className="h-5 w-5 text-[#B4916C]" />;
-    return <AlertCircle className="h-5 w-5 text-[#F87171]" />;
-  };
-
-  // Function to get color based on sentiment value
-  const getSentimentColor = (sentimentValue: number | string) => {
-    // Handle string values
-    if (typeof sentimentValue === 'string') {
-      const val = sentimentValue.toLowerCase();
-      if (val === 'positive') return 'bg-[#4ADE80]';
-      if (val === 'neutral') return 'bg-[#B4916C]';
-      if (val === 'negative') return 'bg-[#F87171]';
-    }
-    
-    // Handle numeric values
-    const score = typeof sentimentValue === 'number' ? sentimentValue : 0;
-    if (score >= 0.2) return 'bg-[#4ADE80]';
-    if (score >= -0.2 && score < 0.2) return 'bg-[#B4916C]';
-    return 'bg-[#F87171]';
-  };
+  // Extract values with fallbacks
+  const overall = sentiment.overall || "neutral";
+  const score = typeof sentiment.score === 'number' ? sentiment.score : 0.5;
   
-  // Function to normalize sentiment score to a percentage (0-100)
-  const normalizeScore = (score: number) => {
-    // If score is between -1 and 1, convert to 0-100 scale
-    if (score >= -1 && score <= 1) {
-      return Math.round((score + 1) * 50); // -1 => 0%, 0 => 50%, 1 => 100%
+  // Get sections if available, or empty array
+  const sections = Array.isArray(sentiment.sentimentBySection) 
+    ? sentiment.sentimentBySection 
+    : Array.isArray(sentiment.sections)
+      ? sentiment.sections
+      : [];
+  
+  // Get sentiment icon and color
+  const getSentimentIcon = (sentimentType: string) => {
+    const type = sentimentType.toLowerCase();
+    if (type.includes('positive') || type === 'good') {
+      return <TrendingUp className="h-5 w-5 text-[#34D399]" />;
+    } else if (type.includes('negative') || type === 'bad') {
+      return <TrendingDown className="h-5 w-5 text-[#EF4444]" />;
+    } else {
+      return <Heart className="h-5 w-5 text-[#8A8782]" />;
     }
-    // If score is already in percentage range
-    return Math.round(Math.max(0, Math.min(100, score)));
   };
 
-  // Get score as a normalized percentage for display
-  const scorePercentage = normalizeScore(sentiment.score);
+  const getSentimentColor = (sentimentType: string) => {
+    const type = sentimentType.toLowerCase();
+    if (type.includes('positive') || type === 'good') {
+      return 'text-[#34D399]';
+    } else if (type.includes('negative') || type === 'bad') {
+      return 'text-[#EF4444]';
+    } else {
+      return 'text-[#8A8782]';
+    }
+  };
 
+  // Convert numeric score to percentage
+  const scorePercentage = Math.round(score * 100);
+  
   return (
     <Card className="border border-[#222222] bg-[#111111] shadow-lg overflow-hidden">
       <CardHeader className="bg-[#0A0A0A] border-b border-[#222222]">
-        <CardTitle className="text-lg font-medium text-[#F9F6EE]">
+        <CardTitle className="text-lg font-medium text-[#F9F6EE] flex items-center gap-2">
+          <Heart className="h-5 w-5 text-[#B4916C]" />
           Sentiment Analysis
         </CardTitle>
       </CardHeader>
       <CardContent className="p-5">
-        {sentiment && (
-          <div className="mb-6">
-            <div className="flex justify-between items-center mb-4">
-              <div className="flex items-center gap-2">
-                {getSentimentIcon(sentiment.overall)}
-                <span className="text-[#E2DFD7] text-lg font-medium capitalize">
-                  {sentiment.overall}
-                </span>
+        <div className="space-y-5">
+          {/* Overall sentiment */}
+          <div className="p-4 rounded-lg bg-[#161616] border border-[#222222]">
+            <div className="flex justify-between items-center mb-2">
+              <h4 className="text-[#F9F6EE] text-sm font-medium">Overall Document Sentiment</h4>
+              <div className="flex items-center">
+                <span className={`text-sm font-semibold ${getSentimentColor(overall)}`}>{scorePercentage}%</span>
               </div>
-              <span className="text-[#8A8782] bg-[#161616] px-2 py-1 rounded-md text-xs">
-                {scorePercentage}% positive
-              </span>
             </div>
-            
-            <div className="w-full bg-[#161616] h-2 rounded-full overflow-hidden">
-              <div 
-                className={`${getSentimentColor(sentiment.overall)} h-full rounded-full`} 
-                style={{ width: `${scorePercentage}%` }} 
-              />
+            <div className="flex items-center gap-3">
+              {getSentimentIcon(overall)}
+              <div>
+                <span className={`text-base font-medium ${getSentimentColor(overall)}`}>
+                  {overall.charAt(0).toUpperCase() + overall.slice(1)}
+                </span>
+                <p className="text-[#8A8782] text-xs mt-0.5">
+                  {score > 0.7 
+                    ? 'The document has a strongly positive tone' 
+                    : score > 0.5 
+                      ? 'The document has a somewhat positive tone' 
+                      : score < 0.3 
+                        ? 'The document has a strongly negative tone' 
+                        : score < 0.5 
+                          ? 'The document has a somewhat negative tone'
+                          : 'The document has a neutral tone'}
+                </p>
+              </div>
             </div>
           </div>
-        )}
-
-        {sentimentBySection && sentimentBySection.length > 0 && (
-          <div>
-            <h3 className="text-[#F9F6EE] font-medium text-base mb-3 flex items-center gap-2">
-              <BarChart2 className="h-4 w-4 text-[#B4916C]" />
-              Sentiment by Section
-            </h3>
-            <div className="space-y-3">
-              {sentimentBySection.map((item, index) => {
-                // Handle either SectionSentiment or SentimentSection format
-                const section = 'section' in item ? item.section : '';
-                const score = 'score' in item ? item.score : 0;
-                const sentimentValue = 'sentiment' in item ? item.sentiment : (score >= 0.2 ? 'positive' : (score <= -0.2 ? 'negative' : 'neutral'));
-                
-                return (
-                  <div key={index} className="bg-[#080808] rounded-lg p-3 border border-[#222222]">
+          
+          {/* Section sentiment analysis - only if we have sections */}
+          {sections.length > 0 && (
+            <div>
+              <h4 className="text-[#F9F6EE] text-sm font-medium mb-3">Sentiment By Section</h4>
+              <div className="space-y-3">
+                {sections.map((section: SectionSentiment, index: number) => (
+                  <div key={index} className="p-3 rounded-lg bg-[#080808] border border-[#1A1A1A]">
                     <div className="flex justify-between items-center mb-1">
-                      <div className="flex items-center gap-2">
-                        {getSentimentIcon(sentimentValue)}
-                        <span className="text-[#E2DFD7] text-sm font-medium">{section}</span>
+                      <span className="text-[#E2DFD7] text-sm">
+                        {section.section || `Section ${index + 1}`}
+                      </span>
+                      <div className="flex items-center">
+                        {getSentimentIcon(section.sentiment || (section.score > 0.5 ? 'positive' : section.score < 0.5 ? 'negative' : 'neutral'))}
+                        <span className={`text-xs font-semibold ml-1 ${
+                          getSentimentColor(section.sentiment || (section.score > 0.5 ? 'positive' : section.score < 0.5 ? 'negative' : 'neutral'))
+                        }`}>
+                          {typeof section.score === 'number' ? Math.round(section.score * 100) : 50}%
+                        </span>
                       </div>
-                      <span className="text-[#8A8782] text-xs">{normalizeScore(score)}%</span>
-                    </div>
-                    <div className="w-full bg-[#161616] h-1.5 rounded-full overflow-hidden">
-                      <div 
-                        className={`${getSentimentColor(sentimentValue)} h-full rounded-full`} 
-                        style={{ width: `${normalizeScore(score)}%` }} 
-                      />
                     </div>
                   </div>
-                );
-              })}
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </CardContent>
     </Card>
   );

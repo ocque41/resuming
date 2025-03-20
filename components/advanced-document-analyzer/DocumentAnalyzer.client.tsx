@@ -39,6 +39,8 @@ const ANALYSIS_TYPES = [
 ];
 
 export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: DocumentAnalyzerProps) {
+  // Create a ref to store analysis results to avoid state update issues
+  const analysisResultsRef = React.useRef<AnalysisResult | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = React.useState<string>(preSelectedDocumentId || '');
   const [analysisType, setAnalysisType] = React.useState<string>('general');
   const [isAnalyzing, setIsAnalyzing] = React.useState<boolean>(false);
@@ -47,6 +49,13 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
   const [activeTab, setActiveTab] = React.useState<string>('summary');
   const [selectedDocument, setSelectedDocument] = React.useState<Document | null>(null);
   const [useFallbackMode, setUseFallbackMode] = React.useState<boolean>(false);
+  // Add a force update state to trigger re-renders
+  const [forceUpdateCounter, setForceUpdateCounter] = React.useState(0);
+
+  // Force update function
+  const forceUpdate = React.useCallback(() => {
+    setForceUpdateCounter(prev => prev + 1);
+  }, []);
 
   // Effect to set the initial document when the component mounts with a preSelectedDocumentId
   React.useEffect(() => {
@@ -185,29 +194,31 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
     }
 
     // Find the selected document object
-    const selectedDocument = documents.find(doc => doc.id === selectedDocumentId);
+    const selectedDocumentObj = documents.find(doc => doc.id === selectedDocumentId);
     
     // Log debug information about the selection
     console.log("Selected document for analysis:", {
       id: selectedDocumentId,
-      document: selectedDocument || "Not found in documents array",
+      document: selectedDocumentObj || "Not found in documents array",
       documentsLength: documents.length,
-      availableDocumentIds: documents.map(d => d.id)
+      availableDocumentIds: documents.map(d => d.id),
+      availableFileNames: documents.map(d => d.fileName)
     });
 
     // Handle missing document information (shouldn't happen, but let's be safe)
-    if (!selectedDocument) {
+    if (!selectedDocumentObj) {
       console.warn("Selected document not found in documents array - will continue with ID only");
     }
 
     // Get file name (if available)
-    const fileName = selectedDocument?.fileName;
+    const fileName = selectedDocumentObj?.fileName;
     
     // Log file information
     console.log("Document file information:", {
       fileName: fileName || "Not available",
       hasFileName: !!fileName,
-      fileNameType: fileName ? typeof fileName : "undefined"
+      fileNameType: fileName ? typeof fileName : "undefined",
+      fileNameLength: fileName ? fileName.length : 0
     });
 
     // Check file type support, but only if we have a file name
@@ -221,12 +232,13 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
     // Start analysis process
     setIsAnalyzing(true);
     setAnalysisResults(null);
+    analysisResultsRef.current = null; // Clear the ref as well
     setAnalysisError(null);
 
     try {
       console.log("Starting document analysis process...");
       
-      // Prepare request payload
+      // Always use a properly formatted request object with all required fields
       const requestBody: {
         documentId: string;
         type: string;
@@ -236,31 +248,38 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
         type: analysisType,
       };
 
-      // Only include fileName if it exists
+      // Always include fileName if it exists
       if (fileName) {
         requestBody.fileName = fileName;
+      } else {
+        console.warn("No fileName available for document ID:", selectedDocumentId, 
+          "- backend will attempt to determine from database");
       }
 
-      console.log("Sending analysis request:", requestBody);
+      console.log("Sending analysis request:", JSON.stringify(requestBody));
 
       // Make the API request with timeout and retry handling
       const makeRequestWithRetry = async (retryCount = 0, maxRetries = 3) => {
         try {
           // Set up request with timeout
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 20000); // Increased timeout
+          const timeoutId = setTimeout(() => controller.abort(), 30000); // Increased timeout further
 
           console.log(`API request attempt ${retryCount + 1}/${maxRetries + 1}`);
           
           const response = await fetch("/api/document/analyze", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { 
+              "Content-Type": "application/json",
+              "X-Document-Id": selectedDocumentId, // Add ID in header too for redundancy
+            },
             body: JSON.stringify(requestBody),
             signal: controller.signal
           });
 
           clearTimeout(timeoutId);
           
+          // Always log the raw response details
           console.log("Received response:", {
             status: response.status,
             statusText: response.statusText,
@@ -271,12 +290,21 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
           if (!response.ok) {
             let errorMessage;
             try {
-              const errorData = await response.json();
-              errorMessage = errorData.error || `Server returned ${response.status} ${response.statusText}`;
-              console.error("API error response:", errorData);
+              const errorText = await response.text();
+              console.log("Error response text:", errorText);
+              
+              try {
+                const errorData = JSON.parse(errorText);
+                errorMessage = errorData.error || `Server returned ${response.status} ${response.statusText}`;
+                console.error("API error response:", errorData);
+              } catch (parseError) {
+                // If we can't parse JSON, use the text directly
+                errorMessage = errorText || `Server returned ${response.status} ${response.statusText}`;
+                console.error("Raw error response:", errorText);
+              }
             } catch (e) {
               errorMessage = `Server error: ${response.status} ${response.statusText}`;
-              console.error("Failed to parse error response:", e);
+              console.error("Failed to read error response:", e);
             }
 
             // Check if we should retry based on the status code
@@ -293,19 +321,38 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
           }
 
           // Success - parse response
-          console.log("Attempting to parse JSON response...");
+          console.log("Attempting to parse response...");
           
           try {
+            // First read as text
             const text = await response.text();
+            console.log("Response text received, length:", text.length);
             console.log("Response text sample:", text.substring(0, 200) + "...");
             
+            if (text.trim() === '') {
+              console.error("Empty response received from server");
+              throw new Error("The server returned an empty response");
+            }
+            
             // Try to parse JSON from text
-            const result = JSON.parse(text);
-            console.log("Analysis results received successfully. Keys:", Object.keys(result));
-            return result;
-          } catch (parseError) {
-            console.error("Failed to parse response JSON:", parseError);
-            throw new Error("Failed to parse analysis results from server");
+            try {
+              const result = JSON.parse(text);
+              console.log("Analysis results parsed successfully. Keys:", Object.keys(result));
+              return result;
+            } catch (parseError) {
+              console.error("Failed to parse response as JSON:", parseError);
+              
+              // If the response looks like HTML, it might be an error page
+              if (text.includes('<!DOCTYPE html>') || text.includes('<html>')) {
+                console.error("Received HTML instead of JSON");
+                throw new Error("The server returned HTML instead of JSON. The API might be experiencing issues.");
+              }
+              
+              throw new Error("Failed to parse analysis results from server");
+            }
+          } catch (error) {
+            console.error("Error processing response:", error);
+            throw error;
           }
         } catch (error) {
           // Handle AbortError (timeout)
@@ -356,20 +403,23 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
         hasSentiment: !!analysisResult.sentiment
       });
       
-      // Update state with results
-      console.log("Setting analysis results state...");
+      // Store results in both state and ref for redundancy
+      analysisResultsRef.current = analysisResult;
+      
+      // Update state immediately with the results
       setAnalysisResults(analysisResult);
-      console.log("Setting active tab to 'summary'...");
       setActiveTab("summary");
       
-      // Force a refresh after a short delay to ensure state updates are reflected
-      setTimeout(() => {
-        console.log("Checking if results are stored in state:", !!analysisResults);
-        if (!analysisResults) {
-          console.log("Results not in state yet, forcing update");
-          setAnalysisResults({...analysisResult});
+      // Force a UI update after a short delay to ensure the results are displayed
+      window.setTimeout(() => {
+        console.log("Forcing UI update to ensure results display");
+        // Double-check that results are still available
+        if (analysisResultsRef.current && !analysisResults) {
+          console.log("Recovering results from ref and updating state");
+          setAnalysisResults({...analysisResultsRef.current});
         }
-      }, 100);
+        forceUpdate();
+      }, 50);
     } catch (error) {
       console.error("Document analysis failed:", error);
       
@@ -384,12 +434,33 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
       console.log("Generating fallback analysis due to API failure");
       const fallbackResult = generateFallbackAnalysis();
       console.log("Setting fallback results:", fallbackResult);
+      analysisResultsRef.current = fallbackResult;
       setAnalysisResults(fallbackResult);
+      forceUpdate(); // Force update to ensure fallback results display
     } finally {
       console.log("Analysis process complete, setting isAnalyzing to false");
       setIsAnalyzing(false);
     }
   };
+
+  // Track results availability for debugging
+  React.useEffect(() => {
+    console.log("Results state changed:", 
+      analysisResults ? `Results available (${typeof analysisResults})` : "No results in state", 
+      "Force update counter:", forceUpdateCounter
+    );
+  }, [analysisResults, forceUpdateCounter]);
+
+  // Add a backup effect to ensure results display
+  React.useEffect(() => {
+    if (!isAnalyzing && analysisResultsRef.current && !analysisResults) {
+      console.log("Recovery effect: restoring results from ref");
+      setAnalysisResults({...analysisResultsRef.current});
+    }
+  }, [isAnalyzing, analysisResults]);
+
+  // Modified results section with debug info and double check
+  const hasResults = analysisResults || analysisResultsRef.current;
 
   // Get the file type icon
   const getFileIcon = (fileName: string) => {
@@ -515,17 +586,20 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
             </div>
           </div>
           
-          {/* Analysis results */}
-          {analysisResults && (
+          {/* Analysis results - modified to use both sources */}
+          {hasResults && (
             <div className="mt-8 pt-6 border-t border-[#222222]">
               <h3 className="text-lg font-safiro text-[#F9F6EE] mb-4">
                 Analysis Results
                 <span className="ml-2 text-sm text-[#8A8782]">
-                  {analysisResults.fileName ? `(${analysisResults.fileName})` : ''}
+                  {(analysisResults || analysisResultsRef.current)?.fileName 
+                    ? `(${(analysisResults || analysisResultsRef.current)?.fileName})`
+                    : ''
+                  }
                 </span>
               </h3>
               <AnalysisResultsContent 
-                result={analysisResults} 
+                result={analysisResults || analysisResultsRef.current} 
                 documentId={selectedDocumentId} 
               />
             </div>
@@ -565,6 +639,15 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
           )}
         </CardContent>
       </Card>
+
+      {/* Add a debugging indicator for results - only visible during development */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="text-xs text-gray-500 mt-2 opacity-50">
+          Results state: {analysisResults ? 'Available in state' : 'Not in state'} | 
+          Ref: {analysisResultsRef.current ? 'Available in ref' : 'Not in ref'} | 
+          Counter: {forceUpdateCounter}
+        </div>
+      )}
     </div>
   );
 } 

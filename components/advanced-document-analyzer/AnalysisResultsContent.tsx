@@ -1,12 +1,13 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FileText, BarChart2, ArrowRight } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import AnalysisKeyPoints from './AnalysisKeyPoints';
 import AnalysisRecommendations from './AnalysisRecommendations';
 import AnalysisInsights from './AnalysisInsights';
 import AnalysisSentiment from './AnalysisSentiment';
-import AnalysisLanguageQuality from './AnalysisLanguageQuality';
 import AnalysisEntities from './AnalysisEntities';
+import AnalysisLanguageQuality from './AnalysisLanguageQuality';
 import AnalysisTimeline from './AnalysisTimeline';
 import { AnalysisResult, DocumentTopic, ApiDocumentTopic } from './types';
 
@@ -16,158 +17,171 @@ interface AnalysisResultsContentProps {
 }
 
 export default function AnalysisResultsContent({ result, documentId }: AnalysisResultsContentProps) {
+  // Log a message when the component is rendered with its props
+  React.useEffect(() => {
+    console.log("AnalysisResultsContent rendered with:", 
+      result ? "Result provided" : "No result", 
+      "DocumentId:", documentId);
+    if (result) {
+      console.log("Result structure:", Object.keys(result));
+    }
+  }, [result, documentId]);
+
   // If result is null, show a fallback message
   if (!result) {
+    console.warn("AnalysisResultsContent: No result data provided");
     return (
-      <Card className="border border-[#222222] bg-[#111111] shadow-lg overflow-hidden">
-        <CardHeader>
-          <CardTitle className="text-lg font-safiro text-[#F9F6EE]">Analysis Results</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-[#8A8782]">No analysis results available. Please try analyzing the document again.</p>
-        </CardContent>
-      </Card>
+      <div className="p-6 border border-dashed border-[#333333] rounded-lg bg-[#0A0A0A] text-center">
+        <FileText className="h-6 w-6 text-[#8A8782] mx-auto mb-3" />
+        <h3 className="text-[#F9F6EE] font-medium">No Analysis Results</h3>
+        <p className="text-[#8A8782] text-sm mt-1">Analysis results will appear here.</p>
+      </div>
     );
   }
 
-  // Normalize the data structure to handle different API formats
+  // Function to normalize data from different response formats
   const normalizeData = (result: any) => {
-    // Handle topics that might be in different formats
-    const normalizedTopics = (result.topics || []).map((topic: any) => {
-      if (topic.topic && topic.relevance) {
-        // Handle old API format with {topic, relevance} structure
-        return { name: topic.topic, relevance: topic.relevance };
-      } else if (topic.name && topic.relevance) {
-        // Handle new API format with {name, relevance} structure
-        return topic;
-      } else {
-        // Handle unexpected format with a default
-        const topicName = topic.name || topic.topic || String(topic);
-        return { name: topicName, relevance: topic.relevance || 0.5 };
+    console.log("Normalizing data for display");
+    try {
+      // Check if we have the key data we need
+      const hasSummary = !!result.summary;
+      const hasKeyPoints = Array.isArray(result.keyPoints) && result.keyPoints.length > 0;
+      const hasInsights = !!result.insights;
+      
+      console.log("Data validation:", { 
+        hasSummary, 
+        hasKeyPoints, 
+        hasInsights,
+        insightsType: typeof result.insights
+      });
+
+      // Process recommendations
+      let recommendations = Array.isArray(result.recommendations) 
+        ? result.recommendations 
+        : [];
+      
+      // Process topics if available
+      let topics = result.topics || [];
+      if (!Array.isArray(topics)) {
+        console.warn("Topics is not an array:", topics);
+        topics = [];
       }
-    });
-
-    // Handle entities that might be in different formats
-    const normalizedEntities = (result.entities || []).map((entity: any) => {
-      // Ensure all entities have standard fields
+      
+      // Process entities if available
+      let entities = result.entities || [];
+      if (!Array.isArray(entities)) {
+        console.warn("Entities is not an array:", entities);
+        entities = [];
+      }
+      
       return {
-        name: entity.name || "Unknown",
-        type: entity.type || "OTHER",
-        count: entity.count || entity.mentions || 1
+        summary: result.summary || "No summary available",
+        keyPoints: Array.isArray(result.keyPoints) ? result.keyPoints : [],
+        recommendations,
+        insights: result.insights || {},
+        topics,
+        entities,
+        sentiment: result.sentiment || { overall: "neutral", score: 0.5 },
+        languageQuality: result.languageQuality || null,
+        timeline: Array.isArray(result.timeline) ? result.timeline : []
       };
-    });
-
-    // Handle sentiment data
-    const normalizedSentiment = result.sentiment ? {
-      overall: result.sentiment.overall || "neutral",
-      score: result.sentiment.score || 0,
-      sentimentBySection: result.sentiment.sentimentBySection || []
-    } : undefined;
-
-    // Handle insights data which could be an array or object
-    let normalizedInsights;
-    if (Array.isArray(result.insights)) {
-      // Convert array format to object format
-      normalizedInsights = result.insights.reduce((obj: any, item: any) => {
-        obj[item.name.toLowerCase().replace(/\s+/g, '')] = item.value;
-        return obj;
-      }, {});
-    } else if (typeof result.insights === 'object' && result.insights !== null) {
-      normalizedInsights = result.insights;
-    } else {
-      // Default empty insights
-      normalizedInsights = {
-        clarity: 50,
-        relevance: 50,
-        completeness: 50,
-        conciseness: 50
+    } catch (error) {
+      console.error("Error normalizing analysis data:", error);
+      // Return a safe default
+      return {
+        summary: "Error processing analysis results",
+        keyPoints: [],
+        recommendations: [],
+        insights: {},
+        topics: [],
+        entities: [],
+        sentiment: { overall: "neutral", score: 0.5 },
+        languageQuality: null,
+        timeline: []
       };
     }
-
-    // Handle timeline data
-    const normalizedTimeline = (result.timeline || []).map((entry: any) => {
-      return {
-        date: entry.date || entry.period || "Unknown date",
-        event: entry.event || entry.entity || "Unknown event"
-      };
-    });
-
-    return {
-      summary: result.summary || "No summary available",
-      keyPoints: result.keyPoints || [],
-      recommendations: result.recommendations || [],
-      insights: normalizedInsights,
-      topics: normalizedTopics,
-      entities: normalizedEntities,
-      sentiment: normalizedSentiment,
-      languageQuality: result.languageQuality || undefined,
-      timeline: normalizedTimeline
-    };
   };
 
   // Normalize the data
-  const normalizedResult = normalizeData(result);
-
-  // Extract fields with null/undefined checks
-  const { 
-    summary, 
-    keyPoints = [], 
-    recommendations = [], 
-    insights,
-    topics = [],
-    entities = [],
-    sentiment,
-    languageQuality,
-    timeline = []
-  } = normalizedResult;
+  const data = normalizeData(result);
+  
+  // Log the normalized data for debugging
+  console.log("Using normalized data with sections:", {
+    keyPointsCount: data.keyPoints.length,
+    recommendationsCount: data.recommendations.length,
+    hasTopics: data.topics && data.topics.length > 0,
+    hasEntities: data.entities && data.entities.length > 0,
+    hasLanguageQuality: !!data.languageQuality,
+    hasTimeline: data.timeline && data.timeline.length > 0
+  });
 
   return (
-    <div className="space-y-6">
-      {/* Document Summary */}
-      <Card className="border border-[#222222] bg-[#111111] shadow-lg overflow-hidden">
-        <CardHeader>
-          <CardTitle className="text-lg font-safiro text-[#F9F6EE]">Document Summary</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-[#C5C2BA]">{summary || 'No summary available'}</p>
-        </CardContent>
-      </Card>
-
-      {/* Key Points & Recommendations */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {keyPoints && keyPoints.length > 0 && (
-          <AnalysisKeyPoints keyPoints={keyPoints} />
-        )}
+    <>
+      <Tabs defaultValue="summary" className="w-full">
+        <TabsList className="w-full mb-6 bg-[#161616] border border-[#222222]">
+          <TabsTrigger value="summary" className="data-[state=active]:bg-[#222222] text-sm">
+            Summary
+          </TabsTrigger>
+          <TabsTrigger value="insights" className="data-[state=active]:bg-[#222222] text-sm">
+            Insights
+          </TabsTrigger>
+          <TabsTrigger value="entities" className="data-[state=active]:bg-[#222222] text-sm">
+            Entities
+          </TabsTrigger>
+          <TabsTrigger value="language" className="data-[state=active]:bg-[#222222] text-sm">
+            Language
+          </TabsTrigger>
+        </TabsList>
         
-        {recommendations && recommendations.length > 0 && (
-          <AnalysisRecommendations recommendations={recommendations} />
-        )}
-      </div>
-
-      {/* Insights */}
-      {insights && (
-        <AnalysisInsights insights={insights} topics={topics} />
-      )}
-
-      {/* Sentiment Analysis */}
-      {sentiment && (
-        <AnalysisSentiment sentiment={sentiment} />
-      )}
-      
-      {/* Language Quality */}
-      {languageQuality && (
-        <AnalysisLanguageQuality languageQuality={languageQuality} />
-      )}
-
-      {/* Entities */}
-      {entities && entities.length > 0 && (
-        <AnalysisEntities entities={entities} />
-      )}
-
-      {/* Timeline */}
-      {timeline && timeline.length > 0 && (
-        <AnalysisTimeline timeline={timeline} />
-      )}
-    </div>
+        <TabsContent value="summary" className="space-y-6">
+          <div className="bg-[#0A0A0A] p-5 rounded-lg border border-[#222222]">
+            <h3 className="text-lg font-medium text-[#F9F6EE] mb-3">Document Summary</h3>
+            <p className="text-[#E2DFD7] text-sm leading-relaxed">{data.summary}</p>
+          </div>
+          
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <AnalysisKeyPoints keyPoints={data.keyPoints} />
+            <AnalysisRecommendations recommendations={data.recommendations} />
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="insights" className="space-y-6">
+          <AnalysisInsights 
+            insights={data.insights} 
+            topics={data.topics} 
+          />
+          
+          {data.sentiment && (
+            <AnalysisSentiment sentiment={data.sentiment} />
+          )}
+          
+          {data.timeline && data.timeline.length > 0 && (
+            <AnalysisTimeline timeline={data.timeline} />
+          )}
+        </TabsContent>
+        
+        <TabsContent value="entities" className="space-y-6">
+          {data.entities && data.entities.length > 0 ? (
+            <AnalysisEntities entities={data.entities} />
+          ) : (
+            <div className="p-6 border border-dashed border-[#333333] rounded-lg bg-[#0A0A0A] text-center">
+              <h3 className="text-[#F9F6EE] font-medium">No Entities Found</h3>
+              <p className="text-[#8A8782] text-sm mt-1">No named entities were detected in this document.</p>
+            </div>
+          )}
+        </TabsContent>
+        
+        <TabsContent value="language" className="space-y-6">
+          {data.languageQuality ? (
+            <AnalysisLanguageQuality languageQuality={data.languageQuality} />
+          ) : (
+            <div className="p-6 border border-dashed border-[#333333] rounded-lg bg-[#0A0A0A] text-center">
+              <h3 className="text-[#F9F6EE] font-medium">Language Analysis Not Available</h3>
+              <p className="text-[#8A8782] text-sm mt-1">Language quality metrics are not available for this document.</p>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+    </>
   );
 }

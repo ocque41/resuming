@@ -1,93 +1,72 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Calendar, Clock, ArrowRight } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import { TimelineEntry } from './types';
 
 interface AnalysisTimelineProps {
-  timeline?: TimelineEntry[];
+  timeline: TimelineEntry[] | any[];
 }
 
-export default function AnalysisTimeline({ timeline = [] }: AnalysisTimelineProps) {
-  if (!timeline || timeline.length === 0) {
+export default function AnalysisTimeline({ timeline }: AnalysisTimelineProps) {
+  console.log("Rendering AnalysisTimeline with", timeline ? timeline.length : 0, "entries");
+  
+  if (!timeline || !Array.isArray(timeline) || timeline.length === 0) {
+    console.warn("Timeline is empty or invalid:", timeline);
     return null;
   }
 
-  // Format date for display
-  const formatDate = (dateString: string): string => {
-    try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) {
-        return dateString; // Return original if not a valid date
+  // Normalize timeline entries to handle different formats
+  const normalizeTimelineEntries = (entries: any[]): TimelineEntry[] => {
+    return entries.map(entry => {
+      if (!entry || typeof entry !== 'object') {
+        console.warn("Invalid timeline entry:", entry);
+        return { date: 'Unknown', event: 'Unknown event' };
       }
-      return date.toLocaleDateString(undefined, { 
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      });
-    } catch (error) {
-      return dateString; // Return original on error
-    }
+
+      // Get date from various possible properties
+      const date = entry.date || entry.period || entry.time || 'Unknown date';
+      
+      // Get event from various possible properties
+      const event = entry.event || entry.entity || entry.description || entry.name || 'Unknown event';
+      
+      return { date, event };
+    });
   };
 
-  // Sort timeline entries chronologically if possible
-  const sortedTimeline = [...timeline].sort((a, b) => {
-    // Try to sort by ISO date if available
-    if (a.date && b.date) {
-      return new Date(a.date).getTime() - new Date(b.date).getTime();
-    }
-    
-    // Fall back to sorting by year if present in period
-    const yearA = a.period?.match(/\b(19|20)\d{2}\b/);
-    const yearB = b.period?.match(/\b(19|20)\d{2}\b/);
-    
-    if (yearA && yearB) {
-      return parseInt(yearA[0]) - parseInt(yearB[0]);
-    }
-    
-    // Keep original order if no sortable criteria
-    return 0;
-  });
+  const normalizedTimeline = normalizeTimelineEntries(timeline);
 
   return (
     <Card className="border border-[#222222] bg-[#111111] shadow-lg overflow-hidden">
       <CardHeader className="bg-[#0A0A0A] border-b border-[#222222]">
         <CardTitle className="text-lg font-medium text-[#F9F6EE] flex items-center gap-2">
           <Calendar className="h-5 w-5 text-[#B4916C]" />
-          Document Timeline
+          Timeline
         </CardTitle>
       </CardHeader>
       <CardContent className="p-5">
         <div className="relative">
-          {/* Vertical timeline line */}
-          <div className="absolute left-[22px] top-0 bottom-0 w-0.5 bg-[#222222]" />
+          {/* Vertical line for timeline */}
+          <div className="absolute top-0 bottom-0 left-3 w-0.5 bg-[#222222]" />
           
-          <div className="space-y-6">
-            {sortedTimeline.map((entry, index) => {
-              // Handle both old and new formats
-              const displayDate = entry.date ? formatDate(entry.date) : entry.period;
-              const displayEvent = entry.event || entry.entity;
-              
-              return (
-                <div key={index} className="relative flex items-start gap-4 pl-12">
-                  {/* Timeline connector dot */}
-                  <div className="absolute left-0 top-1.5 w-5 h-5 rounded-full bg-[#161616] border-2 border-[#B4916C] z-10" />
-                  
-                  <div className="bg-[#0A0A0A] p-4 rounded-lg border border-[#222222] w-full">
-                    <div className="flex justify-between items-start mb-1">
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-[#B4916C]" />
-                        <span className="text-[#E2DFD7] font-medium">{displayDate}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="mt-2 text-[#8A8782] text-sm flex items-center gap-2">
-                      <ArrowRight className="h-3.5 w-3.5 text-[#5D5D5D]" />
-                      <span>{displayEvent}</span>
-                    </div>
-                  </div>
+          {/* Timeline entries */}
+          <div className="space-y-4">
+            {normalizedTimeline.map((entry, index) => (
+              <div 
+                key={index} 
+                className="relative pl-10"
+              >
+                {/* Timeline dot */}
+                <div className="absolute left-0 top-1.5 h-6 w-6 rounded-full bg-[#161616] border-2 border-[#222222] flex items-center justify-center">
+                  <div className="h-2 w-2 rounded-full bg-[#B4916C]" />
                 </div>
-              );
-            })}
+                
+                {/* Content */}
+                <div className="bg-[#161616] rounded-lg p-3 border border-[#222222]">
+                  <div className="text-[#8A8782] text-xs mb-1 font-medium">{entry.date}</div>
+                  <div className="text-[#F9F6EE] text-sm">{entry.event}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </CardContent>
