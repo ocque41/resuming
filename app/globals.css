@@ -252,3 +252,87 @@
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
 }
+
+/* Custom Scrollbar Styles */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #B4916C #161616;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #161616;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #333333;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #B4916C;
+}
+
+.custom-scrollbar::-webkit-scrollbar-corner {
+  background: #161616;
+}
+
+/* Premium scrollbar style with gold accent */
+.premium-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #B4916C #111111;
+}
+
+.premium-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.premium-scrollbar::-webkit-scrollbar-track {
+  background: #111111;
+  border-radius: 3px;
+}
+
+.premium-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, #B4916C, #8C6E52);
+  border-radius: 3px;
+  border: 1px solid #222222;
+}
+
+.premium-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to bottom, #D3AD84, #B4916C);
+}
+
+.premium-scrollbar::-webkit-scrollbar-corner {
+  background: #111111;
+}
+
+/* Minimal scrollbar for content areas */
+.minimal-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #333333 transparent;
+}
+
+.minimal-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.minimal-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.minimal-scrollbar::-webkit-scrollbar-thumb {
+  background: #333333;
+  border-radius: 2px;
+}
+
+.minimal-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #444444;
+}

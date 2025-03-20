@@ -24,6 +24,7 @@ import PremiumPageLayout from "@/components/PremiumPageLayout";
 import { motion } from "framer-motion";
 import { colors } from "@/lib/design-tokens";
 import ErrorBoundaryWrapper from "@/components/ErrorBoundaryWrapper";
+import Scrollable from "@/components/ui/scrollable";
 
 // Define prop interface
 interface DashboardClientProps {
@@ -77,7 +78,7 @@ export default function DashboardClient({
             <PremiumCardTitle>Your CV Collection</PremiumCardTitle>
           </PremiumCardHeader>
           <PremiumCardContent className="p-0">
-            <div className="overflow-x-auto">
+            <Scrollable orientation="horizontal" variant="premium">
               <Table className="w-full">
                 <TableHeader>
                   <TableRow className="border-b border-[#1A1A1A]">
@@ -142,7 +143,7 @@ export default function DashboardClient({
                   )}
                 </TableBody>
               </Table>
-            </div>
+            </Scrollable>
           </PremiumCardContent>
         </PremiumCard>
       </motion.div>

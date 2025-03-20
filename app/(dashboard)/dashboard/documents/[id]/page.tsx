@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import Scrollable from "@/components/ui/scrollable";
 
 // Dynamically import client components to avoid SSR issues
 const DeleteDocument = dynamic(() => import("@/components/delete-document"));
@@ -299,16 +300,19 @@ export default async function DocumentDetailPage({
                     </div>
                   </div>
                   
-                  {/* Preview section - simple version */}
+                  {/* Add document text preview if available */}
                   {document.rawText && (
-                    <div className="mt-6">
-                      <h4 className="text-sm text-[#8A8782] font-medium mb-2">Content Preview</h4>
-                      <div className="bg-[#080808] border border-[#222222] rounded-lg p-4 max-h-64 overflow-y-auto">
-                        <p className="text-sm font-mono text-[#E2DFD7] whitespace-pre-line">
-                          {document.rawText.substring(0, 500)}
-                          {document.rawText.length > 500 && '...'}
+                    <div className="mt-4">
+                      <h2 className="text-lg font-medium text-[#F9F6EE] mb-2 font-safiro">Document Text</h2>
+                      <Scrollable 
+                        className="bg-[#080808] border border-[#222222] rounded-lg p-4" 
+                        maxHeight="16rem"
+                        variant="minimal"
+                      >
+                        <p className="text-[#E2DFD7] whitespace-pre-wrap text-sm">
+                          {document.rawText}
                         </p>
-                      </div>
+                      </Scrollable>
                     </div>
                   )}
                 </TabsContent>
