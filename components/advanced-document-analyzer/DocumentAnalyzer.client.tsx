@@ -9,7 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   AlertCircle, FileText, BarChart2, PieChart, LineChart, Calendar, Check, 
-  Info, Download, RefreshCw, ArrowRight, Loader2
+  Info, Download, RefreshCw, ArrowRight, Loader2, Briefcase, Star,
+  User, File, Bookmark
 } from 'lucide-react';
 import AnalysisRecommendations from './AnalysisRecommendations';
 import AnalysisKeyPoints from './AnalysisKeyPoints';
@@ -48,6 +49,46 @@ const ANALYSIS_TYPES = [
   { id: 'report', label: 'Report Analysis', description: 'Business report quality assessment' },
   { id: 'spreadsheet', label: 'Spreadsheet Analysis', description: 'Data organization and quality evaluation' },
 ];
+
+// Add the cvAnalysis property to the existing AnalysisResult interface
+declare module './types' {
+  interface AnalysisResult {
+    cvAnalysis?: {
+      skills?: {
+        technical?: Array<{name: string; proficiency: string; relevance: number}>;
+        soft?: Array<{name: string; evidence: string; strength: number}>;
+        domain?: Array<{name: string; relevance: number}>;
+      };
+      experience?: {
+        yearsOfExperience?: number;
+        experienceProgression?: string;
+        keyRoles?: string[];
+        achievementsHighlighted?: boolean;
+        clarity?: number;
+      };
+      education?: {
+        highestDegree?: string;
+        relevance?: number;
+        continuingEducation?: boolean;
+      };
+      atsCompatibility?: {
+        score?: number;
+        keywordOptimization?: number;
+        formatCompatibility?: number;
+        improvementAreas?: string[];
+      };
+      strengths?: string[];
+      weaknesses?: string[];
+    };
+  }
+}
+
+// Define or update the AnalysisResultsContentProps interface
+interface AnalysisResultsContentProps {
+  result: AnalysisResult | null;
+  documentId: string | number;
+  tab?: string; // Make tab optional
+}
 
 export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: DocumentAnalyzerProps) {
   // Check for debug mode from URL
@@ -622,6 +663,223 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
     }
   };
 
+  // Add a function to determine if the analysis is for a CV
+  const isCV = React.useMemo(() => {
+    return analysisResults?.analysisType === 'cv' || 
+           analysisResultsRef.current?.analysisType === 'cv';
+  }, [analysisResults, analysisResultsRef.current]);
+
+  // Add a new renderer specifically for CV analysis
+  const renderCVAnalysis = () => {
+    const results = analysisResults || analysisResultsRef.current;
+    if (!results || !results.cvAnalysis) {
+      return (
+        <div className="p-6 text-center">
+          <p className="text-[#8A8782]">No CV-specific analysis available for this document.</p>
+        </div>
+      );
+    }
+
+    const { skills, experience, education, atsCompatibility, strengths, weaknesses } = results.cvAnalysis;
+
+    return (
+      <div className="space-y-8">
+        {/* ATS Compatibility Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-[#111111] border border-[#222222] rounded-xl p-5">
+            <h3 className="font-safiro text-[#F9F6EE] mb-4 flex items-center">
+              <User className="w-5 h-5 text-[#B4916C] mr-2" /> 
+              ATS Compatibility Score
+            </h3>
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-[#8A8782] text-sm">Overall Score</span>
+                  <span className="text-[#F9F6EE] text-sm">{atsCompatibility?.score || 0}/100</span>
+                </div>
+                <Progress value={atsCompatibility?.score || 0} max={100} className="h-2 bg-[#222222]" />
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-[#8A8782] text-sm">Keyword Optimization</span>
+                  <span className="text-[#F9F6EE] text-sm">{atsCompatibility?.keywordOptimization || 0}/100</span>
+                </div>
+                <Progress value={atsCompatibility?.keywordOptimization || 0} max={100} className="h-2 bg-[#222222]" />
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-[#8A8782] text-sm">Format Compatibility</span>
+                  <span className="text-[#F9F6EE] text-sm">{atsCompatibility?.formatCompatibility || 0}/100</span>
+                </div>
+                <Progress value={atsCompatibility?.formatCompatibility || 0} max={100} className="h-2 bg-[#222222]" />
+              </div>
+            </div>
+            <div>
+              <h4 className="text-[#C5C2BA] font-semibold mb-2 text-sm">Improvement Areas</h4>
+              <ul className="space-y-1.5">
+                {atsCompatibility?.improvementAreas?.map((area: string, index: number) => (
+                  <li key={`area-${index}`} className="text-[#8A8782] text-sm flex items-start">
+                    <ArrowRight className="w-3.5 h-3.5 text-[#B4916C] mt-0.5 mr-2 shrink-0" />
+                    <span>{area}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {/* Skills Section */}
+          <div className="bg-[#111111] border border-[#222222] rounded-xl p-5">
+            <h3 className="font-safiro text-[#F9F6EE] mb-4 flex items-center">
+              <Star className="w-5 h-5 text-[#B4916C] mr-2" /> 
+              Skills Assessment
+            </h3>
+            <div className="space-y-6">
+              <div>
+                <h4 className="text-[#C5C2BA] font-semibold mb-3 text-sm">Technical Skills</h4>
+                <ul className="space-y-2">
+                  {skills?.technical?.map((skill: {name: string; proficiency: string; relevance: number}, index: number) => (
+                    <li key={`tech-${index}`} className="flex justify-between items-center">
+                      <span className="text-[#8A8782] text-sm">{skill.name}</span>
+                      <span className="text-[#F9F6EE] text-xs px-2 py-1 bg-[#1A1A1A] rounded-full border border-[#333333]">
+                        {skill.proficiency}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-[#C5C2BA] font-semibold mb-3 text-sm">Soft Skills</h4>
+                <ul className="space-y-2">
+                  {skills?.soft?.map((skill: {name: string; evidence: string; strength: number}, index: number) => (
+                    <li key={`soft-${index}`} className="flex justify-between items-center">
+                      <span className="text-[#8A8782] text-sm">{skill.name}</span>
+                      <span className="text-[#F9F6EE] text-xs px-2 py-1 bg-[#1A1A1A] rounded-full border border-[#333333]">
+                        {skill.strength}/10
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-[#C5C2BA] font-semibold mb-3 text-sm">Domain Skills</h4>
+                <ul className="space-y-2">
+                  {skills?.domain?.map((skill: {name: string; relevance: number}, index: number) => (
+                    <li key={`domain-${index}`} className="flex justify-between items-center">
+                      <span className="text-[#8A8782] text-sm">{skill.name}</span>
+                      <span className="text-[#F9F6EE] text-xs px-2 py-1 bg-[#1A1A1A] rounded-full border border-[#333333]">
+                        Relevance: {skill.relevance}/10
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Experience Section */}
+        <div className="bg-[#111111] border border-[#222222] rounded-xl p-5">
+          <h3 className="font-safiro text-[#F9F6EE] mb-4 flex items-center">
+            <Briefcase className="w-5 h-5 text-[#B4916C] mr-2" /> 
+            Experience Assessment
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div>
+                <span className="text-[#8A8782] text-sm block mb-1">Years of Experience</span>
+                <p className="text-[#F9F6EE] text-lg font-medium">{experience?.yearsOfExperience || 'Not specified'}</p>
+              </div>
+              <div>
+                <span className="text-[#8A8782] text-sm block mb-1">Progression</span>
+                <p className="text-[#F9F6EE] text-sm">{experience?.experienceProgression || 'Not specified'}</p>
+              </div>
+              <div>
+                <span className="text-[#8A8782] text-sm block mb-1">Achievement Clarity</span>
+                <p className="text-[#F9F6EE] text-sm">{experience?.clarity ? `${experience.clarity}/10` : 'Not specified'}</p>
+              </div>
+            </div>
+            <div>
+              <div>
+                <span className="text-[#8A8782] text-sm block mb-1">Key Roles</span>
+                <div className="flex flex-wrap gap-2">
+                  {experience?.keyRoles?.map((role: string, index: number) => (
+                    <span key={`role-${index}`} className="text-[#F9F6EE] text-xs px-2 py-1 bg-[#1A1A1A] rounded-full border border-[#333333]">
+                      {role}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Education Section */}
+        <div className="bg-[#111111] border border-[#222222] rounded-xl p-5">
+          <h3 className="font-safiro text-[#F9F6EE] mb-4 flex items-center">
+            <Bookmark className="w-5 h-5 text-[#B4916C] mr-2" /> 
+            Education Assessment
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div>
+                <span className="text-[#8A8782] text-sm block mb-1">Highest Degree</span>
+                <p className="text-[#F9F6EE] text-lg font-medium">{education?.highestDegree || 'Not specified'}</p>
+              </div>
+              <div>
+                <span className="text-[#8A8782] text-sm block mb-1">Relevance to Career</span>
+                <p className="text-[#F9F6EE] text-sm">{education?.relevance ? `${education.relevance}/10` : 'Not specified'}</p>
+              </div>
+            </div>
+            <div>
+              <div>
+                <span className="text-[#8A8782] text-sm block mb-1">Continuing Education</span>
+                <p className="text-[#F9F6EE] text-sm">{education?.continuingEducation ? 'Yes' : 'No'}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Strengths & Weaknesses Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-[#111111] border border-[#222222] rounded-xl p-5">
+            <h3 className="font-safiro text-[#F9F6EE] mb-4 flex items-center">
+              <Check className="w-5 h-5 text-[#4CAF50] mr-2" /> 
+              Strengths
+            </h3>
+            <div className="space-y-2">
+              <h4 className="text-[#C5C2BA] font-semibold mb-3 text-sm">Key Strengths</h4>
+              <ul className="space-y-1.5">
+                {strengths?.map((strength: string, index: number) => (
+                  <li key={`strength-${index}`} className="text-[#8A8782] text-sm flex items-start">
+                    <Check className="w-3.5 h-3.5 text-[#4CAF50] mt-0.5 mr-2 shrink-0" />
+                    <span>{strength}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <div className="bg-[#111111] border border-[#222222] rounded-xl p-5">
+            <h3 className="font-safiro text-[#F9F6EE] mb-4 flex items-center">
+              <ArrowRight className="w-5 h-5 text-[#B4916C] mr-2" /> 
+              Areas for Improvement
+            </h3>
+            <div className="space-y-2">
+              <h4 className="text-[#C5C2BA] font-semibold mb-3 text-sm">Areas for Improvement</h4>
+              <ul className="space-y-1.5">
+                {weaknesses?.map((weakness: string, index: number) => (
+                  <li key={`weakness-${index}`} className="text-[#8A8782] text-sm flex items-start">
+                    <ArrowRight className="w-3.5 h-3.5 text-[#B4916C] mt-0.5 mr-2 shrink-0" />
+                    <span>{weakness}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <Card className="border border-[#222222] bg-[#111111] shadow-lg overflow-hidden">
@@ -835,10 +1093,65 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
                     }
                   </span>
                 </h3>
-                <AnalysisResultsContent 
-                  result={analysisResults || analysisResultsRef.current} 
-                  documentId={selectedDocumentId} 
-                />
+                <Tabs 
+                  value={activeTab} 
+                  onValueChange={setActiveTab}
+                  className="w-full"
+                >
+                  <TabsList className="grid grid-cols-4 md:grid-cols-5 mb-6">
+                    <TabsTrigger value="summary" className="font-borna">
+                      Summary
+                    </TabsTrigger>
+                    <TabsTrigger value="content" className="font-borna">
+                      Content
+                    </TabsTrigger>
+                    <TabsTrigger value="sentiment" className="font-borna">
+                      Sentiment
+                    </TabsTrigger>
+                    <TabsTrigger value="keyinfo" className="font-borna">
+                      Key Information
+                    </TabsTrigger>
+                    {isCV && (
+                      <TabsTrigger value="cv" className="font-borna">
+                        CV Analysis
+                      </TabsTrigger>
+                    )}
+                  </TabsList>
+                  
+                  <TabsContent value="summary" className="py-2">
+                    <AnalysisResultsContent 
+                      result={analysisResults || analysisResultsRef.current} 
+                      documentId={selectedDocumentId}
+                    />
+                  </TabsContent>
+                  
+                  <TabsContent value="content" className="py-2">
+                    <AnalysisResultsContent 
+                      result={analysisResults || analysisResultsRef.current} 
+                      documentId={selectedDocumentId}
+                    />
+                  </TabsContent>
+                  
+                  <TabsContent value="sentiment" className="py-2">
+                    <AnalysisResultsContent 
+                      result={analysisResults || analysisResultsRef.current} 
+                      documentId={selectedDocumentId}
+                    />
+                  </TabsContent>
+                  
+                  <TabsContent value="keyinfo" className="py-2">
+                    <AnalysisResultsContent 
+                      result={analysisResults || analysisResultsRef.current} 
+                      documentId={selectedDocumentId}
+                    />
+                  </TabsContent>
+                  
+                  {isCV && (
+                    <TabsContent value="cv" className="py-2">
+                      {renderCVAnalysis()}
+                    </TabsContent>
+                  )}
+                </Tabs>
               </div>
             )}
           </div>

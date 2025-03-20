@@ -2,7 +2,7 @@
  * File type detection utilities for the document analyzer
  */
 
-export type FileCategory = 'document' | 'spreadsheet' | 'presentation' | 'image' | 'other';
+export type FileCategory = 'document' | 'spreadsheet' | 'presentation' | 'image' | 'cv' | 'other';
 
 export interface FileTypeInfo {
   extension: string;
@@ -94,6 +94,14 @@ export const FILE_TYPES: Record<string, FileTypeInfo> = {
   },
 };
 
+// Common CV/resume-related keywords to detect in filenames
+const CV_KEYWORDS = [
+  'cv', 'resume', 'curriculum', 'vitae', 
+  'bio', 'profile', 'professional',
+  'jobseeker', 'job-seeker', 'job_seeker',
+  'career'
+];
+
 /**
  * Detects the file type based on filename or MIME type
  * @param fileName The name of the file
@@ -111,7 +119,27 @@ export function detectFileType(fileName: string, mimeType?: string): FileTypeInf
   const extension = fileName.split('.').pop()?.toLowerCase();
   if (!extension) return undefined;
   
-  return FILE_TYPES[extension];
+  const fileType = FILE_TYPES[extension];
+  if (!fileType) return undefined;
+  
+  // Create a copy of the file type that we can modify
+  const result = { ...fileType };
+  
+  // Check if this is likely a CV based on the filename
+  const lowerFileName = fileName.toLowerCase();
+  
+  // If any CV-related keywords are found in the filename, categorize as a CV
+  const isCVByName = CV_KEYWORDS.some(keyword => 
+    lowerFileName.includes(keyword)
+  );
+  
+  if (isCVByName && (fileType.category === 'document')) {
+    // It's a document with CV-related keywords, so categorize as CV
+    result.category = 'cv';
+    result.name = 'CV / Resume';
+  }
+  
+  return result;
 }
 
 /**
@@ -122,8 +150,8 @@ export function detectFileType(fileName: string, mimeType?: string): FileTypeInf
 export function isSupportedForAnalysis(fileType: FileTypeInfo | undefined): boolean {
   if (!fileType) return false;
   
-  // Currently we support documents, spreadsheets, and presentations
-  return ['document', 'spreadsheet', 'presentation'].includes(fileType.category);
+  // Currently we support documents, spreadsheets, presentations, and CVs
+  return ['document', 'spreadsheet', 'presentation', 'cv'].includes(fileType.category);
 }
 
 /**
@@ -135,6 +163,8 @@ export function getAnalysisTypeForFile(fileType: FileTypeInfo | undefined): stri
   if (!fileType) return 'general';
   
   switch (fileType.category) {
+    case 'cv':
+      return 'cv';
     case 'document':
       return 'document';
     case 'spreadsheet':

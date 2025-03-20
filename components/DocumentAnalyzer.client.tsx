@@ -69,10 +69,10 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
       setError("Please select a document to analyze");
       return;
     }
-    
+
     setIsAnalyzing(true);
     setError(null);
-    
+
     try {
       const response = await fetch(`/api/document/analyze`, {
         method: 'POST',
@@ -81,11 +81,11 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
         },
         body: JSON.stringify({ documentId: selectedDocumentId }),
       });
-      
+
       if (!response.ok) {
         throw new Error("Failed to analyze document");
       }
-      
+
       const data = await response.json();
       setAnalysisResult(data.analysis);
     } catch (err) {
@@ -95,10 +95,15 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
       setIsAnalyzing(false);
     }
   };
-  
+
   const handleExportPDF = async () => {
     if (!selectedDocumentId) {
       setError("Please select a document to export");
+      return;
+    }
+    
+    if (!analysisResult) {
+      setError("Please analyze the document first before exporting the PDF");
       return;
     }
     
@@ -194,7 +199,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
     
     switch (analysisType) {
       case 'spreadsheet':
-        return (
+  return (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card title="Data Structure">
               <ResponsiveContainer width="100%" height={300}>
@@ -232,7 +237,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                 </RadarChart>
               </ResponsiveContainer>
             </Card>
-          </div>
+        </div>
         );
         
       case 'presentation':
@@ -275,7 +280,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                 </LineChart>
               </ResponsiveContainer>
             </Card>
-          </div>
+                          </div>
         );
         
       case 'document':
@@ -304,8 +309,8 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
-            </Card>
-            
+              </Card>
+              
             <Card title="Top Keywords">
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart
@@ -324,8 +329,8 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-            </Card>
-          </div>
+              </Card>
+            </div>
         );
     }
   };
@@ -351,8 +356,8 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                 '100%': '#52c41a',
               }}
             />
-          </div>
-          
+                </div>
+                
           <div className="text-center mb-4">
             <h3 className="text-lg font-bold mb-1">
               {(analysisResult.sentimentAnalysis.overallScore || 0) >= 0.8 
@@ -370,7 +375,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                   ? "Your document has a positive tone but could be strengthened in some areas." 
                   : "Consider revising to use more positive and confident language."}
             </p>
-          </div>
+                      </div>
         </Card>
         
         <Card title="Sentiment by Section">
@@ -401,7 +406,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
             </BarChart>
           </ResponsiveContainer>
         </Card>
-      </div>
+                      </div>
     );
   };
   
@@ -426,9 +431,9 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                           <div key={key} className="bg-gray-50 p-3 rounded">
                             <div className="text-xs text-gray-500">{key}</div>
                             <div className="text-lg font-semibold">{value}</div>
-                          </div>
-                        ))}
-                      </div>
+                    </div>
+                  ))}
+                </div>
                     )}
                   </Panel>
                 ))}
@@ -478,7 +483,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                 ))}
               </ul>
             </Card>
-          </div>
+                      </div>
         );
         
       case 'document':
@@ -545,21 +550,21 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                 {analysisResult.summary.highlights?.map((highlight: string, index: number) => (
                   <li key={`highlight-${index}`} className="mb-2">
                     {highlight}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  
             <div>
               <h3 className="text-lg font-bold mb-3">Improvement Suggestions</h3>
               <ul className="list-disc pl-5">
                 {analysisResult.summary.suggestions?.map((suggestion: string, index: number) => (
                   <li key={`suggestion-${index}`} className="mb-2">
                     {suggestion}
-                  </li>
-                ))}
-              </ul>
-            </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
           </div>
         </Card>
         
@@ -575,7 +580,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
               }}
               width={120}
             />
-          </div>
+                    </div>
           <p className="text-center text-gray-600">
             {(analysisResult.summary.overallScore || 0) >= 80 
               ? "Excellent quality! Your document is well-structured and effective." 
@@ -584,7 +589,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                 : "Several improvements could enhance your document's effectiveness."}
           </p>
         </Card>
-      </div>
+                    </div>
     );
   };
   
@@ -608,7 +613,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                   <div className="flex items-center">
                     {getFileTypeIcon()}
                     <span className="ml-2">{doc.fileName}</span>
-                  </div>
+                      </div>
                 </Select.Option>
               ))}
             </Select>
@@ -619,7 +624,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                 </span>
               </Tooltip>
             )}
-          </div>
+                      </div>
           
           {error && (
             <Alert
@@ -631,7 +636,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
               onClose={() => setError(null)}
             />
           )}
-        </div>
+                      </div>
         
         <div className="flex gap-2">
           <Button
@@ -665,8 +670,8 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
               </Tooltip>
             </>
           )}
-        </div>
-      </div>
+                      </div>
+                    </div>
       
       {isAnalyzing ? (
         <div className="text-center py-12">
@@ -701,7 +706,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
               </details>
             </div>
           )}
-        </div>
+                  </div>
       ) : (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
           <div className="text-gray-400 mb-4 text-6xl">{getFileTypeIcon()}</div>
@@ -709,7 +714,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
           <p className="text-gray-500 max-w-md mx-auto">
             Our AI will analyze your document and provide insights on content, sentiment, and key information.
           </p>
-        </div>
+                </div>
       )}
     </div>
   );

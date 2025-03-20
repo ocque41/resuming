@@ -15,6 +15,8 @@ import { eq } from "drizzle-orm";
  * - documentId: The ID of the document to generate a report for
  */
 export async function GET(req: NextRequest) {
+  console.log("PDF report generation API: Request received");
+  
   try {
     // Get document ID from query params
     const url = new URL(req.url);
@@ -22,27 +24,66 @@ export async function GET(req: NextRequest) {
     
     // Validate documentId
     if (!documentId) {
+      console.error("PDF report generation failed: Missing document ID");
       return NextResponse.json({ error: "Document ID is required" }, { status: 400 });
     }
     
-    // Get the document analysis from the database
-    const analysis = await getLatestDocumentAnalysis(Number(documentId));
+    console.log(`Generating PDF report for document ID: ${documentId}`);
     
-    if (!analysis) {
-      return NextResponse.json({ error: "No analysis found for the document" }, { status: 404 });
-    }
-    
-    // Get the CV document to get the file name
+    // Get the CV document first to ensure it exists
     const documents = await db.select().from(cvs).where(eq(cvs.id, Number(documentId))).limit(1);
     const document = documents.length > 0 ? documents[0] : null;
     
     if (!document) {
+      console.error(`PDF report generation failed: Document with ID ${documentId} not found`);
       return NextResponse.json({ error: "Document not found" }, { status: 404 });
     }
     
+    console.log(`Found document: ${document.fileName}`);
+    
+    // Get the document analysis from the database
+    let analysis = await getLatestDocumentAnalysis(Number(documentId));
+    
+    // If no analysis found in the analyses table, try to get from metadata (legacy)
+    if (!analysis && document.metadata) {
+      console.log(`No analysis found in documentAnalyses table, checking metadata`);
+      try {
+        // Try to parse the metadata
+        const metadataAnalysis = JSON.parse(document.metadata);
+        if (metadataAnalysis && Object.keys(metadataAnalysis).length > 0) {
+          console.log(`Found analysis in document metadata`);
+          analysis = {
+            id: 0,
+            cvId: Number(documentId),
+            version: 1,
+            analysisType: metadataAnalysis.analysisType || "general",
+            createdAt: new Date(),
+            contentAnalysis: metadataAnalysis.contentAnalysis,
+            sentimentAnalysis: metadataAnalysis.sentimentAnalysis,
+            keyInformation: metadataAnalysis.keyInformation,
+            summary: metadataAnalysis.summary,
+            rawAnalysisResponse: metadataAnalysis,
+            overallScore: metadataAnalysis.summary?.overallScore || 0,
+            sentimentScore: metadataAnalysis.sentimentAnalysis?.overallScore ? Math.round(metadataAnalysis.sentimentAnalysis.overallScore * 100) : 0,
+            keywordCount: metadataAnalysis.contentAnalysis?.topKeywords?.length || 0,
+            entityCount: metadataAnalysis.keyInformation?.entities?.length || 0,
+          };
+        }
+      } catch (parseError) {
+        console.error(`Error parsing metadata analysis:`, parseError);
+      }
+    }
+    
+    if (!analysis) {
+      console.error(`PDF report generation failed: No analysis found for document ${documentId}`);
+      return NextResponse.json({ error: "No analysis found for the document. Please analyze the document first." }, { status: 404 });
+    }
+    
+    console.log(`Analysis found for document ${documentId}, generating PDF...`);
+    
     // Create a PDF generator
     const generator = new AnalysisReportGenerator(
-      analysis, 
+      analysis.rawAnalysisResponse || analysis, 
       document.fileName || `Document_${documentId}`
     );
     
@@ -56,6 +97,8 @@ export async function GET(req: NextRequest) {
     
     // Format the current date for the filename
     const date = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    
+    console.log(`PDF generated successfully, size: ${pdfBytes.length} bytes`);
     
     // Return the PDF as a downloadable file
     return new NextResponse(pdfBytes, {

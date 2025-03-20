@@ -9,11 +9,16 @@ export class AnalysisReportGenerator {
   private documentName: string;
   private generatedDate: Date;
   private pdfDoc: PDFDocument | null = null;
+  private fileType: string;
   
   constructor(analysis: any, documentName: string) {
     this.analysis = analysis;
     this.documentName = documentName;
     this.generatedDate = new Date();
+    
+    // Determine the file type from the analysis or default to 'document'
+    this.fileType = analysis.fileType || analysis.analysisType || 'document';
+    console.log(`AnalysisReportGenerator initialized for ${this.fileType} file: ${documentName}`);
   }
   
   /**
@@ -25,19 +30,36 @@ export class AnalysisReportGenerator {
     this.pdfDoc = await PDFDocument.create();
     
     // Add metadata to the document
-    this.pdfDoc.setTitle(`CV Analysis Report - ${this.documentName}`);
+    this.pdfDoc.setTitle(`Document Analysis Report - ${this.documentName}`);
     this.pdfDoc.setAuthor('CV Optimizer');
     this.pdfDoc.setSubject('Document Analysis Report');
-    this.pdfDoc.setKeywords(['CV', 'analysis', 'report', 'document']);
+    this.pdfDoc.setKeywords(['analysis', 'report', 'document', this.fileType]);
     this.pdfDoc.setCreationDate(this.generatedDate);
     this.pdfDoc.setModificationDate(this.generatedDate);
+    
+    console.log(`Generating PDF report for ${this.fileType} file: ${this.documentName}`);
     
     // Add pages to the document
     await this.addCoverPage();
     await this.addSummaryPage();
-    await this.addContentAnalysisPage();
-    await this.addSentimentAnalysisPage();
-    await this.addKeyInformationPage();
+    
+    // Add type-specific content pages
+    switch (this.fileType) {
+      case 'spreadsheet':
+        await this.addSpreadsheetAnalysisPages();
+        break;
+      case 'presentation':
+        await this.addPresentationAnalysisPages();
+        break;
+      case 'document':
+      default:
+        await this.addContentAnalysisPage();
+        await this.addSentimentAnalysisPage();
+        await this.addKeyInformationPage();
+        break;
+    }
+    
+    console.log(`PDF report generated for ${this.documentName} with ${this.pdfDoc.getPageCount()} pages`);
     
     // Save the document
     return await this.pdfDoc.save();
@@ -79,18 +101,16 @@ export class AnalysisReportGenerator {
       opacity: 0.8,
     });
     
-    // Add logo (placeholder rectangle for now)
-    page.drawRectangle({
-      x: width / 2 - 50,
-      y: height - 150,
-      width: 100,
-      height: 40,
-      color: accentColor,
-    });
+    // Add title with file type
+    let reportTitle = "DOCUMENT ANALYSIS REPORT";
+    if (this.fileType === 'spreadsheet') {
+      reportTitle = "SPREADSHEET ANALYSIS REPORT";
+    } else if (this.fileType === 'presentation') {
+      reportTitle = "PRESENTATION ANALYSIS REPORT";
+    }
     
-    // Add title
-    page.drawText('DOCUMENT ANALYSIS REPORT', {
-      x: width / 2 - 180,
+    page.drawText(reportTitle, {
+      x: width / 2 - (reportTitle.length * 7), // Rough center alignment
       y: height / 2 + 100,
       size: 24,
       font: helveticaBold,
@@ -98,48 +118,35 @@ export class AnalysisReportGenerator {
     });
     
     // Add document name
-    page.drawText(this.documentName, {
-      x: width / 2 - helveticaBold.widthOfTextAtSize(this.documentName, 18) / 2,
-      y: height / 2 + 50,
-      size: 18,
-      font: helveticaBold,
-      color: accentColor,
+    const nameLines = this.wrapText(this.documentName, helvetica, 18, width - 200);
+    nameLines.forEach((line, i) => {
+      page.drawText(line, {
+        x: width / 2 - (line.length * 5), // Rough center alignment
+        y: height / 2 + 50 - (i * 30),
+        size: 18,
+        font: helvetica,
+        color: textColor,
+      });
     });
     
     // Add date
-    const dateString = this.generatedDate.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-    
-    page.drawText(`Generated on ${dateString}`, {
-      x: width / 2 - helvetica.widthOfTextAtSize(`Generated on ${dateString}`, 12) / 2,
-      y: height / 2,
-      size: 12,
+    const dateText = `Generated on ${this.generatedDate.toLocaleDateString()}`;
+    page.drawText(dateText, {
+      x: width / 2 - (dateText.length * 4), // Rough center alignment
+      y: height / 2 - 50,
+      size: 14,
       font: helvetica,
       color: textColor,
     });
     
-    // Add overall score
-    const score = this.analysis.summary?.overallScore || 0;
-    const scoreText = `Overall Score: ${score}/100`;
-    page.drawText(scoreText, {
-      x: width / 2 - helveticaBold.widthOfTextAtSize(scoreText, 18) / 2,
-      y: height / 2 - 60,
-      size: 18,
-      font: helveticaBold,
-      color: accentColor,
-    });
-    
-    // Add footer
-    page.drawText('CV Optimizer - AI-Powered Document Analysis', {
-      x: width / 2 - helvetica.widthOfTextAtSize('CV Optimizer - AI-Powered Document Analysis', 10) / 2,
-      y: 50,
-      size: 10,
+    // Add file type indicator
+    const fileTypeText = `File Type: ${this.getHumanReadableFileType()}`;
+    page.drawText(fileTypeText, {
+      x: width / 2 - (fileTypeText.length * 4), // Rough center alignment
+      y: height / 2 - 80,
+      size: 14,
       font: helvetica,
       color: textColor,
-      opacity: 0.7,
     });
   }
   
@@ -154,102 +161,113 @@ export class AnalysisReportGenerator {
     const helveticaBold = await this.pdfDoc!.embedFont(StandardFonts.HelveticaBold);
     const helvetica = await this.pdfDoc!.embedFont(StandardFonts.Helvetica);
     
-    // Colors
-    const titleColor = rgb(0.05, 0.05, 0.05); // #050505
-    const accentColor = rgb(0.7, 0.57, 0.42); // #B4916C
-    const textColor = rgb(0.2, 0.2, 0.2);
+    // Brand colors
+    const brandColor = rgb(0.05, 0.05, 0.05); // Dark gray
+    const accentColor = rgb(0.7, 0.57, 0.42); // Tan
+    const lightColor = rgb(0.98, 0.96, 0.93); // Off-white
     
-    // Add header
-    this.drawHeader(page, 'Executive Summary', helveticaBold, titleColor);
-    
-    // Add summary section
-    let y = height - 150;
-    
-    // Section: Key Highlights
-    page.drawText('Key Highlights', {
-      x: 60,
-      y,
-      size: 14,
+    // Add the title of the page with underline
+    page.drawText('EXECUTIVE SUMMARY', {
+      x: 50,
+      y: height - 100,
+      size: 20,
       font: helveticaBold,
+      color: brandColor,
+    });
+    
+    page.drawLine({
+      start: { x: 50, y: height - 110 },
+      end: { x: width - 50, y: height - 110 },
+      thickness: 2,
       color: accentColor,
     });
     
-    y -= 30;
+    // Calculate overall score and circle
+    const summaryData = this.getSummaryData();
+    const score = summaryData.score;
+    const message = summaryData.message;
     
-    // Draw key highlights
-    const highlights = this.analysis.summary?.highlights || [];
-    for (const highlight of highlights) {
-      // Draw bullet point
-      page.drawCircle({
-        x: 65,
-        y: y + 4,
-        size: 3,
-        color: accentColor,
-      });
-      
-      // Wrap text if needed
-      const wrappedText = this.wrapText(highlight, helvetica, 12, width - 160);
-      for (const line of wrappedText) {
-        page.drawText(line, {
-          x: 75,
-          y,
-          size: 12,
-          font: helvetica,
-          color: textColor,
-        });
-        y -= 20;
-      }
-      
-      y -= 5; // Additional spacing between items
-    }
+    // Draw the score circle
+    const circleX = width / 2;
+    const circleY = height - 200;
+    const circleRadius = 60;
     
-    y -= 20;
-    
-    // Section: Improvement Suggestions
-    page.drawText('Improvement Suggestions', {
-      x: 60,
-      y,
-      size: 14,
-      font: helveticaBold,
+    // Draw the background circle
+    page.drawCircle({
+      x: circleX,
+      y: circleY,
+      size: circleRadius * 2,
       color: accentColor,
     });
     
-    y -= 30;
+    // Draw the score text
+    page.drawText(`${score}`, {
+      x: circleX - 25,
+      y: circleY - 10,
+      size: 40,
+      font: helveticaBold,
+      color: lightColor,
+    });
     
-    // Draw improvement suggestions
-    const suggestions = this.analysis.summary?.suggestions || [];
-    for (const suggestion of suggestions) {
-      // Draw arrow bullet point (→)
-      page.drawText('→', {
-        x: 65,
-        y,
+    // Draw the score label
+    page.drawText('Document Score', {
+      x: circleX - 60,
+      y: circleY - 100,
+      size: 16,
+      font: helveticaBold,
+      color: brandColor,
+    });
+    
+    // Draw the document quality message
+    const messageY = height - 350;
+    page.drawText(message, {
+      x: 50,
+      y: messageY,
+      size: 14,
+      font: helvetica,
+      color: brandColor,
+    });
+    
+    // Draw highlights section
+    page.drawText('Key Strengths:', {
+      x: 50,
+      y: messageY - 40,
+      size: 16,
+      font: helveticaBold,
+      color: brandColor,
+    });
+    
+    const highlights = this.getHighlights();
+    highlights.forEach((highlight: string, i: number) => {
+      page.drawText(`• ${highlight}`, {
+        x: 70,
+        y: messageY - 70 - (i * 25),
         size: 12,
         font: helvetica,
-        color: accentColor,
+        color: brandColor,
       });
-      
-      // Wrap text if needed
-      const wrappedText = this.wrapText(suggestion, helvetica, 12, width - 160);
-      for (const line of wrappedText) {
-        page.drawText(line, {
-          x: 75,
-          y,
-          size: 12,
-          font: helvetica,
-          color: textColor,
-        });
-        y -= 20;
-      }
-      
-      y -= 5; // Additional spacing between items
-    }
+    });
     
-    // Add overall score visualization
-    const score = this.analysis.summary?.overallScore || 0;
-    this.drawScoreGauge(page, width - 150, height - 250, 100, score, helveticaBold);
+    // Draw suggestions section
+    const suggestionsY = messageY - 70 - (highlights.length * 25) - 30;
+    page.drawText('Improvement Suggestions:', {
+      x: 50,
+      y: suggestionsY,
+      size: 16,
+      font: helveticaBold,
+      color: brandColor,
+    });
     
-    // Add page number
-    this.drawPageNumber(page, 1);
+    const suggestions = this.getSuggestions();
+    suggestions.forEach((suggestion: string, i: number) => {
+      page.drawText(`• ${suggestion}`, {
+        x: 70,
+        y: suggestionsY - 30 - (i * 25),
+        size: 12,
+        font: helvetica,
+        color: brandColor,
+      });
+    });
   }
   
   /**
@@ -1011,5 +1029,407 @@ export class AnalysisReportGenerator {
     }
     
     return lines;
+  }
+  
+  /**
+   * Add spreadsheet-specific analysis pages to the report
+   */
+  private async addSpreadsheetAnalysisPages() {
+    console.log('Adding spreadsheet analysis pages');
+    
+    // For now, just add generic content pages as a fallback
+    await this.addContentAnalysisPage();
+    
+    // Add data quality metrics if available
+    if (this.analysis.dataQualityAssessment) {
+      await this.addSpreadsheetDataQualityPage();
+    }
+    
+    console.log('Spreadsheet analysis pages added');
+  }
+  
+  /**
+   * Add presentation-specific analysis pages to the report
+   */
+  private async addPresentationAnalysisPages() {
+    console.log('Adding presentation analysis pages');
+    
+    // For now, just add generic content pages as a fallback
+    await this.addContentAnalysisPage();
+    
+    // Add presentation structure metrics if available
+    if (this.analysis.presentationStructure) {
+      await this.addPresentationStructurePage();
+    }
+    
+    console.log('Presentation analysis pages added');
+  }
+  
+  /**
+   * Add a data quality page for spreadsheet analysis
+   */
+  private async addSpreadsheetDataQualityPage() {
+    const page = this.pdfDoc!.addPage(PageSizes.A4);
+    const { width, height } = page.getSize();
+    
+    // Load fonts
+    const helveticaBold = await this.pdfDoc!.embedFont(StandardFonts.HelveticaBold);
+    const helvetica = await this.pdfDoc!.embedFont(StandardFonts.Helvetica);
+    
+    // Brand colors
+    const brandColor = rgb(0.05, 0.05, 0.05);
+    const accentColor = rgb(0.7, 0.57, 0.42);
+    
+    // Add page header
+    await this.drawHeader(page, 'DATA QUALITY ASSESSMENT', helveticaBold, brandColor);
+    
+    // Draw data quality metrics if available
+    const quality = this.analysis.dataQualityAssessment;
+    
+    if (quality) {
+      // Draw quality metrics
+      const metricsY = height - 150;
+      const metrics = [
+        { name: 'Completeness', score: quality.completenessScore },
+        { name: 'Consistency', score: quality.consistencyScore },
+        { name: 'Accuracy', score: quality.accuracyScore },
+        { name: 'Overall Data Quality', score: quality.overallDataQualityScore }
+      ];
+      
+      // Draw each metric as a gauge
+      metrics.forEach((metric, index) => {
+        const y = metricsY - (index * 100);
+        
+        page.drawText(metric.name, {
+          x: 50,
+          y: y + 40,
+          size: 14,
+          font: helveticaBold,
+          color: brandColor,
+        });
+        
+        this.drawScoreGauge(page, 150, y, 30, metric.score, helveticaBold);
+      });
+      
+      // Draw quality issues if available
+      if (quality.qualityIssues && quality.qualityIssues.length > 0) {
+        const issuesY = metricsY - 450;
+        
+        page.drawText('Quality Issues Identified:', {
+          x: 50,
+          y: issuesY,
+          size: 14,
+          font: helveticaBold,
+          color: brandColor,
+        });
+        
+        quality.qualityIssues.slice(0, 5).forEach((issue: any, i: number) => {
+          const issueText = `• ${issue.issue} (${issue.severity})`;
+          const recText = `   Recommendation: ${issue.recommendation}`;
+          
+          page.drawText(issueText, {
+            x: 50,
+            y: issuesY - 30 - (i * 50),
+            size: 12,
+            font: helvetica,
+            color: brandColor,
+          });
+          
+          page.drawText(recText, {
+            x: 50,
+            y: issuesY - 50 - (i * 50),
+            size: 10,
+            font: helvetica,
+            color: brandColor,
+          });
+        });
+      }
+    } else {
+      // Draw fallback message if no data quality metrics
+      page.drawText('No data quality metrics available for this spreadsheet.', {
+        x: 50,
+        y: height - 150,
+        size: 12,
+        font: helvetica,
+        color: brandColor,
+      });
+    }
+    
+    // Add page number
+    this.drawPageNumber(page, this.pdfDoc!.getPageCount());
+  }
+  
+  /**
+   * Add a presentation structure page
+   */
+  private async addPresentationStructurePage() {
+    const page = this.pdfDoc!.addPage(PageSizes.A4);
+    const { width, height } = page.getSize();
+    
+    // Load fonts
+    const helveticaBold = await this.pdfDoc!.embedFont(StandardFonts.HelveticaBold);
+    const helvetica = await this.pdfDoc!.embedFont(StandardFonts.Helvetica);
+    
+    // Brand colors
+    const brandColor = rgb(0.05, 0.05, 0.05);
+    const accentColor = rgb(0.7, 0.57, 0.42);
+    
+    // Add page header
+    await this.drawHeader(page, 'PRESENTATION STRUCTURE ANALYSIS', helveticaBold, brandColor);
+    
+    // Draw presentation structure metrics if available
+    const structure = this.analysis.presentationStructure;
+    
+    if (structure) {
+      const contentY = height - 150;
+      
+      // Draw structure metrics
+      page.drawText(`Slide Count: ${structure.slideCount || 'N/A'}`, {
+        x: 50,
+        y: contentY,
+        size: 14,
+        font: helveticaBold,
+        color: brandColor,
+      });
+      
+      page.drawText(`Introduction: ${structure.hasIntroduction ? 'Yes' : 'No'}`, {
+        x: 50,
+        y: contentY - 30,
+        size: 12,
+        font: helvetica,
+        color: brandColor,
+      });
+      
+      page.drawText(`Conclusion: ${structure.hasConclusion ? 'Yes' : 'No'}`, {
+        x: 50,
+        y: contentY - 60,
+        size: 12,
+        font: helvetica,
+        color: brandColor,
+      });
+      
+      page.drawText(`Narrative Flow: ${structure.narrativeFlow || 'N/A'}`, {
+        x: 50,
+        y: contentY - 90,
+        size: 12,
+        font: helvetica,
+        color: brandColor,
+      });
+      
+      // Draw structure score
+      if (structure.structureScore) {
+        page.drawText('Structure Quality Score:', {
+          x: 50,
+          y: contentY - 130,
+          size: 14,
+          font: helveticaBold,
+          color: brandColor,
+        });
+        
+        this.drawScoreGauge(page, 250, contentY - 160, 40, structure.structureScore, helveticaBold);
+      }
+      
+      // Draw slide structure if available
+      if (structure.slideStructure && structure.slideStructure.length > 0) {
+        const slideY = contentY - 220;
+        
+        page.drawText('Slide Structure Analysis:', {
+          x: 50,
+          y: slideY,
+          size: 14,
+          font: helveticaBold,
+          color: brandColor,
+        });
+        
+        page.drawText('Type', {
+          x: 50,
+          y: slideY - 30,
+          size: 12,
+          font: helveticaBold,
+          color: brandColor,
+        });
+        
+        page.drawText('Purpose', {
+          x: 150,
+          y: slideY - 30,
+          size: 12,
+          font: helveticaBold,
+          color: brandColor,
+        });
+        
+        page.drawText('Effectiveness', {
+          x: 350,
+          y: slideY - 30,
+          size: 12,
+          font: helveticaBold,
+          color: brandColor,
+        });
+        
+        // Draw a line under the headers
+        page.drawLine({
+          start: { x: 50, y: slideY - 35 },
+          end: { x: 500, y: slideY - 35 },
+          thickness: 1,
+          color: accentColor,
+        });
+        
+        // Only show the first 8 slides to avoid overflow
+        structure.slideStructure.slice(0, 8).forEach((slide: any, i: number) => {
+          const y = slideY - 60 - (i * 25);
+          
+          page.drawText(slide.type || 'N/A', {
+            x: 50,
+            y,
+            size: 10,
+            font: helvetica,
+            color: brandColor,
+          });
+          
+          // Truncate purpose if too long
+          const purpose = slide.purpose && slide.purpose.length > 25 
+            ? slide.purpose.substring(0, 22) + '...' 
+            : (slide.purpose || 'N/A');
+          
+          page.drawText(purpose, {
+            x: 150,
+            y,
+            size: 10,
+            font: helvetica,
+            color: brandColor,
+          });
+          
+          page.drawText(`${slide.effectiveness || 'N/A'}/10`, {
+            x: 350,
+            y,
+            size: 10,
+            font: helvetica,
+            color: brandColor,
+          });
+        });
+      }
+    } else {
+      // Draw fallback message if no structure data
+      page.drawText('No structure analysis available for this presentation.', {
+        x: 50,
+        y: height - 150,
+        size: 12,
+        font: helvetica,
+        color: brandColor,
+      });
+    }
+    
+    // Add page number
+    this.drawPageNumber(page, this.pdfDoc!.getPageCount());
+  }
+  
+  /**
+   * Get a human-readable representation of the file type
+   */
+  private getHumanReadableFileType(): string {
+    switch (this.fileType) {
+      case 'spreadsheet':
+        return 'Spreadsheet (Excel/CSV)';
+      case 'presentation':
+        return 'Presentation (PowerPoint)';
+      case 'cv':
+        return 'CV/Resume';
+      case 'document':
+      default:
+        return 'Document (PDF/Word)';
+    }
+  }
+  
+  /**
+   * Get summary data for the document analysis
+   * @returns Object containing score and message
+   */
+  private getSummaryData(): { score: number; message: string } {
+    // Default values
+    const defaultScore = 75;
+    const defaultMessage = 'This document meets quality standards and is well-structured.';
+    
+    // Try to extract score from analysis data
+    let score = defaultScore;
+    let message = defaultMessage;
+    
+    // Get score from analysis if available
+    if (this.analysis.score) {
+      score = this.analysis.score;
+    } else if (this.analysis.overallScore) {
+      score = this.analysis.overallScore;
+    } else if (this.analysis.documentQuality?.overallScore) {
+      score = this.analysis.documentQuality.overallScore;
+    }
+    
+    // Get message based on score range
+    if (score >= 90) {
+      message = 'Excellent document quality. Professional, well-structured, and engaging.';
+    } else if (score >= 80) {
+      message = 'Very good document quality. Minor improvements could enhance overall impact.';
+    } else if (score >= 70) {
+      message = 'Good document quality. Some areas could benefit from refinement.';
+    } else if (score >= 60) {
+      message = 'Average document quality. Several areas need improvement.';
+    } else {
+      message = 'Below average document quality. Significant improvements recommended.';
+    }
+    
+    return { score, message };
+  }
+  
+  /**
+   * Get highlights (strengths) from the analysis
+   * @returns Array of highlight strings
+   */
+  private getHighlights(): string[] {
+    // Default highlights
+    const defaultHighlights = [
+      'Well-structured document',
+      'Clear presentation of information',
+      'Appropriate length for content type'
+    ];
+    
+    // Try to extract highlights from analysis data
+    if (this.analysis.highlights && Array.isArray(this.analysis.highlights)) {
+      return this.analysis.highlights.slice(0, 5); // Limit to top 5
+    }
+    
+    if (this.analysis.strengths && Array.isArray(this.analysis.strengths)) {
+      return this.analysis.strengths.slice(0, 5); // Limit to top 5
+    }
+    
+    if (this.analysis.keyPoints?.strengths && Array.isArray(this.analysis.keyPoints.strengths)) {
+      return this.analysis.keyPoints.strengths.slice(0, 5); // Limit to top 5
+    }
+    
+    return defaultHighlights;
+  }
+  
+  /**
+   * Get improvement suggestions from the analysis
+   * @returns Array of suggestion strings
+   */
+  private getSuggestions(): string[] {
+    // Default suggestions
+    const defaultSuggestions = [
+      'Enhance structure with clearer section headings',
+      'Consider adding visual elements for key information',
+      'Review for consistency in formatting and style'
+    ];
+    
+    // Try to extract suggestions from analysis data
+    if (this.analysis.suggestions && Array.isArray(this.analysis.suggestions)) {
+      return this.analysis.suggestions.slice(0, 5); // Limit to top 5
+    }
+    
+    if (this.analysis.weaknesses && Array.isArray(this.analysis.weaknesses)) {
+      return this.analysis.weaknesses.slice(0, 5); // Limit to top 5
+    }
+    
+    if (this.analysis.keyPoints?.weaknesses && Array.isArray(this.analysis.keyPoints.weaknesses)) {
+      return this.analysis.keyPoints.weaknesses.slice(0, 5); // Limit to top 5
+    }
+    
+    return defaultSuggestions;
   }
 } 

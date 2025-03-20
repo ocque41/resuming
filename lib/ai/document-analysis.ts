@@ -6,6 +6,69 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Simple in-memory cache for analysis results
+// Key is MD5 hash of document text, value is analysis result
+type AnalysisCache = {
+  [key: string]: {
+    result: any;
+    timestamp: number;
+  }
+};
+
+// Cache expiration time: 24 hours in milliseconds
+const CACHE_EXPIRY = 24 * 60 * 60 * 1000;
+
+// In-memory cache object
+const analysisCache: AnalysisCache = {};
+
+/**
+ * Generate a simple hash of the text for use as a cache key
+ * This is a simple implementation - for production, use a proper MD5/SHA hash
+ */
+function generateCacheKey(text: string, fileName: string): string {
+  // Use first 100 chars + file name + length as a simple cache key
+  // For production, use a proper hashing function
+  const prefix = text.substring(0, 100).replace(/\s+/g, '');
+  const fileNameKey = fileName.replace(/\s+/g, '').toLowerCase();
+  const lengthKey = text.length.toString();
+  return `${prefix}_${fileNameKey}_${lengthKey}`;
+}
+
+/**
+ * Store analysis result in cache
+ */
+function cacheAnalysisResult(text: string, fileName: string, result: any): void {
+  const cacheKey = generateCacheKey(text, fileName);
+  analysisCache[cacheKey] = {
+    result,
+    timestamp: Date.now()
+  };
+  console.log(`Cached analysis result for ${fileName} with key ${cacheKey}`);
+}
+
+/**
+ * Get cached analysis result if available and not expired
+ */
+function getCachedAnalysis(text: string, fileName: string): any | null {
+  const cacheKey = generateCacheKey(text, fileName);
+  const cached = analysisCache[cacheKey];
+  
+  if (!cached) {
+    console.log(`No cached analysis found for ${fileName}`);
+    return null;
+  }
+  
+  // Check if cache is expired
+  if (Date.now() - cached.timestamp > CACHE_EXPIRY) {
+    console.log(`Cached analysis for ${fileName} is expired, removing from cache`);
+    delete analysisCache[cacheKey];
+    return null;
+  }
+  
+  console.log(`Using cached analysis for ${fileName}`);
+  return cached.result;
+}
+
 /**
  * Main function to analyze a document using AI
  * @param documentText The raw text content of the document
@@ -15,6 +78,13 @@ const openai = new OpenAI({
 export async function analyzeDocumentWithAI(documentText: string, fileName: string): Promise<any> {
   try {
     console.log(`Starting AI analysis for document: ${fileName}`);
+    
+    // Check if we have a cached result for this document
+    const cachedResult = getCachedAnalysis(documentText, fileName);
+    if (cachedResult) {
+      console.log(`Using cached analysis for ${fileName}`);
+      return cachedResult;
+    }
     
     // Detect file type to determine appropriate analysis method
     const fileType = detectFileType(fileName);
@@ -31,6 +101,10 @@ export async function analyzeDocumentWithAI(documentText: string, fileName: stri
       case 'presentation':
         result = await analyzePresentation(documentText, fileName);
         break;
+      case 'cv':
+        // New specialized CV analysis for resumes and CVs
+        result = await analyzeCV(documentText, fileName);
+        break;
       case 'document':
       default:
         result = await analyzeTextDocument(documentText, fileName);
@@ -38,6 +112,10 @@ export async function analyzeDocumentWithAI(documentText: string, fileName: stri
     }
     
     console.log(`Completed AI analysis for document: ${fileName}`);
+    
+    // Cache the result for future use
+    cacheAnalysisResult(documentText, fileName, result);
+    
     return result;
   } catch (error) {
     console.error('Error in AI document analysis:', error);
@@ -697,6 +775,186 @@ async function generatePresentationSummary(text: string): Promise<any> {
       audienceImpact: "medium",
       persuasiveness: 50,
       overallScore: 50
+    };
+  }
+}
+
+/**
+ * Specialized analysis for CV/resume documents
+ * @param documentText The CV/resume text content
+ * @param fileName The document file name
+ * @returns CV-specific analysis result
+ */
+async function analyzeCV(documentText: string, fileName: string): Promise<any> {
+  // Run specialized CV analysis tasks in parallel for efficiency
+  const [
+    contentAnalysis,
+    sentimentAnalysis,
+    keyInformation,
+    cvSpecificAnalysis,
+    summarization
+  ] = await Promise.all([
+    generateContentAnalysis(documentText),
+    generateSentimentAnalysis(documentText),
+    extractKeyInformation(documentText),
+    analyzeCVSpecifics(documentText),
+    generateCVSummary(documentText)
+  ]);
+  
+  // Combine all analyses into a single structured result with CV-specific data
+  return {
+    fileName,
+    analysisTimestamp: new Date().toISOString(),
+    analysisType: 'cv',
+    contentAnalysis,
+    sentimentAnalysis,
+    keyInformation,
+    cvAnalysis: cvSpecificAnalysis,
+    summary: summarization
+  };
+}
+
+/**
+ * Analyzes CV-specific elements like skills, experience, and ATS compatibility
+ */
+async function analyzeCVSpecifics(text: string): Promise<any> {
+  const prompt = `
+    Perform a detailed analysis of this CV/resume with focus on:
+    1. Skills assessment - identify technical, soft, and domain-specific skills with proficiency estimates
+    2. Experience evaluation - analyze experience depth, relevance, and progression
+    3. Education assessment - evaluate educational qualifications and relevance
+    4. ATS compatibility - analyze how well the CV would perform with Applicant Tracking Systems
+    5. Strengths and weaknesses - identify 3-5 key strengths and areas for improvement
+    
+    Respond with only valid JSON in this exact format:
+    {
+      "skills": {
+        "technical": [{"name": "skill_name", "proficiency": "level", "relevance": number}],
+        "soft": [{"name": "skill_name", "evidence": "brief_evidence", "strength": number}],
+        "domain": [{"name": "domain_skill", "relevance": number}]
+      },
+      "experience": {
+        "yearsOfExperience": number,
+        "experienceProgression": "description",
+        "keyRoles": ["role1", "role2"],
+        "achievementsHighlighted": boolean,
+        "clarity": number
+      },
+      "education": {
+        "highestDegree": "degree_name",
+        "relevance": number,
+        "continuingEducation": boolean
+      },
+      "atsCompatibility": {
+        "score": number,
+        "keywordOptimization": number,
+        "formatCompatibility": number,
+        "improvementAreas": ["area1", "area2"]
+      },
+      "strengths": ["strength1", "strength2", "strength3"],
+      "weaknesses": ["weakness1", "weakness2", "weakness3"]
+    }
+    
+    Document text:
+    ${text.substring(0, 15000)}
+  `;
+  
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.3,
+    response_format: { type: "json_object" }
+  });
+  
+  try {
+    const content = response.choices[0]?.message?.content || "{}";
+    return JSON.parse(content);
+  } catch (error) {
+    console.error('Error parsing CV specifics analysis:', error);
+    return {
+      skills: {
+        technical: [{ name: "Error retrieving skills", proficiency: "unknown", relevance: 0 }],
+        soft: [],
+        domain: []
+      },
+      experience: {
+        yearsOfExperience: 0,
+        experienceProgression: "Unable to determine",
+        keyRoles: [],
+        achievementsHighlighted: false,
+        clarity: 0
+      },
+      education: {
+        highestDegree: "Unknown",
+        relevance: 0,
+        continuingEducation: false
+      },
+      atsCompatibility: {
+        score: 50,
+        keywordOptimization: 50,
+        formatCompatibility: 50,
+        improvementAreas: ["Unable to analyze ATS compatibility"]
+      },
+      strengths: ["Unable to determine strengths"],
+      weaknesses: ["Unable to determine areas for improvement"]
+    };
+  }
+}
+
+/**
+ * Generates CV-specific summary including ATS score and improvement recommendations
+ */
+async function generateCVSummary(text: string): Promise<any> {
+  const prompt = `
+    Generate a comprehensive summary of this CV/resume with:
+    1. Overall assessment score (0-100)
+    2. Key highlights - strongest elements of the CV
+    3. Impact score - how effectively the CV communicates impact/achievements (0-100)
+    4. ATS compatibility score - how well the CV would perform with ATS systems (0-100)
+    5. Improvement suggestions - specific, actionable recommendations to enhance the CV
+    6. Market fit - assessment of how well the CV positions the candidate in the market
+    
+    Respond with only valid JSON in this exact format:
+    {
+      "overallScore": number,
+      "highlights": ["highlight1", "highlight2", "highlight3"],
+      "impactScore": number,
+      "atsScore": number,
+      "suggestions": ["suggestion1", "suggestion2", "suggestion3", "suggestion4", "suggestion5"],
+      "marketFit": {
+        "industryAlignment": "description",
+        "competitiveEdge": "description",
+        "targetRoleRecommendations": ["role1", "role2", "role3"]
+      }
+    }
+    
+    Document text:
+    ${text.substring(0, 15000)}
+  `;
+  
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.3,
+    response_format: { type: "json_object" }
+  });
+  
+  try {
+    const content = response.choices[0]?.message?.content || "{}";
+    return JSON.parse(content);
+  } catch (error) {
+    console.error('Error parsing CV summary:', error);
+    return {
+      overallScore: 50,
+      highlights: ["Unable to determine highlights"],
+      impactScore: 50,
+      atsScore: 50,
+      suggestions: ["Unable to generate improvement suggestions"],
+      marketFit: {
+        industryAlignment: "Unable to determine",
+        competitiveEdge: "Unable to determine",
+        targetRoleRecommendations: ["Unable to generate role recommendations"]
+      }
     };
   }
 } 

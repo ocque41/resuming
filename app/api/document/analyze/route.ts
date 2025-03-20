@@ -100,8 +100,8 @@ function generateMockDocumentAnalysis(documentId: string | number, fileName: str
       keyDates: [
         { description: "Most Recent Position", date: "2020 - Present" },
         { description: "Education Completed", date: "2018" }
-      ],
-      entities: [
+    ],
+    entities: [
         { type: "Organization", name: "Example Company", occurrences: 5 },
         { type: "Skill", name: "Project Management", occurrences: 8 }
       ]
@@ -275,6 +275,89 @@ function generateMockPresentationAnalysis(documentId: string | number, fileName:
 }
 
 /**
+ * Generate mock CV analysis data
+ */
+function generateMockCVAnalysis(documentId: string | number, fileName: string, timestamp: string) {
+  // Base document analysis data
+  const baseAnalysis = generateMockDocumentAnalysis(documentId, fileName, timestamp);
+  
+  // Add CV-specific data
+  return {
+    ...baseAnalysis,
+    analysisType: 'cv',
+    cvAnalysis: {
+      skills: {
+        technical: [
+          { name: "Microsoft Office Suite", proficiency: "Advanced", relevance: 9 },
+          { name: "Data Analysis", proficiency: "Intermediate", relevance: 8 },
+          { name: "Project Management", proficiency: "Advanced", relevance: 9 },
+          { name: "CRM Software", proficiency: "Intermediate", relevance: 7 },
+          { name: "Social Media Management", proficiency: "Advanced", relevance: 8 }
+        ],
+        soft: [
+          { name: "Communication", evidence: "Clear articulation of achievements", strength: 9 },
+          { name: "Leadership", evidence: "Team management experience highlighted", strength: 8 },
+          { name: "Problem Solving", evidence: "Examples of challenges overcome", strength: 7 },
+          { name: "Time Management", evidence: "Multiple concurrent responsibilities", strength: 8 }
+        ],
+        domain: [
+          { name: "Marketing", relevance: 9 },
+          { name: "Business Development", relevance: 8 },
+          { name: "Customer Relations", relevance: 9 }
+        ]
+      },
+      experience: {
+        yearsOfExperience: 5,
+        experienceProgression: "Clear advancement from coordinator to management roles",
+        keyRoles: ["Marketing Manager", "Business Development Coordinator", "Sales Representative"],
+        achievementsHighlighted: true,
+        clarity: 8
+      },
+      education: {
+        highestDegree: "Bachelor of Business Administration",
+        relevance: 9,
+        continuingEducation: true
+      },
+      atsCompatibility: {
+        score: 82,
+        keywordOptimization: 85,
+        formatCompatibility: 78,
+        improvementAreas: [
+          "Use more industry-specific keywords",
+          "Quantify achievements with more metrics",
+          "Add specific software versions used"
+        ]
+      },
+      strengths: [
+        "Strong emphasis on measurable achievements",
+        "Clear career progression",
+        "Balanced technical and soft skills",
+        "Relevant educational background"
+      ],
+      weaknesses: [
+        "Could benefit from more technical certifications",
+        "Some job descriptions lack specific metrics",
+        "Limited detail on software proficiency levels"
+      ]
+    },
+    summary: {
+      ...baseAnalysis.summary,
+      impactScore: 86,
+      atsScore: 82,
+      marketFit: {
+        industryAlignment: "Strong alignment with marketing and business development roles",
+        competitiveEdge: "Combination of analytical skills and communication abilities",
+        targetRoleRecommendations: [
+          "Senior Marketing Manager",
+          "Business Development Director",
+          "Marketing Strategist"
+        ]
+      }
+    }
+  };
+}
+
+/**
  * Handle POST requests for document analysis
  */
 export async function POST(req: NextRequest) {
@@ -311,7 +394,7 @@ export async function POST(req: NextRequest) {
         document = documents[0];
         
         // Use filename from database if not provided in request
-        if (!fileName) {
+    if (!fileName) {
           fileName = document.fileName;
           console.log(`Retrieved fileName from database: ${fileName}`);
         }
@@ -353,18 +436,85 @@ export async function POST(req: NextRequest) {
     const startTime = Date.now();
     
     // Generate analysis result - using AI if we have text content, mock data as fallback
-    let result;
+    let result: any;
     try {
+      // Detect proper analysis type
+      const analysisType = fileType?.category || 'document';
+      
       if (documentText.length > 100) {
         // If we have sufficient text content, use AI analysis
-        console.log(`Using AI analysis for document ${documentId}`);
+        console.log(`Using AI analysis for document ${documentId} (${fileName}, type: ${analysisType})`);
+        
+        // Make sure we're passing the file type correctly
         result = await analyzeDocumentWithAI(documentText, fileName);
         result.documentId = documentId;
         result.fileType = fileType?.category || "document";
+        
+        // Transform data if needed for front-end compatibility
+        if (fileType?.category === 'spreadsheet') {
+          console.log('Transforming spreadsheet data for frontend compatibility');
+          // Map dataStructureAnalysis to contentAnalysis for frontend compatibility
+          result.contentAnalysis = {
+            contentDistribution: result.dataStructureAnalysis?.tables?.map((table: any) => ({
+              name: table.name,
+              value: 100 / (result.dataStructureAnalysis.tables.length || 1)
+            })) || [],
+            topKeywords: result.dataInsights?.keyMetrics?.map((metric: any, index: number) => ({
+              text: metric.name,
+              value: 10 - (index % 10) // Decreasing values 10...1
+            })) || []
+          };
+          
+          // Map to sentimentAnalysis
+          result.sentimentAnalysis = {
+            overallScore: result.dataQualityAssessment?.overallDataQualityScore / 100 || 0.5,
+            sentimentBySection: result.dataQualityAssessment?.qualityIssues?.map((issue: any) => ({
+              section: issue.issue,
+              score: issue.severity === 'high' ? 0.3 : issue.severity === 'medium' ? 0.5 : 0.8
+            })) || []
+          };
+          
+          // Ensure structure matches what the front-end expects
+          console.log('Spreadsheet analysis transformed for frontend compatibility');
+        } else if (fileType?.category === 'presentation') {
+          console.log('Transforming presentation data for frontend compatibility');
+          // Map presentation structure to contentAnalysis for frontend compatibility
+          result.contentAnalysis = {
+            contentDistribution: result.contentBalance?.contentDistribution || [],
+            topKeywords: result.messageClarity?.supportingPoints?.map((point: any, index: number) => ({
+              text: point.point,
+              value: point.clarity
+            })) || []
+          };
+          
+          // Map to sentimentAnalysis
+          result.sentimentAnalysis = {
+            overallScore: result.messageClarity?.overallClarityScore / 100 || 0.5,
+            sentimentBySection: result.presentationStructure?.slideStructure?.map((slide: any) => ({
+              section: slide.purpose,
+              score: slide.effectiveness / 10
+            })) || []
+          };
+          
+          // Ensure structure matches what the front-end expects
+          console.log('Presentation analysis transformed for frontend compatibility');
+        } else if (fileType?.category === 'cv') {
+          // Add this new condition to generate mock CV data
+          result = generateMockCVAnalysis(documentId, fileName, new Date().toISOString());
+        }
       } else {
-        // Fallback to mock data if no text content available
-        console.log(`Insufficient text content for AI analysis of document ${documentId}, using mock data`);
-        result = generateMockAnalysisResult(documentId, fileName, type);
+        // Not enough text, use mock data instead
+        console.log(`Using mock data for document ${documentId} (${fileName}) due to insufficient text`);
+        if (fileType?.category === 'spreadsheet') {
+          result = generateMockSpreadsheetAnalysis(documentId, fileName, new Date().toISOString());
+        } else if (fileType?.category === 'presentation') {
+          result = generateMockPresentationAnalysis(documentId, fileName, new Date().toISOString());
+        } else if (fileType?.category === 'cv') {
+          // Add this new condition to generate mock CV data
+          result = generateMockCVAnalysis(documentId, fileName, new Date().toISOString());
+        } else {
+          result = generateMockDocumentAnalysis(documentId, fileName, new Date().toISOString());
+        }
       }
       
       // Log processing time
@@ -376,7 +526,25 @@ export async function POST(req: NextRequest) {
       
       // Fallback to mock data if AI analysis fails
       console.log(`Falling back to mock analysis for document ${documentId}`);
-      result = generateMockAnalysisResult(documentId, fileName, type);
+      const fallbackType = fileType?.category || 'document';
+      result = generateMockAnalysisResult(documentId, fileName, fallbackType);
+    }
+    
+    // Make sure we have required fields for all document types
+    if (!result.keyInformation) {
+      result.keyInformation = { 
+        contactInfo: [],
+        keyDates: [],
+        entities: []
+      };
+    }
+    
+    if (!result.summary) {
+      result.summary = {
+        highlights: [],
+        suggestions: [],
+        overallScore: 50
+      };
     }
     
     // Store the analysis result in the database using the new function
