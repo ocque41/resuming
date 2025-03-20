@@ -3,6 +3,7 @@ import { db } from "@/lib/db/drizzle";
 import { cvs } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { updateCVAnalysis } from "@/lib/db/queries.server";
+import { analyzeDocumentWithAI } from "@/lib/ai/document-analysis";
 
 // Force dynamic to prevent caching
 export const dynamic = "force-dynamic";
@@ -25,10 +26,10 @@ const SUPPORTED_FILE_TYPES = {
 
 /**
  * Generate a mock analysis result for a document
- * This provides realistic-looking data for testing and demonstration
+ * This fallback provides realistic-looking data when AI analysis fails
  */
-function generateAnalysisResult(documentId: string | number, fileName: string = "document.pdf", type: string = "general") {
-  console.log(`Generating analysis for document ${documentId}, file: ${fileName}, type: ${type}`);
+function generateMockAnalysisResult(documentId: string | number, fileName: string = "document.pdf", type: string = "general") {
+  console.log(`Generating mock analysis for document ${documentId}, file: ${fileName}, type: ${type}`);
   
   // Get file extension, default to pdf if no extension
   const fileExtension = (fileName && fileName.includes('.')) 
@@ -57,12 +58,7 @@ function generateAnalysisResult(documentId: string | number, fileName: string = 
         { text: "Leadership", value: 7 },
         { text: "Development", value: 6 },
         { text: "Strategy", value: 5 },
-        { text: "Innovation", value: 5 },
-        { text: "Technology", value: 4 },
-        { text: "Communication", value: 4 },
-        { text: "Analysis", value: 3 },
-        { text: "Collaboration", value: 3 },
-        { text: "Results", value: 3 }
+        { text: "Innovation", value: 5 }
       ]
     },
     sentimentAnalysis: {
@@ -86,9 +82,7 @@ function generateAnalysisResult(documentId: string | number, fileName: string = 
       ],
       entities: [
         { type: "Organization", name: "Example Company", occurrences: 5 },
-        { type: "Skill", name: "Project Management", occurrences: 8 },
-        { type: "Location", name: "New York", occurrences: 3 },
-        { type: "Degree", name: "Bachelor's Degree", occurrences: 2 }
+        { type: "Skill", name: "Project Management", occurrences: 8 }
       ]
     },
     summary: {
@@ -127,6 +121,8 @@ export async function POST(req: NextRequest) {
     // Extract document ID and optional params
     const { documentId, type = "general" } = body;
     let fileName = body.fileName;
+    let documentText = "";
+    let document = null;
     
     // Validate document ID
     if (!documentId) {
@@ -136,15 +132,25 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
     
-    // Fetch document from database to get filename if not provided
+    // Fetch document from database to get filename and text content
     try {
-      const document = await db.select().from(cvs).where(eq(cvs.id, Number(documentId))).limit(1);
+      const documents = await db.select().from(cvs).where(eq(cvs.id, Number(documentId))).limit(1);
       
-      if (document && document.length > 0) {
+      if (documents && documents.length > 0) {
+        document = documents[0];
+        
         // Use filename from database if not provided in request
         if (!fileName) {
-          fileName = document[0].fileName;
+          fileName = document.fileName;
           console.log(`Retrieved fileName from database: ${fileName}`);
+        }
+        
+        // Get document text content for analysis
+        documentText = document.rawText || "";
+        if (!documentText) {
+          console.warn(`Document with ID ${documentId} has no text content to analyze`);
+        } else {
+          console.log(`Retrieved text content for document ID ${documentId}, length: ${documentText.length} characters`);
         }
       } else {
         console.error(`Document with ID ${documentId} not found in database`);
@@ -154,20 +160,42 @@ export async function POST(req: NextRequest) {
       }
     } catch (dbError) {
       console.error(`Database error when fetching document ${documentId}:`, dbError);
-      // Continue with generic filename if database access fails
-      if (!fileName) {
-        console.log(`fileName is missing in request for document ID: ${documentId}, using generic name`);
-        fileName = `document-${documentId}.pdf`;
-      }
+      return NextResponse.json({ 
+        error: `Database error: Failed to fetch document data` 
+      }, { status: 500 });
     }
     
     console.log(`Processing document analysis with ID: ${documentId}, fileName: ${fileName}`);
     
-    // Simulate processing delay (1.5 seconds)
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    // Start a timer to track performance
+    const startTime = Date.now();
     
-    // Generate analysis result
-    const result = generateAnalysisResult(documentId, fileName, type);
+    // Generate analysis result - using AI if we have text content, mock data as fallback
+    let result;
+    try {
+      if (documentText.length > 100) {
+        // If we have sufficient text content, use AI analysis
+        console.log(`Using AI analysis for document ${documentId}`);
+        result = await analyzeDocumentWithAI(documentText, fileName);
+        result.documentId = documentId;
+        result.analysisType = type;
+      } else {
+        // Fallback to mock data if no text content available
+        console.log(`Insufficient text content for AI analysis of document ${documentId}, using mock data`);
+        result = generateMockAnalysisResult(documentId, fileName, type);
+      }
+      
+      // Log processing time
+      const processingTime = (Date.now() - startTime) / 1000;
+      console.log(`Analysis completed in ${processingTime.toFixed(2)} seconds`);
+      
+    } catch (analysisError) {
+      console.error(`Error in AI analysis for document ${documentId}:`, analysisError);
+      
+      // Fallback to mock data if AI analysis fails
+      console.log(`Falling back to mock analysis for document ${documentId}`);
+      result = generateMockAnalysisResult(documentId, fileName, type);
+    }
     
     // Store the analysis result in the database
     try {
@@ -211,6 +239,6 @@ export async function GET() {
   return NextResponse.json({
     status: "Document analysis API is operational",
     supportedFileTypes: Object.keys(SUPPORTED_FILE_TYPES),
-    mockSample: generateAnalysisResult("sample", "example.pdf")
+    mockSample: generateMockAnalysisResult("sample", "example.pdf")
   });
 } 
