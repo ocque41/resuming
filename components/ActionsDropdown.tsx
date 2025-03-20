@@ -52,6 +52,9 @@ export default function ActionsDropdown({ cv }: ActionsDropdownProps) {
       // Fetch the file with proper binary handling
       const response = await fetch(endpoint, {
         method: 'GET',
+        headers: {
+          'Accept': 'application/pdf',
+        },
         cache: 'no-cache', // Prevent caching issues with binary data
       });
       
@@ -68,37 +71,26 @@ export default function ActionsDropdown({ cv }: ActionsDropdownProps) {
         }
       }
       
-      // Verify content type
+      // Get the content type and use it to determine how to handle the response
       const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/pdf')) {
-        console.error('Unexpected content type:', contentType);
-        throw new Error(`Received unexpected file format: ${contentType || 'unknown'}`);
-      }
+      console.log(`Response content type: ${contentType}`);
       
-      // Get the blob from the response
-      const blob = await response.blob();
+      // Force binary handling regardless of content type
+      const arrayBuffer = await response.arrayBuffer();
       
-      if (blob.size === 0) {
+      if (!arrayBuffer || arrayBuffer.byteLength === 0) {
         throw new Error('Downloaded file is empty');
       }
       
-      // Verify that the blob type is PDF
-      if (blob.type !== 'application/pdf') {
-        console.warn(`MIME type mismatch: expected application/pdf but got ${blob.type}`);
-        // Continue anyway as the server might have set the wrong content type
-      }
+      console.log(`File downloaded successfully, size: ${arrayBuffer.byteLength} bytes`);
       
-      console.log(`File downloaded successfully, size: ${blob.size} bytes, type: ${blob.type}`);
+      // Create a blob from the array buffer with explicit PDF type
+      const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
       
       // Create a URL for the blob
       const url = window.URL.createObjectURL(blob);
       
-      // Create a temporary anchor element and trigger download
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = url;
-      
-      // Use the filename from Content-Disposition if available, otherwise fall back to cv.fileName
+      // Get the filename from Content-Disposition if available
       const contentDisposition = response.headers.get('content-disposition');
       let filename = cv.fileName;
       
@@ -109,15 +101,26 @@ export default function ActionsDropdown({ cv }: ActionsDropdownProps) {
         }
       }
       
+      // Create a temporary anchor element and trigger download
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
       a.download = filename;
       document.body.appendChild(a);
-      a.click();
       
-      // Clean up
+      // Instead of just clicking, dispatch a mouse event for better browser compatibility
+      const clickEvent = new MouseEvent('click', {
+        view: window,
+        bubbles: true,
+        cancelable: true,
+      });
+      a.dispatchEvent(clickEvent);
+      
+      // Clean up after a delay to ensure download starts
       setTimeout(() => {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-      }, 100);
+      }, 200); // Increased timeout to ensure download starts
       
       console.log('Download successful');
     } catch (error) {
@@ -160,10 +163,58 @@ export default function ActionsDropdown({ cv }: ActionsDropdownProps) {
         );
       } else {
         console.error(`File does not appear to be a valid PDF. First bytes: ${result.hexDump.firstBytes.substring(0, 20)}...`);
+        
+        // If the file appears to be invalid, offer to repair it
+        if (confirm("The PDF appears to be invalid. Would you like to attempt a repair?")) {
+          await handleRepairPdf();
+        }
       }
     } catch (error) {
       console.error('Error running PDF diagnostic:', error);
       setDownloadError(`Diagnostic check failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsRunningDiagnostic(false);
+    }
+  };
+
+  const handleRepairPdf = async () => {
+    try {
+      setIsRunningDiagnostic(true);
+      setDiagnosticResult(null);
+      
+      // Call the repair API
+      const response = await fetch(`/api/debug/repair-pdf?fileName=${encodeURIComponent(cv.fileName)}&repair=true`);
+      
+      if (!response.ok) {
+        throw new Error(`PDF repair failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      console.log('PDF repair results:', result);
+      
+      if (result.repaired) {
+        setDiagnosticResult({
+          ...result,
+          isPdf: result.repairedValidation.isValid,
+          fileName: `${cv.fileName} (Repaired)`,
+          message: "PDF successfully repaired! You can now download it."
+        });
+        
+        // Ask if the user wants to download the repaired version
+        if (confirm("PDF successfully repaired! Would you like to download the repaired version?")) {
+          window.location.href = `/api/debug/repair-pdf?fileName=${encodeURIComponent(cv.fileName)}&repair=true&download=true`;
+        }
+      } else {
+        setDiagnosticResult({
+          ...result,
+          isPdf: false,
+          fileName: cv.fileName,
+          message: "PDF repair failed. The file may be severely corrupted."
+        });
+      }
+    } catch (error) {
+      console.error('Error repairing PDF:', error);
+      setDownloadError(`PDF repair failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setIsRunningDiagnostic(false);
     }
@@ -201,6 +252,14 @@ export default function ActionsDropdown({ cv }: ActionsDropdownProps) {
       label: isRunningDiagnostic ? "Checking..." : "Diagnostic Check",
       icon: isRunningDiagnostic ? Loader2 : Search,
       onClick: handleDiagnosticCheck,
+      className: "text-[#F9F6EE]",
+      disabled: isRunningDiagnostic
+    });
+    
+    menuItems.push({
+      label: isRunningDiagnostic ? "Repairing..." : "Repair PDF",
+      icon: isRunningDiagnostic ? Loader2 : FileText,
+      onClick: handleRepairPdf,
       className: "text-[#F9F6EE]",
       disabled: isRunningDiagnostic
     });
@@ -312,13 +371,26 @@ export default function ActionsDropdown({ cv }: ActionsDropdownProps) {
               </div>
               <div className="text-[#F9F6EE] ml-6 mt-1 text-sm">
                 <div>File: {diagnosticResult.fileName}</div>
-                <div>Size: {diagnosticResult.fileSize} bytes</div>
+                <div>Size: {diagnosticResult.fileSize || diagnosticResult.originalSize} bytes</div>
                 {diagnosticResult.isPdf && (
                   <>
                     <div>Version: {diagnosticResult.version}</div>
                     <div>EOF marker: {diagnosticResult.hasEof ? 'Present' : 'Missing'}</div>
-                    <div>Objects: {diagnosticResult.structureInfo.objCount}</div>
+                    <div>Objects: {diagnosticResult.structureInfo?.objCount}</div>
                   </>
+                )}
+                {diagnosticResult.message && (
+                  <div className="mt-2 font-medium">{diagnosticResult.message}</div>
+                )}
+                {diagnosticResult.repaired && (
+                  <div className="mt-2">
+                    <button 
+                      onClick={() => window.location.href = `/api/debug/repair-pdf?fileName=${encodeURIComponent(cv.fileName)}&repair=true&download=true`}
+                      className="px-2 py-1 bg-[#4ECDC4]/20 hover:bg-[#4ECDC4]/30 text-[#4ECDC4] rounded flex items-center text-xs"
+                    >
+                      <Download className="h-3 w-3 mr-1" /> Download Repaired PDF
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

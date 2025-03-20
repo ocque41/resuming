@@ -1,53 +1,13 @@
 import { NextResponse } from "next/server";
 import { getCVByFileName } from "@/lib/db/queries.server";
 import { getOriginalPdfBytes } from "@/lib/storage";
+import { createValidPdfBuffer, verifyPdfBuffer, attemptPdfRepair } from "@/lib/pdfUtils";
 import path from "path";
 import fs from "fs/promises";
 
-// For testing purposes - create a simple PDF document from text
+// Updated version using our new PDF utils
 async function createSimplePdfBuffer(text: string): Promise<Buffer> {
-  // Create a more valid PDF than the string template
-  // This follows a minimal PDF format that should be more valid
-  // PDF Reference: https://www.adobe.com/content/dam/acom/en/devnet/pdf/pdfs/PDF32000_2008.pdf
-  const pdfTemplate = `%PDF-1.7
-1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
-endobj
-2 0 obj
-<< /Type /Pages /Kids [3 0 R] /Count 1 >>
-endobj
-3 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
-endobj
-4 0 obj
-<< /Length ${text.length + 50} >>
-stream
-BT
-/F1 12 Tf
-50 700 Td
-(${text.replace(/[()\\]/g, '\\$&')}) Tj
-ET
-endstream
-endobj
-5 0 obj
-<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
-endobj
-xref
-0 6
-0000000000 65535 f
-0000000010 00000 n
-0000000058 00000 n
-0000000115 00000 n
-0000000234 00000 n
-0000000${text.length + 380} 00000 n
-trailer
-<< /Size 6 /Root 1 0 R >>
-startxref
-${text.length + 550}
-%%EOF`;
-
-  console.log("Created test PDF with content:", text.substring(0, 50) + (text.length > 50 ? "..." : ""));
-  return Buffer.from(pdfTemplate);
+  return createValidPdfBuffer(text);
 }
 
 export async function GET(request: Request) {
@@ -214,24 +174,44 @@ export async function GET(request: Request) {
     if (pdfBytes !== null && pdfBytes.length > 0) {
       console.log(`Returning PDF file: ${safeFileName}, size: ${pdfBytes.length} bytes`);
       
-      // Validate that it looks like a PDF (starts with %PDF-)
-      const isPdfStart = pdfBytes.slice(0, 5).toString() === '%PDF-';
-      if (!isPdfStart) {
-        console.warn(`Warning: File doesn't start with %PDF- marker: ${pdfBytes.slice(0, 20).toString('hex')}`);
+      // Use our PDF verification utility
+      const { isValid, issues } = verifyPdfBuffer(pdfBytes);
+      
+      if (!isValid) {
+        console.warn(`Invalid PDF detected with issues: ${issues.join(', ')}`);
+        
+        // Try to repair the PDF
+        const repairedPdf = attemptPdfRepair(pdfBytes, safeFileName);
+        
+        if (repairedPdf) {
+          console.log(`PDF repaired successfully, new size: ${repairedPdf.length} bytes`);
+          pdfBytes = repairedPdf;
+        } else {
+          // If repair failed, create a new PDF with an error message
+          console.log(`PDF repair failed, creating fallback document`);
+          pdfBytes = createValidPdfBuffer(
+            `Unable to retrieve the document "${safeFileName}". The original file appears to be corrupted.`
+          );
+        }
       }
       
       // Ensure we're working with a Buffer
       const responseBuffer = Buffer.isBuffer(pdfBytes) ? pdfBytes : Buffer.from(pdfBytes);
       
-      // Use Response instead of NextResponse for better binary handling
+      // For NextJS app router, using the standard Response object instead of NextResponse
+      // provides better binary handling for file downloads
       return new Response(responseBuffer, {
+        status: 200,
         headers: {
           'Content-Type': 'application/pdf',
           'Content-Disposition': `attachment; filename="${safeFileName}"; filename*=UTF-8''${encodeURIComponent(safeFileName)}`,
           'Content-Length': String(responseBuffer.length),
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
-          'Expires': '0'
+          'Expires': '0',
+          // Add these headers to prevent transformation or encoding issues
+          'Content-Transfer-Encoding': 'binary',
+          'X-Content-Type-Options': 'nosniff'
         },
       });
     }
