@@ -31,9 +31,9 @@ async function fetchWithRetry(url: string, retries = 1): Promise<Response> {
  * obtains a fresh temporary link via Dropbox API before downloading.
  *
  * @param cvRecord - The CV record object from the database.
- * @returns A Promise that resolves with the PDF bytes as a Uint8Array.
+ * @returns A Promise that resolves with the PDF bytes as a Buffer.
  */
-export async function getOriginalPdfBytes(cvRecord: any): Promise<Uint8Array> {
+export async function getOriginalPdfBytes(cvRecord: any): Promise<Buffer> {
   let storedPath: string = cvRecord.filepath;
   
   // If storedPath is missing or empty, fall back to a default PDF.
@@ -61,25 +61,55 @@ export async function getOriginalPdfBytes(cvRecord: any): Promise<Uint8Array> {
   // Do not cache Dropbox temporary links.
   if (!fileUrl.startsWith("http") || !fileUrl.includes("dl.dropboxusercontent.com")) {
     if (pdfCache.has(fileUrl)) {
-      return pdfCache.get(fileUrl)!;
+      console.log(`Returning cached PDF for URL: ${fileUrl}`);
+      const cachedData = pdfCache.get(fileUrl)!;
+      return Buffer.from(cachedData);
     }
   }
   
   let response;
   try {
+    console.log(`Fetching PDF from URL: ${fileUrl}`);
     response = await fetchWithRetry(fileUrl, 1);
+    
+    // Validate the response content type
+    const contentType = response.headers.get('content-type');
+    if (contentType && !contentType.includes('application/pdf')) {
+      console.warn(`Warning: Unexpected content type from URL ${fileUrl}: ${contentType}`);
+    }
   } catch (err) {
     console.error("Error fetching PDF from URL:", err);
     throw new Error(`Failed to download PDF from URL: ${fileUrl}`);
   }
   
-  const arrayBuffer = await response.arrayBuffer();
-  const pdfBytes = new Uint8Array(arrayBuffer);
-  // Cache non-Dropbox URLs if desired.
-  if (!fileUrl.includes("dl.dropboxusercontent.com")) {
-    pdfCache.set(fileUrl, pdfBytes);
+  try {
+    // Get the response as an array buffer for binary data
+    const arrayBuffer = await response.arrayBuffer();
+    
+    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+      throw new Error('Received empty response from PDF URL');
+    }
+    
+    const pdfBytes = Buffer.from(arrayBuffer);
+    
+    // Basic validation to check if this looks like a PDF
+    if (pdfBytes.length < 5 || pdfBytes.slice(0, 5).toString() !== '%PDF-') {
+      console.warn(`Warning: Retrieved content doesn't appear to be a PDF. First bytes: ${pdfBytes.slice(0, 20).toString('hex')}`);
+    }
+    
+    // Log the size and first few bytes for debugging
+    console.log(`Retrieved PDF, size: ${pdfBytes.length} bytes, first bytes: ${pdfBytes.slice(0, 20).toString('hex')}`);
+    
+    // Cache non-Dropbox URLs if desired.
+    if (!fileUrl.includes("dl.dropboxusercontent.com")) {
+      pdfCache.set(fileUrl, pdfBytes);
+    }
+    
+    return pdfBytes;
+  } catch (processError) {
+    console.error("Error processing PDF data:", processError);
+    throw new Error(`Failed to process PDF data: ${processError instanceof Error ? processError.message : String(processError)}`);
   }
-  return pdfBytes;
 }
 
 /**

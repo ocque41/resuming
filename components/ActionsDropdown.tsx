@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { Menu } from "@headlessui/react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, Trash, Download, MoreVertical, FileText, AlertCircle, Loader2 } from "lucide-react";
+import { ChevronDown, Trash, Download, MoreVertical, FileText, AlertCircle, Loader2, Search } from "lucide-react";
 import DeleteCVButton from "@/components/DeleteCVButton";
 import DocumentDetails from "@/components/DocumentDetails.client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -22,6 +22,8 @@ export default function ActionsDropdown({ cv }: ActionsDropdownProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [diagnosticResult, setDiagnosticResult] = useState<any>(null);
+  const [isRunningDiagnostic, setIsRunningDiagnostic] = useState(false);
   
   const handleDownload = async () => {
     try {
@@ -47,16 +49,26 @@ export default function ActionsDropdown({ cv }: ActionsDropdownProps) {
       
       console.log(`Downloading document from: ${endpoint}`);
       
-      // Fetch the file
-      const response = await fetch(endpoint);
+      // Fetch the file with proper binary handling
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        cache: 'no-cache', // Prevent caching issues with binary data
+      });
       
-      // Check if response is OK and if it's a PDF
+      // Check if response is OK
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Download failed:', errorData);
-        throw new Error(errorData.error || `Failed to download file: ${response.status} ${response.statusText}`);
+        // Try to parse error as JSON if possible
+        try {
+          const errorData = await response.json();
+          console.error('Download failed:', errorData);
+          throw new Error(errorData.error || `Failed to download file: ${response.status} ${response.statusText}`);
+        } catch (jsonError) {
+          // If it's not JSON, just use the status text
+          throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
+        }
       }
       
+      // Verify content type
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/pdf')) {
         console.error('Unexpected content type:', contentType);
@@ -70,24 +82,43 @@ export default function ActionsDropdown({ cv }: ActionsDropdownProps) {
         throw new Error('Downloaded file is empty');
       }
       
-      console.log(`File downloaded successfully, size: ${blob.size} bytes`);
+      // Verify that the blob type is PDF
+      if (blob.type !== 'application/pdf') {
+        console.warn(`MIME type mismatch: expected application/pdf but got ${blob.type}`);
+        // Continue anyway as the server might have set the wrong content type
+      }
+      
+      console.log(`File downloaded successfully, size: ${blob.size} bytes, type: ${blob.type}`);
       
       // Create a URL for the blob
       const url = window.URL.createObjectURL(blob);
       
       // Create a temporary anchor element and trigger download
-      const a = window.document.createElement('a');
+      const a = document.createElement('a');
       a.style.display = 'none';
       a.href = url;
-      a.download = cv.fileName;
-      window.document.body.appendChild(a);
+      
+      // Use the filename from Content-Disposition if available, otherwise fall back to cv.fileName
+      const contentDisposition = response.headers.get('content-disposition');
+      let filename = cv.fileName;
+      
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+?)"/i);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1];
+        }
+      }
+      
+      a.download = filename;
+      document.body.appendChild(a);
       a.click();
       
       // Clean up
-      window.URL.revokeObjectURL(url);
-      window.document.body.removeChild(a);
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }, 100);
       
-      // Show success message (could be implemented with a toast)
       console.log('Download successful');
     } catch (error) {
       console.error('Error downloading file:', error);
@@ -102,6 +133,43 @@ export default function ActionsDropdown({ cv }: ActionsDropdownProps) {
     setIsOpen(false); // Close the dropdown when opening details
   };
 
+  const handleDiagnosticCheck = async () => {
+    try {
+      setIsRunningDiagnostic(true);
+      setDiagnosticResult(null);
+      setIsOpen(false);
+      
+      // Call the diagnostic API
+      const response = await fetch(`/api/debug/check-pdf?fileName=${encodeURIComponent(cv.fileName)}`);
+      
+      if (!response.ok) {
+        throw new Error(`Diagnostic check failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      console.log('PDF diagnostic results:', result);
+      setDiagnosticResult(result);
+      
+      // Display results in console for easier debugging
+      if (result.isPdf) {
+        console.info(
+          `PDF Diagnostic: ${result.fileName} (${result.fileSize} bytes) - ` +
+          `PDF v${result.version}, EOF: ${result.hasEof ? 'OK' : 'MISSING'}, ` +
+          `Objects: ${result.structureInfo.objCount}, ` +
+          `Streams: ${result.structureInfo.streamCount}/${result.structureInfo.endstreamCount}`
+        );
+      } else {
+        console.error(`File does not appear to be a valid PDF. First bytes: ${result.hexDump.firstBytes.substring(0, 20)}...`);
+      }
+    } catch (error) {
+      console.error('Error running PDF diagnostic:', error);
+      setDownloadError(`Diagnostic check failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsRunningDiagnostic(false);
+    }
+  };
+
+  // Build the menu items array dynamically to include development options
   const menuItems = [
     {
       label: isDownloading ? "Downloading..." : "Download",
@@ -126,6 +194,17 @@ export default function ActionsDropdown({ cv }: ActionsDropdownProps) {
       disabled: false
     }
   ];
+  
+  // Add diagnostic option in development mode
+  if (process.env.NODE_ENV === 'development') {
+    menuItems.push({
+      label: isRunningDiagnostic ? "Checking..." : "Diagnostic Check",
+      icon: isRunningDiagnostic ? Loader2 : Search,
+      onClick: handleDiagnosticCheck,
+      className: "text-[#F9F6EE]",
+      disabled: isRunningDiagnostic
+    });
+  }
 
   return (
     <>
@@ -206,6 +285,43 @@ export default function ActionsDropdown({ cv }: ActionsDropdownProps) {
             <AlertDescription className="text-[#F9F6EE] ml-2 text-sm">
               {downloadError}
             </AlertDescription>
+          </Alert>
+        </div>
+      )}
+      
+      {/* Diagnostic result display (only in development) */}
+      {diagnosticResult && process.env.NODE_ENV === 'development' && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <Alert 
+            className={`rounded-xl max-w-md ${
+              diagnosticResult.isPdf 
+                ? "bg-[#1A2E35] border border-[#4ECDC4]/30" 
+                : "bg-[#3A1F24] border border-[#E57373]/30"
+            }`}
+          >
+            <div className="flex flex-col w-full">
+              <div className="flex items-center">
+                {diagnosticResult.isPdf ? (
+                  <div className="h-4 w-4 text-[#4ECDC4] mr-2">✓</div>
+                ) : (
+                  <AlertCircle className="h-4 w-4 text-[#E57373] mr-2" />
+                )}
+                <span className="text-[#F9F6EE] font-semibold">
+                  PDF Diagnostic: {diagnosticResult.isPdf ? 'Valid PDF' : 'Invalid PDF'}
+                </span>
+              </div>
+              <div className="text-[#F9F6EE] ml-6 mt-1 text-sm">
+                <div>File: {diagnosticResult.fileName}</div>
+                <div>Size: {diagnosticResult.fileSize} bytes</div>
+                {diagnosticResult.isPdf && (
+                  <>
+                    <div>Version: {diagnosticResult.version}</div>
+                    <div>EOF marker: {diagnosticResult.hasEof ? 'Present' : 'Missing'}</div>
+                    <div>Objects: {diagnosticResult.structureInfo.objCount}</div>
+                  </>
+                )}
+              </div>
+            </div>
           </Alert>
         </div>
       )}
