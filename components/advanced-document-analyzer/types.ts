@@ -87,6 +87,130 @@ export interface Skill {
   score: number;
 }
 
+// Type for CV specific analysis details
+export interface CVAnalysis {
+  skills?: {
+    technical?: Array<{name: string; proficiency: string; relevance: number}>;
+    soft?: Array<{name: string; evidence: string; strength: number}>;
+    domain?: Array<{name: string; relevance: number}>;
+  };
+  experience?: {
+    yearsOfExperience?: number;
+    experienceProgression?: string;
+    keyRoles?: string[];
+    achievementsHighlighted?: boolean;
+    clarity?: number;
+  };
+  education?: {
+    highestDegree?: string;
+    relevance?: number;
+    continuingEducation?: boolean;
+  };
+  atsCompatibility?: {
+    score?: number;
+    keywordOptimization?: number;
+    formatCompatibility?: number;
+    improvementAreas?: string[];
+  };
+  strengths?: string[];
+  weaknesses?: string[];
+}
+
+// Type for spreadsheet analysis details
+export interface SpreadsheetAnalysis {
+  dataStructure?: {
+    tables?: Array<{
+      name: string;
+      columns: Array<{
+        name: string;
+        dataType: string;
+        completeness: number;
+      }>;
+    }>;
+    structureScore?: number;
+  };
+  dataQuality?: {
+    completeness?: number;
+    consistency?: number;
+    accuracy?: number;
+    issues?: Array<{
+      issue: string;
+      severity: string;
+      recommendation: string;
+    }>;
+    overallScore?: number;
+  };
+  insights?: {
+    keyMetrics?: Array<{
+      name: string;
+      value: string;
+      insight: string;
+    }>;
+    trends?: Array<{
+      description: string;
+      significance: string;
+    }>;
+    anomalies?: Array<{
+      description: string;
+      impact: string;
+    }>;
+  };
+}
+
+// Type for presentation analysis details
+export interface PresentationAnalysis {
+  slideStructure?: {
+    slideCount?: number;
+    hasIntroduction?: boolean;
+    hasConclusion?: boolean;
+    narrativeFlow?: string;
+    slideStructure?: Array<{
+      type: string;
+      purpose: string;
+      effectiveness: number;
+    }>;
+    structureScore?: number;
+  };
+  messageClarity?: {
+    mainMessage?: string;
+    messageClarity?: number;
+    supportingPoints?: Array<{
+      point: string;
+      clarity: number;
+    }>;
+    languageAppropriateness?: number;
+    audienceAlignment?: string;
+    overallClarityScore?: number;
+  };
+  visualBalance?: {
+    textToVisualRatio?: number;
+    visualConsistency?: number;
+    visualImpact?: number;
+  };
+  audienceEngagement?: {
+    engagementElements?: string[];
+    interactivityScore?: number;
+    attentionRetention?: number;
+  };
+}
+
+// Type for content extraction and analysis results
+export interface ContentExtractionResult {
+  rawText?: string;
+  structure?: {
+    sections?: Array<{
+      title: string;
+      content: string;
+      level: number;
+    }>;
+    paragraphs?: number;
+    tables?: number;
+    images?: number;
+    lists?: number;
+  };
+  metadata?: Record<string, string>;
+}
+
 // Complete analysis result type
 export interface AnalysisResult {
   documentId: string | number;
@@ -103,6 +227,10 @@ export interface AnalysisResult {
   languageQuality?: LanguageQuality;
   timeline?: TimelineEntry[];
   skills?: Skill[];
+  cvAnalysis?: CVAnalysis;
+  spreadsheetAnalysis?: SpreadsheetAnalysis;
+  presentationAnalysis?: PresentationAnalysis;
+  contentExtraction?: ContentExtractionResult;
   timestamp?: string;
   createdAt?: string;
 } 

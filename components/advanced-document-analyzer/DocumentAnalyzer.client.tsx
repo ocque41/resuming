@@ -197,7 +197,16 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
     const extension = getFileExtension(fileName);
     if (!extension) return true; // No extension means we can't check, so assume it's supported
     
-    const supportedExtensions = ['pdf', 'docx', 'txt', 'doc', 'rtf', 'xlsx', 'pptx', 'csv', 'json', 'xml', 'html', 'md'];
+    const supportedExtensions = [
+      // Documents
+      'pdf', 'docx', 'txt', 'doc', 'rtf', 'md', 'odt',
+      // Spreadsheets
+      'xlsx', 'xls', 'csv', 'ods', 'tsv',
+      // Presentations
+      'pptx', 'ppt', 'pps', 'ppsx', 'odp',
+      // Others
+      'json', 'xml', 'html'
+    ];
     return supportedExtensions.includes(extension);
   };
 
@@ -337,262 +346,176 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
   };
 
   // The main analyze document function
-  // Now update the analyzeDocument function to ensure we have complete document information
   const analyzeDocument = async () => {
-    if (!selectedDocumentId) {
-      console.error("No document selected for analysis");
+    if (!selectedDocumentId || !selectedDocument?.fileName) {
       setAnalysisError("Please select a document to analyze");
       return;
     }
 
     setIsAnalyzing(true);
-    setAnalysisResults(null);
-    analysisResultsRef.current = null;
     setAnalysisError(null);
-
+    
     try {
-      console.log("Starting document analysis process...");
+      // First, get the complete document information
+      let completeDocumentInfo: any = null;
+      let documentText: string = "";
       
-      // First check cache for previous results
-      const cachedResult = getResultFromCache(selectedDocumentId);
-      if (cachedResult) {
-        console.log("Using cached analysis results");
-        analysisResultsRef.current = cachedResult;
-        setAnalysisResults(cachedResult);
-        setActiveTab("summary");
-        forceUpdate();
+      try {
+        // Try to fetch the document details first
+        completeDocumentInfo = await fetchDocumentDetails(selectedDocumentId);
+        
+        if (completeDocumentInfo && completeDocumentInfo.rawText) {
+          documentText = completeDocumentInfo.rawText;
+          console.log(`Retrieved document text, length: ${documentText.length} characters`);
+        } else {
+          console.warn("Document text not available in the fetched document details");
+        }
+      } catch (fetchError) {
+        console.error("Error fetching document details:", fetchError);
+        // Continue with the analysis - we'll use the API to try to get the text
+      }
+      
+      // Use either the fetched document or the selected document info
+      const documentToAnalyze = completeDocumentInfo || documents.find(doc => doc.id === selectedDocumentId);
+      
+      if (!documentToAnalyze) {
+        throw new Error(`Could not find document with ID ${selectedDocumentId}`);
+      }
+      
+      // Log the analysis request details
+      console.log("Sending analysis request for:", {
+        id: documentToAnalyze.id || selectedDocumentId,
+        fileName: documentToAnalyze.fileName || selectedDocument?.fileName,
+        source: completeDocumentInfo ? "API fetch" : "Local documents list",
+        textLength: documentText.length
+      });
+      
+      // Check if we can analyze this file type
+      const fileName = documentToAnalyze.fileName || selectedDocument?.fileName || "";
+      if (!isSupportedFileType(fileName)) {
+        setAnalysisError(`File type ${getFileExtension(fileName)} is not supported for analysis`);
         setIsAnalyzing(false);
         return;
       }
       
-      // Step 1: Get complete document details before proceeding
-      console.log("Step 1: Retrieving document details");
-      let completeDocumentInfo;
-      try {
-        completeDocumentInfo = await fetchDocumentDetails(selectedDocumentId);
-        console.log("Document details retrieved successfully");
-      } catch (detailsError) {
-        console.error("Step 1 Failed - Could not get document details:", detailsError);
-        // We'll continue with what we have from the document list, but log the issue
-        completeDocumentInfo = null;
+      // If we have no document text and we're not asking the server to extract it,
+      // we can't perform the analysis
+      if (!documentText && !completeDocumentInfo) {
+        setAnalysisError("Document text is not available for analysis. Please upload a document with extractable text content.");
+        setIsAnalyzing(false);
+        return;
       }
       
-      // Step 2: Prepare document information for analysis
-      console.log("Step 2: Preparing document information");
-      // Use either the complete info or the selected document from our local state
-      const documentToAnalyze = completeDocumentInfo || documents.find(doc => doc.id === selectedDocumentId);
-      
-      if (!documentToAnalyze) {
-        console.error("Step 2 Failed - Document not found in any source");
-        throw new Error(`Document with ID ${selectedDocumentId} not found`);
-      }
-      
-      // Log what we're using
-      console.log("Using document for analysis:", {
-        id: documentToAnalyze.id || selectedDocumentId,
-        fileName: documentToAnalyze.fileName || "Unknown",
-        source: completeDocumentInfo ? "API fetch" : "Local documents list",
-        hasFileName: !!documentToAnalyze.fileName
-      });
-      
-      // Step 3: Build the request body
-      console.log("Step 3: Building request body");
-      // Always use a properly formatted request object with all required fields
-      const requestBody: {
-        documentId: string;
-        type: string;
-        fileName?: string;
-      } = {
-        documentId: selectedDocumentId,
-        type: analysisType,
-      };
-
-      // Always include fileName if we have it (absolutely critical for the analysis)
-      if (documentToAnalyze.fileName) {
-        requestBody.fileName = documentToAnalyze.fileName;
-        console.log(`✅ Including fileName '${documentToAnalyze.fileName}' in analysis request`);
-      } else {
-        console.warn("⚠️ No fileName available for document - backend will use generic name");
-        
-        // Last attempt - try to create a generic filename based on the document ID
-        requestBody.fileName = `document-${selectedDocumentId}.pdf`;
-        console.log(`Using fallback fileName: ${requestBody.fileName}`);
-      }
-
-      console.log("Final request body:", JSON.stringify(requestBody));
-
-      // Step 4: Make the API call
-      console.log("Step 4: Sending analysis request to API");
+      // Make the API call with retry logic to handle transient errors
       const makeRequestWithRetry = async (retryCount = 0, maxRetries = 3) => {
         try {
-          // Set up request with timeout
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout for analysis
-
-          console.log(`API request attempt ${retryCount + 1}/${maxRetries + 1}`);
-          
           const response = await fetch("/api/document/analyze", {
             method: "POST",
-            headers: { 
+            headers: {
               "Content-Type": "application/json",
-              "X-Document-Id": selectedDocumentId,
-              "X-Analysis-Type": analysisType
             },
-            body: JSON.stringify(requestBody),
-            signal: controller.signal
+            body: JSON.stringify({
+              documentId: documentToAnalyze.id || selectedDocumentId,
+              documentText: documentText,
+              fileName: documentToAnalyze.fileName || selectedDocument?.fileName,
+              analysisType: analysisType
+            }),
           });
-
-          clearTimeout(timeoutId);
           
-          console.log("Received response:", {
-            status: response.status,
-            statusText: response.statusText,
-            headers: Object.fromEntries([...response.headers.entries()])
-          });
-
-          // Handle error responses
           if (!response.ok) {
-            let errorMessage;
-            try {
-              const errorText = await response.text();
-              console.log("Error response text:", errorText);
-              
-              try {
-                const errorData = JSON.parse(errorText);
-                errorMessage = errorData.error || `Server returned ${response.status} ${response.statusText}`;
-                console.error("API error response:", errorData);
-              } catch (parseError) {
-                errorMessage = errorText || `Server returned ${response.status} ${response.statusText}`;
-                console.error("Raw error response:", errorText);
-              }
-            } catch (e) {
-              errorMessage = `Server error: ${response.status} ${response.statusText}`;
-              console.error("Failed to read error response:", e);
-            }
-
-            // Check if we should retry
-            const shouldRetry = response.status >= 500 && retryCount < maxRetries;
-            
-            if (shouldRetry) {
-              const backoffTime = Math.min(1000 * Math.pow(2, retryCount), 8000);
-              console.log(`Will retry in ${backoffTime}ms...`);
-              await new Promise(resolve => setTimeout(resolve, backoffTime));
-              return makeRequestWithRetry(retryCount + 1, maxRetries);
-            }
-            
-            throw new Error(errorMessage);
-          }
-
-          // Success - parse response
-          console.log("Attempting to parse response...");
-          
-          // First read as text
-          const text = await response.text();
-          console.log("Response text received, length:", text.length);
-          
-          if (!text || text.trim() === '') {
-            console.error("Empty response received from server");
-            throw new Error("The server returned an empty response");
+            const errorText = await response.text();
+            console.error(`API error (${response.status}): ${errorText}`);
+            throw new Error(`Analysis API returned status ${response.status}: ${errorText}`);
           }
           
-          // Try to parse JSON from text
-          try {
-            const result = JSON.parse(text);
-            console.log("Analysis results parsed successfully:", {
-              keys: Object.keys(result),
-              documentId: result.documentId,
-              fileName: result.fileName
-            });
-            return result;
-          } catch (parseError) {
-            console.error("Failed to parse response as JSON:", parseError);
-            console.error("Response text:", text);
-            throw new Error("Failed to parse analysis results");
+          const result = await response.json();
+          console.log("Analysis API response received:", result);
+          
+          // Check if this is an error response
+          if (result.error) {
+            throw new Error(`API Error: ${result.error}`);
           }
+          
+          // Check if we have a proper result structure
+          if (!result || (typeof result !== 'object')) {
+            throw new Error("Invalid response format from analysis API");
+          }
+          
+          // Store in ref for stability
+          analysisResultsRef.current = result;
+          
+          // Update state with the result
+          setAnalysisResults(result);
+          return result;
         } catch (error) {
-          // Handle AbortError (timeout)
-          if (error instanceof Error && error.name === 'AbortError') {
-            console.error("Request timeout occurred");
-            
-            if (retryCount < maxRetries) {
-              console.log(`Retrying after timeout (attempt ${retryCount + 1})...`);
-              return makeRequestWithRetry(retryCount + 1, maxRetries);
-            }
-            
-            throw new Error("Analysis timed out after multiple attempts");
-          }
+          console.error(`Analysis request error (attempt ${retryCount + 1}/${maxRetries}):`, error);
           
-          // Other errors - retry if we haven't reached max retries
-          if (retryCount < maxRetries) {
-            const backoffTime = Math.min(1000 * Math.pow(2, retryCount), 8000);
-            console.log(`Request error: ${error instanceof Error ? error.message : error}`);
-            console.log(`Retrying in ${backoffTime}ms...`);
+          if (retryCount < maxRetries - 1) {
+            // Wait before retrying (exponential backoff)
+            const delay = Math.pow(2, retryCount) * 1000;
+            console.log(`Retrying in ${delay}ms...`);
             
-            await new Promise(resolve => setTimeout(resolve, backoffTime));
+            await new Promise(resolve => setTimeout(resolve, delay));
             return makeRequestWithRetry(retryCount + 1, maxRetries);
+          } else {
+            // We've exhausted our retries, so throw the error
+            throw error;
           }
-          
-          throw error;
         }
       };
-
+      
       try {
-        // Step 5: Execute request with retries
-        console.log("Step 5: Executing API request with retry logic");
-        const analysisResult = await makeRequestWithRetry();
+        // Make the API request with retry logic
+        await makeRequestWithRetry();
         
-        // Step 6: Process successful results
-        console.log("Step 6: Processing successful analysis result");
-        
-        // Save to localStorage cache
-        saveResultToCache(selectedDocumentId, analysisResult);
-        
-        // Use the ref for immediate availability
-        analysisResultsRef.current = analysisResult;
-        
-        // Announce success to the DOM 
-        const customEvent = new CustomEvent('document-analysis-complete', {
-          detail: { documentId: selectedDocumentId, success: true }
-        });
-        document.dispatchEvent(customEvent);
-        window.dispatchEvent(new Event('analysis-result-received'));
-        
-        console.log("Analysis complete event dispatched to DOM");
-        
-        // Update React state directly
-        setAnalysisResults(analysisResult);
-        setActiveTab("summary");
-        
-        // Force a render update
-        forceUpdate();
-        
-        console.log("Analysis state updated successfully");
-        return analysisResult;
-      } catch (error) {
-        // Step 6 (alternative): Handle analysis failure
-        console.error("Analysis failed:", error);
-        
-        setAnalysisError(error instanceof Error ? error.message : "Unknown analysis error");
-        
-        // Generate fallback for display
-        console.log("Generating fallback analysis result");
-        const fallback = generateFallbackAnalysis();
-        analysisResultsRef.current = fallback;
-        setAnalysisResults(fallback);
-        setActiveTab("summary");
-        
-        // Force a render update
-        forceUpdate();
-        
-        return null;
-      } finally {
+        // Analysis is complete - UI will update based on state change
         setIsAnalyzing(false);
+        
+        // Dispatch a custom event that other components can listen for
+        if (typeof window !== 'undefined') {
+          const event = new CustomEvent('documentAnalysisCompleted', {
+            detail: {
+              documentId: selectedDocumentId,
+              success: true
+            }
+          });
+          window.dispatchEvent(event);
+        }
+      } catch (apiError) {
+        console.error("All analysis attempts failed:", apiError);
+        
+        // Generate fallback response for UI testing or when API fails
+        if (process.env.NODE_ENV === 'development') {
+          console.warn("Development mode: Using fallback analysis for UI testing");
+          setUseFallbackMode(true);
+          const fallback = generateFallbackAnalysis();
+          analysisResultsRef.current = fallback;
+          setAnalysisResults(fallback);
+        } else {
+          // In production, show the error to the user
+          setAnalysisError(`Analysis failed: ${apiError instanceof Error ? apiError.message : String(apiError)}`);
+          setAnalysisResults(null);
+        }
+        
+        setIsAnalyzing(false);
+        
+        // Dispatch a custom event that other components can listen for (with failure)
+        if (typeof window !== 'undefined') {
+          const event = new CustomEvent('documentAnalysisCompleted', {
+            detail: {
+              documentId: selectedDocumentId,
+              success: false,
+              error: apiError instanceof Error ? apiError.message : String(apiError)
+            }
+          });
+          window.dispatchEvent(event);
+        }
       }
-    } catch (outerError) {
-      console.error("Outer analysis error:", outerError);
-      setAnalysisError(outerError instanceof Error ? outerError.message : "Analysis failed");
+    } catch (error) {
+      console.error("Error in analyzeDocument:", error);
+      setAnalysisError(`Analysis failed: ${error instanceof Error ? error.message : String(error)}`);
       setIsAnalyzing(false);
-      return null;
+      setAnalysisResults(null);
     }
   };
 
