@@ -77,49 +77,78 @@ export async function POST(req: NextRequest) {
   try {
     console.log('Document analysis API route called');
     
-    // Check authentication - in a simplified version, we'll skip actual auth
-    // In a real implementation, we would use:
-    // const session = await getServerSession(authOptions);
-    // if (!session || !session.user) {
-    //   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    // }
-
     // Parse request body
-    const body = await req.json();
-    console.log('Request body:', body);
-    const { documentId, type } = body;
+    let body;
+    try {
+      body = await req.json();
+      console.log('Request body successfully parsed:', body);
+    } catch (error) {
+      console.error('Failed to parse request body:', error);
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    }
+    
+    const { documentId, type = 'general' } = body;
+    console.log('Document ID:', documentId, 'Analysis type:', type);
 
     if (!documentId) {
       console.log('Missing documentId in request');
       return NextResponse.json({ error: 'Document ID is required' }, { status: 400 });
     }
 
-    // In a real implementation, we would get the document from the database
-    // For now, we'll just create a mock document
-    const mockDocument = {
-      id: documentId,
-      fileName: "document.pdf",
-      userId: "1",
-      filepath: "/path/to/document.pdf",
-      metadata: null
-    };
-
-    console.log('Returning mock analysis results for document:', documentId);
-    
-    // Return mock analysis results
-    const mockResult = {
-      ...MOCK_ANALYSIS_RESULT,
-      documentId
-    };
+    // Fetch the document from the database
+    // For development, we're using mock data
+    try {
+      // In a real implementation, we would get the document from the database
+      // For now, we'll just create a mock document
+      const mockDocument = {
+        id: documentId,
+        fileName: `document-${documentId}.pdf`,
+        userId: "1",
+        filepath: `/path/to/document-${documentId}.pdf`,
+        metadata: null
+      };
       
-    return NextResponse.json(mockResult);
+      console.log('Using mock document:', mockDocument);
+      
+      // In a real implementation, we would check if the user has permission to analyze this document
+      // For now, we'll assume they do
+
+      console.log('Generating analysis result for document:', documentId);
+      
+      // Return mock analysis results with the correct document ID
+      const mockResult = {
+        ...MOCK_ANALYSIS_RESULT,
+        documentId: Number(documentId)
+      };
+      
+      console.log('Analysis completed successfully, returning results');
+      
+      // Add a slight delay to simulate processing time
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      return NextResponse.json(mockResult);
+    } catch (dbError) {
+      console.error('Database error when getting document:', dbError);
+      return NextResponse.json({ error: 'Failed to retrieve document information' }, { status: 500 });
+    }
   } catch (error) {
-    console.error('Error in document analysis endpoint:', error);
+    console.error('Unhandled error in document analysis endpoint:', error);
     return NextResponse.json(
       { error: 'Internal server error' }, 
       { status: 500 }
     );
   }
+}
+
+// Add a simple GET method for testing API route registration
+export async function GET(req: NextRequest) {
+  return NextResponse.json({
+    status: 'ok',
+    message: 'Document analyzer API route is working',
+    supportedMethods: ['POST'],
+    instructions: 'Send a POST request with documentId and type in the request body',
+    timestamp: new Date().toISOString()
+  });
 }
 
 /**

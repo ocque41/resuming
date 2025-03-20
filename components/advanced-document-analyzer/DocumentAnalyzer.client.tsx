@@ -64,33 +64,58 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
     
     setIsAnalyzing(true);
     setAnalysisError(null);
-    console.log('Starting document analysis for document ID:', selectedDocumentId);
+    console.log('Starting document analysis for document ID:', selectedDocumentId, 'Type:', analysisType);
     
     try {
+      console.log('Sending analysis request to API endpoint');
+      const requestBody = {
+        documentId: selectedDocumentId,
+        type: analysisType
+      };
+      console.log('Request payload:', JSON.stringify(requestBody));
+      
       const response = await fetch('/api/document/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          documentId: selectedDocumentId,
-          type: analysisType
-        }),
+        body: JSON.stringify(requestBody),
       });
       
+      console.log('API response status:', response.status);
+      console.log('API response status text:', response.statusText);
+      
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Error response:', errorData);
-        throw new Error(errorData.error || 'Failed to analyze document');
+        const errorText = await response.text();
+        console.error('Error response text:', errorText);
+        
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch (e) {
+          console.error('Failed to parse error response as JSON:', e);
+          throw new Error(`Server error: ${response.status} ${response.statusText}`);
+        }
+        
+        console.error('Parsed error data:', errorData);
+        throw new Error(errorData.error || `Failed to analyze document: ${response.status}`);
       }
       
+      console.log('Successfully received response from API');
       const data = await response.json();
+      console.log('Analysis result data structure:', Object.keys(data));
       console.log('Analysis result:', data);
       setAnalysisResults(data);
     } catch (error) {
-      console.error('Analysis error:', error);
-      setAnalysisError('An error occurred while analyzing the document. Please try again.');
+      console.error('Analysis error details:', error);
+      if (error instanceof Error) {
+        console.error('Error name:', error.name);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+      }
+      setAnalysisError(`An error occurred while analyzing the document: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
     } finally {
+      console.log('Analysis process completed, isAnalyzing set to false');
       setIsAnalyzing(false);
     }
   };

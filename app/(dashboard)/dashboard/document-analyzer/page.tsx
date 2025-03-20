@@ -29,21 +29,27 @@ function DocumentAnalyzerContent() {
     // Fetch documents
     const fetchDocuments = async () => {
       try {
+        console.log('Fetching documents for the analyzer');
         const response = await fetch('/api/documents');
         if (!response.ok) {
+          console.error('Failed to fetch documents, status:', response.status);
           throw new Error('Failed to fetch documents');
         }
         const data = await response.json();
+        console.log('Documents fetched successfully, count:', data.documents?.length || 0);
         setDocuments(data.documents || []);
 
         // If documentId is provided, find the document
         if (documentId) {
+          console.log('Document ID from URL params:', documentId);
           const selectedDoc = data.documents.find(
             (doc: Document) => doc.id.toString() === documentId
           );
           if (selectedDoc) {
+            console.log('Found matching document:', selectedDoc.fileName);
             setDocument(selectedDoc);
           } else {
+            console.error('Document not found with ID:', documentId);
             setError(`Document with ID ${documentId} not found`);
           }
         }
@@ -57,6 +63,13 @@ function DocumentAnalyzerContent() {
 
     fetchDocuments();
   }, [documentId]);
+
+  // Transform documents to the format expected by the DocumentAnalyzerClient
+  const transformedDocuments = documents.map(doc => ({
+    id: doc.id.toString(),
+    fileName: doc.fileName,
+    createdAt: doc.createdAt,
+  }));
 
   return (
     <div className="min-h-screen bg-[#0A0A0A]">
@@ -88,11 +101,7 @@ function DocumentAnalyzerContent() {
           </div>
         ) : (
           <DocumentAnalyzerClient 
-            documents={documents.map(doc => ({
-              id: doc.id.toString(),
-              fileName: doc.fileName,
-              createdAt: doc.createdAt,
-            }))}
+            documents={transformedDocuments}
           />
         )}
       </div>
