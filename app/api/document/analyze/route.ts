@@ -90,37 +90,63 @@ export async function GET(req: NextRequest) {
 
     console.log(`Document analysis request received: documentId=${documentId}, type=${type}`);
 
+    // Authentication check
+    const session = await auth();
+    if (!session?.user?.id) {
+      console.error("Unauthorized access attempt to document analysis API");
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const userId = session.user.id;
+    console.log(`User ${userId} requested analysis for document ${documentId}`);
+
     // Try to get the actual document from the database
     try {
-      const document = await getDocumentById(Number(documentId));
+      // Parse documentId as a number
+      const numericDocId = parseInt(documentId);
+      
+      if (isNaN(numericDocId)) {
+        console.error(`Invalid document ID format: ${documentId}`);
+        return NextResponse.json({ error: 'Invalid document ID format' }, { status: 400 });
+      }
+      
+      // Get document
+      console.log(`Fetching document with ID: ${numericDocId}`);
+      const document = await db.query.cvs.findFirst({
+        where: eq(cvs.id, numericDocId),
+      });
       
       if (!document) {
-        console.error(`Document with ID ${documentId} not found`);
+        console.error(`Document with ID ${numericDocId} not found`);
         return NextResponse.json({ error: 'Document not found' }, { status: 404 });
       }
       
-      console.log(`Found document: ${document.fileName}`);
+      // Check document ownership
+      if (document.userId !== parseInt(userId)) {
+        console.error(`User ${userId} attempted to access document ${numericDocId} owned by user ${document.userId}`);
+        return NextResponse.json({ error: 'You do not have permission to access this document' }, { status: 403 });
+      }
       
-      // If we have access to the document content, we could analyze it here
-      // For now, return the mock result
-      console.log("Returning mock analysis result");
+      console.log(`Found document: ${document.fileName} (ID: ${document.id})`);
+      
+      // For development/debugging - return mock result
+      console.log("Returning mock analysis result for document:", document.fileName);
       
       const mockResult = {
         ...MOCK_ANALYSIS_RESULT,
-        documentId
+        documentId: numericDocId,
+        fileName: document.fileName
       };
         
       return NextResponse.json(mockResult);
     } catch (dbError) {
       console.error("Database error when fetching document:", dbError);
       
-      // If we can't get the document, fall back to mock data
-      console.log("Falling back to mock data due to database error");
-      return NextResponse.json({
-        ...MOCK_ANALYSIS_RESULT,
-        documentId,
-        _note: "This is mock data due to database error"
-      });
+      // Return proper error response
+      return NextResponse.json({ 
+        error: 'Error retrieving document', 
+        details: dbError instanceof Error ? dbError.message : String(dbError)
+      }, { status: 500 });
     }
   } catch (error) {
     console.error('Error in document analysis endpoint:', error);
@@ -133,42 +159,80 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    // Check authentication - in a simplified version, we'll skip actual auth
-    // In a real implementation, we would use:
-    // const session = await getServerSession(authOptions);
-    // if (!session || !session.user) {
-    //   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    // }
+    // Authentication check
+    const session = await auth();
+    if (!session?.user?.id) {
+      console.error("Unauthorized access attempt to document analysis API");
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const userId = session.user.id;
 
     // Parse request body
     const body = await req.json();
     const { documentId } = body;
 
     if (!documentId) {
+      console.error("Missing documentId in request body");
       return NextResponse.json({ error: 'Document ID is required' }, { status: 400 });
     }
 
-    // In a real implementation, we would get the document from the database
-    // For now, we'll just create a mock document
-    const mockDocument = {
-      id: documentId,
-      fileName: "document.pdf",
-      userId: "1",
-      filepath: "/path/to/document.pdf",
-      metadata: null
-    };
+    console.log(`Document analysis POST request received: documentId=${documentId}`);
 
-    // Return mock analysis results
-    const mockResult = {
-      ...MOCK_ANALYSIS_RESULT,
-      documentId
-    };
+    try {
+      // Parse documentId as a number
+      const numericDocId = parseInt(documentId);
       
-    return NextResponse.json(mockResult);
+      if (isNaN(numericDocId)) {
+        console.error(`Invalid document ID format: ${documentId}`);
+        return NextResponse.json({ error: 'Invalid document ID format' }, { status: 400 });
+      }
+      
+      // Get document
+      console.log(`Fetching document with ID: ${numericDocId}`);
+      const document = await db.query.cvs.findFirst({
+        where: eq(cvs.id, numericDocId),
+      });
+      
+      if (!document) {
+        console.error(`Document with ID ${numericDocId} not found`);
+        return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+      }
+      
+      // Check document ownership
+      if (document.userId !== parseInt(userId)) {
+        console.error(`User ${userId} attempted to access document ${numericDocId} owned by user ${document.userId}`);
+        return NextResponse.json({ error: 'You do not have permission to access this document' }, { status: 403 });
+      }
+      
+      console.log(`Found document: ${document.fileName} (ID: ${document.id})`);
+      
+      // Return mock analysis results
+      console.log("Returning mock analysis result for document:", document.fileName);
+      
+      const mockResult = {
+        ...MOCK_ANALYSIS_RESULT,
+        documentId: numericDocId,
+        fileName: document.fileName
+      };
+      
+      return NextResponse.json({
+        success: true,
+        analysis: mockResult
+      });
+    } catch (dbError) {
+      console.error("Database error when fetching document:", dbError);
+      
+      // Return proper error response
+      return NextResponse.json({ 
+        error: 'Error retrieving document', 
+        details: dbError instanceof Error ? dbError.message : String(dbError)
+      }, { status: 500 });
+    }
   } catch (error) {
     console.error('Error in document analysis endpoint:', error);
     return NextResponse.json(
-      { error: 'Internal server error' }, 
+      { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) }, 
       { status: 500 }
     );
   }

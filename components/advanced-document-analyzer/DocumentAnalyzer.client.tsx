@@ -72,35 +72,55 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
     try {
       console.log(`Starting document analysis for documentId=${selectedDocumentId}, type=${analysisType}`);
       
+      // First try with GET endpoint
       const url = `/api/document/analyze?documentId=${selectedDocumentId}&type=${analysisType}`;
       console.log(`Sending request to: ${url}`);
       
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
       console.log(`Analysis response status: ${response.status}`);
       
+      // Make sure we got JSON back
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         console.error('Non-JSON response received:', contentType);
-        throw new Error(`Unexpected response format: ${contentType}`);
+        throw new Error(`Unexpected response format: ${contentType || 'unknown'}`);
       }
       
+      // Handle error responses
       if (!response.ok) {
         const errorData = await response.json();
         console.error('Error response:', errorData);
+        
+        // If GET fails with 404/400, try POST as fallback
+        if (response.status === 404 || response.status === 400) {
+          console.log('GET request failed, trying POST as fallback...');
+          return await analyzeDocumentWithPost();
+        }
+        
         throw new Error(errorData.error || `Failed to analyze document: ${response.status} ${response.statusText}`);
       }
       
+      // Process the successful response
       const data = await response.json();
       console.log('Analysis completed successfully, results:', data);
       
+      // Check if we got data directly or if it's wrapped in an 'analysis' field
+      const analysisData = data.analysis || data;
+      
       // Validate that the response contains the expected fields
-      if (!data.summary || !data.keyPoints || !data.recommendations || !data.insights) {
-        console.error('Invalid analysis result format:', data);
-        throw new Error('The analysis result format is invalid. Some required fields are missing.');
+      if (!analysisData.summary && (!analysisData.keyPoints || !analysisData.recommendations)) {
+        console.warn('Response may not contain all expected analysis fields:', analysisData);
+        // Continue anyway since we have some data
       }
       
       // Update the state with the results
-      setAnalysisResults(data);
+      setAnalysisResults(analysisData);
       
       // Show a success message (optional)
       console.log('Document analysis completed successfully');
@@ -111,6 +131,53 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
       setAnalysisResults(null);
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+  
+  // Fallback to POST method if GET fails
+  const analyzeDocumentWithPost = async () => {
+    try {
+      console.log(`Trying POST method for document analysis...`);
+      
+      const response = await fetch('/api/document/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          documentId: selectedDocumentId,
+          type: analysisType
+        }),
+      });
+      
+      console.log(`POST analysis response status: ${response.status}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('POST Error response:', errorData);
+        throw new Error(errorData.error || `Failed to analyze document using POST: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('POST analysis completed successfully, results:', data);
+      
+      // Check if we got data directly or if it's wrapped in an 'analysis' field
+      const analysisData = data.analysis || data;
+      
+      // Validate the minimum required fields
+      if (!analysisData) {
+        console.error('Invalid analysis result format (empty):', data);
+        throw new Error('The analysis result format is invalid or empty.');
+      }
+      
+      // Update the state with the results
+      setAnalysisResults(analysisData);
+      
+      console.log('Document analysis completed successfully using POST method');
+      
+    } catch (error) {
+      console.error('POST analysis error:', error);
+      throw error; // Let the parent function handle this error
     }
   };
 
