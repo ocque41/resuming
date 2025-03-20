@@ -60,41 +60,18 @@ export default function DocumentDetails({ cvId, onClose }: DocumentDetailsProps)
     if (!document) return;
     
     try {
-      // Show loading state
-      setLoading(true);
-      setError(null);
-      
       const isOptimized = document.metadata?.optimized || false;
       const endpoint = `/api/download-cv?fileName=${encodeURIComponent(document.fileName)}${isOptimized ? '&optimized=true' : ''}`;
-      
-      console.log(`Downloading document from endpoint: ${endpoint}`);
       
       const response = await fetch(endpoint);
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Download failed:', errorData);
-        throw new Error(errorData.error || `Failed to download file: ${response.status} ${response.statusText}`);
-      }
-      
-      // Check if we got a PDF response
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/pdf')) {
-        console.error('Unexpected content type:', contentType);
-        throw new Error(`Received unexpected file format: ${contentType || 'unknown'}`);
+        throw new Error('Failed to download file');
       }
       
       const blob = await response.blob();
-      
-      if (blob.size === 0) {
-        throw new Error('Downloaded file is empty');
-      }
-      
-      console.log(`File downloaded successfully, size: ${blob.size} bytes`);
-      
       const url = window.URL.createObjectURL(blob);
       
-      // Create a download link and click it
       const a = window.document.createElement('a');
       a.style.display = 'none';
       a.href = url;
@@ -102,17 +79,11 @@ export default function DocumentDetails({ cvId, onClose }: DocumentDetailsProps)
       window.document.body.appendChild(a);
       a.click();
       
-      // Clean up
       window.URL.revokeObjectURL(url);
       window.document.body.removeChild(a);
-      
-      // Show success message (optional - can be implemented with a toast notification)
-      console.log('Download successful');
     } catch (error) {
       console.error('Error downloading file:', error);
-      setError(`Failed to download file: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setLoading(false);
+      alert('Failed to download file. Please try again.');
     }
   };
 

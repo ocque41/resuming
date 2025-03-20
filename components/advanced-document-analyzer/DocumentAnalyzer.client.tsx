@@ -60,132 +60,46 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   };
 
   const analyzeDocument = async () => {
-    if (!selectedDocumentId) {
-      setAnalysisError("Please select a document to analyze");
-      return;
-    }
+    if (!selectedDocumentId) return;
     
     setIsAnalyzing(true);
     setAnalysisError(null);
-    setAnalysisResults(null);
+    console.log('Starting document analysis for document ID:', selectedDocumentId);
     
     try {
-      console.log(`Starting document analysis for documentId=${selectedDocumentId}, type=${analysisType}`);
-      
-      // First try with GET endpoint
-      const url = `/api/document/analyze?documentId=${selectedDocumentId}&type=${analysisType}`;
-      console.log(`Sending request to: ${url}`);
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      console.log(`Analysis response status: ${response.status}`);
-      
-      // Make sure we got JSON back
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        console.error('Non-JSON response received:', contentType);
-        throw new Error(`Unexpected response format: ${contentType || 'unknown'}`);
-      }
-      
-      // Handle error responses
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Error response:', errorData);
-        
-        // If GET fails with 404/400, try POST as fallback
-        if (response.status === 404 || response.status === 400) {
-          console.log('GET request failed, trying POST as fallback...');
-          return await analyzeDocumentWithPost();
-        }
-        
-        throw new Error(errorData.error || `Failed to analyze document: ${response.status} ${response.statusText}`);
-      }
-      
-      // Process the successful response
-      const data = await response.json();
-      console.log('Analysis completed successfully, results:', data);
-      
-      // Check if we got data directly or if it's wrapped in an 'analysis' field
-      const analysisData = data.analysis || data;
-      
-      // Validate that the response contains the expected fields
-      if (!analysisData.summary && (!analysisData.keyPoints || !analysisData.recommendations)) {
-        console.warn('Response may not contain all expected analysis fields:', analysisData);
-        // Continue anyway since we have some data
-      }
-      
-      // Update the state with the results
-      setAnalysisResults(analysisData);
-      
-      // Show a success message (optional)
-      console.log('Document analysis completed successfully');
-      
-    } catch (error) {
-      console.error('Analysis error:', error);
-      setAnalysisError(`An error occurred while analyzing the document: ${error instanceof Error ? error.message : String(error)}. Please try again.`);
-      setAnalysisResults(null);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-  
-  // Fallback to POST method if GET fails
-  const analyzeDocumentWithPost = async () => {
-    try {
-      console.log(`Trying POST method for document analysis...`);
-      
       const response = await fetch('/api/document/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           documentId: selectedDocumentId,
           type: analysisType
         }),
       });
       
-      console.log(`POST analysis response status: ${response.status}`);
-      
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('POST Error response:', errorData);
-        throw new Error(errorData.error || `Failed to analyze document using POST: ${response.status} ${response.statusText}`);
+        console.error('Error response:', errorData);
+        throw new Error(errorData.error || 'Failed to analyze document');
       }
       
       const data = await response.json();
-      console.log('POST analysis completed successfully, results:', data);
-      
-      // Check if we got data directly or if it's wrapped in an 'analysis' field
-      const analysisData = data.analysis || data;
-      
-      // Validate the minimum required fields
-      if (!analysisData) {
-        console.error('Invalid analysis result format (empty):', data);
-        throw new Error('The analysis result format is invalid or empty.');
-      }
-      
-      // Update the state with the results
-      setAnalysisResults(analysisData);
-      
-      console.log('Document analysis completed successfully using POST method');
-      
+      console.log('Analysis result:', data);
+      setAnalysisResults(data);
     } catch (error) {
-      console.error('POST analysis error:', error);
-      throw error; // Let the parent function handle this error
+      console.error('Analysis error:', error);
+      setAnalysisError('An error occurred while analyzing the document. Please try again.');
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
   return (
     <div className="space-y-6">
       <Card className="border border-[#222222] bg-[#111111] shadow-lg overflow-hidden">
-        <CardHeader className="bg-[#0A0A0A] border-b border-[#222222]">
-          <CardTitle className="text-lg font-medium text-[#F9F6EE]">
+        <CardHeader>
+          <CardTitle className="text-lg font-safiro text-[#F9F6EE]">
             Document Analyzer
           </CardTitle>
         </CardHeader>
@@ -249,7 +163,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                 {isAnalyzing ? (
                   <>
                     <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Analyzing Document...
+                    Analyzing...
                   </>
                 ) : (
                   <>
@@ -261,43 +175,11 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
             </div>
           </div>
           
-          {/* Loading state for analysis */}
-          {isAnalyzing && (
-            <div className="mt-6 p-5 border border-[#222222] rounded-lg bg-[#080808] space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-[#F9F6EE] font-medium flex items-center">
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin text-[#B4916C]" />
-                  Analyzing your document
-                </h3>
-                <span className="text-[#8A8782] text-sm">This may take a moment</span>
-              </div>
-              
-              <div className="space-y-2">
-                <div className="w-full h-1.5 bg-[#161616] rounded-full overflow-hidden">
-                  <div className="h-full bg-[#B4916C] rounded-full animate-pulse" style={{ width: '75%' }}></div>
-                </div>
-                <div className="flex justify-between text-xs text-[#8A8782]">
-                  <span>Processing document</span>
-                  <span>Extracting insights</span>
-                  <span>Finalizing results</span>
-                </div>
-              </div>
-              
-              <p className="text-[#8A8782] text-sm italic">
-                Our AI is analyzing your document to extract key insights, topics, and recommendations.
-              </p>
-            </div>
-          )}
-          
           {/* Analysis results */}
           {analysisResults && (
             <div className="mt-8 pt-6 border-t border-[#222222]">
               <h3 className="text-lg font-safiro text-[#F9F6EE] mb-4">Analysis Results</h3>
-              
-              <AnalysisResultsContent 
-                result={analysisResults} 
-                documentId={selectedDocumentId}
-              />
+              <AnalysisResultsContent result={analysisResults} documentId={selectedDocumentId} />
             </div>
           )}
           

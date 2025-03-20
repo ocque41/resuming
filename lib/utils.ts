@@ -19,8 +19,3 @@ export function formatError(error: unknown): string {
     return 'An unknown error occurred';
   }
 }
-
-/**
- * Check if the current environment is development
- */
-export const isDevelopment = () => process.env.NODE_ENV === 'development';
