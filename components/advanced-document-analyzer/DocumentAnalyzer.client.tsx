@@ -9,13 +9,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   AlertCircle, FileText, BarChart2, PieChart, LineChart, Calendar, Check, 
-  Info, Download, RefreshCw, ArrowRight
+  Info, Download, RefreshCw, ArrowRight, Loader2
 } from 'lucide-react';
 import AnalysisRecommendations from './AnalysisRecommendations';
 import AnalysisKeyPoints from './AnalysisKeyPoints';
 import AnalysisInsights from './AnalysisInsights';
 import AnalysisResultsContent from './AnalysisResultsContent';
 import { AnalysisResult } from './types';
+import { Label } from '@/components/ui/label';
+import dynamic from 'next/dynamic';
+
+// Dynamically import debug components only in development mode
+const DebugAnalysisButton = process.env.NODE_ENV === 'development'
+  ? dynamic(() => import('./debug-tools/DebugAnalysisButton'))
+  : () => null;
+
+const DebugPanel = process.env.NODE_ENV === 'development'
+  ? dynamic(() => import('./debug-tools/DebugPanel'))
+  : () => null;
 
 // Define types
 interface Document {
@@ -218,7 +229,99 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
     }
   };
 
-  // Update analyze function to use caching
+  // Add a function to fetch document details before analysis
+  const fetchDocumentDetails = async (documentId: string): Promise<any> => {
+    console.log(`Fetching complete document details for ID: ${documentId}`);
+    
+    try {
+      const response = await fetch(`/api/documents/${documentId}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch document details: ${response.status} ${response.statusText}`);
+      }
+      
+      const document = await response.json();
+      console.log(`Document details retrieved:`, {
+        id: document.id,
+        fileName: document.fileName || 'No fileName in response',
+        createdAt: document.createdAt,
+      });
+      
+      // Validate the required fields
+      if (!document.id) {
+        throw new Error(`Invalid document: Missing ID`);
+      }
+      
+      return document;
+    } catch (error) {
+      console.error(`Error fetching document details:`, error);
+      throw error;
+    }
+  };
+
+  // Make a request with retry logic
+  const makeRequestWithRetry = async (url: string, options: RequestInit, maxRetries = 3): Promise<Response> => {
+    let retries = 0;
+    let lastError: Error | null = null;
+    
+    console.log(`Making API request to ${url} with retry logic (max retries: ${maxRetries})`);
+    
+    while (retries < maxRetries) {
+      try {
+        // Set a timeout for the fetch operation
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
+        const fetchOptions = {
+          ...options,
+          signal: controller.signal
+        };
+        
+        console.log(`API request attempt ${retries + 1}/${maxRetries}`, { 
+          url, 
+          method: options.method,
+          hasBody: !!options.body
+        });
+        
+        const response = await fetch(url, fetchOptions);
+        clearTimeout(timeoutId);
+        
+        console.log(`API response received:`, {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok,
+          headers: Object.fromEntries([...response.headers])
+        });
+        
+        // For server errors, we retry
+        if (response.status >= 500) {
+          console.warn(`Server error (${response.status}), retrying...`);
+          retries++;
+          await new Promise(resolve => setTimeout(resolve, 1000 * retries)); // Exponential backoff
+          continue;
+        }
+        
+        return response;
+      } catch (error: any) {
+        lastError = error as Error;
+        console.error(`API request error (attempt ${retries + 1}/${maxRetries}):`, error);
+        
+        if (error.name === 'AbortError') {
+          console.warn('Request timed out');
+        }
+        
+        retries++;
+        if (retries < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * retries)); // Exponential backoff
+        }
+      }
+    }
+    
+    throw lastError || new Error(`Failed after ${maxRetries} retries`);
+  };
+
+  // The main analyze document function
+  // Now update the analyzeDocument function to ensure we have complete document information
   const analyzeDocument = async () => {
     if (!selectedDocumentId) {
       console.error("No document selected for analysis");
@@ -226,61 +329,48 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
       return;
     }
 
-    // Before starting analysis, check if we have cached results
-    const cachedResult = getResultFromCache(selectedDocumentId);
-    if (cachedResult) {
-      console.log("Using cached analysis result:", cachedResult);
-      analysisResultsRef.current = cachedResult;
-      setAnalysisResults(cachedResult);
-      setActiveTab("summary");
-      forceUpdate();
-      return;
-    }
-
-    // Find the selected document object
-    const selectedDocumentObj = documents.find(doc => doc.id === selectedDocumentId);
-    
-    // Log debug information about the selection
-    console.log("Selected document for analysis:", {
-      id: selectedDocumentId,
-      document: selectedDocumentObj || "Not found in documents array",
-      documentsLength: documents.length,
-      availableDocumentIds: documents.map(d => d.id),
-      availableFileNames: documents.map(d => d.fileName)
-    });
-
-    // Handle missing document information (shouldn't happen, but let's be safe)
-    if (!selectedDocumentObj) {
-      console.warn("Selected document not found in documents array - will continue with ID only");
-    }
-
-    // Get file name (if available)
-    const fileName = selectedDocumentObj?.fileName;
-    
-    // Log file information
-    console.log("Document file information:", {
-      fileName: fileName || "Not available",
-      hasFileName: !!fileName,
-      fileNameType: fileName ? typeof fileName : "undefined",
-      fileNameLength: fileName ? fileName.length : 0
-    });
-
-    // Check file type support, but only if we have a file name
-    if (fileName && !isSupportedFileType(fileName)) {
-      const extension = getFileExtension(fileName);
-      console.error(`Unsupported file type detected: .${extension}`);
-      setAnalysisError(`The file type ".${extension}" is not supported for analysis. Please select a document with a supported file type.`);
-      return;
-    }
-
-    // Start analysis process
     setIsAnalyzing(true);
     setAnalysisResults(null);
-    analysisResultsRef.current = null; // Clear the ref as well
+    analysisResultsRef.current = null;
     setAnalysisError(null);
 
     try {
       console.log("Starting document analysis process...");
+      
+      // First check cache for previous results
+      const cachedResult = getResultFromCache(selectedDocumentId);
+      if (cachedResult) {
+        console.log("Using cached analysis results");
+        analysisResultsRef.current = cachedResult;
+        setAnalysisResults(cachedResult);
+        setActiveTab("summary");
+        forceUpdate();
+        setIsAnalyzing(false);
+        return;
+      }
+      
+      // Get complete document details before proceeding
+      let completeDocumentInfo;
+      try {
+        completeDocumentInfo = await fetchDocumentDetails(selectedDocumentId);
+      } catch (detailsError) {
+        console.error("Failed to get complete document details:", detailsError);
+        // Continue with what we have, but log the issue
+        completeDocumentInfo = null;
+      }
+      
+      // Use either the complete info or the selected document from our local state
+      const documentToAnalyze = completeDocumentInfo || documents.find(doc => doc.id === selectedDocumentId);
+      
+      if (!documentToAnalyze) {
+        throw new Error(`Document with ID ${selectedDocumentId} not found`);
+      }
+      
+      console.log("Document for analysis:", {
+        id: documentToAnalyze.id || selectedDocumentId,
+        fileName: documentToAnalyze.fileName || "Unknown",
+        hasFileName: !!documentToAnalyze.fileName
+      });
       
       // Always use a properly formatted request object with all required fields
       const requestBody: {
@@ -292,12 +382,12 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
         type: analysisType,
       };
 
-      // Always include fileName if it exists
-      if (fileName) {
-        requestBody.fileName = fileName;
+      // Always include fileName if we have it
+      if (documentToAnalyze.fileName) {
+        requestBody.fileName = documentToAnalyze.fileName;
+        console.log(`Including fileName '${documentToAnalyze.fileName}' in analysis request`);
       } else {
-        console.warn("No fileName available for document ID:", selectedDocumentId, 
-          "- backend will attempt to determine from database");
+        console.warn("⚠️ No fileName available for document - backend will use generic name");
       }
 
       console.log("Sending analysis request:", JSON.stringify(requestBody));
@@ -307,7 +397,7 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
         try {
           // Set up request with timeout
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 30000); // Increased timeout further
+          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
           console.log(`API request attempt ${retryCount + 1}/${maxRetries + 1}`);
           
@@ -315,7 +405,7 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
             method: "POST",
             headers: { 
               "Content-Type": "application/json",
-              "X-Document-Id": selectedDocumentId, // Add ID in header too for redundancy
+              "X-Document-Id": selectedDocumentId
             },
             body: JSON.stringify(requestBody),
             signal: controller.signal
@@ -323,7 +413,6 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
 
           clearTimeout(timeoutId);
           
-          // Always log the raw response details
           console.log("Received response:", {
             status: response.status,
             statusText: response.statusText,
@@ -342,7 +431,6 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
                 errorMessage = errorData.error || `Server returned ${response.status} ${response.statusText}`;
                 console.error("API error response:", errorData);
               } catch (parseError) {
-                // If we can't parse JSON, use the text directly
                 errorMessage = errorText || `Server returned ${response.status} ${response.statusText}`;
                 console.error("Raw error response:", errorText);
               }
@@ -351,7 +439,7 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
               console.error("Failed to read error response:", e);
             }
 
-            // Check if we should retry based on the status code
+            // Check if we should retry
             const shouldRetry = response.status >= 500 && retryCount < maxRetries;
             
             if (shouldRetry) {
@@ -367,36 +455,27 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
           // Success - parse response
           console.log("Attempting to parse response...");
           
+          // First read as text
+          const text = await response.text();
+          console.log("Response text received, length:", text.length);
+          
+          if (!text || text.trim() === '') {
+            console.error("Empty response received from server");
+            throw new Error("The server returned an empty response");
+          }
+          
+          // Try to parse JSON from text
           try {
-            // First read as text
-            const text = await response.text();
-            console.log("Response text received, length:", text.length);
-            console.log("Response text sample:", text.substring(0, 200) + "...");
-            
-            if (text.trim() === '') {
-              console.error("Empty response received from server");
-              throw new Error("The server returned an empty response");
-            }
-            
-            // Try to parse JSON from text
-            try {
-              const result = JSON.parse(text);
-              console.log("Analysis results parsed successfully. Keys:", Object.keys(result));
-              return result;
-            } catch (parseError) {
-              console.error("Failed to parse response as JSON:", parseError);
-              
-              // If the response looks like HTML, it might be an error page
-              if (text.includes('<!DOCTYPE html>') || text.includes('<html>')) {
-                console.error("Received HTML instead of JSON");
-                throw new Error("The server returned HTML instead of JSON. The API might be experiencing issues.");
-              }
-              
-              throw new Error("Failed to parse analysis results from server");
-            }
-          } catch (error) {
-            console.error("Error processing response:", error);
-            throw error;
+            const result = JSON.parse(text);
+            console.log("Analysis results parsed successfully:", {
+              keys: Object.keys(result),
+              documentId: result.documentId,
+              fileName: result.fileName
+            });
+            return result;
+          } catch (parseError) {
+            console.error("Failed to parse response as JSON:", parseError);
+            throw new Error("Failed to parse analysis results");
           }
         } catch (error) {
           // Handle AbortError (timeout)
@@ -425,88 +504,55 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
         }
       };
 
-      // Execute request with retries
-      const analysisResult = await makeRequestWithRetry();
-      console.log("Document analysis completed successfully, result:", analysisResult);
-      
-      // Validate and process results
-      if (!analysisResult || typeof analysisResult !== 'object') {
-        console.error("Received invalid analysis result:", analysisResult);
-        throw new Error("Invalid analysis result received from server");
+      try {
+        // Execute request with retries
+        const analysisResult = await makeRequestWithRetry();
+        
+        // Success path - more direct state updates
+        console.log("Analysis successful, updating state with result");
+        
+        // Save to localStorage cache
+        saveResultToCache(selectedDocumentId, analysisResult);
+        
+        // Use a single, direct state update
+        analysisResultsRef.current = analysisResult;
+        
+        // Announce success to the DOM 
+        document.dispatchEvent(new CustomEvent('document-analysis-complete', {
+          detail: { documentId: selectedDocumentId, success: true }
+        }));
+        
+        // Update React state directly
+        setAnalysisResults(analysisResult);
+        setActiveTab("summary");
+        
+        // Force a render update
+        forceUpdate();
+        
+        console.log("Analysis state updated successfully");
+        return analysisResult;
+      } catch (error) {
+        console.error("Analysis failed:", error);
+        
+        setAnalysisError(error instanceof Error ? error.message : "Unknown analysis error");
+        
+        // Generate fallback for display
+        const fallback = generateFallbackAnalysis();
+        analysisResultsRef.current = fallback;
+        setAnalysisResults(fallback);
+        
+        // Force a render update
+        forceUpdate();
+        
+        return null;
+      } finally {
+        setIsAnalyzing(false);
       }
-      
-      // Log detailed structure of the result
-      console.log("Analysis result structure:", {
-        keys: Object.keys(analysisResult),
-        docId: analysisResult.documentId,
-        summaryLength: analysisResult.summary ? analysisResult.summary.length : 0,
-        keyPointsCount: Array.isArray(analysisResult.keyPoints) ? analysisResult.keyPoints.length : 'not an array',
-        hasInsights: !!analysisResult.insights,
-        insights: analysisResult.insights,
-        hasTopics: Array.isArray(analysisResult.topics) ? analysisResult.topics.length : 'not an array',
-        hasSentiment: !!analysisResult.sentiment
-      });
-      
-      // Create a DOM event to notify the result was received
-      const resultEvent = new CustomEvent('analysis-result-received', { 
-        detail: { 
-          documentId: selectedDocumentId,
-          success: true 
-        } 
-      });
-      window.dispatchEvent(resultEvent);
-      
-      // Save to cache
-      saveResultToCache(selectedDocumentId, analysisResult);
-      
-      // Immediate UI update approach - set state in multiple ways for redundancy
-      analysisResultsRef.current = analysisResult;
-      setAnalysisResults(analysisResult);
-      setActiveTab("summary");
-      
-      // Force update through counter
-      forceUpdate();
-      
-      // Schedule multiple update attempts to ensure UI refresh
-      const scheduleUpdates = () => {
-        // Update once immediately
-        setAnalysisResults(curr => curr || analysisResult);
-        
-        // Schedule a few attempts with increasing delays
-        [50, 100, 500, 1000].forEach(delay => {
-          setTimeout(() => {
-            console.log(`Update attempt at ${delay}ms`);
-            if (!analysisResults && analysisResultsRef.current) {
-              console.log(`Restoring results at ${delay}ms check`);
-              setAnalysisResults({...analysisResultsRef.current});
-              forceUpdate();
-            }
-          }, delay);
-        });
-      };
-      
-      // Trigger updates
-      scheduleUpdates();
-    } catch (error) {
-      console.error("Document analysis failed:", error);
-      
-      // Set error message based on the type of error
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : "An unknown error occurred during document analysis";
-        
-      setAnalysisError(errorMessage);
-      
-      // Generate fallback analysis as a last resort
-      console.log("Generating fallback analysis due to API failure");
-      const fallbackResult = generateFallbackAnalysis();
-      console.log("Setting fallback results:", fallbackResult);
-      analysisResultsRef.current = fallbackResult;
-      setAnalysisResults(fallbackResult);
-      forceUpdate(); // Force update to ensure fallback results display
-    } finally {
-      console.log("Analysis process complete, setting isAnalyzing to false");
+    } catch (outerError) {
+      console.error("Outer analysis error:", outerError);
+      setAnalysisError(outerError instanceof Error ? outerError.message : "Analysis failed");
       setIsAnalyzing(false);
+      return null;
     }
   };
 
@@ -590,157 +636,161 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
-            {/* Document selection */}
-            <div className="space-y-2">
-              <label className="text-sm text-[#8A8782]">Select Document</label>
-              <select 
-                className="w-full p-2 bg-[#161616] border border-[#333333] rounded-md text-[#F9F6EE]"
-                value={selectedDocumentId}
-                onChange={(e) => handleDocumentChange(e.target.value)}
-              >
-                <option value="">Choose a document...</option>
-                {documents.map((doc) => (
-                  <option key={doc.id} value={doc.id}>
-                    {doc.fileName}
-                  </option>
-                ))}
-              </select>
+            {/* Document selection and analysis type */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Select Document</Label>
+                <Select
+                  value={selectedDocumentId}
+                  onValueChange={handleDocumentChange}
+                >
+                  <SelectTrigger className="bg-[#161616] border-[#222222]">
+                    <SelectValue placeholder="Choose a document" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#161616] border-[#222222]">
+                    {documents.length > 0 ? (
+                      documents.map((doc) => (
+                        <SelectItem key={doc.id} value={doc.id}>
+                          {doc.fileName || `Document ${doc.id}`}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="none" disabled>
+                        No documents available
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Analysis Type</Label>
+                <Select
+                  value={analysisType}
+                  onValueChange={handleAnalysisTypeChange}
+                >
+                  <SelectTrigger className="bg-[#161616] border-[#222222]">
+                    <SelectValue placeholder="Select analysis type" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#161616] border-[#222222]">
+                    <SelectItem value="general">General Analysis</SelectItem>
+                    <SelectItem value="resume">Resume Analysis</SelectItem>
+                    <SelectItem value="cover-letter">Cover Letter Analysis</SelectItem>
+                    <SelectItem value="professional">Professional Document</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            
-            {/* Selected document info */}
+
+            {/* Selected document display */}
             {selectedDocument && (
-              <div className="flex items-center gap-3 p-3 bg-[#161616] rounded-lg">
-                <div className="p-2 bg-[#111111] rounded-md">
+              <div className="flex items-center p-4 rounded-lg bg-[#0A0A0A] border border-[#222222]">
+                <div className="mr-3 bg-[#161616] p-2 rounded-lg border border-[#222222]">
                   {getFileIcon(selectedDocument.fileName)}
                 </div>
                 <div>
-                  <h3 className="text-[#F9F6EE] text-sm font-medium">{selectedDocument.fileName}</h3>
-                  <p className="text-[#8A8782] text-xs">
-                    {new Date(selectedDocument.createdAt).toLocaleDateString()} • {getFileExtension(selectedDocument.fileName).toUpperCase()}
+                  <h3 className="text-[#F9F6EE] font-medium">
+                    {selectedDocument.fileName || `Document ID: ${selectedDocument.id}`}
+                  </h3>
+                  <p className="text-[#8A8782] text-sm">
+                    Uploaded on {new Date(selectedDocument.createdAt).toLocaleString()}
                   </p>
                 </div>
               </div>
             )}
-            
-            {/* Analysis type selection */}
-            <div className="space-y-2">
-              <label className="text-sm text-[#8A8782]">Analysis Type</label>
-              <div className="flex flex-wrap gap-2">
-                <Button 
-                  variant={analysisType === 'general' ? 'default' : 'outline'} 
-                  size="sm" 
-                  onClick={() => handleAnalysisTypeChange('general')}
-                  className={analysisType === 'general' ? 'bg-[#B4916C] hover:bg-[#A3815C]' : 'border-[#333333] text-[#8A8782]'}
-                >
-                  General
-                </Button>
-                <Button 
-                  variant={analysisType === 'cv' ? 'default' : 'outline'} 
-                  size="sm" 
-                  onClick={() => handleAnalysisTypeChange('cv')}
-                  className={analysisType === 'cv' ? 'bg-[#B4916C] hover:bg-[#A3815C]' : 'border-[#333333] text-[#8A8782]'}
-                >
-                  Resume/CV
-                </Button>
-                <Button 
-                  variant={analysisType === 'report' ? 'default' : 'outline'} 
-                  size="sm" 
-                  onClick={() => handleAnalysisTypeChange('report')}
-                  className={analysisType === 'report' ? 'bg-[#B4916C] hover:bg-[#A3815C]' : 'border-[#333333] text-[#8A8782]'}
-                >
-                  Report
-                </Button>
-              </div>
-            </div>
-            
-            {/* Analyze button */}
-            <div className="pt-4">
-              <Button 
-                onClick={analyzeDocument} 
-                disabled={!selectedDocumentId || isAnalyzing}
-                className="w-full bg-[#B4916C] hover:bg-[#A3815C] text-white"
+
+            {/* Analysis button */}
+            <div className="flex justify-center mt-2">
+              <Button
+                onClick={analyzeDocument}
+                disabled={isAnalyzing || !selectedDocumentId}
+                className="bg-[#B4916C] hover:bg-[#A3815C] text-white px-6 py-2"
               >
                 {isAnalyzing ? (
                   <>
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Analyzing...
-                  </>
-                ) : useFallbackMode ? (
-                  <>
-                    <BarChart2 className="h-4 w-4 mr-2" />
-                    Use Simplified Analysis
                   </>
                 ) : (
                   <>
-                    <BarChart2 className="h-4 w-4 mr-2" />
+                    <BarChart2 className="mr-2 h-4 w-4" />
                     Analyze Document
                   </>
                 )}
               </Button>
+              
+              {/* Debug helper button from our component */}
+              {process.env.NODE_ENV === 'development' && (
+                <DebugAnalysisButton
+                  documentId={selectedDocumentId}
+                  fileName={selectedDocument?.fileName}
+                  analysisType={analysisType}
+                  onAnalysisStart={() => setIsAnalyzing(true)}
+                  onAnalysisComplete={(result) => {
+                    analysisResultsRef.current = result;
+                    setAnalysisResults(result);
+                    setActiveTab("summary");
+                    forceUpdate();
+                  }}
+                  onAnalysisError={(errorMsg) => setAnalysisError(errorMsg)}
+                  onAnalysisEnd={() => setIsAnalyzing(false)}
+                  fallbackGenerator={generateFallbackAnalysis}
+                />
+              )}
             </div>
-          </div>
-          
-          {/* Analysis results - modified to use both sources */}
-          {hasResults && (
-            <div className="mt-8 pt-6 border-t border-[#222222]">
-              <h3 className="text-lg font-safiro text-[#F9F6EE] mb-4">
-                Analysis Results
-                <span className="ml-2 text-sm text-[#8A8782]">
-                  {(analysisResults || analysisResultsRef.current)?.fileName 
-                    ? `(${(analysisResults || analysisResultsRef.current)?.fileName})`
-                    : ''
-                  }
-                </span>
-              </h3>
-              <AnalysisResultsContent 
-                result={analysisResults || analysisResultsRef.current} 
-                documentId={selectedDocumentId} 
-              />
-            </div>
-          )}
-          
-          {/* Analysis error */}
-          {analysisError && (
-            <div className="mt-4 p-4 bg-[#3A1F24] border border-[#E57373]/30 rounded-xl">
-              <div className="flex flex-col">
-                <div className="flex items-start">
-                  <AlertCircle className="h-5 w-5 text-[#E57373] mr-2 flex-shrink-0 mt-0.5" />
-                  <p className="text-[#F9F6EE]">{analysisError}</p>
+
+            {/* Error message */}
+            {analysisError && (
+              <div className="bg-[#3A1F24] border border-[#E57373]/30 p-4 rounded-lg text-[#F9F6EE]">
+                <div className="flex items-center">
+                  <AlertCircle className="h-5 w-5 text-[#E57373] mr-2" />
+                  <p>{analysisError}</p>
                 </div>
-                
-                {useFallbackMode && (
-                  <Button 
-                    onClick={analyzeDocument}
-                    className="mt-4 self-end bg-[#3A1F24] border border-[#E57373] text-[#E57373] hover:bg-[#4A2F34]"
-                    size="sm"
-                  >
-                    Try Simplified Analysis
-                  </Button>
-                )}
               </div>
-            </div>
-          )}
-          
-          {/* Empty state when no document is selected */}
-          {!selectedDocumentId && !isAnalyzing && !analysisResults && !analysisError && (
-            <div className="text-center py-8 text-[#8A8782]">
-              <Info className="h-12 w-12 mx-auto mb-4 text-[#333333]" />
-              <p className="mb-2">Select a document to analyze</p>
-              <p className="text-sm max-w-md mx-auto">
-                Choose one of your uploaded documents and select an analysis type to get started.
-              </p>
-            </div>
-          )}
+            )}
+            
+            {/* Analysis results - modified to use both sources */}
+            {hasResults && (
+              <div className="mt-8 pt-6 border-t border-[#222222]">
+                <h3 className="text-lg font-safiro text-[#F9F6EE] mb-4">
+                  Analysis Results
+                  <span className="ml-2 text-sm text-[#8A8782]">
+                    {(analysisResults || analysisResultsRef.current)?.fileName 
+                      ? `(${(analysisResults || analysisResultsRef.current)?.fileName})`
+                      : ''
+                    }
+                  </span>
+                </h3>
+                <AnalysisResultsContent 
+                  result={analysisResults || analysisResultsRef.current} 
+                  documentId={selectedDocumentId} 
+                />
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Add a debugging indicator for results - only visible during development */}
+      {/* Replace the debug panel with our component */}
       {process.env.NODE_ENV === 'development' && (
-        <div className="text-xs text-gray-500 mt-2 opacity-50">
-          Results state: {analysisResults ? 'Available in state' : 'Not in state'} | 
-          Ref: {analysisResultsRef.current ? 'Available in ref' : 'Not in ref'} | 
-          Counter: {forceUpdateCounter}
-        </div>
+        <DebugPanel
+          analysisResults={analysisResults}
+          analysisResultsRef={analysisResultsRef}
+          selectedDocumentId={selectedDocumentId}
+          analysisType={analysisType}
+          isAnalyzing={isAnalyzing}
+          forceUpdateCounter={forceUpdateCounter}
+          onLogState={() => {
+            console.log("Current state:", {
+              selectedDocumentId,
+              hasResults: !!(analysisResultsRef.current || analysisResults),
+              analysisResults: analysisResults ? 'Has Results' : 'No Results',
+              ref: analysisResultsRef.current ? 'Has Ref' : 'No Ref',
+              isAnalyzing,
+              forceUpdateCounter
+            });
+          }}
+        />
       )}
     </div>
   );
