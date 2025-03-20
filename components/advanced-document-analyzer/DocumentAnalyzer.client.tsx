@@ -110,36 +110,41 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
 
   // Helper function to get file extension from filename
   const getFileExtension = (fileName: string): string => {
+    if (!fileName || typeof fileName !== 'string') return '';
     return fileName.split('.').pop()?.toLowerCase() || '';
   };
 
   // Helper function to determine if the selected file is supported
   const isSupportedFileType = (fileName: string): boolean => {
+    if (!fileName || typeof fileName !== 'string') return true; // Consider missing filename as "supported" to let the API handle it
     const extension = getFileExtension(fileName);
-    const supportedExtensions = ['pdf', 'docx', 'txt', 'doc', 'rtf', 'xlsx', 'pptx', 'csv', 'json', 'xml'];
+    if (!extension) return true; // No extension means we can't check, so assume it's supported
+    
+    const supportedExtensions = ['pdf', 'docx', 'txt', 'doc', 'rtf', 'xlsx', 'pptx', 'csv', 'json', 'xml', 'html', 'md'];
     return supportedExtensions.includes(extension);
   };
 
   // Generate mock analysis if the API fails
   const generateFallbackAnalysis = (): AnalysisResult => {
-    if (!selectedDocument) {
-      throw new Error("No document selected");
-    }
-
-    const fileExtension = getFileExtension(selectedDocument.fileName);
+    // Use document ID and file name if available, otherwise use placeholders
+    const documentId = selectedDocumentId || "unknown";
+    const fileName = selectedDocument?.fileName || "unknown.pdf";
+    const fileExtension = getFileExtension(fileName) || "pdf";
     const currentTime = new Date().toISOString();
     
     return {
-      documentId: selectedDocumentId,
-      summary: `This appears to be a ${fileExtension.toUpperCase()} document named "${selectedDocument.fileName}". Fallback analysis has been generated as the full analysis service is currently unavailable.`,
+      documentId: documentId,
+      fileName: fileName,
+      summary: `This appears to be a ${fileExtension.toUpperCase()} document. Fallback analysis has been generated due to API service limitations.`,
       keyPoints: [
-        "Document successfully processed in fallback mode",
-        "Limited analysis available due to API unavailability",
-        "Basic document information extracted from filename"
+        "Document was processed in fallback mode",
+        "Basic information has been extracted",
+        "Limited analysis is available in this mode"
       ],
       recommendations: [
-        "Try analyzing again later when the full service is available",
-        "Check your network connection"
+        "Try analyzing again later",
+        "Check document format compatibility",
+        "Ensure document has readable content"
       ],
       insights: {
         clarity: 50,
@@ -149,65 +154,79 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
         overallScore: 50
       },
       topics: [
-        { topic: fileExtension.toUpperCase() + " Document", relevance: 1.0 },
-        { topic: "Document Analysis", relevance: 0.8 }
+        { name: fileExtension.toUpperCase() + " Document", relevance: 1.0 },
+        { name: "Document Analysis", relevance: 0.8 }
       ],
       entities: [
-        { name: selectedDocument.fileName, type: "Document", count: 1 }
+        { name: fileName, type: "Document", count: 1 }
       ],
       sentiment: {
-        overall: "Neutral",
+        overall: "neutral",
         score: 0.5
       },
-      timestamp: currentTime
+      languageQuality: {
+        grammar: 75,
+        spelling: 75,
+        readability: 75,
+        overall: 75
+      },
+      timeline: [
+        { date: currentTime, event: "Fallback analysis generated" }
+      ],
+      createdAt: currentTime
     };
   };
 
   const analyzeDocument = async () => {
     if (!selectedDocumentId) {
-      console.error("No document selected");
-      setAnalysisError("Please select a document to analyze.");
+      console.error("No document selected for analysis");
+      setAnalysisError("Please select a document to analyze");
       return;
     }
 
-    // Find the selected document in the documents array
+    // Find the selected document object
     const selectedDocument = documents.find(doc => doc.id === selectedDocumentId);
-    if (!selectedDocument) {
-      console.error("Selected document not found in documents array");
-      console.log("Available documents:", documents.map(doc => `${doc.id}: ${doc.fileName}`));
-      setAnalysisError("Selected document information could not be found. Please try selecting it again.");
-      return;
-    }
-
-    // Log document info for debugging
+    
+    // Log debug information about the selection
     console.log("Selected document for analysis:", {
-      id: selectedDocument.id,
-      fileName: selectedDocument.fileName,
-      fileNameExists: !!selectedDocument.fileName,
-      fileNameLength: selectedDocument.fileName ? selectedDocument.fileName.length : 0
+      id: selectedDocumentId,
+      document: selectedDocument || "Not found in documents array",
+      documentsLength: documents.length,
+      availableDocumentIds: documents.map(d => d.id)
     });
 
-    const fileName = selectedDocument.fileName;
-    if (!fileName) {
-      console.warn("Selected document is missing fileName, but we'll continue and let the server try to fetch it");
+    // Handle missing document information (shouldn't happen, but let's be safe)
+    if (!selectedDocument) {
+      console.warn("Selected document not found in documents array - will continue with ID only");
     }
 
-    // Only check file type if fileName is available
-    if (fileName) {
-      const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
-      if (!isSupportedFileType(fileName)) {
-        console.error(`Unsupported file type: ${fileExtension}`);
-        setAnalysisError(`Unsupported file type: .${fileExtension}. Please select a different document.`);
-        return;
-      }
+    // Get file name (if available)
+    const fileName = selectedDocument?.fileName;
+    
+    // Log file information
+    console.log("Document file information:", {
+      fileName: fileName || "Not available",
+      hasFileName: !!fileName,
+      fileNameType: fileName ? typeof fileName : "undefined"
+    });
+
+    // Check file type support, but only if we have a file name
+    if (fileName && !isSupportedFileType(fileName)) {
+      const extension = getFileExtension(fileName);
+      console.error(`Unsupported file type detected: .${extension}`);
+      setAnalysisError(`The file type ".${extension}" is not supported for analysis. Please select a document with a supported file type.`);
+      return;
     }
 
+    // Start analysis process
     setIsAnalyzing(true);
     setAnalysisResults(null);
     setAnalysisError(null);
 
     try {
-      // Create a request body, only including fileName if it exists
+      console.log("Starting document analysis process...");
+      
+      // Prepare request payload
       const requestBody: {
         documentId: string;
         type: string;
@@ -217,64 +236,77 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
         type: analysisType,
       };
 
-      // Only add fileName if it exists
+      // Only include fileName if it exists
       if (fileName) {
         requestBody.fileName = fileName;
       }
 
-      console.log("Sending analysis request with payload:", requestBody);
+      console.log("Sending analysis request:", requestBody);
 
-      // Timeout promise to handle API timeout
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("Analysis request timed out after 20 seconds")), 20000);
-      });
-
-      // Create a function that handles retries
-      const makeRequestWithRetry = async (retryCount = 0, maxRetries = 2) => {
+      // Make the API request with timeout and retry handling
+      const makeRequestWithRetry = async (retryCount = 0, maxRetries = 3) => {
         try {
+          // Set up request with timeout
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 20000);
+          const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-          console.log(`Making request (attempt ${retryCount + 1}/${maxRetries + 1})...`);
+          console.log(`API request attempt ${retryCount + 1}/${maxRetries + 1}`);
+          
           const response = await fetch("/api/document/analyze", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(requestBody),
-            signal: controller.signal,
+            signal: controller.signal
           });
 
           clearTimeout(timeoutId);
 
+          // Handle error responses
           if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
-            console.error("Analysis API error response:", errorData);
+            let errorMessage;
+            try {
+              const errorData = await response.json();
+              errorMessage = errorData.error || `Server returned ${response.status} ${response.statusText}`;
+              console.error("API error response:", errorData);
+            } catch (e) {
+              errorMessage = `Server error: ${response.status} ${response.statusText}`;
+              console.error("Failed to parse error response:", e);
+            }
+
+            // Check if we should retry based on the status code
+            const shouldRetry = response.status >= 500 && retryCount < maxRetries;
             
-            if (response.status === 500 && retryCount < maxRetries) {
-              // Implement exponential backoff
+            if (shouldRetry) {
               const backoffTime = Math.min(1000 * Math.pow(2, retryCount), 8000);
-              console.log(`Request failed, retrying in ${backoffTime}ms...`);
-              
+              console.log(`Will retry in ${backoffTime}ms...`);
               await new Promise(resolve => setTimeout(resolve, backoffTime));
               return makeRequestWithRetry(retryCount + 1, maxRetries);
             }
             
-            throw new Error(errorData.error || `Server error: ${response.status}`);
+            throw new Error(errorMessage);
           }
 
-          const data = await response.json();
-          console.log("Analysis complete, received data:", data);
-          return data;
+          // Success - parse response
+          const result = await response.json();
+          console.log("Analysis results received:", Object.keys(result));
+          return result;
         } catch (error) {
+          // Handle AbortError (timeout)
           if (error instanceof Error && error.name === 'AbortError') {
-            throw new Error("Analysis request timed out");
+            console.error("Request timeout occurred");
+            
+            if (retryCount < maxRetries) {
+              console.log(`Retrying after timeout (attempt ${retryCount + 1})...`);
+              return makeRequestWithRetry(retryCount + 1, maxRetries);
+            }
+            
+            throw new Error("Analysis timed out after multiple attempts");
           }
           
+          // Other errors - retry if we haven't reached max retries
           if (retryCount < maxRetries) {
-            // Implement exponential backoff
             const backoffTime = Math.min(1000 * Math.pow(2, retryCount), 8000);
-            console.log(`Request failed with error: ${error instanceof Error ? error.message : error}`);
+            console.log(`Request error: ${error instanceof Error ? error.message : error}`);
             console.log(`Retrying in ${backoffTime}ms...`);
             
             await new Promise(resolve => setTimeout(resolve, backoffTime));
@@ -285,24 +317,31 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
         }
       };
 
-      // Use Promise.race to handle timeouts
-      const result = await Promise.race([
-        makeRequestWithRetry(),
-        timeoutPromise
-      ]) as AnalysisResult;
-
-      setAnalysisResults(result);
+      // Execute request with retries
+      const analysisResult = await makeRequestWithRetry();
+      console.log("Document analysis completed successfully");
+      
+      // Validate and process results
+      if (!analysisResult || typeof analysisResult !== 'object') {
+        console.error("Received invalid analysis result:", analysisResult);
+        throw new Error("Invalid analysis result received from server");
+      }
+      
+      // Update state with results
+      setAnalysisResults(analysisResult);
       setActiveTab("summary");
     } catch (error) {
-      console.error("Error analyzing document:", error);
-      setAnalysisError(
-        error instanceof Error 
-          ? error.message 
-          : "An unexpected error occurred during analysis. Please try again later."
-      );
+      console.error("Document analysis failed:", error);
       
-      // Fall back to a client-side generated analysis in case of API failure
-      console.log("Falling back to client-side generated analysis");
+      // Set error message based on the type of error
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : "An unknown error occurred during document analysis";
+        
+      setAnalysisError(errorMessage);
+      
+      // Generate fallback analysis as a last resort
+      console.log("Generating fallback analysis due to API failure");
       const fallbackResult = generateFallbackAnalysis();
       setAnalysisResults(fallbackResult);
     } finally {

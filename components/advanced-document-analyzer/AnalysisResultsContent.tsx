@@ -30,27 +30,96 @@ export default function AnalysisResultsContent({ result, documentId }: AnalysisR
     );
   }
 
-  // Extract fields from result, with null/undefined checks
+  // Normalize the data structure to handle different API formats
+  const normalizeData = (result: any) => {
+    // Handle topics that might be in different formats
+    const normalizedTopics = (result.topics || []).map((topic: any) => {
+      if (topic.topic && topic.relevance) {
+        // Handle old API format with {topic, relevance} structure
+        return { name: topic.topic, relevance: topic.relevance };
+      } else if (topic.name && topic.relevance) {
+        // Handle new API format with {name, relevance} structure
+        return topic;
+      } else {
+        // Handle unexpected format with a default
+        const topicName = topic.name || topic.topic || String(topic);
+        return { name: topicName, relevance: topic.relevance || 0.5 };
+      }
+    });
+
+    // Handle entities that might be in different formats
+    const normalizedEntities = (result.entities || []).map((entity: any) => {
+      // Ensure all entities have standard fields
+      return {
+        name: entity.name || "Unknown",
+        type: entity.type || "OTHER",
+        count: entity.count || entity.mentions || 1
+      };
+    });
+
+    // Handle sentiment data
+    const normalizedSentiment = result.sentiment ? {
+      overall: result.sentiment.overall || "neutral",
+      score: result.sentiment.score || 0,
+      sentimentBySection: result.sentiment.sentimentBySection || []
+    } : undefined;
+
+    // Handle insights data which could be an array or object
+    let normalizedInsights;
+    if (Array.isArray(result.insights)) {
+      // Convert array format to object format
+      normalizedInsights = result.insights.reduce((obj: any, item: any) => {
+        obj[item.name.toLowerCase().replace(/\s+/g, '')] = item.value;
+        return obj;
+      }, {});
+    } else if (typeof result.insights === 'object' && result.insights !== null) {
+      normalizedInsights = result.insights;
+    } else {
+      // Default empty insights
+      normalizedInsights = {
+        clarity: 50,
+        relevance: 50,
+        completeness: 50,
+        conciseness: 50
+      };
+    }
+
+    // Handle timeline data
+    const normalizedTimeline = (result.timeline || []).map((entry: any) => {
+      return {
+        date: entry.date || entry.period || "Unknown date",
+        event: entry.event || entry.entity || "Unknown event"
+      };
+    });
+
+    return {
+      summary: result.summary || "No summary available",
+      keyPoints: result.keyPoints || [],
+      recommendations: result.recommendations || [],
+      insights: normalizedInsights,
+      topics: normalizedTopics,
+      entities: normalizedEntities,
+      sentiment: normalizedSentiment,
+      languageQuality: result.languageQuality || undefined,
+      timeline: normalizedTimeline
+    };
+  };
+
+  // Normalize the data
+  const normalizedResult = normalizeData(result);
+
+  // Extract fields with null/undefined checks
   const { 
     summary, 
     keyPoints = [], 
     recommendations = [], 
-    insights, 
+    insights,
     topics = [],
     entities = [],
     sentiment,
     languageQuality,
     timeline = []
-  } = result;
-  
-  // Format topics if needed
-  const formattedTopics = topics.map((topic: any) => {
-    // Handle different topic formats from API
-    if ('topic' in topic) {
-      return { name: topic.topic, relevance: topic.relevance };
-    }
-    return topic;
-  });
+  } = normalizedResult;
 
   return (
     <div className="space-y-6">
@@ -77,7 +146,7 @@ export default function AnalysisResultsContent({ result, documentId }: AnalysisR
 
       {/* Insights */}
       {insights && (
-        <AnalysisInsights insights={insights} topics={formattedTopics} />
+        <AnalysisInsights insights={insights} topics={topics} />
       )}
 
       {/* Sentiment Analysis */}
