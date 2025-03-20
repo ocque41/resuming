@@ -26,6 +26,7 @@ interface Document {
 
 interface DocumentAnalyzerProps {
   documents: Document[];
+  preSelectedDocumentId?: string;
 }
 
 // Analysis types
@@ -37,21 +38,41 @@ const ANALYSIS_TYPES = [
   { id: 'spreadsheet', label: 'Spreadsheet Analysis', description: 'Data organization and quality evaluation' },
 ];
 
-export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
-  const [selectedDocumentId, setSelectedDocumentId] = React.useState<string>('');
+export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: DocumentAnalyzerProps) {
+  const [selectedDocumentId, setSelectedDocumentId] = React.useState<string>(preSelectedDocumentId || '');
   const [analysisType, setAnalysisType] = React.useState<string>('general');
   const [isAnalyzing, setIsAnalyzing] = React.useState<boolean>(false);
   const [analysisResults, setAnalysisResults] = React.useState<AnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = React.useState<string | null>(null);
   const [activeTab, setActiveTab] = React.useState<string>('summary');
+  const [selectedDocument, setSelectedDocument] = React.useState<Document | null>(null);
+  const [useFallbackMode, setUseFallbackMode] = React.useState<boolean>(false);
 
+  // Effect to set the initial document when the component mounts with a preSelectedDocumentId
+  React.useEffect(() => {
+    if (preSelectedDocumentId) {
+      console.log(`Using pre-selected document ID: ${preSelectedDocumentId}`);
+      handleDocumentChange(preSelectedDocumentId);
+    }
+  }, [preSelectedDocumentId, documents]);
+
+  // This function finds and sets the selected document object when an ID is selected
   const handleDocumentChange = (documentId: string) => {
+    console.log(`Document selected: ${documentId}`);
     setSelectedDocumentId(documentId);
+    
+    // Find the complete document object to get access to file name and other properties
+    const document = documents.find(doc => doc.id === documentId) || null;
+    console.log("Selected document details:", document);
+    setSelectedDocument(document);
+    
     setAnalysisResults(null);
     setAnalysisError(null);
+    setUseFallbackMode(false);
   };
 
   const handleAnalysisTypeChange = (type: string) => {
+    console.log(`Analysis type changed to: ${type}`);
     setAnalysisType(type);
     // Reset results when analysis type changes
     if (analysisResults) {
@@ -59,28 +80,115 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
     }
   };
 
+  // Helper function to get file extension from filename
+  const getFileExtension = (fileName: string): string => {
+    return fileName.split('.').pop()?.toLowerCase() || '';
+  };
+
+  // Helper function to determine if the selected file is supported
+  const isSupportedFileType = (fileName: string): boolean => {
+    const extension = getFileExtension(fileName);
+    const supportedExtensions = ['pdf', 'docx', 'txt', 'doc', 'rtf', 'xlsx', 'pptx', 'csv', 'json', 'xml'];
+    return supportedExtensions.includes(extension);
+  };
+
+  // Generate mock analysis if the API fails
+  const generateFallbackAnalysis = (): AnalysisResult => {
+    if (!selectedDocument) {
+      throw new Error("No document selected");
+    }
+
+    const fileExtension = getFileExtension(selectedDocument.fileName);
+    const currentTime = new Date().toISOString();
+    
+    return {
+      documentId: selectedDocumentId,
+      summary: `This appears to be a ${fileExtension.toUpperCase()} document named "${selectedDocument.fileName}". Fallback analysis has been generated as the full analysis service is currently unavailable.`,
+      keyPoints: [
+        "Document successfully processed in fallback mode",
+        "Limited analysis available due to API unavailability",
+        "Basic document information extracted from filename"
+      ],
+      recommendations: [
+        "Try analyzing again later when the full service is available",
+        "Check your network connection"
+      ],
+      insights: {
+        clarity: 50,
+        relevance: 50,
+        completeness: 50,
+        conciseness: 50,
+        overallScore: 50
+      },
+      topics: [
+        { topic: fileExtension.toUpperCase() + " Document", relevance: 1.0 },
+        { topic: "Document Analysis", relevance: 0.8 }
+      ],
+      entities: [
+        { name: selectedDocument.fileName, type: "Document", count: 1 }
+      ],
+      sentiment: {
+        overall: "Neutral",
+        score: 0.5
+      },
+      timestamp: currentTime
+    };
+  };
+
   const analyzeDocument = async () => {
-    if (!selectedDocumentId) return;
+    if (!selectedDocumentId || !selectedDocument) {
+      console.error("No document selected for analysis");
+      setAnalysisError("Please select a document to analyze");
+      return;
+    }
+    
+    // Check if the file type is supported
+    if (!isSupportedFileType(selectedDocument.fileName)) {
+      console.error(`Unsupported file type: ${getFileExtension(selectedDocument.fileName)}`);
+      setAnalysisError(`File type "${getFileExtension(selectedDocument.fileName)}" is not supported for analysis. Please select a supported document type (PDF, DOCX, TXT, etc).`);
+      return;
+    }
     
     setIsAnalyzing(true);
     setAnalysisError(null);
     console.log('Starting document analysis for document ID:', selectedDocumentId, 'Type:', analysisType);
+    console.log('Document filename:', selectedDocument.fileName);
     
     try {
+      if (useFallbackMode) {
+        console.log('Using fallback mode for analysis');
+        // Simulate API delay
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        const fallbackResults = generateFallbackAnalysis();
+        console.log('Generated fallback analysis results:', fallbackResults);
+        setAnalysisResults(fallbackResults);
+        return;
+      }
+      
       console.log('Sending analysis request to API endpoint');
       const requestBody = {
         documentId: selectedDocumentId,
-        type: analysisType
+        type: analysisType,
+        fileName: selectedDocument.fileName
       };
       console.log('Request payload:', JSON.stringify(requestBody));
       
-      const response = await fetch('/api/document/analyze', {
+      // Create a timeout promise to handle API timeout
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout - API did not respond in time')), 15000);
+      });
+      
+      // Create the fetch promise
+      const fetchPromise = fetch('/api/document/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(requestBody),
       });
+      
+      // Race between the fetch and the timeout
+      const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
       
       console.log('API response status:', response.status);
       console.log('API response status text:', response.statusText);
@@ -112,11 +220,41 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
         console.error('Error name:', error.name);
         console.error('Error message:', error.message);
         console.error('Error stack:', error.stack);
+        
+        // Check if it's a timeout error
+        if (error.message.includes('timeout')) {
+          setAnalysisError(`The analysis service is taking too long to respond. Would you like to use a simplified analysis instead?`);
+          setUseFallbackMode(true);
+        } else {
+          setAnalysisError(`An error occurred while analyzing the document: ${error.message}. Please try again.`);
+        }
+      } else {
+        setAnalysisError(`An unknown error occurred. Please try again.`);
       }
-      setAnalysisError(`An error occurred while analyzing the document: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
     } finally {
       console.log('Analysis process completed, isAnalyzing set to false');
       setIsAnalyzing(false);
+    }
+  };
+
+  // Get the file type icon
+  const getFileIcon = (fileName: string) => {
+    const extension = getFileExtension(fileName);
+    
+    switch(extension) {
+      case 'pdf':
+        return <FileText className="h-6 w-6 text-[#F87171]" />;
+      case 'docx':
+      case 'doc':
+      case 'rtf':
+        return <FileText className="h-6 w-6 text-[#60A5FA]" />;
+      case 'xlsx':
+      case 'csv':
+        return <FileText className="h-6 w-6 text-[#34D399]" />;
+      case 'pptx':
+        return <FileText className="h-6 w-6 text-[#F97316]" />;
+      default:
+        return <FileText className="h-6 w-6 text-[#B4916C]" />;
     }
   };
 
@@ -127,6 +265,9 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
           <CardTitle className="text-lg font-safiro text-[#F9F6EE]">
             Document Analyzer
           </CardTitle>
+          <CardDescription className="text-[#8A8782]">
+            Analyze documents in PDF, DOCX, TXT, XLSX, PPTX and more formats.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
@@ -146,6 +287,21 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                 ))}
               </select>
             </div>
+            
+            {/* Selected document info */}
+            {selectedDocument && (
+              <div className="flex items-center gap-3 p-3 bg-[#161616] rounded-lg">
+                <div className="p-2 bg-[#111111] rounded-md">
+                  {getFileIcon(selectedDocument.fileName)}
+                </div>
+                <div>
+                  <h3 className="text-[#F9F6EE] text-sm font-medium">{selectedDocument.fileName}</h3>
+                  <p className="text-[#8A8782] text-xs">
+                    {new Date(selectedDocument.createdAt).toLocaleDateString()} • {getFileExtension(selectedDocument.fileName).toUpperCase()}
+                  </p>
+                </div>
+              </div>
+            )}
             
             {/* Analysis type selection */}
             <div className="space-y-2">
@@ -190,6 +346,11 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                     <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                     Analyzing...
                   </>
+                ) : useFallbackMode ? (
+                  <>
+                    <BarChart2 className="h-4 w-4 mr-2" />
+                    Use Simplified Analysis
+                  </>
                 ) : (
                   <>
                     <BarChart2 className="h-4 w-4 mr-2" />
@@ -211,9 +372,21 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
           {/* Analysis error */}
           {analysisError && (
             <div className="mt-4 p-4 bg-[#3A1F24] border border-[#E57373]/30 rounded-xl">
-              <div className="flex">
-                <AlertCircle className="h-5 w-5 text-[#E57373] mr-2" />
-                <p className="text-[#F9F6EE]">{analysisError}</p>
+              <div className="flex flex-col">
+                <div className="flex items-start">
+                  <AlertCircle className="h-5 w-5 text-[#E57373] mr-2 flex-shrink-0 mt-0.5" />
+                  <p className="text-[#F9F6EE]">{analysisError}</p>
+                </div>
+                
+                {useFallbackMode && (
+                  <Button 
+                    onClick={analyzeDocument}
+                    className="mt-4 self-end bg-[#3A1F24] border border-[#E57373] text-[#E57373] hover:bg-[#4A2F34]"
+                    size="sm"
+                  >
+                    Try Simplified Analysis
+                  </Button>
+                )}
               </div>
             </div>
           )}

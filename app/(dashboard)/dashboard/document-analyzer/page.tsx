@@ -25,43 +25,77 @@ function DocumentAnalyzerContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Fetch documents
-    const fetchDocuments = async () => {
-      try {
-        console.log('Fetching documents for the analyzer');
-        const response = await fetch('/api/documents');
-        if (!response.ok) {
-          console.error('Failed to fetch documents, status:', response.status);
-          throw new Error('Failed to fetch documents');
-        }
-        const data = await response.json();
-        console.log('Documents fetched successfully, count:', data.documents?.length || 0);
-        setDocuments(data.documents || []);
+  // Function to fetch a single document by ID
+  const fetchDocumentById = async (id: string) => {
+    try {
+      console.log(`Fetching document with ID: ${id}`);
+      const response = await fetch(`/api/documents/${id}`);
+      
+      if (!response.ok) {
+        console.error(`Failed to fetch document with ID ${id}, status:`, response.status);
+        throw new Error(`Failed to fetch document with ID ${id}`);
+      }
+      
+      const data = await response.json();
+      console.log('Document fetched successfully:', data.document);
+      return data.document;
+    } catch (error) {
+      console.error('Error fetching document by ID:', error);
+      throw error;
+    }
+  };
 
-        // If documentId is provided, find the document
+  // Function to fetch all documents
+  const fetchAllDocuments = async () => {
+    try {
+      console.log('Fetching all documents for the analyzer');
+      const response = await fetch('/api/documents');
+      
+      if (!response.ok) {
+        console.error('Failed to fetch documents, status:', response.status);
+        throw new Error('Failed to fetch documents');
+      }
+      
+      const data = await response.json();
+      console.log('Documents fetched successfully, count:', data.documents?.length || 0);
+      return data.documents || [];
+    } catch (error) {
+      console.error('Error fetching all documents:', error);
+      throw error;
+    }
+  };
+
+  useEffect(() => {
+    // Async function to handle data fetching
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        
+        // If documentId is provided, fetch that specific document
         if (documentId) {
-          console.log('Document ID from URL params:', documentId);
-          const selectedDoc = data.documents.find(
-            (doc: Document) => doc.id.toString() === documentId
-          );
-          if (selectedDoc) {
-            console.log('Found matching document:', selectedDoc.fileName);
-            setDocument(selectedDoc);
-          } else {
-            console.error('Document not found with ID:', documentId);
-            setError(`Document with ID ${documentId} not found`);
-          }
+          console.log('Document ID provided in URL:', documentId);
+          
+          // Fetch the specific document
+          const doc = await fetchDocumentById(documentId);
+          setDocument(doc);
+          
+          // Also fetch all documents for the dropdown
+          const allDocs = await fetchAllDocuments();
+          setDocuments(allDocs);
+        } else {
+          // Just fetch all documents
+          const allDocs = await fetchAllDocuments();
+          setDocuments(allDocs);
         }
       } catch (error) {
-        console.error('Error fetching documents:', error);
+        console.error('Error loading data:', error);
         setError('Failed to load documents. Please try again later.');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchDocuments();
+    loadData();
   }, [documentId]);
 
   // Transform documents to the format expected by the DocumentAnalyzerClient
@@ -70,6 +104,9 @@ function DocumentAnalyzerContent() {
     fileName: doc.fileName,
     createdAt: doc.createdAt,
   }));
+
+  // If we have a specific document from the URL, pre-select it in the analyzer
+  const preSelectedDocumentId = document ? document.id.toString() : undefined;
 
   return (
     <div className="min-h-screen bg-[#0A0A0A]">
@@ -102,6 +139,7 @@ function DocumentAnalyzerContent() {
         ) : (
           <DocumentAnalyzerClient 
             documents={transformedDocuments}
+            preSelectedDocumentId={preSelectedDocumentId}
           />
         )}
       </div>

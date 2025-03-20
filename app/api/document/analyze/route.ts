@@ -14,14 +14,23 @@ import { getDocumentById } from '@/lib/db/document.server';
 
 export const dynamic = "force-dynamic";
 
-// Supported content types for analysis
-const SUPPORTED_CONTENT_TYPES = [
-  'application/pdf', 
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // docx
-  'text/plain',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // xlsx
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation' // pptx
-];
+// Supported content types for analysis with appropriate file extensions
+const SUPPORTED_FILE_TYPES = {
+  'pdf': 'application/pdf',
+  'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'doc': 'application/msword',
+  'txt': 'text/plain',
+  'rtf': 'application/rtf',
+  'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'xls': 'application/vnd.ms-excel',
+  'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'ppt': 'application/vnd.ms-powerpoint',
+  'csv': 'text/csv',
+  'json': 'application/json',
+  'xml': 'application/xml',
+  'html': 'text/html',
+  'htm': 'text/html'
+};
 
 // Mock analysis result for development purposes
 const MOCK_ANALYSIS_RESULT = {
@@ -73,6 +82,167 @@ const MOCK_ANALYSIS_RESULT = {
   timestamp: new Date().toISOString()
 };
 
+// Helper function to determine file type from extension
+function getFileTypeFromExtension(fileName: string): string {
+  const extension = fileName.split('.').pop()?.toLowerCase() || '';
+  return SUPPORTED_FILE_TYPES[extension as keyof typeof SUPPORTED_FILE_TYPES] || 'application/octet-stream';
+}
+
+// Mock analysis result generator that takes file type into account
+function generateMockAnalysisResult(documentId: string | number, fileName: string, analysisType = 'general') {
+  const extension = fileName.split('.').pop()?.toLowerCase() || '';
+  const currentTime = new Date().toISOString();
+  
+  // Base mock result
+  const mockResult = {
+    documentId: Number(documentId),
+    summary: `This appears to be a ${extension.toUpperCase()} document named "${fileName}". The document has been analyzed using ${analysisType} analysis.`,
+    keyPoints: [
+      "Document successfully processed",
+      `File identified as ${extension.toUpperCase()} format`,
+      `Analysis performed using ${analysisType} analysis mode`
+    ],
+    recommendations: [
+      "Consider using a more specific analysis type for better results",
+      "Upload additional documents for comparative analysis",
+      "Review the document metadata for accuracy"
+    ],
+    insights: {
+      clarity: Math.floor(Math.random() * 20) + 70, // 70-90
+      relevance: Math.floor(Math.random() * 20) + 70, // 70-90
+      completeness: Math.floor(Math.random() * 20) + 70, // 70-90
+      conciseness: Math.floor(Math.random() * 20) + 70, // 70-90
+      overallScore: Math.floor(Math.random() * 20) + 70 // 70-90
+    },
+    topics: generateMockTopics(extension),
+    entities: generateMockEntities(extension, fileName),
+    sentiment: {
+      overall: "Positive",
+      score: (Math.random() * 0.4 + 0.6) // 0.6-1.0
+    },
+    languageQuality: {
+      grammar: Math.floor(Math.random() * 15) + 80, // 80-95
+      spelling: Math.floor(Math.random() * 15) + 80, // 80-95
+      readability: Math.floor(Math.random() * 15) + 80, // 80-95
+      overall: Math.floor(Math.random() * 15) + 80 // 80-95
+    },
+    timeline: generateMockTimeline(),
+    timestamp: currentTime
+  };
+  
+  // Customize based on analysis type
+  if (analysisType === 'cv') {
+    mockResult.summary = `This document appears to be a resume or CV in ${extension.toUpperCase()} format. It includes information about professional experience, skills, and education.`;
+    mockResult.topics = [
+      { topic: "Professional Experience", relevance: 0.95 },
+      { topic: "Technical Skills", relevance: 0.87 },
+      { topic: "Education", relevance: 0.82 },
+      { topic: "Projects", relevance: 0.75 },
+      { topic: "Certifications", relevance: 0.68 }
+    ];
+  } else if (analysisType === 'report') {
+    mockResult.summary = `This document appears to be a business report in ${extension.toUpperCase()} format. It contains data analysis, findings, and recommendations for business operations.`;
+    mockResult.topics = [
+      { topic: "Financial Analysis", relevance: 0.93 },
+      { topic: "Market Research", relevance: 0.85 },
+      { topic: "Business Strategy", relevance: 0.82 },
+      { topic: "Operational Metrics", relevance: 0.78 },
+      { topic: "Risk Assessment", relevance: 0.70 }
+    ];
+  }
+  
+  return mockResult;
+}
+
+// Helper function to generate mock topics based on file type
+function generateMockTopics(fileExtension: string) {
+  const baseTopics = [
+    { topic: "Document Structure", relevance: 0.9 },
+    { topic: "Content Organization", relevance: 0.85 },
+    { topic: "Information Flow", relevance: 0.8 }
+  ];
+  
+  switch (fileExtension) {
+    case 'pdf':
+    case 'docx':
+      return [
+        ...baseTopics,
+        { topic: "Textual Analysis", relevance: 0.75 },
+        { topic: "Visual Elements", relevance: 0.7 }
+      ];
+    case 'xlsx':
+    case 'csv':
+      return [
+        ...baseTopics,
+        { topic: "Data Visualization", relevance: 0.78 },
+        { topic: "Numerical Analysis", relevance: 0.72 }
+      ];
+    case 'pptx':
+      return [
+        ...baseTopics,
+        { topic: "Presentation Style", relevance: 0.82 },
+        { topic: "Visual Impact", relevance: 0.76 }
+      ];
+    default:
+      return baseTopics;
+  }
+}
+
+// Helper function to generate mock entities
+function generateMockEntities(fileExtension: string, fileName: string) {
+  const baseEntities = [
+    { name: fileName, type: "Document", count: 1 }
+  ];
+  
+  // Add some plausible entities based on file type
+  switch (fileExtension) {
+    case 'pdf':
+    case 'docx':
+      return [
+        ...baseEntities,
+        { name: "John Smith", type: "Person", count: 3 },
+        { name: "Microsoft Corporation", type: "Organization", count: 2 },
+        { name: "New York City", type: "Location", count: 1 },
+        { name: "January 2023", type: "Date", count: 2 }
+      ];
+    case 'xlsx':
+    case 'csv':
+      return [
+        ...baseEntities,
+        { name: "Q1 2023", type: "Date", count: 4 },
+        { name: "Revenue", type: "Metric", count: 5 },
+        { name: "North America", type: "Location", count: 2 },
+        { name: "Sales Department", type: "Organization", count: 3 }
+      ];
+    default:
+      return baseEntities;
+  }
+}
+
+// Helper function to generate mock timeline
+function generateMockTimeline() {
+  const currentYear = new Date().getFullYear();
+  
+  return [
+    {
+      period: `January ${currentYear}`,
+      entity: "Document Creation"
+    },
+    {
+      period: `March ${currentYear}`,
+      entity: "First Revision"
+    },
+    {
+      period: `June ${currentYear}`,
+      entity: "Second Revision"
+    },
+    {
+      period: `September ${currentYear}`,
+      entity: "Final Update"
+    }
+  ];
+}
+
 export async function POST(req: NextRequest) {
   try {
     console.log('Document analysis API route called');
@@ -87,49 +257,47 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     }
     
-    const { documentId, type = 'general' } = body;
-    console.log('Document ID:', documentId, 'Analysis type:', type);
+    const { documentId, type = 'general', fileName } = body;
+    console.log('Document ID:', documentId, 'Analysis type:', type, 'Filename:', fileName);
 
     if (!documentId) {
       console.log('Missing documentId in request');
       return NextResponse.json({ error: 'Document ID is required' }, { status: 400 });
     }
+    
+    if (!fileName) {
+      console.log('Missing fileName in request');
+      return NextResponse.json({ error: 'File name is required for analysis' }, { status: 400 });
+    }
+    
+    // Check if file type is supported
+    const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
+    const supportedExtensions = Object.keys(SUPPORTED_FILE_TYPES);
+    
+    if (!supportedExtensions.includes(fileExtension)) {
+      console.error(`Unsupported file type: ${fileExtension}`);
+      return NextResponse.json({ 
+        error: `File type "${fileExtension}" is not supported for analysis. Supported types: ${supportedExtensions.join(', ')}` 
+      }, { status: 400 });
+    }
 
-    // Fetch the document from the database
-    // For development, we're using mock data
     try {
-      // In a real implementation, we would get the document from the database
-      // For now, we'll just create a mock document
-      const mockDocument = {
-        id: documentId,
-        fileName: `document-${documentId}.pdf`,
-        userId: "1",
-        filepath: `/path/to/document-${documentId}.pdf`,
-        metadata: null
-      };
+      // In a real implementation, we'd get the document from the database and analyze it
+      // For now, we'll generate a mock analysis based on the file name and type
+      console.log('Generating mock analysis for document:', documentId, 'type:', type, 'filename:', fileName);
       
-      console.log('Using mock document:', mockDocument);
+      // Simulate processing delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
       
-      // In a real implementation, we would check if the user has permission to analyze this document
-      // For now, we'll assume they do
-
-      console.log('Generating analysis result for document:', documentId);
-      
-      // Return mock analysis results with the correct document ID
-      const mockResult = {
-        ...MOCK_ANALYSIS_RESULT,
-        documentId: Number(documentId)
-      };
+      // Generate mock analysis result
+      const mockResult = generateMockAnalysisResult(documentId, fileName, type);
       
       console.log('Analysis completed successfully, returning results');
       
-      // Add a slight delay to simulate processing time
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
       return NextResponse.json(mockResult);
-    } catch (dbError) {
-      console.error('Database error when getting document:', dbError);
-      return NextResponse.json({ error: 'Failed to retrieve document information' }, { status: 500 });
+    } catch (processingError) {
+      console.error('Error processing document:', processingError);
+      return NextResponse.json({ error: 'Failed to process document' }, { status: 500 });
     }
   } catch (error) {
     console.error('Unhandled error in document analysis endpoint:', error);
@@ -146,41 +314,10 @@ export async function GET(req: NextRequest) {
     status: 'ok',
     message: 'Document analyzer API route is working',
     supportedMethods: ['POST'],
-    instructions: 'Send a POST request with documentId and type in the request body',
+    supportedFileTypes: Object.keys(SUPPORTED_FILE_TYPES),
+    instructions: 'Send a POST request with documentId, type (optional), and fileName in the request body',
     timestamp: new Date().toISOString()
   });
-}
-
-/**
- * Get file type from extension
- */
-function getFileTypeFromExtension(extension: string): string {
-  extension = extension.toLowerCase();
-  
-  const fileTypeMap: Record<string, string> = {
-    '.pdf': 'application/pdf',
-    '.doc': 'application/msword',
-    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    '.xls': 'application/vnd.ms-excel',
-    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    '.ppt': 'application/vnd.ms-powerpoint',
-    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    '.txt': 'text/plain',
-    '.csv': 'text/csv',
-    '.json': 'application/json',
-    '.xml': 'application/xml',
-    '.html': 'text/html',
-    '.htm': 'text/html',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.png': 'image/png',
-    '.gif': 'image/gif',
-    '.zip': 'application/zip',
-    '.rtf': 'application/rtf',
-    '.md': 'text/markdown'
-  };
-  
-  return fileTypeMap[extension] || 'application/octet-stream';
 }
 
 // Mock function to analyze document content

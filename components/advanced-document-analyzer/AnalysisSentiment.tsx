@@ -9,7 +9,7 @@ interface AnalysisSentimentProps {
 }
 
 export default function AnalysisSentiment({ sentiment, sentimentBySection = [] }: AnalysisSentimentProps) {
-  if (!sentiment && (!sentimentBySection || sentimentBySection.length === 0)) {
+  if (!sentiment) {
     return null;
   }
 
