@@ -50,6 +50,22 @@ const ANALYSIS_TYPES = [
 ];
 
 export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: DocumentAnalyzerProps) {
+  // Check for debug mode from URL
+  const [isDebugMode, setIsDebugMode] = React.useState<boolean>(false);
+  
+  // Effect to check for debug parameter in URL
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const debugMode = urlParams.get('debug') === 'analyzer';
+      setIsDebugMode(debugMode);
+      
+      if (debugMode) {
+        console.log("🔍 Analyzer debug mode activated via URL parameter");
+      }
+    }
+  }, []);
+  
   // Create a ref to store analysis results to avoid state update issues
   const analysisResultsRef = React.useRef<AnalysisResult | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = React.useState<string>(preSelectedDocumentId || '');
@@ -234,17 +250,33 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
     console.log(`Fetching complete document details for ID: ${documentId}`);
     
     try {
-      const response = await fetch(`/api/documents/${documentId}`);
+      // Use our dedicated API for CV analysis
+      const response = await fetch(`/api/cv-analyzer/get-cv-for-analysis?cvId=${documentId}`);
       
       if (!response.ok) {
         throw new Error(`Failed to fetch document details: ${response.status} ${response.statusText}`);
       }
       
-      const document = await response.json();
-      console.log(`Document details retrieved:`, {
+      // First read the response as text for debugging
+      const responseText = await response.text();
+      console.log(`Document details retrieved (raw):`, responseText);
+      
+      // Try to parse the JSON
+      let document;
+      try {
+        document = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error("Failed to parse document details response:", parseError);
+        throw new Error("Invalid response format from document details API");
+      }
+      
+      console.log(`Document details parsed successfully:`, {
         id: document.id,
         fileName: document.fileName || 'No fileName in response',
+        filePath: document.filePath || document.filepath || 'No filePath in response',
         createdAt: document.createdAt,
+        hasRawText: !!document.rawText,
+        hasMetadata: !!document.metadata
       });
       
       // Validate the required fields
@@ -252,72 +284,15 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
         throw new Error(`Invalid document: Missing ID`);
       }
       
+      if (!document.fileName) {
+        console.warn(`⚠️ Document ${document.id} has no fileName property`);
+      }
+      
       return document;
     } catch (error) {
       console.error(`Error fetching document details:`, error);
       throw error;
     }
-  };
-
-  // Make a request with retry logic
-  const makeRequestWithRetry = async (url: string, options: RequestInit, maxRetries = 3): Promise<Response> => {
-    let retries = 0;
-    let lastError: Error | null = null;
-    
-    console.log(`Making API request to ${url} with retry logic (max retries: ${maxRetries})`);
-    
-    while (retries < maxRetries) {
-      try {
-        // Set a timeout for the fetch operation
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-        
-        const fetchOptions = {
-          ...options,
-          signal: controller.signal
-        };
-        
-        console.log(`API request attempt ${retries + 1}/${maxRetries}`, { 
-          url, 
-          method: options.method,
-          hasBody: !!options.body
-        });
-        
-        const response = await fetch(url, fetchOptions);
-        clearTimeout(timeoutId);
-        
-        console.log(`API response received:`, {
-          status: response.status,
-          statusText: response.statusText,
-          ok: response.ok,
-          headers: Object.fromEntries([...response.headers])
-        });
-        
-        // For server errors, we retry
-        if (response.status >= 500) {
-          console.warn(`Server error (${response.status}), retrying...`);
-          retries++;
-          await new Promise(resolve => setTimeout(resolve, 1000 * retries)); // Exponential backoff
-          continue;
-        }
-        
-        return response;
-      } catch (error: any) {
-        lastError = error as Error;
-        console.error(`API request error (attempt ${retries + 1}/${maxRetries}):`, error);
-        
-        if (error.name === 'AbortError') {
-          console.warn('Request timed out');
-        }
-        
-        retries++;
-        if (retries < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * retries)); // Exponential backoff
-        }
-      }
-    }
-    
-    throw lastError || new Error(`Failed after ${maxRetries} retries`);
   };
 
   // The main analyze document function
@@ -349,29 +324,38 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
         return;
       }
       
-      // Get complete document details before proceeding
+      // Step 1: Get complete document details before proceeding
+      console.log("Step 1: Retrieving document details");
       let completeDocumentInfo;
       try {
         completeDocumentInfo = await fetchDocumentDetails(selectedDocumentId);
+        console.log("Document details retrieved successfully");
       } catch (detailsError) {
-        console.error("Failed to get complete document details:", detailsError);
-        // Continue with what we have, but log the issue
+        console.error("Step 1 Failed - Could not get document details:", detailsError);
+        // We'll continue with what we have from the document list, but log the issue
         completeDocumentInfo = null;
       }
       
+      // Step 2: Prepare document information for analysis
+      console.log("Step 2: Preparing document information");
       // Use either the complete info or the selected document from our local state
       const documentToAnalyze = completeDocumentInfo || documents.find(doc => doc.id === selectedDocumentId);
       
       if (!documentToAnalyze) {
+        console.error("Step 2 Failed - Document not found in any source");
         throw new Error(`Document with ID ${selectedDocumentId} not found`);
       }
       
-      console.log("Document for analysis:", {
+      // Log what we're using
+      console.log("Using document for analysis:", {
         id: documentToAnalyze.id || selectedDocumentId,
         fileName: documentToAnalyze.fileName || "Unknown",
+        source: completeDocumentInfo ? "API fetch" : "Local documents list",
         hasFileName: !!documentToAnalyze.fileName
       });
       
+      // Step 3: Build the request body
+      console.log("Step 3: Building request body");
       // Always use a properly formatted request object with all required fields
       const requestBody: {
         documentId: string;
@@ -382,22 +366,27 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
         type: analysisType,
       };
 
-      // Always include fileName if we have it
+      // Always include fileName if we have it (absolutely critical for the analysis)
       if (documentToAnalyze.fileName) {
         requestBody.fileName = documentToAnalyze.fileName;
-        console.log(`Including fileName '${documentToAnalyze.fileName}' in analysis request`);
+        console.log(`✅ Including fileName '${documentToAnalyze.fileName}' in analysis request`);
       } else {
         console.warn("⚠️ No fileName available for document - backend will use generic name");
+        
+        // Last attempt - try to create a generic filename based on the document ID
+        requestBody.fileName = `document-${selectedDocumentId}.pdf`;
+        console.log(`Using fallback fileName: ${requestBody.fileName}`);
       }
 
-      console.log("Sending analysis request:", JSON.stringify(requestBody));
+      console.log("Final request body:", JSON.stringify(requestBody));
 
-      // Make the API request with timeout and retry handling
+      // Step 4: Make the API call
+      console.log("Step 4: Sending analysis request to API");
       const makeRequestWithRetry = async (retryCount = 0, maxRetries = 3) => {
         try {
           // Set up request with timeout
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+          const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout for analysis
 
           console.log(`API request attempt ${retryCount + 1}/${maxRetries + 1}`);
           
@@ -405,7 +394,8 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
             method: "POST",
             headers: { 
               "Content-Type": "application/json",
-              "X-Document-Id": selectedDocumentId
+              "X-Document-Id": selectedDocumentId,
+              "X-Analysis-Type": analysisType
             },
             body: JSON.stringify(requestBody),
             signal: controller.signal
@@ -475,6 +465,7 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
             return result;
           } catch (parseError) {
             console.error("Failed to parse response as JSON:", parseError);
+            console.error("Response text:", text);
             throw new Error("Failed to parse analysis results");
           }
         } catch (error) {
@@ -505,22 +496,27 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
       };
 
       try {
-        // Execute request with retries
+        // Step 5: Execute request with retries
+        console.log("Step 5: Executing API request with retry logic");
         const analysisResult = await makeRequestWithRetry();
         
-        // Success path - more direct state updates
-        console.log("Analysis successful, updating state with result");
+        // Step 6: Process successful results
+        console.log("Step 6: Processing successful analysis result");
         
         // Save to localStorage cache
         saveResultToCache(selectedDocumentId, analysisResult);
         
-        // Use a single, direct state update
+        // Use the ref for immediate availability
         analysisResultsRef.current = analysisResult;
         
         // Announce success to the DOM 
-        document.dispatchEvent(new CustomEvent('document-analysis-complete', {
+        const customEvent = new CustomEvent('document-analysis-complete', {
           detail: { documentId: selectedDocumentId, success: true }
-        }));
+        });
+        document.dispatchEvent(customEvent);
+        window.dispatchEvent(new Event('analysis-result-received'));
+        
+        console.log("Analysis complete event dispatched to DOM");
         
         // Update React state directly
         setAnalysisResults(analysisResult);
@@ -532,14 +528,17 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
         console.log("Analysis state updated successfully");
         return analysisResult;
       } catch (error) {
+        // Step 6 (alternative): Handle analysis failure
         console.error("Analysis failed:", error);
         
         setAnalysisError(error instanceof Error ? error.message : "Unknown analysis error");
         
         // Generate fallback for display
+        console.log("Generating fallback analysis result");
         const fallback = generateFallbackAnalysis();
         analysisResultsRef.current = fallback;
         setAnalysisResults(fallback);
+        setActiveTab("summary");
         
         // Force a render update
         forceUpdate();
@@ -739,12 +738,87 @@ export default function DocumentAnalyzer({ documents, preSelectedDocumentId }: D
               )}
             </div>
 
+            {/* Analysis progress indicator */}
+            {isAnalyzing && (
+              <div className="mt-6 p-4 bg-[#1A1A1A] border border-[#333333] rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-[#F9F6EE] font-medium flex items-center">
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin text-[#B4916C]" />
+                    Analysis in Progress
+                  </h3>
+                </div>
+                <Progress 
+                  value={70} 
+                  className="h-2 bg-[#333333] [&>div]:bg-[#B4916C]" 
+                />
+                <p className="mt-2 text-sm text-[#8A8782]">
+                  Analyzing document content and generating insights. This may take a moment...
+                </p>
+              </div>
+            )}
+
             {/* Error message */}
             {analysisError && (
               <div className="bg-[#3A1F24] border border-[#E57373]/30 p-4 rounded-lg text-[#F9F6EE]">
                 <div className="flex items-center">
                   <AlertCircle className="h-5 w-5 text-[#E57373] mr-2" />
                   <p>{analysisError}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Debug info panel - shows when debug mode is activated */}
+            {(isDebugMode || process.env.NODE_ENV === 'development') && (
+              <div className="mt-4 p-3 bg-[#0A0A0A] border border-purple-800/30 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-medium text-purple-400">Analyzer Debug Info</h4>
+                  <span className="text-xs text-purple-500">{isDebugMode ? 'URL Debug Mode' : 'Dev Mode'}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs text-[#8A8782]">
+                  <div>Document ID: <span className="text-white">{selectedDocumentId || 'None'}</span></div>
+                  <div>File Name: <span className="text-white">{selectedDocument?.fileName || 'Unknown'}</span></div>
+                  <div>Analysis Type: <span className="text-white">{analysisType}</span></div>
+                  <div>Analyzing: <span className="text-white">{isAnalyzing ? 'Yes' : 'No'}</span></div>
+                  <div>Has Results: <span className="text-white">{analysisResults ? 'Yes' : 'No'}</span></div>
+                  <div>Has Results (ref): <span className="text-white">{analysisResultsRef.current ? 'Yes' : 'No'}</span></div>
+                  <div>Force Counter: <span className="text-white">{forceUpdateCounter}</span></div>
+                  <div>Active Tab: <span className="text-white">{activeTab}</span></div>
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <button 
+                    className="text-xs px-2 py-1 bg-purple-900/50 text-purple-300 rounded hover:bg-purple-800/50 transition-colors"
+                    onClick={() => {
+                      console.log('Debug - Analysis State:', {
+                        documentId: selectedDocumentId,
+                        document: selectedDocument,
+                        results: analysisResults,
+                        resultsRef: analysisResultsRef.current,
+                        error: analysisError,
+                        isAnalyzing,
+                        forceCounter: forceUpdateCounter
+                      });
+                    }}
+                  >
+                    Log State
+                  </button>
+                  <button 
+                    className="text-xs px-2 py-1 bg-blue-900/50 text-blue-300 rounded hover:bg-blue-800/50 transition-colors"
+                    onClick={forceUpdate}
+                  >
+                    Force Update
+                  </button>
+                  {analysisResults && (
+                    <button 
+                      className="text-xs px-2 py-1 bg-green-900/50 text-green-300 rounded hover:bg-green-800/50 transition-colors"
+                      onClick={() => {
+                        // Force display of analysis results
+                        setActiveTab('summary');
+                        forceUpdate();
+                      }}
+                    >
+                      Show Results
+                    </button>
+                  )}
                 </div>
               </div>
             )}
