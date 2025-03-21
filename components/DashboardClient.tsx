@@ -82,9 +82,9 @@ export default function DashboardClient({
               <Table className="w-full">
                 <TableHeader>
                   <TableRow className="border-b border-[#1A1A1A]">
-                    <TableHead className="text-[#E2DFD7] font-safiro font-medium">Name</TableHead>
-                    <TableHead className="text-[#E2DFD7] font-safiro font-medium">ATS Score</TableHead>
-                    <TableHead className="text-[#E2DFD7] font-safiro font-medium">Optimized</TableHead>
+                    <TableHead className="text-[#E2DFD7] font-safiro font-medium w-full md:w-auto">Name</TableHead>
+                    <TableHead className="text-[#E2DFD7] font-safiro font-medium hidden md:table-cell">ATS Score</TableHead>
+                    <TableHead className="text-[#E2DFD7] font-safiro font-medium hidden sm:table-cell">Optimized</TableHead>
                     <TableHead className="text-[#E2DFD7] font-safiro font-medium">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -105,10 +105,10 @@ export default function DashboardClient({
                       }
                       return (
                         <TableRow key={cv.id} className="border-b border-[#1A1A1A] hover:bg-[#0A0A0A]">
-                          <TableCell className="text-sm text-[#F9F6EE] font-borna font-medium">
-                            {cv.fileName}
+                          <TableCell className="text-sm text-[#F9F6EE] font-borna font-medium max-w-[150px] md:max-w-none truncate">
+                            <span className="block truncate" title={cv.fileName}>{cv.fileName}</span>
                           </TableCell>
-                          <TableCell className="text-sm">
+                          <TableCell className="text-sm hidden md:table-cell">
                             {metadata?.atsScore ? (
                               <span 
                                 className={`px-2.5 py-1 rounded-md text-sm font-borna ${
@@ -123,7 +123,7 @@ export default function DashboardClient({
                               </span>
                             ) : "-"}
                           </TableCell>
-                          <TableCell className="text-sm">
+                          <TableCell className="text-sm hidden sm:table-cell">
                             {metadata?.optimized ? (
                               <span className="px-2.5 py-1 bg-[#0D1F15] rounded-md text-[#4ADE80] font-borna text-sm">
                                 Yes
@@ -194,8 +194,8 @@ export default function DashboardClient({
           <PremiumFeatureCard 
             href="/dashboard/enhance"
             icon={FileText}
-            title="Document Editor"
-            description="Edit with AI assistance"
+            title="Create"
+            description="Chat with the powerful employee 'Reming'"
             iconBgColor="bg-[#050505]"
             bgGradient
             animationDelay={0.15}
@@ -238,8 +238,8 @@ export default function DashboardClient({
           <PremiumFeatureCard 
             href="/dashboard/jobs"
             icon={Briefcase}
-            title="Find Matching Jobs"
-            description="Discover jobs that match your CV"
+            title="Job Opportunities"
+            description="Discover the best jobs you can get now with your current CV"
             fullWidth
             accentBorder
             animationDelay={0.35}

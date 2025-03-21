@@ -48,20 +48,22 @@ export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
   return (
     <>
       <Menu as="div" className="relative inline-block text-left">
-        <Menu.Button as={Fragment}>
-          <motion.div
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="flex items-center gap-2 cursor-pointer"
-          >
-            <MicroCard variant="custom" className="cursor-pointer ml-auto bg-[#B4916C] hover:bg-[#B4916C]/90 transition-colors duration-200">
-              <span className="flex items-center justify-center h-full w-full rounded-full text-white font-safiro">
-                U
-              </span>
-            </MicroCard>
-            <ChevronDown className="h-4 w-4 text-[#8A8782]" />
-          </motion.div>
-        </Menu.Button>
+        <div>
+          <Menu.Button as={Fragment}>
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="flex items-center gap-2 cursor-pointer"
+            >
+              <MicroCard variant="custom" className="cursor-pointer ml-auto bg-[#B4916C] hover:bg-[#B4916C]/90 transition-colors duration-200">
+                <span className="flex items-center justify-center h-full w-full rounded-full text-white font-safiro">
+                  U
+                </span>
+              </MicroCard>
+              <ChevronDown className="h-4 w-4 text-[#8A8782]" />
+            </motion.div>
+          </Menu.Button>
+        </div>
         <Transition
           as={Fragment}
           enter="transition ease-out duration-200"
@@ -71,7 +73,7 @@ export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
           leaveFrom="transform opacity-100 scale-100"
           leaveTo="transform opacity-0 scale-95"
         >
-          <Menu.Items className="absolute right-0 mt-2 w-56 origin-top-right bg-[#111111] border border-[#222222] rounded-lg shadow-lg focus:outline-none z-50 py-1">
+          <Menu.Items className="absolute right-0 md:right-0 mt-2 w-56 origin-top-right bg-[#111111] border border-[#222222] rounded-lg shadow-lg focus:outline-none z-50 py-1">
             {menuItems.map((item, index) => (
               <Menu.Item key={item.label}>
                 {({ active }) => (

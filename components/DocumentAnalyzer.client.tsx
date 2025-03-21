@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { Select, Button, Alert, Spin, Tabs, Card, Progress, Collapse, Empty, Tooltip, List, Avatar } from "antd";
+import React, { useState, useEffect } from "react";
+import { Select, Button, Alert, Spin, Tabs, Card, Progress, Collapse, Empty, Tooltip, List, Avatar, Modal, Upload, message } from "antd";
 import { 
   PieChart, 
   Pie, 
@@ -30,7 +30,12 @@ import {
   FilePptOutlined, 
   DownloadOutlined, 
   ShareAltOutlined,
-  CheckOutlined
+  CheckOutlined,
+  UploadOutlined,
+  CheckCircleOutlined,
+  FileSearchOutlined,
+  InboxOutlined,
+  ThunderboltOutlined
 } from "@ant-design/icons";
 import { detectFileType, getAnalysisTypeForFile, FileTypeInfo } from "@/lib/file-utils/file-type-detector";
 
@@ -44,7 +49,8 @@ const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8"];
 interface Document {
   id: string;
   fileName: string;
-  createdAt: Date;
+  createdAt: string;
+  filePath?: string;
 }
 
 interface DocumentAnalyzerProps {
@@ -108,9 +114,65 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   const [error, setError] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<any | null>(null);
   const [activeTab, setActiveTab] = useState("1");
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
+  const [documentList, setDocumentList] = useState<Document[]>(documents);
+  
+  // Upload props configuration for Ant Design Upload component
+  const { Dragger } = Upload;
+  
+  // Function to fetch documents from the server
+  const fetchDocuments = () => {
+    setIsLoadingDocuments(true);
+    fetch('/api/cv/list')
+      .then(res => res.json())
+      .then(data => {
+        setDocumentList(data.documents || []);
+        setIsLoadingDocuments(false);
+      })
+      .catch(err => {
+        console.error('Error fetching documents:', err);
+        setIsLoadingDocuments(false);
+      });
+  };
+  
+  const uploadProps = {
+    name: 'file',
+    multiple: false,
+    action: '/api/cv/upload',
+    onChange(info: any) {
+      if (info.file.status === 'done') {
+        // Handle successful upload
+        message.success(`${info.file.name} uploaded successfully`);
+        // Refresh documents list
+        fetchDocuments();
+      } else if (info.file.status === 'error') {
+        message.error(`${info.file.name} upload failed.`);
+      }
+    },
+    beforeUpload: (file: File) => {
+      const isValidType = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'text/plain'
+      ].includes(file.type);
+      
+      if (!isValidType) {
+        message.error('You can only upload PDF, DOC, DOCX or TXT files!');
+      }
+      
+      const isLt5M = file.size / 1024 / 1024 < 5;
+      if (!isLt5M) {
+        message.error('File must be smaller than 5MB!');
+      }
+      
+      return isValidType && isLt5M;
+    }
+  };
   
   // Get the selected document's file name
-  const selectedDocument = documents.find(doc => doc.id === selectedDocumentId);
+  const selectedDocument = documentList.find(doc => doc.id === selectedDocumentId);
   
   // Detect file type if we have a selected document
   const fileType = selectedDocument ? detectFileType(selectedDocument.fileName) : undefined;
@@ -273,18 +335,39 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
     }
   };
   
-  // Get the file type icon
-  const getFileTypeIcon = () => {
-    if (!fileType) return <FileTextOutlined />;
+  // Function to get file type icon based on file name
+  const getFileTypeIcon = (fileName: string) => {
+    const fileType = getFileTypeFromName(fileName);
+    if (!fileType) return <FileSearchOutlined />;
     
-    switch (fileType.category) {
-      case 'spreadsheet':
-        return <FileExcelOutlined style={{ color: '#217346' }} />;
-      case 'presentation':
-        return <FilePptOutlined style={{ color: '#D24726' }} />;
-      case 'document':
+    switch (fileType.name) {
+      case 'pdf':
+        return <FileSearchOutlined style={{ color: '#e74c3c' }} />;
+      case 'doc':
+      case 'docx':
+        return <FileSearchOutlined style={{ color: '#3498db' }} />;
+      case 'txt':
+        return <FileSearchOutlined style={{ color: '#95a5a6' }} />;
       default:
-        return <FileTextOutlined style={{ color: '#2B579A' }} />;
+        return <FileSearchOutlined />;
+    }
+  };
+  
+  // Function to determine file type from file name
+  const getFileTypeFromName = (fileName: string) => {
+    if (!fileName) return null;
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    
+    switch (extension) {
+      case 'pdf':
+        return { name: 'pdf', category: 'document' };
+      case 'doc':
+      case 'docx':
+        return { name: 'doc', category: 'document' };
+      case 'txt':
+        return { name: 'txt', category: 'document' };
+      default:
+        return { name: 'unknown', category: 'other' };
     }
   };
   
@@ -313,7 +396,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
     
     return (
       <div className="grid grid-cols-1 gap-6">
-        <Card title="Document Quality Breakdown">
+        <Card title="Document Quality Breakdown" className="border-[#222222] bg-[#111111]">
           <ResponsiveContainer width="100%" height={300}>
             <RadarChart 
               outerRadius={90} 
@@ -331,59 +414,30 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                 []
               }
             >
-              <PolarGrid />
-              <PolarAngleAxis dataKey="subject" />
-              <PolarRadiusAxis angle={30} domain={[0, 100]} />
+              <PolarGrid stroke="#333333" />
+              <PolarAngleAxis dataKey="subject" tick={{ fill: "#F9F6EE" }} />
+              <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: "#F9F6EE" }} />
               <Radar 
                 name="Document Quality" 
                 dataKey="score" 
-                stroke="#8884d8" 
-                fill="#8884d8" 
+                stroke="#B4916C" 
+                fill="#B4916C" 
                 fillOpacity={0.6}
               />
               <RechartsTooltip formatter={(value: number) => `${value}/100`} />
-              <Legend />
+              <Legend wrapperStyle={{ color: "#F9F6EE" }} />
             </RadarChart>
           </ResponsiveContainer>
         </Card>
 
-        {analysisResult.topics && analysisResult.topics.length > 0 && (
-          <Card title="Document Topics Distribution">
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={analysisResult.topics.map((topic: {name: string, relevance: number}) => ({
-                    name: topic.name,
-                    value: Math.round(topic.relevance * 100)
-                  }))}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={true}
-                  outerRadius={100}
-                  fill="#8884d8"
-                  dataKey="value"
-                  nameKey="name"
-                  label={({ name, percent }: { name: string, percent: number }) => `${name}: ${percent.toFixed(0)}%`}
-                >
-                  {analysisResult.topics.map((_: any, index: number) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <RechartsTooltip formatter={(value: number) => `${value}%`} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </Card>
-        )}
-
-        <Card title="Key Points">
+        <Card title="Key Points" className="border-[#222222] bg-[#111111]">
           <List
             dataSource={analysisResult.keyPoints || []}
             renderItem={(item: string, index: number) => (
-              <List.Item>
+              <List.Item className="border-b border-[#222222] last:border-0">
                 <List.Item.Meta
-                  avatar={<Avatar style={{ backgroundColor: COLORS[index % COLORS.length] }}>{index + 1}</Avatar>}
-                  title={<span>{item}</span>}
+                  avatar={<Avatar style={{ backgroundColor: '#B4916C' }}>{index + 1}</Avatar>}
+                  title={<span className="text-[#F9F6EE]">{item}</span>}
                 />
               </List.Item>
             )}
@@ -401,9 +455,9 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
     
     return (
       <div className="grid grid-cols-1 gap-4">
-        <Card title="Document Sentiment">
+        <Card title="Document Sentiment" className="border-[#222222] bg-[#111111]">
           <div className="flex flex-col items-center justify-center mb-6">
-            <div className="text-xl font-bold mb-2 capitalize">
+            <div className="text-xl font-bold mb-2 capitalize text-[#F9F6EE]">
               {analysisResult.sentiment.overall}
             </div>
             <Progress 
@@ -416,28 +470,28 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
               strokeColor={
                 analysisResult.sentiment.overall === "positive" ? "#52c41a" :
                 analysisResult.sentiment.overall === "negative" ? "#ff4d4f" :
-                "#1890ff"
+                "#B4916C"
               }
             />
-            <div className="mt-2 text-sm text-gray-500">
+            <div className="mt-2 text-sm text-[#C5C2BA]">
               Sentiment Score: {Math.round(analysisResult.sentiment.score * 100)}%
             </div>
           </div>
         </Card>
         
-        <Card title="Language Quality">
+        <Card title="Language Quality" className="border-[#222222] bg-[#111111]">
           {analysisResult.languageQuality && (
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               {Object.entries(analysisResult.languageQuality).map(([key, value]: [string, any]) => (
                 <div key={key} className="text-center">
-                  <div className="mb-2 text-sm text-gray-500 capitalize">{key}</div>
+                  <div className="mb-2 text-sm text-[#C5C2BA] capitalize">{key}</div>
                   <Progress
                     type="circle"
                     percent={value}
                     width={80}
                     strokeColor={
                       value >= 80 ? "#52c41a" : 
-                      value >= 60 ? "#faad14" : 
+                      value >= 60 ? "#B4916C" : 
                       "#ff4d4f"
                     }
                   />
@@ -447,16 +501,16 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
           )}
         </Card>
         
-        <Card title="Top Topics">
+        <Card title="Top Topics" className="border-[#222222] bg-[#111111]">
           {analysisResult.topics && analysisResult.topics.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {analysisResult.topics.slice(0, 6).map((topic: any, index: number) => (
-                <div key={`topic-${index}`} className="bg-[#222222]/30 p-3 rounded-md">
+                <div key={`topic-${index}`} className="bg-[#222222] p-3 rounded-md">
                   <div className="flex justify-between items-center mb-2">
-                    <div className="font-medium">{topic.name}</div>
-                    <div className="text-sm text-gray-400">{Math.round(topic.relevance * 100)}%</div>
+                    <div className="font-medium text-[#F9F6EE]">{topic.name}</div>
+                    <div className="text-sm text-[#C5C2BA]">{Math.round(topic.relevance * 100)}%</div>
                   </div>
-                  <Progress percent={Math.round(topic.relevance * 100)} size="small" strokeWidth={4} />
+                  <Progress percent={Math.round(topic.relevance * 100)} size="small" strokeWidth={4} strokeColor="#B4916C" />
                 </div>
               ))}
             </div>
@@ -478,35 +532,35 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
     if (fileType?.category === 'document' && analysisResult.insights) {
       return (
         <div className="grid grid-cols-1 gap-4">
-          <Card title="Document Type" className="text-center">
-            <div className="text-2xl font-bold mb-3">
+          <Card title="Document Type" className="text-center border-[#222222] bg-[#111111]">
+            <div className="text-2xl font-bold mb-3 text-[#F9F6EE]">
               {fileType.name === 'pdf' && selectedDocument?.fileName.toLowerCase().includes('cv') ? 'CV / Resume' : 'Document'}
             </div>
-            <div className="text-gray-500">
+            <div className="text-[#C5C2BA]">
               {`File type: ${fileType.name.toUpperCase()} • Created: ${new Date(selectedDocument?.createdAt || Date.now()).toLocaleDateString()}`}
             </div>
           </Card>
           
-          <Card title="Recommendations">
+          <Card title="Recommendations" className="border-[#222222] bg-[#111111]">
             <List
               dataSource={analysisResult.recommendations || []}
               renderItem={(item: string, index: number) => (
-                <List.Item>
+                <List.Item className="border-b border-[#222222] last:border-0">
                   <List.Item.Meta
                     avatar={
                       <Avatar 
-                        style={{ backgroundColor: '#52c41a' }}
+                        style={{ backgroundColor: '#B4916C' }}
                         icon={<CheckOutlined />}
                       />
                     }
-                    title={<span>{item}</span>}
+                    title={<span className="text-[#F9F6EE]">{item}</span>}
                   />
                 </List.Item>
               )}
             />
           </Card>
           
-          <Card title="Top Topics">
+          <Card title="Top Topics" className="border-[#222222] bg-[#111111]">
             {analysisResult.topics && analysisResult.topics.length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                 {analysisResult.topics.slice(0, 9).map((topic: {name: string, relevance: number}, index: number) => (
@@ -514,9 +568,9 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                     key={`topic-tag-${index}`} 
                     className="py-1 px-3 rounded-full text-center text-sm"
                     style={{
-                      backgroundColor: `${COLORS[index % COLORS.length]}20`,
-                      color: COLORS[index % COLORS.length],
-                      border: `1px solid ${COLORS[index % COLORS.length]}`
+                      backgroundColor: '#333333',
+                      color: '#F9F6EE',
+                      border: '1px solid #B4916C'
                     }}
                   >
                     {topic.name} ({Math.round(topic.relevance * 100)}%)
@@ -534,32 +588,33 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
     // Generic document information
     return (
       <div className="grid grid-cols-1 gap-4">
-        <Card title="Document Information">
+        <Card title="Document Information" className="border-[#222222] bg-[#111111]">
           <table className="min-w-full">
             <tbody>
-              <tr>
-                <td className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">File Name</td>
-                <td className="px-6 py-3 text-left text-sm text-gray-900">{selectedDocument?.fileName}</td>
+              <tr className="border-b border-[#222222]">
+                <td className="px-6 py-3 text-left text-xs font-medium text-[#C5C2BA] uppercase tracking-wider w-1/3">File Name</td>
+                <td className="px-6 py-3 text-left text-sm text-[#F9F6EE]">{selectedDocument?.fileName}</td>
+              </tr>
+              <tr className="border-b border-[#222222]">
+                <td className="px-6 py-3 text-left text-xs font-medium text-[#C5C2BA] uppercase tracking-wider">File Type</td>
+                <td className="px-6 py-3 text-left text-sm text-[#F9F6EE]">{fileType?.name.toUpperCase()}</td>
+              </tr>
+              <tr className="border-b border-[#222222]">
+                <td className="px-6 py-3 text-left text-xs font-medium text-[#C5C2BA] uppercase tracking-wider">Created</td>
+                <td className="px-6 py-3 text-left text-sm text-[#F9F6EE]">{new Date(selectedDocument?.createdAt || Date.now()).toLocaleString()}</td>
+              </tr>
+              <tr className="border-b border-[#222222]">
+                <td className="px-6 py-3 text-left text-xs font-medium text-[#C5C2BA] uppercase tracking-wider">Analysis Type</td>
+                <td className="px-6 py-3 text-left text-sm text-[#F9F6EE] capitalize">{analysisType}</td>
               </tr>
               <tr>
-                <td className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File Type</td>
-                <td className="px-6 py-3 text-left text-sm text-gray-900">{fileType?.name.toUpperCase()}</td>
-              </tr>
-              <tr>
-                <td className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</td>
-                <td className="px-6 py-3 text-left text-sm text-gray-900">{new Date(selectedDocument?.createdAt || Date.now()).toLocaleString()}</td>
-              </tr>
-              <tr>
-                <td className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Analysis Type</td>
-                <td className="px-6 py-3 text-left text-sm text-gray-900 capitalize">{analysisType}</td>
-              </tr>
-              <tr>
-                <td className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Overall Quality</td>
-                <td className="px-6 py-3 text-left text-sm text-gray-900">
+                <td className="px-6 py-3 text-left text-xs font-medium text-[#C5C2BA] uppercase tracking-wider">Overall Quality</td>
+                <td className="px-6 py-3 text-left text-sm text-[#F9F6EE]">
                   <Progress 
                     percent={analysisResult.insights?.overallScore || 0} 
                     size="small" 
                     status={(analysisResult.insights?.overallScore || 0) >= 70 ? "success" : (analysisResult.insights?.overallScore || 0) >= 40 ? "normal" : "exception"} 
+                    strokeColor="#B4916C"
                   />
                 </td>
               </tr>
@@ -567,14 +622,14 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
           </table>
         </Card>
         
-        <Card title="Key Points">
+        <Card title="Key Points" className="border-[#222222] bg-[#111111]">
           <List
             dataSource={analysisResult.keyPoints || []}
             renderItem={(item: string, index: number) => (
-              <List.Item>
+              <List.Item className="border-b border-[#222222] last:border-0">
                 <List.Item.Meta
-                  avatar={<Avatar style={{ backgroundColor: COLORS[index % COLORS.length] }}>{index + 1}</Avatar>}
-                  title={<span>{item}</span>}
+                  avatar={<Avatar style={{ backgroundColor: '#B4916C' }}>{index + 1}</Avatar>}
+                  title={<span className="text-[#F9F6EE]">{item}</span>}
                 />
               </List.Item>
             )}
@@ -593,15 +648,15 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
     // The summary section is similar for all file types
     return (
       <div>
-        <Card title="Document Analysis Summary" className="mb-4">
-          <div className="py-3 px-4 bg-[#222222]/50 rounded-md mb-4">
+        <Card title="Document Analysis Summary" className="mb-4 border-[#222222] bg-[#111111]">
+          <div className="py-3 px-4 bg-[#222222] rounded-md mb-4">
             <p className="text-[#F9F6EE]">{analysisResult.summary}</p>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <h3 className="text-lg font-bold mb-3">Key Points</h3>
-              <ul className="list-disc pl-5">
+              <h3 className="text-lg font-bold mb-3 text-[#F9F6EE]">Key Points</h3>
+              <ul className="list-disc pl-5 text-[#F9F6EE]">
                 {analysisResult.keyPoints?.map((point: string, index: number) => (
                   <li key={`point-${index}`} className="mb-2">
                     {point}
@@ -611,8 +666,8 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
             </div>
             
             <div>
-              <h3 className="text-lg font-bold mb-3">Recommendations</h3>
-              <ul className="list-disc pl-5">
+              <h3 className="text-lg font-bold mb-3 text-[#F9F6EE]">Recommendations</h3>
+              <ul className="list-disc pl-5 text-[#F9F6EE]">
                 {analysisResult.recommendations?.map((recommendation: string, index: number) => (
                   <li key={`recommendation-${index}`} className="mb-2">
                     {recommendation}
@@ -623,17 +678,17 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
           </div>
         </Card>
         
-        <Card title="Document Quality Insights">
+        <Card title="Document Quality Insights" className="border-[#222222] bg-[#111111]">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             {analysisResult.insights && Object.entries(analysisResult.insights).map(([key, value]: [string, any], index) => {
               // Skip overallScore as we'll display it prominently
               if (key === 'overallScore') return null;
               
               return (
-                <div key={key} className="bg-[#222222]/30 p-3 rounded-md text-center">
-                  <div className="text-sm text-[#F9F6EE]/70 capitalize mb-1">{key.replace(/([A-Z])/g, ' $1').trim()}</div>
-                  <div className="text-lg font-semibold">
-                    <Progress percent={value} size="small" showInfo={false} />
+                <div key={key} className="bg-[#222222] p-3 rounded-md text-center">
+                  <div className="text-sm text-[#C5C2BA] capitalize mb-1">{key.replace(/([A-Z])/g, ' $1').trim()}</div>
+                  <div className="text-lg font-semibold text-[#F9F6EE]">
+                    <Progress percent={value} size="small" showInfo={false} strokeColor="#B4916C" />
                     <span className="mt-1 inline-block">{value}/100</span>
                   </div>
                 </div>
@@ -645,16 +700,16 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
             <Progress
               type="circle"
               percent={analysisResult.insights?.overallScore || 0}
-              format={(percent) => `${percent}`}
+              format={(percent) => <span className="text-[#F9F6EE]">{percent}</span>}
               strokeColor={{
-                '0%': '#108ee9',
-                '100%': '#87d068',
+                '0%': '#B4916C',
+                '100%': '#B4916C',
               }}
               width={120}
             />
           </div>
           
-          <p className="text-center text-gray-600">
+          <p className="text-center text-[#C5C2BA]">
             {(analysisResult.insights?.overallScore || 0) >= 80 
               ? "Excellent quality! Your document is well-structured and effective." 
               : (analysisResult.insights?.overallScore || 0) >= 60 
@@ -668,113 +723,216 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   
   return (
     <div className="w-full">
-      <div className="space-y-4">
-        <div className="mb-4">
-          <label className="block mb-2 text-[#F9F6EE] font-borna">Select Document</label>
-          <DocSelector
-            documents={documents}
-            value={selectedDocumentId}
-            onChange={setSelectedDocumentId}
-          />
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-[#F9F6EE] mb-2">Document Analysis</h1>
+          <p className="text-[#C5C2BA]">Upload documents to analyze content and get insights</p>
         </div>
-        
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={handleAnalyze}
-            disabled={isAnalyzing || !selectedDocumentId}
-            className="px-4 py-2 bg-[#333333] text-[#F9F6EE] font-borna rounded-md hover:bg-[#444444] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+        <div className="mt-4 md:mt-0 flex space-x-2">
+          <Button
+            onClick={() => setIsUploadModalOpen(true)}
+            type="primary"
+            icon={<UploadOutlined />}
+            style={{ backgroundColor: '#B4916C', borderColor: '#B4916C' }}
           >
-            {isAnalyzing ? (
-              <>
-                <div className="w-4 h-4 border-2 border-t-transparent border-[#B4916C] rounded-full animate-spin"></div>
-                <span>Analyzing...</span>
-              </>
-            ) : (
-              <>
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                </svg>
-                <span>Analyze Document</span>
-              </>
-            )}
-          </button>
-          
-          <button
-            onClick={handleExportPDF}
-            disabled={!analysisResult || isPdfExporting}
-            className="px-4 py-2 bg-[#222222] text-[#F9F6EE] font-borna rounded-md hover:bg-[#333333] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-          >
-            {isPdfExporting ? (
-              <>
-                <div className="w-4 h-4 border-2 border-t-transparent border-[#B4916C] rounded-full animate-spin"></div>
-                <span>Exporting...</span>
-              </>
-            ) : (
-              <>
-                <DownloadOutlined />
-                <span>Export PDF</span>
-              </>
-            )}
-          </button>
-          
-          <button
-            onClick={handleShare}
-            disabled={!analysisResult}
-            className="px-4 py-2 bg-[#222222] text-[#F9F6EE] font-borna rounded-md hover:bg-[#333333] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-          >
-            <ShareAltOutlined />
-            <span>Share</span>
-          </button>
+            Upload Document
+          </Button>
         </div>
-        
-        {error && (
-          <div className="mt-4 px-4 py-3 bg-[#3A1F24] border border-[#E57373]/30 text-[#F9F6EE] font-borna rounded-md">
-            <div className="flex items-start">
-              <svg className="w-5 h-5 text-[#E57373] mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div>
-                <p className="font-medium">{error}</p>
-                {error.includes("document content") && (
-                  <p className="mt-1 text-sm opacity-80">
-                    This could happen if the document wasn't properly processed. Try uploading the document again or contact support.
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-        
-        {isAnalyzing ? (
-          <LoadingSpinner text="Analyzing your document. This may take a minute..." />
-        ) : analysisResult ? (
-          <div className="mt-8 border border-[#222222] bg-[#111111] rounded-md p-4">
-            <div className="flex items-center mb-4">
-              {getFileTypeIcon()}
-              <h3 className="ml-2 text-lg text-[#F9F6EE] font-safiro">{selectedDocument?.fileName}</h3>
-            </div>
-            
-            <div className="mb-6">
-              <Tabs defaultActiveKey="1" activeKey={activeTab} onChange={setActiveTab} className="custom-tabs">
-                <TabPane tab="Overview" key="1">
-                  {renderAnalysisSection("summary")}
-                </TabPane>
-                <TabPane tab="Quality Insights" key="2">
-                  {renderAnalysisSection("content")}
-                </TabPane>
-                <TabPane tab="Sentiment & Language" key="3">
-                  {renderAnalysisSection("sentiment")}
-                </TabPane>
-                <TabPane tab={fileType?.category === 'document' && selectedDocument?.fileName.toLowerCase().includes('cv') ? "CV Details" : "Document Details"} key="4">
-                  {renderAnalysisSection("keyinfo")}
-                </TabPane>
-              </Tabs>
-            </div>
-          </div>
-        ) : (
-          <EmptyDocumentState />
-        )}
       </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Document Selection Sidebar */}
+        <div className="lg:col-span-3">
+          <Card title="My Documents" className="border-[#222222] bg-[#111111] text-[#F9F6EE]">
+            {isLoadingDocuments ? (
+              <div className="py-10 text-center">
+                <Spin tip="Loading documents..." />
+              </div>
+            ) : documentList.length === 0 ? (
+              <Empty 
+                description={
+                  <span className="text-[#C5C2BA]">No documents found</span>
+                }
+              />
+            ) : (
+              <List
+                dataSource={documentList}
+                renderItem={(doc) => (
+                  <List.Item
+                    className={`cursor-pointer transition duration-200 border-b border-[#222222] last:border-0 ${
+                      selectedDocument?.id === doc.id ? 'bg-[#333333]' : 'hover:bg-[#222222]'
+                    }`}
+                    onClick={() => setSelectedDocumentId(doc.id)}
+                  >
+                    <List.Item.Meta
+                      avatar={getFileTypeIcon(doc.fileName)}
+                      title={<span className="text-[#F9F6EE] truncate max-w-[200px]">{doc.fileName}</span>}
+                      description={
+                        <span className="text-[#C5C2BA]">
+                          {getFileTypeFromName(doc.fileName)?.name.toUpperCase()} • {new Date(doc.createdAt).toLocaleDateString()}
+                        </span>
+                      }
+                    />
+                    {selectedDocument?.id === doc.id && (
+                      <CheckCircleOutlined style={{ color: '#B4916C' }} className="ml-2" />
+                    )}
+                  </List.Item>
+                )}
+              />
+            )}
+          </Card>
+        </div>
+
+        {/* Document Analysis Area */}
+        <div className="lg:col-span-9">
+          {selectedDocument ? (
+            <Card className="border-[#222222] bg-[#111111]">
+              <Tabs
+                activeKey={activeTab}
+                onChange={setActiveTab}
+                items={[
+                  {
+                    key: 'summary',
+                    label: <span className="text-[#F9F6EE]">Summary</span>,
+                    children: renderSummary(),
+                  },
+                  {
+                    key: 'keyInfo',
+                    label: <span className="text-[#F9F6EE]">Key Information</span>,
+                    children: renderKeyInformation(),
+                  },
+                  {
+                    key: 'sentiment',
+                    label: <span className="text-[#F9F6EE]">Sentiment Analysis</span>,
+                    children: renderSentimentAnalysis(),
+                  },
+                  {
+                    key: 'contentAnalysis',
+                    label: <span className="text-[#F9F6EE]">Content Analysis</span>,
+                    children: renderContentAnalysis(),
+                  },
+                ]}
+              />
+              <div className="mt-6 flex justify-end">
+                <Button
+                  onClick={handleAnalyze}
+                  type="primary"
+                  icon={<ThunderboltOutlined />}
+                  loading={isAnalyzing}
+                  style={{ backgroundColor: '#B4916C', borderColor: '#B4916C' }}
+                >
+                  {isAnalyzing ? 'Analyzing...' : 'Analyze Document'}
+                </Button>
+              </div>
+            </Card>
+          ) : (
+            <Card className="text-center py-12 border-[#222222] bg-[#111111]">
+              <div className="text-[#F9F6EE] mb-4">
+                <FileSearchOutlined style={{ fontSize: 48 }} />
+              </div>
+              <h3 className="text-xl font-medium text-[#F9F6EE] mb-2">No Document Selected</h3>
+              <p className="text-[#C5C2BA] mb-6">
+                Select a document from the sidebar or upload a new one to analyze
+              </p>
+              <Button
+                onClick={() => setIsUploadModalOpen(true)}
+                type="primary"
+                icon={<UploadOutlined />}
+                style={{ backgroundColor: '#B4916C', borderColor: '#B4916C' }}
+              >
+                Upload Document
+              </Button>
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {/* Upload Modal */}
+      <Modal
+        title="Upload Document"
+        open={isUploadModalOpen}
+        onCancel={() => setIsUploadModalOpen(false)}
+        footer={null}
+        maskStyle={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}
+        className="upload-document-modal"
+        styles={{
+          header: {
+            backgroundColor: '#111111',
+            borderBottom: '1px solid #222222',
+          },
+          body: {
+            backgroundColor: '#111111',
+          },
+          mask: {
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          },
+          content: {
+            backgroundColor: '#111111',
+            borderRadius: '8px',
+            border: '1px solid #222222',
+          },
+          footer: {
+            backgroundColor: '#111111',
+            borderTop: '1px solid #222222',
+          }
+        }}
+      >
+        <Dragger
+          {...uploadProps}
+          listType="picture"
+          className="mt-4 bg-[#050505] border-[#222222] rounded-lg"
+        >
+          <p className="ant-upload-drag-icon">
+            <InboxOutlined style={{ color: '#B4916C' }} />
+          </p>
+          <p className="ant-upload-text text-[#F9F6EE]">
+            Click or drag file to this area to upload
+          </p>
+          <p className="ant-upload-hint text-[#C5C2BA]">
+            Support for .pdf, .doc, .docx, .txt, and other documents up to 5MB
+          </p>
+        </Dragger>
+      </Modal>
+
+      {/* Error Modal */}
+      <Modal
+        title={<span className="text-[#F9F6EE]">Analysis Error</span>}
+        open={!!error}
+        onCancel={() => setError('')}
+        footer={[
+          <Button 
+            key="ok" 
+            onClick={() => setError('')}
+            style={{ backgroundColor: '#B4916C', borderColor: '#B4916C', color: '#F9F6EE' }}
+          >
+            OK
+          </Button>
+        ]}
+        styles={{
+          header: {
+            backgroundColor: '#111111',
+            borderBottom: '1px solid #222222',
+          },
+          body: {
+            backgroundColor: '#111111',
+            color: '#F9F6EE'
+          },
+          mask: {
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          },
+          content: {
+            backgroundColor: '#111111',
+            borderRadius: '8px',
+            border: '1px solid #222222',
+          },
+          footer: {
+            backgroundColor: '#111111',
+            borderTop: '1px solid #222222',
+          }
+        }}
+      >
+        <div className="text-[#F9F6EE]">{error}</div>
+      </Modal>
     </div>
   );
 } 
