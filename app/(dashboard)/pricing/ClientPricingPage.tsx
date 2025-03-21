@@ -45,11 +45,11 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
   };
 
   // Ensure we have fallbacks for all data
-  const proPlan = products.find((product) => product.name === "Pro") || { id: "pro-fallback", name: "Pro" };
+  const freePlan = products.find((product) => product.name === "Pro") || { id: "free-fallback", name: "Free" };
   const moonlightingPlan = products.find((product) => product.name === "Moonlighting") || { id: "moonlighting-fallback", name: "Moonlighting" };
   const ceoPlan = products.find((product) => product.name === "CEO") || { id: "ceo-fallback", name: "CEO" };
 
-  const proPrice = prices.find((price) => price.productId === proPlan?.id) || { unitAmount: 799, id: "price_1QoUP9FYYYXM77wGBUVqTaiE", productId: proPlan.id };
+  const freePrice = prices.find((price) => price.productId === freePlan?.id) || { unitAmount: 0, id: "price_free", productId: freePlan.id };
   const moonlightingPrice = prices.find((price) => price.productId === moonlightingPlan?.id) || { unitAmount: 1499, id: "price-moonlighting-fallback", productId: moonlightingPlan.id };
   const ceoPrice = prices.find((price) => price.productId === ceoPlan?.id) || { unitAmount: 9999, id: "price_1QoYTrFYYYXM77wGffciG20i", productId: ceoPlan.id };
 
@@ -96,41 +96,41 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
 
         <div className="grid md:grid-cols-3 gap-8 justify-center mb-8">
           <PricingCard
-            name="Pro"
-            price={proPrice?.unitAmount || 799}
+            name="Free"
+            price={0}
             interval="month"
             features={[
-              "20 CV uploads/month ⓘ",
-              "10 ATS analyses/month ⓘ",
-              "7 Optimizations/month ⓘ",
-              "Priority 2 in AI processing ⓘ",
+              "Optimize CV ⓘ",
+              "Document Analysis ⓘ",
+              "Job Description Generator ⓘ",
+              "CV to Job Match ⓘ",
+              "Job Opportunities ⓘ"
             ]}
             tooltips={{
-              "20 CV uploads/month ⓘ": "Upload up to 20 different CVs each month",
-              "10 ATS analyses/month ⓘ": "Get ATS compatibility analysis for 10 CVs monthly",
-              "7 Optimizations/month ⓘ": "Receive AI-powered optimization suggestions 7 times per month",
-              "Priority 2 in AI processing ⓘ": "Your requests are processed with priority level 2",
+              "Optimize CV ⓘ": "Analyze & optimize for ATS",
+              "Document Analysis ⓘ": "Extract insights & visualize data",
+              "Job Description Generator ⓘ": "Create detailed job descriptions",
+              "CV to Job Match ⓘ": "Analyze CV against job descriptions",
+              "Job Opportunities ⓘ": "Discover the best jobs you can get now with your current CV"
             }}
             highlight={false}
-            priceId="price_1QoUP9FYYYXM77wGBUVqTaiE"
+            priceId="price_free"
             animationDelay={0.2}
             onCheckout={handleCheckout}
           />
           <PricingCard
             name="Moonlighting"
-            price={moonlightingPrice?.unitAmount || 1499}
+            price={1499}
             interval="month"
             features={[
-              "Unlimited CV uploads/month ⓘ",
-              "20 ATS analyses/month ⓘ",
-              "15 Optimizations/month ⓘ",
-              "Access to Analytics Suite ⓘ",
+              "Everything in Free Plan ⓘ",
+              "Unlimited Access to Create Suite ⓘ",
+              "Access to Reming Agent ⓘ"
             ]}
             tooltips={{
-              "Unlimited CV uploads/month ⓘ": "Upload as many CVs as you need without any monthly limits",
-              "20 ATS analyses/month ⓘ": "Get detailed analysis of how your CV performs against ATS systems",
-              "15 Optimizations/month ⓘ": "AI-powered suggestions to improve your CV structure and content",
-              "Access to Analytics Suite ⓘ": "Advanced metrics and insights about your CV performance",
+              "Everything in Free Plan ⓘ": "All features from the Free plan included",
+              "Unlimited Access to Create Suite ⓘ": "Unlimited access to the Create suite for advanced content creation",
+              "Access to Reming Agent ⓘ": "Access the unlimited power of \"Reming\" the most powerful Agent"
             }}
             highlight={true}
             priceId={moonlightingPrice?.id}

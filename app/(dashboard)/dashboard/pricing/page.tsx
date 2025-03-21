@@ -22,13 +22,13 @@ interface ActivityLog {
 
 // Create fallback data for static rendering
 const fallbackPrices = [
-  { id: "price_1QoUP9FYYYXM77wGBUVqTaiE", productId: "pro-fallback", unitAmount: 799 },
+  { id: "price_free", productId: "free-fallback", unitAmount: 0 },
   { id: "price-moonlighting-fallback", productId: "moonlighting-fallback", unitAmount: 1499 },
   { id: "price_1QoYTrFYYYXM77wGffciG20i", productId: "ceo-fallback", unitAmount: 9999 }
 ];
 
 const fallbackProducts = [
-  { id: "pro-fallback", name: "Pro" },
+  { id: "free-fallback", name: "Free" },
   { id: "moonlighting-fallback", name: "Moonlighting" },
   { id: "ceo-fallback", name: "CEO" }
 ];

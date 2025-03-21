@@ -32,6 +32,12 @@ export default function PricingCardClient({
 
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // If it's the free plan, no checkout needed
+    if (name === "Free" || price === 0) {
+      return;
+    }
+    
     setIsLoading(true);
     setError(null);
 
@@ -178,7 +184,7 @@ export default function PricingCardClient({
         <form onSubmit={handleCheckout} className="w-full mt-auto">
           <Button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || (name === "Free" || price === 0)}
             className={`w-full font-medium font-safiro ${
               highlight
                 ? "bg-[#B4916C] hover:bg-[#A3815B] text-[#050505]"
@@ -190,6 +196,8 @@ export default function PricingCardClient({
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Processing...
               </>
+            ) : name === "Free" || price === 0 ? (
+              "Current Plan"
             ) : (
               <>{highlight ? "Upgrade Now" : "Select Plan"}</>
             )}

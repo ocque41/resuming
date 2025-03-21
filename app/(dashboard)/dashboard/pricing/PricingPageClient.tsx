@@ -44,8 +44,8 @@ export default function PricingPageClient({
   pricingError 
 }: PricingPageClientProps) {
   // Ensure we have fallbacks for all data
-  const proPlan = products.find((product) => product.name === "Pro") || 
-    { id: "pro-fallback", name: "Pro" };
+  const freePlan = products.find((product) => product.name === "Pro") || 
+    { id: "free-fallback", name: "Free" };
   
   const moonlightingPlan = products.find((product) => product.name === "Moonlighting") || 
     { id: "moonlighting-fallback", name: "Moonlighting" };
@@ -53,8 +53,8 @@ export default function PricingPageClient({
   const ceoPlan = products.find((product) => product.name === "CEO") || 
     { id: "ceo-fallback", name: "CEO" };
 
-  const proPrice = prices.find((price) => price.productId === proPlan?.id) || 
-    { id: "price_1QoUP9FYYYXM77wGBUVqTaiE", productId: "pro-fallback", unitAmount: 799 };
+  const freePrice = prices.find((price) => price.productId === freePlan?.id) || 
+    { id: "price_free", productId: "free-fallback", unitAmount: 0 };
   
   const moonlightingPrice = prices.find((price) => price.productId === moonlightingPlan?.id) || 
     { id: "price-moonlighting-fallback", productId: "moonlighting-fallback", unitAmount: 1499 };
@@ -95,40 +95,40 @@ export default function PricingPageClient({
               <PricingErrorBoundary>
                 <div className="grid md:grid-cols-3 gap-8 justify-center">
                   <PricingCardClient
-                    name="Pro"
-                    price={proPrice?.unitAmount || 799}
+                    name="Free"
+                    price={0}
                     interval="month"
                     features={[
-                      "20 CV uploads/month ⓘ",
-                      "10 ATS analyses/month ⓘ",
-                      "7 Optimizations/month ⓘ",
-                      "Priority 2 in AI processing ⓘ",
+                      "Optimize CV ⓘ",
+                      "Document Analysis ⓘ",
+                      "Job Description Generator ⓘ",
+                      "CV to Job Match ⓘ",
+                      "Job Opportunities ⓘ",
                     ]}
                     tooltips={{
-                      "20 CV uploads/month ⓘ": "Upload up to 20 different CVs each month",
-                      "10 ATS analyses/month ⓘ": "Get ATS compatibility analysis for 10 CVs monthly",
-                      "7 Optimizations/month ⓘ": "Receive AI-powered optimization suggestions 7 times per month",
-                      "Priority 2 in AI processing ⓘ": "Your requests are processed with priority level 2",
+                      "Optimize CV ⓘ": "Analyze & optimize for ATS",
+                      "Document Analysis ⓘ": "Extract insights & visualize data",
+                      "Job Description Generator ⓘ": "Create detailed job descriptions",
+                      "CV to Job Match ⓘ": "Analyze CV against job descriptions",
+                      "Job Opportunities ⓘ": "Discover the best jobs you can get now with your current CV",
                     }}
                     highlight={false}
-                    priceId={proPrice?.id}
+                    priceId={freePrice?.id}
                     animationDelay={0.2}
                   />
                   <PricingCardClient
                     name="Moonlighting"
-                    price={moonlightingPrice?.unitAmount || 1499}
+                    price={1499}
                     interval="month"
                     features={[
-                      "Unlimited CV uploads/month ⓘ",
-                      "20 ATS analyses/month ⓘ",
-                      "15 Optimizations/month ⓘ",
-                      "Access to Analytics Suite ⓘ",
+                      "Everything in Free Plan ⓘ",
+                      "Unlimited Access to Create Suite ⓘ",
+                      "Access to Reming Agent ⓘ",
                     ]}
                     tooltips={{
-                      "Unlimited CV uploads/month ⓘ": "Upload as many CVs as you need without any monthly limits",
-                      "20 ATS analyses/month ⓘ": "Get detailed analysis of how your CV performs against ATS systems",
-                      "15 Optimizations/month ⓘ": "AI-powered suggestions to improve your CV structure and content",
-                      "Access to Analytics Suite ⓘ": "Advanced metrics and insights about your CV performance",
+                      "Everything in Free Plan ⓘ": "All features from the Free plan included",
+                      "Unlimited Access to Create Suite ⓘ": "Unlimited access to the Create suite for advanced content creation",
+                      "Access to Reming Agent ⓘ": "Access the unlimited power of \"Reming\" the most powerful Agent",
                     }}
                     highlight={true}
                     priceId={moonlightingPrice?.id}
