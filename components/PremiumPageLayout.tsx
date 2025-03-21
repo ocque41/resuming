@@ -153,7 +153,7 @@ export default function PremiumPageLayout({
               </div>
             </div>
             
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-4 relative ml-auto">
               {headerExtra}
               {teamData && activityLogs && (
                 <UserMenu teamData={teamData} activityLogs={activityLogs} />

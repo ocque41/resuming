@@ -54,7 +54,7 @@ export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
             whileTap={{ scale: 0.95 }}
             className="flex items-center gap-2 cursor-pointer"
           >
-            <MicroCard variant="custom" className="cursor-pointer ml-auto bg-[#B4916C] hover:bg-[#B4916C]/90 transition-colors duration-200">
+            <MicroCard variant="custom" className="cursor-pointer bg-[#B4916C] hover:bg-[#B4916C]/90 transition-colors duration-200">
               <span className="flex items-center justify-center h-full w-full rounded-full text-white font-safiro">
                 U
               </span>

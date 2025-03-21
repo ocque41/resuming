@@ -417,24 +417,6 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
             </div>
           )}
         </Card>
-        
-        <Card title="Top Topics">
-          {analysisResult.topics && analysisResult.topics.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {analysisResult.topics.slice(0, 6).map((topic: any, index: number) => (
-                <div key={`topic-${index}`} className="bg-[#222222] p-3 rounded-md">
-                  <div className="flex justify-between items-center mb-2">
-                    <div className="font-medium text-[#F9F6EE]">{topic.name}</div>
-                    <div className="text-sm text-[#B4916C]">{Math.round(topic.relevance * 100)}%</div>
-                  </div>
-                  <Progress percent={Math.round(topic.relevance * 100)} size="small" strokeWidth={4} strokeColor="#B4916C" />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <Empty description="No topics detected" />
-          )}
-        </Card>
       </div>
     );
   };
@@ -450,10 +432,10 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
       return (
         <div className="grid grid-cols-1 gap-4">
           <Card title="Document Type" className="text-center">
-            <div className="text-2xl font-bold mb-3">
+            <div className="text-2xl font-bold mb-3 text-[#F9F6EE]">
               {fileType.name === 'pdf' && selectedDocument?.fileName.toLowerCase().includes('cv') ? 'CV / Resume' : 'Document'}
             </div>
-            <div className="text-gray-500">
+            <div className="text-[#C5C2BA]">
               {`File type: ${fileType.name.toUpperCase()} • Created: ${new Date(selectedDocument?.createdAt || Date.now()).toLocaleDateString()}`}
             </div>
           </Card>
@@ -476,28 +458,6 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
               )}
             />
           </Card>
-          
-          <Card title="Top Topics">
-            {analysisResult.topics && analysisResult.topics.length > 0 ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                {analysisResult.topics.slice(0, 9).map((topic: {name: string, relevance: number}, index: number) => (
-                  <div 
-                    key={`topic-tag-${index}`} 
-                    className="py-1 px-3 rounded-full text-center text-sm"
-                    style={{
-                      backgroundColor: `${COLORS[index % COLORS.length]}20`,
-                      color: COLORS[index % COLORS.length],
-                      border: `1px solid ${COLORS[index % COLORS.length]}`
-                    }}
-                  >
-                    {topic.name} ({Math.round(topic.relevance * 100)}%)
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <Empty description="No topics detected" />
-            )}
-          </Card>
         </div>
       );
     }
@@ -509,20 +469,20 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
           <table className="min-w-full">
             <tbody>
               <tr>
-                <td className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">File Name</td>
-                <td className="px-6 py-3 text-left text-sm text-gray-900">{selectedDocument?.fileName}</td>
+                <td className="px-6 py-3 text-left text-xs font-medium text-[#C5C2BA] uppercase tracking-wider w-1/3">File Name</td>
+                <td className="px-6 py-3 text-left text-sm text-[#F9F6EE]">{selectedDocument?.fileName}</td>
               </tr>
               <tr>
-                <td className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File Type</td>
-                <td className="px-6 py-3 text-left text-sm text-gray-900">{fileType?.name.toUpperCase()}</td>
+                <td className="px-6 py-3 text-left text-xs font-medium text-[#C5C2BA] uppercase tracking-wider">File Type</td>
+                <td className="px-6 py-3 text-left text-sm text-[#F9F6EE]">{fileType?.name.toUpperCase()}</td>
               </tr>
               <tr>
-                <td className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</td>
-                <td className="px-6 py-3 text-left text-sm text-gray-900">{new Date(selectedDocument?.createdAt || Date.now()).toLocaleString()}</td>
+                <td className="px-6 py-3 text-left text-xs font-medium text-[#C5C2BA] uppercase tracking-wider">Created</td>
+                <td className="px-6 py-3 text-left text-sm text-[#F9F6EE]">{new Date(selectedDocument?.createdAt || Date.now()).toLocaleString()}</td>
               </tr>
               <tr>
-                <td className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Analysis Type</td>
-                <td className="px-6 py-3 text-left text-sm text-gray-900 capitalize">{analysisType}</td>
+                <td className="px-6 py-3 text-left text-xs font-medium text-[#C5C2BA] uppercase tracking-wider">Analysis Type</td>
+                <td className="px-6 py-3 text-left text-sm text-[#F9F6EE] capitalize">{analysisType}</td>
               </tr>
               <tr>
                 <td className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Overall Quality</td>
