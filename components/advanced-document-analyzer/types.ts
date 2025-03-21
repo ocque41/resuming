@@ -211,6 +211,47 @@ export interface ContentExtractionResult {
   metadata?: Record<string, string>;
 }
 
+// Type for scientific paper analysis details
+export interface ScientificAnalysis {
+  researchStructure?: {
+    hasAbstract?: boolean;
+    hasIntroduction?: boolean;
+    hasMethodology?: boolean;
+    hasResults?: boolean;
+    hasDiscussion?: boolean;
+    hasConclusion?: boolean;
+    hasReferences?: boolean;
+    structureCompleteness?: number;
+    structureQuality?: number;
+  };
+  researchQuality?: {
+    methodologyRigor?: number;
+    dataQuality?: number;
+    analysisDepth?: number;
+    conclusionValidity?: number;
+    literatureReviewQuality?: number;
+    originalityScore?: number;
+    impactPotential?: number;
+    overallQuality?: number;
+  };
+  citationAnalysis?: {
+    estimatedCitationCount?: number;
+    recentReferences?: number;
+    selfCitations?: boolean;
+    keyReferences?: string[];
+    citationQuality?: number;
+  };
+  contentAssessment?: {
+    clarity?: number;
+    technicalDepth?: number;
+    audienceLevel?: string;
+    jargonLevel?: string;
+    graphicsQuality?: number;
+  };
+  researchGaps?: string[];
+  futureWorkSuggestions?: string[];
+}
+
 // Complete analysis result type
 export interface AnalysisResult {
   documentId: string | number;
@@ -283,6 +324,46 @@ export interface AnalysisResult {
     visualHierarchyScore?: number;
   };
   improvementSuggestions?: any;
+  
+  // Scientific paper analysis properties
+  researchStructure?: {
+    hasAbstract?: boolean;
+    hasIntroduction?: boolean;
+    hasMethodology?: boolean;
+    hasResults?: boolean;
+    hasDiscussion?: boolean;
+    hasConclusion?: boolean;
+    hasReferences?: boolean;
+    structureCompleteness?: number;
+    structureQuality?: number;
+  };
+  researchQuality?: {
+    methodologyRigor?: number;
+    dataQuality?: number;
+    analysisDepth?: number;
+    conclusionValidity?: number;
+    literatureReviewQuality?: number;
+    originalityScore?: number;
+    impactPotential?: number;
+    overallQuality?: number;
+  };
+  citationAnalysis?: {
+    estimatedCitationCount?: number;
+    recentReferences?: number;
+    selfCitations?: boolean;
+    keyReferences?: string[];
+    citationQuality?: number;
+  };
+  contentAssessment?: {
+    clarity?: number;
+    technicalDepth?: number;
+    audienceLevel?: string;
+    jargonLevel?: string;
+    graphicsQuality?: number;
+  };
+  researchGaps?: string[];
+  futureWorkSuggestions?: string[];
+  scientificAnalysis?: ScientificAnalysis;
   
   // Allow for any future extensions without TypeScript errors
   [key: string]: any;

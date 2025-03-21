@@ -45,6 +45,8 @@ function generateMockAnalysisResult(documentId: string | number, fileName: strin
     return generateMockPresentationAnalysis(documentId, fileName, timestamp);
   } else if (purpose === 'cv') {
     return generateMockCVAnalysis(documentId, fileName, timestamp);
+  } else if (purpose === 'scientific') {
+    return generateMockScientificAnalysis(documentId, fileName, timestamp);
   } else {
     // Default to general document analysis
     return generateMockDocumentAnalysis(documentId, fileName, timestamp);
@@ -354,6 +356,105 @@ function generateMockCVAnalysis(documentId: string | number, fileName: string, t
         ]
       }
     }
+  };
+}
+
+/**
+ * Generate mock scientific paper analysis data
+ */
+function generateMockScientificAnalysis(documentId: string | number, fileName: string, timestamp: string) {
+  return {
+    documentId,
+    fileName,
+    fileType: "pdf",
+    analysisType: "scientific",
+    analysisTimestamp: timestamp,
+    summary: "This research paper presents a novel approach to natural language processing using transformer-based models enhanced with domain-specific pre-training. The study demonstrates significant improvements in performance across multiple benchmarks compared to existing methods. The methodology includes rigorous testing and validation procedures with detailed error analysis.",
+    keyPoints: [
+      "Proposed model achieves 12% improvement over state-of-the-art methods",
+      "Domain-specific pre-training significantly enhances performance in specialized applications",
+      "Ablation studies reveal the importance of contextual embeddings in the architecture",
+      "Error analysis identifies specific linguistic challenges for future research",
+      "Model demonstrates strong generalization capabilities across diverse datasets"
+    ],
+    recommendations: [
+      "Expand evaluation to include more diverse linguistic phenomena",
+      "Consider computational efficiency improvements for practical applications",
+      "Incorporate additional domain knowledge through structured inputs",
+      "Conduct longitudinal studies to assess model performance over time",
+      "Explore ensemble methods to further enhance accuracy and robustness"
+    ],
+    insights: {
+      clarity: 85,
+      relevance: 92,
+      completeness: 78,
+      conciseness: 75,
+      structure: 88,
+      engagement: 70,
+      contentquality: 83,
+      overallScore: 82
+    },
+    researchStructure: {
+      hasAbstract: true,
+      hasIntroduction: true,
+      hasMethodology: true,
+      hasResults: true,
+      hasDiscussion: true,
+      hasConclusion: true,
+      hasReferences: true,
+      structureCompleteness: 90,
+      structureQuality: 85
+    },
+    researchQuality: {
+      methodologyRigor: 87,
+      dataQuality: 82,
+      analysisDepth: 85,
+      conclusionValidity: 80,
+      literatureReviewQuality: 78,
+      originalityScore: 75,
+      impactPotential: 88,
+      overallQuality: 82
+    },
+    citationAnalysis: {
+      estimatedCitationCount: 42,
+      recentReferences: 65,
+      selfCitations: true,
+      keyReferences: [
+        "Smith et al. (2022). Advances in Transformer Architecture",
+        "Johnson & Williams (2021). Domain-Specific Pre-training",
+        "Garcia et al. (2023). Benchmark Datasets for NLP Tasks",
+        "Zhang (2022). Performance Metrics for Language Models"
+      ],
+      citationQuality: 85
+    },
+    contentAssessment: {
+      clarity: 88,
+      technicalDepth: 90,
+      audienceLevel: "Expert Academic",
+      jargonLevel: "High",
+      graphicsQuality: 75
+    },
+    topics: [
+      { name: "Natural Language Processing", relevance: 0.95 },
+      { name: "Transformer Models", relevance: 0.92 },
+      { name: "Domain-Specific Pre-training", relevance: 0.88 },
+      { name: "Performance Benchmarking", relevance: 0.80 },
+      { name: "Machine Learning", relevance: 0.75 }
+    ],
+    researchGaps: [
+      "Limited evaluation on low-resource languages",
+      "Insufficient analysis of computational requirements",
+      "Lack of comparison with ensemble methods",
+      "Minimal exploration of transfer learning capabilities",
+      "Limited discussion of ethical considerations"
+    ],
+    futureWorkSuggestions: [
+      "Investigate performance in multilingual settings",
+      "Develop more efficient training procedures",
+      "Explore applications in specialized domains like healthcare or legal",
+      "Conduct human evaluation studies",
+      "Address bias and fairness concerns"
+    ]
   };
 }
 

@@ -76,6 +76,12 @@ const documentPurposes = [
     label: "Presentation", 
     description: "Analyze slides and presentations in PDF format", 
     tooltip: "Evaluates presentation structure, messaging clarity, and visual hierarchy of slides saved as PDFs."
+  },
+  { 
+    value: "scientific", 
+    label: "Scientific Paper", 
+    description: "Analyze research papers and academic articles", 
+    tooltip: "Evaluates research quality, methodology, citations, and content structure of scientific papers and academic articles."
   }
 ];
 
@@ -406,6 +412,8 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
             return renderPresentationAnalysis();
           case 'cv':
             return renderCVAnalysis();
+          case 'scientific':
+            return renderScientificAnalysis();
           default:
             return renderContentAnalysis();
         }
@@ -1025,6 +1033,336 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
             })}
           </div>
         </Card>
+      </div>
+    );
+  };
+  
+  // Helper function to render scientific paper analysis
+  const renderScientificAnalysis = () => {
+    if (!analysisResult) return <Empty description="No analysis data available" />;
+
+    // Access the scientific paper specific data
+    const {
+      researchStructure,
+      researchQuality,
+      citationAnalysis,
+      contentAssessment,
+      researchGaps,
+      futureWorkSuggestions
+    } = analysisResult;
+
+    return (
+      <div className="space-y-6">
+        <div className="mb-4">
+          <h3 className="text-xl text-[#F9F6EE] font-safiro mb-3">Research Paper Analysis</h3>
+          <p className="text-[#C5C2BA] font-borna">
+            Detailed analysis of the research paper's structure, methodology, and contribution to the field.
+          </p>
+        </div>
+
+        {/* Research Structure */}
+        <div className="space-y-4">
+          <h4 className="text-lg text-[#F9F6EE] font-safiro border-b border-[#333333] pb-2">
+            Research Structure
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Structure components */}
+            <div className="bg-[#171717] rounded-xl p-4 border border-[#222222]">
+              <h5 className="text-[#B4916C] font-safiro mb-3">Structure Components</h5>
+              <div className="space-y-2">
+                {researchStructure && (
+                  <ul className="grid grid-cols-1 gap-2">
+                    <li className="flex items-center">
+                      <div className={`h-4 w-4 rounded-full mr-2 ${researchStructure.hasAbstract ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className="text-[#F9F6EE] font-borna">Abstract</span>
+                    </li>
+                    <li className="flex items-center">
+                      <div className={`h-4 w-4 rounded-full mr-2 ${researchStructure.hasIntroduction ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className="text-[#F9F6EE] font-borna">Introduction</span>
+                    </li>
+                    <li className="flex items-center">
+                      <div className={`h-4 w-4 rounded-full mr-2 ${researchStructure.hasMethodology ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className="text-[#F9F6EE] font-borna">Methodology</span>
+                    </li>
+                    <li className="flex items-center">
+                      <div className={`h-4 w-4 rounded-full mr-2 ${researchStructure.hasResults ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className="text-[#F9F6EE] font-borna">Results</span>
+                    </li>
+                    <li className="flex items-center">
+                      <div className={`h-4 w-4 rounded-full mr-2 ${researchStructure.hasDiscussion ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className="text-[#F9F6EE] font-borna">Discussion</span>
+                    </li>
+                    <li className="flex items-center">
+                      <div className={`h-4 w-4 rounded-full mr-2 ${researchStructure.hasConclusion ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className="text-[#F9F6EE] font-borna">Conclusion</span>
+                    </li>
+                    <li className="flex items-center">
+                      <div className={`h-4 w-4 rounded-full mr-2 ${researchStructure.hasReferences ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className="text-[#F9F6EE] font-borna">References</span>
+                    </li>
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            {/* Structure Quality */}
+            <div className="bg-[#171717] rounded-xl p-4 border border-[#222222]">
+              <h5 className="text-[#B4916C] font-safiro mb-3">Structure Quality</h5>
+              {researchStructure && (
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-[#F9F6EE] font-borna">Completeness</span>
+                      <span className="text-[#B4916C] font-borna">{researchStructure.structureCompleteness || 0}%</span>
+                    </div>
+                    <div className="w-full bg-[#333333] rounded-full h-2.5">
+                      <div 
+                        className="bg-[#B4916C] h-2.5 rounded-full" 
+                        style={{ width: `${researchStructure.structureCompleteness || 0}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-[#F9F6EE] font-borna">Quality</span>
+                      <span className="text-[#B4916C] font-borna">{researchStructure.structureQuality || 0}%</span>
+                    </div>
+                    <div className="w-full bg-[#333333] rounded-full h-2.5">
+                      <div 
+                        className="bg-[#B4916C] h-2.5 rounded-full" 
+                        style={{ width: `${researchStructure.structureQuality || 0}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Research Quality */}
+        <div className="space-y-4">
+          <h4 className="text-lg text-[#F9F6EE] font-safiro border-b border-[#333333] pb-2">
+            Research Quality Assessment
+          </h4>
+          {researchQuality && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-[#171717] rounded-xl p-4 border border-[#222222]">
+                <h5 className="text-[#B4916C] font-safiro mb-3">Methodology & Analysis</h5>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-[#F9F6EE] font-borna">Methodology Rigor</span>
+                      <span className="text-[#B4916C] font-borna">{researchQuality.methodologyRigor || 0}%</span>
+                    </div>
+                    <div className="w-full bg-[#333333] rounded-full h-2.5">
+                      <div 
+                        className="bg-[#B4916C] h-2.5 rounded-full" 
+                        style={{ width: `${researchQuality.methodologyRigor || 0}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-[#F9F6EE] font-borna">Data Quality</span>
+                      <span className="text-[#B4916C] font-borna">{researchQuality.dataQuality || 0}%</span>
+                    </div>
+                    <div className="w-full bg-[#333333] rounded-full h-2.5">
+                      <div 
+                        className="bg-[#B4916C] h-2.5 rounded-full" 
+                        style={{ width: `${researchQuality.dataQuality || 0}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-[#F9F6EE] font-borna">Analysis Depth</span>
+                      <span className="text-[#B4916C] font-borna">{researchQuality.analysisDepth || 0}%</span>
+                    </div>
+                    <div className="w-full bg-[#333333] rounded-full h-2.5">
+                      <div 
+                        className="bg-[#B4916C] h-2.5 rounded-full" 
+                        style={{ width: `${researchQuality.analysisDepth || 0}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-[#171717] rounded-xl p-4 border border-[#222222]">
+                <h5 className="text-[#B4916C] font-safiro mb-3">Contribution & Impact</h5>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-[#F9F6EE] font-borna">Originality</span>
+                      <span className="text-[#B4916C] font-borna">{researchQuality.originalityScore || 0}%</span>
+                    </div>
+                    <div className="w-full bg-[#333333] rounded-full h-2.5">
+                      <div 
+                        className="bg-[#B4916C] h-2.5 rounded-full" 
+                        style={{ width: `${researchQuality.originalityScore || 0}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-[#F9F6EE] font-borna">Impact Potential</span>
+                      <span className="text-[#B4916C] font-borna">{researchQuality.impactPotential || 0}%</span>
+                    </div>
+                    <div className="w-full bg-[#333333] rounded-full h-2.5">
+                      <div 
+                        className="bg-[#B4916C] h-2.5 rounded-full" 
+                        style={{ width: `${researchQuality.impactPotential || 0}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-[#F9F6EE] font-borna">Overall Quality</span>
+                      <span className="text-[#B4916C] font-borna">{researchQuality.overallQuality || 0}%</span>
+                    </div>
+                    <div className="w-full bg-[#333333] rounded-full h-2.5">
+                      <div 
+                        className="bg-[#B4916C] h-2.5 rounded-full" 
+                        style={{ width: `${researchQuality.overallQuality || 0}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Citation Analysis */}
+        {citationAnalysis && (
+          <div className="space-y-4">
+            <h4 className="text-lg text-[#F9F6EE] font-safiro border-b border-[#333333] pb-2">
+              Citation Analysis
+            </h4>
+            <div className="bg-[#171717] rounded-xl p-4 border border-[#222222]">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="flex flex-col items-center p-3 bg-[#111111] rounded-lg">
+                  <span className="text-[#B4916C] text-3xl font-safiro">{citationAnalysis.estimatedCitationCount || 0}</span>
+                  <span className="text-[#C5C2BA] text-sm mt-1">Citations</span>
+                </div>
+                <div className="flex flex-col items-center p-3 bg-[#111111] rounded-lg">
+                  <span className="text-[#B4916C] text-3xl font-safiro">{citationAnalysis.recentReferences || 0}%</span>
+                  <span className="text-[#C5C2BA] text-sm mt-1">Recent References</span>
+                </div>
+                <div className="flex flex-col items-center p-3 bg-[#111111] rounded-lg">
+                  <span className="text-[#B4916C] text-3xl font-safiro">{citationAnalysis.citationQuality || 0}%</span>
+                  <span className="text-[#C5C2BA] text-sm mt-1">Citation Quality</span>
+                </div>
+              </div>
+
+              {/* Key References */}
+              {citationAnalysis.keyReferences && citationAnalysis.keyReferences.length > 0 && (
+                <div>
+                  <h5 className="text-[#B4916C] font-safiro mb-2">Key References</h5>
+                  <ul className="space-y-1 text-[#F9F6EE] font-borna">
+                    {citationAnalysis.keyReferences.map((reference: string, index: number) => (
+                      <li key={index} className="text-sm">
+                        • {reference}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Research Gaps and Future Work */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Research Gaps */}
+          {researchGaps && researchGaps.length > 0 && (
+            <div className="bg-[#171717] rounded-xl p-4 border border-[#222222]">
+              <h5 className="text-[#B4916C] font-safiro mb-3">Research Gaps</h5>
+              <ul className="space-y-2 text-[#F9F6EE] font-borna">
+                {researchGaps.map((gap: string, index: number) => (
+                  <li key={index} className="flex">
+                    <span className="text-[#B4916C] mr-2">•</span>
+                    <span>{gap}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Future Work Suggestions */}
+          {futureWorkSuggestions && futureWorkSuggestions.length > 0 && (
+            <div className="bg-[#171717] rounded-xl p-4 border border-[#222222]">
+              <h5 className="text-[#B4916C] font-safiro mb-3">Future Research Directions</h5>
+              <ul className="space-y-2 text-[#F9F6EE] font-borna">
+                {futureWorkSuggestions.map((suggestion: string, index: number) => (
+                  <li key={index} className="flex">
+                    <span className="text-[#B4916C] mr-2">•</span>
+                    <span>{suggestion}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        {/* Content Assessment */}
+        {contentAssessment && (
+          <div className="space-y-4">
+            <h4 className="text-lg text-[#F9F6EE] font-safiro border-b border-[#333333] pb-2">
+              Content Assessment
+            </h4>
+            <div className="bg-[#171717] rounded-xl p-4 border border-[#222222]">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                <div>
+                  <div className="flex justify-between mb-1">
+                    <span className="text-[#F9F6EE] font-borna">Content Clarity</span>
+                    <span className="text-[#B4916C] font-borna">{contentAssessment.clarity || 0}%</span>
+                  </div>
+                  <div className="w-full bg-[#333333] rounded-full h-2.5">
+                    <div 
+                      className="bg-[#B4916C] h-2.5 rounded-full" 
+                      style={{ width: `${contentAssessment.clarity || 0}%` }}
+                    ></div>
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between mb-1">
+                    <span className="text-[#F9F6EE] font-borna">Technical Depth</span>
+                    <span className="text-[#B4916C] font-borna">{contentAssessment.technicalDepth || 0}%</span>
+                  </div>
+                  <div className="w-full bg-[#333333] rounded-full h-2.5">
+                    <div 
+                      className="bg-[#B4916C] h-2.5 rounded-full" 
+                      style={{ width: `${contentAssessment.technicalDepth || 0}%` }}
+                    ></div>
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between mb-1">
+                    <span className="text-[#F9F6EE] font-borna">Graphics Quality</span>
+                    <span className="text-[#B4916C] font-borna">{contentAssessment.graphicsQuality || 0}%</span>
+                  </div>
+                  <div className="w-full bg-[#333333] rounded-full h-2.5">
+                    <div 
+                      className="bg-[#B4916C] h-2.5 rounded-full" 
+                      style={{ width: `${contentAssessment.graphicsQuality || 0}%` }}
+                    ></div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 bg-[#111111] rounded-lg">
+                    <div className="text-[#C5C2BA] text-sm mb-1">Audience Level</div>
+                    <div className="text-[#F9F6EE] font-borna">{contentAssessment.audienceLevel || "Academic"}</div>
+                  </div>
+                  <div className="p-3 bg-[#111111] rounded-lg">
+                    <div className="text-[#C5C2BA] text-sm mb-1">Jargon Level</div>
+                    <div className="text-[#F9F6EE] font-borna">{contentAssessment.jargonLevel || "Moderate"}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };

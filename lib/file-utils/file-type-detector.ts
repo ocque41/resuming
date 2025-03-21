@@ -2,7 +2,7 @@
  * File type detection utilities for the document analyzer
  */
 
-export type FileCategory = 'document' | 'spreadsheet' | 'presentation' | 'image' | 'cv' | 'other';
+export type FileCategory = 'document' | 'spreadsheet' | 'presentation' | 'image' | 'cv' | 'scientific' | 'other';
 
 export interface FileTypeInfo {
   extension: string;
@@ -102,6 +102,15 @@ const CV_KEYWORDS = [
   'career'
 ];
 
+// Common scientific paper-related keywords to detect in filenames
+const SCIENTIFIC_KEYWORDS = [
+  'research', 'paper', 'study', 'article', 
+  'journal', 'thesis', 'dissertation',
+  'conference', 'proceedings', 'publication',
+  'scientific', 'academic', 'analysis',
+  'experiment', 'findings', 'methodology'
+];
+
 /**
  * Detects the file type based on filename or MIME type
  * @param fileName The name of the file
@@ -139,6 +148,17 @@ export function detectFileType(fileName: string, mimeType?: string): FileTypeInf
     result.name = 'CV / Resume';
   }
   
+  // Check if this is likely a scientific paper based on the filename
+  const isScientificByName = SCIENTIFIC_KEYWORDS.some(keyword => 
+    lowerFileName.includes(keyword)
+  );
+  
+  if (isScientificByName && (fileType.category === 'document')) {
+    // It's a document with scientific-related keywords, so categorize as scientific
+    result.category = 'scientific';
+    result.name = 'Scientific Paper / Research Article';
+  }
+  
   return result;
 }
 
@@ -150,8 +170,8 @@ export function detectFileType(fileName: string, mimeType?: string): FileTypeInf
 export function isSupportedForAnalysis(fileType: FileTypeInfo | undefined): boolean {
   if (!fileType) return false;
   
-  // Currently we support documents, spreadsheets, presentations, and CVs
-  return ['document', 'spreadsheet', 'presentation', 'cv'].includes(fileType.category);
+  // Currently we support documents, spreadsheets, presentations, CVs, and scientific papers
+  return ['document', 'spreadsheet', 'presentation', 'cv', 'scientific'].includes(fileType.category);
 }
 
 /**
@@ -171,6 +191,8 @@ export function getAnalysisTypeForFile(fileType: FileTypeInfo | undefined): stri
       return 'spreadsheet';
     case 'presentation':
       return 'presentation';
+    case 'scientific':
+      return 'scientific';
     default:
       return 'general';
   }

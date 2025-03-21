@@ -174,6 +174,9 @@ export async function analyzeDocument(
       case 'presentation':
         result = await analyzePresentationDocument(documentId, documentText, fileName);
         break;
+      case 'scientific':
+        result = await analyzeScientificDocument(documentId, documentText, fileName);
+        break;
       default:
         result = await analyzeGeneralDocument(documentId, documentText, fileName);
         break;
@@ -622,5 +625,146 @@ async function analyzePresentationDocument(
   } catch (error) {
     console.error("Error parsing presentation analysis response:", error);
     throw new Error("Failed to analyze presentation data");
+  }
+}
+
+/**
+ * Analyze a scientific paper or research article
+ */
+async function analyzeScientificDocument(
+  documentId: string, 
+  documentText: string, 
+  fileName: string
+): Promise<AnalysisResult> {
+  const prompt = `
+    You are a scientific research expert. This PDF document contains a scientific paper or research article.
+    Your task is to analyze this content thoroughly as a scientific publication.
+    
+    Document: ${fileName}
+    
+    Content:
+    ${documentText.substring(0, 15000)}
+    
+    Please provide a detailed analysis with these elements in a JSON structure:
+    
+    1. summary: A 3-5 sentence summary of the research paper, covering objective, methodology, key findings, and significance
+    2. keyPoints: 4-6 key findings or contributions from the research
+    3. recommendations: 3-5 recommendations for improving or extending the research
+    4. researchStructure: {
+       - hasAbstract: Boolean - does it have a proper abstract?
+       - hasIntroduction: Boolean - does it have a proper introduction?
+       - hasMethodology: Boolean - does it have a clear methodology section?
+       - hasResults: Boolean - does it have a results section?
+       - hasDiscussion: Boolean - does it have a discussion section?
+       - hasConclusion: Boolean - does it have a conclusion section?
+       - hasReferences: Boolean - does it have a references section?
+       - structureCompleteness: Score 0-100 for how complete the structure is
+       - structureQuality: Score 0-100 for structure quality
+    }
+    5. researchQuality: {
+       - methodologyRigor: Score 0-100 for how rigorous the methodology is
+       - dataQuality: Score 0-100 for the quality of data presented
+       - analysisDepth: Score 0-100 for depth of analysis
+       - conclusionValidity: Score 0-100 for how well-supported the conclusions are
+       - literatureReviewQuality: Score 0-100 for quality of literature review
+       - originalityScore: Score 0-100 for how original the research is
+       - impactPotential: Score 0-100 for potential impact in the field
+       - overallQuality: Score 0-100 for overall research quality
+    }
+    6. citationAnalysis: {
+       - estimatedCitationCount: Your best estimate of references/citations
+       - recentReferences: Percentage of references from last 5 years (estimate)
+       - selfCitations: Boolean - does it include self-citations?
+       - keyReferences: Array of what appear to be key references
+       - citationQuality: Score 0-100 for citation quality and relevance
+    }
+    7. contentAssessment: {
+       - clarity: Score 0-100 for how clear the explanations are
+       - technicalDepth: Score 0-100 for technical detail level
+       - audienceLevel: Assessment of intended audience (e.g., "Expert", "Academic", "General academic")
+       - jargonLevel: Assessment of specialized terminology use
+       - graphicsQuality: Score 0-100 for quality of figures/tables
+    }
+    8. topics: Array of research topics/fields with relevance scores (0-1)
+    9. researchGaps: Array of research gaps or limitations identified
+    10. futureWorkSuggestions: Array of suggested future research directions
+    
+    Respond with ONLY the JSON structure. Be as detailed and thorough as possible in your analysis.
+  `;
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.2,
+    response_format: { type: "json_object" }
+  });
+
+  try {
+    const content = response.choices[0].message.content;
+    const analysisData = content ? JSON.parse(content) : {};
+    
+    // Construct the scientific paper analysis result
+    const result: AnalysisResult = {
+      documentId,
+      fileName,
+      analysisType: 'scientific',
+      summary: analysisData.summary || 'No summary available',
+      keyPoints: Array.isArray(analysisData.keyPoints) ? analysisData.keyPoints : [],
+      recommendations: Array.isArray(analysisData.recommendations) ? analysisData.recommendations : [],
+      insights: {
+        clarity: analysisData.contentAssessment?.clarity || 70,
+        relevance: analysisData.researchQuality?.impactPotential || 75,
+        completeness: analysisData.researchStructure?.structureCompleteness || 65,
+        conciseness: 70,
+        structure: analysisData.researchStructure?.structureQuality || 65,
+        engagement: 60,
+        contentquality: analysisData.researchQuality?.overallQuality || 70,
+        overallScore: analysisData.researchQuality?.overallQuality || 70
+      },
+      researchStructure: analysisData.researchStructure || {
+        hasAbstract: true,
+        hasIntroduction: true,
+        hasMethodology: true,
+        hasResults: true,
+        hasDiscussion: true,
+        hasConclusion: true,
+        hasReferences: true,
+        structureCompleteness: 70,
+        structureQuality: 70
+      },
+      researchQuality: analysisData.researchQuality || {
+        methodologyRigor: 65,
+        dataQuality: 70,
+        analysisDepth: 65,
+        conclusionValidity: 70,
+        literatureReviewQuality: 65,
+        originalityScore: 60,
+        impactPotential: 65,
+        overallQuality: 65
+      },
+      citationAnalysis: analysisData.citationAnalysis || {
+        estimatedCitationCount: 0,
+        recentReferences: 0,
+        selfCitations: false,
+        keyReferences: [],
+        citationQuality: 50
+      },
+      contentAssessment: analysisData.contentAssessment || {
+        clarity: 70,
+        technicalDepth: 65,
+        audienceLevel: "Academic",
+        jargonLevel: "Moderate",
+        graphicsQuality: 60
+      },
+      topics: Array.isArray(analysisData.topics) ? analysisData.topics : [],
+      researchGaps: Array.isArray(analysisData.researchGaps) ? analysisData.researchGaps : [],
+      futureWorkSuggestions: Array.isArray(analysisData.futureWorkSuggestions) ? analysisData.futureWorkSuggestions : [],
+      createdAt: new Date().toISOString()
+    };
+    
+    return result;
+  } catch (error) {
+    console.error("Error parsing scientific paper analysis response:", error);
+    throw new Error("Failed to analyze scientific paper");
   }
 } 
