@@ -21,6 +21,7 @@ import CVUploader from "@/components/CVUploader.client";
 import PremiumFeatureCard from "@/components/PremiumFeatureCard";
 import { PremiumCard, PremiumCardHeader, PremiumCardTitle, PremiumCardContent } from "@/components/ui/premium-card";
 import PremiumPageLayout from "@/components/PremiumPageLayout";
+import PlanRestrictedFeature from "@/components/PlanRestrictedFeature";
 import { motion } from "framer-motion";
 import { colors } from "@/lib/design-tokens";
 import ErrorBoundaryWrapper from "@/components/ErrorBoundaryWrapper";
@@ -51,6 +52,9 @@ export default function DashboardClient({
       }
     }
   };
+
+  // Get the plan name from teamData
+  const planName = teamData?.planName || "Free";
 
   return (
     <PremiumPageLayout 
@@ -191,16 +195,23 @@ export default function DashboardClient({
             withElevation
           />
           
-          <PremiumFeatureCard 
-            href="/dashboard/enhance"
-            icon={FileText}
-            title="Create"
-            description="Chat with the powerful employee 'Reming'"
-            iconBgColor="bg-[#050505]"
-            bgGradient
-            animationDelay={0.15}
-            withElevation
-          />
+          <PlanRestrictedFeature 
+            planName={planName}
+            requiredPlan="moonlighting"
+            title="Upgrade to Moonlighting"
+            description="Access the Create suite with our most powerful AI 'Reming'"
+          >
+            <PremiumFeatureCard 
+              href="/dashboard/enhance"
+              icon={FileText}
+              title="Create"
+              description="Chat with the powerful employee 'Reming'"
+              iconBgColor="bg-[#050505]"
+              bgGradient
+              animationDelay={0.15}
+              withElevation
+            />
+          </PlanRestrictedFeature>
           
           <PremiumFeatureCard 
             href="/dashboard/analyze"
@@ -235,16 +246,23 @@ export default function DashboardClient({
             withElevation
           />
           
-          <PremiumFeatureCard 
-            href="/dashboard/jobs"
-            icon={Briefcase}
-            title="Job Opportunities"
-            description="Discover the best jobs you can get now with your current CV"
-            fullWidth
-            accentBorder
-            animationDelay={0.35}
-            withElevation
-          />
+          <PlanRestrictedFeature 
+            planName={planName}
+            requiredPlan="moonlighting"
+            title="Upgrade to Moonlighting"
+            description="Access job opportunities and track your career progress"
+          >
+            <PremiumFeatureCard 
+              href="/dashboard/jobs"
+              icon={Briefcase}
+              title="Job Opportunities"
+              description="Discover the best jobs you can get now with your current CV"
+              fullWidth
+              accentBorder
+              animationDelay={0.35}
+              withElevation
+            />
+          </PlanRestrictedFeature>
         </motion.div>
       </motion.div>
     </PremiumPageLayout>

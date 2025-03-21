@@ -182,6 +182,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     // Create a new team if there's no invitation
     const newTeam: NewTeam = {
       name: `${email}'s Team`,
+      planName: "Free" // Set default plan to Free
     };
 
     [createdTeam] = await db.insert(teams).values(newTeam).returning();
@@ -218,7 +219,8 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     return createCheckoutSession({ team: createdTeam, priceId });
   }
 
-  redirect('/dashboard');
+  // For new users, redirect to the pricing page first
+  redirect('/dashboard/pricing');
 });
 
 export async function signOut() {

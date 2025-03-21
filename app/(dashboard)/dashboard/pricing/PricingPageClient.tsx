@@ -50,17 +50,11 @@ export default function PricingPageClient({
   const moonlightingPlan = products.find((product) => product.name === "Moonlighting") || 
     { id: "moonlighting-fallback", name: "Moonlighting" };
   
-  const ceoPlan = products.find((product) => product.name === "CEO") || 
-    { id: "ceo-fallback", name: "CEO" };
-
   const freePrice = prices.find((price) => price.productId === freePlan?.id) || 
     { id: "price_free", productId: "free-fallback", unitAmount: 0 };
   
   const moonlightingPrice = prices.find((price) => price.productId === moonlightingPlan?.id) || 
     { id: "price-moonlighting-fallback", productId: "moonlighting-fallback", unitAmount: 1499 };
-  
-  const ceoPrice = prices.find((price) => price.productId === ceoPlan?.id) || 
-    { id: "price_1QoYTrFYYYXM77wGffciG20i", productId: "ceo-fallback", unitAmount: 9999 };
 
   return (
     <Suspense fallback={<PricingPageSkeleton />}>
@@ -93,7 +87,7 @@ export default function PricingPageClient({
               error={pricingError}
             >
               <PricingErrorBoundary>
-                <div className="grid md:grid-cols-3 gap-8 justify-center">
+                <div className="grid md:grid-cols-2 gap-8 justify-center max-w-4xl mx-auto">
                   <PricingCardClient
                     name="Free"
                     price={0}
@@ -133,28 +127,6 @@ export default function PricingPageClient({
                     highlight={true}
                     priceId={moonlightingPrice?.id}
                     animationDelay={0.3}
-                  />
-                  <PricingCardClient
-                    name="CEO"
-                    price={ceoPrice?.unitAmount || 9999}
-                    interval="month"
-                    features={[
-                      "Unlimited CV uploads ⓘ",
-                      "Unlimited ATS analyses ⓘ",
-                      "Unlimited Optimizations ⓘ",
-                      "Access to Analytics Suite ⓘ",
-                      "Early access to new features ⓘ",
-                    ]}
-                    tooltips={{
-                      "Unlimited CV uploads ⓘ": "No monthly limit on CV uploads",
-                      "Unlimited ATS analyses ⓘ": "Analyze your CVs against ATS systems as many times as you need",
-                      "Unlimited Optimizations ⓘ": "Get unlimited AI-powered optimization suggestions",
-                      "Access to Analytics Suite ⓘ": "Full access to advanced analytics and insights",
-                      "Early access to new features ⓘ": "Be the first to try new platform features",
-                    }}
-                    highlight={false}
-                    priceId={ceoPrice?.id}
-                    animationDelay={0.4}
                   />
                 </div>
               </PricingErrorBoundary>
