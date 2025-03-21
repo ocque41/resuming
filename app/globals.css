@@ -443,3 +443,81 @@
     display: none;
   }
 }
+
+/* Custom tabs styling for DocumentAnalyzer */
+.custom-tabs .ant-tabs-nav::before {
+  border-bottom-color: #222222 !important;
+}
+
+.custom-tabs .ant-tabs-tab {
+  color: #C5C2BA !important;
+  font-family: 'Borna', sans-serif !important;
+  padding: 12px 16px !important;
+  transition: all 0.3s ease !important;
+}
+
+.custom-tabs .ant-tabs-tab:hover {
+  color: #F9F6EE !important;
+}
+
+.custom-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #B4916C !important;
+  font-weight: 500 !important;
+}
+
+.custom-tabs .ant-tabs-ink-bar {
+  background-color: #B4916C !important;
+  height: 3px !important;
+}
+
+.custom-tabs .ant-tabs-content-holder {
+  padding: 20px 0 !important;
+}
+
+/* Card styling */
+.custom-tabs .ant-card {
+  background-color: #111111 !important;
+  border: 1px solid #222222 !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+}
+
+.custom-tabs .ant-card-head {
+  background-color: #171717 !important;
+  border-bottom: 1px solid #222222 !important;
+  color: #F9F6EE !important;
+  font-family: 'Safiro', sans-serif !important;
+}
+
+.custom-tabs .ant-card-body {
+  color: #C5C2BA !important;
+  font-family: 'Borna', sans-serif !important;
+}
+
+.custom-tabs .ant-empty {
+  color: #8A8782 !important;
+}
+
+.custom-tabs .ant-collapse {
+  background-color: transparent !important;
+  border: none !important;
+}
+
+.custom-tabs .ant-collapse-item {
+  border-color: #222222 !important;
+}
+
+.custom-tabs .ant-collapse-header {
+  color: #F9F6EE !important;
+  font-family: 'Borna', sans-serif !important;
+}
+
+.custom-tabs .ant-collapse-content {
+  background-color: #171717 !important;
+  border-color: #222222 !important;
+}
+
+.custom-tabs .recharts-text {
+  fill: #C5C2BA !important;
+  font-family: 'Borna', sans-serif !important;
+}

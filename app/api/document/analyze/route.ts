@@ -367,7 +367,7 @@ export async function POST(req: NextRequest) {
   try {
     // Parse the request body
     const body = await req.json();
-    const { documentId, documentText, fileName, analysisType = "general" } = body;
+    let { documentId, documentText, fileName, analysisType = "general" } = body;
     
     // Validate input
     if (!documentId) {
@@ -375,8 +375,44 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Document ID is required" }, { status: 400 });
     }
     
+    // If documentText is not provided, try to fetch it from the database
     if (!documentText) {
-      console.error("Missing document text in request");
+      console.log(`Document text not provided, attempting to fetch from database for document ID: ${documentId}`);
+      
+      try {
+        const docRecord = await db.query.cvs.findFirst({
+          where: eq(cvs.id, parseInt(documentId)),
+        });
+        
+        if (!docRecord) {
+          console.error(`Document with ID ${documentId} not found in database`);
+          return NextResponse.json({ error: "Document not found" }, { status: 404 });
+        }
+        
+        // Use the raw text from the database
+        documentText = docRecord.rawText || "";
+        
+        // If we don't have a filename, use the one from the database
+        if (!fileName && docRecord.fileName) {
+          fileName = docRecord.fileName;
+        }
+        
+        console.log(`Retrieved document text from database, length: ${documentText.length} characters`);
+        
+        // If we still don't have document text, return an error
+        if (!documentText || documentText.length === 0) {
+          console.error("Retrieved document has no text content");
+          return NextResponse.json({ error: "Document has no text content for analysis" }, { status: 400 });
+        }
+      } catch (dbError) {
+        console.error(`Error fetching document from database: ${dbError instanceof Error ? dbError.message : String(dbError)}`);
+        return NextResponse.json({ error: "Failed to retrieve document content" }, { status: 500 });
+      }
+    }
+    
+    // Validate document text after potential fetch
+    if (!documentText) {
+      console.error("Missing document text in request and unable to fetch it");
       return NextResponse.json({ error: "Document text is required" }, { status: 400 });
     }
     

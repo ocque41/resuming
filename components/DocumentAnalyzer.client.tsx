@@ -49,6 +49,56 @@ interface DocumentAnalyzerProps {
   documents: Document[];
 }
 
+// Replace Select with our custom styled dropdown
+const DocSelector = ({ documents, value, onChange }: {
+  documents: Document[];
+  value: string | null;
+  onChange: (value: string) => void;
+}) => {
+  return (
+    <div className="relative">
+      <select
+        value={value || ""}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-4 py-2 bg-[#111111] border border-[#222222] rounded-md text-[#F9F6EE] font-borna appearance-none focus:outline-none focus:ring-2 focus:ring-[#B4916C] focus:border-transparent"
+      >
+        <option value="" disabled>Select a document to analyze</option>
+        {documents.map((doc) => (
+          <option key={doc.id} value={doc.id}>
+            {doc.fileName}
+          </option>
+        ))}
+      </select>
+      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+        <svg className="w-5 h-5 text-[#B4916C]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+    </div>
+  );
+};
+
+// Loading spinner component
+const LoadingSpinner = ({ text }: { text: string }) => (
+  <div className="flex items-center justify-center flex-col py-12">
+    <div className="w-12 h-12 border-4 border-[#222222] border-t-[#B4916C] rounded-full animate-spin mb-4"></div>
+    <p className="text-[#C5C2BA] font-borna">{text}</p>
+  </div>
+);
+
+// Empty state component
+const EmptyDocumentState = () => (
+  <div className="border border-[#222222] bg-[#111111] rounded-md p-8 text-center">
+    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#171717] text-[#B4916C] mb-4">
+      <FileTextOutlined style={{ fontSize: "24px" }} />
+    </div>
+    <h3 className="text-xl font-safiro text-[#F9F6EE] mb-2">Select a document to analyze</h3>
+    <p className="text-[#C5C2BA] font-borna max-w-md mx-auto">
+      Our AI will analyze your document and extract insights, key information, and sentiment analysis.
+    </p>
+  </div>
+);
+
 export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -63,6 +113,24 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   // Detect file type if we have a selected document
   const fileType = selectedDocument ? detectFileType(selectedDocument.fileName) : undefined;
   const analysisType = fileType ? getAnalysisTypeForFile(fileType) : "general";
+
+  // Function to fetch document content by ID
+  const fetchDocumentContent = async (documentId: string) => {
+    try {
+      const response = await fetch(`/api/cv/get-details?cvId=${documentId}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch document content');
+      }
+      
+      const data = await response.json();
+      return data.rawText || '';
+    } catch (error) {
+      console.error('Error fetching document content:', error);
+      throw error;
+    }
+  };
   
   const handleAnalyze = async () => {
     if (!selectedDocumentId) {
@@ -74,20 +142,43 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
     setError(null);
 
     try {
+      // First, fetch the document content
+      let documentText = '';
+      try {
+        documentText = await fetchDocumentContent(selectedDocumentId);
+        
+        if (!documentText) {
+          setError("The document content could not be retrieved for analysis");
+          setIsAnalyzing(false);
+          return;
+        }
+      } catch (fetchError) {
+        console.error("Error fetching document content:", fetchError);
+        setError("Could not retrieve document content. Please try again.");
+        setIsAnalyzing(false);
+        return;
+      }
+
+      // Now send for analysis with the document content
       const response = await fetch(`/api/document/analyze`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ documentId: selectedDocumentId }),
+        body: JSON.stringify({ 
+          documentId: selectedDocumentId,
+          documentText: documentText,
+          fileName: selectedDocument?.fileName
+        }),
       });
 
       if (!response.ok) {
-        throw new Error("Failed to analyze document");
+        const errorData = await response.text();
+        throw new Error(errorData || "Failed to analyze document");
       }
 
       const data = await response.json();
-      setAnalysisResult(data.analysis);
+      setAnalysisResult(data.analysis || data);
     } catch (err) {
       console.error("Analysis error:", err);
       setError("An error occurred while analyzing the document");
@@ -594,128 +685,114 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   };
   
   return (
-    <div className="document-analyzer">
-      <div className="mb-6 flex flex-col md:flex-row items-start md:items-center gap-4">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-2">
-            <Select
-              placeholder="Select a document to analyze"
-              style={{ width: "100%" }}
-              onChange={(value: string) => {
-                setSelectedDocumentId(value);
-                setError(null);
-              }}
-              value={selectedDocumentId}
-              className="mb-1"
-            >
-              {documents.map((doc) => (
-                <Select.Option key={doc.id} value={doc.id}>
-                  <div className="flex items-center">
-                    {getFileTypeIcon()}
-                    <span className="ml-2">{doc.fileName}</span>
-                      </div>
-                </Select.Option>
-              ))}
-            </Select>
-            {fileType && (
-              <Tooltip title={fileType.name}>
-                <span className="text-xs px-2 py-1 bg-gray-100 rounded-full">
-                  {fileType.extension.toUpperCase()}
-                </span>
-              </Tooltip>
-            )}
-                      </div>
-          
-          {error && (
-            <Alert
-              message={error}
-              type="error"
-              showIcon
-              className="mb-4"
-              closable
-              onClose={() => setError(null)}
-            />
-          )}
-                      </div>
-        
-        <div className="flex gap-2">
-          <Button
-            type="primary"
-            onClick={handleAnalyze}
-            loading={isAnalyzing}
-            disabled={!selectedDocumentId}
-          >
-            {isAnalyzing ? "Analyzing..." : "Analyze Document"}
-          </Button>
-          
-          {analysisResult && (
-            <>
-              <Tooltip title="Export as PDF report">
-                <Button
-                  onClick={handleExportPDF}
-                  icon={<DownloadOutlined />}
-                  loading={isPdfExporting}
-                >
-                  Export
-                </Button>
-              </Tooltip>
-              
-              <Tooltip title="Share analysis results">
-                <Button
-                  onClick={handleShare}
-                  icon={<ShareAltOutlined />}
-                >
-                  Share
-                </Button>
-              </Tooltip>
-            </>
-          )}
-                      </div>
-                    </div>
-      
-      {isAnalyzing ? (
-        <div className="text-center py-12">
-          <Spin size="large" />
-          <p className="mt-4 text-gray-500">Analyzing your document...</p>
+    <div className="w-full">
+      <div className="space-y-4">
+        <div className="mb-4">
+          <label className="block mb-2 text-[#F9F6EE] font-borna">Select Document</label>
+          <DocSelector
+            documents={documents}
+            value={selectedDocumentId}
+            onChange={setSelectedDocumentId}
+          />
         </div>
-      ) : analysisResult ? (
-        <div>
-          <Tabs activeKey={activeTab} onChange={setActiveTab}>
-            <TabPane tab="Summary" key="1">
-              {renderAnalysisSection("summary")}
-            </TabPane>
-            <TabPane tab="Content Analysis" key="2">
-              {renderAnalysisSection("content")}
-            </TabPane>
-            <TabPane tab="Sentiment Analysis" key="3">
-              {renderAnalysisSection("sentiment")}
-            </TabPane>
-            <TabPane tab="Key Information" key="4">
-              {renderAnalysisSection("keyinfo")}
-            </TabPane>
-          </Tabs>
+        
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={handleAnalyze}
+            disabled={isAnalyzing || !selectedDocumentId}
+            className="px-4 py-2 bg-[#333333] text-[#F9F6EE] font-borna rounded-md hover:bg-[#444444] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+          >
+            {isAnalyzing ? (
+              <>
+                <div className="w-4 h-4 border-2 border-t-transparent border-[#B4916C] rounded-full animate-spin"></div>
+                <span>Analyzing...</span>
+              </>
+            ) : (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
+                <span>Analyze Document</span>
+              </>
+            )}
+          </button>
           
-          {/* Debug view in development mode */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="mt-8 border-t pt-4">
-              <details className="text-xs">
-                <summary className="cursor-pointer font-medium mb-2">Debug: Analysis Result</summary>
-                <pre className="bg-gray-50 p-4 rounded overflow-auto max-h-96">
-                  {JSON.stringify(analysisResult, null, 2)}
-                </pre>
-              </details>
+          <button
+            onClick={handleExportPDF}
+            disabled={!analysisResult || isPdfExporting}
+            className="px-4 py-2 bg-[#222222] text-[#F9F6EE] font-borna rounded-md hover:bg-[#333333] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+          >
+            {isPdfExporting ? (
+              <>
+                <div className="w-4 h-4 border-2 border-t-transparent border-[#B4916C] rounded-full animate-spin"></div>
+                <span>Exporting...</span>
+              </>
+            ) : (
+              <>
+                <DownloadOutlined />
+                <span>Export PDF</span>
+              </>
+            )}
+          </button>
+          
+          <button
+            onClick={handleShare}
+            disabled={!analysisResult}
+            className="px-4 py-2 bg-[#222222] text-[#F9F6EE] font-borna rounded-md hover:bg-[#333333] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+          >
+            <ShareAltOutlined />
+            <span>Share</span>
+          </button>
+        </div>
+        
+        {error && (
+          <div className="mt-4 px-4 py-3 bg-[#3A1F24] border border-[#E57373]/30 text-[#F9F6EE] font-borna rounded-md">
+            <div className="flex items-start">
+              <svg className="w-5 h-5 text-[#E57373] mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <p className="font-medium">{error}</p>
+                {error.includes("document content") && (
+                  <p className="mt-1 text-sm opacity-80">
+                    This could happen if the document wasn't properly processed. Try uploading the document again or contact support.
+                  </p>
+                )}
+              </div>
             </div>
-          )}
-                  </div>
-      ) : (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
-          <div className="text-gray-400 mb-4 text-6xl">{getFileTypeIcon()}</div>
-          <h3 className="text-lg font-medium text-gray-600 mb-2">Select a document and click "Analyze"</h3>
-          <p className="text-gray-500 max-w-md mx-auto">
-            Our AI will analyze your document and provide insights on content, sentiment, and key information.
-          </p>
-                </div>
-      )}
+          </div>
+        )}
+        
+        {isAnalyzing ? (
+          <LoadingSpinner text="Analyzing your document. This may take a minute..." />
+        ) : analysisResult ? (
+          <div className="mt-8 border border-[#222222] bg-[#111111] rounded-md p-4">
+            <div className="flex items-center mb-4">
+              {getFileTypeIcon()}
+              <h3 className="ml-2 text-lg text-[#F9F6EE] font-safiro">{selectedDocument?.fileName}</h3>
+            </div>
+            
+            <div className="mb-6">
+              <Tabs defaultActiveKey="1" activeKey={activeTab} onChange={setActiveTab} className="custom-tabs">
+                <TabPane tab="Summary" key="1">
+                  {renderAnalysisSection("summary")}
+                </TabPane>
+                <TabPane tab="Content Analysis" key="2">
+                  {renderAnalysisSection("content")}
+                </TabPane>
+                <TabPane tab="Sentiment" key="3">
+                  {renderAnalysisSection("sentiment")}
+                </TabPane>
+                <TabPane tab="Key Information" key="4">
+                  {renderAnalysisSection("keyinfo")}
+                </TabPane>
+              </Tabs>
+            </div>
+          </div>
+        ) : (
+          <EmptyDocumentState />
+        )}
+      </div>
     </div>
   );
 } 
