@@ -117,15 +117,27 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   // Function to fetch document content by ID
   const fetchDocumentContent = async (documentId: string) => {
     try {
+      console.log(`Fetching document content for ID: ${documentId}`);
+      
       const response = await fetch(`/api/cv/get-details?cvId=${documentId}`);
       
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch document content');
+        const errorMessage = errorData.error || 'Failed to fetch document content';
+        console.error(`Error fetching document content: ${errorMessage}, status: ${response.status}`);
+        throw new Error(errorMessage);
       }
       
       const data = await response.json();
-      return data.rawText || '';
+      
+      // Check if we actually have text content
+      if (!data.rawText) {
+        console.warn(`Document ID ${documentId} has no text content`);
+        throw new Error('Document has no text content for analysis');
+      }
+      
+      console.log(`Successfully retrieved document content, length: ${data.rawText.length} characters`);
+      return data.rawText;
     } catch (error) {
       console.error('Error fetching document content:', error);
       throw error;
@@ -148,17 +160,23 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
         documentText = await fetchDocumentContent(selectedDocumentId);
         
         if (!documentText) {
-          setError("The document content could not be retrieved for analysis");
+          setError("The document has no text content for analysis. Try re-uploading the document.");
           setIsAnalyzing(false);
           return;
         }
       } catch (fetchError) {
         console.error("Error fetching document content:", fetchError);
-        setError("Could not retrieve document content. Please try again.");
+        if (fetchError instanceof Error && fetchError.message.includes('no text content')) {
+          setError("This document doesn't have any text content that can be analyzed. Please upload a document that contains text.");
+        } else {
+          setError("Could not retrieve document content. Please try again.");
+        }
         setIsAnalyzing(false);
         return;
       }
 
+      console.log(`Sending document for analysis, text length: ${documentText.length} characters`);
+      
       // Now send for analysis with the document content
       const response = await fetch(`/api/document/analyze`, {
         method: 'POST',
@@ -174,14 +192,17 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
 
       if (!response.ok) {
         const errorData = await response.text();
+        console.error(`Analysis API error: ${errorData}, status: ${response.status}`);
         throw new Error(errorData || "Failed to analyze document");
       }
 
       const data = await response.json();
+      console.log(`Analysis completed successfully`, data);
       setAnalysisResult(data.analysis || data);
     } catch (err) {
       console.error("Analysis error:", err);
-      setError("An error occurred while analyzing the document");
+      const errorMessage = err instanceof Error ? err.message : "An error occurred while analyzing the document";
+      setError(errorMessage);
     } finally {
       setIsAnalyzing(false);
     }

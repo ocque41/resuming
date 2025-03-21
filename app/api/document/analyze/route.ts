@@ -402,21 +402,33 @@ export async function POST(req: NextRequest) {
         // If we still don't have document text, return an error
         if (!documentText || documentText.length === 0) {
           console.error("Retrieved document has no text content");
-          return NextResponse.json({ error: "Document has no text content for analysis" }, { status: 400 });
+          return NextResponse.json({ 
+            error: "The document has no text content for analysis. Try re-uploading the document with proper text content."
+          }, { status: 400 });
         }
       } catch (dbError) {
         console.error(`Error fetching document from database: ${dbError instanceof Error ? dbError.message : String(dbError)}`);
-        return NextResponse.json({ error: "Failed to retrieve document content" }, { status: 500 });
+        return NextResponse.json({ 
+          error: "Failed to retrieve document content. Please try again later."
+        }, { status: 500 });
       }
     }
     
     // Validate document text after potential fetch
     if (!documentText) {
       console.error("Missing document text in request and unable to fetch it");
-      return NextResponse.json({ error: "Document text is required" }, { status: 400 });
+      return NextResponse.json({ 
+        error: "Document text is required for analysis. Please ensure the document contains extractable text."
+      }, { status: 400 });
     }
     
-    console.log(`Processing analysis request for document ID: ${documentId}, file: ${fileName || 'unknown'}, type: ${analysisType}`);
+    // Trim excessive document text to prevent token limit issues
+    if (documentText.length > 100000) {
+      console.log(`Document text is very large (${documentText.length} chars), trimming to 100,000 chars to prevent token issues`);
+      documentText = documentText.substring(0, 100000);
+    }
+    
+    console.log(`Processing analysis request for document ID: ${documentId}, file: ${fileName || 'unknown'}, type: ${analysisType}, text length: ${documentText.length}`);
     
     // Check file type support if fileName is provided
     if (fileName) {
@@ -424,7 +436,7 @@ export async function POST(req: NextRequest) {
       if (fileType && !isSupportedForAnalysis(fileType)) {
         console.warn(`Unsupported file type for analysis: ${fileType.name}`);
         return NextResponse.json({
-          error: `File type ${fileType.name} is not currently supported for analysis`
+          error: `File type ${fileType.name} is not currently supported for analysis. Please use PDF, DOCX, or TXT files.`
         }, { status: 400 });
       }
     }
@@ -452,15 +464,24 @@ export async function POST(req: NextRequest) {
     } catch (analysisError) {
       console.error("Error during document analysis:", analysisError);
       
-      // If AI analysis fails, don't return a mock - let the client know the analysis failed
+      // If OpenAI API is down or rate-limited, provide a more helpful error
+      const errorMessage = analysisError instanceof Error ? analysisError.message : String(analysisError);
+      
+      if (errorMessage.includes('rate limit') || errorMessage.includes('capacity')) {
+        return NextResponse.json({ 
+          error: "The AI service is currently busy. Please try again in a few minutes."
+        }, { status: 429 });
+      }
+      
+      // If an error occurs during analysis, don't return a mock - let the client know the analysis failed
       return NextResponse.json({ 
-        error: "Failed to analyze document: " + (analysisError instanceof Error ? analysisError.message : String(analysisError))
+        error: "Failed to analyze document: " + errorMessage
       }, { status: 500 });
     }
   } catch (error) {
     console.error("Error in document analysis API:", error);
     return NextResponse.json({
-      error: "Failed to analyze document",
+      error: "Failed to process document analysis request",
       details: error instanceof Error ? error.message : String(error)
     }, { status: 500 });
   }

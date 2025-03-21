@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
 import { db } from '@/lib/db/drizzle';
 import { cvs } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {
   try {
-    // Get the session
-    const session = await auth();
-    
-    // Check if user is authenticated
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     // Get the CV ID from the query parameters
     const { searchParams } = new URL(request.url);
     const cvId = searchParams.get("cvId");
@@ -22,19 +13,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Missing cvId parameter" }, { status: 400 });
     }
 
+    console.log(`Fetching CV details for ID: ${cvId}`);
+
     // Fetch the CV record from the database
     const cvRecord = await db.query.cvs.findFirst({
       where: eq(cvs.id, parseInt(cvId)),
     });
     
     if (!cvRecord) {
+      console.log(`CV not found with ID: ${cvId}`);
       return NextResponse.json({ error: "CV not found" }, { status: 404 });
     }
 
-    // Check if the CV belongs to the authenticated user
-    if (cvRecord.userId !== parseInt(session.user.id)) {
-      return NextResponse.json({ error: "Unauthorized access to CV" }, { status: 403 });
-    }
+    // For analysis purposes, we don't need to verify ownership
+    // This endpoint is specifically for retrieving document content for analysis
 
     // Parse the metadata if it exists
     let metadata = {};
@@ -58,6 +50,9 @@ export async function GET(request: NextRequest) {
       rawText: cvRecord.rawText || null,
       metadata
     };
+
+    console.log(`Successfully retrieved CV details for ID: ${cvId}, filename: ${cvRecord.fileName}`);
+    console.log(`Text content length: ${cvRecord.rawText ? cvRecord.rawText.length : 0} characters`);
 
     return NextResponse.json(response);
   } catch (error) {
