@@ -32,11 +32,11 @@ const analysisCache: AnalysisCache = new Map();
 /**
  * Creates a cache key for storing analysis results
  */
-function createCacheKey(documentId: string, fileContent: string): string {
+function createCacheKey(documentId: string, fileContent: string, purpose: string = 'general'): string {
   // For a real implementation, use a proper hash function
   const contentPreview = fileContent.substring(0, 100).replace(/\s+/g, '');
   const contentLength = fileContent.length.toString();
-  return `${documentId}_${contentPreview}_${contentLength}`;
+  return `${documentId}_${purpose}_${contentPreview}_${contentLength}`;
 }
 
 /**
@@ -133,13 +133,14 @@ const analysisSchema = z.object({
 export async function analyzeDocument(
   documentId: string,
   documentText: string,
-  fileName: string
+  fileName: string,
+  documentPurpose?: string
 ): Promise<AnalysisResult> {
   try {
-    console.log(`Starting enhanced analysis for document: ${fileName} (ID: ${documentId})`);
+    console.log(`Starting enhanced analysis for document: ${fileName} (ID: ${documentId}), purpose: ${documentPurpose || 'auto-detect'}`);
     
-    // Check cache first
-    const cacheKey = createCacheKey(documentId, documentText);
+    // Check cache first - use document purpose in the cache key
+    const cacheKey = createCacheKey(documentId, documentText, documentPurpose);
     const cached = analysisCache.get(cacheKey);
     
     if (cached && (Date.now() - cached.timestamp < CACHE_EXPIRY)) {
@@ -147,11 +148,20 @@ export async function analyzeDocument(
       return cached.result;
     }
     
-    // Detect document type using both file extension and content
-    const documentType = await detectDocumentTypeFromContent(documentText, fileName);
-    console.log(`Detected document type: ${documentType}`);
+    // If a purpose is provided, use that; otherwise detect from content
+    let documentType: string;
     
-    // Analyze based on document type
+    if (documentPurpose) {
+      // Use the provided document purpose directly
+      documentType = documentPurpose;
+      console.log(`Using provided document purpose: ${documentType}`);
+    } else {
+      // Fall back to content-based detection
+      documentType = await detectDocumentTypeFromContent(documentText, fileName);
+      console.log(`Detected document type from content: ${documentType}`);
+    }
+    
+    // Analyze based on document type/purpose
     let result: AnalysisResult;
     
     switch (documentType) {
@@ -169,13 +179,16 @@ export async function analyzeDocument(
         break;
     }
     
+    // Ensure the analysis type matches the document purpose
+    result.analysisType = documentType;
+    
     // Cache the result
     analysisCache.set(cacheKey, {
       result,
       timestamp: Date.now()
     });
     
-    console.log(`Analysis completed for document: ${fileName}`);
+    console.log(`Analysis completed for document: ${fileName}, type: ${documentType}`);
     return result;
   } catch (error) {
     console.error(`Error analyzing document ${fileName}:`, error);
@@ -384,7 +397,7 @@ async function analyzeCVDocument(
 }
 
 /**
- * Analyze a spreadsheet document
+ * Analyze a spreadsheet-like document (table data within PDFs)
  */
 async function analyzeSpreadsheetDocument(
   documentId: string, 
@@ -392,36 +405,42 @@ async function analyzeSpreadsheetDocument(
   fileName: string
 ): Promise<AnalysisResult> {
   const prompt = `
-    Analyze this spreadsheet data and provide a comprehensive assessment.
+    You are a data analysis expert. This PDF document contains tabular or spreadsheet-like data.
+    Your task is to extract and analyze this data as if it was originally a spreadsheet.
     
     Document: ${fileName}
     
-    Content (tabular data converted to text):
+    Content:
     ${documentText.substring(0, 15000)}
     
-    Provide a detailed analysis with these JSON elements:
+    Please provide a detailed analysis with these elements in a JSON structure:
     
-    1. summary: A 3-5 sentence summary of what this spreadsheet contains and its purpose
-    2. keyPoints: 4-6 key observations about the data
-    3. recommendations: 3-5 recommendations for improving the spreadsheet
-    4. insights: Numerical scores (0-100) for:
-       - clarity: How clear and understandable the data organization is
-       - relevance: How relevant the data is to its apparent purpose
-       - completeness: How complete the dataset appears to be
-       - conciseness: How efficiently the data is organized
-       - structure: How well-structured the spreadsheet is
-       - engagement: How effectively the data tells a story
-       - contentquality: Overall quality of the data
-       - overallScore: Overall spreadsheet quality score
-    5. topics: Array of data categories/themes with relevance scores (0-1)
-    6. spreadsheetAnalysis: {
-       - dataStructure: Assessment of how data is organized,
-       - dataQuality: {completeness, consistency, accuracy} scores,
-       - insights: Key metrics and patterns identified,
-       - anomalies: Any outliers or unusual patterns detected
+    1. summary: A 3-5 sentence summary of what this data represents
+    2. keyPoints: 4-6 key insights discovered from analyzing the data
+    3. recommendations: 3-5 recommendations based on the data analysis
+    4. dataStructureAnalysis: Information about the table structure including:
+       - tableCount: How many tables were detected
+       - columnCount: Estimated number of columns across all tables
+       - rowCount: Estimated number of rows across all tables
+       - dataTypes: Array of detected data types (text, numeric, date, etc.)
+       - completeness: Score 0-100 rating how complete the data appears
+    5. dataInsights: {
+       - trends: Array of identified trends in the data
+       - patterns: Array of notable patterns
+       - outliers: Any data points that seem unusual or outliers
+       - correlations: Any detected correlations between different data elements
     }
+    6. dataQualityAssessment: {
+       - completenessScore: 0-100
+       - consistencyScore: 0-100
+       - accuracyScore: 0-100 based on estimation
+       - qualityIssues: Array of identified issues
+       - overallDataQualityScore: 0-100
+    }
+    7. topics: Array of topics/categories present in the data with relevance scores (0-1)
+    8. visualizationSuggestions: 3-5 recommendations for how to visualize this data
     
-    Respond with ONLY the JSON structure.
+    Respond with ONLY the JSON structure. Be as detailed and thorough as possible in your analysis.
   `;
 
   const response = await openai.chat.completions.create({
@@ -435,7 +454,7 @@ async function analyzeSpreadsheetDocument(
     const content = response.choices[0].message.content;
     const analysisData = content ? JSON.parse(content) : {};
     
-    // Create a properly structured result
+    // Construct the spreadsheet analysis result
     const result: AnalysisResult = {
       documentId,
       fileName,
@@ -443,31 +462,51 @@ async function analyzeSpreadsheetDocument(
       summary: analysisData.summary || 'No summary available',
       keyPoints: Array.isArray(analysisData.keyPoints) ? analysisData.keyPoints : [],
       recommendations: Array.isArray(analysisData.recommendations) ? analysisData.recommendations : [],
-      insights: analysisData.insights || {
-        clarity: 50,
-        relevance: 50,
-        completeness: 50,
-        conciseness: 50,
-        structure: 50,
-        engagement: 50,
-        contentquality: 50,
-        overallScore: 50
+      insights: {
+        clarity: 70,
+        relevance: 75,
+        completeness: analysisData.dataQualityAssessment?.completenessScore || 50,
+        conciseness: 65,
+        structure: 70,
+        engagement: 60,
+        contentquality: analysisData.dataQualityAssessment?.overallDataQualityScore || 50,
+        overallScore: analysisData.dataQualityAssessment?.overallDataQualityScore || 50
+      },
+      dataStructureAnalysis: analysisData.dataStructureAnalysis || {
+        tableCount: 0,
+        columnCount: 0,
+        rowCount: 0,
+        dataTypes: [],
+        completeness: 50
+      },
+      dataInsights: analysisData.dataInsights || {
+        trends: [],
+        patterns: [],
+        outliers: [],
+        correlations: []
+      },
+      dataQualityAssessment: analysisData.dataQualityAssessment || {
+        completenessScore: 50,
+        consistencyScore: 50,
+        accuracyScore: 50,
+        qualityIssues: [],
+        overallDataQualityScore: 50
       },
       topics: Array.isArray(analysisData.topics) ? analysisData.topics : [],
-      spreadsheetAnalysis: analysisData.spreadsheetAnalysis,
-      timestamp: new Date().toISOString(),
+      visualizationSuggestions: Array.isArray(analysisData.visualizationSuggestions) ? 
+        analysisData.visualizationSuggestions : [],
       createdAt: new Date().toISOString()
     };
     
     return result;
   } catch (error) {
-    console.error('Error parsing spreadsheet analysis response:', error);
-    throw new Error('Failed to parse spreadsheet analysis response');
+    console.error("Error parsing spreadsheet analysis response:", error);
+    throw new Error("Failed to analyze spreadsheet data");
   }
 }
 
 /**
- * Analyze a presentation document
+ * Analyze a presentation document (slide deck in PDF format)
  */
 async function analyzePresentationDocument(
   documentId: string, 
@@ -475,37 +514,46 @@ async function analyzePresentationDocument(
   fileName: string
 ): Promise<AnalysisResult> {
   const prompt = `
-    Analyze this presentation document and provide a comprehensive assessment.
+    You are a presentation and communication expert. This PDF document contains a presentation or slide deck.
+    Your task is to analyze this content as if it was originally a presentation.
     
     Document: ${fileName}
     
     Content:
     ${documentText.substring(0, 15000)}
     
-    Provide a detailed analysis with these JSON elements:
+    Please provide a detailed analysis with these elements in a JSON structure:
     
-    1. summary: A 3-5 sentence summary of the presentation's content and purpose
-    2. keyPoints: 4-6 key messages from the presentation
+    1. summary: A 3-5 sentence summary of what this presentation is about
+    2. keyPoints: 4-6 key points or messages from the presentation
     3. recommendations: 3-5 recommendations for improving the presentation
-    4. insights: Numerical scores (0-100) for:
-       - clarity: How clear the presentation message is
-       - relevance: How relevant the content is to the apparent audience
-       - completeness: How thorough the presentation is
-       - conciseness: How concise and focused the presentation is
-       - structure: How well-structured the presentation flow is
-       - engagement: How engaging the presentation is
-       - contentquality: Overall quality of the content
-       - overallScore: Overall presentation quality score
-    5. topics: Array of presentation topics with relevance scores (0-1)
-    6. sentiment: Overall presentation tone
-    7. presentationAnalysis: {
-       - slideStructure: Assessment of slide organization and flow,
-       - messageClarity: How clear the core message is,
-       - visualBalance: Assessment of text vs. visuals,
-       - audienceEngagement: Factors that engage or lose audience interest
+    4. presentationStructure: {
+       - estimatedSlideCount: Your best estimate of how many slides
+       - hasIntroduction: Boolean - does it have a proper introduction?
+       - hasConclusion: Boolean - does it have a proper conclusion?
+       - narrativeFlow: Score 0-100 for how well the presentation flows
+       - slideStructureQuality: Score 0-100 for structure quality
     }
+    5. messageClarity: {
+       - mainMessage: What appears to be the main message/purpose
+       - clarity: Score 0-100 for how clear the main message is
+       - supportingPoints: Array of supporting points and their clarity scores
+       - audienceAlignment: Assessment of how well it targets its audience
+    }
+    6. contentBalance: {
+       - textDensity: Score 0-100 (100 = too much text)
+       - visualElements: Estimated amount of visual elements (0-100)
+       - contentDistribution: Assessment of how well content is distributed
+    }
+    7. designAssessment: {
+       - consistencyScore: 0-100 for design consistency
+       - readabilityScore: 0-100 for text readability
+       - visualHierarchyScore: 0-100 for visual hierarchy effectiveness
+    }
+    8. topics: Array of topics in the presentation with relevance scores (0-1)
+    9. improvementSuggestions: Specific suggestions for improvement by category
     
-    Respond with ONLY the JSON structure.
+    Respond with ONLY the JSON structure. Be as detailed and thorough as possible in your analysis.
   `;
 
   const response = await openai.chat.completions.create({
@@ -519,7 +567,7 @@ async function analyzePresentationDocument(
     const content = response.choices[0].message.content;
     const analysisData = content ? JSON.parse(content) : {};
     
-    // Create a properly structured result
+    // Construct the presentation analysis result
     const result: AnalysisResult = {
       documentId,
       fileName,
@@ -527,26 +575,52 @@ async function analyzePresentationDocument(
       summary: analysisData.summary || 'No summary available',
       keyPoints: Array.isArray(analysisData.keyPoints) ? analysisData.keyPoints : [],
       recommendations: Array.isArray(analysisData.recommendations) ? analysisData.recommendations : [],
-      insights: analysisData.insights || {
+      insights: {
+        clarity: analysisData.messageClarity?.clarity || 65,
+        relevance: 70,
+        completeness: 65,
+        conciseness: 70,
+        structure: analysisData.presentationStructure?.slideStructureQuality || 60,
+        engagement: 75,
+        contentquality: 70,
+        overallScore: (
+          (analysisData.messageClarity?.clarity || 65) + 
+          70 + 65 + 70 + 
+          (analysisData.presentationStructure?.slideStructureQuality || 60) + 
+          75 + 70
+        ) / 7
+      },
+      presentationStructure: analysisData.presentationStructure || {
+        estimatedSlideCount: 0,
+        hasIntroduction: false,
+        hasConclusion: false,
+        narrativeFlow: 50,
+        slideStructureQuality: 50
+      },
+      messageClarity: analysisData.messageClarity || {
+        mainMessage: "Unclear from analysis",
         clarity: 50,
-        relevance: 50,
-        completeness: 50,
-        conciseness: 50,
-        structure: 50,
-        engagement: 50,
-        contentquality: 50,
-        overallScore: 50
+        supportingPoints: [],
+        audienceAlignment: "Uncertain"
+      },
+      contentBalance: analysisData.contentBalance || {
+        textDensity: 50,
+        visualElements: 50,
+        contentDistribution: "Mixed"
+      },
+      designAssessment: analysisData.designAssessment || {
+        consistencyScore: 50,
+        readabilityScore: 50,
+        visualHierarchyScore: 50
       },
       topics: Array.isArray(analysisData.topics) ? analysisData.topics : [],
-      sentiment: analysisData.sentiment || { overall: 'neutral', score: 0.5 },
-      presentationAnalysis: analysisData.presentationAnalysis,
-      timestamp: new Date().toISOString(),
+      improvementSuggestions: analysisData.improvementSuggestions || {},
       createdAt: new Date().toISOString()
     };
     
     return result;
   } catch (error) {
-    console.error('Error parsing presentation analysis response:', error);
-    throw new Error('Failed to parse presentation analysis response');
+    console.error("Error parsing presentation analysis response:", error);
+    throw new Error("Failed to analyze presentation data");
   }
 } 

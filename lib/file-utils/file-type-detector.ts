@@ -174,4 +174,16 @@ export function getAnalysisTypeForFile(fileType: FileTypeInfo | undefined): stri
     default:
       return 'general';
   }
+}
+
+/**
+ * Checks if a file is a PDF based on its file extension
+ * @param fileName The name of the file to check
+ * @returns Boolean indicating if the file is a PDF
+ */
+export function isPdfFile(fileName: string): boolean {
+  // Get the file extension
+  const extension = fileName.split('.').pop()?.toLowerCase();
+  // Check if the extension is 'pdf'
+  return extension === 'pdf';
 } 

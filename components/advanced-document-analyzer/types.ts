@@ -233,4 +233,57 @@ export interface AnalysisResult {
   contentExtraction?: ContentExtractionResult;
   timestamp?: string;
   createdAt?: string;
+  
+  // New PDF specialized analysis properties
+  // For spreadsheet-like data in PDFs
+  dataStructureAnalysis?: {
+    tableCount?: number;
+    columnCount?: number;
+    rowCount?: number;
+    dataTypes?: string[];
+    completeness?: number;
+  };
+  dataInsights?: {
+    trends?: any[];
+    patterns?: any[];
+    outliers?: any[];
+    correlations?: any[];
+  };
+  dataQualityAssessment?: {
+    completenessScore?: number;
+    consistencyScore?: number;
+    accuracyScore?: number;
+    qualityIssues?: any[];
+    overallDataQualityScore?: number;
+  };
+  visualizationSuggestions?: string[];
+  
+  // For presentation-like PDFs
+  presentationStructure?: {
+    estimatedSlideCount?: number;
+    hasIntroduction?: boolean;
+    hasConclusion?: boolean;
+    narrativeFlow?: number;
+    slideStructureQuality?: number;
+  };
+  messageClarity?: {
+    mainMessage?: string;
+    clarity?: number;
+    supportingPoints?: any[];
+    audienceAlignment?: string;
+  };
+  contentBalance?: {
+    textDensity?: number;
+    visualElements?: number;
+    contentDistribution?: string;
+  };
+  designAssessment?: {
+    consistencyScore?: number;
+    readabilityScore?: number;
+    visualHierarchyScore?: number;
+  };
+  improvementSuggestions?: any;
+  
+  // Allow for any future extensions without TypeScript errors
+  [key: string]: any;
 } 

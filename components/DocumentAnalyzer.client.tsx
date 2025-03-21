@@ -32,7 +32,7 @@ import {
   ShareAltOutlined,
   CheckOutlined
 } from "@ant-design/icons";
-import { detectFileType, getAnalysisTypeForFile, FileTypeInfo } from "@/lib/file-utils/file-type-detector";
+import { detectFileType, getAnalysisTypeForFile, FileTypeInfo, isPdfFile } from "@/lib/file-utils/file-type-detector";
 
 // Define TabPane and Panel using destructuring
 const { TabPane } = Tabs;
@@ -50,6 +50,93 @@ interface Document {
 interface DocumentAnalyzerProps {
   documents: Document[];
 }
+
+// Document purpose options with more detailed tooltips
+const documentPurposes = [
+  { 
+    value: "general", 
+    label: "General Document", 
+    description: "Standard text document analysis", 
+    tooltip: "Best for regular documents like articles, reports, letters, and other text-focused content."
+  },
+  { 
+    value: "cv", 
+    label: "CV / Resume", 
+    description: "Optimized for resume analysis and improvements", 
+    tooltip: "Analyzes your resume for effectiveness, highlights skills gaps, and provides optimization recommendations."
+  },
+  { 
+    value: "spreadsheet", 
+    label: "Data / Spreadsheet", 
+    description: "Analyze tabular data and metrics within PDFs", 
+    tooltip: "Extracts and analyzes tables, charts, and numerical data from PDFs, even if they were originally spreadsheets."
+  },
+  { 
+    value: "presentation", 
+    label: "Presentation", 
+    description: "Analyze slides and presentations in PDF format", 
+    tooltip: "Evaluates presentation structure, messaging clarity, and visual hierarchy of slides saved as PDFs."
+  }
+];
+
+// Document purpose selector component with tooltips
+const DocumentPurposeSelector = ({ value, onChange }: {
+  value: string;
+  onChange: (value: string) => void;
+}) => {
+  return (
+    <div className="relative mt-4">
+      <div className="flex items-center">
+        <label className="block text-[#F9F6EE] font-borna mb-2">Document Purpose</label>
+        <div className="relative ml-2 group">
+          <span className="cursor-help text-[#8A8782] hover:text-[#B4916C]">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+          </span>
+          <div className="hidden group-hover:block absolute z-10 top-full left-0 w-64 p-3 bg-[#18161a] border border-[#333333] rounded-md shadow-lg text-[#C5C2BA] text-xs mt-2">
+            Choose the purpose that best matches how you want to analyze your PDF, regardless of its original format.
+          </div>
+        </div>
+      </div>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-4 py-3 md:py-2 bg-[#111111] border border-[#222222] rounded-md text-[#F9F6EE] font-borna appearance-none focus:outline-none focus:ring-2 focus:ring-[#B4916C] focus:border-transparent max-sm:text-base"
+      >
+        {documentPurposes.map((purpose) => (
+          <option key={purpose.value} value={purpose.value} className="py-2">
+            {purpose.label}
+          </option>
+        ))}
+      </select>
+      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none mt-8">
+        <svg className="w-5 h-5 text-[#B4916C]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+      <div className="flex items-center mt-1">
+        <p className="text-[#8A8782] text-sm mr-2">
+          {documentPurposes.find(p => p.value === value)?.description}
+        </p>
+        <div className="relative group">
+          <span className="cursor-help text-[#8A8782] hover:text-[#B4916C]">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+          </span>
+          <div className="hidden group-hover:block absolute z-10 top-full left-0 w-64 p-3 bg-[#18161a] border border-[#333333] rounded-md shadow-lg text-[#C5C2BA] text-xs mt-2">
+            {documentPurposes.find(p => p.value === value)?.tooltip}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // Replace Select with our custom styled dropdown
 const DocSelector = ({ documents, value, onChange }: {
@@ -103,6 +190,7 @@ const EmptyDocumentState = () => (
 
 export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
+  const [documentPurpose, setDocumentPurpose] = useState<string>("general");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isPdfExporting, setIsPdfExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,9 +200,11 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   // Get the selected document's file name
   const selectedDocument = documents.find(doc => doc.id === selectedDocumentId);
   
-  // Detect file type if we have a selected document
-  const fileType = selectedDocument ? detectFileType(selectedDocument.fileName) : undefined;
-  const analysisType = fileType ? getAnalysisTypeForFile(fileType) : "general";
+  // Check if the selected document is a PDF
+  const isSelectedDocumentPdf = selectedDocument ? isPdfFile(selectedDocument.fileName) : false;
+  
+  // Analysis type is now primarily determined by document purpose, not file type
+  const analysisType = documentPurpose;
 
   // Function to fetch document content by ID
   const fetchDocumentContent = async (documentId: string) => {
@@ -151,6 +241,12 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
       setError("Please select a document to analyze");
       return;
     }
+    
+    // Validate that the selected document is a PDF
+    if (selectedDocument && !isSelectedDocumentPdf) {
+      setError("Only PDF documents are supported for analysis. Please select a PDF document.");
+      return;
+    }
 
     setIsAnalyzing(true);
     setError(null);
@@ -177,7 +273,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
         return;
       }
 
-      console.log(`Sending document for analysis, text length: ${documentText.length} characters`);
+      console.log(`Sending document for analysis, text length: ${documentText.length} characters, purpose: ${documentPurpose}`);
       
       // Now send for analysis with the document content
       const response = await fetch(`/api/document/analyze`, {
@@ -188,7 +284,8 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
         body: JSON.stringify({ 
           documentId: selectedDocumentId,
           documentText: documentText,
-          fileName: selectedDocument?.fileName
+          fileName: selectedDocument?.fileName,
+          documentPurpose: documentPurpose // Add the document purpose to the API request
         }),
       });
 
@@ -275,6 +372,9 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   
   // Get the file type icon
   const getFileTypeIcon = () => {
+    if (!selectedDocument || !selectedDocument.fileName) return <FileTextOutlined />;
+    
+    const fileType = detectFileType(selectedDocument.fileName);
     if (!fileType) return <FileTextOutlined />;
     
     switch (fileType.category) {
@@ -288,21 +388,274 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
     }
   };
   
-  // Get a component to render based on the file type and analysis section
+  // Function to determine which analysis section to render based on tab
   const renderAnalysisSection = (section: string) => {
-    if (!analysisResult) return null;
+    if (!analysisResult) {
+      return <Empty description="No analysis data available" />;
+    }
     
     switch (section) {
+      case "summary":
+        return renderSummary();
       case "content":
-        return renderContentAnalysis();
+        // Use document purpose to determine which content analysis to show
+        switch (documentPurpose) {
+          case 'spreadsheet':
+            return renderSpreadsheetAnalysis();
+          case 'presentation':
+            return renderPresentationAnalysis();
+          case 'cv':
+            return renderCVAnalysis();
+          default:
+            return renderContentAnalysis();
+        }
       case "sentiment":
         return renderSentimentAnalysis();
       case "keyinfo":
         return renderKeyInformation();
-      case "summary":
       default:
-        return renderSummary();
+        return <Empty description="Unknown analysis section" />;
     }
+  };
+  
+  // Helper function to render spreadsheet data analysis
+  const renderSpreadsheetAnalysis = () => {
+    if (!analysisResult) return null;
+    
+    // Access data analysis properties with safe defaults
+    const dataStructureAnalysis = analysisResult.dataStructureAnalysis || {};
+    const dataInsights = analysisResult.dataInsights || {};
+    const dataQualityAssessment = analysisResult.dataQualityAssessment || {};
+    
+    return (
+      <div className="space-y-6">
+        <Card title="Data Structure Analysis">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="text-center">
+              <div className="text-[#C5C2BA] mb-2">Tables</div>
+              <div className="text-2xl font-safiro text-[#F9F6EE]">{dataStructureAnalysis.tableCount || 0}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[#C5C2BA] mb-2">Columns</div>
+              <div className="text-2xl font-safiro text-[#F9F6EE]">{dataStructureAnalysis.columnCount || 0}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[#C5C2BA] mb-2">Rows</div>
+              <div className="text-2xl font-safiro text-[#F9F6EE]">{dataStructureAnalysis.rowCount || 0}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[#C5C2BA] mb-2">Completeness</div>
+              <Progress 
+                type="circle" 
+                percent={dataStructureAnalysis.completeness || 0} 
+                width={60} 
+                strokeColor="#B4916C"
+              />
+            </div>
+          </div>
+          <div>
+            <div className="text-[#C5C2BA] mb-2">Data Types</div>
+            <div className="flex flex-wrap gap-2">
+              {Array.isArray(dataStructureAnalysis.dataTypes) ? 
+                dataStructureAnalysis.dataTypes.map((type: string, index: number) => (
+                  <span key={index} className="px-2 py-1 bg-[#222222] text-[#F9F6EE] rounded text-sm">
+                    {type}
+                  </span>
+                )) : 
+                <span className="text-[#C5C2BA]">No data types detected</span>
+              }
+            </div>
+          </div>
+        </Card>
+        
+        <Card title="Data Quality Assessment">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="text-center">
+              <div className="text-[#C5C2BA] mb-2">Completeness</div>
+              <Progress 
+                percent={dataQualityAssessment.completenessScore || 0} 
+                strokeColor="#B4916C" 
+              />
+            </div>
+            <div className="text-center">
+              <div className="text-[#C5C2BA] mb-2">Consistency</div>
+              <Progress 
+                percent={dataQualityAssessment.consistencyScore || 0} 
+                strokeColor="#B4916C" 
+              />
+            </div>
+            <div className="text-center">
+              <div className="text-[#C5C2BA] mb-2">Accuracy</div>
+              <Progress 
+                percent={dataQualityAssessment.accuracyScore || 0} 
+                strokeColor="#B4916C" 
+              />
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-[#C5C2BA] mb-2">Overall Data Quality</div>
+            <Progress 
+              percent={dataQualityAssessment.overallDataQualityScore || 0} 
+              strokeColor="#B4916C" 
+              status={(dataQualityAssessment.overallDataQualityScore || 0) >= 80 ? "success" : "normal"}
+            />
+          </div>
+        </Card>
+        
+        {/* Data Insights */}
+        <Card title="Data Insights">
+          <Collapse defaultActiveKey={['1']} bordered={false} className="bg-transparent">
+            <Panel header="Trends & Patterns" key="1" className="bg-[#0A0A0A] border border-[#222222] mb-2">
+              <ul className="list-disc pl-5 text-[#C5C2BA]">
+                {Array.isArray(dataInsights.trends) ? 
+                  dataInsights.trends.map((trend: any, index: number) => (
+                    <li key={index} className="mb-2">
+                      {trend.description}
+                      <span className="text-[#B4916C] ml-2 text-sm">
+                        {trend.significance && `(${trend.significance})`}
+                      </span>
+                    </li>
+                  )) : 
+                  <li>No trends detected</li>
+                }
+              </ul>
+            </Panel>
+            <Panel header="Anomalies & Outliers" key="2" className="bg-[#0A0A0A] border border-[#222222]">
+              <ul className="list-disc pl-5 text-[#C5C2BA]">
+                {Array.isArray(dataInsights.outliers) ? 
+                  dataInsights.outliers.map((outlier: any, index: number) => (
+                    <li key={index} className="mb-2">
+                      {outlier.description}
+                      <div className="text-[#8A8782] text-sm mt-1 ml-2">
+                        {outlier.impact && `Impact: ${outlier.impact}`}
+                      </div>
+                    </li>
+                  )) : 
+                  <li>No anomalies detected</li>
+                }
+              </ul>
+            </Panel>
+          </Collapse>
+        </Card>
+      </div>
+    );
+  };
+
+  // Helper function to render presentation analysis
+  const renderPresentationAnalysis = () => {
+    if (!analysisResult) return null;
+    
+    // Access presentation analysis properties with safe defaults
+    const presentationStructure = analysisResult.presentationStructure || {};
+    const messageClarity = analysisResult.messageClarity || {};
+    const contentBalance = analysisResult.contentBalance || {};
+    const designAssessment = analysisResult.designAssessment || {};
+    
+    return (
+      <div className="space-y-6">
+        <Card title="Presentation Structure Analysis">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="text-center">
+              <div className="text-[#C5C2BA] mb-2">Estimated Slides</div>
+              <div className="text-2xl font-safiro text-[#F9F6EE]">
+                {presentationStructure.estimatedSlideCount || '?'}
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="text-[#C5C2BA] mb-2">Introduction</div>
+              <div className="text-2xl font-safiro text-[#F9F6EE]">
+                {presentationStructure.hasIntroduction ? '✓' : '✗'}
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="text-[#C5C2BA] mb-2">Conclusion</div>
+              <div className="text-2xl font-safiro text-[#F9F6EE]">
+                {presentationStructure.hasConclusion ? '✓' : '✗'}
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="text-[#C5C2BA] mb-2">Narrative Flow</div>
+              <Progress 
+                type="circle" 
+                percent={presentationStructure.narrativeFlow || 0} 
+                width={60} 
+                strokeColor="#B4916C"
+              />
+            </div>
+          </div>
+        </Card>
+        
+        <Card title="Message Clarity">
+          <div className="mb-4">
+            <div className="text-[#C5C2BA] mb-2">Main Message</div>
+            <div className="p-3 bg-[#0A0A0A] border border-[#222222] rounded text-[#F9F6EE]">
+              {messageClarity.mainMessage || 'No clear main message detected'}
+            </div>
+          </div>
+          
+          <div className="mb-4">
+            <div className="text-[#C5C2BA] mb-2">Message Clarity Score</div>
+            <Progress 
+              percent={messageClarity.clarity || 0} 
+              strokeColor="#B4916C" 
+            />
+          </div>
+          
+          <div>
+            <div className="text-[#C5C2BA] mb-2">Supporting Points</div>
+            <ul className="list-disc pl-5 text-[#C5C2BA]">
+              {Array.isArray(messageClarity.supportingPoints) ? 
+                messageClarity.supportingPoints.map((point: any, index: number) => (
+                  <li key={index} className="mb-2">
+                    {point.point}
+                    <div className="ml-2 mt-1">
+                      <Progress 
+                        percent={point.clarity || 0} 
+                        size="small" 
+                        strokeColor="#B4916C" 
+                      />
+                    </div>
+                  </li>
+                )) : 
+                <li>No supporting points detected</li>
+              }
+            </ul>
+          </div>
+        </Card>
+        
+        <Card title="Design Assessment">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <div className="text-[#C5C2BA] mb-2 text-center">Visual Consistency</div>
+              <Progress 
+                type="circle" 
+                percent={designAssessment.consistencyScore || 0} 
+                width={80} 
+                strokeColor="#B4916C"
+              />
+            </div>
+            <div>
+              <div className="text-[#C5C2BA] mb-2 text-center">Readability</div>
+              <Progress 
+                type="circle" 
+                percent={designAssessment.readabilityScore || 0} 
+                width={80} 
+                strokeColor="#B4916C"
+              />
+            </div>
+            <div>
+              <div className="text-[#C5C2BA] mb-2 text-center">Visual Hierarchy</div>
+              <Progress 
+                type="circle" 
+                percent={designAssessment.visualHierarchyScore || 0} 
+                width={80} 
+                strokeColor="#B4916C"
+              />
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
   };
   
   // Render content analysis based on file type
@@ -428,15 +781,15 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
     }
     
     // For CV/resume files, render CV-specific information
-    if (fileType?.category === 'document' && analysisResult.insights) {
+    if (selectedDocument && selectedDocument.fileName && selectedDocument.fileName.toLowerCase().includes('cv')) {
       return (
         <div className="grid grid-cols-1 gap-4">
           <Card title="Document Type" className="text-center">
             <div className="text-2xl font-bold mb-3 text-[#F9F6EE]">
-              {fileType.name === 'pdf' && selectedDocument?.fileName.toLowerCase().includes('cv') ? 'CV / Resume' : 'Document'}
+              {selectedDocument.fileName.toLowerCase().includes('cv') ? 'CV / Resume' : 'Document'}
             </div>
             <div className="text-[#C5C2BA]">
-              {`File type: ${fileType.name.toUpperCase()} • Created: ${new Date(selectedDocument?.createdAt || Date.now()).toLocaleDateString()}`}
+              {`File type: ${selectedDocument.fileName ? (detectFileType(selectedDocument.fileName)?.name || 'Unknown').toUpperCase() : 'Unknown'} • Created: ${new Date(selectedDocument.createdAt || Date.now()).toLocaleDateString()}`}
             </div>
           </Card>
           
@@ -474,7 +827,11 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
               </tr>
               <tr>
                 <td className="px-6 py-3 text-left text-xs font-medium text-[#C5C2BA] uppercase tracking-wider">File Type</td>
-                <td className="px-6 py-3 text-left text-sm text-[#F9F6EE]">{fileType?.name.toUpperCase()}</td>
+                <td className="px-6 py-3 text-left text-sm text-[#F9F6EE]">
+                  {selectedDocument && selectedDocument.fileName 
+                    ? (detectFileType(selectedDocument.fileName)?.name || 'Unknown').toUpperCase() 
+                    : 'UNKNOWN'}
+                </td>
               </tr>
               <tr>
                 <td className="px-6 py-3 text-left text-xs font-medium text-[#C5C2BA] uppercase tracking-wider">Created</td>
@@ -597,6 +954,81 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
     );
   };
   
+  // Helper function to render CV analysis
+  const renderCVAnalysis = () => {
+    if (!analysisResult) return null;
+    
+    // For CV analysis, we'll reuse the existing key information section
+    // but with some enhancements specific to CVs
+    return (
+      <div className="space-y-6">
+        <Card title="CV Quality Analysis">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <div className="text-[#C5C2BA] mb-2">Document Type</div>
+              <div className="text-lg font-safiro text-[#F9F6EE]">CV / Resume</div>
+            </div>
+            <div>
+              <div className="text-[#C5C2BA] mb-2">Overall Quality</div>
+              <Progress 
+                percent={analysisResult.insights?.overallScore || 0} 
+                strokeColor="#B4916C" 
+              />
+            </div>
+          </div>
+        </Card>
+        
+        <Card title="Content Breakdown">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h4 className="text-[#F9F6EE] font-medium mb-3">Key Strengths</h4>
+              <ul className="list-disc list-inside text-[#C5C2BA] space-y-2">
+                {Array.isArray(analysisResult.keyPoints) ? 
+                  analysisResult.keyPoints.slice(0, 3).map((point: string, index: number) => (
+                    <li key={index}>{point}</li>
+                  )) : 
+                  <li>No key strengths identified</li>
+                }
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-[#F9F6EE] font-medium mb-3">Areas for Improvement</h4>
+              <ul className="list-disc list-inside text-[#C5C2BA] space-y-2">
+                {Array.isArray(analysisResult.recommendations) ? 
+                  analysisResult.recommendations.map((rec: string, index: number) => (
+                    <li key={index}>{rec}</li>
+                  )) : 
+                  <li>No recommendations available</li>
+                }
+              </ul>
+            </div>
+          </div>
+        </Card>
+        
+        <Card title="CV Metrics">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {analysisResult.insights && Object.entries(analysisResult.insights).map(([key, value]: [string, any], index: number) => {
+              // Skip the overall score as we already display it
+              if (key === 'overallScore') return null;
+              
+              return (
+                <div key={index} className="text-center">
+                  <div className="text-[#C5C2BA] mb-2 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</div>
+                  <Progress 
+                    type="circle" 
+                    percent={value || 0} 
+                    width={70} 
+                    strokeColor="#B4916C" 
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      </div>
+    );
+  };
+  
   return (
     <div className="w-full">
       <div className="space-y-4">
@@ -609,10 +1041,27 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
           />
         </div>
         
+        {selectedDocument && !isSelectedDocumentPdf && (
+          <Alert
+            message="PDF Only"
+            description="This analyzer works with PDF documents only. Please select a PDF document."
+            type="warning"
+            showIcon
+            className="bg-[#3A361F] border border-[#E5D373]/30 text-[#F9F6EE]"
+          />
+        )}
+        
+        {selectedDocument && isSelectedDocumentPdf && (
+          <DocumentPurposeSelector
+            value={documentPurpose}
+            onChange={setDocumentPurpose}
+          />
+        )}
+        
         <div className="flex flex-wrap gap-2">
           <button
             onClick={handleAnalyze}
-            disabled={isAnalyzing || !selectedDocumentId}
+            disabled={isAnalyzing || !selectedDocumentId || (selectedDocument && !isSelectedDocumentPdf)}
             className="px-4 py-2 bg-[#333333] text-[#F9F6EE] font-borna rounded-md hover:bg-[#444444] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
           >
             {isAnalyzing ? (
@@ -696,7 +1145,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                 <TabPane tab="Sentiment & Language" key="3">
                   {renderAnalysisSection("sentiment")}
                 </TabPane>
-                <TabPane tab={fileType?.category === 'document' && selectedDocument?.fileName.toLowerCase().includes('cv') ? "CV Details" : "Document Details"} key="4">
+                <TabPane tab={selectedDocument && selectedDocument.fileName && selectedDocument.fileName.toLowerCase().includes('cv') ? "CV Details" : "Document Details"} key="4">
                   {renderAnalysisSection("keyinfo")}
                 </TabPane>
               </Tabs>
