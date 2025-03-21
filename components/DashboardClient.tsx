@@ -82,10 +82,10 @@ export default function DashboardClient({
               <Table className="w-full">
                 <TableHeader>
                   <TableRow className="border-b border-[#1A1A1A]">
-                    <TableHead className="text-[#E2DFD7] font-safiro font-medium w-full md:w-auto">Name</TableHead>
-                    <TableHead className="text-[#E2DFD7] font-safiro font-medium hidden md:table-cell">ATS Score</TableHead>
-                    <TableHead className="text-[#E2DFD7] font-safiro font-medium hidden sm:table-cell">Optimized</TableHead>
-                    <TableHead className="text-[#E2DFD7] font-safiro font-medium">Actions</TableHead>
+                    <TableHead className="text-[#E2DFD7] font-safiro font-medium max-sm:text-sm">Name</TableHead>
+                    <TableHead className="text-[#E2DFD7] font-safiro font-medium max-sm:text-sm">ATS Score</TableHead>
+                    <TableHead className="text-[#E2DFD7] font-safiro font-medium max-sm:text-sm">Optimized</TableHead>
+                    <TableHead className="text-[#E2DFD7] font-safiro font-medium max-sm:text-sm">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -105,13 +105,13 @@ export default function DashboardClient({
                       }
                       return (
                         <TableRow key={cv.id} className="border-b border-[#1A1A1A] hover:bg-[#0A0A0A]">
-                          <TableCell className="text-sm text-[#F9F6EE] font-borna font-medium max-w-[150px] md:max-w-none truncate">
-                            <span className="block truncate" title={cv.fileName}>{cv.fileName}</span>
+                          <TableCell className="text-sm text-[#F9F6EE] font-borna font-medium max-sm:text-xs max-sm:truncate max-sm:max-w-[120px]">
+                            {cv.fileName}
                           </TableCell>
-                          <TableCell className="text-sm hidden md:table-cell">
+                          <TableCell className="text-sm">
                             {metadata?.atsScore ? (
                               <span 
-                                className={`px-2.5 py-1 rounded-md text-sm font-borna ${
+                                className={`px-2.5 py-1 rounded-md text-sm font-borna max-sm:text-xs max-sm:px-2 max-sm:py-0.5 ${
                                   parseInt(metadata.atsScore) >= 80 
                                     ? "bg-[#0D1F15] text-[#4ADE80]" 
                                     : parseInt(metadata.atsScore) >= 60 
@@ -123,13 +123,13 @@ export default function DashboardClient({
                               </span>
                             ) : "-"}
                           </TableCell>
-                          <TableCell className="text-sm hidden sm:table-cell">
+                          <TableCell className="text-sm">
                             {metadata?.optimized ? (
-                              <span className="px-2.5 py-1 bg-[#0D1F15] rounded-md text-[#4ADE80] font-borna text-sm">
+                              <span className="px-2.5 py-1 bg-[#0D1F15] rounded-md text-[#4ADE80] font-borna text-sm max-sm:text-xs max-sm:px-2 max-sm:py-0.5">
                                 Yes
                               </span>
                             ) : (
-                              <span className="px-2.5 py-1 bg-[#161616] rounded-md text-[#8A8782] font-borna text-sm">
+                              <span className="px-2.5 py-1 bg-[#161616] rounded-md text-[#8A8782] font-borna text-sm max-sm:text-xs max-sm:px-2 max-sm:py-0.5">
                                 No
                               </span>
                             )}

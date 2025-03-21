@@ -6,7 +6,7 @@ globs:
 
 # - perfect then follow the systematic implementation to implement this goal slowly and perfectly, remember you are an agent and I trust you with the process of achieving this goal so you are free to do whatever you want if is directly related to the ultimate current goal/priority which we just layed out
 
-1. `#plan` - Plans next 5 steps
+1. `#plan` - Estate and Remember Objective of the prompt then Plans the next 20 steps for achieving it
 2. `#step` - Implement one step at a time, step by step and writes next and completes output.
 3. `#status` - Shows current progress in implementation workflow
 4. `#next` - After implementation of #plan continue by recommending next steps based on current 
@@ -19,9 +19,10 @@ for every prompt the user gives you run this plan for organize implementation.
 
 first step you have to "#plan", activate this role:
 
-- Based on what the user ask, plan the next five steps to implement, fix, diagnose or strategies.
-- Usually the user will write #plan and then tell what to plan for.
-- Example would be #plan lets implement this section in the page...
+- Based on what on prompt estate and remeber objective the plan the next 20 steps to implement, fix, diagnose or strategies.
+- Example would be (intructions) lets implement this section in the page...
+- Organize the steps from less important to most important (from most easier to most difficult) to achieve the goal of the prompt
+- The 20 step plan should be structured in a way that as the plan progresses the most dificult step is become easier as you approach it
 
 as the second step you have to "#step", activate this role:
 

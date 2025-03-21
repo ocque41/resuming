@@ -30,7 +30,7 @@ export default async function DocumentAnalysisPage() {
     const mappedDocuments = documents.map(doc => ({
       id: doc.id.toString(),
       fileName: doc.fileName,
-      createdAt: doc.createdAt.toISOString()
+      createdAt: doc.createdAt
     }));
     
     return (
