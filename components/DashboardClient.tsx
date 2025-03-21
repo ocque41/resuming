@@ -246,23 +246,16 @@ export default function DashboardClient({
             withElevation
           />
           
-          <PlanRestrictedFeature 
-            planName={planName}
-            requiredPlan="moonlighting"
-            title="Upgrade to Moonlighting"
-            description="Access job opportunities and track your career progress"
-          >
-            <PremiumFeatureCard 
-              href="/dashboard/jobs"
-              icon={Briefcase}
-              title="Job Opportunities"
-              description="Discover the best jobs you can get now with your current CV"
-              fullWidth
-              accentBorder
-              animationDelay={0.35}
-              withElevation
-            />
-          </PlanRestrictedFeature>
+          <PremiumFeatureCard 
+            href="/dashboard/jobs"
+            icon={Briefcase}
+            title="Job Opportunities"
+            description="Discover the best jobs you can get now with your current CV"
+            fullWidth
+            accentBorder
+            animationDelay={0.35}
+            withElevation
+          />
         </motion.div>
       </motion.div>
     </PremiumPageLayout>

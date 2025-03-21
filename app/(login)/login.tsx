@@ -11,13 +11,20 @@ import Image from "next/image";
 import { Card, CardHeader, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { signIn } from "./actions";
+import { signIn, signUp } from "./actions";
 import { ActionState } from "@/lib/auth/middleware";
 
-const signInAction = (data: FormData) =>
-  signIn({ error: "", email: "", password: "" }, data).then(
-    (res) => res ?? { error: "", email: "", password: "" }
-  );
+const createAction = (mode: "signin" | "signup") => (data: FormData) => {
+  if (mode === "signin") {
+    return signIn({ error: "", email: "", password: "" }, data).then(
+      (res) => res ?? { error: "", email: "", password: "" }
+    );
+  } else {
+    return signUp({ error: "", email: "", password: "" }, data).then(
+      (res) => res ?? { error: "", email: "", password: "" }
+    );
+  }
+};
 
 function AuthForm({ mode }: { mode: "signin" | "signup" }) {
   const searchParams = useSearchParams();
@@ -25,7 +32,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
   const priceId = searchParams?.get("priceId");
   const inviteId = searchParams?.get("inviteId");
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
-    signInAction,
+    createAction(mode),
     { error: "", email: "", password: "" }
   );
 

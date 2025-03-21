@@ -117,7 +117,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
 
   if (existingUser.length > 0) {
     return {
-      error: 'Failed to create user. Please try again.',
+      error: 'An account with this email already exists. Please sign in instead.',
       email,
       password,
     };
@@ -135,7 +135,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
 
   if (!createdUser) {
     return {
-      error: 'Failed to create user. Please try again.',
+      error: 'Failed to create account. Please try again later.',
       email,
       password,
     };
@@ -146,37 +146,83 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   let createdTeam: typeof teams.$inferSelect | null = null;
 
   if (inviteId) {
-    // Check if there's a valid invitation
-    const [invitation] = await db
-      .select()
-      .from(invitations)
-      .where(
-        and(
-          eq(invitations.id, parseInt(inviteId)),
-          eq(invitations.email, email),
-          eq(invitations.status, 'pending'),
-        ),
-      )
-      .limit(1);
-
-    if (invitation) {
-      teamId = invitation.teamId;
-      userRole = invitation.role;
-
-      await db
-        .update(invitations)
-        .set({ status: 'accepted' })
-        .where(eq(invitations.id, invitation.id));
-
-      await logActivity(teamId, createdUser.id, ActivityType.ACCEPT_INVITATION);
-
-      [createdTeam] = await db
+    try {
+      // Check if there's a valid invitation
+      const [invitation] = await db
         .select()
-        .from(teams)
-        .where(eq(teams.id, teamId))
+        .from(invitations)
+        .where(
+          and(
+            eq(invitations.id, parseInt(inviteId)),
+            eq(invitations.email, email),
+            eq(invitations.status, 'pending'),
+          ),
+        )
         .limit(1);
-    } else {
-      return { error: 'Invalid or expired invitation.', email, password };
+
+      if (invitation) {
+        teamId = invitation.teamId;
+        userRole = invitation.role;
+
+        await db
+          .update(invitations)
+          .set({ status: 'accepted' })
+          .where(eq(invitations.id, invitation.id));
+
+        await logActivity(teamId, createdUser.id, ActivityType.ACCEPT_INVITATION);
+
+        [createdTeam] = await db
+          .select()
+          .from(teams)
+          .where(eq(teams.id, teamId))
+          .limit(1);
+      } else {
+        // If invitation not found but inviteId was provided, create a new team anyway
+        // but also inform the user about the invalid invitation
+        console.warn(`Invalid invitation ID provided: ${inviteId} for user: ${email}`);
+        
+        // Create a new team for the user
+        const newTeam: NewTeam = {
+          name: `${email}'s Team`,
+          planName: "Free" // Set default plan to Free
+        };
+
+        [createdTeam] = await db.insert(teams).values(newTeam).returning();
+        
+        if (!createdTeam) {
+          return {
+            error: 'Failed to create team. Please try again.',
+            email,
+            password,
+          };
+        }
+
+        teamId = createdTeam.id;
+        userRole = 'owner';
+        await logActivity(teamId, createdUser.id, ActivityType.CREATE_TEAM);
+      }
+    } catch (error) {
+      console.error('Error processing invitation:', error);
+      
+      // Create a new team for the user as fallback
+      const newTeam: NewTeam = {
+        name: `${email}'s Team`,
+        planName: "Free" // Set default plan to Free
+      };
+
+      [createdTeam] = await db.insert(teams).values(newTeam).returning();
+      
+      if (!createdTeam) {
+        return {
+          error: 'Failed to create team. Please try again.',
+          email,
+          password,
+        };
+      }
+
+      teamId = createdTeam.id;
+      userRole = 'owner';
+      await logActivity(teamId, createdUser.id, ActivityType.CREATE_TEAM);
     }
   } else {
     // Create a new team if there's no invitation
@@ -207,20 +253,29 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     role: userRole,
   };
 
-  await Promise.all([
-    db.insert(teamMembers).values(newTeamMember),
-    logActivity(teamId, createdUser.id, ActivityType.SIGN_UP),
-    setSession(createdUser),
-  ]);
+  try {
+    await Promise.all([
+      db.insert(teamMembers).values(newTeamMember),
+      logActivity(teamId, createdUser.id, ActivityType.SIGN_UP),
+      setSession(createdUser),
+    ]);
 
-  const redirectTo = formData.get('redirect') as string | null;
-  if (redirectTo === 'checkout') {
-    const priceId = formData.get('priceId') as string;
-    return createCheckoutSession({ team: createdTeam, priceId });
+    const redirectTo = formData.get('redirect') as string | null;
+    if (redirectTo === 'checkout') {
+      const priceId = formData.get('priceId') as string;
+      return createCheckoutSession({ team: createdTeam, priceId });
+    }
+
+    // For new users, redirect to the pricing page first
+    redirect('/dashboard/pricing');
+  } catch (error) {
+    console.error('Error during sign-up completion:', error);
+    return {
+      error: 'Your account was created but we encountered an issue. Please try signing in.',
+      email,
+      password
+    };
   }
-
-  // For new users, redirect to the pricing page first
-  redirect('/dashboard/pricing');
 });
 
 export async function signOut() {
