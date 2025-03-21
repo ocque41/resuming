@@ -43,6 +43,21 @@ export async function getSession() {
   return await verifyToken(session);
 }
 
+/**
+ * Get the authenticated user from the session
+ * Returns user ID if authenticated, null otherwise
+ */
+export async function getUser() {
+  const session = await getSession();
+  if (!session) return null;
+  
+  // Check if session has expired
+  const expiresAt = new Date(session.expires);
+  if (expiresAt < new Date()) return null;
+  
+  return session.user;
+}
+
 export async function setSession(user: NewUser) {
   const expiresInOneDay = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const session: SessionData = {

@@ -1,263 +1,285 @@
-"use client";
+'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table";
-import DeleteCVButton from "@/components/DeleteCVButton";
-import UserMenu from "@/components/UserMenu";
-import ActionsDropdown from "@/components/ActionsDropdown";
-import Link from "next/link";
+import { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { 
-  BarChart2, FileText, Briefcase, Upload, PieChart, TrendingUp, 
-  Search
-} from "lucide-react";
-import CVUploader from "@/components/CVUploader.client";
-import PremiumFeatureCard from "@/components/PremiumFeatureCard";
-import { PremiumCard, PremiumCardHeader, PremiumCardTitle, PremiumCardContent } from "@/components/ui/premium-card";
-import PremiumPageLayout from "@/components/PremiumPageLayout";
-import PlanRestrictedFeature from "@/components/PlanRestrictedFeature";
-import { motion } from "framer-motion";
-import { colors } from "@/lib/design-tokens";
-import ErrorBoundaryWrapper from "@/components/ErrorBoundaryWrapper";
-import Scrollable from "@/components/ui/scrollable";
+  BarChart2, 
+  Upload,
+  FileText, 
+  Plus,
+  Trash2,
+  Clock,
+  User,
+  RefreshCw,
+  Settings,
+  Mail,
+  Activity
+} from 'lucide-react';
+import dynamic from 'next/dynamic';
+import { formatDistanceToNow } from 'date-fns';
 
-// Define prop interface
+import { Button } from '@/components/ui/button';
+import { PremiumFeatureCard } from '@/components/ui/premium-feature-card';
+import { PlanRestrictedFeature } from '@/components/ui/plan-restricted-feature';
+import { EmptyState } from '@/components/ui/empty-state';
+
+// Dynamically import DocumentUploader to ensure it only loads on client
+const DocumentUploader = dynamic(() => import('./DocumentUploader'), {
+  ssr: false,
+});
+
+// Types
+interface CV {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+interface ActivityLog {
+  id: string;
+  action: string;
+  resource: string;
+  resourceId: string;
+  timestamp: string;
+  userId: string;
+}
+
+interface TeamData {
+  id: string;
+  planName?: string;
+  [key: string]: any;
+}
+
 interface DashboardClientProps {
   userName: string;
-  teamData: any;
-  cvs: any[];
-  activityLogs: any[];
+  teamData: TeamData;
+  cvs: CV[];
+  activityLogs: ActivityLog[];
 }
 
 export default function DashboardClient({ 
   userName, 
   teamData, 
-  cvs,
+  cvs, 
   activityLogs 
 }: DashboardClientProps) {
+  const router = useRouter();
+  const [isUploaderOpen, setIsUploaderOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState<Record<string, boolean>>({});
   
-  // Animation settings for staggered children
-  const container = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
+  // Extract plan name with fallback to "Free"
+  const planName = teamData?.planName || "Free";
+  
+  // Helper to format dates
+  const formatDate = (dateString: string) => {
+    try {
+      return formatDistanceToNow(new Date(dateString), { addSuffix: true });
+    } catch (error) {
+      return "Invalid date";
+    }
+  };
+  
+  // Get activity icon based on action
+  const getActivityIcon = (action: string) => {
+    switch (action) {
+      case 'created':
+        return <Plus className="h-4 w-4 text-green-500" />;
+      case 'updated':
+        return <RefreshCw className="h-4 w-4 text-blue-500" />;
+      case 'deleted':
+        return <Trash2 className="h-4 w-4 text-red-500" />;
+      case 'analyzed':
+        return <BarChart2 className="h-4 w-4 text-purple-500" />;
+      case 'settings':
+        return <Settings className="h-4 w-4 text-gray-500" />;
+      case 'email':
+        return <Mail className="h-4 w-4 text-amber-500" />;
+      default:
+        return <User className="h-4 w-4 text-gray-500" />;
     }
   };
 
-  // Get the plan name from teamData
-  const planName = teamData?.planName || "Free";
+  // Format activity action for display
+  const formatAction = (action: string) => {
+    return action.charAt(0).toUpperCase() + action.slice(1);
+  };
+
+  // Handle CV deletion
+  const handleDeleteCV = async (id: string) => {
+    setIsDeleting(prev => ({ ...prev, [id]: true }));
+    
+    try {
+      // API call would go here
+      // await fetch(`/api/documents/${id}`, { method: 'DELETE' });
+      
+      // For demo purposes, we're just simulating an API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Refresh data after delete
+      router.refresh();
+    } catch (error) {
+      console.error('Failed to delete CV:', error);
+    } finally {
+      setIsDeleting(prev => ({ ...prev, [id]: false }));
+    }
+  };
 
   return (
-    <PremiumPageLayout 
-      title="Welcome back"
-      subtitle={userName}
-      withGradientBackground
-      withScrollIndicator
-      animation="fade"
-      teamData={teamData}
-      activityLogs={activityLogs}
-      maxWidth="2xl"
-    >
-      {/* CV Collection */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.2 }}
-      >
-        <PremiumCard 
-          variant="default" 
-          shadowSize="lg"
-          className="overflow-hidden"
-        >
-          <PremiumCardHeader>
-            <PremiumCardTitle>Your CV Collection</PremiumCardTitle>
-          </PremiumCardHeader>
-          <PremiumCardContent className="p-0">
-            <Scrollable orientation="horizontal" variant="modern">
-              <Table className="w-full">
-                <TableHeader>
-                  <TableRow className="border-b border-[#1A1A1A]">
-                    <TableHead className="text-[#E2DFD7] font-safiro font-medium max-sm:text-sm">Name</TableHead>
-                    <TableHead className="text-[#E2DFD7] font-safiro font-medium max-sm:text-sm">ATS Score</TableHead>
-                    <TableHead className="text-[#E2DFD7] font-safiro font-medium max-sm:text-sm">Optimized</TableHead>
-                    <TableHead className="text-[#E2DFD7] font-safiro font-medium max-sm:text-sm">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {cvs.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-8 text-[#8A8782] italic font-borna">
-                        Upload your first CV to get started
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    cvs.map((cv: any) => {
-                      let metadata = null;
-                      try {
-                        metadata = cv.metadata ? JSON.parse(cv.metadata) : null;
-                      } catch (err) {
-                        console.error("Error parsing metadata:", err);
-                      }
-                      return (
-                        <TableRow key={cv.id} className="border-b border-[#1A1A1A] hover:bg-[#0A0A0A]">
-                          <TableCell className="text-sm text-[#F9F6EE] font-borna font-medium max-sm:text-xs max-sm:truncate max-sm:max-w-[120px]">
-                            {cv.fileName}
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {metadata?.atsScore ? (
-                              <span 
-                                className={`px-2.5 py-1 rounded-md text-sm font-borna max-sm:text-xs max-sm:px-2 max-sm:py-0.5 ${
-                                  parseInt(metadata.atsScore) >= 80 
-                                    ? "bg-[#0D1F15] text-[#4ADE80]" 
-                                    : parseInt(metadata.atsScore) >= 60 
-                                    ? "bg-[#1A140A] text-[#FCD34D]" 
-                                    : "bg-[#1A0505] text-[#F5C2C2]"
-                                }`}
-                              >
-                                {metadata.atsScore}
-                              </span>
-                            ) : "-"}
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {metadata?.optimized ? (
-                              <span className="px-2.5 py-1 bg-[#0D1F15] rounded-md text-[#4ADE80] font-borna text-sm max-sm:text-xs max-sm:px-2 max-sm:py-0.5">
-                                Yes
-                              </span>
-                            ) : (
-                              <span className="px-2.5 py-1 bg-[#161616] rounded-md text-[#8A8782] font-borna text-sm max-sm:text-xs max-sm:px-2 max-sm:py-0.5">
-                                No
-                              </span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <ActionsDropdown cv={cv} />
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </Scrollable>
-          </PremiumCardContent>
-        </PremiumCard>
-      </motion.div>
-      
-      {/* CV Upload Area */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.3 }}
-      >
-        <div className="flex items-center mb-2">
-          <Upload className="h-5 w-5 text-[#B4916C] mr-2" />
-          <h2 className="text-lg font-safiro font-semibold text-[#F9F6EE]">Upload New CV</h2>
-        </div>
-        <ErrorBoundaryWrapper>
-          <CVUploader />
-        </ErrorBoundaryWrapper>
-      </motion.div>
-      
-      {/* Feature Links */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.5, delay: 0.4 }}
-      >
-        <div className="flex items-center mb-4">
-          <Search className="h-5 w-5 text-[#B4916C] mr-2" />
-          <h2 className="text-lg font-safiro font-semibold text-[#F9F6EE]">Suites</h2>
-        </div>
+    <div className="space-y-8">
+      <section>
+        <h2 className="text-2xl font-safiro text-[#F9F6EE] mb-4">Welcome back, {userName}!</h2>
         
-        <motion.div 
-          className="grid grid-cols-1 md:grid-cols-2 gap-4"
-          variants={container}
-          initial="hidden"
-          animate="show"
-        >
-          <PremiumFeatureCard 
-            href="/dashboard/optimize"
-            icon={TrendingUp}
-            title="Optimize CV"
-            description="Analyze & optimize for ATS"
-            iconBgColor="bg-[#050505]"
-            bgGradient
-            animationDelay={0.1}
-            withElevation
-          />
-          
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Create Feature - Pro Plan */}
           <PlanRestrictedFeature 
-            planName={planName}
-            requiredPlan="moonlighting"
-            title="Upgrade to Moonlighting"
-            description="Access the Create suite with our most powerful AI 'Reming'"
+            requiredPlan="Basic" 
+            currentPlan={planName}
+            lockedMessage="Create custom CV templates"
           >
-            <PremiumFeatureCard 
-              href="/dashboard/enhance"
-              icon={FileText}
+            <PremiumFeatureCard
               title="Create"
-              description="Chat with the powerful employee 'Reming'"
-              iconBgColor="bg-[#050505]"
-              bgGradient
-              animationDelay={0.15}
-              withElevation
+              description="Build custom CV templates optimized for ATS systems"
+              icon={Plus}
+              href="/dashboard/create"
             />
           </PlanRestrictedFeature>
           
-          <PremiumFeatureCard 
-            href="/dashboard/analyze"
-            icon={PieChart}
-            title="Document Analysis"
-            description="Extract insights & visualize data"
-            iconBgColor="bg-[#050505]"
-            bgGradient
-            animationDelay={0.2}
-            withElevation
-          />
+          {/* Analyze Feature - Basic Plan */}
+          <PlanRestrictedFeature 
+            requiredPlan="Basic" 
+            currentPlan={planName}
+            lockedMessage="Analyze your CV against job descriptions"
+          >
+            <PremiumFeatureCard
+              title="Analyze"
+              description="Check your CV against job descriptions for keyword optimization"
+              icon={BarChart2}
+              href="/dashboard/analyze"
+            />
+          </PlanRestrictedFeature>
           
-          <PremiumFeatureCard 
-            href="/job-description"
-            icon={FileText}
-            title="Job Description Generator"
-            description="Create detailed job descriptions"
-            iconBgColor="bg-[#050505]"
-            bgGradient
-            animationDelay={0.25}
-            withElevation
+          {/* Chat Feature - Pro Plan */}
+          <PlanRestrictedFeature 
+            requiredPlan="Pro" 
+            currentPlan={planName}
+            lockedMessage="Get AI assistance with your CV"
+          >
+            <PremiumFeatureCard
+              title="Chat"
+              description="Ask our AI assistant for help with your CV and job applications"
+              icon={Activity}
+              href="/dashboard/chat"
+            />
+          </PlanRestrictedFeature>
+        </div>
+      </section>
+      
+      <section>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-safiro text-[#F9F6EE]">Your CVs</h2>
+          <Button
+            onClick={() => setIsUploaderOpen(true)}
+            className="bg-[#B4916C] hover:bg-[#A3815B] text-[#050505]"
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Upload CV
+          </Button>
+        </div>
+        
+        {cvs.length === 0 ? (
+          <EmptyState
+            title="No CVs uploaded yet"
+            description="Upload your CV to get started with optimization"
+            icon={<FileText className="h-12 w-12 text-[#8A8782]" />}
+            action={{
+              label: "Upload CV",
+              onClick: () => setIsUploaderOpen(true)
+            }}
           />
-          
-          <PremiumFeatureCard 
-            href="/job-match"
-            icon={BarChart2}
-            title="CV to Job Match"
-            description="Analyze CV against job descriptions"
-            iconBgColor="bg-[#050505]"
-            bgGradient
-            animationDelay={0.3}
-            withElevation
+        ) : (
+          <div className="bg-[#0D0D0D] border border-[#222222] rounded-lg divide-y divide-[#222222]">
+            {cvs.map((cv) => (
+              <div key={cv.id} className="flex items-center justify-between p-4">
+                <div className="flex items-center">
+                  <div className="bg-[#161616] p-2 rounded mr-3">
+                    <FileText className="h-5 w-5 text-[#B4916C]" />
+                  </div>
+                  <div>
+                    <p className="font-safiro text-[#F9F6EE]">{cv.name}</p>
+                    <p className="text-xs text-[#8A8782]">Uploaded {formatDate(cv.createdAt)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-[#333333] text-[#C5C2BA] hover:bg-[#1A1A1A]"
+                    onClick={() => router.push(`/dashboard/cvs/${cv.id}`)}
+                  >
+                    View
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-red-900/30 text-red-400 hover:bg-red-900/10 hover:border-red-900/50"
+                    onClick={() => handleDeleteCV(cv.id)}
+                    disabled={isDeleting[cv.id]}
+                  >
+                    {isDeleting[cv.id] ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+      
+      <section>
+        <h2 className="text-xl font-safiro text-[#F9F6EE] mb-4">Recent Activity</h2>
+        
+        {activityLogs.length === 0 ? (
+          <EmptyState
+            title="No recent activity"
+            description="Your actions will be logged here"
+            icon={<Clock className="h-12 w-12 text-[#8A8782]" />}
           />
-          
-          <PremiumFeatureCard 
-            href="/dashboard/jobs"
-            icon={Briefcase}
-            title="Job Opportunities"
-            description="Discover the best jobs you can get now with your current CV"
-            fullWidth
-            accentBorder
-            animationDelay={0.35}
-            withElevation
-          />
-        </motion.div>
-      </motion.div>
-    </PremiumPageLayout>
+        ) : (
+          <div className="bg-[#0D0D0D] border border-[#222222] rounded-lg divide-y divide-[#222222]">
+            {activityLogs.slice(0, 5).map((log) => (
+              <div key={log.id} className="flex items-center p-4">
+                <div className="bg-[#161616] p-2 rounded mr-3">
+                  {getActivityIcon(log.action)}
+                </div>
+                <div>
+                  <p className="text-[#F9F6EE]">
+                    <span className="text-[#B4916C]">{formatAction(log.action)}</span>
+                    {' '}{log.resource.toLowerCase()}
+                    {log.resource === 'CV' && (
+                      <Link 
+                        href={`/dashboard/cvs/${log.resourceId}`} 
+                        className="text-[#9ECDFF] hover:underline ml-1"
+                      >
+                        View
+                      </Link>
+                    )}
+                  </p>
+                  <p className="text-xs text-[#8A8782]">{formatDate(log.timestamp)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <DocumentUploader 
+        isOpen={isUploaderOpen} 
+        onClose={() => setIsUploaderOpen(false)} 
+      />
+    </div>
   );
 } 

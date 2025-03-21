@@ -15,6 +15,7 @@ import {
   type NewActivityLog,
   ActivityType,
   invitations,
+  emailVerificationTokens,
 } from '@/lib/db/schema';
 import { comparePasswords, hashPassword, setSession } from '@/lib/auth/session';
 import { redirect } from 'next/navigation';
@@ -25,6 +26,10 @@ import {
   validatedAction,
   validatedActionWithUser,
 } from '@/lib/auth/middleware';
+import { verifyCaptcha } from "@/lib/captcha";
+import { generateToken } from "@/lib/auth/tokens";
+import { addUserToNotion } from "@/lib/notion/client";
+import { sendConfirmationEmail } from "@/lib/email/client";
 
 async function logActivity(
   teamId: number | null | undefined,
@@ -108,6 +113,35 @@ const signUpSchema = z.object({
 
 export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   const { email, password, inviteId } = data;
+  
+  // Verify the captcha token
+  const captchaToken = formData.get('captchaToken') as string;
+  if (!captchaToken) {
+    return {
+      error: 'Please complete the captcha verification.',
+      email,
+      password,
+    };
+  }
+  
+  // Verify the token with hCaptcha
+  try {
+    const verificationResult = await verifyCaptcha(captchaToken);
+    if (!verificationResult.success) {
+      return {
+        error: 'Captcha verification failed. Please try again.',
+        email,
+        password,
+      };
+    }
+  } catch (error) {
+    console.error('Captcha verification error:', error);
+    return {
+      error: 'Error verifying captcha. Please try again.',
+      email,
+      password,
+    };
+  }
 
   const existingUser = await db
     .select()
@@ -129,6 +163,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     email,
     passwordHash,
     role: 'owner', // Default role, will be overridden if there's an invitation
+    emailVerified: false, // Set email as not verified initially
   };
 
   const [createdUser] = await db.insert(users).values(newUser).returning();
@@ -139,6 +174,34 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       email,
       password,
     };
+  }
+
+  // Generate a verification token
+  const verificationToken = generateToken(createdUser.id, 24); // 24 hour expiration
+  
+  // Calculate expiration date (24 hours from now)
+  const expiresAt = new Date();
+  expiresAt.setHours(expiresAt.getHours() + 24);
+  
+  // Save the token to the database
+  try {
+    await db.insert(emailVerificationTokens).values({
+      userId: createdUser.id,
+      token: verificationToken,
+      expiresAt,
+    });
+    
+    // Send verification email
+    await sendConfirmationEmail({
+      email: createdUser.email,
+      token: verificationToken,
+    });
+    
+    // Add user to Notion database
+    await addUserToNotion(createdUser.email, false);
+  } catch (error) {
+    console.error('Error during verification setup:', error);
+    // Continue with sign-up process even if verification email fails
   }
 
   let teamId: number;
