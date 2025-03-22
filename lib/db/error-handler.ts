@@ -10,6 +10,8 @@ export class DbOperationError extends Error {
   public readonly table: string;
   public readonly originalError: unknown;
   public readonly errorId: string;
+  public readonly isMissingColumnError: boolean;
+  public readonly missingColumn?: string;
 
   constructor({
     message,
@@ -32,13 +34,36 @@ export class DbOperationError extends Error {
     this.originalError = originalError;
     this.errorId = errorId;
     
+    // Check if this is a missing column error
+    this.isMissingColumnError = isMissingColumnError(originalError);
+    
+    // Extract the missing column name if applicable
+    if (this.isMissingColumnError) {
+      this.missingColumn = extractMissingColumnName(originalError);
+    }
+    
     // Log the error with full context
     console.error(`Database Error [${errorId}]:`, {
       message,
       operation,
       table,
+      isMissingColumnError: this.isMissingColumnError,
+      missingColumn: this.missingColumn,
       originalError,
     });
+    
+    // Log a more detailed warning if we detected a missing column
+    if (this.isMissingColumnError && this.missingColumn) {
+      console.warn(`
+        ⚠️ SCHEMA MISMATCH DETECTED ⚠️
+        The column "${this.missingColumn}" was referenced in code but doesn't exist in the database.
+        This might indicate that a migration is missing or failed to run.
+        
+        To fix this issue:
+        1. Run the database migration: npx tsx lib/db/fix-db-schema.ts
+        2. Or manually add the missing column to the database
+      `);
+    }
   }
 }
 
@@ -64,6 +89,53 @@ export async function withDbErrorHandling<T>(
       originalError: error,
     });
   }
+}
+
+/**
+ * Checks if an error is related to a missing column
+ * @param error The error to check
+ * @returns True if the error indicates a missing column
+ */
+function isMissingColumnError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const errorMessage = error.message.toLowerCase();
+    return (
+      errorMessage.includes('column') && 
+      (errorMessage.includes('does not exist') || 
+       errorMessage.includes('not found') ||
+       errorMessage.includes('no such column'))
+    );
+  }
+  return false;
+}
+
+/**
+ * Extracts the name of the missing column from an error message
+ * @param error The error containing the missing column information
+ * @returns The name of the missing column, or undefined if it couldn't be extracted
+ */
+function extractMissingColumnName(error: unknown): string | undefined {
+  if (!(error instanceof Error)) return undefined;
+  
+  const errorMessage = error.message;
+  
+  // Common PostgreSQL error: column "X" does not exist
+  const pgMatch = errorMessage.match(/column ["']([^"']+)["'] does not exist/i);
+  if (pgMatch && pgMatch[1]) return pgMatch[1];
+  
+  // Another common pattern: ERROR: column X does not exist
+  const pgMatch2 = errorMessage.match(/ERROR:[^:]*column ([^ ]+) does not exist/i);
+  if (pgMatch2 && pgMatch2[1]) return pgMatch2[1];
+  
+  // MySQL pattern: Unknown column 'X' in 'field list'
+  const mysqlMatch = errorMessage.match(/Unknown column ['"]([^'"]+)['"] in/i);
+  if (mysqlMatch && mysqlMatch[1]) return mysqlMatch[1];
+  
+  // SQLite pattern: no such column: X
+  const sqliteMatch = errorMessage.match(/no such column:[ ]*([^ ]+)/i);
+  if (sqliteMatch && sqliteMatch[1]) return sqliteMatch[1];
+  
+  return undefined;
 }
 
 /**
@@ -100,6 +172,10 @@ export function isForeignKeyError(error: unknown): boolean {
  */
 export function getUserFriendlyDbErrorMessage(error: unknown): string {
   if (error instanceof DbOperationError) {
+    if (error.isMissingColumnError) {
+      return `The application is trying to access data that doesn't exist in the database. Please contact support (Error ID: ${error.errorId})`;
+    }
+    
     if (isUniqueConstraintError(error.originalError)) {
       return 'This record already exists. Please try with different details.';
     } else if (isForeignKeyError(error.originalError)) {
