@@ -16,10 +16,14 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { signIn, signUp } from "./actions";
 import { ActionState } from "@/lib/auth/middleware";
 
-// Log environment for debugging
+// Enhanced debugging for reCAPTCHA
 if (typeof window !== 'undefined') {
   console.log("Login component - Environment:", process.env.NODE_ENV);
   console.log("Login component - RECAPTCHA_SITE_KEY available:", !!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY);
+  if (process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
+    console.log("Login component - RECAPTCHA_SITE_KEY length:", process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.length);
+    console.log("Login component - RECAPTCHA_SITE_KEY first 5 chars:", process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.substring(0, 5));
+  }
 }
 
 const createAction = (mode: "signin" | "signup") => (data: FormData) => {
@@ -46,9 +50,27 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [captchaError, setCaptchaError] = useState<string>("");
+  const [captchaAttempts, setCaptchaAttempts] = useState(0);
+  const formRef = useRef<HTMLFormElement>(null);
   
   // Use the reCAPTCHA v3 hook
   const { executeReCaptcha, token: captchaToken, error: recaptchaError, loading: recaptchaLoading } = useReCaptchaV3();
+  
+  // Pre-load reCAPTCHA token on component mount for signup
+  useEffect(() => {
+    if (mode === "signup" && !captchaToken && !recaptchaLoading && !recaptchaError) {
+      const preloadToken = async () => {
+        console.log("Preloading reCAPTCHA token");
+        try {
+          const token = await executeReCaptcha('signup_preload');
+          console.log("Preloaded reCAPTCHA token:", token ? "success" : "failed");
+        } catch (error) {
+          console.error("Error preloading reCAPTCHA token:", error);
+        }
+      };
+      preloadToken();
+    }
+  }, [mode, captchaToken, recaptchaLoading, recaptchaError, executeReCaptcha]);
   
   // Handle reCAPTCHA errors
   useEffect(() => {
@@ -58,49 +80,89 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
     }
   }, [recaptchaError]);
 
+  // If token is loaded after user started submitting, continue submission
+  useEffect(() => {
+    if (isSubmitting && captchaToken && formRef.current && mode === "signup") {
+      console.log("Token received while submitting, continuing submission");
+      const formData = new FormData(formRef.current);
+      formData.append("captchaToken", captchaToken);
+      formAction(formData);
+    }
+  }, [captchaToken, isSubmitting, formAction, mode]);
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    
+    if (isSubmitting) return;
     setIsSubmitting(true);
     
     try {
-      // For signup, execute reCAPTCHA verification
-      let token = captchaToken;
-      if (mode === "signup" && !token) {
-        console.log("Executing reCAPTCHA verification");
-        token = await executeReCaptcha('signup');
-        
-        if (!token) {
-          setCaptchaError("CAPTCHA verification failed. Please try again.");
-          setIsSubmitting(false);
-          return;
-        }
-      }
-      
-      // Debug output for form submission
-      console.log("Form submission - mode:", mode);
+      // Only for signup mode
       if (mode === "signup") {
+        console.log("Signup form submission started");
+        setCaptchaError("");
+        
+        // If we already have a token, use it
+        let token = captchaToken;
+        
+        // If not, try to get one
+        if (!token) {
+          console.log("No reCAPTCHA token available, executing verification");
+          setCaptchaAttempts(prev => prev + 1);
+          
+          try {
+            token = await executeReCaptcha('signup');
+            console.log("reCAPTCHA execution result:", token ? "success" : "failed");
+          } catch (error) {
+            console.error("reCAPTCHA execution error:", error);
+            setCaptchaError(`reCAPTCHA error: ${error instanceof Error ? error.message : "Failed to verify"}`);
+            setIsSubmitting(false);
+            return;
+          }
+          
+          // If still no token after execution
+          if (!token) {
+            // Try one more time if less than 3 attempts
+            if (captchaAttempts < 2) {
+              console.log(`reCAPTCHA token generation failed, attempt ${captchaAttempts + 1}`);
+              setCaptchaError("CAPTCHA verification in progress. Please wait...");
+              setTimeout(() => {
+                setIsSubmitting(false);
+                handleSubmit(event);
+              }, 1500);
+              return;
+            } else {
+              console.error("Failed to get reCAPTCHA token after multiple attempts");
+              setCaptchaError("CAPTCHA verification failed. Please refresh the page and try again.");
+              setIsSubmitting(false);
+              return;
+            }
+          }
+        }
+        
         console.log("CAPTCHA token available:", !!token);
-      }
-      
-      const formData = new FormData(event.currentTarget);
-      
-      // Add CAPTCHA token to form data if available
-      if (token && mode === "signup") {
+        console.log("CAPTCHA token length:", token?.length);
+        
+        // Create form data and add token
+        const formData = new FormData(event.currentTarget);
         formData.append("captchaToken", token);
-        console.log("CAPTCHA token added to form data, length:", token.length);
+        
+        // Submit the form with the token
+        formAction(formData);
+      } else {
+        // For signin, just submit the form
+        formAction(new FormData(event.currentTarget));
       }
-      
-      formAction(formData);
     } catch (error) {
       console.error("Form submission error:", error);
       setCaptchaError(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
-    } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
     <form
+      ref={formRef}
       className="space-y-6"
       onSubmit={handleSubmit}
     >
@@ -148,11 +210,11 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
 
       {mode === "signup" && (
         <div className="flex flex-col items-center">
-          {/* reCAPTCHA v3 doesn't require user interaction, so we just show verification status */}
+          {/* reCAPTCHA v3 doesn't require user interaction, but we show verification status */}
           {(recaptchaLoading || isSubmitting) && (
             <div className="flex items-center text-sm text-gray-400 my-2">
               <Loader className="animate-spin mr-2 h-4 w-4" />
-              Verifying...
+              {recaptchaLoading ? "Loading verification..." : "Verifying..."}
             </div>
           )}
           

@@ -20,6 +20,12 @@ declare global {
       execute: (siteKey: string, options: { action: string }) => Promise<string>;
     };
     onRecaptchaLoaded: () => void;
+    _recaptchaLoadedCallback?: () => void;
+    _recaptchaStatus?: {
+      loaded: boolean;
+      error: Error | null;
+      timestamp: number;
+    };
   }
 }
 
@@ -42,6 +48,33 @@ export function ReCaptchaV3({
 
   // Function to load the reCAPTCHA script
   const loadReCaptchaScript = useCallback(() => {
+    // Check for a global status object to avoid duplicate script loads
+    if (typeof window !== 'undefined') {
+      // Initialize status object if it doesn't exist
+      if (!window._recaptchaStatus) {
+        window._recaptchaStatus = {
+          loaded: false,
+          error: null,
+          timestamp: Date.now()
+        };
+      }
+      
+      // If already loaded, update local state
+      if (window._recaptchaStatus.loaded && window.grecaptcha) {
+        console.log("reCAPTCHA: Using already loaded script");
+        setLoading(false);
+        return;
+      }
+      
+      // If there was a previous error recently, don't try to load again too quickly
+      if (window._recaptchaStatus.error && (Date.now() - window._recaptchaStatus.timestamp < 5000)) {
+        console.warn("reCAPTCHA: Recent error, waiting before retry");
+        setError(window._recaptchaStatus.error);
+        setLoading(false);
+        return;
+      }
+    }
+
     // Skip if script is already loaded
     if (window.grecaptcha) {
       setLoading(false);
@@ -54,8 +87,19 @@ export function ReCaptchaV3({
       setError(error);
       onError?.(error);
       setLoading(false);
+      
+      if (typeof window !== 'undefined') {
+        window._recaptchaStatus = {
+          loaded: false,
+          error: error,
+          timestamp: Date.now()
+        };
+      }
+      
       return;
     }
+
+    console.log(`reCAPTCHA: Loading script with site key starting with ${actualSiteKey.substring(0, 5)}`);
 
     // Create script element
     const script = document.createElement('script');
@@ -63,15 +107,34 @@ export function ReCaptchaV3({
     script.async = true;
     script.defer = true;
     
+    // Create a global callback that can be referenced for clean-up
+    window._recaptchaLoadedCallback = () => {
+      console.log("reCAPTCHA: Script loaded successfully");
+      window._recaptchaStatus = {
+        loaded: true,
+        error: null,
+        timestamp: Date.now()
+      };
+      setLoading(false);
+    };
+    
     // Set up callbacks
     script.onload = () => {
-      window.grecaptcha.ready(() => {
-        setLoading(false);
-      });
+      window.grecaptcha.ready(window._recaptchaLoadedCallback || (() => setLoading(false)));
     };
 
-    script.onerror = () => {
+    script.onerror = (event) => {
       const error = new Error('Error loading reCAPTCHA script');
+      console.error("reCAPTCHA: Script loading error", event);
+      
+      if (typeof window !== 'undefined') {
+        window._recaptchaStatus = {
+          loaded: false,
+          error: error,
+          timestamp: Date.now()
+        };
+      }
+      
       setError(error);
       onError?.(error);
       setLoading(false);
@@ -82,7 +145,10 @@ export function ReCaptchaV3({
 
     // Clean up function
     return () => {
-      document.head.removeChild(script);
+      // Only remove if it's the one we added
+      if (document.head.contains(script)) {
+        document.head.removeChild(script);
+      }
     };
   }, [actualSiteKey, onError]);
 
@@ -90,20 +156,37 @@ export function ReCaptchaV3({
   const executeReCaptcha = useCallback(async () => {
     if (!window.grecaptcha) {
       const error = new Error('reCAPTCHA has not loaded yet');
+      console.error("reCAPTCHA: grecaptcha object not available");
       setError(error);
       onError?.(error);
       return;
     }
 
     try {
+      console.log(`reCAPTCHA: Executing verification for action "${action}"`);
+      
+      // Make sure grecaptcha is ready
+      await new Promise<void>((resolve) => {
+        if (window.grecaptcha) {
+          window.grecaptcha.ready(() => resolve());
+        } else {
+          resolve(); // Resolve anyway to avoid hanging
+        }
+      });
+      
       const token = await window.grecaptcha.execute(actualSiteKey, { action });
-      console.log(`reCAPTCHA v3 token generated for action: ${action}`);
+      
+      if (!token) {
+        throw new Error('reCAPTCHA execution returned empty token');
+      }
+      
+      console.log(`reCAPTCHA: Token generated successfully (length: ${token.length})`);
       onVerify(token);
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to execute reCAPTCHA');
+      console.error('reCAPTCHA execution error:', error);
       setError(error);
       onError?.(error);
-      console.error('reCAPTCHA execution error:', error);
     }
   }, [actualSiteKey, action, onVerify, onError]);
 
@@ -149,6 +232,83 @@ export function useReCaptchaV3() {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [initialized, setInitialized] = useState<boolean>(false);
+
+  // Initialize the reCAPTCHA script on first load
+  useEffect(() => {
+    // Skip if already initialized
+    if (initialized) return;
+
+    const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+    if (!siteKey) {
+      console.error("reCAPTCHA hook: No site key available");
+      setError(new Error('reCAPTCHA site key is missing'));
+      return;
+    }
+
+    // Check if script is already loaded
+    if (typeof window !== 'undefined' && window.grecaptcha) {
+      console.log("reCAPTCHA hook: Script already loaded");
+      setInitialized(true);
+      return;
+    }
+
+    // Load script if not already loaded
+    setLoading(true);
+    
+    // Check for existing script tag
+    const existingScript = document.querySelector(`script[src*="recaptcha/api.js"]`);
+    
+    if (existingScript) {
+      console.log("reCAPTCHA hook: Script tag already exists");
+      // Wait for it to be ready
+      if (window.grecaptcha) {
+        window.grecaptcha.ready(() => {
+          setLoading(false);
+          setInitialized(true);
+        });
+      } else {
+        // Set a timeout in case it never loads
+        setTimeout(() => {
+          if (!window.grecaptcha) {
+            setError(new Error('reCAPTCHA failed to initialize'));
+            setLoading(false);
+          }
+        }, 5000);
+      }
+      return;
+    }
+
+    console.log("reCAPTCHA hook: Loading script");
+    const script = document.createElement('script');
+    script.src = `https://www.google.com/recaptcha/api.js?render=${siteKey}`;
+    script.async = true;
+    script.defer = true;
+
+    script.onload = () => {
+      console.log("reCAPTCHA hook: Script loaded");
+      window.grecaptcha.ready(() => {
+        console.log("reCAPTCHA hook: Ready");
+        setLoading(false);
+        setInitialized(true);
+      });
+    };
+
+    script.onerror = () => {
+      console.error("reCAPTCHA hook: Script failed to load");
+      setError(new Error('Failed to load reCAPTCHA script'));
+      setLoading(false);
+    };
+
+    document.head.appendChild(script);
+
+    return () => {
+      // Cleanup only if we added the script
+      if (document.head.contains(script)) {
+        document.head.removeChild(script);
+      }
+    };
+  }, [initialized]);
 
   // Function to execute reCAPTCHA verification
   const executeReCaptcha = useCallback(async (action: string) => {
@@ -159,6 +319,7 @@ export function useReCaptchaV3() {
     
     if (!siteKey) {
       const error = new Error('reCAPTCHA site key is missing');
+      console.error("reCAPTCHA execute: No site key");
       setError(error);
       setLoading(false);
       return null;
@@ -166,24 +327,49 @@ export function useReCaptchaV3() {
 
     try {
       if (!window.grecaptcha) {
+        console.error("reCAPTCHA execute: grecaptcha not loaded");
         throw new Error('reCAPTCHA is not loaded');
       }
 
+      console.log(`reCAPTCHA execute: Starting for action "${action}"`);
+      
       // Execute reCAPTCHA with specified action
-      await new Promise<void>((resolve) => window.grecaptcha.ready(() => resolve()));
+      await new Promise<void>((resolve) => {
+        const readyCallback = () => {
+          console.log("reCAPTCHA execute: Ready");
+          resolve();
+        };
+        
+        if (window.grecaptcha) {
+          window.grecaptcha.ready(readyCallback);
+        } else {
+          console.warn("reCAPTCHA execute: grecaptcha disappeared");
+          setTimeout(resolve, 100); // Resolve anyway to prevent hanging
+        }
+      });
+      
+      console.log("reCAPTCHA execute: Calling execute");
       const token = await window.grecaptcha.execute(siteKey, { action });
+      
+      if (!token) {
+        console.error("reCAPTCHA execute: Empty token returned");
+        throw new Error('Empty token returned');
+      }
+      
+      console.log(`reCAPTCHA execute: Token generated (length: ${token.length})`);
       setToken(token);
       setLoading(false);
       return token;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('reCAPTCHA failed');
+      console.error("reCAPTCHA execute error:", err);
       setError(error);
       setLoading(false);
       return null;
     }
   }, []);
 
-  return { executeReCaptcha, token, error, loading };
+  return { executeReCaptcha, token, error, loading, initialized };
 }
 
 /**
@@ -197,18 +383,44 @@ export function ReCaptchaV3Provider({ children }: { children: React.ReactNode })
     // Skip if already loaded or no site key
     if (loaded || !siteKey || typeof window === 'undefined') return;
     
+    // Check if script is already loaded
+    if (window.grecaptcha) {
+      console.log("ReCaptchaV3Provider: Script already loaded");
+      setLoaded(true);
+      return;
+    }
+    
+    console.log("ReCaptchaV3Provider: Loading script");
+    
     // Define global callback
-    window.onRecaptchaLoaded = () => setLoaded(true);
+    window.onRecaptchaLoaded = () => {
+      console.log("ReCaptchaV3Provider: Script loaded via callback");
+      setLoaded(true);
+    };
     
     // Add script to document
     const script = document.createElement('script');
     script.src = `https://www.google.com/recaptcha/api.js?render=${siteKey}`;
     script.async = true;
     script.defer = true;
+    
+    script.onload = () => {
+      console.log("ReCaptchaV3Provider: Script onload event");
+      window.grecaptcha.ready(() => {
+        console.log("ReCaptchaV3Provider: Ready");
+        setLoaded(true);
+        if (window.onRecaptchaLoaded) {
+          window.onRecaptchaLoaded();
+        }
+      });
+    };
+    
     document.head.appendChild(script);
 
     return () => {
-      document.head.removeChild(script);
+      if (document.head.contains(script)) {
+        document.head.removeChild(script);
+      }
     };
   }, [siteKey, loaded]);
 

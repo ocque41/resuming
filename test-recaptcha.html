@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>reCAPTCHA Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      margin: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .container {
+      border: 1px solid #ddd;
+      padding: 20px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    .token-display {
+      word-break: break-all;
+      margin-top: 10px;
+      padding: 10px;
+      background-color: #f5f5f5;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+    .error {
+      color: red;
+    }
+    .success {
+      color: green;
+    }
+  </style>
+</head>
+<body>
+  <h1>reCAPTCHA v3 Test Page</h1>
+  
+  <div class="container">
+    <h2>Environment</h2>
+    <div id="env-info">Loading environment info...</div>
+  </div>
+  
+  <div class="container">
+    <h2>reCAPTCHA v3</h2>
+    <p>Test the reCAPTCHA v3 implementation with different actions.</p>
+    
+    <div>
+      <label for="action">Select action:</label>
+      <select id="action">
+        <option value="homepage">homepage</option>
+        <option value="login">login</option>
+        <option value="signup">signup</option>
+        <option value="submit">submit</option>
+      </select>
+      
+      <button id="execute-v3" disabled>Execute reCAPTCHA v3</button>
+    </div>
+    
+    <div id="v3-loading" style="display: none;">
+      <p>Loading reCAPTCHA...</p>
+    </div>
+    
+    <div id="v3-result" style="display: none;">
+      <h3>Token</h3>
+      <div id="v3-token" class="token-display"></div>
+      
+      <h3>Verification Result</h3>
+      <div id="v3-verify-result"></div>
+    </div>
+    
+    <div id="v3-error" class="error" style="display: none;"></div>
+  </div>
+  
+  <div class="container">
+    <h2>Test Keys</h2>
+    <p>Google provides test keys that will always pass verification:</p>
+    <p><strong>Test Site Key:</strong> 6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI</p>
+    <p><strong>Test Secret Key:</strong> 6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe</p>
+    <button id="use-test-key">Use Test Key</button>
+  </div>
+  
+  <script>
+    // Get DOM elements
+    const envInfo = document.getElementById('env-info');
+    const actionSelect = document.getElementById('action');
+    const executeV3Button = document.getElementById('execute-v3');
+    const v3Loading = document.getElementById('v3-loading');
+    const v3Result = document.getElementById('v3-result');
+    const v3Token = document.getElementById('v3-token');
+    const v3VerifyResult = document.getElementById('v3-verify-result');
+    const v3Error = document.getElementById('v3-error');
+    const useTestKeyButton = document.getElementById('use-test-key');
+    
+    // Get site key from URL parameters or use default
+    const urlParams = new URLSearchParams(window.location.search);
+    let siteKey = urlParams.get('siteKey') || '';
+    
+    // If no siteKey, try to get from window.__env if it exists
+    if (!siteKey && window.__env && window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
+      siteKey = window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+    }
+    
+    // If still no siteKey, ask the user
+    if (!siteKey) {
+      siteKey = prompt('Please enter your reCAPTCHA site key:');
+    }
+    
+    // Update environment info
+    envInfo.innerHTML = `
+      <p><strong>Site Key:</strong> ${siteKey ? `${siteKey.substring(0, 6)}...${siteKey.substring(siteKey.length - 4)}` : 'Not set'}</p>
+      <p><strong>Domain:</strong> ${window.location.hostname}</p>
+      <p><strong>Protocol:</strong> ${window.location.protocol}</p>
+    `;
+    
+    // Load reCAPTCHA script
+    function loadRecaptchaScript(key) {
+      // Remove existing script if any
+      const existingScript = document.querySelector('script[src*="recaptcha/api.js"]');
+      if (existingScript) {
+        existingScript.remove();
+      }
+      
+      // Create new script
+      const script = document.createElement('script');
+      script.src = `https://www.google.com/recaptcha/api.js?render=${key}`;
+      script.async = true;
+      script.onload = function() {
+        console.log('reCAPTCHA script loaded');
+        executeV3Button.disabled = false;
+        
+        // Update environment info
+        envInfo.innerHTML = `
+          <p><strong>Site Key:</strong> ${key ? `${key.substring(0, 6)}...${key.substring(key.length - 4)}` : 'Not set'}</p>
+          <p><strong>Domain:</strong> ${window.location.hostname}</p>
+          <p><strong>Protocol:</strong> ${window.location.protocol}</p>
+          <p class="success">✓ reCAPTCHA script loaded successfully</p>
+        `;
+      };
+      script.onerror = function() {
+        console.error('Failed to load reCAPTCHA script');
+        v3Error.textContent = 'Failed to load reCAPTCHA script. Check if the site key is valid and the domain is authorized.';
+        v3Error.style.display = 'block';
+        
+        // Update environment info
+        envInfo.innerHTML += `<p class="error">✗ Failed to load reCAPTCHA script</p>`;
+      };
+      
+      document.head.appendChild(script);
+    }
+    
+    // Execute reCAPTCHA v3
+    async function executeRecaptchaV3() {
+      const action = actionSelect.value;
+      
+      // Reset previous results
+      v3Token.textContent = '';
+      v3VerifyResult.innerHTML = '';
+      v3Result.style.display = 'none';
+      v3Error.style.display = 'none';
+      v3Loading.style.display = 'block';
+      
+      try {
+        console.log(`Executing reCAPTCHA v3 with action: ${action}`);
+        
+        // Execute reCAPTCHA
+        grecaptcha.ready(async function() {
+          try {
+            const token = await grecaptcha.execute(siteKey, { action });
+            console.log('Token received:', token);
+            
+            // Display token
+            v3Token.textContent = token;
+            v3Result.style.display = 'block';
+            
+            // Verify token
+            try {
+              const verifyResponse = await fetch('/api/debug/captcha-client-test', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ captchaToken: token })
+              });
+              
+              const verifyResult = await verifyResponse.json();
+              console.log('Verification result:', verifyResult);
+              
+              // Display verification result
+              v3VerifyResult.innerHTML = `
+                <p class="${verifyResult.success ? 'success' : 'error'}">
+                  <strong>${verifyResult.success ? '✓ Verification succeeded' : '✗ Verification failed'}</strong>
+                </p>
+                <p><strong>Message:</strong> ${verifyResult.message}</p>
+                ${verifyResult.score !== undefined ? `<p><strong>Score:</strong> ${verifyResult.score}</p>` : ''}
+                ${verifyResult.action ? `<p><strong>Action:</strong> ${verifyResult.action}</p>` : ''}
+                <p><strong>Details:</strong></p>
+                <pre>${JSON.stringify(verifyResult.details, null, 2)}</pre>
+              `;
+            } catch (verifyError) {
+              console.error('Verification error:', verifyError);
+              v3VerifyResult.innerHTML = `
+                <p class="error">
+                  <strong>✗ Verification request failed</strong>
+                </p>
+                <p><strong>Error:</strong> ${verifyError.message}</p>
+                <p>This could be because the verification endpoint is not available or there was a network error.</p>
+              `;
+            }
+          } catch (error) {
+            console.error('reCAPTCHA execution error:', error);
+            v3Error.textContent = `reCAPTCHA execution error: ${error.message}`;
+            v3Error.style.display = 'block';
+          }
+          
+          v3Loading.style.display = 'none';
+        });
+      } catch (error) {
+        console.error('reCAPTCHA error:', error);
+        v3Error.textContent = `reCAPTCHA error: ${error.message}`;
+        v3Error.style.display = 'block';
+        v3Loading.style.display = 'none';
+      }
+    }
+    
+    // Use Google's test key
+    function useTestKey() {
+      const testKey = '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
+      siteKey = testKey;
+      loadRecaptchaScript(testKey);
+    }
+    
+    // Add event listeners
+    executeV3Button.addEventListener('click', executeRecaptchaV3);
+    useTestKeyButton.addEventListener('click', useTestKey);
+    
+    // Load reCAPTCHA script on page load if site key is available
+    if (siteKey) {
+      loadRecaptchaScript(siteKey);
+    } else {
+      envInfo.innerHTML += `<p class="error">No reCAPTCHA site key provided</p>`;
+    }
+  </script>
+</body>
+</html> 
