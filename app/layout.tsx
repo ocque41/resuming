@@ -8,6 +8,9 @@ import { I18nProvider } from '@/components/i18n-provider';
 import { Inter } from "next/font/google";
 import { cn } from '@/lib/utils';
 
+// Import database initialization module to run on app startup
+import '@/lib/db/init';
+
 export const metadata: Metadata = {
   title: 'CV Optimizer - AI-powered CV Analysis & Optimization',
   description: 'AI-powered CV Analysis & Optimization unlocking exclusive career opportunities.',

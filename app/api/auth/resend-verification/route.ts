@@ -6,6 +6,7 @@ import { generateToken } from '@/lib/auth/tokens';
 import { sendConfirmationEmail } from '@/lib/email/client';
 import { withApiErrorHandling, ApiErrorCode } from '@/lib/api/error-handler';
 import { withDbErrorHandling } from '@/lib/db/error-handler';
+import { sql } from 'drizzle-orm';
 
 // Rate limiting - track email addresses and their last request timestamps
 const rateLimitMap = new Map<string, number>();
@@ -124,16 +125,70 @@ export const POST = withApiErrorHandling(async (request: NextRequest) => {
     
     console.log(`[${operationId}] Saving new verification token for user ID: ${user.id}`);
     
-    // Save the token to the database
-    await withDbErrorHandling(
-      async () => db.insert(emailVerificationTokens).values({
-        userId: user.id,
-        token: verificationToken,
-        expiresAt,
-      }),
-      'saveVerificationToken',
-      'emailVerificationTokens'
-    );
+    // First check if the email_verification_tokens table exists
+    const tablesResult = await db.execute(sql`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'email_verification_tokens'
+      );
+    `);
+    
+    const tableExists = tablesResult[0]?.exists;
+    if (!tableExists) {
+      console.error(`[${operationId}] email_verification_tokens table doesn't exist, creating it...`);
+      // Create the table if it doesn't exist
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS email_verification_tokens (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          token TEXT NOT NULL UNIQUE,
+          expires_at TIMESTAMP NOT NULL,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+      `);
+      console.log(`[${operationId}] email_verification_tokens table created`);
+    }
+    
+    // Save the token to the database with retry
+    let tokenSaved = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        console.log(`[${operationId}] Attempt ${attempt} to save verification token`);
+        
+        await withDbErrorHandling(
+          async () => db.insert(emailVerificationTokens).values({
+            userId: user.id,
+            token: verificationToken,
+            expiresAt,
+          }),
+          'saveVerificationToken',
+          'emailVerificationTokens'
+        );
+        
+        tokenSaved = true;
+        console.log(`[${operationId}] Verification token saved successfully`);
+        break; // Exit retry loop on success
+      } catch (err) {
+        console.error(`[${operationId}] Error saving verification token (attempt ${attempt}/3):`, err);
+        if (attempt < 3) {
+          // Wait before retrying (exponential backoff: 1s, 2s, 4s)
+          const delay = Math.pow(2, attempt - 1) * 1000;
+          console.log(`[${operationId}] Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+    if (!tokenSaved) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: 'Unable to save verification token. Please try again later.',
+          statusCode: 500 
+        },
+        { status: 500 }
+      );
+    }
     
     console.log(`[${operationId}] Sending verification email to: ${email}`);
     

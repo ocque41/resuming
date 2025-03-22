@@ -193,21 +193,72 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   const expiresAt = new Date();
   expiresAt.setHours(expiresAt.getHours() + 24);
   
-  // Save the token to the database
+  // Create a unique operation ID for tracking this verification setup
+  const operationId = `verification-setup-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  
+  // Save the token to the database with retries
+  let verificationSetupSuccessful = false;
   try {
-    await db.insert(emailVerificationTokens).values({
-      userId: createdUser.id,
-      token: verificationToken,
-      expiresAt,
-    });
+    // Try up to 3 times to create the verification token
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        console.log(`[${operationId}] Attempt ${attempt} to create verification token for user ${createdUser.id}`);
+        
+        // First check if the email_verification_tokens table exists
+        const tablesResult = await db.execute(sql`
+          SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_name = 'email_verification_tokens'
+          );
+        `);
+        
+        const tableExists = tablesResult[0]?.exists;
+        if (!tableExists) {
+          console.error(`[${operationId}] email_verification_tokens table doesn't exist, creating it...`);
+          // Create the table if it doesn't exist
+          await db.execute(sql`
+            CREATE TABLE IF NOT EXISTS email_verification_tokens (
+              id SERIAL PRIMARY KEY,
+              user_id INTEGER NOT NULL REFERENCES users(id),
+              token TEXT NOT NULL UNIQUE,
+              expires_at TIMESTAMP NOT NULL,
+              created_at TIMESTAMP NOT NULL DEFAULT NOW()
+            );
+          `);
+          console.log(`[${operationId}] email_verification_tokens table created`);
+        }
+        
+        // Insert the verification token
+        await db.insert(emailVerificationTokens).values({
+          userId: createdUser.id,
+          token: verificationToken,
+          expiresAt,
+        });
+        
+        console.log(`[${operationId}] Verification token created successfully for user ${createdUser.id}`);
+        verificationSetupSuccessful = true;
+        break; // Exit the retry loop on success
+      } catch (err) {
+        console.error(`[${operationId}] Error creating verification token (attempt ${attempt}/3):`, err);
+        if (attempt < 3) {
+          // Wait before retrying (exponential backoff: 1s, 2s, 4s)
+          const delay = Math.pow(2, attempt - 1) * 1000;
+          console.log(`[${operationId}] Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
     
     // Send verification email and add user to Notion as background tasks
     // that don't block the signup process
     Promise.allSettled([
       (async () => {
         try {
+          const emailSendId = `email-send-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+          console.log(`[${emailSendId}] Sending verification email to ${email}`);
+          
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
           
           await sendConfirmationEmail({
             email: createdUser.email,
@@ -215,7 +266,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
           });
           
           clearTimeout(timeoutId);
-          console.log('Verification email sent successfully to:', email);
+          console.log(`[${emailSendId}] Verification email sent successfully to: ${email}`);
         } catch (error) {
           console.error('Failed to send verification email:', error);
         }
@@ -372,8 +423,26 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     redirect('/dashboard/pricing');
   } catch (error) {
     console.error('Error during sign-up completion:', error);
+    
+    // Determine if the error is related to verification setup
+    let errorMessage = 'Your account was created but we encountered an issue. Please try signing in.';
+    
+    // If verification setup failed, provide more specific message
+    if (!verificationSetupSuccessful) {
+      errorMessage = 'Your account was created, but we could not set up email verification. You can request a new verification email after signing in.';
+    }
+    
+    // If it's a database-related error
+    if (error instanceof Error && 
+        (error.message.includes('database') || 
+         error.message.includes('relation') ||
+         error.message.includes('column'))) {
+      console.error('Database error during signup:', error.message);
+      errorMessage = 'A database issue occurred. Your account was created, but some features may be limited. Please sign in.';
+    }
+    
     return {
-      error: 'Your account was created but we encountered an issue. Please try signing in.',
+      error: errorMessage,
       email,
       password
     };
