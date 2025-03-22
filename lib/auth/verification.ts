@@ -1,107 +1,99 @@
-import { createHash, randomBytes } from 'crypto';
-import { cookies } from 'next/headers';
-import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { users, emailVerifications } from '@/lib/db/schema';
-import { redirect } from "next/navigation";
+import { users, verificationTokens } from '@/lib/db/schema';
+import { eq, and } from 'drizzle-orm';
+import { randomBytes } from 'crypto';
 
-// Generate a random token for email verification
-export function generateVerificationToken(): string {
-  return randomBytes(32).toString('hex');
-}
-
-// Generate a hash for the verification token
-export function hashVerificationToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex');
-}
-
-// Store verification token in the database
-export async function storeVerificationToken(
-  userId: number,
-  email: string,
-  token: string
-): Promise<string> {
-  // Hash the token for storage
-  const hashedToken = hashVerificationToken(token);
-  
-  // Set expiration to 24 hours from now
-  const expiresAt = new Date();
-  expiresAt.setHours(expiresAt.getHours() + 24);
-  
-  // Delete any existing tokens for this user
-  await db.delete(emailVerifications)
-    .where(eq(emailVerifications.userId, userId));
-  
-  // Insert the new token
-  await db.insert(emailVerifications).values({
-    userId,
-    email,
-    token: hashedToken,
-    expiresAt,
-  });
-  
-  return token;
-}
-
-// Verify a token and mark a user as verified
-export async function verifyEmailWithToken(
-  email: string,
-  token: string
-): Promise<{
-  success: boolean;
-  error?: string;
-  userId?: number;
-}> {
+/**
+ * Creates a verification token for a user
+ * @param email - User's email
+ * @param expiresIn - Token expiration time in seconds (default 24 hours)
+ * @returns The generated token
+ */
+export async function createVerificationToken(email: string, expiresIn: number = 86400) {
   try {
-    // Hash the provided token
-    const hashedToken = hashVerificationToken(token);
+    // Generate a secure random token
+    const token = randomBytes(32).toString('hex');
     
-    // Find a matching verification record
-    const verificationRecord = await db.query.emailVerifications.findFirst({
-      where: and(
-        eq(emailVerifications.email, email),
-        eq(emailVerifications.token, hashedToken)
-      ),
+    // Calculate the expiration date
+    const expires = new Date(Date.now() + expiresIn * 1000);
+    
+    // Remove any existing tokens for this email
+    await db.delete(verificationTokens).where(eq(verificationTokens.email, email));
+    
+    // Insert the new token
+    await db.insert(verificationTokens).values({
+      email,
+      token,
+      expires,
     });
     
-    // If no record is found
-    if (!verificationRecord) {
-      return { success: false, error: "Invalid verification token" };
-    }
-    
-    // Check if the token is expired
-    if (new Date() > verificationRecord.expiresAt) {
-      return { success: false, error: "Verification token has expired" };
-    }
-    
-    // Mark the user as verified
-    await db.update(users)
-      .set({ emailVerified: new Date() })
-      .where(eq(users.id, verificationRecord.userId));
-    
-    // Delete the verification record
-    await db.delete(emailVerifications)
-      .where(eq(emailVerifications.id, verificationRecord.id));
-    
-    return { success: true, userId: verificationRecord.userId };
+    return token;
   } catch (error) {
-    console.error("Error verifying email:", error);
-    return { success: false, error: "An error occurred during verification" };
+    console.error('Error creating verification token:', error);
+    throw error;
   }
 }
 
-// Check if a user is verified
-export async function isUserVerified(userId: number): Promise<boolean> {
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-  });
-  
-  return !!user?.emailVerified;
+/**
+ * Validates a verification token
+ * @param email - User's email
+ * @param token - Token to validate
+ * @returns Whether the token is valid
+ */
+export async function validateVerificationToken(email: string, token: string) {
+  try {
+    // Get the token for this email
+    const result = await db
+      .select()
+      .from(verificationTokens)
+      .where(
+        and(
+          eq(verificationTokens.email, email),
+          eq(verificationTokens.token, token)
+        )
+      )
+      .limit(1);
+    
+    if (result.length === 0) {
+      return false;
+    }
+    
+    const verificationToken = result[0];
+    
+    // Check if the token has expired
+    if (verificationToken.expires < new Date()) {
+      return false;
+    }
+    
+    // Token is valid
+    return true;
+  } catch (error) {
+    console.error('Error validating verification token:', error);
+    return false;
+  }
 }
 
-// Require verification middleware
-export async function requireVerification(userId: number): Promise<void> {
-  if (!await isUserVerified(userId)) {
-    redirect("/verification-required");
+/**
+ * Marks a user's email as verified
+ * @param email - User's email
+ * @returns Whether the operation was successful
+ */
+export async function markEmailAsVerified(email: string) {
+  try {
+    // Update the user record
+    await db
+      .update(users)
+      .set({ emailVerified: new Date() })
+      .where(eq(users.email, email));
+    
+    // Delete the verification token
+    await db
+      .delete(verificationTokens)
+      .where(eq(verificationTokens.email, email));
+    
+    return true;
+  } catch (error) {
+    console.error('Error marking email as verified:', error);
+    return false;
   }
 } 

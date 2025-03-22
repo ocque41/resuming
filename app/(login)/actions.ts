@@ -15,7 +15,6 @@ import {
   type NewActivityLog,
   ActivityType,
   invitations,
-  Team,
 } from '@/lib/db/schema';
 import { comparePasswords, hashPassword, setSession } from '@/lib/auth/session';
 import { redirect } from 'next/navigation';
@@ -26,11 +25,10 @@ import {
   validatedAction,
   validatedActionWithUser,
 } from '@/lib/auth/middleware';
-import { generateVerificationToken, storeVerificationToken } from '@/lib/auth/verification';
-import { sendVerificationEmail } from '@/lib/email/send-verification';
-import { addUserToNotion } from '@/lib/notion/client';
-import { verifyCaptcha } from '@/lib/auth/captcha';
-import { logVerificationActivity } from '@/lib/auth/verification-logger';
+import { addUserToNotion } from "@/lib/notion/notion";
+import { sendVerificationEmail } from "@/lib/email/resend";
+import { createVerificationToken } from "@/lib/auth/verification";
+import axios from "axios";
 
 async function logActivity(
   teamId: number | null | undefined,
@@ -92,23 +90,17 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
     };
   }
 
-  // Set session and log activity
-  const { emailVerified } = await setSession(foundUser);
-  await logActivity(foundTeam?.id, foundUser.id, ActivityType.SIGN_IN);
+  await Promise.all([
+    setSession(foundUser),
+    logActivity(foundTeam?.id, foundUser.id, ActivityType.SIGN_IN),
+  ]);
 
-  // Handle specified redirect, if any
   const redirectTo = formData.get('redirect') as string | null;
   if (redirectTo === 'checkout') {
     const priceId = formData.get('priceId') as string;
     return createCheckoutSession({ team: foundTeam, priceId });
   }
 
-  // If the user's email is not verified, redirect to the verification required page
-  if (!emailVerified) {
-    redirect('/verification-required');
-  }
-
-  // Otherwise, redirect to the dashboard
   redirect('/dashboard');
 });
 
@@ -118,33 +110,41 @@ const signUpSchema = z.object({
   inviteId: z.string().optional(),
 });
 
-export async function signUp(formData: FormData) {
-  const email = (formData.get('email') as string)?.toLowerCase();
-  const password = formData.get('password') as string;
-  const name = formData.get('name') as string || email.split('@')[0];
-  const inviteId = formData.get('inviteId') as string;
-  const captchaToken = formData.get('captchaToken') as string;
-  
-  // Require CAPTCHA verification
+export const signUp = validatedAction(signUpSchema, async (data, formData) => {
+  const { email, password, inviteId } = data;
+  const captchaToken = formData.get("captchaToken") as string;
+
+  // Verify CAPTCHA
   if (!captchaToken) {
     return {
-      error: 'Please complete the CAPTCHA verification.',
-      email,
-      password,
-    };
-  }
-  
-  // Validate captchaToken with Google reCAPTCHA
-  const isValidCaptcha = await verifyCaptcha(captchaToken);
-  if (!isValidCaptcha) {
-    return {
-      error: 'CAPTCHA verification failed. Please try again.',
+      error: "CAPTCHA verification required",
       email,
       password,
     };
   }
 
-  // Check for existing user
+  try {
+    // Verify CAPTCHA token with Google
+    const recaptchaSecret = process.env.RECAPTCHA_SECRET_KEY;
+    const response = await axios.post(
+      `https://www.google.com/recaptcha/api/siteverify?secret=${recaptchaSecret}&response=${captchaToken}`
+    );
+    
+    // If CAPTCHA verification fails
+    if (!response.data.success) {
+      console.error("CAPTCHA verification failed:", response.data);
+      return {
+        error: "CAPTCHA verification failed. Please try again.",
+        email,
+        password,
+      };
+    }
+  } catch (error) {
+    console.error("CAPTCHA verification error:", error);
+    // Continue with sign up even if CAPTCHA verification has an issue
+    // We don't want to block legitimate users if our CAPTCHA service has problems
+  }
+
   const existingUser = await db
     .select()
     .from(users)
@@ -153,7 +153,7 @@ export async function signUp(formData: FormData) {
 
   if (existingUser.length > 0) {
     return {
-      error: 'An account with this email already exists.',
+      error: 'An account with this email already exists. Please sign in instead.',
       email,
       password,
     };
@@ -161,12 +161,11 @@ export async function signUp(formData: FormData) {
 
   const passwordHash = await hashPassword(password);
 
-  // Create the user
   const newUser: NewUser = {
     email,
     passwordHash,
-    name,
-    role: 'member',
+    role: 'owner', // Default role, will be overridden if there's an invitation
+    emailVerified: null, // Mark email as not verified initially
   };
 
   const [createdUser] = await db.insert(users).values(newUser).returning();
@@ -179,11 +178,27 @@ export async function signUp(formData: FormData) {
     };
   }
 
-  let teamId: number;
-  let userRole: string = 'owner';
-  let createdTeam: typeof teams.$inferSelect;
+  // Create verification token and send verification email
+  try {
+    const verificationToken = await createVerificationToken(email);
+    await sendVerificationEmail(email, verificationToken);
+  } catch (error) {
+    console.error("Failed to send verification email:", error);
+    // Continue with sign up even if email sending fails
+  }
 
-  // Rest of team creation logic follows...
+  // Add user to Notion
+  try {
+    await addUserToNotion(email, "Free");
+  } catch (error) {
+    console.error("Failed to add user to Notion:", error);
+    // Continue with sign up even if Notion integration fails
+  }
+
+  let teamId: number;
+  let userRole: string;
+  let createdTeam: typeof teams.$inferSelect | null = null;
+
   if (inviteId) {
     try {
       // Check if there's a valid invitation
@@ -203,7 +218,6 @@ export async function signUp(formData: FormData) {
         teamId = invitation.teamId;
         userRole = invitation.role;
 
-        // Mark invitation as accepted
         await db
           .update(invitations)
           .set({ status: 'accepted' })
@@ -217,11 +231,13 @@ export async function signUp(formData: FormData) {
           .where(eq(teams.id, teamId))
           .limit(1);
       } else {
-        // Invalid invitation, create a new team
+        // If invitation not found but inviteId was provided, create a new team anyway
+        // but also inform the user about the invalid invitation
         console.warn(`Invalid invitation ID provided: ${inviteId} for user: ${email}`);
         
+        // Create a new team for the user
         const newTeam: NewTeam = {
-          name: `${name}'s Team`,
+          name: `${email}'s Team`,
           planName: "Free" // Set default plan to Free
         };
 
@@ -242,10 +258,10 @@ export async function signUp(formData: FormData) {
     } catch (error) {
       console.error('Error processing invitation:', error);
       
-      // Fallback: create a new team
+      // Create a new team for the user as fallback
       const newTeam: NewTeam = {
-        name: `${name}'s Team`,
-        planName: "Free"
+        name: `${email}'s Team`,
+        planName: "Free" // Set default plan to Free
       };
 
       [createdTeam] = await db.insert(teams).values(newTeam).returning();
@@ -259,13 +275,14 @@ export async function signUp(formData: FormData) {
       }
 
       teamId = createdTeam.id;
+      userRole = 'owner';
       await logActivity(teamId, createdUser.id, ActivityType.CREATE_TEAM);
     }
   } else {
-    // No invitation, create a new team
+    // Create a new team if there's no invitation
     const newTeam: NewTeam = {
-      name: `${name}'s Team`,
-      planName: "Free"
+      name: `${email}'s Team`,
+      planName: "Free" // Set default plan to Free
     };
 
     [createdTeam] = await db.insert(teams).values(newTeam).returning();
@@ -279,6 +296,8 @@ export async function signUp(formData: FormData) {
     }
 
     teamId = createdTeam.id;
+    userRole = 'owner';
+
     await logActivity(teamId, createdUser.id, ActivityType.CREATE_TEAM);
   }
 
@@ -289,50 +308,63 @@ export async function signUp(formData: FormData) {
   };
 
   try {
-    // Generate verification token
-    const token = generateVerificationToken();
-    await storeVerificationToken(createdUser.id, email, token);
-    
-    // Send verification email using the existing function
-    await sendVerificationEmail({
-      email,
-      token,
-      name: createdUser.name || '',
-    });
-    
-    // Add to Notion database if enabled
-    try {
-      await addUserToNotion({
-        email,
-        signupDate: new Date(),
-        verified: false,
-        planName: createdTeam.planName || 'Free',
-      });
-    } catch (notionError) {
-      // Don't fail if Notion integration fails
-      console.error('Error adding user to Notion:', notionError);
-    }
-    
-    // Create team member, log activity, and set session
+    // Insert the team member first
     await db.insert(teamMembers).values(newTeamMember);
+    
+    // Log the activity
     await logActivity(teamId, createdUser.id, ActivityType.SIGN_UP);
     
-    // Log verification email sent for the new user
-    await logVerificationActivity(createdUser.id, ActivityType.VERIFICATION_RESENT);
-    
-    await setSession(createdUser);
-    
-    // Always redirect to verification required page for new users
-    redirect('/verification-required');
+    // Set session - this is the critical part that might be failing
+    try {
+      await setSession(createdUser);
+    } catch (sessionError) {
+      console.error('Error setting session during sign-up:', sessionError);
+      // Even if session setting fails, we'll still continue since the account exists
+    }
+
+    const redirectTo = formData.get('redirect') as string | null;
+    if (redirectTo === 'checkout') {
+      const priceId = formData.get('priceId') as string;
+      return createCheckoutSession({ team: createdTeam, priceId });
+    }
+
+    // For new users, redirect to the pricing page first
+    redirect('/dashboard/pricing');
   } catch (error) {
-    console.error('Error after user creation:', error);
-    return {
-      error: 'Your account was created but we encountered an issue. Please try signing in.',
-      email,
-      password,
-    };
+    console.error('Error during sign-up completion:', error);
+    
+    // If the error is related to team member insertion, attempt to fix it
+    try {
+      const existingMember = await db
+        .select()
+        .from(teamMembers)
+        .where(and(
+          eq(teamMembers.userId, createdUser.id),
+          eq(teamMembers.teamId, teamId)
+        ))
+        .limit(1);
+        
+      if (existingMember.length === 0) {
+        // Try one more time to insert the team member
+        await db.insert(teamMembers).values(newTeamMember);
+        await logActivity(teamId, createdUser.id, ActivityType.SIGN_UP);
+      }
+      
+      // Try to set the session again
+      await setSession(createdUser);
+      
+      // Attempt to redirect again
+      redirect('/dashboard/pricing');
+    } catch (recoveryError) {
+      console.error('Failed to recover from sign-up error:', recoveryError);
+      return {
+        error: 'Your account was created but we encountered an issue. Please try signing in.',
+        email,
+        password
+      };
+    }
   }
-}
+});
 
 export async function signOut() {
   const user = (await getUser()) as User;

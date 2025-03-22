@@ -24,10 +24,10 @@ export const users = pgTable('users', {
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   role: varchar('role', { length: 20 }).notNull().default('member'),
+  emailVerified: timestamp('email_verified'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   deletedAt: timestamp('deleted_at'),
-  emailVerified: timestamp('email_verified'),
 });
 
 export const teams = pgTable('teams', {
@@ -171,6 +171,7 @@ export const teamsRelations = relations(teams, ({ many }) => ({
 export const usersRelations = relations(users, ({ many }) => ({
   teamMembers: many(teamMembers),
   invitationsSent: many(invitations),
+  verificationTokens: many(verificationTokens),
 }));
 
 export const invitationsRelations = relations(invitations, ({ one }) => ({
@@ -227,16 +228,20 @@ export const deletedCvMetadata = pgTable(
   }
 );
 
-export const emailVerifications = pgTable('email_verifications', {
+export const verificationTokens = pgTable('verification_tokens', {
   id: serial('id').primaryKey(),
-  userId: integer('user_id')
-    .notNull()
-    .references(() => users.id),
   email: varchar('email', { length: 255 }).notNull(),
   token: text('token').notNull(),
+  expires: timestamp('expires').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
-  expiresAt: timestamp('expires_at').notNull(),
 });
+
+export const verificationTokensRelations = relations(verificationTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [verificationTokens.email],
+    references: [users.email],
+  }),
+}));
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -265,9 +270,6 @@ export enum ActivityType {
   REMOVE_TEAM_MEMBER = 'REMOVE_TEAM_MEMBER',
   INVITE_TEAM_MEMBER = 'INVITE_TEAM_MEMBER',
   ACCEPT_INVITATION = 'ACCEPT_INVITATION',
-  EMAIL_VERIFIED = 'EMAIL_VERIFIED',
-  VERIFICATION_FAILED = 'VERIFICATION_FAILED',
-  VERIFICATION_RESENT = 'VERIFICATION_RESENT',
 }
 
 export type Document = typeof documents.$inferSelect;
@@ -281,5 +283,5 @@ export type DocumentAnalysis = typeof documentAnalyses.$inferSelect;
 export type NewDocumentAnalysis = typeof documentAnalyses.$inferInsert;
 export type DocumentAnalysisId = z.infer<typeof documentAnalysisIdSchema>["id"];
 
-export type EmailVerification = typeof emailVerifications.$inferSelect;
-export type NewEmailVerification = typeof emailVerifications.$inferInsert;
+export type VerificationToken = typeof verificationTokens.$inferSelect;
+export type NewVerificationToken = typeof verificationTokens.$inferInsert;

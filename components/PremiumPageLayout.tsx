@@ -26,8 +26,6 @@ interface PremiumPageLayoutProps {
   toolbar?: React.ReactNode;
   activityLogs?: any[];
   teamData?: any;
-  userEmailVerified?: boolean;
-  userEmail?: string;
 }
 
 /**
@@ -49,8 +47,6 @@ export default function PremiumPageLayout({
   toolbar,
   activityLogs,
   teamData,
-  userEmailVerified,
-  userEmail,
 }: PremiumPageLayoutProps) {
   const [scrollProgress, setScrollProgress] = useState(0);
   const isMobile = useMediaQuery("(max-width: 768px)");
@@ -160,12 +156,7 @@ export default function PremiumPageLayout({
             <div className="flex items-center space-x-4 relative ml-auto">
               {headerExtra}
               {teamData && activityLogs && (
-                <UserMenu 
-                  teamData={teamData} 
-                  activityLogs={activityLogs} 
-                  emailVerified={userEmailVerified}
-                  userEmail={userEmail}
-                />
+                <UserMenu teamData={teamData} activityLogs={activityLogs} />
               )}
             </div>
           </div>

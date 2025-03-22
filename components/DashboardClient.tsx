@@ -26,7 +26,6 @@ import { motion } from "framer-motion";
 import { colors } from "@/lib/design-tokens";
 import ErrorBoundaryWrapper from "@/components/ErrorBoundaryWrapper";
 import Scrollable from "@/components/ui/scrollable";
-import { EmailVerificationAlert } from "@/components/EmailVerificationAlert";
 
 // Define prop interface
 interface DashboardClientProps {
@@ -34,20 +33,13 @@ interface DashboardClientProps {
   teamData: any;
   cvs: any[];
   activityLogs: any[];
-  user: {
-    id: number;
-    email: string;
-    name: string | null;
-    emailVerified: boolean;
-  };
 }
 
 export default function DashboardClient({ 
   userName, 
   teamData, 
   cvs,
-  activityLogs,
-  user
+  activityLogs 
 }: DashboardClientProps) {
   
   // Animation settings for staggered children
@@ -74,20 +66,7 @@ export default function DashboardClient({
       teamData={teamData}
       activityLogs={activityLogs}
       maxWidth="2xl"
-      userEmailVerified={user.emailVerified}
-      userEmail={user.email}
     >
-      {/* Email verification alert */}
-      {user && !user.emailVerified && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <EmailVerificationAlert userEmail={user.email} />
-        </motion.div>
-      )}
-      
       {/* CV Collection */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}

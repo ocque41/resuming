@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { getUser, getTeamForUser, getCVsForUser, getActivityLogs } from "@/lib/db/queries.server";
 import ErrorBoundaryWrapper from "@/components/ErrorBoundaryWrapper";
 import DashboardClient from "@/components/DashboardClient";
-import { checkEmailVerified } from "@/lib/auth/require-verification";
 
 // Add a CV type definition
 interface CV {
@@ -24,9 +23,6 @@ export default async function DashboardPage() {
     redirect("/sign-in");
   }
   
-  // Get email verification status
-  const emailVerified = await checkEmailVerified();
-  
   const teamData = await getTeamForUser(user.id);
   if (!teamData) {
     throw new Error("Team not found");
@@ -38,12 +34,6 @@ export default async function DashboardPage() {
   // Get user display name
   const userName = user.name || 'User';
 
-  // Create a user object with verification status
-  const enrichedUser = {
-    ...user,
-    emailVerified
-  };
-
   return (
     <ErrorBoundaryWrapper>
       <DashboardClient 
@@ -51,7 +41,6 @@ export default async function DashboardPage() {
         teamData={teamData}
         cvs={cvs}
         activityLogs={activityLogs}
-        user={enrichedUser}
       />
     </ErrorBoundaryWrapper>
   );

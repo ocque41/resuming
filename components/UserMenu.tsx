@@ -8,21 +8,14 @@ import { MicroCard } from "@/components/ui/micro-card";
 import MyDialog from "@/components/ui/dialogui";
 import ClientSettingsDialogContent from "@/components/ClientSettingsPage";
 import { motion } from "framer-motion";
-import { Settings, LogOut, DollarSign, ChevronDown, Mail } from "lucide-react";
+import { Settings, LogOut, DollarSign, ChevronDown } from "lucide-react";
 
 interface UserMenuProps {
   teamData: any;
   activityLogs: any[];
-  emailVerified?: boolean;
-  userEmail?: string;
 }
 
-export default function UserMenu({ 
-  teamData, 
-  activityLogs, 
-  emailVerified = true,
-  userEmail
-}: UserMenuProps) {
+export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
   const router = useRouter();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -33,20 +26,8 @@ export default function UserMenu({
   const handleManageSubscription = () => {
     router.push("/dashboard/pricing");
   };
-  
-  const handleVerifyEmail = () => {
-    router.push("/verification-required");
-  };
 
-  // Build menu items array, conditionally adding verification option
   const menuItems = [
-    // Add verification item for unverified users
-    ...(!emailVerified ? [{
-      label: "Verify Email",
-      icon: Mail,
-      onClick: handleVerifyEmail,
-      highlight: true
-    }] : []),
     {
       label: "Manage Subscription",
       icon: DollarSign,
@@ -75,9 +56,6 @@ export default function UserMenu({
           >
             <MicroCard variant="custom" className="cursor-pointer bg-[#B4916C] hover:bg-[#B4916C]/90 transition-colors duration-200">
               <span className="flex items-center justify-center h-full w-full rounded-full text-white font-safiro">
-                {!emailVerified && (
-                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-yellow-500 rounded-full border border-[#050505]"></span>
-                )}
                 U
               </span>
             </MicroCard>
@@ -102,13 +80,9 @@ export default function UserMenu({
                     onClick={item.onClick}
                     className={`${
                       active ? "bg-[#161616]" : ""
-                    } flex items-center w-full px-4 py-3 text-sm ${
-                      item.highlight ? "text-yellow-500 font-medium" : "text-[#F9F6EE]"
-                    } font-borna`}
+                    } flex items-center w-full px-4 py-3 text-sm text-[#F9F6EE] font-borna`}
                   >
-                    <item.icon className={`h-4 w-4 mr-3 ${
-                      item.highlight ? "text-yellow-500" : "text-[#B4916C]"
-                    }`} />
+                    <item.icon className="h-4 w-4 mr-3 text-[#B4916C]" />
                     {item.label}
                   </motion.button>
                 )}
