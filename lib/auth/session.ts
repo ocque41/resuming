@@ -1,7 +1,8 @@
 import { compare, hash } from 'bcryptjs';
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
-import { NewUser } from '@/lib/db/schema';
+import { NewUser, User } from '@/lib/db/schema';
+import { isUserVerified } from './verification';
 
 const key = new TextEncoder().encode(process.env.AUTH_SECRET);
 const SALT_ROUNDS = 10;
@@ -18,7 +19,10 @@ export async function comparePasswords(
 }
 
 type SessionData = {
-  user: { id: number };
+  user: { 
+    id: number;
+    emailVerified?: boolean;
+  };
   expires: string;
 };
 
@@ -44,26 +48,28 @@ export async function getSession() {
 }
 
 /**
- * Get the authenticated user from the session
- * Returns user ID if authenticated, null otherwise
+ * Sets a session cookie for the authenticated user
+ * @param user The user object
+ * @param skipVerificationCheck If true, will not check email verification status
  */
-export async function getUser() {
-  const session = await getSession();
-  if (!session) return null;
+export async function setSession(user: User | NewUser, skipVerificationCheck = false) {
+  // Check if user has a verified email, unless skipVerificationCheck is true
+  let emailVerified = !!user.emailVerified;
   
-  // Check if session has expired
-  const expiresAt = new Date(session.expires);
-  if (expiresAt < new Date()) return null;
+  if (!emailVerified && !skipVerificationCheck && typeof user.id === 'number') {
+    // Check verification status from the database
+    emailVerified = await isUserVerified(user.id);
+  }
   
-  return session.user;
-}
-
-export async function setSession(user: NewUser) {
   const expiresInOneDay = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const session: SessionData = {
-    user: { id: user.id! },
+    user: { 
+      id: user.id!, 
+      emailVerified 
+    },
     expires: expiresInOneDay.toISOString(),
   };
+  
   const encryptedSession = await signToken(session);
   (await cookies()).set('session', encryptedSession, {
     expires: expiresInOneDay,
@@ -71,4 +77,6 @@ export async function setSession(user: NewUser) {
     secure: true,
     sameSite: 'lax',
   });
+  
+  return { emailVerified };
 }

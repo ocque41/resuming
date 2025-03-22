@@ -1,34 +1,30 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { signToken, verifyToken } from '@/lib/auth/session';
-import { DbOperationError } from '@/lib/db/error-handler';
 
 const protectedRoutes = '/dashboard';
 
-// Function to determine if an error is database-related
-const isDatabaseError = (error: unknown): boolean => {
-  if (error instanceof DbOperationError) return true;
-  
-  if (error instanceof Error) {
-    const errorMsg = error.message.toLowerCase();
-    return (
-      errorMsg.includes('database') ||
-      errorMsg.includes('pg:') ||
-      errorMsg.includes('postgres') ||
-      errorMsg.includes('column') ||
-      errorMsg.includes('sql') ||
-      errorMsg.includes('db')
-    );
-  }
-  
-  return false;
-};
+// Routes that don't require email verification even for logged-in users
+const publicRoutes = [
+  '/verify-email',
+  '/verification-required',
+  '/resend-verification',
+  '/sign-in',
+  '/sign-up',
+  '/api/', // API routes
+  '/_next/', // Next.js assets
+  '/favicon.ico',
+];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const sessionCookie = request.cookies.get('session');
   const isProtectedRoute = pathname.startsWith(protectedRoutes);
-
+  
+  // Skip verification check for public routes
+  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
+  
+  // If no session and trying to access protected route, redirect to sign-in
   if (isProtectedRoute && !sessionCookie) {
     return NextResponse.redirect(new URL('/sign-in', request.url));
   }
@@ -41,6 +37,7 @@ export async function middleware(request: NextRequest) {
       const expiresInOneDay = new Date(Date.now() + 24 * 60 * 60 * 1000);
       const maxAgeInSeconds = 24 * 60 * 60; // 1 day in seconds
       
+      // Refresh the session
       res.cookies.set('session', await signToken({
         ...parsed,
         expires: expiresInOneDay.toISOString(),
@@ -50,6 +47,11 @@ export async function middleware(request: NextRequest) {
         sameSite: 'lax',
         maxAge: maxAgeInSeconds,
       });
+      
+      // If protected route and user's email is not verified, redirect to verification page
+      if (isProtectedRoute && !isPublicRoute && parsed.user && parsed.user.emailVerified === false) {
+        return NextResponse.redirect(new URL('/verification-required', request.url));
+      }
     } catch (error) {
       console.error('Error updating session:', error);
       res.cookies.delete('session');
@@ -59,40 +61,9 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  try {
-    // For actual authentication middleware, use Next.js auth solutions
-    // This is a simplified example to demonstrate error handling
-    return res;
-  } catch (error) {
-    console.error('Middleware error:', error);
-    
-    // If it's a database error, handle it specially
-    if (isDatabaseError(error)) {
-      console.error('Database error caught in middleware:', error);
-      
-      // Check if this is an API route
-      if (pathname.startsWith('/api/')) {
-        return NextResponse.json(
-          { 
-            error: 'Database error', 
-            message: 'There was an issue with our database. Our team has been notified.'
-          },
-          { status: 503 }
-        );
-      }
-      
-      // For page requests, redirect to a maintenance page
-      return NextResponse.redirect(new URL('/maintenance', request.url));
-    }
-    
-    // Pass through other errors to be handled by Next.js
-    throw error;
-  }
+  return res;
 }
 
 export const config = {
-  matcher: [
-    // Apply to all routes except static files, api routes we don't want to intercept, etc.
-    '/((?!_next/static|_next/image|favicon.ico|maintenance).*)',
-  ],
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
 };

@@ -24,20 +24,10 @@ export const users = pgTable('users', {
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   role: varchar('role', { length: 20 }).notNull().default('member'),
-  emailVerified: boolean('email_verified').default(false),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   deletedAt: timestamp('deleted_at'),
-});
-
-export const emailVerificationTokens = pgTable('email_verification_tokens', {
-  id: serial('id').primaryKey(),
-  userId: integer('user_id')
-    .notNull()
-    .references(() => users.id),
-  token: text('token').notNull().unique(),
-  expiresAt: timestamp('expires_at').notNull(),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
+  emailVerified: timestamp('email_verified'),
 });
 
 export const teams = pgTable('teams', {
@@ -237,6 +227,17 @@ export const deletedCvMetadata = pgTable(
   }
 );
 
+export const emailVerifications = pgTable('email_verifications', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id')
+    .notNull()
+    .references(() => users.id),
+  email: varchar('email', { length: 255 }).notNull(),
+  token: text('token').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  expiresAt: timestamp('expires_at').notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Team = typeof teams.$inferSelect;
@@ -247,8 +248,6 @@ export type ActivityLog = typeof activityLogs.$inferSelect;
 export type NewActivityLog = typeof activityLogs.$inferInsert;
 export type Invitation = typeof invitations.$inferSelect;
 export type NewInvitation = typeof invitations.$inferInsert;
-export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
-export type NewEmailVerificationToken = typeof emailVerificationTokens.$inferInsert;
 export type TeamDataWithMembers = Team & {
   teamMembers: (TeamMember & {
     user: Pick<User, 'id' | 'name' | 'email'>;
@@ -266,6 +265,9 @@ export enum ActivityType {
   REMOVE_TEAM_MEMBER = 'REMOVE_TEAM_MEMBER',
   INVITE_TEAM_MEMBER = 'INVITE_TEAM_MEMBER',
   ACCEPT_INVITATION = 'ACCEPT_INVITATION',
+  EMAIL_VERIFIED = 'EMAIL_VERIFIED',
+  VERIFICATION_FAILED = 'VERIFICATION_FAILED',
+  VERIFICATION_RESENT = 'VERIFICATION_RESENT',
 }
 
 export type Document = typeof documents.$inferSelect;
@@ -278,3 +280,6 @@ export const documentAnalysisIdSchema = z.object({ id: z.number() });
 export type DocumentAnalysis = typeof documentAnalyses.$inferSelect;
 export type NewDocumentAnalysis = typeof documentAnalyses.$inferInsert;
 export type DocumentAnalysisId = z.infer<typeof documentAnalysisIdSchema>["id"];
+
+export type EmailVerification = typeof emailVerifications.$inferSelect;
+export type NewEmailVerification = typeof emailVerifications.$inferInsert;

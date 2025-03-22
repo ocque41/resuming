@@ -10,20 +10,27 @@ import { Loader } from "lucide-react";
 import Image from "next/image";
 import { Card, CardHeader, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
 import { useState } from "react";
-import CaptchaWrapper from "@/components/CaptchaWrapper";
+import RecaptchaComponent from "@/components/ReCaptcha";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { signIn, signUp } from "./actions";
 import { ActionState } from "@/lib/auth/middleware";
 
+type AuthState = { error: string; email: string; password: string };
+
 const createAction = (mode: "signin" | "signup") => (data: FormData) => {
   if (mode === "signin") {
-    return signIn({ error: "", email: "", password: "" }, data).then(
-      (res) => res ?? { error: "", email: "", password: "" }
+    // Get validated data from the form
+    const email = data.get("email") as string;
+    const password = data.get("password") as string;
+    
+    return signIn({ email, password }, data).then(
+      (res) => res ?? { error: "", email: "", password: "" } as AuthState
     );
   } else {
-    return signUp({ error: "", email: "", password: "" }, data).then(
-      (res) => res ?? { error: "", email: "", password: "" }
+    // The signUp function now accepts FormData directly
+    return signUp(data).then(
+      (res) => res ?? { error: "", email: "", password: "" } as AuthState
     );
   }
 };
@@ -33,45 +40,31 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
   const redirect = searchParams?.get("redirect");
   const priceId = searchParams?.get("priceId");
   const inviteId = searchParams?.get("inviteId");
-  const [state, formAction, pending] = useActionState<ActionState, FormData>(
+  const [state, formAction, pending] = useActionState<AuthState, FormData>(
     createAction(mode),
     { error: "", email: "", password: "" }
   );
   
-  const [captchaToken, setCaptchaToken] = useState<string>("");
-  const [captchaError, setCaptchaError] = useState<string>("");
-  
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [formSubmitted, setFormSubmitted] = useState(false);
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     
-    // If it's sign-up and no captcha token, show error
+    // For signup, require captcha
     if (mode === "signup" && !captchaToken) {
-      setCaptchaError("Please complete the captcha verification");
+      setFormSubmitted(true);
       return;
     }
     
     const formData = new FormData(event.currentTarget);
     
-    // Add captcha token to form data if available
-    if (captchaToken) {
+    // Add the captcha token to the form data for signup
+    if (mode === "signup" && captchaToken) {
       formData.append("captchaToken", captchaToken);
     }
     
     formAction(formData);
-  };
-  
-  const handleCaptchaVerify = (token: string) => {
-    setCaptchaToken(token);
-    setCaptchaError("");
-  };
-  
-  const handleCaptchaError = (error: string) => {
-    console.error("Captcha error:", error);
-    setCaptchaError("Error verifying captcha");
-  };
-  
-  const handleCaptchaExpire = () => {
-    setCaptchaToken("");
   };
 
   return (
@@ -121,18 +114,15 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
           />
         </div>
       </div>
-      
+
       {mode === "signup" && (
         <div>
-          <CaptchaWrapper
-            onVerify={handleCaptchaVerify}
-            onError={handleCaptchaError}
-            onExpire={handleCaptchaExpire}
-            theme="dark"
-            size="normal"
+          <RecaptchaComponent 
+            onChange={setCaptchaToken} 
+            className="flex justify-center mt-4"
           />
-          {captchaError && (
-            <p className="text-red-500 text-xs mt-1">{captchaError}</p>
+          {formSubmitted && !captchaToken && (
+            <p className="text-red-500 text-sm mt-2">Please complete the CAPTCHA verification</p>
           )}
         </div>
       )}
@@ -143,7 +133,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
         <Button
           type="submit"
           className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-white bg-[#B4916C] hover:bg-[#B4916C]/75 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#B4916C]"
-          disabled={pending || (mode === "signup" && !captchaToken)}
+          disabled={pending}
         >
           {pending ? (
             <>
