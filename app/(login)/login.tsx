@@ -121,7 +121,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
         <div className="flex flex-col items-center">
           <ReCAPTCHA
             ref={recaptchaRef}
-            sitekey="6LdlnC8pAAAAAKgGryyYW0H5OUAhzs_WbYYHHUL5" // Replace with your reCAPTCHA site key in production
+            sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || "6LdlnC8pAAAAAKgGryyYW0H5OUAhzs_WbYYHHUL5"} 
             theme="dark"
             onChange={(token) => {
               setCaptchaToken(token);

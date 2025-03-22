@@ -26,7 +26,7 @@ import {
   validatedActionWithUser,
 } from '@/lib/auth/middleware';
 import { addUserToNotion } from "@/lib/notion/notion";
-import { sendVerificationEmail } from "@/lib/email/resend";
+import { sendVerificationEmail, sendConfirmationEmail } from "@/lib/email/resend";
 import { createVerificationToken } from "@/lib/auth/verification";
 import axios from "axios";
 
@@ -182,6 +182,9 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   try {
     const verificationToken = await createVerificationToken(email);
     await sendVerificationEmail(email, verificationToken);
+    
+    // Also send a welcome/confirmation email
+    await sendConfirmationEmail(email);
   } catch (error) {
     console.error("Failed to send verification email:", error);
     // Continue with sign up even if email sending fails
@@ -329,7 +332,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     }
 
     // For new users, redirect to the pricing page first
-    redirect('/dashboard/pricing');
+    redirect('/signup-success');
   } catch (error) {
     console.error('Error during sign-up completion:', error);
     
@@ -354,7 +357,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       await setSession(createdUser);
       
       // Attempt to redirect again
-      redirect('/dashboard/pricing');
+      redirect('/signup-success');
     } catch (recoveryError) {
       console.error('Failed to recover from sign-up error:', recoveryError);
       return {
