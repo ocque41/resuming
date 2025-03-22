@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyCaptcha } from '@/lib/actions';
+import { verifyCaptcha } from '@/lib/captcha';
 
 // GET handler for retrieving environment information
 export async function GET() {
@@ -49,9 +49,13 @@ export async function POST(request: NextRequest) {
     // Add debugging information
     const debugInfo = {
       success: verificationResult.success,
-      message: verificationResult.success
+      message: verificationResult.message || (verificationResult.success
         ? 'CAPTCHA verification successful'
-        : 'CAPTCHA verification failed',
+        : 'CAPTCHA verification failed'),
+      // Include v3 specific fields if available
+      score: verificationResult.score,
+      action: verificationResult.action,
+      isV3: verificationResult.score !== undefined,
       details: {
         verificationResult,
         token: {

@@ -10,7 +10,7 @@ import { Loader } from "lucide-react";
 import Image from "next/image";
 import { Card, CardHeader, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
 import { useState, useRef, useEffect } from "react";
-import ReCAPTCHAWrapper from "@/components/ui/recaptcha";
+import { useReCaptchaV3, ReCaptchaV3Provider } from "@/components/ui/recaptcha-v3";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { signIn, signUp } from "./actions";
@@ -44,58 +44,59 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
     { error: "", email: "", password: "" }
   );
   
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [captchaError, setCaptchaError] = useState<string>("");
-  const [keysDebug, setKeysDebug] = useState<string>("");
   
-  // Reset reCAPTCHA when form is submitted or errors occur
+  // Use the reCAPTCHA v3 hook
+  const { executeReCaptcha, token: captchaToken, error: recaptchaError, loading: recaptchaLoading } = useReCaptchaV3();
+  
+  // Handle reCAPTCHA errors
   useEffect(() => {
-    if (state.error && captchaToken) {
-      setCaptchaToken(null);
+    if (recaptchaError) {
+      console.error('reCAPTCHA error:', recaptchaError);
+      setCaptchaError(`reCAPTCHA error: ${recaptchaError.message}`);
     }
-  }, [state.error, captchaToken]);
+  }, [recaptchaError]);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setIsSubmitting(true);
     
-    // Debug output for form submission
-    console.log("Form submission - mode:", mode);
-    if (mode === "signup") {
-      console.log("CAPTCHA token available:", !!captchaToken);
+    try {
+      // For signup, execute reCAPTCHA verification
+      let token = captchaToken;
+      if (mode === "signup" && !token) {
+        console.log("Executing reCAPTCHA verification");
+        token = await executeReCaptcha('signup');
+        
+        if (!token) {
+          setCaptchaError("CAPTCHA verification failed. Please try again.");
+          setIsSubmitting(false);
+          return;
+        }
+      }
+      
+      // Debug output for form submission
+      console.log("Form submission - mode:", mode);
+      if (mode === "signup") {
+        console.log("CAPTCHA token available:", !!token);
+      }
+      
+      const formData = new FormData(event.currentTarget);
+      
+      // Add CAPTCHA token to form data if available
+      if (token && mode === "signup") {
+        formData.append("captchaToken", token);
+        console.log("CAPTCHA token added to form data, length:", token.length);
+      }
+      
+      formAction(formData);
+    } catch (error) {
+      console.error("Form submission error:", error);
+      setCaptchaError(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setIsSubmitting(false);
     }
-    
-    // Only check CAPTCHA for sign-up
-    if (mode === "signup" && !captchaToken) {
-      setCaptchaError("Please complete the CAPTCHA verification");
-      return;
-    }
-    
-    const formData = new FormData(event.currentTarget);
-    
-    // Add CAPTCHA token to form data if available
-    if (captchaToken) {
-      formData.append("captchaToken", captchaToken);
-      console.log("CAPTCHA token added to form data, length:", captchaToken.length);
-    }
-    
-    formAction(formData);
-  };
-
-  const handleCaptchaChange = (token: string | null) => {
-    console.log("reCAPTCHA token:", token ? "Received" : "Cleared");
-    setCaptchaToken(token);
-    if (token) {
-      setCaptchaError("");
-    }
-  };
-
-  const handleCaptchaError = () => {
-    setCaptchaError("CAPTCHA error occurred. Please try refreshing the page.");
-  };
-
-  const handleCaptchaExpired = () => {
-    setCaptchaToken(null);
-    setCaptchaError("CAPTCHA expired, please verify again");
   };
 
   return (
@@ -147,16 +148,14 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
 
       {mode === "signup" && (
         <div className="flex flex-col items-center">
-          <div className="mb-2 text-xs text-gray-400">
-            Please verify that you are human
-          </div>
-          <ReCAPTCHAWrapper
-            onChange={handleCaptchaChange}
-            onError={handleCaptchaError}
-            onExpired={handleCaptchaExpired}
-            theme="dark"
-            className="mb-2"
-          />
+          {/* reCAPTCHA v3 doesn't require user interaction, so we just show verification status */}
+          {(recaptchaLoading || isSubmitting) && (
+            <div className="flex items-center text-sm text-gray-400 my-2">
+              <Loader className="animate-spin mr-2 h-4 w-4" />
+              Verifying...
+            </div>
+          )}
+          
           {captchaError && <div className="text-red-500 text-sm mt-2">{captchaError}</div>}
           
           <div className="text-sm text-[#F9F6EE] mt-4 text-center max-w-xs">
@@ -179,12 +178,12 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
         <Button
           type="submit"
           className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-white bg-[#B4916C] hover:bg-[#B4916C]/75 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#B4916C]"
-          disabled={pending || (mode === "signup" && !captchaToken)}
+          disabled={pending || isSubmitting || recaptchaLoading}
         >
-          {pending ? (
+          {pending || isSubmitting ? (
             <>
               <Loader className="animate-spin mr-2 h-4 w-4" />
-              Loading...
+              {isSubmitting ? "Verifying..." : "Loading..."}
             </>
           ) : mode === "signin" ? (
             "Sign in"
@@ -206,54 +205,56 @@ export function Login({ mode = "signin" }: { mode?: "signin" | "signup" }) {
   }, [mode]);
 
   return (
-    <div className="min-h-[100dvh] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 bg-[#050505]">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="flex justify-center mb-6">
-          <Image src="/white.png" alt="Resuming Logo" width={150} height={150} />
+    <ReCaptchaV3Provider>
+      <div className="min-h-[100dvh] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 bg-[#050505]">
+        <div className="sm:mx-auto sm:w-full sm:max-w-md">
+          <div className="flex justify-center mb-6">
+            <Image src="/white.png" alt="Resuming Logo" width={150} height={150} />
+          </div>
+          <Card className="sm:max-w-md w-full">
+            <CardHeader className="p-6">
+              <CardTitle className="text-3xl font-bold">
+                {mode === "signin" ? "Sign in to your account" : "Create your account"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-6">
+              {/* Tabs replaced by link-based navigation */}
+              <div className="flex w-full justify-center space-x-2 mb-4">
+                <Link
+                  href="/sign-in"
+                  className={`w-full text-center py-2 px-4 rounded-md transition-colors duration-300 hover:bg-[#B4916C]/75 ${
+                    mode === "signin" ? "bg-[#B4916C]/50" : ""
+                  }`}
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/sign-up"
+                  className={`w-full text-center py-2 px-4 rounded-md transition-colors duration-300 hover:bg-[#B4916C]/75 ${
+                    mode === "signup" ? "bg-[#B4916C]/50" : ""
+                  }`}
+                >
+                  Sign Up
+                </Link>
+              </div>
+              <div>
+                <AuthForm mode={mode} />
+              </div>
+            </CardContent>
+            <CardFooter className="p-6">
+              <div className="text-sm text-white">
+                {mode === "signin" ? "New to our platform? " : "Already have an account? "}
+                <Link
+                  href={mode === "signin" ? "/sign-up" : "/sign-in"}
+                  className="text-[#B4916C] hover:underline"
+                >
+                  {mode === "signin" ? "Create an account" : "Sign in to your account"}
+                </Link>
+              </div>
+            </CardFooter>
+          </Card>
         </div>
-        <Card className="sm:max-w-md w-full">
-          <CardHeader className="p-6">
-            <CardTitle className="text-3xl font-bold">
-              {mode === "signin" ? "Sign in to your account" : "Create your account"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-6">
-            {/* Tabs replaced by link-based navigation */}
-            <div className="flex w-full justify-center space-x-2 mb-4">
-              <Link
-                href="/sign-in"
-                className={`w-full text-center py-2 px-4 rounded-md transition-colors duration-300 hover:bg-[#B4916C]/75 ${
-                  mode === "signin" ? "bg-[#B4916C]/50" : ""
-                }`}
-              >
-                Sign In
-              </Link>
-              <Link
-                href="/sign-up"
-                className={`w-full text-center py-2 px-4 rounded-md transition-colors duration-300 hover:bg-[#B4916C]/75 ${
-                  mode === "signup" ? "bg-[#B4916C]/50" : ""
-                }`}
-              >
-                Sign Up
-              </Link>
-            </div>
-            <div>
-              <AuthForm mode={mode} />
-            </div>
-          </CardContent>
-          <CardFooter className="p-6">
-            <div className="text-sm text-white">
-              {mode === "signin" ? "New to our platform? " : "Already have an account? "}
-              <Link
-                href={mode === "signin" ? "/sign-up" : "/sign-in"}
-                className="text-[#B4916C] hover:underline"
-              >
-                {mode === "signin" ? "Create an account" : "Sign in to your account"}
-              </Link>
-            </div>
-          </CardFooter>
-        </Card>
       </div>
-    </div>
+    </ReCaptchaV3Provider>
   );
 }

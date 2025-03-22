@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import ReCAPTCHAWrapper from '@/components/ui/recaptcha';
+import { ReCaptchaV3, useReCaptchaV3 } from '@/components/ui/recaptcha-v3';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { motion } from 'framer-motion';
@@ -23,6 +24,15 @@ export default function CaptchaTestPage() {
   const [isDomainCheckLoading, setIsDomainCheckLoading] = useState(false);
   const [keyTestResult, setKeyTestResult] = useState<any>(null);
   const [isTestingKey, setIsTestingKey] = useState(false);
+  
+  // State for reCAPTCHA v3
+  const [v3Action, setV3Action] = useState<string>('homepage');
+  const [v3Token, setV3Token] = useState<string | null>(null);
+  const [v3VerifyResult, setV3VerifyResult] = useState<any>(null);
+  const [isV3Loading, setIsV3Loading] = useState(false);
+  
+  // Use the reCAPTCHA v3 hook
+  const { executeReCaptcha, token: hookToken, error: recaptchaError, loading: recaptchaLoading } = useReCaptchaV3();
 
   useEffect(() => {
     // Get the site key from the environment variable
@@ -101,6 +111,74 @@ export default function CaptchaTestPage() {
       setVerifyResult({ success: false, message: 'Error verifying CAPTCHA' });
     } finally {
       setIsLoading(false);
+    }
+  };
+  
+  // Function for handling reCAPTCHA v3 execution
+  const handleExecuteV3 = async () => {
+    setIsV3Loading(true);
+    setV3Token(null);
+    setV3VerifyResult(null);
+    
+    try {
+      const token = await executeReCaptcha(v3Action);
+      setV3Token(token);
+      
+      if (token) {
+        // Verify the token
+        const response = await fetch('/api/debug/captcha-client-test', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ captchaToken: token }),
+        });
+        
+        const data = await response.json();
+        setV3VerifyResult(data);
+      }
+    } catch (error) {
+      console.error('Failed to execute or verify reCAPTCHA v3:', error);
+      setV3VerifyResult({ 
+        success: false, 
+        message: `Error with reCAPTCHA v3: ${error instanceof Error ? error.message : 'Unknown error'}` 
+      });
+    } finally {
+      setIsV3Loading(false);
+    }
+  };
+  
+  // Handle token from reCAPTCHA v3 component
+  const handleV3TokenGenerated = (token: string) => {
+    setV3Token(token);
+    
+    // Automatically verify the token
+    verifyV3Token(token);
+  };
+  
+  // Verify a reCAPTCHA v3 token
+  const verifyV3Token = async (token: string) => {
+    setIsV3Loading(true);
+    
+    try {
+      const response = await fetch('/api/debug/captcha-client-test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ captchaToken: token }),
+      });
+      
+      const data = await response.json();
+      setV3VerifyResult(data);
+    } catch (error) {
+      console.error('Failed to verify reCAPTCHA v3:', error);
+      setV3VerifyResult({ 
+        success: false, 
+        message: `Error verifying reCAPTCHA v3: ${error instanceof Error ? error.message : 'Unknown error'}` 
+      });
+    } finally {
+      setIsV3Loading(false);
     }
   };
 
@@ -183,7 +261,8 @@ export default function CaptchaTestPage() {
           <CardContent>
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="mb-6">
-                <TabsTrigger value="test">Test reCAPTCHA</TabsTrigger>
+                <TabsTrigger value="test">Test reCAPTCHA v2</TabsTrigger>
+                <TabsTrigger value="v3test">Test reCAPTCHA v3</TabsTrigger>
                 <TabsTrigger value="config">Configuration</TabsTrigger>
                 <TabsTrigger value="env">Environment</TabsTrigger>
                 <TabsTrigger value="domain">Domain Check</TabsTrigger>
@@ -192,7 +271,7 @@ export default function CaptchaTestPage() {
               
               <TabsContent value="test" className="space-y-6">
                 <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-medium">reCAPTCHA Test</h3>
+                  <h3 className="text-lg font-medium">reCAPTCHA v2 Test</h3>
                   <Button 
                     variant="outline" 
                     size="sm" 
@@ -669,6 +748,148 @@ export default function CaptchaTestPage() {
                     <ExternalLink className="ml-1 h-3 w-3" />
                   </a>
                 </div>
+              </TabsContent>
+
+              <TabsContent value="v3test" className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-medium">reCAPTCHA v3 Test</h3>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={refreshData}
+                    className="flex items-center gap-1"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Refresh
+                  </Button>
+                </div>
+                
+                <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-md">
+                  <p className="mb-4 text-sm">
+                    reCAPTCHA v3 returns a score for each request without user friction. 
+                    The score (1.0 is very likely a good interaction, 0.0 is very likely a bot) 
+                    can be used to determine appropriate action.
+                  </p>
+                  
+                  <div className="mb-4">
+                    <p className="text-sm font-medium mb-2">Select an action:</p>
+                    <div className="flex gap-2 flex-wrap">
+                      <Button 
+                        onClick={() => setV3Action('homepage')} 
+                        variant={v3Action === 'homepage' ? 'default' : 'outline'}
+                        size="sm"
+                      >
+                        homepage
+                      </Button>
+                      <Button 
+                        onClick={() => setV3Action('login')} 
+                        variant={v3Action === 'login' ? 'default' : 'outline'}
+                        size="sm"
+                      >
+                        login
+                      </Button>
+                      <Button 
+                        onClick={() => setV3Action('signup')} 
+                        variant={v3Action === 'signup' ? 'default' : 'outline'} 
+                        size="sm"
+                      >
+                        signup
+                      </Button>
+                      <Button 
+                        onClick={() => setV3Action('submit')} 
+                        variant={v3Action === 'submit' ? 'default' : 'outline'} 
+                        size="sm"
+                      >
+                        submit
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="mb-4 bg-slate-200 dark:bg-slate-700 p-3 rounded-md">
+                    <p className="font-mono text-xs mb-2">
+                      Current Action: <span className="font-bold">{v3Action}</span>
+                    </p>
+                    <Button 
+                      onClick={handleExecuteV3} 
+                      disabled={isV3Loading || recaptchaLoading}
+                      size="sm"
+                    >
+                      {isV3Loading || recaptchaLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Executing...
+                        </>
+                      ) : (
+                        'Execute reCAPTCHA v3'
+                      )}
+                    </Button>
+                    <p className="text-xs mt-2 text-slate-600 dark:text-slate-400">
+                      This will use the useReCaptchaV3 hook to execute reCAPTCHA v3 without a visible challenge.
+                    </p>
+                  </div>
+                  
+                  <Separator className="my-4" />
+                  
+                  <div className="mb-4">
+                    <p className="text-sm font-medium mb-2">Try the ReCaptchaV3 component:</p>
+                    <div className="p-3 bg-slate-200 dark:bg-slate-700 rounded-md">
+                      <p className="text-xs mb-2">
+                        This component will automatically execute reCAPTCHA v3 with the specified action:
+                      </p>
+                      <ReCaptchaV3 
+                        action={v3Action}
+                        onVerify={handleV3TokenGenerated}
+                        className="min-h-[30px]"
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                {v3Token && (
+                  <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-md">
+                    <h4 className="font-medium mb-2">reCAPTCHA v3 Token:</h4>
+                    <div className="bg-white dark:bg-slate-900 p-2 rounded-md">
+                      <p className="text-xs font-mono break-all">{v3Token}</p>
+                    </div>
+                  </div>
+                )}
+                
+                {v3VerifyResult && (
+                  <div className={`p-4 rounded-md ${v3VerifyResult.success ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20'}`}>
+                    <div className="flex items-start">
+                      {v3VerifyResult.success ? (
+                        <Check className="h-5 w-5 mr-2 text-green-500 flex-shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertTriangle className="h-5 w-5 mr-2 text-red-500 flex-shrink-0 mt-0.5" />
+                      )}
+                      <div>
+                        <h4 className={`font-medium ${v3VerifyResult.success ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
+                          {v3VerifyResult.success ? 'Verification Successful' : 'Verification Failed'}
+                        </h4>
+                        <p>{v3VerifyResult.message}</p>
+                        
+                        {v3VerifyResult.score !== undefined && (
+                          <div className="mt-2 p-2 bg-slate-200 dark:bg-slate-700 rounded-md">
+                            <p className="text-sm font-medium">Score: {v3VerifyResult.score.toFixed(2)}</p>
+                            <p className="text-xs mt-1">
+                              {v3VerifyResult.score > 0.7 
+                                ? 'High score: Very likely legitimate user'
+                                : v3VerifyResult.score > 0.5
+                                  ? 'Medium score: Likely legitimate user'
+                                  : 'Low score: Possibly bot or suspicious activity'}
+                            </p>
+                          </div>
+                        )}
+                        
+                        {v3VerifyResult.details && (
+                          <pre className="mt-2 text-xs overflow-auto p-2 bg-slate-100 dark:bg-slate-800 rounded-md">
+                            {JSON.stringify(v3VerifyResult.details, null, 2)}
+                          </pre>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </CardContent>

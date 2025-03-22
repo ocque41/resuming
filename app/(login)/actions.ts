@@ -28,6 +28,7 @@ import {
 import { addUserToNotion, addOrUpdateNotionUser } from "@/lib/notion/notion";
 import { sendVerificationEmail, sendConfirmationEmail } from "@/lib/email/resend";
 import { createVerificationToken } from "@/lib/auth/verification";
+import { verifyCaptcha } from "@/lib/captcha";
 import axios from "axios";
 
 async function logActivity(
@@ -114,7 +115,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   const { email, password, inviteId } = data;
   const captchaToken = formData.get("captchaToken") as string;
 
-  // Verify CAPTCHA
+  // Verify CAPTCHA using our enhanced verifyCaptcha function
   if (!captchaToken) {
     return {
       error: "CAPTCHA verification required",
@@ -124,101 +125,37 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   }
 
   try {
-    // Verify CAPTCHA token with Google
-    const recaptchaSecret = process.env.RECAPTCHA_SECRET_KEY;
+    // Use the enhanced verifyCaptcha function with v3 support
+    // Require a minimum score of 0.4 for sign-up (adjust as needed)
+    const captchaResult = await verifyCaptcha(captchaToken, 0.4);
     
-    if (!recaptchaSecret) {
-      console.error("RECAPTCHA_SECRET_KEY is not configured");
-      return {
-        error: "Server configuration error with reCAPTCHA. Please contact support.",
-        email,
-        password,
-      };
-    }
+    console.log("CAPTCHA verification result:", captchaResult);
     
-    // Log key details for debugging (in a secure way)
-    console.log("CAPTCHA token received:", !!captchaToken, "length:", captchaToken?.length || 0);
-    console.log("RECAPTCHA_SECRET_KEY configured:", !!recaptchaSecret, "length:", recaptchaSecret.length);
-    console.log("Host environment:", process.env.VERCEL_URL || process.env.NODE_ENV || "unknown");
-    
-    // Detailed request logging
-    try {
-      const verifyUrl = `https://www.google.com/recaptcha/api/siteverify`;
-      const params = new URLSearchParams({
-        secret: recaptchaSecret,
-        response: captchaToken || ''
-      });
-      
-      console.log("Making reCAPTCHA verification request");
-      
-      // Use axios with proper POST data format
-      const response = await axios.post(verifyUrl, params.toString(), {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
-      });
-      
-      console.log("CAPTCHA verification response:", JSON.stringify(response.data));
-      
-      // If CAPTCHA verification fails
-      if (!response.data.success) {
-        console.error("CAPTCHA verification failed:", response.data);
-        
-        // Provide more specific error messages based on error codes
-        if (response.data['error-codes']?.includes('invalid-input-secret')) {
-          console.error("Invalid reCAPTCHA secret key - please check configuration");
-          return {
-            error: "Server configuration error with CAPTCHA (invalid secret). Please try again later or contact support.",
-            email,
-            password,
-          };
-        } else if (response.data['error-codes']?.includes('invalid-input-response')) {
-          return {
-            error: "Invalid CAPTCHA response. Please refresh the page and try the CAPTCHA again.",
-            email,
-            password,
-          };
-        } else if (response.data['error-codes']?.includes('missing-input-secret')) {
-          console.error("Missing reCAPTCHA secret key");
-          return {
-            error: "Server configuration error with CAPTCHA (missing secret). Please try again later or contact support.",
-            email,
-            password,
-          };
-        } else if (response.data['error-codes']?.includes('missing-input-response')) {
-          return {
-            error: "CAPTCHA response was missing. Please complete the CAPTCHA challenge before submitting.",
-            email,
-            password,
-          };
-        } else if (response.data['error-codes']?.includes('hostname-mismatch')) {
-          console.error("reCAPTCHA hostname mismatch");
-          return {
-            error: "CAPTCHA verification failed due to domain mismatch. Please ensure you're on the correct website.",
-            email,
-            password,
-          };
-        } else if (response.data['error-codes']?.includes('timeout-or-duplicate')) {
-          return {
-            error: "CAPTCHA token expired or was already used. Please solve the CAPTCHA again.",
-            email,
-            password,
-          };
-        } else {
-          const errorCodes = response.data['error-codes']?.join(', ') || 'Unknown error';
-          console.error(`reCAPTCHA error codes: ${errorCodes}`);
-          return {
-            error: `CAPTCHA verification failed (${errorCodes}). Please try again.`,
-            email,
-            password,
-          };
-        }
+    if (!captchaResult.success) {
+      if (captchaResult.score !== undefined) {
+        // This is a v3 response with a score that was too low
+        console.warn(`reCAPTCHA v3 score too low: ${captchaResult.score}`);
+        return {
+          error: `CAPTCHA verification failed: Score too low (${captchaResult.score.toFixed(2)}). Please try again or contact support if the problem persists.`,
+          email,
+          password,
+        };
+      } else {
+        // This is a v2 failure or an error
+        return {
+          error: captchaResult.message || "CAPTCHA verification failed. Please try again.",
+          email,
+          password,
+        };
       }
-    } catch (error) {
-      console.error("CAPTCHA API request error:", error);
-      // Skip CAPTCHA verification in case of network errors
-      console.log("Skipping CAPTCHA verification due to API error");
     }
+    
+    // Log successful verification
+    console.log("CAPTCHA verification successful");
+    if (captchaResult.score !== undefined) {
+      console.log(`CAPTCHA score: ${captchaResult.score}, action: ${captchaResult.action || 'none'}`);
+    }
+    
   } catch (error) {
     console.error("CAPTCHA verification error:", error);
     // Continue with sign up even if CAPTCHA verification has an issue
