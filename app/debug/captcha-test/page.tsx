@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import ReCAPTCHAWrapper from '@/components/ui/recaptcha';
-import { ReCaptchaV3, useReCaptchaV3 } from '@/components/ui/recaptcha-v3';
+import { ReCaptchaV3, useReCaptcha } from '@/components/ui/recaptcha-v3';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { motion } from 'framer-motion';
@@ -30,9 +30,11 @@ export default function CaptchaTestPage() {
   const [v3Token, setV3Token] = useState<string | null>(null);
   const [v3VerifyResult, setV3VerifyResult] = useState<any>(null);
   const [isV3Loading, setIsV3Loading] = useState(false);
+  const [v3Executing, setV3Executing] = useState(false);
+  const [v3Error, setV3Error] = useState<Error | null>(null);
   
   // Use the reCAPTCHA v3 hook
-  const { executeReCaptcha, token: hookToken, error: recaptchaError, loading: recaptchaLoading } = useReCaptchaV3();
+  const { execute, token: hookToken, error: recaptchaError, loading: recaptchaLoading } = useReCaptcha();
 
   useEffect(() => {
     // Get the site key from the environment variable
@@ -116,35 +118,23 @@ export default function CaptchaTestPage() {
   
   // Function for handling reCAPTCHA v3 execution
   const handleExecuteV3 = async () => {
-    setIsV3Loading(true);
-    setV3Token(null);
-    setV3VerifyResult(null);
+    setV3Executing(true);
+    setV3Error(null);
     
     try {
-      const token = await executeReCaptcha(v3Action);
+      const token = await execute();
       setV3Token(token);
       
       if (token) {
-        // Verify the token
-        const response = await fetch('/api/debug/captcha-client-test', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ captchaToken: token }),
-        });
-        
-        const data = await response.json();
-        setV3VerifyResult(data);
+        await verifyV3Token(token);
+      } else {
+        setV3Error(new Error('Failed to generate token'));
       }
-    } catch (error) {
-      console.error('Failed to execute or verify reCAPTCHA v3:', error);
-      setV3VerifyResult({ 
-        success: false, 
-        message: `Error with reCAPTCHA v3: ${error instanceof Error ? error.message : 'Unknown error'}` 
-      });
+    } catch (err) {
+      console.error('Error executing reCAPTCHA v3:', err);
+      setV3Error(err instanceof Error ? err : new Error(String(err)));
     } finally {
-      setIsV3Loading(false);
+      setV3Executing(false);
     }
   };
   
@@ -838,8 +828,7 @@ export default function CaptchaTestPage() {
                       </p>
                       <ReCaptchaV3 
                         action={v3Action}
-                        onVerify={handleV3TokenGenerated}
-                        className="min-h-[30px]"
+                        onToken={handleV3TokenGenerated}
                       />
                     </div>
                   </div>
