@@ -8,12 +8,14 @@ import { motion } from 'framer-motion';
 import { verifyEmailAction } from './actions';
 
 export default function EmailVerificationClient({ token }: { token: string }) {
-  const [status, setStatus] = useState<'loading' | 'success' | 'expired' | 'invalid'>('loading');
+  const [status, setStatus] = useState<'loading' | 'success' | 'expired' | 'invalid' | 'error'>('loading');
   const [message, setMessage] = useState<string>('Verifying your email...');
   const [email, setEmail] = useState<string>('');
   const [isResending, setIsResending] = useState<boolean>(false);
   const [resendMessage, setResendMessage] = useState<string>('');
   const [resendError, setResendError] = useState<boolean>(false);
+  const [verificationAttempt, setVerificationAttempt] = useState<number>(1);
+  const [isRetrying, setIsRetrying] = useState<boolean>(false);
 
   useEffect(() => {
     const verifyEmail = async () => {
@@ -24,6 +26,7 @@ export default function EmailVerificationClient({ token }: { token: string }) {
       }
 
       try {
+        setIsRetrying(verificationAttempt > 1);
         const result = await verifyEmailAction(token);
         
         if (result.success) {
@@ -34,17 +37,25 @@ export default function EmailVerificationClient({ token }: { token: string }) {
           setMessage('This verification link has expired. Please request a new one.');
         } else {
           setStatus('invalid');
-          setMessage('Invalid verification token. Please check your email and try again.');
+          setMessage(result.message || 'Invalid verification token. Please check your email and try again.');
         }
       } catch (error) {
         console.error('Error verifying email:', error);
-        setStatus('invalid');
-        setMessage('An error occurred while verifying your email. Please try again later.');
+        setStatus('error');
+        setMessage('An unexpected response was received from the server. Please try again later.');
+      } finally {
+        setIsRetrying(false);
       }
     };
 
     verifyEmail();
-  }, [token]);
+  }, [token, verificationAttempt]);
+
+  const handleRetryVerification = () => {
+    setStatus('loading');
+    setMessage('Retrying verification...');
+    setVerificationAttempt(prev => prev + 1);
+  };
 
   const handleResendVerification = async () => {
     if (!email) return;
@@ -80,6 +91,28 @@ export default function EmailVerificationClient({ token }: { token: string }) {
     }
   };
 
+  const getEmailDomain = (email: string) => {
+    const parts = email.split('@');
+    return parts.length === 2 ? parts[1] : null;
+  };
+
+  const getEmailProviderLink = (email: string) => {
+    const domain = getEmailDomain(email);
+    if (!domain) return null;
+    
+    const providers: Record<string, string> = {
+      'gmail.com': 'https://mail.google.com',
+      'outlook.com': 'https://outlook.live.com',
+      'hotmail.com': 'https://outlook.live.com',
+      'yahoo.com': 'https://mail.yahoo.com',
+      'icloud.com': 'https://www.icloud.com/mail',
+      'aol.com': 'https://mail.aol.com',
+      'protonmail.com': 'https://mail.proton.me',
+    };
+    
+    return providers[domain] || null;
+  };
+
   return (
     <div className="min-h-[100dvh] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 bg-[#050505]">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
@@ -100,20 +133,52 @@ export default function EmailVerificationClient({ token }: { token: string }) {
               {status === 'loading' && (
                 <>
                   <Loader2 className="h-16 w-16 text-[#B4916C] animate-spin mb-6" />
-                  <h2 className="text-2xl font-bold text-[#F9F6EE] mb-2 font-safiro">Verifying Your Email</h2>
-                  <p className="text-[#C5C2BA] font-borna mb-6">Just a moment while we verify your email address...</p>
+                  <h2 className="text-2xl font-bold text-[#F9F6EE] mb-2 font-safiro">
+                    {isRetrying ? 'Retrying Verification' : 'Verifying Your Email'}
+                  </h2>
+                  <p className="text-[#C5C2BA] font-borna mb-6">{message}</p>
                 </>
               )}
               
               {status === 'success' && (
                 <>
-                  <CheckCircle className="h-16 w-16 text-green-500 mb-6" />
+                  <motion.div
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ duration: 0.5, type: "spring" }}
+                  >
+                    <CheckCircle className="h-16 w-16 text-green-500 mb-6" />
+                  </motion.div>
                   <h2 className="text-2xl font-bold text-[#F9F6EE] mb-2 font-safiro">Email Verified!</h2>
                   <p className="text-[#C5C2BA] font-borna mb-6">{message}</p>
                   <div className="mt-4">
-                    <Link href="/dashboard/pricing" passHref>
+                    <Link href="/dashboard" passHref>
                       <Button className="bg-[#B4916C] hover:bg-[#A3815B] text-[#050505] font-safiro">
                         Continue to Dashboard
+                      </Button>
+                    </Link>
+                  </div>
+                </>
+              )}
+              
+              {status === 'error' && (
+                <>
+                  <AlertTriangle className="h-16 w-16 text-red-500 mb-6" />
+                  <h2 className="text-2xl font-bold text-[#F9F6EE] mb-2 font-safiro">Verification Error</h2>
+                  <p className="text-[#C5C2BA] font-borna mb-6">{message}</p>
+                  
+                  <div className="flex flex-col space-y-3">
+                    <Button 
+                      onClick={handleRetryVerification} 
+                      className="bg-[#B4916C] hover:bg-[#A3815B] text-[#050505] font-safiro"
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Retry Verification
+                    </Button>
+                    
+                    <Link href="/sign-in" passHref>
+                      <Button variant="outline" className="border-[#333333] text-[#C5C2BA] hover:bg-[#1A1A1A] font-safiro">
+                        Back to Sign In
                       </Button>
                     </Link>
                   </div>
@@ -156,9 +221,27 @@ export default function EmailVerificationClient({ token }: { token: string }) {
                     </Button>
                     
                     {resendMessage && (
-                      <p className={`text-sm mt-2 ${resendError ? 'text-red-400' : 'text-green-400'}`}>
+                      <motion.p 
+                        className={`text-sm mt-2 ${resendError ? 'text-red-400' : 'text-green-400'}`}
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3 }}
+                      >
                         {resendMessage}
-                      </p>
+                      </motion.p>
+                    )}
+                    
+                    {email && !resendError && resendMessage && getEmailProviderLink(email) && (
+                      <div className="mt-4">
+                        <a 
+                          href={getEmailProviderLink(email)!}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center text-[#B4916C] hover:underline text-sm"
+                        >
+                          Open {getEmailDomain(email)} in new tab
+                        </a>
+                      </div>
                     )}
                   </div>
                   

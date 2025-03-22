@@ -6,6 +6,7 @@ import {
   type NewEmailVerificationToken 
 } from '@/lib/db/schema';
 import { and, eq, gt } from 'drizzle-orm';
+import { withDbErrorHandling } from '@/lib/db/error-handler';
 
 // Secret key for token generation
 const secret = process.env.AUTH_SECRET || 'your-secret-key';
@@ -83,37 +84,93 @@ export async function saveEmailVerificationToken(userId: number, token: string, 
  * Find a valid token in the database
  */
 export async function findValidToken(token: string) {
-  const now = new Date();
-  
-  const [foundToken] = await db
-    .select()
-    .from(emailVerificationTokens)
-    .where(
-      and(
-        eq(emailVerificationTokens.token, token),
-        gt(emailVerificationTokens.expiresAt, now)
-      )
-    )
-    .limit(1);
-    
-  return foundToken;
+  try {
+    return await withDbErrorHandling(
+      async () => {
+        const now = new Date();
+        
+        const [foundToken] = await db
+          .select()
+          .from(emailVerificationTokens)
+          .where(
+            and(
+              eq(emailVerificationTokens.token, token),
+              gt(emailVerificationTokens.expiresAt, now)
+            )
+          )
+          .limit(1);
+          
+        return foundToken;
+      },
+      'findValidToken',
+      'emailVerificationTokens'
+    );
+  } catch (error) {
+    console.error('Error finding valid token:', error);
+    return null;
+  }
 }
 
 /**
  * Mark a user's email as verified
+ * Includes retry mechanism for better reliability
  */
-export async function markEmailAsVerified(userId: number) {
-  await db
-    .update(users)
-    .set({ emailVerified: true })
-    .where(eq(users.id, userId));
+export async function markEmailAsVerified(userId: number, retryCount = 3): Promise<boolean> {
+  let lastError: any = null;
+  
+  // Try the operation up to retryCount times
+  for (let attempt = 1; attempt <= retryCount; attempt++) {
+    try {
+      await withDbErrorHandling(
+        async () => {
+          await db
+            .update(users)
+            .set({ emailVerified: true })
+            .where(eq(users.id, userId));
+        },
+        'markEmailAsVerified',
+        'users'
+      );
+      
+      console.log(`Successfully marked email as verified for user ID: ${userId} (attempt ${attempt})`);
+      return true;
+    } catch (error) {
+      lastError = error;
+      console.warn(`Error marking email as verified for user ID: ${userId} (attempt ${attempt}/${retryCount})`, error);
+      
+      // Only retry if we haven't exceeded retryCount
+      if (attempt < retryCount) {
+        // Add exponential backoff: wait longer between each retry
+        const backoffMs = Math.min(100 * Math.pow(2, attempt), 1000);
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+      }
+    }
+  }
+  
+  // All retry attempts failed
+  console.error(`Failed to mark email as verified for user ID: ${userId} after ${retryCount} attempts`, lastError);
+  return false;
 }
 
 /**
  * Delete a token from the database
  */
-export async function deleteToken(tokenId: number) {
-  await db
-    .delete(emailVerificationTokens)
-    .where(eq(emailVerificationTokens.id, tokenId));
+export async function deleteToken(tokenId: number): Promise<boolean> {
+  try {
+    await withDbErrorHandling(
+      async () => {
+        await db
+          .delete(emailVerificationTokens)
+          .where(eq(emailVerificationTokens.id, tokenId));
+      },
+      'deleteToken',
+      'emailVerificationTokens'
+    );
+    
+    console.log(`Successfully deleted token ID: ${tokenId}`);
+    return true;
+  } catch (error) {
+    console.error(`Failed to delete token ID: ${tokenId}`, error);
+    return false;
+  }
 } 
