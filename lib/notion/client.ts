@@ -3,13 +3,54 @@ import { QueryDatabaseParameters } from '@notionhq/client/build/src/api-endpoint
 import { env } from '@/lib/env/server';
 
 // Initialize the Notion client
-const notionClient = new Client({
-  auth: env.NOTION_API_KEY,
-});
+let notionClient: Client | null = null;
+
+try {
+  notionClient = new Client({
+    auth: env.NOTION_API_KEY,
+  });
+} catch (error) {
+  console.error('Failed to initialize Notion client:', error);
+}
 
 // Database IDs
 const USER_DB_ID = env.NOTION_USER_DATABASE_ID;
 const FEEDBACK_DB_ID = env.NOTION_FEEDBACK_DATABASE_ID;
+
+/**
+ * Execute a Notion API call with timeout protection
+ * @param apiCall Function that performs the Notion API call
+ * @param timeoutMs Timeout in milliseconds
+ * @returns Result of the API call or error
+ */
+async function withTimeout<T>(apiCall: () => Promise<T>, timeoutMs = 5000): Promise<{
+  success: boolean;
+  data?: T;
+  error?: any;
+}> {
+  if (!notionClient) {
+    console.warn('Notion client not initialized, skipping operation');
+    return { success: false, error: 'Notion service not available' };
+  }
+
+  return new Promise((resolve) => {
+    const timeoutId = setTimeout(() => {
+      console.error('Notion API call timed out after', timeoutMs, 'ms');
+      resolve({ success: false, error: 'Timeout calling Notion API' });
+    }, timeoutMs);
+
+    apiCall()
+      .then((data) => {
+        clearTimeout(timeoutId);
+        resolve({ success: true, data });
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId);
+        console.error('Error calling Notion API:', error);
+        resolve({ success: false, error });
+      });
+  });
+}
 
 /**
  * Adds a user to the Notion users database
@@ -34,31 +75,39 @@ export async function addUserToNotion(
       return existingUser.id;
     }
 
-    // Add the user to Notion
-    const response = await notionClient.pages.create({
-      parent: {
-        database_id: USER_DB_ID,
-      },
-      properties: {
-        Email: {
-          type: 'email',
-          email: email,
+    // Add the user to Notion with timeout protection
+    const client = notionClient as Client;
+    const result = await withTimeout(() => 
+      client.pages.create({
+        parent: {
+          database_id: USER_DB_ID!,
         },
-        'Email Verified': {
-          type: 'checkbox',
-          checkbox: isVerified,
-        },
-        'Sign-up Date': {
-          type: 'date',
-          date: {
-            start: new Date().toISOString(),
+        properties: {
+          Email: {
+            type: 'email',
+            email: email,
+          },
+          'Email Verified': {
+            type: 'checkbox',
+            checkbox: isVerified,
+          },
+          'Sign-up Date': {
+            type: 'date',
+            date: {
+              start: new Date().toISOString(),
+            },
           },
         },
-      },
-    });
+      })
+    );
+
+    if (!result.success) {
+      console.warn(`Failed to add user ${email} to Notion, but continuing`);
+      return null;
+    }
 
     console.log(`Added user ${email} to Notion`);
-    return response.id;
+    return result.data?.id || null;
   } catch (error) {
     console.error('Error adding user to Notion:', error);
     return null;
@@ -71,24 +120,31 @@ export async function addUserToNotion(
  * @returns The user page object if found, null otherwise
  */
 export async function findUserByEmail(email: string) {
-  if (!USER_DB_ID) {
-    console.warn('Notion user database ID not configured');
+  if (!USER_DB_ID || !notionClient) {
+    console.warn('Notion configuration not available');
     return null;
   }
 
   try {
-    const response = await notionClient.databases.query({
-      database_id: USER_DB_ID,
-      filter: {
-        property: 'Email',
-        email: {
-          equals: email,
+    const client = notionClient as Client;
+    const result = await withTimeout(() => 
+      client.databases.query({
+        database_id: USER_DB_ID!,
+        filter: {
+          property: 'Email',
+          email: {
+            equals: email,
+          },
         },
-      },
-    });
+      })
+    );
 
-    if (response.results.length > 0) {
-      return response.results[0];
+    if (!result.success || !result.data) {
+      return null;
+    }
+
+    if (result.data.results.length > 0) {
+      return result.data.results[0];
     }
     return null;
   } catch (error) {
@@ -107,6 +163,11 @@ export async function updateUserVerificationStatus(
   email: string,
   isVerified: boolean,
 ): Promise<boolean> {
+  if (!notionClient) {
+    console.warn('Notion client not initialized');
+    return false;
+  }
+
   try {
     // Find the user by email to get their page ID
     const user = await findUserByEmail(email);
@@ -115,16 +176,24 @@ export async function updateUserVerificationStatus(
       return false;
     }
 
-    // Update the verification status
-    await notionClient.pages.update({
-      page_id: user.id,
-      properties: {
-        'Email Verified': {
-          type: 'checkbox',
-          checkbox: isVerified,
+    // Update the verification status with timeout protection
+    const client = notionClient as Client;
+    const result = await withTimeout(() => 
+      client.pages.update({
+        page_id: user.id,
+        properties: {
+          'Email Verified': {
+            type: 'checkbox',
+            checkbox: isVerified,
+          },
         },
-      },
-    });
+      })
+    );
+
+    if (!result.success) {
+      console.warn(`Failed to update verification status for ${email}, but continuing`);
+      return false;
+    }
 
     console.log(`Updated verification status for ${email} to ${isVerified}`);
     return true;
@@ -146,48 +215,56 @@ export async function addFeedbackToNotion(
   feedback: string,
   type: string = 'general',
 ): Promise<string | null> {
-  if (!FEEDBACK_DB_ID) {
-    console.warn('Notion feedback database ID not configured');
+  if (!FEEDBACK_DB_ID || !notionClient) {
+    console.warn('Notion feedback configuration not available');
     return null;
   }
 
   try {
-    const response = await notionClient.pages.create({
-      parent: {
-        database_id: FEEDBACK_DB_ID,
-      },
-      properties: {
-        Email: {
-          type: 'email',
-          email: email,
+    const client = notionClient as Client;
+    const result = await withTimeout(() => 
+      client.pages.create({
+        parent: {
+          database_id: FEEDBACK_DB_ID!,
         },
-        Feedback: {
-          type: 'rich_text',
-          rich_text: [
-            {
-              text: {
-                content: feedback,
+        properties: {
+          Email: {
+            type: 'email',
+            email: email,
+          },
+          Feedback: {
+            type: 'rich_text',
+            rich_text: [
+              {
+                text: {
+                  content: feedback,
+                },
               },
+            ],
+          },
+          Type: {
+            type: 'select',
+            select: {
+              name: type,
             },
-          ],
-        },
-        Type: {
-          type: 'select',
-          select: {
-            name: type,
+          },
+          Date: {
+            type: 'date',
+            date: {
+              start: new Date().toISOString(),
+            },
           },
         },
-        Date: {
-          type: 'date',
-          date: {
-            start: new Date().toISOString(),
-          },
-        },
-      },
-    });
+      })
+    );
+
+    if (!result.success || !result.data) {
+      console.warn(`Failed to add feedback from ${email} to Notion, but continuing`);
+      return null;
+    }
 
     console.log(`Added feedback from ${email} to Notion`);
-    return response.id;
+    return result.data.id;
   } catch (error) {
     console.error('Error adding feedback to Notion:', error);
     return null;

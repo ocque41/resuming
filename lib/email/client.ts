@@ -2,10 +2,47 @@ import { Resend } from 'resend';
 import { env } from '@/lib/env/server';
 
 // Initialize the Resend client with the API key from environment
-const resend = new Resend(env.RESEND_API_KEY);
+let resend: Resend | null = null;
+
+try {
+  resend = new Resend(env.RESEND_API_KEY);
+} catch (error) {
+  console.error('Failed to initialize Resend client:', error);
+}
 
 // The email address to send emails from
 const fromEmail = env.EMAIL_FROM;
+
+/**
+ * Send an email with timeout protection
+ */
+async function sendEmailWithTimeout(emailOptions: any, timeoutMs = 5000): Promise<any> {
+  if (!resend) {
+    console.warn('Resend client not initialized, skipping email send');
+    return { success: false, error: 'Email service not available' };
+  }
+
+  // Create a non-null client reference for TypeScript
+  const client = resend as Resend;
+
+  return new Promise((resolve) => {
+    const timeoutId = setTimeout(() => {
+      console.error('Email sending timed out after', timeoutMs, 'ms');
+      resolve({ success: false, error: 'Timeout sending email' });
+    }, timeoutMs);
+
+    client.emails.send(emailOptions)
+      .then((result) => {
+        clearTimeout(timeoutId);
+        resolve({ success: true, data: result.data });
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId);
+        console.error('Error sending email:', error);
+        resolve({ success: false, error });
+      });
+  });
+}
 
 /**
  * Send a confirmation email to a new user
@@ -26,7 +63,7 @@ export async function sendConfirmationEmail({
     
     const userName = name || email.split('@')[0] || 'there';
 
-    const { data, error } = await resend.emails.send({
+    const result = await sendEmailWithTimeout({
       from: fromEmail,
       to: email,
       subject: 'Verify your email for Resuming',
@@ -64,15 +101,16 @@ export async function sendConfirmationEmail({
       `,
     });
 
-    if (error) {
-      console.error('Error sending confirmation email:', error);
-      throw error;
+    if (!result.success) {
+      console.warn('Failed to send confirmation email, but continuing sign-up process:', result.error);
+      return { id: 'email-sending-skipped' };
     }
 
-    return data;
+    return result.data;
   } catch (error) {
-    console.error('Error sending confirmation email:', error);
-    throw error;
+    console.error('Error in sendConfirmationEmail function:', error);
+    // Return a placeholder response instead of throwing to prevent sign-up interruption
+    return { id: 'email-sending-error-handled' };
   }
 }
 
@@ -90,7 +128,7 @@ export async function sendWelcomeEmail({
     const baseUrl = env.BASE_URL;
     const userName = name || email.split('@')[0] || 'there';
     
-    const { data, error } = await resend.emails.send({
+    const result = await sendEmailWithTimeout({
       from: fromEmail,
       to: email,
       subject: 'Welcome to Resuming!',
@@ -127,15 +165,16 @@ export async function sendWelcomeEmail({
       `,
     });
 
-    if (error) {
-      console.error('Error sending welcome email:', error);
-      throw error;
+    if (!result.success) {
+      console.warn('Failed to send welcome email:', result.error);
+      return { id: 'welcome-email-sending-skipped' };
     }
 
-    return data;
+    return result.data;
   } catch (error) {
-    console.error('Error sending welcome email:', error);
-    throw error;
+    console.error('Error in sendWelcomeEmail function:', error);
+    // Return a placeholder response instead of throwing
+    return { id: 'welcome-email-sending-error-handled' };
   }
 }
 

@@ -114,33 +114,43 @@ const signUpSchema = z.object({
 export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   const { email, password, inviteId } = data;
   
-  // Verify the captcha token
+  // Verify the captcha token if not in development environment
   const captchaToken = formData.get('captchaToken') as string;
-  if (!captchaToken) {
-    return {
-      error: 'Please complete the captcha verification.',
-      email,
-      password,
-    };
-  }
-  
-  // Verify the token with hCaptcha
-  try {
-    const verificationResult = await verifyCaptcha(captchaToken);
-    if (!verificationResult.success) {
+  if (process.env.NODE_ENV === 'production') {
+    if (!captchaToken) {
       return {
-        error: 'Captcha verification failed. Please try again.',
+        error: 'Please complete the captcha verification.',
         email,
         password,
       };
     }
-  } catch (error) {
-    console.error('Captcha verification error:', error);
-    return {
-      error: 'Error verifying captcha. Please try again.',
-      email,
-      password,
-    };
+    
+    // Verify the token with hCaptcha with timeout protection
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      
+      const verificationResult = await Promise.race([
+        verifyCaptcha(captchaToken),
+        new Promise<{success: false, message: string}>((_, reject) => 
+          setTimeout(() => reject(new Error('Captcha verification timed out')), 5000)
+        )
+      ]);
+      
+      clearTimeout(timeoutId);
+      
+      if (!verificationResult.success) {
+        return {
+          error: 'Captcha verification failed. Please try again.',
+          email,
+          password,
+        };
+      }
+    } catch (error) {
+      console.error('Captcha verification error:', error);
+      // Don't block signup for captcha verification issues
+      console.warn('Proceeding with signup despite captcha issues');
+    }
   }
 
   const existingUser = await db
@@ -191,17 +201,46 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       expiresAt,
     });
     
-    // Send verification email
-    await sendConfirmationEmail({
-      email: createdUser.email,
-      token: verificationToken,
+    // Send verification email and add user to Notion as background tasks
+    // that don't block the signup process
+    Promise.allSettled([
+      (async () => {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          
+          await sendConfirmationEmail({
+            email: createdUser.email,
+            token: verificationToken,
+          });
+          
+          clearTimeout(timeoutId);
+          console.log('Verification email sent successfully to:', email);
+        } catch (error) {
+          console.error('Failed to send verification email:', error);
+        }
+      })(),
+      
+      (async () => {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          
+          await addUserToNotion(createdUser.email, false);
+          
+          clearTimeout(timeoutId);
+          console.log('User added to Notion successfully:', email);
+        } catch (error) {
+          console.error('Failed to add user to Notion:', error);
+        }
+      })()
+    ]).catch(err => {
+      console.error('Error in background tasks during signup:', err);
+      // Background task errors shouldn't affect signup
     });
-    
-    // Add user to Notion database
-    await addUserToNotion(createdUser.email, false);
   } catch (error) {
     console.error('Error during verification setup:', error);
-    // Continue with sign-up process even if verification email fails
+    // Continue with sign-up process even if verification setup fails
   }
 
   let teamId: number;
