@@ -5,9 +5,9 @@
  * that might cause verification to fail.
  */
 
-// Google's test keys that will always pass verification - useful for testing
-const TEST_SITE_KEY = '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
-const TEST_SECRET_KEY = '6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe';
+// Constants for Google's test keys
+export const RECAPTCHA_TEST_SITE_KEY = '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
+export const RECAPTCHA_TEST_SECRET_KEY = '6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe';
 
 /**
  * Check if we're using Google's test keys
@@ -17,7 +17,7 @@ export function isUsingTestKeys(): boolean {
   const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
   const secretKey = process.env.RECAPTCHA_SECRET_KEY;
   
-  return siteKey === TEST_SITE_KEY || secretKey === TEST_SECRET_KEY;
+  return siteKey === RECAPTCHA_TEST_SITE_KEY || secretKey === RECAPTCHA_TEST_SECRET_KEY;
 }
 
 /**
@@ -135,4 +135,18 @@ function getPotentialIssues(
 export function isRecaptchaConfigured(): boolean {
   const status = getRecaptchaConfigStatus();
   return status.isProperlyConfigured;
-} 
+}
+
+/**
+ * Check if the provided site key is Google's test key
+ */
+export const isTestReCaptchaSiteKey = (siteKey: string): boolean => {
+  return siteKey === RECAPTCHA_TEST_SITE_KEY;
+};
+
+/**
+ * Check if the provided secret key is Google's test key
+ */
+export const isTestReCaptchaSecretKey = (secretKey: string): boolean => {
+  return secretKey === RECAPTCHA_TEST_SECRET_KEY;
+}; 

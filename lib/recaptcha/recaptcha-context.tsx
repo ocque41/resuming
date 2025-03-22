@@ -24,11 +24,14 @@ interface ReCaptchaContextState {
   action: string;
   siteKey?: string;
   configStatus: ReturnType<typeof getRecaptchaConfigStatus>;
+  isDevelopment: boolean;
+  usingTestKeys: boolean;
 
   // Methods
   executeVerification: (action?: string) => Promise<string | null>;
   resetVerification: () => void;
   setCustomMessage: (message: string, status?: 'idle' | 'loading' | 'success' | 'error' | 'warning') => void;
+  skipVerification: () => Promise<string>;
 }
 
 // Create the context with a default value
@@ -67,34 +70,49 @@ export function ReCaptchaProvider({
   // Configuration status
   const configStatus = getRecaptchaConfigStatus();
   const isDevDomain = isDevelopmentDomain();
-  const shouldSkip = skipForDevelopment && (process.env.NODE_ENV === 'development' || isDevDomain);
+  const isDevelopment = process.env.NODE_ENV === 'development' || isDevDomain;
+  const shouldSkip = skipForDevelopment && isDevelopment;
+  const usingTestKeys = configStatus.usingTestKeys;
   
-  // Debug logging for configuration status
+  // Enhanced debug logging for configuration status
   useEffect(() => {
-    console.log("reCAPTCHA Configuration Status:", {
+    const debugInfo = {
       hasSiteKey: configStatus.hasSiteKey,
       hasSecretKey: configStatus.hasSecretKey,
       domain: configStatus.domain,
-      usingTestKeys: configStatus.usingTestKeys,
+      usingTestKeys,
       isDevDomain,
       shouldSkipVerification: shouldSkip,
-      environment: process.env.NODE_ENV
-    });
+      environment: process.env.NODE_ENV,
+      configuredProperly: configStatus.isProperlyConfigured
+    };
+    
+    console.log("%creCAPTCHA Configuration Status:", "font-weight: bold; color: blue;", debugInfo);
     
     if (!configStatus.hasSiteKey) {
-      console.warn("reCAPTCHA Site Key is missing. Check if NEXT_PUBLIC_RECAPTCHA_SITE_KEY environment variable is set.");
+      console.warn("%creCAPTCHA Site Key is missing!", "font-weight: bold; color: orange;", 
+        "Check if NEXT_PUBLIC_RECAPTCHA_SITE_KEY environment variable is set.");
     }
     
     if (!configStatus.hasSecretKey) {
-      console.warn("reCAPTCHA Secret Key is missing. Check if RECAPTCHA_SECRET_KEY environment variable is set.");
+      console.warn("%creCAPTCHA Secret Key is missing!", "font-weight: bold; color: orange;", 
+        "Check if RECAPTCHA_SECRET_KEY environment variable is set.");
     }
     
     // Try to determine the source of site key
-    console.log("Site Key Sources:", {
-      fromEnvVar: process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ? "✅ Present" : "❌ Missing",
-      fromWindow: typeof window !== 'undefined' && window.__env?.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ? "✅ Present" : "❌ Missing",
+    const siteKeyFromEnv = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+    const siteKeyFromWindow = typeof window !== 'undefined' && window.__env?.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+    
+    console.log("%creCAPTCHA Site Key Sources:", "font-weight: bold; color: blue;", {
+      fromEnvVar: siteKeyFromEnv ? "✅ Present" : "❌ Missing",
+      fromWindow: siteKeyFromWindow ? "✅ Present" : "❌ Missing",
+      fromWindowLength: siteKeyFromWindow ? siteKeyFromWindow.length : 0,
+      fromEnvLength: siteKeyFromEnv ? siteKeyFromEnv.length : 0,
+      // Show partial keys for debugging
+      windowKeyPrefix: siteKeyFromWindow ? siteKeyFromWindow.substring(0, 6) : null,
+      envKeyPrefix: siteKeyFromEnv ? siteKeyFromEnv.substring(0, 6) : null,
     });
-  }, [configStatus, isDevDomain, shouldSkip]);
+  }, [configStatus, isDevDomain, shouldSkip, usingTestKeys]);
   
   // Use our reCAPTCHA hook
   const {
@@ -155,14 +173,31 @@ export function ReCaptchaProvider({
   useEffect(() => {
     if (!isConfigured && !shouldSkip) {
       setVerificationStatus('error');
-      setVerificationMessage("reCAPTCHA is not properly configured");
-      console.error("reCAPTCHA configuration error: Site key or secret key is missing");
+      
+      // Provide a more specific error message
+      let message = "reCAPTCHA is not properly configured";
+      if (!configStatus.hasSiteKey && !configStatus.hasSecretKey) {
+        message = "reCAPTCHA site key and secret key are missing";
+      } else if (!configStatus.hasSiteKey) {
+        message = "reCAPTCHA site key is missing";
+      } else if (!configStatus.hasSecretKey) {
+        message = "reCAPTCHA secret key is missing";
+      }
+      
+      setVerificationMessage(message);
+      console.error("reCAPTCHA configuration error:", message, {
+        hasSiteKey: configStatus.hasSiteKey,
+        hasSecretKey: configStatus.hasSecretKey,
+        domain: configStatus.domain
+      });
     } else if (shouldSkip) {
       setVerificationStatus('warning');
       setVerificationMessage("reCAPTCHA verification skipped in development");
-    } else if (configStatus.usingTestKeys && process.env.NODE_ENV === 'production') {
+      console.info("reCAPTCHA verification skipped in development environment");
+    } else if (usingTestKeys && process.env.NODE_ENV === 'production') {
       setVerificationStatus('warning');
       setVerificationMessage("Using test keys in production. Not secure for real users.");
+      console.warn("Using test reCAPTCHA keys in production environment. This is not secure for real users.");
     } else {
       // Only set to idle if we don't already have a token
       if (!token) {
@@ -170,7 +205,7 @@ export function ReCaptchaProvider({
         setVerificationMessage("Verification ready");
       }
     }
-  }, [isConfigured, shouldSkip, configStatus.usingTestKeys, token]);
+  }, [isConfigured, shouldSkip, usingTestKeys, token, configStatus]);
 
   // Execute verification with optional custom action
   const executeVerification = useCallback(async (customAction?: string): Promise<string | null> => {
@@ -182,18 +217,33 @@ export function ReCaptchaProvider({
     }
     
     if (!isConfigured) {
-      console.error("Cannot execute reCAPTCHA - not configured properly", {
+      const errorDetails = {
         hasSiteKey: configStatus.hasSiteKey,
-        hasSecretKey: configStatus.hasSecretKey
-      });
+        hasSecretKey: configStatus.hasSecretKey,
+        domain: configStatus.domain
+      };
+      
+      console.error("Cannot execute reCAPTCHA - not configured properly", errorDetails);
+      
+      // Provide more descriptive error messages
+      let message = "reCAPTCHA is not properly configured";
+      if (!configStatus.hasSiteKey && !configStatus.hasSecretKey) {
+        message = "Cannot verify: reCAPTCHA keys are missing";
+      } else if (!configStatus.hasSiteKey) {
+        message = "Cannot verify: reCAPTCHA site key is missing";
+      } else if (!configStatus.hasSecretKey) {
+        message = "Cannot verify: reCAPTCHA secret key is missing";
+      }
+      
       setVerificationStatus('error');
-      setVerificationMessage("reCAPTCHA is not properly configured");
+      setVerificationMessage(message);
       return null;
     }
     
     // If token exists and is not expired, return it without changing state
     if (token && tokenExpiryTime && Date.now() < tokenExpiryTime) {
-      console.log("Using existing valid reCAPTCHA token");
+      console.log("Using existing valid reCAPTCHA token (expires in", 
+        Math.round((tokenExpiryTime - Date.now()) / 1000), "seconds)");
       return token;
     }
     
@@ -208,21 +258,27 @@ export function ReCaptchaProvider({
       try {
         // If a custom action is provided, update the action
         if (customAction && customAction !== action) {
+          console.log(`Updating reCAPTCHA action from "${action}" to "${customAction}"`);
           setAction(customAction);
         }
         
+        console.log(`Executing reCAPTCHA verification with action: ${customAction || action}`);
         const newToken = await execute();
+        
         if (newToken) {
+          console.log(`Successfully obtained reCAPTCHA token (${newToken.substring(0, 10)}...)`);
           setVerificationStatus('success');
           setVerificationMessage("Verification successful");
           return newToken;
         }
         
-        throw new Error("No token received");
+        throw new Error("No token received from reCAPTCHA");
       } catch (err) {
         if (retries < maxRetries) {
           retries++;
           console.log(`reCAPTCHA retry attempt ${retries}/${maxRetries}`);
+          // Short delay before retry
+          await new Promise(resolve => setTimeout(resolve, 1000));
           return await attemptExecution();
         }
         
@@ -251,6 +307,14 @@ export function ReCaptchaProvider({
     }
   }, []);
 
+  // Add a skip verification method
+  const skipVerification = useCallback(async (): Promise<string> => {
+    console.warn("Bypassing reCAPTCHA verification");
+    setVerificationStatus('warning');
+    setVerificationMessage("Verification bypassed (not secure)");
+    return "verification-bypassed-token";
+  }, []);
+
   // Get site key from environment or config status
   const siteKey = typeof window !== 'undefined' && window.__env?.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
     ? window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
@@ -270,9 +334,12 @@ export function ReCaptchaProvider({
     action,
     siteKey,
     configStatus,
+    isDevelopment,
+    usingTestKeys,
     executeVerification,
     resetVerification,
-    setCustomMessage
+    setCustomMessage,
+    skipVerification
   };
 
   return (

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getRecaptchaConfigStatus } from '@/lib/recaptcha/domain-check';
 
 /**
  * API endpoint to check reCAPTCHA configuration
@@ -18,6 +19,9 @@ export async function GET(request: NextRequest) {
   
   // Check if site key is defined 
   const isSiteKeyConfigured = !!siteKey;
+
+  // Get more detailed configuration status
+  const configStatus = getRecaptchaConfigStatus();
   
   // Create a configuration object with safe information (no full keys exposed)
   const config = {
@@ -28,17 +32,40 @@ export async function GET(request: NextRequest) {
     domain,
     environment: process.env.NODE_ENV,
     timestamp: new Date().toISOString(),
+    // Include a sanitized version of the config status
+    configStatus: {
+      hasSiteKey: configStatus.hasSiteKey,
+      hasSecretKey: configStatus.hasSecretKey,
+      domain: configStatus.domain,
+      usingTestKeys: configStatus.usingTestKeys,
+      isDevelopment: configStatus.isDevelopment,
+      environment: configStatus.environment,
+      isProperlyConfigured: configStatus.isProperlyConfigured,
+      potentialIssues: configStatus.potentialIssues,
+    }
   };
   
   // Google's test key - indicate if we're using it
   const TEST_SITE_KEY = '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
   const isUsingTestKey = siteKey === TEST_SITE_KEY;
   
-  return NextResponse.json({
-    status: 'ok',
-    config,
-    isUsingTestKey,
-    // Include the full site key only if it's the test key or we're in development
-    siteKey: isUsingTestKey || process.env.NODE_ENV === 'development' ? siteKey : undefined
-  });
+  // Add CORS headers to ensure the endpoint can be accessed from different origins during testing
+  const headers = new Headers();
+  headers.append('Access-Control-Allow-Origin', '*');
+  headers.append('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  
+  return NextResponse.json(
+    {
+      status: 'ok',
+      config,
+      isUsingTestKey,
+      // Make sure to always include the siteKey for client-side usage
+      // This is critical for the reCAPTCHA widget to initialize
+      siteKey: siteKey || '',
+    },
+    { 
+      status: 200,
+      headers
+    }
+  );
 } 

@@ -8,6 +8,21 @@
     window.__env = {};
   }
 
+  // Debug flag - can be controlled via localStorage for troubleshooting
+  const debugMode = localStorage.getItem('env_loader_debug') === 'true';
+  
+  // Helper function for logging
+  function log(message, data) {
+    if (debugMode) {
+      console.log(`[env-loader] ${message}`, data);
+    }
+  }
+
+  // Helper function for error logging
+  function logError(message, error) {
+    console.error(`[env-loader] ${message}`, error);
+  }
+
   /**
    * Load environment variables from the server
    * and make them available in window.__env
@@ -16,45 +31,84 @@
     // Only run in browser
     if (typeof window === 'undefined') return;
     
+    log('Starting environment variable loading...');
+    
     // Check if we already have the reCAPTCHA site key
     if (window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
-      console.log("env-loader: Already have reCAPTCHA site key");
+      log('Already have reCAPTCHA site key', { 
+        keyPrefix: window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.substring(0, 6) + '...' 
+      });
       return;
     }
 
+    // Add timestamp to avoid caching issues
+    const timestamp = new Date().getTime();
+    const url = `/api/recaptcha-config?_=${timestamp}`;
+    
+    log(`Fetching from ${url}`);
+
     // Try to load from reCAPTCHA config endpoint
-    fetch('/api/recaptcha-config')
+    fetch(url)
       .then(response => {
         if (!response.ok) {
-          throw new Error(`Failed to load reCAPTCHA config: ${response.status}`);
+          throw new Error(`Failed to load reCAPTCHA config: ${response.status} ${response.statusText}`);
         }
+        log('Received response', { status: response.status });
         return response.json();
       })
       .then(data => {
-        // If we have a site key (either from test or dev environment), set it
+        log('Received data', { 
+          hasConfig: !!data.config,
+          hasSiteKey: !!data.siteKey,
+          configStatus: data.status
+        });
+        
+        // If we have a site key, set it
         if (data.siteKey) {
           window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = data.siteKey;
-          console.log("env-loader: Loaded reCAPTCHA site key from API");
-        } else if (data.config.isSiteKeyConfigured) {
-          // We know there's a site key configured, but we don't want to expose it
-          // This helps debugging while maintaining security
-          console.log("env-loader: reCAPTCHA site key is configured on server but not exposed to client");
+          log('Loaded reCAPTCHA site key', { 
+            keyPrefix: data.siteKey.substring(0, 6) + '...',
+            length: data.siteKey.length
+          });
+          
+          // Store configuration details for debugging
+          window.__env.recaptchaConfig = data.config;
+          
+          // Dispatch an event to notify that environment variables are loaded
+          window.dispatchEvent(new CustomEvent('env-loaded', { detail: { success: true } }));
+        } else {
+          logError('reCAPTCHA site key is missing from API response', data);
+          window.dispatchEvent(new CustomEvent('env-loaded', { 
+            detail: { 
+              success: false, 
+              error: 'Site key missing from response'
+            } 
+          }));
         }
-        
-        // Store config details for debugging
-        window.__env.recaptchaConfig = data.config;
-        
-        // Dispatch an event to notify that environment variables are loaded
-        window.dispatchEvent(new CustomEvent('env-loaded'));
       })
       .catch(error => {
-        console.error("env-loader: Failed to load environment variables", error);
+        logError('Failed to load environment variables', error);
+        window.dispatchEvent(new CustomEvent('env-loaded', { 
+          detail: { 
+            success: false, 
+            error: error.message
+          } 
+        }));
       });
   }
 
-  // Load variables immediately
+  // Attempt to load variables immediately
+  log('Initializing environment loader');
   loadEnvironmentVariables();
 
   // Also expose the function globally for manual reloading
   window.loadEnvironmentVariables = loadEnvironmentVariables;
+  
+  // Expose a debug toggle function
+  window.toggleEnvLoaderDebug = function() {
+    const newState = localStorage.getItem('env_loader_debug') !== 'true';
+    localStorage.setItem('env_loader_debug', newState);
+    console.log(`[env-loader] Debug mode ${newState ? 'enabled' : 'disabled'}`);
+    return newState;
+  };
 })(); 
