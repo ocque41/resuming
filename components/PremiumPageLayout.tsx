@@ -9,6 +9,7 @@ import Link from "next/link";
 import { PremiumButton } from "./ui/premium-button";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import UserMenu from "./UserMenu";
+import EmailVerificationBanner from "./EmailVerificationBanner";
 
 interface PremiumPageLayoutProps {
   title: string;
@@ -111,6 +112,12 @@ export default function PremiumPageLayout({
     </motion.div>
   ) : null;
 
+  // Check if we should show the email verification banner
+  const shouldShowVerificationBanner = teamData && 
+    teamData.user && 
+    teamData.user.email && 
+    !teamData.user.emailVerified;
+
   return (
     <>
       {/* Scroll progress indicator */}
@@ -119,6 +126,11 @@ export default function PremiumPageLayout({
           className="fixed top-0 left-0 z-50 h-0.5 bg-[#B4916C] transition-all duration-100"
           style={{ width: `${scrollProgress}%` }}
         />
+      )}
+
+      {/* Email Verification Banner */}
+      {shouldShowVerificationBanner && (
+        <EmailVerificationBanner email={teamData.user.email} />
       )}
 
       {/* Page container with optional gradient background */}
