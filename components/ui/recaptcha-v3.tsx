@@ -1,15 +1,29 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import { Loader2 } from 'lucide-react';
+import { RECAPTCHA_ACTIONS } from '@/lib/recaptcha/actions';
+import { getRecaptchaConfigStatus, isUsingTestKeys } from '@/lib/recaptcha/domain-check';
 
 // Define interface for the reCAPTCHA v3 props
 interface ReCaptchaV3Props {
-  action: string;
-  onVerify: (token: string) => void;
-  onError?: (error: Error) => void;
+  action?: string;
   siteKey?: string;
-  className?: string;
+  onToken?: (token: string) => void;
+  onError?: (error: Error) => void;
+  /**
+   * Whether to automatically refresh the token periodically
+   * Tokens expire after 2 minutes, so this can help ensure 
+   * fresh tokens are available
+   */
+  autoRefresh?: boolean;
+  refreshInterval?: number; // in milliseconds
+  /**
+   * Flag to skip loading recaptcha in some development scenarios 
+   * where you don't want to hit the recaptcha API
+   */
+  skipForDevelopment?: boolean;
 }
 
 // Add helper for environment variables
@@ -62,388 +76,334 @@ declare global {
   }
 }
 
-/**
- * ReCaptcha V3 component that loads the reCAPTCHA script and executes verification
- * without requiring user interaction.
- */
 export function ReCaptchaV3({
-  action,
-  onVerify,
-  onError,
+  action = RECAPTCHA_ACTIONS.GENERIC, // Use consistent action name from our constants
   siteKey,
-  className = ''
+  onToken,
+  onError,
+  autoRefresh = false,
+  refreshInterval = 110000, // just under 2 minutes
+  skipForDevelopment = false
 }: ReCaptchaV3Props) {
-  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  
-  // Get site key from props, environment, or URL query parameter
+  const [loadingScript, setLoadingScript] = useState(false);
+  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const executingRef = useRef(false);
+
+  // Check if we're in a development environment and should skip recaptcha
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const shouldSkip = isDevelopment && skipForDevelopment;
+
+  // Get proper site key with improved error handling
   const actualSiteKey = useCallback(() => {
-    // First check props
-    if (siteKey) return siteKey;
-    
-    // Then check environment variables (with helper)
-    const env = getEnv();
-    if (env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
-      return env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
-    }
-    
-    // Try to get from URL if we're in the browser
-    if (typeof window !== 'undefined') {
-      // Make sure window.__env exists
-      if (!window.__env) {
-        window.__env = {};
-      }
-      
-      const urlParams = new URLSearchParams(window.location.search);
-      const urlSiteKey = urlParams.get('recaptchaKey');
-      if (urlSiteKey) {
-        // Save to window.__env for future use
-        window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = urlSiteKey;
-        return urlSiteKey;
-      }
-    }
-    
-    return '';
-  }, [siteKey]);
-
-  // Function to load the reCAPTCHA script
-  const loadReCaptchaScript = useCallback(() => {
-    // Check for a global status object to avoid duplicate script loads
-    if (typeof window !== 'undefined') {
-      // Initialize status object if it doesn't exist
-      if (!window._recaptchaStatus) {
-        window._recaptchaStatus = {
-          loaded: false,
-          error: null,
-          timestamp: Date.now()
-        };
-      }
-      
-      // If already loaded, update local state
-      if (window._recaptchaStatus.loaded && window.grecaptcha) {
-        console.log("reCAPTCHA: Using already loaded script");
-        setLoading(false);
-        return;
-      }
-      
-      // If there was a previous error recently, don't try to load again too quickly
-      if (window._recaptchaStatus.error && (Date.now() - window._recaptchaStatus.timestamp < 5000)) {
-        console.warn("reCAPTCHA: Recent error, waiting before retry");
-        setError(window._recaptchaStatus.error);
-        setLoading(false);
-        return;
-      }
+    // Check if we have a valid site key as a prop
+    if (siteKey && siteKey.length > 10) {
+      return siteKey;
     }
 
-    // Skip if script is already loaded
-    if (window.grecaptcha) {
-      setLoading(false);
-      return;
+    // Check if we need to skip altogether for development
+    if (shouldSkip) {
+      console.log('Skipping reCAPTCHA in development mode');
+      return 'development-skip';
     }
 
-    // Get the site key using our helper
+    // Try to get the site key from environment
+    const envSiteKey = 
+      typeof window !== 'undefined' && window.__env && window.__env.RECAPTCHA_SITE_KEY 
+        ? window.__env.RECAPTCHA_SITE_KEY 
+        : process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+
+    // Check if we're using test keys and log warning if appropriate
+    if (envSiteKey && isUsingTestKeys()) {
+      console.warn(
+        'Using Google reCAPTCHA test keys. These should not be used in production!'
+      );
+    }
+
+    // Check configuration status for more detailed logs
+    if (!envSiteKey || envSiteKey.length < 10) {
+      const configStatus = getRecaptchaConfigStatus();
+      console.error(
+        'ReCAPTCHA configuration issue:',
+        configStatus
+      );
+    }
+
+    return envSiteKey;
+  }, [siteKey, shouldSkip]);
+
+  // Execute reCAPTCHA with improved error handling and retries
+  const executeReCaptcha = useCallback(async (): Promise<string | null> => {
+    if (shouldSkip) {
+      console.log('Skipping reCAPTCHA execution in development mode');
+      return 'development-dummy-token';
+    }
+
     const key = actualSiteKey();
-    
-    // Validate site key
-    if (!key) {
-      const error = new Error('reCAPTCHA site key is missing');
-      console.error("reCAPTCHA: Site key is missing", { 
-        fromProps: !!siteKey,
-        fromEnv: !!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY,
-        fromWindowEnv: typeof window !== 'undefined' && !!window.__env?.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
-      });
+    if (!key || key.length < 10) {
+      const error = new Error(`Cannot execute reCAPTCHA: Invalid site key`);
+      console.error(error);
       setError(error);
       onError?.(error);
-      setLoading(false);
-      
-      if (typeof window !== 'undefined') {
-        window._recaptchaStatus = {
-          loaded: false,
-          error: error,
-          timestamp: Date.now()
-        };
-      }
-      
-      return;
+      return null;
     }
 
-    console.log(`reCAPTCHA: Loading script with site key starting with ${key.substring(0, 5)}`);
-
-    // Create script element
-    const script = document.createElement('script');
-    script.src = `https://www.google.com/recaptcha/api.js?render=${key}`;
-    script.async = true;
-    script.defer = true;
-    
-    // Create a global callback that can be referenced for clean-up
-    window._recaptchaLoadedCallback = () => {
-      console.log("reCAPTCHA: Script loaded successfully");
-      window._recaptchaStatus = {
-        loaded: true,
-        error: null,
-        timestamp: Date.now()
-      };
-      setLoading(false);
-    };
-    
-    // Set up callbacks
-    script.onload = () => {
-      window.grecaptcha.ready(window._recaptchaLoadedCallback || (() => setLoading(false)));
-    };
-
-    script.onerror = (event) => {
-      const error = new Error('Error loading reCAPTCHA script');
-      console.error("reCAPTCHA: Script loading error", event);
-      
-      if (typeof window !== 'undefined') {
-        window._recaptchaStatus = {
-          loaded: false,
-          error: error,
-          timestamp: Date.now()
-        };
-      }
-      
-      setError(error);
-      onError?.(error);
-      setLoading(false);
-    };
-
-    // Add script to document
-    document.head.appendChild(script);
-
-    // Clean up function
-    return () => {
-      // Only remove if it's the one we added
-      if (document.head.contains(script)) {
-        document.head.removeChild(script);
-      }
-    };
-  }, [actualSiteKey, onError, siteKey]);
-
-  // Function to execute reCAPTCHA verification
-  const executeReCaptcha = useCallback(async () => {
-    if (!window.grecaptcha) {
-      const error = new Error('reCAPTCHA has not loaded yet');
-      console.error("reCAPTCHA: grecaptcha object not available");
-      setError(error);
-      onError?.(error);
-      return;
+    // Prevent concurrent executions
+    if (executingRef.current) {
+      console.log('reCAPTCHA execution already in progress, skipping');
+      return null;
     }
 
     try {
-      console.log(`reCAPTCHA: Executing verification for action "${action}"`);
-      
-      // Make sure grecaptcha is ready
-      await new Promise<void>((resolve) => {
-        if (window.grecaptcha) {
-          window.grecaptcha.ready(() => resolve());
-        } else {
-          resolve(); // Resolve anyway to avoid hanging
-        }
-      });
-      
-      const key = actualSiteKey();
-      const token = await window.grecaptcha.execute(key, { action });
-      
-      if (!token) {
-        throw new Error('reCAPTCHA execution returned empty token');
+      executingRef.current = true;
+      console.log(`Executing reCAPTCHA for action: ${action}`);
+
+      if (!window.grecaptcha || !window.grecaptcha.execute) {
+        throw new Error('reCAPTCHA not loaded yet');
       }
+
+      // Use the execute method with sitekey and action
+      const token = await window.grecaptcha.execute(key, { action });
+      console.log(`reCAPTCHA token received: ${token.substring(0, 10)}...`);
       
-      console.log(`reCAPTCHA: Token generated successfully (length: ${token.length})`);
-      onVerify(token);
+      // Only call onToken if token is valid (non-empty string)
+      if (token && typeof token === 'string' && token.length > 0) {
+        onToken?.(token);
+        return token;
+      } else {
+        throw new Error('Received invalid token from reCAPTCHA');
+      }
     } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to execute reCAPTCHA');
+      const error = err instanceof Error ? err : new Error(String(err));
       console.error('reCAPTCHA execution error:', error);
       setError(error);
       onError?.(error);
+      return null;
+    } finally {
+      executingRef.current = false;
     }
-  }, [actualSiteKey, action, onVerify, onError]);
+  }, [action, actualSiteKey, onError, onToken, shouldSkip]);
 
-  // Load script when component mounts
+  // Load the reCAPTCHA script with better error handling
   useEffect(() => {
-    loadReCaptchaScript();
-  }, [loadReCaptchaScript]);
+    if (loaded || loadingScript || shouldSkip) return;
 
-  // Execute reCAPTCHA when script is loaded
-  useEffect(() => {
-    if (!loading && !error) {
-      executeReCaptcha();
-    }
-  }, [loading, error, executeReCaptcha]);
-
-  // Show loading indicator while script is loading
-  if (loading) {
-    return (
-      <div className={`flex items-center justify-center p-2 ${className}`}>
-        <Loader2 className="animate-spin h-4 w-4 mr-2 text-gray-500" />
-        <span className="text-sm text-gray-500">Verifying...</span>
-      </div>
-    );
-  }
-
-  // Show error message if something went wrong
-  if (error) {
-    return (
-      <div className={`text-sm text-red-500 p-2 ${className}`}>
-        Error: {error.message}
-      </div>
-    );
-  }
-
-  // Return null in the successful case - v3 is invisible to users
-  return null;
-}
-
-/**
- * Custom hook to use reCAPTCHA v3 in functional components
- */
-export function useReCaptchaV3() {
-  const [token, setToken] = useState<string | null>(null);
-  const [error, setError] = useState<Error | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [initialized, setInitialized] = useState<boolean>(false);
-
-  // Initialize the reCAPTCHA script on first load
-  useEffect(() => {
-    // Skip if already initialized
-    if (initialized) return;
-
-    // Get site key with our helper
-    const env = getEnv();
-    const siteKey = env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+    const key = actualSiteKey();
     
-    if (!siteKey) {
-      console.error("reCAPTCHA hook: No site key available");
-      setError(new Error('reCAPTCHA site key is missing'));
+    // Skip if we don't have a valid key
+    if (!key || key.length < 10) {
+      console.error(`Cannot load reCAPTCHA: No valid site key available`);
       return;
     }
 
-    // Check if script is already loaded
-    if (typeof window !== 'undefined' && window.grecaptcha) {
-      console.log("reCAPTCHA hook: Script already loaded");
-      setInitialized(true);
+    // Skip if recaptcha is already loaded
+    if (window.grecaptcha) {
+      console.log('reCAPTCHA already loaded, skipping script load');
+      setLoaded(true);
       return;
     }
 
-    // Load script if not already loaded
-    setLoading(true);
-    
-    // Check for existing script tag
-    const existingScript = document.querySelector(`script[src*="recaptcha/api.js"]`);
-    
-    if (existingScript) {
-      console.log("reCAPTCHA hook: Script tag already exists");
-      // Wait for it to be ready
-      if (window.grecaptcha) {
-        window.grecaptcha.ready(() => {
-          setLoading(false);
-          setInitialized(true);
+    const loadScript = async () => {
+      try {
+        setLoadingScript(true);
+        console.log(`Loading reCAPTCHA script with site key: ${key.substring(0, 5)}...`);
+
+        // Create script element
+        const script = document.createElement('script');
+        script.src = `https://www.google.com/recaptcha/api.js?render=${key}`;
+        script.async = true;
+        script.defer = true;
+
+        // Setup load and error handlers
+        const scriptLoaded = new Promise<void>((resolve, reject) => {
+          script.onload = () => {
+            console.log('reCAPTCHA script loaded successfully');
+            resolve();
+          };
+          script.onerror = (event) => {
+            reject(new Error('Failed to load reCAPTCHA script'));
+          };
         });
-      } else {
-        // Set a timeout in case it never loads
+
+        // Add script to document
+        document.head.appendChild(script);
+        
+        // Wait for script to load
+        await scriptLoaded;
+        setLoaded(true);
+        
+        // Wait a bit for grecaptcha to initialize properly
         setTimeout(() => {
-          if (!window.grecaptcha) {
-            setError(new Error('reCAPTCHA failed to initialize'));
-            setLoading(false);
-          }
-        }, 5000);
+          executeReCaptcha().catch(console.error);
+        }, 1000);
+        
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        console.error('Error loading reCAPTCHA:', error);
+        setError(error);
+        onError?.(error);
+      } finally {
+        setLoadingScript(false);
       }
-      return;
-    }
-
-    console.log("reCAPTCHA hook: Loading script");
-    const script = document.createElement('script');
-    script.src = `https://www.google.com/recaptcha/api.js?render=${siteKey}`;
-    script.async = true;
-    script.defer = true;
-
-    script.onload = () => {
-      console.log("reCAPTCHA hook: Script loaded");
-      window.grecaptcha.ready(() => {
-        console.log("reCAPTCHA hook: Ready");
-        setLoading(false);
-        setInitialized(true);
-      });
     };
 
-    script.onerror = () => {
-      console.error("reCAPTCHA hook: Script failed to load");
-      setError(new Error('Failed to load reCAPTCHA script'));
-      setLoading(false);
+    loadScript();
+
+    // Cleanup function
+    return () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+    };
+  }, [loaded, loadingScript, executeReCaptcha, actualSiteKey, onError, shouldSkip]);
+
+  // Setup token refresh if autoRefresh is enabled
+  useEffect(() => {
+    if (!autoRefresh || !loaded || shouldSkip) return;
+
+    const setupRefresh = () => {
+      refreshTimeoutRef.current = setTimeout(async () => {
+        try {
+          await executeReCaptcha();
+        } catch (err) {
+          console.error('Error in reCAPTCHA refresh:', err);
+        } finally {
+          // Schedule next refresh
+          setupRefresh();
+        }
+      }, refreshInterval);
     };
 
-    document.head.appendChild(script);
+    setupRefresh();
 
     return () => {
-      // Cleanup only if we added the script
-      if (document.head.contains(script)) {
-        document.head.removeChild(script);
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
       }
     };
-  }, [initialized]);
+  }, [autoRefresh, loaded, refreshInterval, executeReCaptcha, shouldSkip]);
 
-  // Function to execute reCAPTCHA verification
-  const executeReCaptcha = useCallback(async (action: string) => {
-    setLoading(true);
-    setError(null);
-    
-    // Get site key with our helper
-    const env = getEnv();
-    const siteKey = env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
-    
-    if (!siteKey) {
-      const error = new Error('reCAPTCHA site key is missing');
-      console.error("reCAPTCHA execute: No site key");
-      setError(error);
-      setLoading(false);
+  // Method to manually execute reCAPTCHA
+  const execute = useCallback(async (): Promise<string | null> => {
+    if (!loaded && !shouldSkip) {
+      console.warn('ReCAPTCHA not loaded yet, cannot execute');
       return null;
+    }
+
+    return executeReCaptcha();
+  }, [loaded, executeReCaptcha, shouldSkip]);
+
+  return null; // This component doesn't render anything
+}
+
+// Utility hook to use reCAPTCHA in functional components
+export function useReCaptcha(props: Omit<ReCaptchaV3Props, 'onToken' | 'onError'> = {}) {
+  const [token, setToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const executingRef = useRef(false);
+
+  const handleToken = useCallback((newToken: string) => {
+    setToken(newToken);
+    setLoading(false);
+  }, []);
+
+  const handleError = useCallback((err: Error) => {
+    setError(err);
+    setLoading(false);
+  }, []);
+
+  const execute = useCallback(async (): Promise<string | null> => {
+    // Prevent multiple simultaneous executions
+    if (executingRef.current) {
+      console.log('reCAPTCHA execution already in progress, skipping');
+      return token;
     }
 
     try {
-      if (!window.grecaptcha) {
-        console.error("reCAPTCHA execute: grecaptcha not loaded");
-        throw new Error('reCAPTCHA is not loaded');
+      executingRef.current = true;
+      setLoading(true);
+      setError(null);
+
+      // Directly return a development token if skipping
+      if (props.skipForDevelopment && process.env.NODE_ENV === 'development') {
+        const dummyToken = 'development-dummy-token';
+        setToken(dummyToken);
+        setLoading(false);
+        return dummyToken;
       }
 
-      console.log(`reCAPTCHA execute: Starting for action "${action}"`);
-      
-      // Execute reCAPTCHA with specified action
-      await new Promise<void>((resolve) => {
-        const readyCallback = () => {
-          console.log("reCAPTCHA execute: Ready");
-          resolve();
+      // Create a promise to handle the token
+      return new Promise((resolve) => {
+        // Create one-time handlers for this execution
+        const onTokenCallback = (newToken: string) => {
+          handleToken(newToken);
+          resolve(newToken);
         };
-        
-        if (window.grecaptcha) {
-          window.grecaptcha.ready(readyCallback);
-        } else {
-          console.warn("reCAPTCHA execute: grecaptcha disappeared");
-          setTimeout(resolve, 100); // Resolve anyway to prevent hanging
-        }
-      });
-      
-      console.log("reCAPTCHA execute: Calling execute");
-      const token = await window.grecaptcha.execute(siteKey, { action });
-      
-      if (!token) {
-        console.error("reCAPTCHA execute: Empty token returned");
-        throw new Error('Empty token returned');
-      }
-      
-      console.log(`reCAPTCHA execute: Token generated (length: ${token.length})`);
-      setToken(token);
-      setLoading(false);
-      return token;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('reCAPTCHA failed');
-      console.error("reCAPTCHA execute error:", err);
-      setError(error);
-      setLoading(false);
-      return null;
-    }
-  }, []);
 
-  return { executeReCaptcha, token, error, loading, initialized };
+        const onErrorCallback = (err: Error) => {
+          handleError(err);
+          resolve(null);
+        };
+
+        // Create temporary reCAPTCHA element
+        const recaptchaContainer = document.createElement('div');
+        recaptchaContainer.style.display = 'none';
+        document.body.appendChild(recaptchaContainer);
+
+        // Render temporary component to get token
+        const cleanup = () => {
+          if (recaptchaContainer) {
+            document.body.removeChild(recaptchaContainer);
+          }
+        };
+
+        ReactDOM.render(
+          <ReCaptchaV3
+            {...props}
+            onToken={(token) => {
+              cleanup();
+              onTokenCallback(token);
+            }}
+            onError={(err) => {
+              cleanup();
+              onErrorCallback(err);
+            }}
+          />,
+          recaptchaContainer
+        );
+
+        // Set timeout to cleanup if it takes too long
+        setTimeout(() => {
+          cleanup();
+          onErrorCallback(new Error('reCAPTCHA execution timed out'));
+        }, 10000);
+      });
+    } finally {
+      executingRef.current = false;
+    }
+  }, [props, token, handleToken, handleError]);
+
+  // Create ReCAPTCHA component for continuous token refreshing if needed
+  const RecaptchaComponent = useCallback(
+    () => (
+      <ReCaptchaV3
+        {...props}
+        onToken={handleToken}
+        onError={handleError}
+      />
+    ),
+    [props, handleToken, handleError]
+  );
+
+  return {
+    token,
+    loading,
+    error,
+    execute,
+    RecaptchaComponent,
+  };
 }
 
 /**

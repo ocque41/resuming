@@ -28,7 +28,20 @@ import {
 import { addUserToNotion, addOrUpdateNotionUser } from "@/lib/notion/notion";
 import { sendVerificationEmail, sendConfirmationEmail } from "@/lib/email/resend";
 import { createVerificationToken } from "@/lib/auth/verification";
-import { verifyCaptcha } from "@/lib/captcha";
+import { verifyCaptcha, verifyRecaptchaV3, VerificationResult } from "@/lib/captcha";
+import { 
+  RECAPTCHA_ACTIONS, 
+  getErrorMessageForAction, 
+  scorePassesThreshold 
+} from "@/lib/recaptcha/actions";
+import { 
+  getTrustLevel, 
+  TrustLevel, 
+  logSuspiciousActivity, 
+  getRecommendedVerification,
+  VerificationType 
+} from "@/lib/recaptcha/score-handler";
+import { getRecaptchaConfigStatus, isUsingTestKeys } from "@/lib/recaptcha/domain-check";
 import axios from "axios";
 
 async function logActivity(
@@ -56,7 +69,68 @@ const signInSchema = z.object({
 
 export const signIn = validatedAction(signInSchema, async (data, formData) => {
   const { email, password } = data;
-
+  
+  // Check for captcha token - not required for sign-in but used if provided
+  const captchaToken = formData.get("captchaToken") as string | null;
+  
+  // Perform reCAPTCHA verification if token exists
+  let recaptchaScore = 0;
+  let suspicious = false;
+  
+  if (captchaToken) {
+    try {
+      const verificationResult = await verifyRecaptchaV3(captchaToken, RECAPTCHA_ACTIONS.LOGIN);
+      
+      if (verificationResult.success) {
+        recaptchaScore = verificationResult.score || 0;
+        console.log(`ReCAPTCHA verified for login with score: ${recaptchaScore}`);
+        
+        // Get trust level from score
+        const trustLevel = getTrustLevel(recaptchaScore);
+        
+        // Determine if login attempt is suspicious
+        suspicious = trustLevel === TrustLevel.LOW || trustLevel === TrustLevel.VERY_LOW;
+        
+        // Get recommended verification type based on score
+        const verificationType = getRecommendedVerification(recaptchaScore, RECAPTCHA_ACTIONS.LOGIN);
+        
+        // For suspicious logins, you might want to:
+        // 1. Implement rate limiting
+        // 2. Send login notification emails
+        // 3. Require additional verification
+        if (suspicious) {
+          // Log suspicious activity for security monitoring
+          logSuspiciousActivity(
+            RECAPTCHA_ACTIONS.LOGIN, 
+            recaptchaScore, 
+            undefined, // IP would go here in a real implementation
+            email
+          );
+          
+          console.warn(`Suspicious login attempt for ${email} with score ${recaptchaScore}`);
+          
+          // For now, we'll still allow the login but with enhanced monitoring
+          // In production, you might enforce additional verification steps
+          if (verificationType === VerificationType.BLOCK) {
+            return {
+              success: false,
+              message: "Login blocked due to security concerns. Please contact support.",
+            };
+          }
+        }
+      } else {
+        console.warn(`ReCAPTCHA verification failed for login attempt: ${email}`);
+        // Failed verification will be treated as suspicious
+        suspicious = true;
+      }
+    } catch (error) {
+      console.error('Error verifying reCAPTCHA:', error);
+    }
+  }
+  
+  // Continue with login flow, even if reCAPTCHA verification fails
+  // This ensures legitimate users can still log in if reCAPTCHA has issues
+  
   const userWithTeam = await db
     .select({
       user: users,
@@ -84,6 +158,13 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
   );
 
   if (!isPasswordValid) {
+    // For failed logins, consider the reCAPTCHA score in your security logic
+    if (suspicious) {
+      // If the login attempt was already suspicious and the password is wrong,
+      // you might want to implement stricter measures here
+      console.error(`Suspicious failed login attempt for ${email}`);
+    }
+    
     return {
       error: 'Invalid email or password. Please try again.',
       email,
@@ -102,6 +183,15 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
     return createCheckoutSession({ team: foundTeam, priceId });
   }
 
+  // For successful logins with suspicious scores, you might want to:
+  // 1. Set a shorter session expiry
+  // 2. Apply additional monitoring
+  // 3. Require step-up authentication for sensitive operations
+  if (suspicious) {
+    console.log(`Allowing suspicious login for ${email} but with extra monitoring`);
+    // Here you would implement your enhanced security measures
+  }
+
   redirect('/dashboard');
 });
 
@@ -113,53 +203,71 @@ const signUpSchema = z.object({
 
 export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   const { email, password, inviteId } = data;
-  const captchaToken = formData.get("captchaToken") as string;
+  const captchaToken = formData.get("captchaToken") as string | null;
 
-  // Verify CAPTCHA using our enhanced verifyCaptcha function
-  if (!captchaToken) {
-    return {
-      error: "CAPTCHA verification required",
-      email,
-      password,
-    };
-  }
+  // Log reCAPTCHA configuration status for debugging
+  const configStatus = getRecaptchaConfigStatus();
+  console.log("reCAPTCHA config during signup:", configStatus);
 
-  try {
-    // Use the enhanced verifyCaptcha function with v3 support
-    // Require a minimum score of 0.4 for sign-up (adjust as needed)
-    const captchaResult = await verifyCaptcha(captchaToken, 0.4);
-    
-    console.log("CAPTCHA verification result:", captchaResult);
-    
-    if (!captchaResult.success) {
-      if (captchaResult.score !== undefined) {
-        // This is a v3 response with a score that was too low
-        console.warn(`reCAPTCHA v3 score too low: ${captchaResult.score}`);
-        return {
-          error: `CAPTCHA verification failed: Score too low (${captchaResult.score.toFixed(2)}). Please try again or contact support if the problem persists.`,
-          email,
-          password,
-        };
-      } else {
-        // This is a v2 failure or an error
-        return {
-          error: captchaResult.message || "CAPTCHA verification failed. Please try again.",
-          email,
-          password,
-        };
+  // Perform reCAPTCHA verification
+  let recaptchaScore = 0;
+  let recaptchaVerified = false;
+  let recaptchaError = false;
+  
+  if (captchaToken) {
+    try {
+      // Verify the captcha token with the specific signup action
+      const verificationResult = await verifyRecaptchaV3(captchaToken, RECAPTCHA_ACTIONS.SIGNUP);
+      recaptchaVerified = verificationResult.success;
+      recaptchaScore = verificationResult.score || 0;
+      
+      if (isUsingTestKeys()) {
+        console.warn('Using reCAPTCHA test keys in signup flow. This is not secure for production.');
       }
+      
+      if (recaptchaVerified) {
+        console.log(`ReCAPTCHA verified for signup with score: ${recaptchaScore}`);
+        
+        // Get trust level from score for more detailed analytics
+        const trustLevel = getTrustLevel(recaptchaScore);
+        console.log(`Signup trust level: ${trustLevel}`);
+        
+        // If score doesn't pass threshold, log but still allow signup with a warning
+        if (!scorePassesThreshold(recaptchaScore, RECAPTCHA_ACTIONS.SIGNUP)) {
+          console.warn(`Signup allowed despite low reCAPTCHA score: ${recaptchaScore}`);
+          // Log suspicious activity for monitoring
+          logSuspiciousActivity(RECAPTCHA_ACTIONS.SIGNUP, recaptchaScore);
+        }
+        
+        // Get recommended verification type based on score
+        const verificationType = getRecommendedVerification(recaptchaScore, RECAPTCHA_ACTIONS.SIGNUP);
+        
+        // For this implementation, we'll only reject completely if the recommendation is to block
+        if (verificationType === VerificationType.BLOCK) {
+          return {
+            success: false,
+            message: getErrorMessageForAction(RECAPTCHA_ACTIONS.SIGNUP),
+          };
+        }
+        
+        // For other verification types, we'll just log them for now
+        // In a full implementation, you would handle each verification type differently
+        if (verificationType !== VerificationType.NONE) {
+          console.log(`Recommended additional verification for signup: ${verificationType}`);
+        }
+      } else {
+        console.error('ReCAPTCHA verification failed for signup');
+        recaptchaError = true;
+        
+        // Log suspicious activity but continue with signup
+        logSuspiciousActivity(RECAPTCHA_ACTIONS.SIGNUP, 0);
+      }
+    } catch (error) {
+      console.error('Error verifying reCAPTCHA:', error);
+      recaptchaError = true;
     }
-    
-    // Log successful verification
-    console.log("CAPTCHA verification successful");
-    if (captchaResult.score !== undefined) {
-      console.log(`CAPTCHA score: ${captchaResult.score}, action: ${captchaResult.action || 'none'}`);
-    }
-    
-  } catch (error) {
-    console.error("CAPTCHA verification error:", error);
-    // Continue with sign up even if CAPTCHA verification has an issue
-    // We don't want to block legitimate users if our CAPTCHA service has problems
+  } else {
+    console.warn('No captchaToken provided for signup');
   }
 
   const existingUser = await db

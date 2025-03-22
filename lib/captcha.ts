@@ -1,6 +1,7 @@
 import axios from 'axios';
+import { getMinScoreForAction } from './recaptcha/actions';
 
-type VerificationResult = {
+export type VerificationResult = {
   success: boolean;
   message: string;
   score?: number;
@@ -19,11 +20,13 @@ const TEST_SECRET_KEY = '6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe';
  * 
  * @param captchaToken The token from the reCAPTCHA client-side component
  * @param minScore Minimum score to accept for reCAPTCHA v3 (0.0 to 1.0)
+ * @param expectedAction Optional expected action name for additional security
  * @returns Result object with success status, message, and details
  */
 export async function verifyCaptcha(
   captchaToken: string | null | undefined,
-  minScore: number = 0.5
+  minScore: number = 0.5,
+  expectedAction?: string
 ): Promise<VerificationResult> {
   // Return error if no token
   if (!captchaToken) {
@@ -57,8 +60,12 @@ export async function verifyCaptcha(
       success: true,
       message: 'CAPTCHA verification successful (using test keys)',
       score: 1.0, // Test key always returns high score
-      action: 'test',
-      details: { hostname: 'testkey.google.com', challenge_ts: new Date().toISOString() }
+      action: expectedAction || 'test',
+      details: { 
+        hostname: 'testkey.google.com', 
+        challenge_ts: new Date().toISOString(),
+        using_test_key: true
+      }
     };
   }
 
@@ -68,21 +75,9 @@ export async function verifyCaptcha(
     params.append('secret', secretKey);
     params.append('response', captchaToken);
     
-    // Get the client's IP if available - but this usually won't work on the server
-    // Only try in client environments
-    if (typeof window !== 'undefined') {
-      try {
-        const request = await fetch('https://api.ipify.org/?format=json');
-        const data = await request.json();
-        if (data.ip) {
-          params.append('remoteip', data.ip);
-        }
-      } catch (error) {
-        console.warn('verifyCaptcha: Failed to get client IP', error);
-        // Proceed without IP - this is optional anyway
-      }
-    }
-
+    // Add remote IP if we have one from request headers
+    // This will be handled by the caller if available
+    
     // Send verification request to Google
     console.log('verifyCaptcha: Sending verification request to Google');
     const response = await axios.post(
@@ -133,8 +128,27 @@ export async function verifyCaptcha(
       // This is a v3 response with a score
       console.log(`verifyCaptcha: v3 verification - score: ${data.score}, action: ${data.action}`);
       
-      if (data.score < minScore) {
-        console.warn(`verifyCaptcha: v3 score too low (${data.score} < ${minScore})`);
+      // If an expected action is provided, verify it matches
+      if (expectedAction && data.action && data.action !== expectedAction) {
+        console.warn(`verifyCaptcha: Action mismatch, expected '${expectedAction}' but got '${data.action}'`);
+        return {
+          success: false,
+          message: `CAPTCHA verification failed: Action mismatch`,
+          score: data.score,
+          action: data.action,
+          details: {
+            ...data,
+            expected_action: expectedAction
+          }
+        };
+      }
+      
+      // If action-specific minimum score is available, use it instead of the provided minScore
+      const actionBasedMinScore = data.action ? getMinScoreForAction(data.action) : minScore;
+      const finalMinScore = Math.max(actionBasedMinScore, minScore);
+      
+      if (data.score < finalMinScore) {
+        console.warn(`verifyCaptcha: v3 score too low (${data.score} < ${finalMinScore})`);
         return {
           success: false,
           message: `CAPTCHA score too low: ${data.score.toFixed(2)}`,
@@ -185,6 +199,39 @@ export async function verifyCaptcha(
       success: false,
       message: errorMessage,
       details: { error: error instanceof Error ? error.message : String(error) }
+    };
+  }
+}
+
+/**
+ * Simplified wrapper around verifyCaptcha for v3 with action verification
+ * 
+ * @param token The reCAPTCHA token
+ * @param action The expected action name
+ * @returns VerificationResult object with success status, score and more details
+ */
+export async function verifyRecaptchaV3(
+  token: string | null | undefined, 
+  action: string
+): Promise<VerificationResult> {
+  if (!token) {
+    return {
+      success: false,
+      message: 'No reCAPTCHA token provided',
+      score: 0
+    };
+  }
+  
+  try {
+    // Use the minimum score for this specific action
+    const minScore = getMinScoreForAction(action);
+    return await verifyCaptcha(token, minScore, action);
+  } catch (error) {
+    console.error('Error in verifyRecaptchaV3:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Unknown error during reCAPTCHA verification',
+      score: 0
     };
   }
 } 
