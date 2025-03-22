@@ -69,6 +69,33 @@ export function ReCaptchaProvider({
   const isDevDomain = isDevelopmentDomain();
   const shouldSkip = skipForDevelopment && (process.env.NODE_ENV === 'development' || isDevDomain);
   
+  // Debug logging for configuration status
+  useEffect(() => {
+    console.log("reCAPTCHA Configuration Status:", {
+      hasSiteKey: configStatus.hasSiteKey,
+      hasSecretKey: configStatus.hasSecretKey,
+      domain: configStatus.domain,
+      usingTestKeys: configStatus.usingTestKeys,
+      isDevDomain,
+      shouldSkipVerification: shouldSkip,
+      environment: process.env.NODE_ENV
+    });
+    
+    if (!configStatus.hasSiteKey) {
+      console.warn("reCAPTCHA Site Key is missing. Check if NEXT_PUBLIC_RECAPTCHA_SITE_KEY environment variable is set.");
+    }
+    
+    if (!configStatus.hasSecretKey) {
+      console.warn("reCAPTCHA Secret Key is missing. Check if RECAPTCHA_SECRET_KEY environment variable is set.");
+    }
+    
+    // Try to determine the source of site key
+    console.log("Site Key Sources:", {
+      fromEnvVar: process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ? "✅ Present" : "❌ Missing",
+      fromWindow: typeof window !== 'undefined' && window.__env?.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ? "✅ Present" : "❌ Missing",
+    });
+  }, [configStatus, isDevDomain, shouldSkip]);
+  
   // Use our reCAPTCHA hook
   const {
     token,
@@ -129,6 +156,7 @@ export function ReCaptchaProvider({
     if (!isConfigured && !shouldSkip) {
       setVerificationStatus('error');
       setVerificationMessage("reCAPTCHA is not properly configured");
+      console.error("reCAPTCHA configuration error: Site key or secret key is missing");
     } else if (shouldSkip) {
       setVerificationStatus('warning');
       setVerificationMessage("reCAPTCHA verification skipped in development");
@@ -136,10 +164,13 @@ export function ReCaptchaProvider({
       setVerificationStatus('warning');
       setVerificationMessage("Using test keys in production. Not secure for real users.");
     } else {
-      setVerificationStatus('idle');
-      setVerificationMessage("Verification ready");
+      // Only set to idle if we don't already have a token
+      if (!token) {
+        setVerificationStatus('idle');
+        setVerificationMessage("Verification ready");
+      }
     }
-  }, [isConfigured, shouldSkip, configStatus.usingTestKeys]);
+  }, [isConfigured, shouldSkip, configStatus.usingTestKeys, token]);
 
   // Execute verification with optional custom action
   const executeVerification = useCallback(async (customAction?: string): Promise<string | null> => {
@@ -151,13 +182,16 @@ export function ReCaptchaProvider({
     }
     
     if (!isConfigured) {
-      console.error("Cannot execute reCAPTCHA - not configured properly");
+      console.error("Cannot execute reCAPTCHA - not configured properly", {
+        hasSiteKey: configStatus.hasSiteKey,
+        hasSecretKey: configStatus.hasSecretKey
+      });
       setVerificationStatus('error');
       setVerificationMessage("reCAPTCHA is not properly configured");
       return null;
     }
     
-    // If token exists and is not expired, return it
+    // If token exists and is not expired, return it without changing state
     if (token && tokenExpiryTime && Date.now() < tokenExpiryTime) {
       console.log("Using existing valid reCAPTCHA token");
       return token;
@@ -167,29 +201,40 @@ export function ReCaptchaProvider({
     setVerificationStatus('loading');
     setVerificationMessage("Verifying...");
     
-    try {
-      // If a custom action is provided, update the action
-      if (customAction && customAction !== action) {
-        setAction(customAction);
-      }
-      
-      const newToken = await execute();
-      if (newToken) {
-        setVerificationStatus('success');
-        setVerificationMessage("Verification successful");
-        return newToken;
-      } else {
+    let retries = 0;
+    const maxRetries = 2;
+    
+    const attemptExecution = async (): Promise<string | null> => {
+      try {
+        // If a custom action is provided, update the action
+        if (customAction && customAction !== action) {
+          setAction(customAction);
+        }
+        
+        const newToken = await execute();
+        if (newToken) {
+          setVerificationStatus('success');
+          setVerificationMessage("Verification successful");
+          return newToken;
+        }
+        
+        throw new Error("No token received");
+      } catch (err) {
+        if (retries < maxRetries) {
+          retries++;
+          console.log(`reCAPTCHA retry attempt ${retries}/${maxRetries}`);
+          return await attemptExecution();
+        }
+        
+        console.error("reCAPTCHA verification error after retries:", err);
         setVerificationStatus('error');
-        setVerificationMessage("Verification failed");
+        setVerificationMessage(err instanceof Error ? err.message : "Verification failed");
         return null;
       }
-    } catch (err) {
-      console.error("reCAPTCHA verification error:", err);
-      setVerificationStatus('error');
-      setVerificationMessage(err instanceof Error ? err.message : "Verification failed");
-      return null;
-    }
-  }, [shouldSkip, isConfigured, token, tokenExpiryTime, action, execute]);
+    };
+    
+    return attemptExecution();
+  }, [shouldSkip, isConfigured, token, tokenExpiryTime, action, execute, configStatus]);
 
   // Reset verification state
   const resetVerification = useCallback(() => {

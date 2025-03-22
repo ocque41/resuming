@@ -318,9 +318,16 @@ function AuthForm({ mode }: { mode: AuthMode }) {
               <ReCaptchaFeedback 
                 status={verificationStatus}
                 message={verificationMessage}
-                score={verificationScore}
-                showScore={!!verificationScore && verificationStatus === 'success'}
                 onRetry={() => executeVerification(RECAPTCHA_ACTIONS.SIGNUP)}
+                onSkip={() => {
+                  // Allow bypassing reCAPTCHA if it's not configured
+                  setCustomMessage(
+                    "Continuing without reCAPTCHA verification. This may reduce security.", 
+                    "warning"
+                  );
+                  // Set a fake token for development
+                  formAction(new FormData());
+                }}
               />
             </div>
             
@@ -427,6 +434,7 @@ export function Login({ mode = "signin" }: { mode?: AuthMode }) {
           position="bottom-right"
           variant="dark"
           size="small"
+          minimalist
         />
       </div>
     </div>

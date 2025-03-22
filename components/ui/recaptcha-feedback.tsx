@@ -1,152 +1,122 @@
 "use client";
 
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle, AlertCircle, Loader2, AlertTriangle, Shield } from 'lucide-react';
-
-type VerificationStatus = 'idle' | 'loading' | 'success' | 'error' | 'warning';
+import { AlertCircle, Shield, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { cn } from '@/lib/utils';
 
 interface ReCaptchaFeedbackProps {
-  status: VerificationStatus;
+  status: 'idle' | 'loading' | 'success' | 'error' | 'warning';
   message?: string;
-  score?: number;
-  showScore?: boolean;
   className?: string;
+  showRetry?: boolean;
   onRetry?: () => void;
-  compact?: boolean;
+  onSkip?: () => void;
 }
 
 /**
  * ReCaptcha Feedback Component
  * 
- * This component provides visual feedback for reCAPTCHA verification states.
- * It shows different icons and messages based on the verification status.
+ * Displays the current status of reCAPTCHA verification with appropriate
+ * icons and messages. Provides a retry option when verification fails.
  */
 export default function ReCaptchaFeedback({
-  status = 'idle',
+  status,
   message,
-  score,
-  showScore = false,
-  className = '',
+  className,
+  showRetry = true,
   onRetry,
-  compact = false,
+  onSkip
 }: ReCaptchaFeedbackProps) {
-  // Get the appropriate icon based on status
-  const getStatusIcon = () => {
-    switch (status) {
-      case 'loading':
-        return <Loader2 className="h-4 w-4 text-[#B4916C] animate-spin" />;
-      case 'success':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
-      case 'error':
-        return <AlertCircle className="h-4 w-4 text-red-500" />;
-      case 'warning':
-        return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
-      case 'idle':
-      default:
-        return <Shield className="h-4 w-4 text-[#B4916C]" />;
+  // No icon for idle status
+  if (status === 'idle') return null;
+
+  // Map status to icon and colors
+  const statusConfig = {
+    loading: {
+      icon: <Loader2 className="h-4 w-4 animate-spin" />,
+      bg: 'bg-blue-50',
+      text: 'text-blue-700',
+      border: 'border-blue-200'
+    },
+    success: {
+      icon: <CheckCircle className="h-4 w-4" />,
+      bg: 'bg-green-50',
+      text: 'text-green-700',
+      border: 'border-green-200'
+    },
+    error: {
+      icon: <AlertCircle className="h-4 w-4" />,
+      bg: 'bg-red-50',
+      text: 'text-red-700',
+      border: 'border-red-200'
+    },
+    warning: {
+      icon: <AlertTriangle className="h-4 w-4" />,
+      bg: 'bg-yellow-50',
+      text: 'text-yellow-700',
+      border: 'border-yellow-200'
+    },
+    idle: {
+      icon: <Shield className="h-4 w-4" />,
+      bg: 'bg-gray-50',
+      text: 'text-gray-700',
+      border: 'border-gray-200'
     }
   };
 
-  // Get the appropriate message based on status
-  const getStatusMessage = () => {
-    if (message) return message;
-    
-    switch (status) {
-      case 'loading':
-        return 'Verifying...';
-      case 'success':
-        return 'Verification successful';
-      case 'error':
-        return 'Verification failed';
-      case 'warning':
-        return 'Additional verification may be required';
-      case 'idle':
-      default:
-        return 'Verification required';
-    }
-  };
+  const config = statusConfig[status];
 
-  // Get color class based on status
-  const getColorClass = () => {
-    switch (status) {
-      case 'success':
-        return 'text-green-500 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800/30';
-      case 'error':
-        return 'text-red-500 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/30';
-      case 'warning':
-        return 'text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800/30';
-      case 'loading':
-        return 'text-[#B4916C] bg-[#B4916C]/5 border-[#B4916C]/20';
-      case 'idle':
-      default:
-        return 'text-[#F9F6EE] bg-[#111111] border-[#222222]';
-    }
-  };
-
-  // Get score color based on value
-  const getScoreColor = (score: number) => {
-    if (score >= 0.8) return 'text-green-500';
-    if (score >= 0.5) return 'text-[#B4916C]';
-    if (score >= 0.3) return 'text-yellow-500';
-    return 'text-red-500';
-  };
-
-  // Display score as percentage
-  const formatScore = (score: number) => {
-    return `${Math.round(score * 100)}%`;
-  };
-
-  if (compact) {
-    // Compact version - just the icon and minimal text
-    return (
-      <motion.div 
-        className={`inline-flex items-center space-x-1.5 px-2 py-1 rounded-md text-xs ${getColorClass()} ${className}`}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.2 }}
-      >
-        {getStatusIcon()}
-        <span>{status === 'loading' ? 'Verifying' : ''}</span>
-      </motion.div>
-    );
-  }
+  // Configuration error specific guidance
+  const isConfigError = status === 'error' && message === 'reCAPTCHA is not properly configured';
 
   return (
-    <AnimatePresence mode="wait">
-      <motion.div 
-        key={status}
-        className={`flex items-center gap-2 p-2 text-sm border rounded-md ${getColorClass()} ${className}`}
-        initial={{ opacity: 0, y: 5 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -5 }}
-        transition={{ duration: 0.2 }}
-      >
-        <div className="flex-shrink-0">
-          {getStatusIcon()}
-        </div>
+    <motion.div
+      initial={{ opacity: 0, y: 5 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={cn(
+        'rounded-md p-2.5 flex items-start space-x-2 text-sm border', 
+        config.bg, 
+        config.text, 
+        config.border,
+        className
+      )}
+    >
+      <span className="mt-0.5">{config.icon}</span>
+      <div className="flex-1">
+        <p className="font-medium">{message || status}</p>
         
-        <div className="flex-grow min-w-0">
-          <p className="text-xs font-medium truncate">
-            {getStatusMessage()}
-          </p>
-          
-          {showScore && score !== undefined && (
-            <p className={`text-xs ${getScoreColor(score)}`}>
-              Score: {formatScore(score)}
-            </p>
-          )}
-        </div>
-        
-        {status === 'error' && onRetry && (
-          <button 
-            onClick={onRetry}
-            className="text-xs text-[#B4916C] hover:text-[#A3815B] ml-auto"
-          >
-            Retry
-          </button>
+        {isConfigError && (
+          <div className="mt-1.5 text-xs text-gray-600">
+            <p className="mb-1">The reCAPTCHA service is not properly configured. This could be due to:</p>
+            <ul className="list-disc pl-4 space-y-0.5">
+              <li>Missing reCAPTCHA API keys</li>
+              <li>Incorrect domain configuration</li>
+              <li>Network issues preventing API communication</li>
+            </ul>
+          </div>
         )}
-      </motion.div>
-    </AnimatePresence>
+        
+        {(showRetry && status === 'error') && (
+          <div className="mt-2 flex space-x-2">
+            <button 
+              onClick={onRetry}
+              className="text-xs font-medium bg-white hover:bg-gray-50 text-gray-700 px-2 py-1 rounded border border-gray-300 transition-colors"
+            >
+              Retry Verification
+            </button>
+            
+            {isConfigError && onSkip && (
+              <button 
+                onClick={onSkip}
+                className="text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded border border-gray-300 transition-colors"
+              >
+                Continue Without Verification
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </motion.div>
   );
 } 

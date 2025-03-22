@@ -16,6 +16,7 @@ interface ReCaptchaBadgeProps {
   variant?: BadgeVariant;
   size?: BadgeSize;
   showInfoIcon?: boolean;
+  minimalist?: boolean;
   className?: string;
 }
 
@@ -32,32 +33,12 @@ export default function ReCaptchaBadge({
   variant = 'dark',
   size = 'small',
   showInfoIcon = true,
+  minimalist = false,
   className = '',
 }: ReCaptchaBadgeProps) {
   const [expanded, setExpanded] = useState(false);
   const [dismissed, setDismissed] = useState(false);
-
-  if (dismissed) {
-    // If dismissed, show only a minimal indicator
-    return (
-      <motion.div
-        className={cn(
-          'fixed z-50 cursor-pointer',
-          position === 'bottom-right' && 'bottom-2 right-2',
-          position === 'bottom-left' && 'bottom-2 left-2',
-          position === 'top-right' && 'top-2 right-2',
-          position === 'top-left' && 'top-2 left-2',
-          className
-        )}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 0.6 }}
-        whileHover={{ opacity: 1 }}
-        onClick={() => setDismissed(false)}
-      >
-        <Shield size={16} className="text-[#B4916C]" />
-      </motion.div>
-    );
-  }
+  const [hovered, setHovered] = useState(false);
 
   // Position classes
   const positionClasses = {
@@ -87,6 +68,83 @@ export default function ReCaptchaBadge({
     large: 18,
   };
 
+  // If dismissed, show only a minimal indicator
+  if (dismissed) {
+    return (
+      <motion.div
+        className={cn(
+          'fixed z-50 cursor-pointer',
+          positionClasses[position],
+          className
+        )}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 0.4 }}
+        whileHover={{ opacity: 1 }}
+        onClick={() => setDismissed(false)}
+      >
+        <Shield size={16} className="text-[#B4916C]" />
+      </motion.div>
+    );
+  }
+
+  // If minimalist mode is enabled, show a very minimal version
+  if (minimalist) {
+    return (
+      <motion.div
+        className={cn(
+          'fixed z-50 cursor-pointer',
+          positionClasses[position],
+          className
+        )}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 0.4 }}
+        whileHover={{ opacity: 1 }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        <div className="relative">
+          <Shield size={16} className="text-[#B4916C]" />
+          
+          {/* Show the attribution text on hover */}
+          {hovered && (
+            <motion.div
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={cn(
+                'absolute rounded-md shadow-md border p-2 whitespace-nowrap text-xs',
+                position.includes('right') ? 'right-0' : 'left-0',
+                position.includes('top') ? 'bottom-full mb-2' : 'top-full mt-2',
+                colorClasses[variant]
+              )}
+            >
+              <p className="mb-1">Protected by reCAPTCHA</p>
+              <div className="flex gap-1 text-[10px] opacity-80">
+                <Link 
+                  href="https://policies.google.com/privacy" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-[#B4916C] hover:underline"
+                >
+                  Privacy
+                </Link>
+                <span>-</span>
+                <Link 
+                  href="https://policies.google.com/terms" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-[#B4916C] hover:underline"
+                >
+                  Terms
+                </Link>
+              </div>
+            </motion.div>
+          )}
+        </div>
+      </motion.div>
+    );
+  }
+
+  // Standard badge implementation
   return (
     <motion.div
       className={cn(
