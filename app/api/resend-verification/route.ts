@@ -5,6 +5,7 @@ import { db } from '@/lib/db/drizzle';
 import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { updateUserVerificationStatus } from '@/lib/notion/notion';
+import { verificationEmailLimiter } from '@/lib/rate-limiting/upstash';
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,6 +16,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Email is required' },
         { status: 400 }
+      );
+    }
+    
+    // Apply rate limiting based on email
+    const rateLimitResult = await verificationEmailLimiter(email);
+    
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { 
+          error: rateLimitResult.error || 'Too many verification requests. Please try again later.',
+          reset: rateLimitResult.reset.toISOString(),
+          remaining: 0
+        },
+        { status: 429 }
       );
     }
     
@@ -65,7 +80,11 @@ export async function POST(request: NextRequest) {
     }
     
     return NextResponse.json(
-      { message: 'Verification email sent successfully' },
+      { 
+        message: 'Verification email sent successfully',
+        remaining: rateLimitResult.remaining,
+        reset: rateLimitResult.reset.toISOString()
+      },
       { status: 200 }
     );
   } catch (error) {

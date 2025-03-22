@@ -25,7 +25,7 @@ import {
   validatedAction,
   validatedActionWithUser,
 } from '@/lib/auth/middleware';
-import { addUserToNotion } from "@/lib/notion/notion";
+import { addUserToNotion, addOrUpdateNotionUser } from "@/lib/notion/notion";
 import { sendVerificationEmail, sendConfirmationEmail } from "@/lib/email/resend";
 import { createVerificationToken } from "@/lib/auth/verification";
 import axios from "axios";
@@ -190,12 +190,15 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     // Continue with sign up even if email sending fails
   }
 
-  // Add user to Notion
+  // Add user to Notion - this is MANDATORY, not optional
   try {
-    await addUserToNotion(email, "Free");
+    // Use addOrUpdateNotionUser with default Free plan and not subscribed to newsletter
+    await addOrUpdateNotionUser(email, "Free", false, "Pending");
+    console.log("Successfully added user to Notion:", email);
   } catch (error) {
     console.error("Failed to add user to Notion:", error);
-    // Continue with sign up even if Notion integration fails
+    // Log the error but continue with sign-up process
+    // We don't want to block the user registration if Notion has issues
   }
 
   let teamId: number;

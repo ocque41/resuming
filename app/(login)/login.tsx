@@ -133,6 +133,18 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
             }}
           />
           {captchaError && <div className="text-red-500 text-sm mt-2">{captchaError}</div>}
+          
+          <div className="text-sm text-[#F9F6EE] mt-4 text-center max-w-xs">
+            By signing up you are agreeing to our{" "}
+            <a 
+              href="https://chromad.vercel.app/docs/products/resuming/privacy-policy" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-[#F9F6EE] underline hover:text-[#B4916C] transition-colors"
+            >
+              Terms of Service and Policies
+            </a>
+          </div>
         </div>
       )}
 

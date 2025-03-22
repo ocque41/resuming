@@ -8,6 +8,109 @@ const notion = new Client({
 const databaseId = process.env.NOTION_DB;
 
 /**
+ * Adds a new user email to the Notion database or updates an existing one
+ * @param email - User's email
+ * @param planName - User's plan name (Free or Moonlighting)
+ * @param isSubscribed - Whether the user is subscribed to the newsletter
+ * @param status - Email verification status
+ * @returns result of the database operation
+ */
+export async function addOrUpdateNotionUser(
+  email: string,
+  planName: string = 'Free',
+  isSubscribed: boolean = false,
+  status: 'Pending' | 'Verified' = 'Pending'
+) {
+  try {
+    if (!databaseId) {
+      throw new Error('Notion database ID not configured');
+    }
+
+    // First check if the user already exists
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      filter: {
+        property: 'Email',
+        title: {
+          equals: email,
+        },
+      },
+    });
+
+    // User exists, update their record
+    if (response.results.length > 0) {
+      const pageId = response.results[0].id;
+      
+      const updateResponse = await notion.pages.update({
+        page_id: pageId,
+        properties: {
+          Plan: {
+            select: {
+              name: planName,
+            },
+          },
+          Status: {
+            select: {
+              name: status,
+            },
+          },
+          Subscribed: {
+            checkbox: isSubscribed,
+          },
+          // Don't update the Joined date since it's already set
+        },
+      });
+
+      return updateResponse;
+    } 
+    // User doesn't exist, create new record
+    else {
+      const createResponse = await notion.pages.create({
+        parent: {
+          database_id: databaseId,
+        },
+        properties: {
+          Email: {
+            title: [
+              {
+                text: {
+                  content: email,
+                },
+              },
+            ],
+          },
+          Plan: {
+            select: {
+              name: planName,
+            },
+          },
+          Status: {
+            select: {
+              name: status,
+            },
+          },
+          Subscribed: {
+            checkbox: isSubscribed,
+          },
+          Joined: {
+            date: {
+              start: new Date().toISOString(),
+            },
+          },
+        },
+      });
+
+      return createResponse;
+    }
+  } catch (error) {
+    console.error('Error adding/updating user in Notion:', error);
+    // Don't throw the error to avoid breaking the flow
+    // Just log it and return null
+    return null;
+  }
+}
+
+/**
  * Adds a new user email to the Notion database
  * @param email - User's email
  * @param planName - User's plan name (Free or Moonlighting)
@@ -19,50 +122,8 @@ export async function addUserToNotion(
   planName: string = 'Free',
   status: 'Pending' | 'Verified' = 'Pending'
 ) {
-  try {
-    if (!databaseId) {
-      throw new Error('Notion database ID not configured');
-    }
-
-    const response = await notion.pages.create({
-      parent: {
-        database_id: databaseId,
-      },
-      properties: {
-        Email: {
-          title: [
-            {
-              text: {
-                content: email,
-              },
-            },
-          ],
-        },
-        Plan: {
-          select: {
-            name: planName,
-          },
-        },
-        Status: {
-          select: {
-            name: status,
-          },
-        },
-        Joined: {
-          date: {
-            start: new Date().toISOString(),
-          },
-        },
-      },
-    });
-
-    return response;
-  } catch (error) {
-    console.error('Error adding user to Notion:', error);
-    // Don't throw the error to avoid breaking the sign-up flow
-    // Just log it and return null
-    return null;
-  }
+  // Use the more comprehensive function
+  return addOrUpdateNotionUser(email, planName, false, status);
 }
 
 /**

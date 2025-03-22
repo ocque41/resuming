@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateVerificationToken, markEmailAsVerified } from '@/lib/auth/verification';
 import { updateUserVerificationStatus } from '@/lib/notion/notion';
+import { verificationEmailLimiter } from '@/lib/rate-limiting/upstash';
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,6 +12,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Token and email are required' },
         { status: 400 }
+      );
+    }
+    
+    // Apply moderate rate limiting based on email for verification attempts
+    // Less strict than sending emails, but still protects against brute force
+    const rateLimitResult = await verificationEmailLimiter(email + ':verify');
+    
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { 
+          error: rateLimitResult.error || 'Too many verification attempts. Please try again later.',
+          reset: rateLimitResult.reset.toISOString()
+        },
+        { status: 429 }
       );
     }
     

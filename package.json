@@ -69,6 +69,7 @@
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
     "@types/uuid": "^10.0.0",
+    "@upstash/redis": "^1.34.6",
     "ai": "^4.1.34",
     "antd": "^5.23.3",
     "axios": "^1.8.2",
