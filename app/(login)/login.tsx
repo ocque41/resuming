@@ -10,21 +10,16 @@ import { Loader } from "lucide-react";
 import Image from "next/image";
 import { Card, CardHeader, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
 import { useState, useRef, useEffect } from "react";
-import ReCAPTCHA from "react-google-recaptcha";
+import ReCAPTCHAWrapper from "@/components/ui/recaptcha";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { signIn, signUp } from "./actions";
 import { ActionState } from "@/lib/auth/middleware";
 
-// Define the reCAPTCHA site key as a constant to ensure it's properly loaded
-// Using a hardcoded fallback for development that matches the .env value
-const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || "6LdlnC8pAAAAAKgGryyYW0H5OUAhzs_WbYYHHUL5";
-console.log("reCAPTCHA site key:", RECAPTCHA_SITE_KEY ? "Loaded (length: " + RECAPTCHA_SITE_KEY.length + ")" : "Not loaded");
-
-// For debugging only - check if site key is loaded properly
+// Log environment for debugging
 if (typeof window !== 'undefined') {
-  console.log("Environment:", process.env.NODE_ENV);
-  console.log("reCAPTCHA site key (first 5 chars):", RECAPTCHA_SITE_KEY?.substring(0, 5));
+  console.log("Login component - Environment:", process.env.NODE_ENV);
+  console.log("Login component - RECAPTCHA_SITE_KEY available:", !!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY);
 }
 
 const createAction = (mode: "signin" | "signup") => (data: FormData) => {
@@ -50,26 +45,15 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
   );
   
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
-  const recaptchaRef = useRef<ReCAPTCHA>(null);
   const [captchaError, setCaptchaError] = useState<string>("");
   const [keysDebug, setKeysDebug] = useState<string>("");
   
-  // Debug reCAPTCHA configuration on component mount
-  useEffect(() => {
-    if (mode === "signup") {
-      const debugInfo = `Site key: ${RECAPTCHA_SITE_KEY ? `${RECAPTCHA_SITE_KEY.slice(0, 3)}...${RECAPTCHA_SITE_KEY.slice(-3)}` : "Not loaded"}`;
-      setKeysDebug(debugInfo);
-      console.log("reCAPTCHA debug:", debugInfo);
-    }
-  }, [mode]);
-
   // Reset reCAPTCHA when form is submitted or errors occur
   useEffect(() => {
-    if (state.error && recaptchaRef.current) {
-      recaptchaRef.current.reset();
+    if (state.error && captchaToken) {
       setCaptchaToken(null);
     }
-  }, [state.error]);
+  }, [state.error, captchaToken]);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -97,6 +81,23 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
     formAction(formData);
   };
 
+  const handleCaptchaChange = (token: string | null) => {
+    console.log("reCAPTCHA token:", token ? "Received" : "Cleared");
+    setCaptchaToken(token);
+    if (token) {
+      setCaptchaError("");
+    }
+  };
+
+  const handleCaptchaError = () => {
+    setCaptchaError("CAPTCHA error occurred. Please try refreshing the page.");
+  };
+
+  const handleCaptchaExpired = () => {
+    setCaptchaToken(null);
+    setCaptchaError("CAPTCHA expired, please verify again");
+  };
+
   return (
     <form
       className="space-y-6"
@@ -118,7 +119,6 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
             defaultValue={state.email}
             required
             maxLength={50}
-            // Changed input background to a darker shade
             className="appearance-none rounded-full block w-full px-3 py-2 border border-[#B4916C]/30 placeholder-[#B4916C] text-white bg-[#9E7C57] focus:outline-none focus:ring-[#B4916C] focus:border-[#B4916C] sm:text-sm"
             placeholder="Enter your email"
           />
@@ -150,28 +150,14 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
           <div className="mb-2 text-xs text-gray-400">
             Please verify that you are human
           </div>
-          <ReCAPTCHA
-            ref={recaptchaRef}
-            sitekey={RECAPTCHA_SITE_KEY}
+          <ReCAPTCHAWrapper
+            onChange={handleCaptchaChange}
+            onError={handleCaptchaError}
+            onExpired={handleCaptchaExpired}
             theme="dark"
-            onChange={(token) => {
-              console.log("reCAPTCHA token received:", token ? "Yes (length: " + token.length + ")" : "No");
-              setCaptchaToken(token);
-              setCaptchaError("");
-            }}
-            onExpired={() => {
-              setCaptchaToken(null);
-              setCaptchaError("CAPTCHA expired, please verify again");
-            }}
-            onError={() => {
-              console.error("reCAPTCHA error occurred");
-              setCaptchaError("CAPTCHA error occurred. Please try refreshing the page.");
-            }}
+            className="mb-2"
           />
           {captchaError && <div className="text-red-500 text-sm mt-2">{captchaError}</div>}
-          {keysDebug && process.env.NODE_ENV === "development" && (
-            <div className="text-gray-500 text-xs mt-1">{keysDebug}</div>
-          )}
           
           <div className="text-sm text-[#F9F6EE] mt-4 text-center max-w-xs">
             By signing up you are agreeing to our{" "}
@@ -214,9 +200,9 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
 export function Login({ mode = "signin" }: { mode?: "signin" | "signup" }) {
   const router = useRouter();
 
-  // Reset CAPTCHA when switching between signin and signup
+  // Debug log on component mount
   useEffect(() => {
-    console.log("Login mode changed:", mode);
+    console.log("Login mode:", mode);
   }, [mode]);
 
   return (

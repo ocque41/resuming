@@ -1,104 +1,87 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyCaptcha } from '@/lib/actions';
 
+// GET handler for retrieving environment information
 export async function GET() {
-  // Get the PUBLIC environment variables 
-  // (this will mirror what client-side code will receive - only NEXT_PUBLIC_ prefixed vars)
-  const publicVars = Object.entries(process.env)
-    .filter(([key]) => key.startsWith('NEXT_PUBLIC_'))
-    .reduce((acc, [key, value]) => {
-      acc[key] = value;
-      return acc;
-    }, {} as Record<string, string | undefined>);
-  
-  // Specifically check reCAPTCHA key
-  const recaptchaSiteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
-  
-  return NextResponse.json({
-    status: 'ok',
-    publicVars: Object.keys(publicVars),
-    hasRecaptchaSiteKey: !!recaptchaSiteKey,
-    recaptchaSiteKeyLength: recaptchaSiteKey?.length || 0,
-    recaptchaSiteKeyFirstChar: recaptchaSiteKey ? recaptchaSiteKey.charAt(0) : null,
-    recaptchaSiteKeyLastChar: recaptchaSiteKey ? recaptchaSiteKey.charAt(recaptchaSiteKey.length - 1) : null
-  });
+  // Get environment information that's safe to expose to the client
+  // Be careful not to expose sensitive information
+  const envInfo = {
+    nodeEnv: process.env.NODE_ENV,
+    siteKey: {
+      exists: !!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY,
+      // Only show partial keys in production
+      value: process.env.NODE_ENV === 'production' 
+        ? (process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY 
+            ? `${process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.substring(0, 6)}...${process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.substring(process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.length - 4)}`
+            : null)
+        : process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY,
+      length: process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY?.length,
+    },
+    secretKey: {
+      exists: !!process.env.RECAPTCHA_SECRET_KEY,
+      // Only show if the secret key exists, never show the actual value
+      length: process.env.RECAPTCHA_SECRET_KEY?.length,
+    },
+    verifyEndpoint: 'https://www.google.com/recaptcha/api/siteverify',
+    host: process.env.VERCEL_URL || process.env.NEXT_PUBLIC_APP_URL || null,
+  };
+
+  return NextResponse.json(envInfo);
 }
 
-export async function POST(request: Request) {
-  // Parse the request body
-  const body = await request.json();
-  const { captchaToken } = body;
-
-  // Check if we have a captcha token
-  if (!captchaToken) {
-    return NextResponse.json(
-      { success: false, message: 'Missing CAPTCHA token' },
-      { status: 400 }
-    );
-  }
-
-  // Get the secret key from environment
-  const recaptchaSecret = process.env.RECAPTCHA_SECRET_KEY;
-  if (!recaptchaSecret) {
-    return NextResponse.json(
-      { 
-        success: false, 
-        message: 'reCAPTCHA is not properly configured on the server',
-        details: {
-          errorType: 'MISSING_SECRET_KEY',
-          info: 'The RECAPTCHA_SECRET_KEY environment variable is not set'
-        }
-      },
-      { status: 500 }
-    );
-  }
-
+// POST handler for testing the CAPTCHA verification
+export async function POST(request: NextRequest) {
   try {
-    // Log details for debugging
-    console.log(`Verifying CAPTCHA token (length: ${captchaToken.length})`);
-    
-    // Verify the captcha token
-    const response = await fetch(
-      `https://www.google.com/recaptcha/api/siteverify`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: `secret=${recaptchaSecret}&response=${captchaToken}`,
-      }
-    );
+    // Parse the request body
+    const { captchaToken } = await request.json();
 
-    const data = await response.json();
-    console.log('reCAPTCHA verification response:', data);
-
-    if (data.success) {
-      return NextResponse.json({
-        success: true,
-        message: 'CAPTCHA verified successfully',
-        details: {
-          score: data.score,
-          hostname: data.hostname,
-          action: data.action,
-          timestamp: new Date().toISOString(),
-        }
-      });
-    } else {
-      return NextResponse.json({
-        success: false,
-        message: 'CAPTCHA verification failed',
-        details: {
-          errorCodes: data['error-codes'],
-          timestamp: new Date().toISOString(),
-        }
-      });
+    // Check if token is provided
+    if (!captchaToken) {
+      return NextResponse.json(
+        { success: false, message: 'CAPTCHA token is required' },
+        { status: 400 }
+      );
     }
+
+    // Verify the token
+    const verificationResult = await verifyCaptcha(captchaToken);
+    
+    // Add debugging information
+    const debugInfo = {
+      success: verificationResult.success,
+      message: verificationResult.success
+        ? 'CAPTCHA verification successful'
+        : 'CAPTCHA verification failed',
+      details: {
+        verificationResult,
+        token: {
+          provided: !!captchaToken,
+          length: captchaToken?.length,
+          prefix: captchaToken?.substring(0, 10) + '...',
+        },
+        environment: {
+          nodeEnv: process.env.NODE_ENV,
+          hasSecretKey: !!process.env.RECAPTCHA_SECRET_KEY,
+          secretKeyLength: process.env.RECAPTCHA_SECRET_KEY?.length,
+          hasSiteKey: !!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY,
+          siteKeyLength: process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY?.length,
+        },
+        date: new Date().toISOString(),
+      },
+    };
+
+    return NextResponse.json(debugInfo);
   } catch (error) {
     console.error('Error verifying CAPTCHA:', error);
+    
     return NextResponse.json(
       { 
         success: false, 
-        message: 'Error verifying CAPTCHA', 
-        details: { errorType: 'SERVER_ERROR', error: String(error) } 
+        message: 'Error processing CAPTCHA verification',
+        details: {
+          error: error instanceof Error ? error.message : String(error),
+          stack: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined,
+        },
       },
       { status: 500 }
     );
