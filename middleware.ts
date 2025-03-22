@@ -16,6 +16,17 @@ const authRoutes = [
   '/sign-up'
 ];
 
+// Define public routes that don't require authentication
+const publicRoutes = [
+  '/verify-email',
+  '/signup-success',
+  '/confirm-email',
+  '/newsletter',
+  '/api/debug/captcha-config',
+  '/api/subscribe',
+  '/api/unsubscribe',
+];
+
 // Define premium routes that require email verification
 const premiumRoutes = [
   '/dashboard/enhance'
@@ -31,8 +42,16 @@ export async function middleware(request: NextRequest) {
   // Check if the current route is an auth route
   const isAuthRoute = authRoutes.some(route => pathname.startsWith(route));
   
+  // Check if the current route is a public route
+  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
+  
   // Check if the current route requires email verification
   const requiresVerification = premiumRoutes.some(route => pathname.startsWith(route));
+
+  // Always allow public routes, even without a session
+  if (isPublicRoute) {
+    return NextResponse.next();
+  }
 
   // If trying to access a protected route without a session, redirect to sign-in
   if (isProtectedRoute && !sessionCookie) {

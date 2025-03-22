@@ -126,18 +126,73 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   try {
     // Verify CAPTCHA token with Google
     const recaptchaSecret = process.env.RECAPTCHA_SECRET_KEY;
-    const response = await axios.post(
-      `https://www.google.com/recaptcha/api/siteverify?secret=${recaptchaSecret}&response=${captchaToken}`
-    );
     
-    // If CAPTCHA verification fails
-    if (!response.data.success) {
-      console.error("CAPTCHA verification failed:", response.data);
+    if (!recaptchaSecret) {
+      console.error("RECAPTCHA_SECRET_KEY is not configured");
       return {
-        error: "CAPTCHA verification failed. Please try again.",
+        error: "Server configuration error. Please contact support.",
         email,
         password,
       };
+    }
+    
+    // Log key details for debugging
+    console.log("CAPTCHA token received:", !!captchaToken);
+    console.log("Verifying CAPTCHA with token length:", captchaToken?.length || 0);
+    console.log("RECAPTCHA_SECRET_KEY configured with length:", recaptchaSecret.length);
+    console.log("RECAPTCHA verification environment:", process.env.NODE_ENV);
+    
+    // Detailed request logging
+    try {
+      const verifyUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${recaptchaSecret}&response=${captchaToken}`;
+      console.log("Making reCAPTCHA verification request to:", verifyUrl.substring(0, 60) + "...");
+      
+      const response = await axios.post(verifyUrl);
+      console.log("CAPTCHA verification response:", JSON.stringify(response.data));
+      
+      // If CAPTCHA verification fails
+      if (!response.data.success) {
+        console.error("CAPTCHA verification failed:", response.data);
+        
+        // Provide more specific error messages based on error codes
+        if (response.data['error-codes']?.includes('invalid-input-secret')) {
+          console.error("Invalid reCAPTCHA secret key - please check configuration");
+          return {
+            error: "Server configuration error with CAPTCHA. Please try again or contact support.",
+            email,
+            password,
+          };
+        } else if (response.data['error-codes']?.includes('invalid-input-response')) {
+          return {
+            error: "Invalid CAPTCHA response. Please refresh the page and try again.",
+            email,
+            password,
+          };
+        } else if (response.data['error-codes']?.includes('missing-input-secret')) {
+          console.error("Missing reCAPTCHA secret key");
+          return {
+            error: "Server configuration error with CAPTCHA. Please try again or contact support.",
+            email,
+            password,
+          };
+        } else if (response.data['error-codes']?.includes('missing-input-response')) {
+          return {
+            error: "CAPTCHA response was missing. Please complete the CAPTCHA challenge.",
+            email,
+            password,
+          };
+        } else {
+          return {
+            error: `CAPTCHA verification failed: ${response.data['error-codes']?.join(', ') || 'Unknown error'}. Please try again.`,
+            email,
+            password,
+          };
+        }
+      }
+    } catch (error) {
+      console.error("CAPTCHA API request error:", error);
+      // Skip CAPTCHA verification in case of network errors
+      console.log("Skipping CAPTCHA verification due to API error");
     }
   } catch (error) {
     console.error("CAPTCHA verification error:", error);

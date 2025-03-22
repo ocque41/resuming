@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from 'react';
+import { useState, Suspense, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { 
@@ -11,13 +11,15 @@ import {
   Shield, 
   ArrowLeft,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
+  Mail
 } from 'lucide-react';
 import { ArticleTitle } from '@/components/ui/article';
 import BillingButton from '@/app/(dashboard)/dashboard/billing-button';
 import { InviteTeamMember } from '@/app/(dashboard)/dashboard/invite-team';
 import ActivityLogClient from '@/components/ActivityLogClient';
 import ErrorBoundaryWrapper from './ErrorBoundaryWrapper';
+import NewsletterSubscriptionStatus from './NewsletterSubscriptionStatus';
 
 // Dynamically import pages to prevent server/client component conflicts
 import dynamic from 'next/dynamic';
@@ -96,6 +98,40 @@ export default function ClientSettingsDialogContent({
   onClose,
 }: ClientSettingsDialogContentProps) {
   const [activeSection, setActiveSection] = useState('account');
+  const [userEmail, setUserEmail] = useState('');
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
+
+  // Get the user's email
+  useEffect(() => {
+    // The GeneralPage component dynamically loads user data
+    // We can extract the email from teamData if needed
+    if (teamData?.user?.email) {
+      setUserEmail(teamData.user.email);
+    } else if (teamData?.userEmail) {
+      setUserEmail(teamData.userEmail);
+    }
+  }, [teamData]);
+
+  // Get the subscription status
+  useEffect(() => {
+    if (!userEmail) return;
+
+    async function getSubscriptionStatus() {
+      try {
+        const response = await fetch('/api/subscription-status');
+        const data = await response.json();
+        setIsSubscribed(!!data.subscribed);
+      } catch (error) {
+        console.error('Failed to get subscription status:', error);
+        setIsSubscribed(false);
+      } finally {
+        setIsLoadingSubscription(false);
+      }
+    }
+
+    getSubscriptionStatus();
+  }, [userEmail]);
 
   return (
     <motion.section 
@@ -154,6 +190,42 @@ export default function ClientSettingsDialogContent({
                 <BillingButton />
               </CardContent>
             </Card>
+          </motion.div>
+        </motion.div>
+        
+        <motion.div variants={itemVariants}>
+          <div className="flex items-center mb-4 mt-8">
+            <Mail className="h-5 w-5 text-[#B4916C] mr-2" />
+            <h2 className="text-lg font-medium text-[#F9F6EE] font-safiro">Newsletter</h2>
+          </div>
+          <motion.div
+            whileHover={{ y: -5 }}
+            transition={{ duration: 0.3 }}
+          >
+            {userEmail ? (
+              isLoadingSubscription ? (
+                <ComponentLoader label="Loading subscription status..." />
+              ) : (
+                <NewsletterSubscriptionStatus 
+                  email={userEmail} 
+                  initialSubscribed={isSubscribed} 
+                />
+              )
+            ) : (
+              <Card className="border border-[#222222] bg-[#111111] shadow-lg hover:border-[#333333] transition-all duration-300 rounded-xl overflow-hidden">
+                <CardHeader className="bg-[#0D0D0D] pb-4 border-b border-[#222222]">
+                  <CardTitle className="text-xl font-bold text-[#F9F6EE] font-safiro flex items-center">
+                    <Mail className="w-5 h-5 mr-2 text-[#B4916C]" />
+                    Newsletter Subscription
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <div className="text-center text-[#8A8782]">
+                    User email not available
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </motion.div>
         </motion.div>
         

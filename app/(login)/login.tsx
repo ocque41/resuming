@@ -16,6 +16,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { signIn, signUp } from "./actions";
 import { ActionState } from "@/lib/auth/middleware";
 
+// Define the reCAPTCHA site key as a constant to ensure it's properly loaded
+const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || "6LdlnC8pAAAAAKgGryyYW0H5OUAhzs_WbYYHHUL5";
+
 const createAction = (mode: "signin" | "signup") => (data: FormData) => {
   if (mode === "signin") {
     return signIn({ error: "", email: "", password: "" }, data).then(
@@ -121,7 +124,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
         <div className="flex flex-col items-center">
           <ReCAPTCHA
             ref={recaptchaRef}
-            sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || "6LdlnC8pAAAAAKgGryyYW0H5OUAhzs_WbYYHHUL5"} 
+            sitekey={RECAPTCHA_SITE_KEY}
             theme="dark"
             onChange={(token) => {
               setCaptchaToken(token);
