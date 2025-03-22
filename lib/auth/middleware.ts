@@ -28,10 +28,17 @@ export function validatedAction<S extends z.ZodType<any, any>, T>(
   };
 }
 
+// Create a more flexible type for the user parameter
+type UserForAction = Omit<User, 'passwordHash' | 'updatedAt' | 'deletedAt'> & {
+  passwordHash?: string;
+  updatedAt?: Date;
+  deletedAt?: Date | null;
+};
+
 type ValidatedActionWithUserFunction<S extends z.ZodType<any, any>, T> = (
   data: z.infer<S>,
   formData: FormData,
-  user: User
+  user: UserForAction
 ) => Promise<T>;
 
 export function validatedActionWithUser<S extends z.ZodType<any, any>, T>(

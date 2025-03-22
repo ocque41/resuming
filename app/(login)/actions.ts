@@ -389,9 +389,14 @@ export const updatePassword = validatedActionWithUser(
   async (data, _, user) => {
     const { currentPassword, newPassword } = data;
 
+    // Check if passwordHash is defined
+    if (!user.passwordHash) {
+      return { error: 'Account information is incomplete. Please contact support.' };
+    }
+
     const isPasswordValid = await comparePasswords(
       currentPassword,
-      user.passwordHash,
+      user.passwordHash as string,
     );
 
     if (!isPasswordValid) {
@@ -428,7 +433,12 @@ export const deleteAccount = validatedActionWithUser(
   async (data, _, user) => {
     const { password } = data;
 
-    const isPasswordValid = await comparePasswords(password, user.passwordHash);
+    // Check if passwordHash is defined
+    if (!user.passwordHash) {
+      return { error: 'Account information is incomplete. Please contact support.' };
+    }
+
+    const isPasswordValid = await comparePasswords(password, user.passwordHash as string);
     if (!isPasswordValid) {
       return { error: 'Incorrect password. Account deletion failed.' };
     }
