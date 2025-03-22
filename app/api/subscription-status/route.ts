@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Client } from '@notionhq/client';
-import { getUser } from '@/lib/db/queries.server';
-import { cookies } from 'next/headers';
-import { verifyToken } from '@/lib/auth/session';
 import { getSession } from '@/lib/auth/session';
+import { db } from '@/lib/db/drizzle';
+import { users } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 
 // Initialize Notion client
 const notion = new Client({
@@ -24,16 +24,35 @@ export async function GET() {
       );
     }
 
-    // Get the user ID from session - used for logging
+    // Get the user ID from session
     const userId = session.user.id;
     
-    // We need to get the user's email from the database since it's not in the session
-    // For now, we'll assume we have an email from another source
-    let userEmail = '';
+    // Get the user's email from the database
+    const userResult = await db
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    
+    if (userResult.length === 0) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
+    }
+    
+    const userEmail = userResult[0].email;
+    
+    if (!userEmail) {
+      return NextResponse.json(
+        { error: 'User email not found' },
+        { status: 400 }
+      );
+    }
     
     // Initialize Notion client
     const notionSecret = process.env.NOTION_SECRET;
-    const notionDatabaseId = process.env.NOTION_NEWSLETTER_DATABASE_ID;
+    const notionDatabaseId = process.env.NOTION_NEWSLETTER_DATABASE_ID || process.env.NOTION_DB;
 
     if (!notionSecret || !notionDatabaseId) {
       console.error('Notion configuration missing');
@@ -46,17 +65,6 @@ export async function GET() {
     const notion = new Client({
       auth: notionSecret,
     });
-    
-    // Query the users table to get the email
-    // This would typically come from a database query using the user ID
-    
-    // Let's use a placeholder query for now - in a real implementation,
-    // you would get the user's email from your database
-    // For example: const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
-    // userEmail = user.email;
-    
-    // For demo purposes only - this should be replaced with actual user data
-    userEmail = 'user@example.com';
     
     // Query Notion database for the user
     const response = await notion.databases.query({

@@ -22,9 +22,13 @@ const publicRoutes = [
   '/signup-success',
   '/confirm-email',
   '/newsletter',
+  '/debug/captcha-test',
   '/api/debug/captcha-config',
+  '/api/debug/captcha-client-test',
   '/api/subscribe',
   '/api/unsubscribe',
+  '/api/resend-verification',
+  '/api/verify-email',
 ];
 
 // Define premium routes that require email verification

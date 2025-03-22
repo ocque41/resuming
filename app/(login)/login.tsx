@@ -17,7 +17,15 @@ import { signIn, signUp } from "./actions";
 import { ActionState } from "@/lib/auth/middleware";
 
 // Define the reCAPTCHA site key as a constant to ensure it's properly loaded
+// Using a hardcoded fallback for development that matches the .env value
 const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || "6LdlnC8pAAAAAKgGryyYW0H5OUAhzs_WbYYHHUL5";
+console.log("reCAPTCHA site key:", RECAPTCHA_SITE_KEY ? "Loaded (length: " + RECAPTCHA_SITE_KEY.length + ")" : "Not loaded");
+
+// For debugging only - check if site key is loaded properly
+if (typeof window !== 'undefined') {
+  console.log("Environment:", process.env.NODE_ENV);
+  console.log("reCAPTCHA site key (first 5 chars):", RECAPTCHA_SITE_KEY?.substring(0, 5));
+}
 
 const createAction = (mode: "signin" | "signup") => (data: FormData) => {
   if (mode === "signin") {
@@ -44,7 +52,17 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const recaptchaRef = useRef<ReCAPTCHA>(null);
   const [captchaError, setCaptchaError] = useState<string>("");
+  const [keysDebug, setKeysDebug] = useState<string>("");
   
+  // Debug reCAPTCHA configuration on component mount
+  useEffect(() => {
+    if (mode === "signup") {
+      const debugInfo = `Site key: ${RECAPTCHA_SITE_KEY ? `${RECAPTCHA_SITE_KEY.slice(0, 3)}...${RECAPTCHA_SITE_KEY.slice(-3)}` : "Not loaded"}`;
+      setKeysDebug(debugInfo);
+      console.log("reCAPTCHA debug:", debugInfo);
+    }
+  }, [mode]);
+
   // Reset reCAPTCHA when form is submitted or errors occur
   useEffect(() => {
     if (state.error && recaptchaRef.current) {
@@ -55,6 +73,12 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    
+    // Debug output for form submission
+    console.log("Form submission - mode:", mode);
+    if (mode === "signup") {
+      console.log("CAPTCHA token available:", !!captchaToken);
+    }
     
     // Only check CAPTCHA for sign-up
     if (mode === "signup" && !captchaToken) {
@@ -67,6 +91,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
     // Add CAPTCHA token to form data if available
     if (captchaToken) {
       formData.append("captchaToken", captchaToken);
+      console.log("CAPTCHA token added to form data, length:", captchaToken.length);
     }
     
     formAction(formData);
@@ -122,11 +147,15 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
 
       {mode === "signup" && (
         <div className="flex flex-col items-center">
+          <div className="mb-2 text-xs text-gray-400">
+            Please verify that you are human
+          </div>
           <ReCAPTCHA
             ref={recaptchaRef}
             sitekey={RECAPTCHA_SITE_KEY}
             theme="dark"
             onChange={(token) => {
+              console.log("reCAPTCHA token received:", token ? "Yes (length: " + token.length + ")" : "No");
               setCaptchaToken(token);
               setCaptchaError("");
             }}
@@ -134,8 +163,15 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
               setCaptchaToken(null);
               setCaptchaError("CAPTCHA expired, please verify again");
             }}
+            onError={() => {
+              console.error("reCAPTCHA error occurred");
+              setCaptchaError("CAPTCHA error occurred. Please try refreshing the page.");
+            }}
           />
           {captchaError && <div className="text-red-500 text-sm mt-2">{captchaError}</div>}
+          {keysDebug && process.env.NODE_ENV === "development" && (
+            <div className="text-gray-500 text-xs mt-1">{keysDebug}</div>
+          )}
           
           <div className="text-sm text-[#F9F6EE] mt-4 text-center max-w-xs">
             By signing up you are agreeing to our{" "}
@@ -177,6 +213,11 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
 
 export function Login({ mode = "signin" }: { mode?: "signin" | "signup" }) {
   const router = useRouter();
+
+  // Reset CAPTCHA when switching between signin and signup
+  useEffect(() => {
+    console.log("Login mode changed:", mode);
+  }, [mode]);
 
   return (
     <div className="min-h-[100dvh] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 bg-[#050505]">

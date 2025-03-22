@@ -20,6 +20,9 @@ export default function VerifyEmailClient({ token, email }: VerifyEmailClientPro
   const [isResending, setIsResending] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
   const [resendError, setResendError] = useState('');
+  const [subscribeToNewsletter, setSubscribeToNewsletter] = useState(true);
+  const [isSubscribing, setIsSubscribing] = useState(false);
+  const [subscriptionSuccess, setSubscriptionSuccess] = useState(false);
 
   useEffect(() => {
     const verifyEmail = async () => {
@@ -44,6 +47,11 @@ export default function VerifyEmailClient({ token, email }: VerifyEmailClientPro
 
         if (response.ok) {
           setIsSuccess(true);
+          
+          // Auto-subscribe to newsletter if the user verified email successfully
+          if (subscribeToNewsletter) {
+            handleNewsletterSubscription();
+          }
         } else {
           setError(data.error || 'Failed to verify email');
         }
@@ -55,7 +63,7 @@ export default function VerifyEmailClient({ token, email }: VerifyEmailClientPro
     };
 
     verifyEmail();
-  }, [token, email]);
+  }, [token, email, subscribeToNewsletter]);
 
   const handleResendVerification = async () => {
     setIsResending(true);
@@ -83,6 +91,32 @@ export default function VerifyEmailClient({ token, email }: VerifyEmailClientPro
       console.error('Error resending verification:', err);
     } finally {
       setIsResending(false);
+    }
+  };
+  
+  const handleNewsletterSubscription = async () => {
+    if (isSubscribing) return;
+    
+    setIsSubscribing(true);
+    
+    try {
+      const response = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setSubscriptionSuccess(true);
+      }
+    } catch (err) {
+      console.error('Error subscribing to newsletter:', err);
+    } finally {
+      setIsSubscribing(false);
     }
   };
 
@@ -134,6 +168,12 @@ export default function VerifyEmailClient({ token, email }: VerifyEmailClientPro
                       You can now access all features of your account.
                     </p>
                   </div>
+                  
+                  {subscriptionSuccess && (
+                    <div className="mt-4 p-3 bg-[#0D1F15]/50 rounded-lg text-green-500 text-sm">
+                      You've been successfully subscribed to our newsletter.
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col items-center space-y-4">

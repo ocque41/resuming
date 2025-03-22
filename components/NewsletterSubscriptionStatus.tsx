@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Mail, CheckCircle, AlertTriangle, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +21,33 @@ export default function NewsletterSubscriptionStatus({
   const [subscriptionStatus, setSubscriptionStatus] = useState(initialSubscribed);
   const [subscriptionSuccess, setSubscriptionSuccess] = useState(false);
   const [subscriptionError, setSubscriptionError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Fetch the current subscription status from the API
+  useEffect(() => {
+    const fetchSubscriptionStatus = async () => {
+      try {
+        setIsLoading(true);
+        const response = await fetch('/api/subscription-status');
+        
+        if (response.ok) {
+          const data = await response.json();
+          setSubscriptionStatus(data.subscribed);
+        } else {
+          // If there's an error, fall back to the initial value
+          setSubscriptionStatus(initialSubscribed);
+        }
+      } catch (error) {
+        console.error('Error fetching subscription status:', error);
+        // Fall back to initial value on error
+        setSubscriptionStatus(initialSubscribed);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchSubscriptionStatus();
+  }, [initialSubscribed]);
 
   const handleToggleSubscription = async () => {
     if (isSubscribing) return;
@@ -80,19 +107,28 @@ export default function NewsletterSubscriptionStatus({
               </p>
             </div>
             <div className="flex items-center space-x-2">
-              <Switch
-                id="newsletter-subscription"
-                checked={subscriptionStatus}
-                onCheckedChange={handleToggleSubscription}
-                disabled={isSubscribing}
-                className="data-[state=checked]:bg-[#B4916C]"
-              />
-              <Label
-                htmlFor="newsletter-subscription"
-                className="text-[#F9F6EE] font-borna cursor-pointer"
-              >
-                {subscriptionStatus ? "Subscribed" : "Not Subscribed"}
-              </Label>
+              {isLoading ? (
+                <div className="flex items-center space-x-2">
+                  <Loader2 className="h-4 w-4 text-[#B4916C] animate-spin" />
+                  <span className="text-[#8A8782] text-sm">Loading...</span>
+                </div>
+              ) : (
+                <>
+                  <Switch
+                    id="newsletter-subscription"
+                    checked={subscriptionStatus}
+                    onCheckedChange={handleToggleSubscription}
+                    disabled={isSubscribing || isLoading}
+                    className="data-[state=checked]:bg-[#B4916C]"
+                  />
+                  <Label
+                    htmlFor="newsletter-subscription"
+                    className="text-[#F9F6EE] font-borna cursor-pointer"
+                  >
+                    {subscriptionStatus ? "Subscribed" : "Not Subscribed"}
+                  </Label>
+                </>
+              )}
             </div>
           </div>
 
