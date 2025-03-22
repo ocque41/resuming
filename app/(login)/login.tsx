@@ -16,13 +16,55 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { signIn, signUp } from "./actions";
 import { ActionState } from "@/lib/auth/middleware";
 
+// Create a global window object to store environment variables
+// This helps with client-side environment variable access
+const setupEnv = () => {
+  if (typeof window !== 'undefined') {
+    if (!window.__env) {
+      window.__env = {};
+    }
+    
+    // Set reCAPTCHA site key if available
+    if (process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY && !window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
+      window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+    }
+    
+    // Attempt to get from URL parameters (useful for testing)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlSiteKey = urlParams.get('recaptchaKey');
+    if (urlSiteKey) {
+      window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = urlSiteKey;
+    }
+  }
+};
+
 // Enhanced debugging for reCAPTCHA
 if (typeof window !== 'undefined') {
+  setupEnv();
+  
   console.log("Login component - Environment:", process.env.NODE_ENV);
   console.log("Login component - RECAPTCHA_SITE_KEY available:", !!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY);
-  if (process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
+  console.log("Login component - window.__env available:", !!window.__env);
+  
+  if (window.__env?.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
+    console.log("Login component - window.__env.RECAPTCHA_SITE_KEY available:", true);
+    console.log("Login component - window.__env.RECAPTCHA_SITE_KEY length:", window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.length);
+    console.log("Login component - window.__env.RECAPTCHA_SITE_KEY first 5 chars:", window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.substring(0, 5));
+  } else if (process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
     console.log("Login component - RECAPTCHA_SITE_KEY length:", process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.length);
     console.log("Login component - RECAPTCHA_SITE_KEY first 5 chars:", process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.substring(0, 5));
+  } else {
+    console.warn("Login component - No reCAPTCHA site key found in environment variables");
+  }
+}
+
+// Add to window global interface
+declare global {
+  interface Window {
+    __env?: {
+      NEXT_PUBLIC_RECAPTCHA_SITE_KEY?: string;
+      [key: string]: any;
+    };
   }
 }
 
@@ -51,14 +93,35 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [captchaError, setCaptchaError] = useState<string>("");
   const [captchaAttempts, setCaptchaAttempts] = useState(0);
+  const [recaptchaKeyMissing, setRecaptchaKeyMissing] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  
+  // Check for reCAPTCHA site key
+  useEffect(() => {
+    // Run environment setup just to be sure
+    setupEnv();
+    
+    // Check if we have a reCAPTCHA site key
+    const hasSiteKey = !!(
+      (typeof window !== 'undefined' && window.__env?.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) || 
+      process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+    );
+    
+    setRecaptchaKeyMissing(!hasSiteKey);
+    
+    if (!hasSiteKey && mode === 'signup') {
+      console.error("reCAPTCHA site key is missing. Sign-up functionality will be limited.");
+      setCaptchaError("reCAPTCHA site key is missing. Please contact support.");
+    }
+  }, [mode]);
   
   // Use the reCAPTCHA v3 hook
   const { executeReCaptcha, token: captchaToken, error: recaptchaError, loading: recaptchaLoading } = useReCaptchaV3();
   
   // Pre-load reCAPTCHA token on component mount for signup
   useEffect(() => {
-    if (mode === "signup" && !captchaToken && !recaptchaLoading && !recaptchaError) {
+    // Only try to preload if we have a site key
+    if (mode === "signup" && !captchaToken && !recaptchaLoading && !recaptchaError && !recaptchaKeyMissing) {
       const preloadToken = async () => {
         console.log("Preloading reCAPTCHA token");
         try {
@@ -70,7 +133,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
       };
       preloadToken();
     }
-  }, [mode, captchaToken, recaptchaLoading, recaptchaError, executeReCaptcha]);
+  }, [mode, captchaToken, recaptchaLoading, recaptchaError, executeReCaptcha, recaptchaKeyMissing]);
   
   // Handle reCAPTCHA errors
   useEffect(() => {
@@ -101,6 +164,13 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
       if (mode === "signup") {
         console.log("Signup form submission started");
         setCaptchaError("");
+        
+        // Skip reCAPTCHA if site key is missing in development
+        if (recaptchaKeyMissing && process.env.NODE_ENV === 'development') {
+          console.warn("CAPTCHA verification skipped in development mode due to missing site key");
+          formAction(new FormData(event.currentTarget));
+          return;
+        }
         
         // If we already have a token, use it
         let token = captchaToken;
@@ -211,7 +281,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
       {mode === "signup" && (
         <div className="flex flex-col items-center">
           {/* reCAPTCHA v3 doesn't require user interaction, but we show verification status */}
-          {(recaptchaLoading || isSubmitting) && (
+          {(recaptchaLoading || isSubmitting) && !recaptchaKeyMissing && (
             <div className="flex items-center text-sm text-gray-400 my-2">
               <Loader className="animate-spin mr-2 h-4 w-4" />
               {recaptchaLoading ? "Loading verification..." : "Verifying..."}
@@ -240,7 +310,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
         <Button
           type="submit"
           className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-white bg-[#B4916C] hover:bg-[#B4916C]/75 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#B4916C]"
-          disabled={pending || isSubmitting || recaptchaLoading}
+          disabled={pending || isSubmitting || (recaptchaLoading && !recaptchaKeyMissing)}
         >
           {pending || isSubmitting ? (
             <>
@@ -264,6 +334,8 @@ export function Login({ mode = "signin" }: { mode?: "signin" | "signup" }) {
   // Debug log on component mount
   useEffect(() => {
     console.log("Login mode:", mode);
+    // Setup environment variables
+    setupEnv();
   }, [mode]);
 
   return (

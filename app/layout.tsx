@@ -104,6 +104,8 @@ export default function RootLayout({
             `,
           }}
         />
+        {/* Environment variables loader - helps with reCAPTCHA */}
+        <script src="/env-loader.js" />
       </head>
       <body className="min-h-[100dvh] bg-[#050505] font-borna">
         <I18nProvider>

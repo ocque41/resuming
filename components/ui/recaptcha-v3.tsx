@@ -12,6 +12,35 @@ interface ReCaptchaV3Props {
   className?: string;
 }
 
+// Add helper for environment variables
+// This helps ensure we can access environment variables in different contexts
+const getEnv = () => {
+  // Ensure window.__env exists
+  if (typeof window !== 'undefined') {
+    // Initialize __env object if it doesn't exist
+    if (!window.__env) {
+      window.__env = {};
+    }
+    
+    // Try to get from window.__env if it exists (for runtime injection)
+    if (window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
+      return {
+        NEXT_PUBLIC_RECAPTCHA_SITE_KEY: window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+      };
+    }
+    
+    // Try to get from regular Next.js env
+    if (process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
+      return {
+        NEXT_PUBLIC_RECAPTCHA_SITE_KEY: process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+      };
+    }
+  }
+  
+  // Return empty object as fallback
+  return { NEXT_PUBLIC_RECAPTCHA_SITE_KEY: '' };
+};
+
 // Define window with reCAPTCHA properties
 declare global {
   interface Window {
@@ -25,6 +54,10 @@ declare global {
       loaded: boolean;
       error: Error | null;
       timestamp: number;
+    };
+    __env?: {
+      NEXT_PUBLIC_RECAPTCHA_SITE_KEY?: string;
+      [key: string]: any;
     };
   }
 }
@@ -43,8 +76,35 @@ export function ReCaptchaV3({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   
-  // Get site key from props or environment
-  const actualSiteKey = siteKey || process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || '';
+  // Get site key from props, environment, or URL query parameter
+  const actualSiteKey = useCallback(() => {
+    // First check props
+    if (siteKey) return siteKey;
+    
+    // Then check environment variables (with helper)
+    const env = getEnv();
+    if (env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
+      return env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+    }
+    
+    // Try to get from URL if we're in the browser
+    if (typeof window !== 'undefined') {
+      // Make sure window.__env exists
+      if (!window.__env) {
+        window.__env = {};
+      }
+      
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlSiteKey = urlParams.get('recaptchaKey');
+      if (urlSiteKey) {
+        // Save to window.__env for future use
+        window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = urlSiteKey;
+        return urlSiteKey;
+      }
+    }
+    
+    return '';
+  }, [siteKey]);
 
   // Function to load the reCAPTCHA script
   const loadReCaptchaScript = useCallback(() => {
@@ -81,9 +141,17 @@ export function ReCaptchaV3({
       return;
     }
 
+    // Get the site key using our helper
+    const key = actualSiteKey();
+    
     // Validate site key
-    if (!actualSiteKey) {
+    if (!key) {
       const error = new Error('reCAPTCHA site key is missing');
+      console.error("reCAPTCHA: Site key is missing", { 
+        fromProps: !!siteKey,
+        fromEnv: !!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY,
+        fromWindowEnv: typeof window !== 'undefined' && !!window.__env?.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+      });
       setError(error);
       onError?.(error);
       setLoading(false);
@@ -99,11 +167,11 @@ export function ReCaptchaV3({
       return;
     }
 
-    console.log(`reCAPTCHA: Loading script with site key starting with ${actualSiteKey.substring(0, 5)}`);
+    console.log(`reCAPTCHA: Loading script with site key starting with ${key.substring(0, 5)}`);
 
     // Create script element
     const script = document.createElement('script');
-    script.src = `https://www.google.com/recaptcha/api.js?render=${actualSiteKey}`;
+    script.src = `https://www.google.com/recaptcha/api.js?render=${key}`;
     script.async = true;
     script.defer = true;
     
@@ -150,7 +218,7 @@ export function ReCaptchaV3({
         document.head.removeChild(script);
       }
     };
-  }, [actualSiteKey, onError]);
+  }, [actualSiteKey, onError, siteKey]);
 
   // Function to execute reCAPTCHA verification
   const executeReCaptcha = useCallback(async () => {
@@ -174,7 +242,8 @@ export function ReCaptchaV3({
         }
       });
       
-      const token = await window.grecaptcha.execute(actualSiteKey, { action });
+      const key = actualSiteKey();
+      const token = await window.grecaptcha.execute(key, { action });
       
       if (!token) {
         throw new Error('reCAPTCHA execution returned empty token');
@@ -239,7 +308,10 @@ export function useReCaptchaV3() {
     // Skip if already initialized
     if (initialized) return;
 
-    const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+    // Get site key with our helper
+    const env = getEnv();
+    const siteKey = env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+    
     if (!siteKey) {
       console.error("reCAPTCHA hook: No site key available");
       setError(new Error('reCAPTCHA site key is missing'));
@@ -315,7 +387,9 @@ export function useReCaptchaV3() {
     setLoading(true);
     setError(null);
     
-    const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+    // Get site key with our helper
+    const env = getEnv();
+    const siteKey = env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
     
     if (!siteKey) {
       const error = new Error('reCAPTCHA site key is missing');
@@ -377,7 +451,10 @@ export function useReCaptchaV3() {
  */
 export function ReCaptchaV3Provider({ children }: { children: React.ReactNode }) {
   const [loaded, setLoaded] = useState(false);
-  const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || '';
+  
+  // Get site key with our helper
+  const env = getEnv();
+  const siteKey = env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || '';
 
   useEffect(() => {
     // Skip if already loaded or no site key
