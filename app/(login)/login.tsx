@@ -164,28 +164,76 @@ function AuthForm({ mode }: { mode: AuthMode }) {
         resetVerification();
         setCustomMessage("Verifying your request...", 'loading');
         
-        // Skip reCAPTCHA verification in specific conditions
+        // Get environment and domain info
         const isDevelopment = process.env.NODE_ENV === 'development';
         const isDevDomain = isDevelopmentDomain();
-        const shouldSkipVerification = !recaptchaConfigured && isDevelopment;
+        const isVercelPreview = typeof window !== 'undefined' && 
+          window.location.hostname.includes('vercel.app');
+        
+        // Skip reCAPTCHA verification in specific conditions:
+        // 1. In development environment and not configured
+        // 2. In Vercel preview deployments (for testing)
+        // 3. When using test keys (for development)
+        const usingTestKeys = typeof window !== 'undefined' && 
+          window.__env?.usingTestKey === true;
+          
+        const shouldSkipVerification = 
+          (!recaptchaConfigured && (isDevelopment || isDevDomain)) || 
+          isVercelPreview;
         
         if (shouldSkipVerification) {
-          console.warn("CAPTCHA verification skipped in development mode due to missing site key");
-          setCustomMessage("Verification skipped in development mode", 'warning');
+          console.warn("CAPTCHA verification skipped in development mode or preview deployment");
+          setCustomMessage("Verification skipped in development/preview mode", 'warning');
           formAction(new FormData(event.currentTarget));
           return;
         }
         
+        if (usingTestKeys && !isDevelopment && !isDevDomain) {
+          console.warn("Using test reCAPTCHA keys in non-development environment");
+          setCustomMessage("Using test verification keys (not secure for production)", 'warning');
+        }
+        
         // Execute verification with specific action for signup
         let captchaToken: string | null = null;
+        
         try {
           captchaToken = await executeVerification(RECAPTCHA_ACTIONS.SIGNUP);
         } catch (error) {
           console.error("reCAPTCHA execution error:", error);
-          setCustomMessage(
-            error instanceof Error ? error.message : "Failed to verify", 
-            'error'
-          );
+          
+          // Check for specific error types
+          const errorMessage = error instanceof Error ? error.message : "Failed to verify";
+          const isConfigError = errorMessage.includes('not configured') || 
+                              errorMessage.includes('missing');
+          const isNetworkError = errorMessage.includes('network') || 
+                               errorMessage.includes('failed to load');
+                               
+          if (isConfigError) {
+            setCustomMessage(
+              "reCAPTCHA verification unavailable. Please try again later or contact support.", 
+              'error'
+            );
+            
+            // After 3 seconds, offer to continue without verification
+            setTimeout(() => {
+              setCustomMessage(
+                "Continue without verification? This reduces protection against spam.", 
+                'warning'
+              );
+            }, 3000);
+            
+          } else if (isNetworkError) {
+            setCustomMessage(
+              "Network error during verification. Check your internet connection.", 
+              'error'
+            );
+          } else {
+            setCustomMessage(
+              errorMessage, 
+              'error'
+            );
+          }
+          
           setIsSubmitting(false);
           return;
         }
@@ -204,8 +252,12 @@ function AuthForm({ mode }: { mode: AuthMode }) {
             return;
           } else {
             console.error("Failed to get reCAPTCHA token after multiple attempts");
-            const errorMsg = getErrorMessageForAction(RECAPTCHA_ACTIONS.SIGNUP);
-            setCustomMessage(errorMsg, 'error');
+            
+            // After maximum attempts, provide option to continue anyway with warning
+            setCustomMessage(
+              "Verification unsuccessful after multiple attempts. You can try again or continue with reduced security.", 
+              'warning'
+            );
             setIsSubmitting(false);
             return;
           }

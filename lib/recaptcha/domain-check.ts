@@ -10,131 +10,14 @@ export const RECAPTCHA_TEST_SITE_KEY = '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI
 export const RECAPTCHA_TEST_SECRET_KEY = '6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe';
 
 /**
- * Check if we're using Google's test keys
- * These keys always pass verification but should not be used in production
+ * Check if the test keys are being used
+ * Google provides test keys that pass verification but should not be used in production
  */
 export function isUsingTestKeys(): boolean {
   const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
   const secretKey = process.env.RECAPTCHA_SECRET_KEY;
   
   return siteKey === RECAPTCHA_TEST_SITE_KEY || secretKey === RECAPTCHA_TEST_SECRET_KEY;
-}
-
-/**
- * Get the current domain from various sources
- * This is important because reCAPTCHA is configured to work with specific domains
- */
-export function getCurrentDomain(): string {
-  // Try to get domain from environment variables
-  if (process.env.NEXT_PUBLIC_APP_URL) {
-    try {
-      const url = new URL(process.env.NEXT_PUBLIC_APP_URL);
-      return url.hostname;
-    } catch (error) {
-      console.warn('Invalid NEXT_PUBLIC_APP_URL format:', error);
-    }
-  }
-  
-  // Try VERCEL_URL for Vercel deployments
-  if (process.env.VERCEL_URL) {
-    return process.env.VERCEL_URL;
-  }
-  
-  // If running in browser, get from location
-  if (typeof window !== 'undefined') {
-    return window.location.hostname;
-  }
-  
-  // Last resort fallback
-  return 'unknown-domain';
-}
-
-/**
- * Check if the domain is localhost or a development domain
- * This is important because reCAPTCHA behaves differently on localhost
- */
-export function isDevelopmentDomain(): boolean {
-  const domain = getCurrentDomain();
-  return domain === 'localhost' || 
-         domain === '127.0.0.1' || 
-         domain.includes('.local') ||
-         domain.endsWith('.ngrok.io') ||
-         domain.includes('localhost:');
-}
-
-/**
- * Get detailed reCAPTCHA configuration status
- * 
- * @returns Object with configuration details
- */
-export function getRecaptchaConfigStatus() {
-  const hasSiteKey = !!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
-  const hasSecretKey = !!process.env.RECAPTCHA_SECRET_KEY;
-  const domain = getCurrentDomain();
-  const usingTestKeys = isUsingTestKeys();
-  const isDevelopment = isDevelopmentDomain();
-  const nodeEnv = process.env.NODE_ENV || 'unknown';
-  
-  return {
-    // Basic configuration
-    hasSiteKey,
-    hasSecretKey,
-    domain,
-    usingTestKeys,
-    isDevelopment,
-    environment: nodeEnv,
-    
-    // Key information (partial for security)
-    siteKeyLength: process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY?.length || 0,
-    secretKeyLength: process.env.RECAPTCHA_SECRET_KEY?.length || 0,
-    siteKeyFirstChars: hasSiteKey ? process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY?.substring(0, 6) + '...' : null,
-    
-    // Configuration status
-    isProperlyConfigured: hasSiteKey && hasSecretKey && (!isDevelopment || usingTestKeys),
-    potentialIssues: getPotentialIssues(hasSiteKey, hasSecretKey, usingTestKeys, isDevelopment, nodeEnv),
-    timestamp: new Date().toISOString()
-  };
-}
-
-/**
- * Get potential issues with reCAPTCHA configuration
- */
-function getPotentialIssues(
-  hasSiteKey: boolean, 
-  hasSecretKey: boolean,
-  usingTestKeys: boolean,
-  isDevelopment: boolean,
-  nodeEnv: string
-): string[] {
-  const issues: string[] = [];
-  
-  if (!hasSiteKey) {
-    issues.push('Missing reCAPTCHA site key');
-  }
-  
-  if (!hasSecretKey) {
-    issues.push('Missing reCAPTCHA secret key');
-  }
-  
-  if (usingTestKeys && nodeEnv === 'production') {
-    issues.push('Using Google test keys in production');
-  }
-  
-  if (isDevelopment && !usingTestKeys) {
-    issues.push('Development domain without test keys (may need domain configuration)');
-  }
-  
-  return issues;
-}
-
-/**
- * Check if reCAPTCHA is properly configured
- * 
- * @returns Whether reCAPTCHA is properly configured
- */
-export function isRecaptchaConfigured(): boolean {
-  const status = getRecaptchaConfigStatus();
-  return status.isProperlyConfigured;
 }
 
 /**
@@ -149,4 +32,224 @@ export const isTestReCaptchaSiteKey = (siteKey: string): boolean => {
  */
 export const isTestReCaptchaSecretKey = (secretKey: string): boolean => {
   return secretKey === RECAPTCHA_TEST_SECRET_KEY;
-}; 
+};
+
+/**
+ * Get the current domain from various environment variables
+ * This is a best-effort approach as exact domain can't always be determined server-side
+ */
+export function getCurrentDomain(): string {
+  // Check various sources for domain info
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const vercelUrl = process.env.VERCEL_URL;
+  
+  // Parse from APP_URL if available (preferred source)
+  if (appUrl) {
+    try {
+      const url = new URL(appUrl.startsWith('http') ? appUrl : `https://${appUrl}`);
+      return url.hostname;
+    } catch (e) {
+      console.error('Error parsing NEXT_PUBLIC_APP_URL:', e);
+    }
+  }
+  
+  // Use Vercel URL if deployed there
+  if (vercelUrl) {
+    return vercelUrl;
+  }
+  
+  // Default for local development
+  if (process.env.NODE_ENV === 'development') {
+    return 'localhost';
+  }
+  
+  // Fallback
+  return 'unknown';
+}
+
+/**
+ * Formats a domain for display and comparison
+ * Removes www. prefix and normalizes
+ */
+export function formatDomain(domain: string): string {
+  if (!domain) return '';
+  
+  let formatted = domain.toLowerCase().trim();
+  
+  // Remove protocol if present
+  if (formatted.startsWith('http://')) {
+    formatted = formatted.substring(7);
+  } else if (formatted.startsWith('https://')) {
+    formatted = formatted.substring(8);
+  }
+  
+  // Remove www. prefix for consistent comparison
+  if (formatted.startsWith('www.')) {
+    formatted = formatted.substring(4);
+  }
+  
+  // Remove port and path
+  formatted = formatted.split(':')[0];
+  formatted = formatted.split('/')[0];
+  
+  return formatted;
+}
+
+/**
+ * Check if the current domain is a development domain
+ * Development domains don't need to be registered with reCAPTCHA
+ */
+export function isDevelopmentDomain(): boolean {
+  const domain = getCurrentDomain();
+  const formattedDomain = formatDomain(domain);
+  
+  // Check for local development domains
+  const developmentDomains = [
+    'localhost',
+    '127.0.0.1',
+    '0.0.0.0',
+    '[::1]', // IPv6 localhost
+  ];
+  
+  // Check if domain ends with development TLDs
+  const isDevelopmentTLD = 
+    formattedDomain.endsWith('.local') || 
+    formattedDomain.endsWith('.test') || 
+    formattedDomain.endsWith('.example') || 
+    formattedDomain.endsWith('.invalid') || 
+    formattedDomain.endsWith('.localhost');
+  
+  return developmentDomains.includes(formattedDomain) || isDevelopmentTLD;
+}
+
+/**
+ * Check if domain is a Vercel preview deployment
+ */
+export function isVercelPreviewDomain(): boolean {
+  const domain = getCurrentDomain();
+  return domain.includes('vercel.app') && !domain.includes('-production');
+}
+
+/**
+ * Get comprehensive status about the current reCAPTCHA configuration
+ * This helps with debugging and provides actionable insights
+ */
+export function getRecaptchaConfigStatus() {
+  // Check keys
+  const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+  const secretKey = process.env.RECAPTCHA_SECRET_KEY;
+  
+  const hasSiteKey = !!siteKey;
+  const hasSecretKey = !!secretKey;
+  
+  // Check domain information
+  const domain = getCurrentDomain();
+  const formattedDomain = formatDomain(domain);
+  const isDevelopment = isDevelopmentDomain();
+  const isVercelPreview = isVercelPreviewDomain();
+  
+  // Check if using test keys
+  const usingTestKeys = isUsingTestKeys();
+  
+  // Environment info
+  const nodeEnv = process.env.NODE_ENV || 'development';
+  
+  // Get a list of potential issues
+  const potentialIssues = getPotentialIssues(
+    hasSiteKey,
+    hasSecretKey,
+    usingTestKeys,
+    isDevelopment,
+    nodeEnv
+  );
+  
+  // Check if the configuration is properly set up
+  const isProperlyConfigured = (
+    hasSiteKey && 
+    hasSecretKey && 
+    (nodeEnv !== 'production' || !usingTestKeys) && // No test keys in production
+    potentialIssues.length === 0
+  );
+
+  return {
+    hasSiteKey,
+    hasSecretKey,
+    domain: formattedDomain,
+    originalDomain: domain,
+    usingTestKeys,
+    isDevelopment,
+    isVercelPreview,
+    environment: nodeEnv,
+    isProperlyConfigured,
+    potentialIssues,
+    timestamp: new Date().toISOString()
+  };
+}
+
+/**
+ * Determine potential issues with the reCAPTCHA configuration
+ * Returns a list of potential issues, empty if none
+ */
+function getPotentialIssues(
+  hasSiteKey: boolean, 
+  hasSecretKey: boolean,
+  usingTestKeys: boolean,
+  isDevelopment: boolean,
+  nodeEnv: string
+): string[] {
+  const issues: string[] = [];
+  
+  // Missing keys
+  if (!hasSiteKey && !hasSecretKey) {
+    issues.push('Both site key and secret key are missing');
+  } else if (!hasSiteKey) {
+    issues.push('Site key is missing');
+  } else if (!hasSecretKey) {
+    issues.push('Secret key is missing');
+  }
+  
+  // Test keys in production
+  if (usingTestKeys && nodeEnv === 'production') {
+    issues.push('Using test keys in production environment');
+  }
+  
+  // Domain mismatch warnings (can't be determined server-side with certainty)
+  if (!isDevelopment && nodeEnv === 'production' && !usingTestKeys) {
+    issues.push('Verify that your domain is properly registered in the reCAPTCHA admin console');
+  }
+  
+  return issues;
+}
+
+/**
+ * Simplified check if reCAPTCHA is properly configured
+ * Use getRecaptchaConfigStatus() for more detailed information
+ */
+export function isRecaptchaConfigured(): boolean {
+  const status = getRecaptchaConfigStatus();
+  return status.isProperlyConfigured;
+}
+
+/**
+ * Checks if a domain matches or is a subdomain of an allowed domain
+ */
+export function isDomainAllowed(domain: string, allowedDomains: string[]): boolean {
+  const formattedDomain = formatDomain(domain);
+  
+  // Check for exact match or subdomain match
+  return allowedDomains.some(allowedDomain => {
+    const formattedAllowedDomain = formatDomain(allowedDomain);
+    
+    // Check if it's an exact match
+    if (formattedDomain === formattedAllowedDomain) {
+      return true;
+    }
+    
+    // Check if it's a subdomain (domain ends with .allowedDomain)
+    if (formattedAllowedDomain && formattedDomain.endsWith(`.${formattedAllowedDomain}`)) {
+      return true;
+    }
+    
+    return false;
+  });
+} 
