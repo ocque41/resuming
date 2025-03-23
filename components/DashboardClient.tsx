@@ -199,13 +199,13 @@ export default function DashboardClient({
             planName={planName}
             requiredPlan="moonlighting"
             title="Upgrade to Moonlighting"
-            description="Access the Create suite with our most powerful AI 'Reming'"
+            description="Access the Create suite with our most powerful AI 'Remin'"
           >
             <PremiumFeatureCard 
               href="/dashboard/enhance"
               icon={FileText}
               title="Create"
-              description="Chat with the powerful employee 'Reming'"
+              description="Chat with the powerful employee 'Remin'"
               iconBgColor="bg-[#050505]"
               bgGradient
               animationDelay={0.15}

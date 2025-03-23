@@ -26,10 +26,10 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'Resuming',
-    description: 'The first Engineer - Recruiter AI Platform.',
+    description: 'The First Engineer - Recruiter AI Platform.',
     images: [
       {
-        url: 'https://resuming.ai/1.png',
+        url: `https://resuming.ai/1.png?v=${Date.now()}`,
         width: 1200,
         height: 630,
         alt: 'Resuming - AI Platform for Engineers and Recruiters',
@@ -43,8 +43,8 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Resuming',
-    description: 'The first Engineer - Recruiter AI Platform.',
-    images: ['https://resuming.ai/1.png'],
+    description: 'The First Engineer - Recruiter AI Platform.',
+    images: [`https://resuming.ai/1.png?v=${Date.now()}`],
     creator: '@resumingai',
   },
   icons: {
@@ -99,6 +99,15 @@ export default function RootLayout({
         <meta name="application-name" content="Resuming" />
         <link rel="canonical" href="https://resuming.ai" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        
+        {/* Facebook and WhatsApp specific */}
+        <meta property="og:image:secure_url" content={`https://resuming.ai/1.png?v=${Date.now()}`} />
+        <meta property="og:image:type" content="image/png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:updated_time" content={new Date().toISOString()} />
+        <meta property="fb:app_id" content="resumingapp" />
+        
         <link
           rel="stylesheet"
           href="https://unpkg.com/franken-ui@1.1.0/dist/css/core.min.css"

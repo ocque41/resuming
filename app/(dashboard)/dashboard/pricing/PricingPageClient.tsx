@@ -117,12 +117,12 @@ export default function PricingPageClient({
                     features={[
                       "Everything in Free Plan ⓘ",
                       "Unlimited Access to Create Suite ⓘ",
-                      "Access to Reming Agent ⓘ",
+                      "Access to Remin Agent ⓘ",
                     ]}
                     tooltips={{
                       "Everything in Free Plan ⓘ": "All features from the Free plan included",
                       "Unlimited Access to Create Suite ⓘ": "Unlimited access to the Create suite for advanced content creation",
-                      "Access to Reming Agent ⓘ": "Access the unlimited power of \"Reming\" the most powerful Agent",
+                      "Access to Remin Agent ⓘ": "Access the unlimited power of \"Remin\" the most powerful Agent",
                     }}
                     highlight={true}
                     priceId={moonlightingPrice?.id}

@@ -72,6 +72,18 @@ export default function HomePage() {
         className="flex flex-col bg-[#050505] overflow-hidden font-borna"
         style={{ height: viewportHeight }}
       >
+        {/* WhatsApp preview fallback - uses standard meta tags in a specific way to hint to WhatsApp */}
+        <div style={{ display: 'none' }}>
+          <img 
+            src={`https://resuming.ai/1.png?v=${Date.now()}`}
+            alt="Resuming - The First Engineer-Recruiter AI Platform"
+            width="1200" 
+            height="630" 
+          />
+          <h1>Resuming - The First Engineer-Recruiter AI Platform</h1>
+          <p>Designed for technical professionals and emerging talent alike. Optimize your career today with AI-powered tools.</p>
+        </div>
+        
         {/* JSON-LD structured data for SEO */}
         <script
           type="application/ld+json"
@@ -437,7 +449,7 @@ export default function HomePage() {
                 
                 <motion.div variants={fadeInUp}>
                   <ArticleContent className="mt-2 sm:mt-3 md:mt-4 text-base sm:text-lg md:text-xl lg:text-2xl text-gray-300 font-borna">
-                    <p>The first Engineer - Recruiter AI Platform</p>
+                    <p>The First Engineer - Recruiter AI Platform</p>
                     <p className="text-base sm:text-lg mt-2">
                       Designed for technical professionals and emerging talent
                     </p>
