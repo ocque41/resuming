@@ -190,7 +190,7 @@ export default function VerifyEmailClient({ token, email }: VerifyEmailClientPro
                       <div className="flex items-center">
                         <Mail className="h-4 w-4 text-[#B4916C] mr-2" />
                         <Label htmlFor="newsletter-subscribe" className="text-[#F9F6EE] font-borna text-sm">
-                          Subscribe to our newsletter
+                          Get latest updates first
                         </Label>
                       </div>
                       <Switch
@@ -201,7 +201,7 @@ export default function VerifyEmailClient({ token, email }: VerifyEmailClientPro
                       />
                     </div>
                     <p className="text-[#8A8782] text-xs">
-                      Get the latest updates, tips, and exclusive offers
+                      Get the tips, articles and exclusive offers
                     </p>
                     
                     {isSubscribing && (

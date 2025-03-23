@@ -111,8 +111,8 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
             required
             maxLength={50}
             // Changed input background to a darker shade
-            className="appearance-none rounded-full block w-full px-3 py-2 border border-[#B4916C]/30 placeholder-[#B4916C] text-white bg-[#9E7C57] focus:outline-none focus:ring-[#B4916C] focus:border-[#B4916C] sm:text-sm"
-            placeholder="Enter your email"
+              className="appearance-none rounded-full block w-full px-3 py-2 border border-[#F9F6EE]/30 placeholder-[#333333] text-[#050505] bg-[#9E7C57] focus:outline-none focus:ring-[#B4916C] focus:border-[#B4916C] sm:text-sm"
+              placeholder="Enter your email"
           />
         </div>
       </div>
@@ -131,7 +131,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
             required
             minLength={8}
             maxLength={100}
-            className="appearance-none rounded-full block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-white bg-[#9E7C57] focus:outline-none focus:ring-[#B4916C] focus:border-[#B4916C] sm:text-sm"
+            className="appearance-none rounded-full block w-full px-3 py-2 border border-[#F9F6EE] placeholder-[#333333] text-[#050505] bg-[#F9F6EE] focus:outline-none focus:ring-[#B4916C] focus:border-[#B4916C] sm:text-sm"
             placeholder="Enter your password"
           />
         </div>
@@ -167,12 +167,12 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
               <div className="flex items-center">
                 <Mail className="h-4 w-4 text-[#B4916C] mr-2" />
                 <Label htmlFor="newsletter-subscribe" className="text-[#F9F6EE] font-medium text-sm cursor-pointer">
-                  Subscribe to our newsletter
+                  Get latest updates first
                 </Label>
               </div>
             </div>
             <p className="text-[#8A8782] text-xs ml-6">
-              Get the latest updates, tips, and exclusive offers
+              Get the tips, articlesand exclusive offers
             </p>
           </div>
           
@@ -239,16 +239,16 @@ export function Login({ mode = "signin" }: { mode?: "signin" | "signup" }) {
             <div className="flex w-full justify-center space-x-2 mb-4">
               <Link
                 href="/sign-in"
-                className={`w-full text-center py-2 px-4 rounded-md transition-colors duration-300 hover:bg-[#B4916C]/75 ${
-                  mode === "signin" ? "bg-[#B4916C]/50" : ""
+                className={`w-full text-center py-2 px-4 rounded-md transition-colors duration-300 hover:bg-[#F9F6EE] ${
+                  mode === "signin" ? "bg-[#F9F6EE]/50" : ""
                 }`}
               >
                 Sign In
               </Link>
               <Link
                 href="/sign-up"
-                className={`w-full text-center py-2 px-4 rounded-md transition-colors duration-300 hover:bg-[#B4916C]/75 ${
-                  mode === "signup" ? "bg-[#B4916C]/50" : ""
+                className={`w-full text-center py-2 px-4 rounded-md transition-colors duration-300 hover:bg-[#F9F6EE] ${
+                  mode === "signup" ? "bg-[#F9F6EE]/50" : ""
                 }`}
               >
                 Sign Up

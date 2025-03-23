@@ -12,6 +12,7 @@ const protectedRoutes = [
   '/api/notion(.*)',
   '/api/team(.*)',
   '/api/email-stats(.*)',
+  '/api/auth/update-password',
   '/admin(.*)',
 ];
 

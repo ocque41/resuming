@@ -13,7 +13,7 @@ interface NewsletterSectionProps {
 
 export default function NewsletterSection({
   title = "Stay Updated",
-  description = "Subscribe to our newsletter to get the latest updates on optimizing your resume and career advice.",
+  description = "Get latest updates first on optimizing your resume and career advice.",
   className = "",
   animationDelay = 0.2
 }: NewsletterSectionProps) {

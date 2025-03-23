@@ -51,7 +51,7 @@ export async function setSession(user: NewUser) {
   const session: SessionData = {
     user: { 
       id: user.id!,
-      admin: !!user.admin
+      admin: user.admin !== undefined ? !!user.admin : false
     },
     expires: expiresInOneDay.toISOString(),
   };

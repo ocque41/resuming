@@ -170,6 +170,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
         passwordHash,
         role: 'owner', // Default role
         emailVerified: null, // Mark email as not verified initially
+        admin: false, // Explicitly set admin to false
       };
       
       const [createdUser] = await db.insert(users).values(newUser).returning();
