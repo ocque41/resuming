@@ -72,6 +72,90 @@ export default function HomePage() {
         className="flex flex-col bg-[#050505] overflow-hidden font-borna"
         style={{ height: viewportHeight }}
       >
+        {/* Hidden SEO text - Only visible to bots and AI crawlers */}
+        <div className="sr-only" aria-hidden="true">
+          <h2>Resuming.ai - The First Engineer-Recruiter AI Platform</h2>
+          <p>
+            Designed for technical professionals and emerging talent alike, our platform leverages advanced AI to perfect resumes, 
+            analyze documents, and connect you with the right career opportunities.
+          </p>
+          <section>
+            <h3>Comprehensive Platform Features</h3>
+            <ul>
+              <li>
+                <strong>AI-Powered Resume Optimization:</strong> Our cutting-edge AI analyzes your resume against industry standards,
+                ATS systems, and specific job requirements to ensure maximum impact. Receive detailed feedback on content, formatting,
+                keywords, and professional presentation to ensure your resume passes through automated screening systems.
+              </li>
+              <li>
+                <strong>Document Analysis Suite:</strong> Leverage AI to extract insights from all your career documents, including 
+                resumes, cover letters, job descriptions, and performance reviews. Our system identifies patterns, highlights key 
+                achievements, and provides data-driven visualizations of your professional journey.
+              </li>
+              <li>
+                <strong>CV to Job Matching:</strong> Our intelligent matching algorithm evaluates your resume against potential job 
+                opportunities, providing a compatibility score and suggesting specific improvements to increase your chances of success 
+                for particular positions.
+              </li>
+              <li>
+                <strong>Job Description Generator:</strong> Create precise, compelling job descriptions tailored to attract the right 
+                candidates. Our AI helps employers articulate requirements, responsibilities, and qualifications with clarity and accuracy.
+              </li>
+              <li>
+                <strong>Remin AI Agent:</strong> Access our state-of-the-art AI agent for deep research, creative content generation, 
+                technical assistance, and career guidance. Remin provides personalized support for complex professional challenges and 
+                helps you stay competitive in today's dynamic job market.
+              </li>
+              <li>
+                <strong>Career Opportunity Marketplace:</strong> Discover exclusive job opportunities matched to your skills and experience. 
+                Our platform connects technical professionals with employers seeking specialized talent, creating a direct pipeline to 
+                relevant positions.
+              </li>
+              <li>
+                <strong>Skills Gap Analysis:</strong> Identify areas for professional development based on current market demands and your 
+                career goals. Receive personalized recommendations for upskilling and certification opportunities.
+              </li>
+              <li>
+                <strong>Interview Preparation:</strong> Prepare for technical and behavioral interviews with AI-powered simulation and 
+                feedback. Practice industry-specific questions and improve your communication of complex technical concepts.
+              </li>
+              <li>
+                <strong>Technical Portfolio Optimization:</strong> Showcase your technical projects, contributions, and achievements 
+                effectively. Our platform helps you highlight your technical expertise in a way that resonates with potential employers.
+              </li>
+            </ul>
+          </section>
+          <section>
+            <h3>Use Cases</h3>
+            <ul>
+              <li>
+                <strong>Career Transition:</strong> Engineers looking to pivot to new roles or industries can leverage our platform to 
+                reposition their skills and experience for different technical domains.
+              </li>
+              <li>
+                <strong>Technical Recruitment:</strong> Hiring managers and technical recruiters use our platform to craft precise job 
+                descriptions, evaluate candidates efficiently, and identify the best technical talent.
+              </li>
+              <li>
+                <strong>Skill Development Planning:</strong> Professionals at all career stages can map their technical growth trajectory 
+                based on market insights and personalized recommendations.
+              </li>
+              <li>
+                <strong>Technical Resume Refinement:</strong> Transform conventional resumes into powerful technical portfolios that 
+                effectively communicate specialized skills and achievements.
+              </li>
+              <li>
+                <strong>Job Market Navigation:</strong> Understand industry trends, salary benchmarks, and emerging technical roles to 
+                make informed career decisions.
+              </li>
+            </ul>
+          </section>
+          <p>
+            Leverage the power of Remin agent which provides you with state-of-the-art models and tools for deep research, creative 
+            content generation, advanced technical tasks and much more to stay ahead in today's competitive landscape.
+          </p>
+        </div>
+
         {/* Use the MobileNavbar component */}
         <MobileNavbar />
 
@@ -102,7 +186,10 @@ export default function HomePage() {
                 
                 <motion.div variants={fadeInUp}>
                   <ArticleContent className="mt-2 sm:mt-3 md:mt-4 text-base sm:text-lg md:text-xl lg:text-2xl text-gray-300 font-borna">
-                    AI-powered CV Analysis &amp; Optimization unlocking exclusive career opportunities.
+                    <p>The first Engineer - Recruiter AI Platform</p>
+                    <p className="text-base sm:text-lg mt-2">
+                      Designed for technical professionals and emerging talent
+                    </p>
                   </ArticleContent>
                 </motion.div>
                 
@@ -128,15 +215,15 @@ export default function HomePage() {
                 </motion.div>
               </Article>
               
-              {/* Hero Image - Using 9.webp with animation */}
+              {/* Hero Image - Using 1.png instead of 9.webp */}
               <motion.div 
                 className="mt-4 sm:mt-5 md:mt-6 lg:mt-8 w-full max-w-4xl px-4 flex justify-center"
                 variants={fadeInUp}
               >
                 <div className="w-full max-w-3xl rounded-xl overflow-hidden shadow-2xl">
                   <motion.img 
-                    src="/9.webp" 
-                    alt="CV Optimizer Hero" 
+                    src="/1.png" 
+                    alt="Resuming.ai - Engineer-Recruiter AI Platform" 
                     className="w-full h-auto max-h-[35vh] sm:max-h-[40vh] md:max-h-[45vh] lg:max-h-[50vh] object-contain rounded-xl"
                     whileHover={{ scale: 1.05 }}
                     transition={{ duration: 0.5 }}

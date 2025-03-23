@@ -1,19 +1,19 @@
 {
-  "name": "CV Optimizer",
-  "short_name": "CV Optimizer",
-  "description": "AI-powered CV Analysis & Optimization unlocking exclusive career opportunities.",
+  "name": "Resuming.ai",
+  "short_name": "Resuming",
+  "description": "The First Engineer-Recruiter AI Platform. Designed for technical professionals and emerging talent.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#050505",
   "theme_color": "#050505",
   "icons": [
     {
-      "src": "/Screenshot 2025-03-04 230224.png",
+      "src": "/favicon-for-app/icon1.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/Screenshot 2025-03-04 230224.png",
+      "src": "/favicon-for-app/apple-icon.png",
       "sizes": "512x512",
       "type": "image/png"
     }

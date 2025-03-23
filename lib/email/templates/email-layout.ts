@@ -30,6 +30,12 @@ export function createEmailLayout({
   baseUrl = process.env.BASE_URL || 'http://localhost:3000',
   year = new Date().getFullYear()
 }: EmailLayoutProps): string {
+  // Ensure baseUrl doesn't end with a slash
+  const sanitizedBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+  
+  // Create absolute URL for logo
+  const logoUrl = `${sanitizedBaseUrl}/white.png`;
+  
   // Pre-header text (visible in email clients preview)
   const preHeader = previewText ? 
     `<div style="display: none; max-height: 0px; overflow: hidden;">${previewText}</div>` : 
@@ -61,7 +67,7 @@ export function createEmailLayout({
     ${preHeader}
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #050505; color: #F9F6EE;">
       <div style="text-align: center; margin-bottom: 20px;">
-        <img src="${baseUrl}/white.png" alt="Resuming.ai Logo" style="width: 150px;">
+        <img src="${logoUrl}" alt="Resuming.ai Logo" style="width: 150px; height: auto; display: inline-block;" border="0">
       </div>
       
       <div style="background-color: #111111; border-radius: 8px; padding: 30px; margin-bottom: 20px; border: 1px solid #222222;">

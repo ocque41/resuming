@@ -195,7 +195,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
       <div>
         <Button
           type="submit"
-          className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-[#050505] bg-[#B4916C] hover:bg-[#B4916C]/75 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#B4916C]"
+          className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-[#F9F6EE] bg-[#050505] hover:bg-[#333333] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#B4916C]"
           disabled={pending || (mode === "signup" && !captchaToken)}
         >
           {pending ? (

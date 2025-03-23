@@ -191,7 +191,7 @@ function PricingCard({
 
   return (
     <motion.div
-      className={`rounded-xl overflow-hidden transition-all duration-300 ${
+      className={`rounded-xl overflow-hidden transition-all duration-300 flex flex-col ${
         highlight 
           ? "border border-[#B4916C] bg-[#0A0A0A]" 
           : "border border-[#222222] bg-[#111111]"
@@ -243,8 +243,8 @@ function PricingCard({
         )}
       </div>
       
-      <div className="p-6">
-        <ul className="space-y-4 mb-8">
+      <div className="p-6 flex-grow flex flex-col h-full">
+        <ul className="space-y-4 flex-grow mb-8">
           {features.map((feature, index) => (
             <li key={index} className="flex items-start group relative">
               <div className={`h-5 w-5 mr-3 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -269,7 +269,7 @@ function PricingCard({
         </ul>
         <motion.button
           onClick={() => onCheckout(priceId || "")}
-          className={`w-full font-medium px-4 py-3 rounded-lg transition-all duration-300 font-safiro ${
+          className={`w-full font-medium px-4 py-3 rounded-lg transition-all duration-300 font-safiro h-12 ${
             highlight
               ? "bg-[#B4916C] hover:bg-[#A3815B] text-[#050505]"
               : "bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"

@@ -9,32 +9,32 @@ import { Inter } from "next/font/google";
 import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
-  title: 'CV Optimizer - AI-powered CV Analysis & Optimization',
-  description: 'AI-powered CV Analysis & Optimization unlocking exclusive career opportunities.',
-  keywords: 'CV, resume, job search, career, AI, optimization, analysis',
-  authors: [{ name: 'CV Optimizer Team' }],
-  creator: 'CV Optimizer',
-  publisher: 'CV Optimizer',
+  title: 'Resuming.ai - The First Engineer-Recruiter AI Platform',
+  description: 'Designed for technical professionals and emerging talent alike, our platform leverages advanced AI to perfect resumes, analyze documents, and connect you with the right career opportunities.',
+  keywords: 'CV, resume, job search, career, AI, optimization, analysis, engineer, recruiter, technical professionals, emerging talent',
+  authors: [{ name: 'Resuming.ai Team' }],
+  creator: 'Resuming.ai',
+  publisher: 'Resuming.ai',
   formatDetection: {
     email: false,
     address: false,
     telephone: false,
   },
-  metadataBase: new URL('https://cvoptimizer.com'), // Replace with your actual domain
+  metadataBase: new URL('https://resuming.ai'),
   alternates: {
     canonical: '/',
   },
   openGraph: {
-    title: 'CV Optimizer - AI-powered CV Analysis & Optimization',
-    description: 'AI-powered CV Analysis & Optimization unlocking exclusive career opportunities.',
-    url: 'https://cvoptimizer.com', // Replace with your actual domain
-    siteName: 'CV Optimizer',
+    title: 'Resuming.ai - The First Engineer-Recruiter AI Platform',
+    description: 'Designed for technical professionals and emerging talent alike, our platform leverages advanced AI to perfect resumes, analyze documents, and connect you with the right career opportunities.',
+    url: 'https://resuming.ai',
+    siteName: 'Resuming.ai',
     images: [
       {
-        url: '/9.webp', // Using the same image as the hero
+        url: '/1.png',
         width: 1200,
         height: 630,
-        alt: 'CV Optimizer - AI-powered CV Analysis & Optimization',
+        alt: 'Resuming.ai - The First Engineer-Recruiter AI Platform',
       },
     ],
     locale: 'en_US',
@@ -42,17 +42,17 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'CV Optimizer - AI-powered CV Analysis & Optimization',
-    description: 'AI-powered CV Analysis & Optimization unlocking exclusive career opportunities.',
-    images: ['/9.webp'], // Using the same image as the hero
-    creator: '@cvoptimizer', // Replace with your actual Twitter handle
+    title: 'Resuming.ai - The First Engineer-Recruiter AI Platform',
+    description: 'Designed for technical professionals and emerging talent alike, our platform leverages advanced AI to perfect resumes, analyze documents, and connect you with the right career opportunities.',
+    images: ['/1.png'],
+    creator: '@resumingai',
   },
   icons: {
-    icon: '/Screenshot 2025-03-04 230224.png',
-    apple: '/Screenshot 2025-03-04 230224.png',
-    shortcut: '/Screenshot 2025-03-04 230224.png',
+    icon: '/favicon-for-app/favicon.ico',
+    apple: '/favicon-for-app/favicon.ico',
+    shortcut: '/favicon-for-app/favicon.ico',
   },
-  manifest: '/manifest.json', // You'll need to create this file for PWA support
+  manifest: '/manifest.json',
 };
 
 export const viewport: Viewport = {

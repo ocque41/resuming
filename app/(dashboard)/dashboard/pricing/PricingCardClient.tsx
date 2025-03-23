@@ -149,8 +149,8 @@ export default function PricingCardClient({
         )}
       </div>
       
-      <div className="p-6">
-        <ul className="space-y-4 mb-8">
+      <div className="p-6 flex flex-col h-full">
+        <ul className="space-y-4 flex-grow mb-8">
           {features.map((feature, index) => (
             <li key={index} className="flex items-start group relative">
               <div className={`h-5 w-5 mr-3 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -185,7 +185,7 @@ export default function PricingCardClient({
           <Button
             type="submit"
             disabled={isLoading || (name === "Free" || price === 0)}
-            className={`w-full font-medium font-safiro ${
+            className={`w-full font-medium font-safiro h-12 ${
               highlight
                 ? "bg-[#B4916C] hover:bg-[#A3815B] text-[#050505]"
                 : "bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"

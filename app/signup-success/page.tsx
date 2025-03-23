@@ -171,6 +171,10 @@ function SignupSuccessContent() {
                         </div>
                       </div>
                       
+                      <p className="text-[#8A8782] text-sm mb-3">
+                        If you've already confirmed your email elsewhere, please refresh this page to update your status.
+                      </p>
+                      
                       {!resendSuccess ? (
                         <Button
                           onClick={handleResendVerification}
@@ -203,6 +207,10 @@ function SignupSuccessContent() {
                     <div>
                       <p className="text-[#fff]/70 mb-3">
                         We've sent a verification email to your inbox. Please check your email and click the verification link.
+                      </p>
+                      
+                      <p className="text-[#8A8782] text-sm mb-3">
+                        If you've already confirmed your email, please refresh this page to update your status.
                       </p>
                       
                       {!resendSuccess ? (
