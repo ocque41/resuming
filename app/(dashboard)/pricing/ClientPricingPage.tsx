@@ -94,7 +94,7 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
 
         <div className="grid md:grid-cols-2 gap-8 justify-center mb-8 max-w-4xl mx-auto">
           <PricingCard
-            name="Free"
+            name="Pro"
             price={0}
             interval="month"
             features={[
@@ -121,12 +121,12 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
             price={1499}
             interval="month"
             features={[
-              "Everything in Free Plan ⓘ",
+              "Everything in Pro Plan ⓘ",
               "Unlimited Access to Create Suite ⓘ",
               "Access to Remin Agent ⓘ"
             ]}
             tooltips={{
-              "Everything in Free Plan ⓘ": "All features from the Free plan included",
+              "Everything in Pro Plan ⓘ": "All features from the Pro plan included",
               "Unlimited Access to Create Suite ⓘ": "Unlimited access to the Create suite for advanced content creation",
               "Access to Remin Agent ⓘ": "Access the unlimited power of \"Remin\" the most powerful Agent"
             }}
@@ -219,10 +219,16 @@ function PricingCard({
           )}
         </h2>
         <p className="text-4xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
-          ${(price || 0) / 100}
-          <span className="text-xl font-normal text-[#8A8782] ml-1 font-borna">
-            /{interval}
-          </span>
+          {price === 0 ? (
+            "FREE"
+          ) : (
+            <>
+              ${(price || 0) / 100}
+              <span className="text-xl font-normal text-[#8A8782] ml-1 font-borna">
+                /{interval}
+              </span>
+            </>
+          )}
         </p>
         
         {highlight && (

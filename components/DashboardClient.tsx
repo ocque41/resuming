@@ -53,8 +53,10 @@ export default function DashboardClient({
     }
   };
 
-  // Get the plan name from teamData
-  const planName = teamData?.planName || "Free";
+  // Extract team data for the dashboard
+  const teamId = teamData?.id;
+  const teamName = teamData?.name || "Personal";
+  const planName = teamData?.planName || "Pro";
 
   return (
     <PremiumPageLayout 

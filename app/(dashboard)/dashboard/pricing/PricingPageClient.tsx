@@ -89,7 +89,7 @@ export default function PricingPageClient({
               <PricingErrorBoundary>
                 <div className="grid md:grid-cols-2 gap-8 justify-center max-w-4xl mx-auto">
                   <PricingCardClient
-                    name="Free"
+                    name="Pro"
                     price={0}
                     interval="month"
                     features={[
@@ -115,12 +115,12 @@ export default function PricingPageClient({
                     price={1499}
                     interval="month"
                     features={[
-                      "Everything in Free Plan ⓘ",
+                      "Everything in Pro Plan ⓘ",
                       "Unlimited Access to Create Suite ⓘ",
                       "Access to Remin Agent ⓘ",
                     ]}
                     tooltips={{
-                      "Everything in Free Plan ⓘ": "All features from the Free plan included",
+                      "Everything in Pro Plan ⓘ": "All features from the Pro plan included",
                       "Unlimited Access to Create Suite ⓘ": "Unlimited access to the Create suite for advanced content creation",
                       "Access to Remin Agent ⓘ": "Access the unlimited power of \"Remin\" the most powerful Agent",
                     }}

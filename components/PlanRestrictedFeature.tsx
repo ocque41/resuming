@@ -42,7 +42,7 @@ export default function PlanRestrictedFeature({
   const hasAccess = 
     normalizedPlanName === "moonlighting" || // Moonlighting users have access to everything
     normalizedPlanName === normalizedRequiredPlan || // Users with exact required plan have access
-    (normalizedRequiredPlan === "free" && normalizedPlanName !== ""); // Free features are accessible to all logged-in users
+    (normalizedRequiredPlan === "pro" && normalizedPlanName !== ""); // Pro features are accessible to all logged-in users
   
   const handleUpgradeClick = () => {
     router.push("/dashboard/pricing");

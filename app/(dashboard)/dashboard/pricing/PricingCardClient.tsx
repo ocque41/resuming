@@ -33,8 +33,8 @@ export default function PricingCardClient({
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // If it's the free plan, no checkout needed
-    if (name === "Free" || price === 0) {
+    // If it's the Pro plan, no checkout needed
+    if (name === "Pro" || price === 0) {
       return;
     }
     
@@ -125,10 +125,16 @@ export default function PricingCardClient({
           )}
         </h2>
         <p className="text-4xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
-          ${(price || 0) / 100}
-          <span className="text-xl font-normal text-[#8A8782] ml-1 font-borna">
-            /{interval}
-          </span>
+          {price === 0 ? (
+            "FREE"
+          ) : (
+            <>
+              ${(price || 0) / 100}
+              <span className="text-xl font-normal text-[#8A8782] ml-1 font-borna">
+                /{interval}
+              </span>
+            </>
+          )}
         </p>
         
         {highlight && (
@@ -184,7 +190,7 @@ export default function PricingCardClient({
         <form onSubmit={handleCheckout} className="w-full mt-auto">
           <Button
             type="submit"
-            disabled={isLoading || (name === "Free" || price === 0)}
+            disabled={isLoading || (name === "Pro" || price === 0)}
             className={`w-full font-medium font-safiro h-12 ${
               highlight
                 ? "bg-[#B4916C] hover:bg-[#A3815B] text-[#050505]"
@@ -196,7 +202,7 @@ export default function PricingCardClient({
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Processing...
               </>
-            ) : name === "Free" || price === 0 ? (
+            ) : name === "Pro" || price === 0 ? (
               "Current Plan"
             ) : (
               <>{highlight ? "Upgrade Now" : "Select Plan"}</>
