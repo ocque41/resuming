@@ -275,34 +275,6 @@ function SignupSuccessContent() {
             </Link>
           </CardFooter>
         </Card>
-
-        {emailId && !deliveryStatus && (
-          <div className="mt-4">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={checkDeliveryStatus}
-              disabled={isCheckingDelivery}
-            >
-              {isCheckingDelivery ? 'Checking...' : 'Check Email Delivery Status'}
-            </Button>
-          </div>
-        )}
-        
-        {deliveryStatus && (
-          <div className="mt-2 text-sm">
-            <span>Delivery status: </span>
-            <span className={
-              deliveryStatus === 'delivered' ? 'text-green-600 font-medium' : 
-              deliveryStatus === 'failed' ? 'text-red-600 font-medium' : 
-              'text-amber-600 font-medium'
-            }>
-              {deliveryStatus === 'delivered' ? 'Delivered' : 
-               deliveryStatus === 'failed' ? 'Failed' : 
-               deliveryStatus === 'sent' ? 'Sent' : 'Unknown'}
-            </span>
-          </div>
-        )}
       </div>
     </div>
   );

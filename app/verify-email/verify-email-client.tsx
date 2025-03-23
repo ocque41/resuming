@@ -170,6 +170,9 @@ export default function VerifyEmailClient({ token, email }: VerifyEmailClientPro
                   <p className="text-[#C5C2BA] font-borna">
                     Please wait while we verify your email address...
                   </p>
+                  <p className="text-[#8A8782] text-sm mt-2">
+                    If you've already confirmed your email in another tab, please refresh this page.
+                  </p>
                 </div>
               ) : isSuccess ? (
                 <div className="flex flex-col items-center space-y-4">
@@ -234,6 +237,9 @@ export default function VerifyEmailClient({ token, email }: VerifyEmailClientPro
                       There was a problem verifying your email
                     </p>
                     <p className="text-red-400 font-borna">{error}</p>
+                    <p className="text-[#8A8782] text-sm mt-2">
+                      If you have already confirmed your email through another link, please try refreshing this page.
+                    </p>
                   </div>
 
                   {!isResending && !resendSuccess ? (
