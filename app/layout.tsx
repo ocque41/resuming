@@ -25,8 +25,8 @@ export const metadata: Metadata = {
     canonical: '/',
   },
   openGraph: {
-    title: 'Resuming.ai - The First Engineer-Recruiter AI Platform',
-    description: 'Designed for technical professionals and emerging talent alike, our platform leverages advanced AI to perfect resumes, analyze documents, and connect you with the right career opportunities.',
+    title: 'Resuming',
+    description: 'The first Engineer - Recruiter AI Platform',
     url: 'https://resuming.ai',
     siteName: 'Resuming.ai',
     images: [
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
         url: '/1.png',
         width: 1200,
         height: 630,
-        alt: 'Resuming.ai - The First Engineer-Recruiter AI Platform',
+        alt: 'Resuming - The First Engineer-Recruiter AI Platform',
       },
     ],
     locale: 'en_US',
@@ -42,8 +42,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Resuming.ai - The First Engineer-Recruiter AI Platform',
-    description: 'Designed for technical professionals and emerging talent alike, our platform leverages advanced AI to perfect resumes, analyze documents, and connect you with the right career opportunities.',
+    title: 'Resuming',
+    description: 'The first Engineer - Recruiter AI Platform',
     images: ['/1.png'],
     creator: '@resumingai',
   },

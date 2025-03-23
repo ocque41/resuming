@@ -215,14 +215,14 @@ export default function HomePage() {
                 </motion.div>
               </Article>
               
-              {/* Hero Image - Using 1.png instead of 9.webp */}
+              {/* Hero Image - Using 9.webp */}
               <motion.div 
                 className="mt-4 sm:mt-5 md:mt-6 lg:mt-8 w-full max-w-4xl px-4 flex justify-center"
                 variants={fadeInUp}
               >
                 <div className="w-full max-w-3xl rounded-xl overflow-hidden shadow-2xl">
                   <motion.img 
-                    src="/1.png" 
+                    src="/9.webp" 
                     alt="Resuming.ai - Engineer-Recruiter AI Platform" 
                     className="w-full h-auto max-h-[35vh] sm:max-h-[40vh] md:max-h-[45vh] lg:max-h-[50vh] object-contain rounded-xl"
                     whileHover={{ scale: 1.05 }}
