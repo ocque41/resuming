@@ -12,7 +12,7 @@
   const debugMode = localStorage.getItem('env_loader_debug') === 'true';
   
   // Configuration
-  const MAX_RETRIES = 3;
+  const MAX_RETRIES = 5; // Increase max retries for production
   const RETRY_DELAY = 1000; // ms
   const PRODUCTION_DOMAINS = ['resuming.ai', 'www.resuming.ai'];
   const TEST_SITE_KEY = '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
@@ -47,7 +47,13 @@
    */
   function isProductionDomain() {
     const hostname = window.location.hostname.toLowerCase();
-    return PRODUCTION_DOMAINS.includes(hostname);
+    const isProd = PRODUCTION_DOMAINS.includes(hostname);
+    
+    if (isProd && debugMode) {
+      log(`Production domain detected: ${hostname}`);
+    }
+    
+    return isProd;
   }
 
   /**
@@ -55,10 +61,16 @@
    */
   function isDevelopmentDomain() {
     const hostname = window.location.hostname.toLowerCase();
-    return hostname === 'localhost' || 
+    const isDev = hostname === 'localhost' || 
            hostname === '127.0.0.1' || 
            hostname.endsWith('.local') || 
            hostname.endsWith('.test');
+    
+    if (isDev && debugMode) {
+      log(`Development domain detected: ${hostname}`);
+    }
+    
+    return isDev;
   }
 
   /**
@@ -68,6 +80,7 @@
     // For production domains, use the user's site key
     if (isProductionDomain()) {
       log('Production domain detected, using production site key');
+      // Always use the hardcoded site key on production domains for reliability
       return USER_SITE_KEY;
     }
     
@@ -86,11 +99,14 @@
    * Get appropriate environment settings when API fails
    */
   function getEnvFallbackSettings() {
+    const isProdDomain = isProductionDomain();
+    const isDevDomain = isDevelopmentDomain();
+    
     return {
       NEXT_PUBLIC_RECAPTCHA_SITE_KEY: getSiteKeyForDomain(),
-      isProductionDomain: isProductionDomain(),
-      isDevelopmentDomain: isDevelopmentDomain(),
-      usingTestKey: !isProductionDomain(),
+      isProductionDomain: isProdDomain,
+      isDevelopmentDomain: isDevDomain,
+      usingTestKey: !isProdDomain && isDevDomain,
       domain: window.location.hostname,
       loadSource: 'fallback',
       loadTimestamp: new Date().toISOString()
@@ -133,6 +149,15 @@
       }));
       
       return;
+    }
+
+    // Priority - if we're on production domain, set the site key immediately
+    // while we load from the API to ensure it's never missing
+    if (isProductionDomain()) {
+      log('Production domain detected, setting initial site key while API loads');
+      window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = USER_SITE_KEY;
+      window.__env.isProductionDomain = true;
+      window.__env.domain = window.location.hostname;
     }
 
     // Add timestamp to avoid caching issues
@@ -199,17 +224,25 @@
         
         // If we have a site key, set it
         if (data.siteKey) {
-          window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = data.siteKey;
-          window.__env.usingTestKey = data.isUsingTestKey;
+          // If on production domain, don't override with test keys
+          if (isProductionDomain() && data.isUsingTestKey) {
+            logWarning('Production domain - ignoring test key from API, using production key');
+            window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = USER_SITE_KEY;
+            window.__env.usingTestKey = false;
+          } else {
+            window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = data.siteKey;
+            window.__env.usingTestKey = data.isUsingTestKey;
+          }
+          
           window.__env.isProductionDomain = isProductionDomain();
           window.__env.isDevelopmentDomain = isDevelopmentDomain();
           window.__env.domain = window.location.hostname;
           window.__env.loadSource = 'api';
           
           log('Loaded reCAPTCHA site key', { 
-            keyPrefix: data.siteKey.substring(0, 6) + '...',
-            length: data.siteKey.length,
-            isTestKey: data.isUsingTestKey
+            keyPrefix: window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.substring(0, 6) + '...',
+            length: window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.length,
+            isTestKey: window.__env.usingTestKey
           });
           
           // Store configuration details for debugging
@@ -222,7 +255,7 @@
           window.dispatchEvent(new CustomEvent('env-loaded', { 
             detail: { 
               success: true,
-              isTestKey: data.isUsingTestKey
+              isTestKey: window.__env.usingTestKey
             } 
           }));
         } else {

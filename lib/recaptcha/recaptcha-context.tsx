@@ -102,39 +102,76 @@ export function ReCaptchaProvider({
       usingTestKeys,
       shouldSkipVerification: shouldSkip,
       environment: process.env.NODE_ENV,
-      configuredProperly: configStatus.isProperlyConfigured
+      configuredProperly: configStatus.isProperlyConfigured,
+      potentialIssues: configStatus.potentialIssues,
+      allowedDomains: configStatus.allowedDomains
     };
     
-    console.log("%creCAPTCHA Configuration Status:", "font-weight: bold; color: blue;", debugInfo);
+    // Enhanced logging with domain-specific formatting
+    if (isProdDomain && isProduction) {
+      console.log(
+        "%c[ReCAPTCHA Config] Production Domain: %c" + currentDomain,
+        "font-weight: bold; color: blue;",
+        "font-weight: bold; color: green; background-color: rgba(0,255,0,0.1);"
+      );
+    } else if (isDevDomain) {
+      console.log(
+        "%c[ReCAPTCHA Config] Development Domain: %c" + currentDomain,
+        "font-weight: bold; color: blue;",
+        "font-weight: bold; color: orange;"
+      );
+    } else {
+      console.log(
+        "%c[ReCAPTCHA Config] Domain: %c" + currentDomain,
+        "font-weight: bold; color: blue;",
+        "font-weight: normal; color: black;"
+      );
+    }
+    
+    console.log("%c[ReCAPTCHA Config] Configuration Status:", "font-weight: bold; color: blue;", debugInfo);
     
     // Critical warnings for production domain missing configuration
     if (isProdDomain && isProduction) {
+      // Specific logging for resuming.ai domain
+      if (currentDomain.includes('resuming.ai')) {
+        console.log(
+          "%c[ReCAPTCHA Config] Resuming.ai Production Domain Detected",
+          "font-weight: bold; color: green; background-color: rgba(0,255,0,0.1); padding: 2px 5px; border-radius: 3px;"
+        );
+      }
+      
       if (!configStatus.hasSiteKey) {
-        console.error("%cCRITICAL: reCAPTCHA Site Key is missing on production domain!", 
-                     "font-weight: bold; color: red; font-size: 14px;", 
-                     "Check if NEXT_PUBLIC_RECAPTCHA_SITE_KEY environment variable is set.");
+        console.error(
+          "%c[ReCAPTCHA CRITICAL ERROR] Site Key is missing on production domain!",
+          "font-weight: bold; color: white; background-color: red; padding: 2px 5px; border-radius: 3px;",
+          "\nCheck if NEXT_PUBLIC_RECAPTCHA_SITE_KEY environment variable is set correctly."
+        );
       }
       
       if (!configStatus.hasSecretKey) {
-        console.error("%cCRITICAL: reCAPTCHA Secret Key is missing on production domain!", 
-                     "font-weight: bold; color: red; font-size: 14px;", 
-                     "Check if RECAPTCHA_SECRET_KEY environment variable is set.");
+        console.error(
+          "%c[ReCAPTCHA CRITICAL ERROR] Secret Key is missing on production domain!",
+          "font-weight: bold; color: white; background-color: red; padding: 2px 5px; border-radius: 3px;",
+          "\nCheck if RECAPTCHA_SECRET_KEY environment variable is set correctly."
+        );
       }
       
       if (usingTestKeys) {
-        console.error("%cCRITICAL: Using TEST reCAPTCHA keys in PRODUCTION!", 
-                     "font-weight: bold; color: red; font-size: 14px;",
-                     "This is not secure and should never happen in production.");
+        console.error(
+          "%c[ReCAPTCHA CRITICAL SECURITY ISSUE] Using TEST keys in PRODUCTION!",
+          "font-weight: bold; color: white; background-color: red; padding: 2px 5px; border-radius: 3px;",
+          "\nThis is not secure and should never happen in production environment."
+        );
       }
     } else {
       // Regular warnings for development
       if (!configStatus.hasSiteKey) {
-        console.warn("%creCAPTCHA Site Key is missing!", "font-weight: bold; color: orange;", 
+        console.warn("%c[ReCAPTCHA Warning] Site Key is missing!", "font-weight: bold; color: orange;", 
           "Check if NEXT_PUBLIC_RECAPTCHA_SITE_KEY environment variable is set.");
       }
       
       if (!configStatus.hasSecretKey) {
-        console.warn("%creCAPTCHA Secret Key is missing!", "font-weight: bold; color: orange;", 
+        console.warn("%c[ReCAPTCHA Warning] Secret Key is missing!", "font-weight: bold; color: orange;", 
           "Check if RECAPTCHA_SECRET_KEY environment variable is set.");
       }
     }
@@ -143,15 +180,25 @@ export function ReCaptchaProvider({
     const siteKeyFromEnv = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
     const siteKeyFromWindow = typeof window !== 'undefined' && window.__env?.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
     
-    console.log("%creCAPTCHA Site Key Sources:", "font-weight: bold; color: blue;", {
+    console.log("%c[ReCAPTCHA Config] Site Key Sources:", "font-weight: bold; color: blue;", {
       fromEnvVar: siteKeyFromEnv ? "✅ Present" : "❌ Missing",
       fromWindow: siteKeyFromWindow ? "✅ Present" : "❌ Missing",
       fromWindowLength: siteKeyFromWindow ? siteKeyFromWindow.length : 0,
       fromEnvLength: siteKeyFromEnv ? siteKeyFromEnv.length : 0,
       // Show partial keys for debugging
-      windowKeyPrefix: siteKeyFromWindow ? siteKeyFromWindow.substring(0, 6) : null,
-      envKeyPrefix: siteKeyFromEnv ? siteKeyFromEnv.substring(0, 6) : null,
+      windowKeyPrefix: siteKeyFromWindow ? siteKeyFromWindow.substring(0, 6) + "..." : null,
+      envKeyPrefix: siteKeyFromEnv ? siteKeyFromEnv.substring(0, 6) + "..." : null,
+      domain: currentDomain,
+      isDomainAllowed: configStatus.allowedDomains.includes(currentDomain)
     });
+
+    // Auto-recovery attempt for window.__env if environment variable is available
+    if (!siteKeyFromWindow && siteKeyFromEnv && typeof window !== 'undefined') {
+      console.warn("%c[ReCAPTCHA Recovery] Attempting to recover missing window.__env site key", "font-weight: bold; color: orange;");
+      if (!window.__env) window.__env = {};
+      window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = siteKeyFromEnv;
+      console.log("%c[ReCAPTCHA Recovery] Site key recovered from environment variables", "font-weight: bold; color: green;");
+    }
   }, [configStatus, isDevDomain, isProdDomain, shouldSkip, usingTestKeys, currentDomain, isProduction]);
   
   // Use our reCAPTCHA hook
@@ -283,7 +330,7 @@ export function ReCaptchaProvider({
   // Execute verification with optional custom action
   const executeVerification = useCallback(async (customAction?: string): Promise<string | null> => {
     if (shouldSkip) {
-      console.log("Skipping reCAPTCHA verification in development");
+      console.log("%c[ReCAPTCHA] Skipping verification in development", "color: orange;");
       setVerificationStatus('warning');
       setVerificationMessage("Verification skipped in development");
       setVerificationScore(1.0);
@@ -296,10 +343,12 @@ export function ReCaptchaProvider({
         hasSiteKey: configStatus.hasSiteKey,
         hasSecretKey: configStatus.hasSecretKey,
         domain: currentDomain,
-        isProdDomain
+        isProdDomain,
+        usingTestKeys,
+        issues: configStatus.potentialIssues
       };
       
-      console.error("Cannot execute reCAPTCHA - not configured properly", errorDetails);
+      console.error("%c[ReCAPTCHA Error] Not configured properly", "color: red;", errorDetails);
       
       // Provide more descriptive error messages
       let message = "reCAPTCHA is not properly configured";
@@ -314,6 +363,24 @@ export function ReCaptchaProvider({
       // Special message for production domain
       if (isProdDomain && isProduction) {
         message = `Critical: ${message} on production domain ${currentDomain}`;
+        
+        // Additional logging for resuming.ai domain
+        if (currentDomain.includes('resuming.ai')) {
+          console.error(
+            "%c[ReCAPTCHA CRITICAL ERROR] Configuration failure on resuming.ai production domain!",
+            "font-weight: bold; color: white; background-color: red; padding: 2px 5px; border-radius: 3px;",
+            "\nPlease check environment variables and domain configuration immediately."
+          );
+        }
+      }
+      
+      // Check for auto-recovery options
+      if (!configStatus.hasSiteKey && typeof window !== 'undefined' && window.__env) {
+        if (window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
+          console.warn("%c[ReCAPTCHA Recovery] Found site key in window.__env, attempting recovery", "color: orange;");
+          // This allows the render but execution will still fail if the key is invalid
+          return null;
+        }
       }
       
       setVerificationStatus('error');
@@ -323,8 +390,8 @@ export function ReCaptchaProvider({
     
     // If token exists and is not expired, return it without changing state
     if (token && tokenExpiryTime && Date.now() < tokenExpiryTime) {
-      console.log("Using existing valid reCAPTCHA token (expires in", 
-        Math.round((tokenExpiryTime - Date.now()) / 1000), "seconds)");
+      const secondsRemaining = Math.round((tokenExpiryTime - Date.now()) / 1000);
+      console.log(`%c[ReCAPTCHA] Using existing valid token (expires in ${secondsRemaining}s)`, "color: green;");
       return token;
     }
     
@@ -332,27 +399,34 @@ export function ReCaptchaProvider({
     setVerificationStatus('loading');
     setVerificationMessage("Verifying...");
     
+    // For production domains, especially resuming.ai, use more retries
     let retries = 0;
-    const maxRetries = 2;
+    const maxRetries = isProdDomain ? 3 : 2;
     
     const attemptExecution = async (): Promise<string | null> => {
       try {
         // If a custom action is provided, update the action
         if (customAction && customAction !== action) {
-          console.log(`Updating reCAPTCHA action from "${action}" to "${customAction}"`);
+          console.log(`%c[ReCAPTCHA] Action: ${action} → ${customAction}`, "color: blue;");
           setAction(customAction);
         }
         
         const actionToExecute = customAction || action;
-        console.log(`Executing reCAPTCHA verification with action: ${actionToExecute}`);
+        console.log(`%c[ReCAPTCHA] Executing verification for "${actionToExecute}"`, "color: blue;");
+        
+        // Log domain information for better debugging
+        if (isProdDomain) {
+          console.log(`%c[ReCAPTCHA] Executing on production domain: ${currentDomain}`, "color: green;");
+        }
+        
         const newToken = await execute(actionToExecute);
         
         if (newToken) {
           // Only log first 10 chars of token to protect sensitive info
           if (isDevelopment) {
-            console.log(`Successfully obtained reCAPTCHA token (${newToken.substring(0, 10)}...)`);
+            console.log(`%c[ReCAPTCHA] Got token (${newToken.substring(0, 10)}...)`, "color: green;");
           } else {
-            console.log(`Successfully obtained reCAPTCHA token`);
+            console.log(`%c[ReCAPTCHA] Token obtained successfully`, "color: green;");
           }
           
           // Check score against threshold if score is available
@@ -364,12 +438,11 @@ export function ReCaptchaProvider({
             setVerificationTrustLevel(trustLevel);
             
             if (score < minScore) {
+              console.warn(`%c[ReCAPTCHA] Low score: ${score.toFixed(2)} < ${minScore.toFixed(2)}`, "color: orange;");
               setVerificationStatus('warning');
               setVerificationMessage(`Verification score (${score.toFixed(2)}) below threshold (${minScore.toFixed(2)})`);
-              
-              // Still return the token, but caller should check the score
-              console.warn(`reCAPTCHA score (${score.toFixed(2)}) is below threshold (${minScore.toFixed(2)}) for action ${actionToExecute}`);
             } else {
+              console.log(`%c[ReCAPTCHA] Good score: ${score.toFixed(2)} ≥ ${minScore.toFixed(2)}`, "color: green;");
               setVerificationStatus('success');
               setVerificationMessage(`Verification successful (score: ${score.toFixed(2)})`);
             }
@@ -385,23 +458,41 @@ export function ReCaptchaProvider({
       } catch (err) {
         if (retries < maxRetries) {
           retries++;
-          console.log(`reCAPTCHA retry attempt ${retries}/${maxRetries}`);
+          const delay = 1000 * Math.pow(2, retries);
+          console.warn(`%c[ReCAPTCHA] Retry ${retries}/${maxRetries} after ${delay}ms`, "color: orange;");
           // Exponential backoff before retry
-          await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retries)));
+          await new Promise(resolve => setTimeout(resolve, delay));
           return await attemptExecution();
         }
         
-        console.error("reCAPTCHA verification error after retries:", err);
+        console.error("%c[ReCAPTCHA Error] Verification failed after retries", "color: red;", err);
         
         // Special handling for production domain errors
         if (isProdDomain && isProduction) {
           const errorMessage = err instanceof Error ? err.message : "Unknown error";
-          console.error("Critical: reCAPTCHA verification failed on production domain:", {
-            domain: currentDomain,
-            action: customAction || action,
-            error: errorMessage,
-            time: new Date().toISOString()
-          });
+          
+          // Extra detailed logging for resuming.ai domain
+          if (currentDomain.includes('resuming.ai')) {
+            console.error(
+              "%c[ReCAPTCHA CRITICAL ERROR] Verification failed on resuming.ai production domain!",
+              "font-weight: bold; color: white; background-color: red; padding: 2px 5px; border-radius: 3px;",
+              {
+                domain: currentDomain,
+                action: customAction || action,
+                error: errorMessage,
+                time: new Date().toISOString(),
+                retries,
+                maxRetries
+              }
+            );
+          } else {
+            console.error("%c[ReCAPTCHA Error] Production verification failed:", "color: red;", {
+              domain: currentDomain,
+              action: customAction || action,
+              error: errorMessage,
+              time: new Date().toISOString()
+            });
+          }
         }
         
         setVerificationStatus('error');

@@ -65,23 +65,34 @@ if (typeof window !== 'undefined') {
   setupEnv();
   
   const isDev = process.env.NODE_ENV === 'development';
+  const currentDomain = window.location.hostname;
+  const isProdDomain = PRODUCTION_DOMAINS.includes(currentDomain);
   
-  if (isDev) {
-    console.log("Login component - Environment:", process.env.NODE_ENV);
-    console.log("Login component - RECAPTCHA_SITE_KEY available:", !!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY);
-    console.log("Login component - window.__env available:", !!window.__env);
-    console.log("Login component - Domain:", window.location.hostname);
-    console.log("Login component - Is Production Domain:", window.__env?.isProductionDomain);
+  if (isDev || isProdDomain) {
+    console.log(`[reCAPTCHA Debug] Environment: ${process.env.NODE_ENV}`);
+    console.log(`[reCAPTCHA Debug] Domain: ${currentDomain}`);
+    console.log(`[reCAPTCHA Debug] Is Production Domain: ${isProdDomain}`);
+    console.log(`[reCAPTCHA Debug] Site Key available: ${!!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY}`);
+    console.log(`[reCAPTCHA Debug] Window __env available: ${!!window.__env}`);
     
     if (window.__env?.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
-      console.log("Login component - window.__env.RECAPTCHA_SITE_KEY available:", true);
-      console.log("Login component - window.__env.RECAPTCHA_SITE_KEY length:", window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.length);
-      console.log("Login component - window.__env.RECAPTCHA_SITE_KEY first 5 chars:", window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.substring(0, 5));
+      console.log(`[reCAPTCHA Debug] Window __env Site Key length: ${window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.length}`);
+      console.log(`[reCAPTCHA Debug] Window __env Site Key first 5 chars: ${window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.substring(0, 5)}`);
+      console.log(`[reCAPTCHA Debug] Using test key: ${window.__env.usingTestKey === true}`);
     } else if (process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
-      console.log("Login component - RECAPTCHA_SITE_KEY length:", process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.length);
-      console.log("Login component - RECAPTCHA_SITE_KEY first 5 chars:", process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.substring(0, 5));
+      console.log(`[reCAPTCHA Debug] Process env Site Key length: ${process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.length}`);
+      console.log(`[reCAPTCHA Debug] Process env Site Key first 5 chars: ${process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.substring(0, 5)}`);
     } else {
-      console.warn("Login component - No reCAPTCHA site key found in environment variables");
+      console.warn(`[reCAPTCHA Debug] No reCAPTCHA site key found in environment variables`);
+    }
+    
+    // Special logging for resuming.ai domain
+    if (isProdDomain) {
+      console.log(`[reCAPTCHA Debug] ✅ Running on production domain: ${currentDomain}`);
+      
+      // Get reCAPTCHA configuration status
+      const configStatus = getRecaptchaConfigStatus();
+      console.log(`[reCAPTCHA Debug] Configuration status: ${JSON.stringify(configStatus)}`);
     }
   }
 }
@@ -141,28 +152,35 @@ function shouldSkipVerification(mode: AuthMode): boolean {
   
   // Get environment information
   const isDev = process.env.NODE_ENV === 'development';
-  const isLocalhost = typeof window !== 'undefined' && 
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-  const isVercelPreview = typeof window !== 'undefined' && 
-    window.location.hostname.includes('vercel.app');
+  const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '';
+  const isLocalhost = currentDomain === 'localhost' || currentDomain === '127.0.0.1';
+  const isTestDomain = currentDomain.endsWith('.local') || currentDomain.endsWith('.test');
+  const isVercelPreview = currentDomain.includes('vercel.app');
+  const isProdDomain = PRODUCTION_DOMAINS.includes(currentDomain);
   const usingTestKeys = typeof window !== 'undefined' && window.__env?.usingTestKey === true;
   const skipRecaptcha = process.env.SKIP_RECAPTCHA === 'true';
   
+  // Always verify on production domains
+  if (isProdDomain) {
+    console.log(`[reCAPTCHA] Verification required for production domain: ${currentDomain}`);
+    return false;
+  }
+  
   // Skip in development with SKIP_RECAPTCHA flag
   if (isDev && skipRecaptcha) {
-    console.log("Skipping reCAPTCHA: SKIP_RECAPTCHA flag is set");
+    console.log(`[reCAPTCHA] Skipping verification: SKIP_RECAPTCHA flag is set`);
     return true;
   }
   
   // Skip for localhost in development
-  if (isDev && isLocalhost) {
-    console.log("Skipping reCAPTCHA: localhost in development");
+  if (isDev && (isLocalhost || isTestDomain)) {
+    console.log(`[reCAPTCHA] Skipping verification: ${currentDomain} in development`);
     return true;
   }
   
   // Skip for Vercel preview deployments
   if (isVercelPreview) {
-    console.log("Skipping reCAPTCHA: Vercel preview deployment");
+    console.log(`[reCAPTCHA] Skipping verification: Vercel preview deployment`);
     return true;
   }
   
@@ -261,7 +279,7 @@ function AuthForm({ mode }: { mode: AuthMode }) {
       }
       
       // If we get here, we need to verify (mostly for signup)
-      console.log(`${mode} form submission started - requires verification`);
+      console.log(`[reCAPTCHA] ${mode} form submission started - requires verification`);
       resetVerification();
       setCustomMessage("Verifying your request...", 'loading');
       
@@ -269,12 +287,28 @@ function AuthForm({ mode }: { mode: AuthMode }) {
       const captchaAction = mode === "signup" ? RECAPTCHA_ACTIONS.SIGNUP : RECAPTCHA_ACTIONS.LOGIN;
       
       try {
+        // Get domain information
+        const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '';
+        const isProdDomain = isProductionDomain(currentDomain);
+        
+        // Check reCAPTCHA configuration first
+        const configStatus = getRecaptchaConfigStatus();
+        if (!configStatus.isProperlyConfigured) {
+          throw new Error(`reCAPTCHA is not properly configured: ${configStatus.potentialIssues.join(', ')}`);
+        }
+        
         // Attempt to get a verification token
         const captchaToken = await executeVerification(captchaAction);
         
         if (captchaToken) {
           // Success! Submit the form with the token
-          console.log(`reCAPTCHA verification successful for ${mode}`);
+          console.log(`[reCAPTCHA] Verification successful for ${mode}`);
+          
+          // Add detailed logging for production domains
+          if (isProdDomain) {
+            console.log(`[reCAPTCHA] ✅ Successful verification on production domain: ${currentDomain}`);
+          }
+          
           setCustomMessage("Verification successful", 'success');
           
           // Create form data and add token
@@ -285,36 +319,77 @@ function AuthForm({ mode }: { mode: AuthMode }) {
           formAction(formData);
         } else {
           // No token, but no error either (unusual)
-          console.warn(`reCAPTCHA returned no token for ${mode}`);
-          setCustomMessage("Verification incomplete. Please try again.", 'warning');
+          console.warn(`[reCAPTCHA] Returned no token for ${mode}`);
+          
+          // Different messaging based on domain
+          if (isProdDomain) {
+            setCustomMessage(`Verification incomplete on ${currentDomain}. Please refresh the page and try again.`, 'warning');
+            
+            // Log the issue for production domains
+            console.error(`[reCAPTCHA] No token returned on production domain: ${currentDomain}`, {
+              action: captchaAction,
+              time: new Date().toISOString(),
+              domain: currentDomain
+            });
+          } else {
+            setCustomMessage("Verification incomplete. Please try again.", 'warning');
+          }
+          
           setIsSubmitting(false);
         }
       } catch (error) {
-        console.error(`reCAPTCHA verification error for ${mode}:`, error);
+        console.error(`[reCAPTCHA] Verification error for ${mode}:`, error);
         
         // Handle domain-specific errors
-        const isProductionSite = typeof window !== 'undefined' && 
-          PRODUCTION_DOMAINS.includes(window.location.hostname);
-        
+        const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '';
+        const isProdDomain = isProductionDomain(currentDomain);
         const errorMessage = error instanceof Error ? error.message : "Verification failed";
         
-        if (isProductionSite) {
-          // On production site, this should not happen
-          setCustomMessage(
-            `Unexpected verification error on ${window.location.hostname}. Please try again or contact support.`, 
-            'error'
-          );
+        // Determine if this is a configuration error
+        const isConfigError = errorMessage.includes('not properly configured') || 
+                              errorMessage.includes('missing') ||
+                              errorMessage.includes('site key');
+        
+        // Check for network errors
+        const isNetworkError = errorMessage.includes('network') || 
+                               errorMessage.includes('fetch') || 
+                               errorMessage.includes('timeout');
+        
+        if (isProdDomain) {
+          // On production site, provide specific error guidance
+          if (isConfigError) {
+            setCustomMessage(
+              `Critical: reCAPTCHA configuration error on ${currentDomain}. Please contact support.`, 
+              'error'
+            );
+          } else if (isNetworkError) {
+            setCustomMessage(
+              `Network error during verification on ${currentDomain}. Please check your connection and try again.`, 
+              'error'
+            );
+          } else {
+            setCustomMessage(
+              `Verification error on ${currentDomain}. Please try again or contact support.`, 
+              'error'
+            );
+          }
           
           // For production domains, log the error with more details
-          console.error("Production domain verification error:", {
-            domain: window.location.hostname,
+          console.error("[reCAPTCHA] Production domain verification error:", {
+            domain: currentDomain,
             mode,
             error: errorMessage,
-            time: new Date().toISOString()
+            isConfigError,
+            isNetworkError,
+            time: new Date().toISOString(),
+            action: captchaAction
           });
         } else {
           // On development or other domains, show more details
-          setCustomMessage(errorMessage, 'error');
+          setCustomMessage(
+            `Verification error (${mode}): ${errorMessage}`, 
+            'error'
+          );
           
           // After a short delay, offer to continue without verification on non-prod
           if (mode === "signup" && process.env.NODE_ENV !== 'production') {
@@ -331,7 +406,7 @@ function AuthForm({ mode }: { mode: AuthMode }) {
         setIsSubmitting(false);
       }
     } catch (error) {
-      console.error("Form submission error:", error);
+      console.error("[Form] Submission error:", error);
       const errorMsg = `Error: ${error instanceof Error ? error.message : "Unknown error"}`;
       setCustomMessage(errorMsg, 'error');
       setIsSubmitting(false);
@@ -397,16 +472,48 @@ function AuthForm({ mode }: { mode: AuthMode }) {
                 message={verificationMessage}
                 score={verificationScore}
                 action={mode === "signup" ? RECAPTCHA_ACTIONS.SIGNUP : RECAPTCHA_ACTIONS.LOGIN}
+                details={{
+                  configError: verificationMessage?.includes('not properly configured') || 
+                              verificationMessage?.includes('missing') ||
+                              verificationMessage?.includes('site key'),
+                  networkError: verificationMessage?.includes('network') || 
+                                verificationMessage?.includes('fetch') || 
+                                verificationMessage?.includes('timeout'),
+                  tokenError: verificationMessage?.includes('token') || 
+                             verificationMessage?.includes('verification'),
+                  domainError: verificationMessage?.includes('domain')
+                }}
                 onRetry={() => {
                   resetVerification();
-                  setCaptchaAttempts(0);
+                  setCaptchaAttempts(prev => prev + 1);
                   setIsSubmitting(false);
-                  executeVerification(mode === "signup" ? RECAPTCHA_ACTIONS.SIGNUP : RECAPTCHA_ACTIONS.LOGIN);
+                  
+                  // Add a retry counter to limit potential abuse
+                  if (captchaAttempts < 3) {
+                    executeVerification(mode === "signup" ? RECAPTCHA_ACTIONS.SIGNUP : RECAPTCHA_ACTIONS.LOGIN);
+                  } else {
+                    setCustomMessage(
+                      "Too many verification attempts. Please refresh the page and try again.",
+                      "warning"
+                    );
+                  }
                 }}
                 onSkip={() => {
                   if (formRef.current) {
+                    // Only allow skipping on non-production domains
+                    const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '';
+                    const isProdDomain = isProductionDomain(currentDomain);
+                    
+                    if (isProdDomain) {
+                      setCustomMessage(
+                        `Verification required on ${currentDomain}. Please try again or contact support.`,
+                        "error"
+                      );
+                      return;
+                    }
+                    
                     // Skip verification and continue with form submission
-                    console.log(`Skipping verification for ${mode} form submission`);
+                    console.log(`[reCAPTCHA] Skipping verification for ${mode} form submission`);
                     setCustomMessage(
                       "Continuing without verification. This may reduce security.", 
                       "warning"

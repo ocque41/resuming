@@ -136,35 +136,51 @@ export function ReCaptchaV3({
 
   // Log environment during development
   useEffect(() => {
+    const domainInfo = {
+      nodeEnv: process.env.NODE_ENV,
+      domain: currentDomain,
+      isDevelopmentDomain: isDevDomain,
+      isProductionDomain: isProdDomain,
+      skipForDevelopment,
+      useTestKeysInDev,
+      shouldSkip
+    };
+
     if (isDevelopment) {
-      console.log('ReCaptchaV3 Component Environment:', {
-        nodeEnv: process.env.NODE_ENV,
-        domain: currentDomain,
-        isDevelopmentDomain: isDevDomain,
-        isProductionDomain: isProdDomain,
-        skipForDevelopment,
-        useTestKeysInDev,
-        shouldSkip
-      });
+      console.log('%c[ReCaptchaV3] Environment:', 'color: blue; font-weight: bold;', domainInfo);
+    } else if (isProdDomain) {
+      // Special logging for production domains, especially resuming.ai
+      if (currentDomain.includes('resuming.ai')) {
+        console.log(
+          '%c[ReCaptchaV3] Resuming.ai Production Domain',
+          'color: green; background-color: rgba(0,255,0,0.1); font-weight: bold; padding: 2px 5px; border-radius: 3px;',
+          domainInfo
+        );
+      } else {
+        console.log('%c[ReCaptchaV3] Production Domain:', 'color: green; font-weight: bold;', domainInfo);
+      }
     }
-  }, []);
+  }, [currentDomain, isDevelopment, isDevDomain, isProdDomain, skipForDevelopment, useTestKeysInDev, shouldSkip]);
 
   // Get proper site key with improved error handling
   const actualSiteKey = useCallback(() => {
     // Check if we have a valid site key as a prop
     if (siteKey && siteKey.length > 10) {
+      if (isDevelopment) {
+        console.log('%c[ReCaptchaV3] Using provided site key', 'color: blue;');
+      }
       return siteKey;
     }
 
     // Check if we need to skip altogether for development
     if (shouldSkip) {
-      console.log('Skipping reCAPTCHA in development mode');
+      console.log('%c[ReCaptchaV3] Skipping in development mode', 'color: orange;');
       return 'development-skip';
     }
     
     // Use test keys in development if specified
     if (isDevelopment && useTestKeysInDev) {
-      console.log('Using Google test keys in development mode');
+      console.log('%c[ReCaptchaV3] Using Google test keys in development', 'color: orange;');
       window.__env && (window.__env.usingTestKey = true);
       return RECAPTCHA_TEST_KEY;
     }
@@ -175,10 +191,20 @@ export function ReCaptchaV3({
         ? window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY 
         : process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
 
+    // Add detailed logging about the key source
+    if (envSiteKey) {
+      const source = window.__env?.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ? 'window.__env' : 'process.env';
+      if (isDevelopment) {
+        console.log(`%c[ReCaptchaV3] Using site key from ${source}`, 'color: blue;');
+      }
+    }
+
     // Check if we're using test keys and log warning if appropriate
     if (envSiteKey && isUsingTestKeys() && !isDevelopment) {
       console.warn(
-        'Using Google reCAPTCHA test keys. These should not be used in production!'
+        '%c[ReCaptchaV3] Warning: Using Google test keys',
+        'color: red; font-weight: bold;',
+        'These should not be used in production!'
       );
       window.__env && (window.__env.usingTestKey = true);
     }
@@ -188,25 +214,49 @@ export function ReCaptchaV3({
       const configStatus = getRecaptchaConfigStatus();
       
       if (isProdDomain && isProduction) {
-        console.error(
-          'Critical: ReCAPTCHA configuration issue on production domain:',
-          configStatus
-        );
+        // Special handling for resuming.ai domain
+        if (currentDomain.includes('resuming.ai')) {
+          console.error(
+            '%c[ReCaptchaV3 CRITICAL ERROR] Missing site key on resuming.ai!',
+            'color: white; background-color: red; font-weight: bold; padding: 2px 5px; border-radius: 3px;',
+            configStatus
+          );
+        } else {
+          console.error(
+            '%c[ReCaptchaV3 Error] Missing site key on production domain',
+            'color: red; font-weight: bold;',
+            configStatus
+          );
+        }
       } else {
         console.warn(
-          'ReCAPTCHA configuration issue:',
+          '%c[ReCaptchaV3 Warning] Configuration issue',
+          'color: orange; font-weight: bold;',
           configStatus
         );
+      }
+
+      // Attempt to recover the key if possible
+      if (typeof window !== 'undefined' && window.__env) {
+        if (process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY && !window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
+          console.warn('%c[ReCaptchaV3] Attempting to recover site key from process.env', 'color: orange;');
+          window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+          
+          if (window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY?.length > 10) {
+            console.log('%c[ReCaptchaV3] Successfully recovered site key', 'color: green;');
+            return window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+          }
+        }
       }
     }
 
     return envSiteKey || '';
-  }, [siteKey, shouldSkip, isDevelopment, useTestKeysInDev, isProduction, isProdDomain]);
+  }, [siteKey, shouldSkip, isDevelopment, useTestKeysInDev, isProduction, isProdDomain, currentDomain]);
 
   // Execute reCAPTCHA with improved error handling and retries
   const executeReCaptcha = useCallback(async (): Promise<string | null> => {
     if (shouldSkip) {
-      console.log('Skipping reCAPTCHA execution in development mode');
+      console.log('%c[ReCaptchaV3] Skipping execution in development', 'color: orange;');
       setVerificationScore(1.0); // Perfect score for skipped verification
       const dummyToken = 'development-dummy-token-' + new Date().getTime();
       onToken?.(dummyToken, 1.0);
@@ -216,7 +266,29 @@ export function ReCaptchaV3({
     const key = actualSiteKey();
     if (!key || key.length < 10) {
       const error = new Error(`Cannot execute reCAPTCHA: Invalid site key`);
-      console.error(error);
+      
+      if (isProdDomain && isProduction) {
+        // Special error for resuming.ai domain
+        if (currentDomain.includes('resuming.ai')) {
+          console.error(
+            '%c[ReCaptchaV3 CRITICAL ERROR] Invalid site key on resuming.ai!',
+            'color: white; background-color: red; font-weight: bold; padding: 2px 5px; border-radius: 3px;',
+            {
+              domain: currentDomain,
+              action,
+              time: new Date().toISOString()
+            }
+          );
+        } else {
+          console.error('%c[ReCaptchaV3 Error] Invalid site key on production domain', 'color: red;', {
+            domain: currentDomain,
+            action
+          });
+        }
+      } else {
+        console.error('%c[ReCaptchaV3 Error] Invalid site key', 'color: red;', error);
+      }
+      
       setError(error);
       onError?.(error);
       return null;
@@ -224,13 +296,13 @@ export function ReCaptchaV3({
 
     // Prevent concurrent executions
     if (executingRef.current) {
-      console.log('reCAPTCHA execution already in progress, skipping');
+      console.log('%c[ReCaptchaV3] Execution already in progress', 'color: orange;');
       return null;
     }
 
     try {
       executingRef.current = true;
-      console.log(`Executing reCAPTCHA for action: ${action}`);
+      console.log(`%c[ReCaptchaV3] Executing for action: ${action}`, 'color: blue;');
 
       if (!window.grecaptcha || !window.grecaptcha.execute) {
         throw new Error('reCAPTCHA not loaded yet');
@@ -241,7 +313,9 @@ export function ReCaptchaV3({
       
       // Log token for debugging (only first 10 chars for security)
       if (isDevelopment) {
-        console.log(`reCAPTCHA token received: ${token.substring(0, 10)}...`);
+        console.log(`%c[ReCaptchaV3] Token received: ${token.substring(0, 10)}...`, 'color: green;');
+      } else if (isProdDomain) {
+        console.log(`%c[ReCaptchaV3] Token received on ${currentDomain}`, 'color: green;');
       }
       
       // Only call onToken if token is valid (non-empty string)
@@ -254,11 +328,22 @@ export function ReCaptchaV3({
           const simulatedScore = 0.9; // High score for test keys
           setVerificationScore(simulatedScore);
           onToken?.(token, simulatedScore);
+          
+          if (isProdDomain && isProduction && isUsingTestKeys()) {
+            console.warn(
+              '%c[ReCaptchaV3 Warning] Using test keys with simulated score in production',
+              'color: orange; font-weight: bold;'
+            );
+          }
         } else {
           // In production, we'd ideally validate the token on the server
           // and get the actual score, but we can use a default here
           setVerificationScore(undefined);
           onToken?.(token, undefined);
+          
+          if (isProdDomain) {
+            console.log(`%c[ReCaptchaV3] Verification successful on ${currentDomain}`, 'color: green;');
+          }
         }
         
         return token;
@@ -267,19 +352,47 @@ export function ReCaptchaV3({
       }
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
-      console.error('reCAPTCHA execution error:', error);
+      
+      if (isProdDomain && isProduction) {
+        // Special error logging for production domains
+        if (currentDomain.includes('resuming.ai')) {
+          console.error(
+            '%c[ReCaptchaV3 Error] Execution failed on resuming.ai',
+            'color: red; font-weight: bold;',
+            {
+              error: error.message,
+              action,
+              attempt: retryAttemptsRef.current + 1,
+              maxAttempts: MAX_RETRY_ATTEMPTS,
+              domain: currentDomain,
+              time: new Date().toISOString()
+            }
+          );
+        } else {
+          console.error('%c[ReCaptchaV3 Error] Execution failed on production domain', 'color: red;', {
+            error: error.message,
+            domain: currentDomain
+          });
+        }
+      } else {
+        console.error('%c[ReCaptchaV3 Error] Execution failed', 'color: red;', error);
+      }
       
       // Implement retry logic
       if (retryAttemptsRef.current < MAX_RETRY_ATTEMPTS) {
         retryAttemptsRef.current++;
-        console.log(`Retrying reCAPTCHA execution (attempt ${retryAttemptsRef.current} of ${MAX_RETRY_ATTEMPTS})`);
-        
-        // Exponential backoff for retries
         const backoffDelay = Math.pow(2, retryAttemptsRef.current) * 1000;
+        
+        console.log(
+          `%c[ReCaptchaV3] Retrying in ${backoffDelay/1000}s (${retryAttemptsRef.current}/${MAX_RETRY_ATTEMPTS})`,
+          'color: orange;'
+        );
         
         setTimeout(() => {
           executingRef.current = false;
-          executeReCaptcha().catch(console.error);
+          executeReCaptcha().catch(e => {
+            console.error('%c[ReCaptchaV3] Retry failed', 'color: red;', e);
+          });
         }, backoffDelay);
         
         return null;
@@ -294,7 +407,44 @@ export function ReCaptchaV3({
         executingRef.current = false;
       }
     }
-  }, [action, actualSiteKey, onError, onToken, shouldSkip, isDevelopment]);
+  }, [action, actualSiteKey, onError, onToken, shouldSkip, isDevelopment, isProdDomain, isProduction, currentDomain]);
+
+  // Special handling for script load errors on production
+  const handleScriptError = useCallback((error: Error) => {
+    if (isProdDomain && isProduction) {
+      // Special error for resuming.ai domain
+      if (currentDomain.includes('resuming.ai')) {
+        console.error(
+          '%c[ReCaptchaV3 CRITICAL ERROR] Script failed to load on resuming.ai!',
+          'color: white; background-color: red; font-weight: bold; padding: 2px 5px; border-radius: 3px;',
+          {
+            domain: currentDomain,
+            error: error.message,
+            time: new Date().toISOString(),
+            recovery: 'Attempting to recover by setting dummy token'
+          }
+        );
+        
+        // For production domains, we can attempt recovery by setting a token
+        // This won't work for verification but prevents UI from breaking
+        if (onToken) {
+          setTimeout(() => {
+            onToken('error-recovery-token-' + new Date().getTime(), 0.1);
+          }, 1000);
+        }
+      } else {
+        console.error('%c[ReCaptchaV3 Error] Script failed to load on production domain', 'color: red;', {
+          domain: currentDomain,
+          error: error.message
+        });
+      }
+    } else {
+      console.error('%c[ReCaptchaV3 Error] Script failed to load', 'color: red;', error);
+    }
+    
+    setError(error);
+    onError?.(error);
+  }, [isProdDomain, isProduction, currentDomain, onToken, onError]);
 
   // Load the reCAPTCHA script with better error handling
   useEffect(() => {
@@ -305,16 +455,19 @@ export function ReCaptchaV3({
     // Skip if we don't have a valid key
     if (!key || key.length < 10) {
       if (isProdDomain && isProduction) {
-        console.error(`Critical: Cannot load reCAPTCHA on production domain: No valid site key available`);
+        console.error(
+          `%c[ReCaptchaV3 Error] Cannot load script on ${currentDomain}: No valid site key`, 
+          'color: red; font-weight: bold;'
+        );
       } else {
-        console.warn(`Cannot load reCAPTCHA: No valid site key available`);
+        console.warn(`%c[ReCaptchaV3 Warning] Cannot load script: No valid site key`, 'color: orange;');
       }
       return;
     }
 
     // Skip if recaptcha is already loaded
     if (window.grecaptcha) {
-      console.log('reCAPTCHA already loaded, skipping script load');
+      console.log('%c[ReCaptchaV3] Script already loaded', 'color: green;');
       setLoaded(true);
       return;
     }
@@ -322,7 +475,7 @@ export function ReCaptchaV3({
     const loadScript = async () => {
       try {
         setLoadingScript(true);
-        console.log(`Loading reCAPTCHA script with site key: ${key.substring(0, 5)}...`);
+        console.log(`%c[ReCaptchaV3] Loading script with key: ${key.substring(0, 5)}...`, 'color: blue;');
 
         // Create script element
         const script = document.createElement('script');
@@ -333,7 +486,7 @@ export function ReCaptchaV3({
         // Setup load and error handlers
         const scriptLoaded = new Promise<void>((resolve, reject) => {
           script.onload = () => {
-            console.log('reCAPTCHA script loaded successfully');
+            console.log('%c[ReCaptchaV3] Script loaded successfully', 'color: green;');
             resolve();
           };
           script.onerror = (event) => {
@@ -356,23 +509,14 @@ export function ReCaptchaV3({
         
         // Wait a bit for grecaptcha to initialize properly
         setTimeout(() => {
-          executeReCaptcha().catch(console.error);
+          executeReCaptcha().catch(err => handleScriptError(
+            err instanceof Error ? err : new Error(String(err))
+          ));
         }, 1000);
         
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
-        console.error('Error loading reCAPTCHA:', error);
-        
-        if (isProdDomain && isProduction) {
-          console.error('Critical: reCAPTCHA failed to load on production domain:', {
-            domain: currentDomain,
-            error: error.message,
-            timestamp: new Date().toISOString()
-          });
-        }
-        
-        setError(error);
-        onError?.(error);
+        handleScriptError(error);
       } finally {
         setLoadingScript(false);
       }
@@ -386,7 +530,7 @@ export function ReCaptchaV3({
         clearTimeout(refreshTimeoutRef.current);
       }
     };
-  }, [loaded, loadingScript, executeReCaptcha, actualSiteKey, onError, shouldSkip, isProdDomain, isProduction, currentDomain]);
+  }, [loaded, loadingScript, executeReCaptcha, actualSiteKey, handleScriptError, shouldSkip, isProdDomain, isProduction, currentDomain]);
 
   // Setup token refresh if autoRefresh is enabled
   useEffect(() => {

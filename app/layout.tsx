@@ -115,7 +115,7 @@ export default function RootLayout({
             <ReCaptchaProvider 
               defaultAction={RECAPTCHA_ACTIONS.GENERIC}
               skipForDevelopment={process.env.NODE_ENV === 'development' && process.env.SKIP_RECAPTCHA === 'true'}
-              useTestKeysInDev={process.env.NODE_ENV === 'development' && process.env.USE_TEST_KEYS === 'true'}
+              useTestKeysInDev={process.env.NODE_ENV === 'development'}
               tokenRefreshInterval={120000 * 0.9} // 90% of 2 minutes (token expiry)
             >
               {children}
