@@ -19,9 +19,15 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { signIn, signUp } from "./actions";
 import { ActionState } from "@/lib/auth/middleware";
 
-// Import our new reCAPTCHA utilities
+// Import our reCAPTCHA utilities
 import { RECAPTCHA_ACTIONS, getMinScoreForAction, getErrorMessageForAction } from "@/lib/recaptcha/actions";
-import { isRecaptchaConfigured, getRecaptchaConfigStatus, isDevelopmentDomain } from "@/lib/recaptcha/domain-check";
+import { 
+  isRecaptchaConfigured, 
+  getRecaptchaConfigStatus, 
+  isDevelopmentDomain,
+  isProductionDomain,
+  PRODUCTION_DOMAINS 
+} from "@/lib/recaptcha/domain-check";
 
 // Create a global window object to store environment variables
 // This helps with client-side environment variable access
@@ -42,6 +48,15 @@ const setupEnv = () => {
     if (urlSiteKey) {
       window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = urlSiteKey;
     }
+    
+    // Store domain information
+    window.__env.domain = window.location.hostname;
+    window.__env.isProductionDomain = PRODUCTION_DOMAINS.includes(window.location.hostname);
+    window.__env.isDevelopmentDomain = 
+      window.location.hostname === 'localhost' || 
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.endsWith('.local') ||
+      window.location.hostname.endsWith('.test');
   }
 };
 
@@ -49,19 +64,25 @@ const setupEnv = () => {
 if (typeof window !== 'undefined') {
   setupEnv();
   
-  console.log("Login component - Environment:", process.env.NODE_ENV);
-  console.log("Login component - RECAPTCHA_SITE_KEY available:", !!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY);
-  console.log("Login component - window.__env available:", !!window.__env);
+  const isDev = process.env.NODE_ENV === 'development';
   
-  if (window.__env?.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
-    console.log("Login component - window.__env.RECAPTCHA_SITE_KEY available:", true);
-    console.log("Login component - window.__env.RECAPTCHA_SITE_KEY length:", window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.length);
-    console.log("Login component - window.__env.RECAPTCHA_SITE_KEY first 5 chars:", window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.substring(0, 5));
-  } else if (process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
-    console.log("Login component - RECAPTCHA_SITE_KEY length:", process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.length);
-    console.log("Login component - RECAPTCHA_SITE_KEY first 5 chars:", process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.substring(0, 5));
-  } else {
-    console.warn("Login component - No reCAPTCHA site key found in environment variables");
+  if (isDev) {
+    console.log("Login component - Environment:", process.env.NODE_ENV);
+    console.log("Login component - RECAPTCHA_SITE_KEY available:", !!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY);
+    console.log("Login component - window.__env available:", !!window.__env);
+    console.log("Login component - Domain:", window.location.hostname);
+    console.log("Login component - Is Production Domain:", window.__env?.isProductionDomain);
+    
+    if (window.__env?.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
+      console.log("Login component - window.__env.RECAPTCHA_SITE_KEY available:", true);
+      console.log("Login component - window.__env.RECAPTCHA_SITE_KEY length:", window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.length);
+      console.log("Login component - window.__env.RECAPTCHA_SITE_KEY first 5 chars:", window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.substring(0, 5));
+    } else if (process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
+      console.log("Login component - RECAPTCHA_SITE_KEY length:", process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.length);
+      console.log("Login component - RECAPTCHA_SITE_KEY first 5 chars:", process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.substring(0, 5));
+    } else {
+      console.warn("Login component - No reCAPTCHA site key found in environment variables");
+    }
   }
 }
 
@@ -69,8 +90,12 @@ if (typeof window !== 'undefined') {
 declare global {
   interface Window {
     __env?: {
-      NEXT_PUBLIC_RECAPTCHA_SITE_KEY?: string;
       [key: string]: any;
+      NEXT_PUBLIC_RECAPTCHA_SITE_KEY?: string;
+      domain?: string;
+      isProductionDomain?: boolean;
+      isDevelopmentDomain?: boolean;
+      usingTestKey?: boolean;
     };
   }
 }
@@ -105,6 +130,66 @@ const createAction = (mode: AuthMode) => (data: FormData) => {
   }
 };
 
+/**
+ * Determine if reCAPTCHA verification should be skipped based on environment
+ */
+function shouldSkipVerification(mode: AuthMode): boolean {
+  // For sign-in, we typically have less strict requirements
+  if (mode === "signin") {
+    return true; // We can optionally enable verification for suspicious logins
+  }
+  
+  // Get environment information
+  const isDev = process.env.NODE_ENV === 'development';
+  const isLocalhost = typeof window !== 'undefined' && 
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  const isVercelPreview = typeof window !== 'undefined' && 
+    window.location.hostname.includes('vercel.app');
+  const usingTestKeys = typeof window !== 'undefined' && window.__env?.usingTestKey === true;
+  const skipRecaptcha = process.env.SKIP_RECAPTCHA === 'true';
+  
+  // Skip in development with SKIP_RECAPTCHA flag
+  if (isDev && skipRecaptcha) {
+    console.log("Skipping reCAPTCHA: SKIP_RECAPTCHA flag is set");
+    return true;
+  }
+  
+  // Skip for localhost in development
+  if (isDev && isLocalhost) {
+    console.log("Skipping reCAPTCHA: localhost in development");
+    return true;
+  }
+  
+  // Skip for Vercel preview deployments
+  if (isVercelPreview) {
+    console.log("Skipping reCAPTCHA: Vercel preview deployment");
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Handle skipping verification based on mode and environment
+ */
+function handleSkipVerification(mode: AuthMode, formData: FormData, formAction: (formData: FormData) => void) {
+  if (mode === "signin") {
+    console.log("Signin: Verification not required");
+    formAction(formData);
+    return true;
+  }
+  
+  const shouldSkip = shouldSkipVerification(mode);
+  
+  if (shouldSkip) {
+    console.log(`Skipping verification for ${mode}`);
+    formAction(formData);
+    return true;
+  }
+  
+  return false;
+}
+
 function AuthForm({ mode }: { mode: AuthMode }) {
   const searchParams = useSearchParams();
   const redirect = searchParams?.get("redirect");
@@ -117,6 +202,7 @@ function AuthForm({ mode }: { mode: AuthMode }) {
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [captchaAttempts, setCaptchaAttempts] = useState(0);
+  const [submitAllowed, setSubmitAllowed] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   
   // Use our ReCaptchaContext instead of direct hook
@@ -130,7 +216,8 @@ function AuthForm({ mode }: { mode: AuthMode }) {
     verificationScore,
     executeVerification,
     resetVerification,
-    setCustomMessage
+    setCustomMessage,
+    skipVerification
   } = useReCaptchaContext();
 
   // Effect to handle reCAPTCHA errors
@@ -143,11 +230,17 @@ function AuthForm({ mode }: { mode: AuthMode }) {
 
   // If token is loaded after user started submitting, continue submission
   useEffect(() => {
-    if (isSubmitting && token && formRef.current && mode === "signup") {
+    if (isSubmitting && token && formRef.current) {
       console.log("Token received while submitting, continuing submission");
       const formData = new FormData(formRef.current);
-      formData.append("captchaToken", token);
+      
+      // Only append captcha token for signup mode
+      if (mode === "signup") {
+        formData.append("captchaToken", token);
+      }
+      
       formAction(formData);
+      setIsSubmitting(false);
     }
   }, [token, isSubmitting, formAction, mode]);
 
@@ -158,153 +251,84 @@ function AuthForm({ mode }: { mode: AuthMode }) {
     setIsSubmitting(true);
     
     try {
-      // Only for signup mode
-      if (mode === "signup") {
-        console.log("Signup form submission started");
-        resetVerification();
-        setCustomMessage("Verifying your request...", 'loading');
+      // Get form data
+      const formData = new FormData(event.currentTarget);
+      
+      // Check if we should skip verification
+      if (handleSkipVerification(mode, formData, formAction)) {
+        setIsSubmitting(false);
+        return;
+      }
+      
+      // If we get here, we need to verify (mostly for signup)
+      console.log(`${mode} form submission started - requires verification`);
+      resetVerification();
+      setCustomMessage("Verifying your request...", 'loading');
+      
+      // Execute reCAPTCHA verification
+      const captchaAction = mode === "signup" ? RECAPTCHA_ACTIONS.SIGNUP : RECAPTCHA_ACTIONS.LOGIN;
+      
+      try {
+        // Attempt to get a verification token
+        const captchaToken = await executeVerification(captchaAction);
         
-        // Get environment and domain info
-        const isDevelopment = process.env.NODE_ENV === 'development';
-        const isDevDomain = isDevelopmentDomain();
-        const isVercelPreview = typeof window !== 'undefined' && 
-          window.location.hostname.includes('vercel.app');
-        
-        // Skip reCAPTCHA verification in specific conditions:
-        // 1. In development environment and not configured
-        // 2. In Vercel preview deployments (for testing)
-        // 3. When using test keys (for development)
-        const usingTestKeys = typeof window !== 'undefined' && 
-          window.__env?.usingTestKey === true;
+        if (captchaToken) {
+          // Success! Submit the form with the token
+          console.log(`reCAPTCHA verification successful for ${mode}`);
+          setCustomMessage("Verification successful", 'success');
           
-        const shouldSkipVerification = 
-          (!recaptchaConfigured && (isDevelopment || isDevDomain)) || 
-          isVercelPreview;
-        
-        if (shouldSkipVerification) {
-          console.warn("CAPTCHA verification skipped in development mode or preview deployment");
-          setCustomMessage("Verification skipped in development/preview mode", 'warning');
-          formAction(new FormData(event.currentTarget));
-          return;
-        }
-        
-        if (usingTestKeys && !isDevelopment && !isDevDomain) {
-          console.warn("Using test reCAPTCHA keys in non-development environment");
-          setCustomMessage("Using test verification keys (not secure for production)", 'warning');
-        }
-        
-        // Execute verification with specific action for signup
-        let captchaToken: string | null = null;
-        
-        try {
-          captchaToken = await executeVerification(RECAPTCHA_ACTIONS.SIGNUP);
-        } catch (error) {
-          console.error("reCAPTCHA execution error:", error);
+          // Create form data and add token
+          const formData = new FormData(event.currentTarget);
+          formData.append("captchaToken", captchaToken);
           
-          // Check for specific error types
-          const errorMessage = error instanceof Error ? error.message : "Failed to verify";
-          const isConfigError = errorMessage.includes('not configured') || 
-                              errorMessage.includes('missing');
-          const isNetworkError = errorMessage.includes('network') || 
-                               errorMessage.includes('failed to load');
-                               
-          if (isConfigError) {
-            setCustomMessage(
-              "reCAPTCHA verification unavailable. Please try again later or contact support.", 
-              'error'
-            );
-            
-            // After 3 seconds, offer to continue without verification
+          // Submit the form with the token
+          formAction(formData);
+        } else {
+          // No token, but no error either (unusual)
+          console.warn(`reCAPTCHA returned no token for ${mode}`);
+          setCustomMessage("Verification incomplete. Please try again.", 'warning');
+          setIsSubmitting(false);
+        }
+      } catch (error) {
+        console.error(`reCAPTCHA verification error for ${mode}:`, error);
+        
+        // Handle domain-specific errors
+        const isProductionSite = typeof window !== 'undefined' && 
+          PRODUCTION_DOMAINS.includes(window.location.hostname);
+        
+        const errorMessage = error instanceof Error ? error.message : "Verification failed";
+        
+        if (isProductionSite) {
+          // On production site, this should not happen
+          setCustomMessage(
+            `Unexpected verification error on ${window.location.hostname}. Please try again or contact support.`, 
+            'error'
+          );
+          
+          // For production domains, log the error with more details
+          console.error("Production domain verification error:", {
+            domain: window.location.hostname,
+            mode,
+            error: errorMessage,
+            time: new Date().toISOString()
+          });
+        } else {
+          // On development or other domains, show more details
+          setCustomMessage(errorMessage, 'error');
+          
+          // After a short delay, offer to continue without verification on non-prod
+          if (mode === "signup" && process.env.NODE_ENV !== 'production') {
             setTimeout(() => {
               setCustomMessage(
-                "Continue without verification? This reduces protection against spam.", 
+                "Continue without verification in development mode?", 
                 'warning'
               );
-            }, 3000);
-            
-          } else if (isNetworkError) {
-            setCustomMessage(
-              "Network error during verification. Check your internet connection.", 
-              'error'
-            );
-          } else {
-            setCustomMessage(
-              errorMessage, 
-              'error'
-            );
-          }
-          
-          setIsSubmitting(false);
-          return;
-        }
-        
-        // If still no token after execution
-        if (!captchaToken) {
-          // Try one more time if less than 3 attempts
-          if (captchaAttempts < 2) {
-            console.log(`reCAPTCHA token generation failed, attempt ${captchaAttempts + 1}`);
-            setCaptchaAttempts(prev => prev + 1);
-            setCustomMessage(`Verification attempt ${captchaAttempts + 1}...`, 'loading');
-            setTimeout(() => {
-              setIsSubmitting(false);
-              handleSubmit(event);
-            }, 1500);
-            return;
-          } else {
-            console.error("Failed to get reCAPTCHA token after multiple attempts");
-            
-            // After maximum attempts, provide option to continue anyway with warning
-            setCustomMessage(
-              "Verification unsuccessful after multiple attempts. You can try again or continue with reduced security.", 
-              'warning'
-            );
-            setIsSubmitting(false);
-            return;
+              setSubmitAllowed(true);
+            }, 2000);
           }
         }
         
-        console.log("CAPTCHA token available:", !!captchaToken);
-        console.log("CAPTCHA token length:", captchaToken?.length);
-        
-        // Create form data and add token
-        const formData = new FormData(event.currentTarget);
-        formData.append("captchaToken", captchaToken);
-        
-        // Submit the form with the token
-        formAction(formData);
-      } else if (mode === "signin") {
-        // For signin, optionally add reCAPTCHA verification with a lower threshold
-        // This is optional but can add additional security for login attempts
-        
-        // Only verify suspicious logins in production
-        const needsVerification = false; // You can implement logic to determine if verification is needed
-        
-        if (needsVerification && recaptchaConfigured) {
-          try {
-            console.log("Verifying login attempt with reCAPTCHA");
-            setCustomMessage("Verifying login attempt...", 'loading');
-            const captchaToken = await executeVerification(RECAPTCHA_ACTIONS.LOGIN);
-            
-            if (captchaToken) {
-              setCustomMessage("Verification successful", 'success');
-              const formData = new FormData(event.currentTarget);
-              formData.append("captchaToken", captchaToken);
-              formAction(formData);
-            } else {
-              // Continue without verification if token generation fails
-              setCustomMessage("Proceeding without verification", 'warning');
-              formAction(new FormData(event.currentTarget));
-            }
-          } catch (error) {
-            // If reCAPTCHA fails, still allow login but log the error
-            console.error("reCAPTCHA verification for login failed:", error);
-            setCustomMessage("Verification failed, proceeding anyway", 'warning');
-            formAction(new FormData(event.currentTarget));
-          }
-        } else {
-          // Regular sign-in without verification
-          formAction(new FormData(event.currentTarget));
-        }
+        setIsSubmitting(false);
       }
     } catch (error) {
       console.error("Form submission error:", error);
@@ -363,37 +387,52 @@ function AuthForm({ mode }: { mode: AuthMode }) {
           </div>
         </div>
 
-        {mode === "signup" && (
+        {/* Only show reCAPTCHA feedback for signup or if verification is active */}
+        {(mode === "signup" || verificationStatus !== 'idle') && (
           <div className="flex flex-col items-center">
             {/* Use ReCaptchaFeedback with our context state */}
             <div className="w-full my-2">
               <ReCaptchaFeedback 
                 status={verificationStatus}
                 message={verificationMessage}
-                onRetry={() => executeVerification(RECAPTCHA_ACTIONS.SIGNUP)}
+                score={verificationScore}
+                action={mode === "signup" ? RECAPTCHA_ACTIONS.SIGNUP : RECAPTCHA_ACTIONS.LOGIN}
+                onRetry={() => {
+                  resetVerification();
+                  setCaptchaAttempts(0);
+                  setIsSubmitting(false);
+                  executeVerification(mode === "signup" ? RECAPTCHA_ACTIONS.SIGNUP : RECAPTCHA_ACTIONS.LOGIN);
+                }}
                 onSkip={() => {
-                  // Allow bypassing reCAPTCHA if it's not configured
-                  setCustomMessage(
-                    "Continuing without reCAPTCHA verification. This may reduce security.", 
-                    "warning"
-                  );
-                  // Set a fake token for development
-                  formAction(new FormData());
+                  if (formRef.current) {
+                    // Skip verification and continue with form submission
+                    console.log(`Skipping verification for ${mode} form submission`);
+                    setCustomMessage(
+                      "Continuing without verification. This may reduce security.", 
+                      "warning"
+                    );
+                    
+                    // Create form data
+                    const formData = new FormData(formRef.current);
+                    formAction(formData);
+                  }
                 }}
               />
             </div>
             
-            <div className="text-sm text-[#F9F6EE] mt-4 text-center max-w-xs">
-              By signing up you are agreeing to our{" "}
-              <a 
-                href="https://chromad.vercel.app/docs/products/resuming/privacy-policy" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-[#F9F6EE] underline hover:text-[#B4916C] transition-colors"
-              >
-                Terms of Service and Policies
-              </a>
-            </div>
+            {mode === "signup" && (
+              <div className="text-sm text-[#F9F6EE] mt-4 text-center max-w-xs">
+                By signing up you are agreeing to our{" "}
+                <a 
+                  href="https://chromad.vercel.app/docs/products/resuming/privacy-policy" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-[#F9F6EE] underline hover:text-[#B4916C] transition-colors"
+                >
+                  Terms of Service and Policies
+                </a>
+              </div>
+            )}
           </div>
         )}
 
@@ -403,7 +442,7 @@ function AuthForm({ mode }: { mode: AuthMode }) {
           <Button
             type="submit"
             className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-white bg-[#B4916C] hover:bg-[#B4916C]/75 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#B4916C]"
-            disabled={pending || isSubmitting || (recaptchaLoading && mode === "signup" && recaptchaConfigured)}
+            disabled={pending || isSubmitting || (recaptchaLoading && mode === "signup" && recaptchaConfigured && !submitAllowed)}
           >
             {pending || isSubmitting ? (
               <>

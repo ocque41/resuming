@@ -14,6 +14,9 @@
   // Configuration
   const MAX_RETRIES = 3;
   const RETRY_DELAY = 1000; // ms
+  const PRODUCTION_DOMAINS = ['resuming.ai', 'www.resuming.ai'];
+  const TEST_SITE_KEY = '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
+  const USER_SITE_KEY = '6LcX-vwqAAAAAMdAK0K7JlSyCqO6GOp27myEnlh2';
   
   // Tracking state
   let retryCount = 0;
@@ -40,6 +43,61 @@
   }
 
   /**
+   * Helper to determine if we're on a production domain
+   */
+  function isProductionDomain() {
+    const hostname = window.location.hostname.toLowerCase();
+    return PRODUCTION_DOMAINS.includes(hostname);
+  }
+
+  /**
+   * Helper to determine if we're on a development domain
+   */
+  function isDevelopmentDomain() {
+    const hostname = window.location.hostname.toLowerCase();
+    return hostname === 'localhost' || 
+           hostname === '127.0.0.1' || 
+           hostname.endsWith('.local') || 
+           hostname.endsWith('.test');
+  }
+
+  /**
+   * Get the appropriate site key based on the current domain
+   */
+  function getSiteKeyForDomain() {
+    // For production domains, use the user's site key
+    if (isProductionDomain()) {
+      log('Production domain detected, using production site key');
+      return USER_SITE_KEY;
+    }
+    
+    // For development domains, use Google's test key
+    if (isDevelopmentDomain()) {
+      log('Development domain detected, using Google test key');
+      return TEST_SITE_KEY;
+    }
+    
+    // For unknown domains, try the user's site key first
+    log('Unknown domain, defaulting to production site key');
+    return USER_SITE_KEY;
+  }
+
+  /**
+   * Get appropriate environment settings when API fails
+   */
+  function getEnvFallbackSettings() {
+    return {
+      NEXT_PUBLIC_RECAPTCHA_SITE_KEY: getSiteKeyForDomain(),
+      isProductionDomain: isProductionDomain(),
+      isDevelopmentDomain: isDevelopmentDomain(),
+      usingTestKey: !isProductionDomain(),
+      domain: window.location.hostname,
+      loadSource: 'fallback',
+      loadTimestamp: new Date().toISOString()
+    };
+  }
+
+  /**
    * Load environment variables from the server
    * and make them available in window.__env
    */
@@ -53,7 +111,10 @@
     log('Starting environment variable loading...', {
       retryCount,
       debugMode,
-      windowEnvExists: !!window.__env
+      windowEnvExists: !!window.__env,
+      hostname: window.location.hostname,
+      isProduction: isProductionDomain(),
+      isDevelopment: isDevelopmentDomain()
     });
     
     // Check if we already have the reCAPTCHA site key
@@ -86,19 +147,28 @@
     // Create a timeout to abort fetch if it takes too long
     const timeoutId = setTimeout(() => {
       fetchTimedOut = true;
-      logWarning('Fetch timeout reached, continuing execution');
+      logWarning('Fetch timeout reached, using fallback configuration');
       
       // Dispatch timeout event for components waiting
       window.dispatchEvent(new CustomEvent('env-loading-timeout', { 
         detail: { url, timestamp } 
       }));
       
-      // Try to recover by setting a reasonable default for development
-      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        logWarning('Development environment detected, setting Google test key as fallback');
-        window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
-        window.__env.usingTestKey = true;
-      }
+      // Set fallback values based on domain
+      const fallbackSettings = getEnvFallbackSettings();
+      Object.assign(window.__env, fallbackSettings);
+      
+      // Log the fallback settings we're using
+      log('Using fallback settings due to API timeout', fallbackSettings);
+      
+      // Dispatch an event to notify that environment variables are loaded
+      window.dispatchEvent(new CustomEvent('env-loaded', { 
+        detail: { 
+          success: true,
+          isTestKey: fallbackSettings.usingTestKey,
+          fromFallback: true
+        } 
+      }));
     }, 5000); // 5 second timeout
 
     // Try to load from reCAPTCHA config endpoint
@@ -107,6 +177,7 @@
         clearTimeout(timeoutId);
         if (fetchTimedOut) {
           log('Fetch completed after timeout, still processing response');
+          return null; // Skip further processing if we already used fallback
         }
         
         if (!response.ok) {
@@ -116,6 +187,9 @@
         return response.json();
       })
       .then(data => {
+        // Skip if we already used fallback due to timeout
+        if (fetchTimedOut || !data) return;
+        
         log('Received data', { 
           hasConfig: !!data.config,
           hasSiteKey: !!data.siteKey,
@@ -127,6 +201,10 @@
         if (data.siteKey) {
           window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = data.siteKey;
           window.__env.usingTestKey = data.isUsingTestKey;
+          window.__env.isProductionDomain = isProductionDomain();
+          window.__env.isDevelopmentDomain = isDevelopmentDomain();
+          window.__env.domain = window.location.hostname;
+          window.__env.loadSource = 'api';
           
           log('Loaded reCAPTCHA site key', { 
             keyPrefix: data.siteKey.substring(0, 6) + '...',
@@ -155,30 +233,49 @@
             window.__env.recaptchaConfig = data.config;
           }
           
+          // Use fallback settings
+          const fallbackSettings = getEnvFallbackSettings();
+          Object.assign(window.__env, fallbackSettings);
+          
+          log('Using fallback settings due to missing site key', fallbackSettings);
+          
           window.dispatchEvent(new CustomEvent('env-loaded', { 
             detail: { 
-              success: false, 
-              error: 'Site key missing from response'
+              success: true, 
+              fromFallback: true,
+              isTestKey: fallbackSettings.usingTestKey
             } 
           }));
-          
-          // Retry loading if we haven't exceeded retry limit
-          retryWithBackoff();
         }
       })
       .catch(error => {
         clearTimeout(timeoutId);
+        
+        // Skip if we already used fallback due to timeout
+        if (fetchTimedOut) return;
+        
         logError('Failed to load environment variables', error);
         
-        window.dispatchEvent(new CustomEvent('env-loaded', { 
-          detail: { 
-            success: false, 
-            error: error.message
-          } 
-        }));
-        
-        // Retry loading if we haven't exceeded retry limit
-        retryWithBackoff();
+        // Use fallback settings for retry logic
+        if (retryCount < MAX_RETRIES) {
+          // Retry loading
+          retryWithBackoff();
+        } else {
+          // Max retries reached, use fallback settings
+          const fallbackSettings = getEnvFallbackSettings();
+          Object.assign(window.__env, fallbackSettings);
+          
+          log('Using fallback settings after max retries', fallbackSettings);
+          
+          window.dispatchEvent(new CustomEvent('env-loaded', { 
+            detail: { 
+              success: true, 
+              fromFallback: true,
+              afterRetries: true,
+              isTestKey: fallbackSettings.usingTestKey
+            } 
+          }));
+        }
       });
   }
   
@@ -200,6 +297,21 @@
       
       // Set a flag that we're in a failed state
       window.__env.loadFailed = true;
+      
+      // Use fallback settings as last resort
+      const fallbackSettings = getEnvFallbackSettings();
+      Object.assign(window.__env, fallbackSettings);
+      
+      log('Using fallback settings after load failure', fallbackSettings);
+      
+      window.dispatchEvent(new CustomEvent('env-loaded', { 
+        detail: { 
+          success: true, 
+          fromFallback: true,
+          afterFailure: true,
+          isTestKey: fallbackSettings.usingTestKey
+        } 
+      }));
       
       // Show alert in debug mode
       if (debugMode) {
@@ -245,6 +357,10 @@
       retryCount,
       loadFailed: window.__env?.loadFailed || false,
       usingTestKey: window.__env?.usingTestKey || false,
+      isProductionDomain: window.__env?.isProductionDomain || isProductionDomain(),
+      isDevelopmentDomain: window.__env?.isDevelopmentDomain || isDevelopmentDomain(),
+      domain: window.__env?.domain || window.location.hostname,
+      loadSource: window.__env?.loadSource || 'unknown',
       loadTimestamp: window.__env?.loadTimestamp,
       recaptchaConfig: window.__env?.recaptchaConfig
     };

@@ -1,9 +1,10 @@
 "use client";
 
 import React from 'react';
-import { AlertCircle, Shield, Loader2, CheckCircle, AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react';
+import { AlertCircle, Shield, Loader2, CheckCircle, AlertTriangle, ExternalLink, RefreshCw, Info, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { PRODUCTION_DOMAINS } from '@/lib/recaptcha/domain-check';
 
 interface ReCaptchaFeedbackProps {
   status: 'idle' | 'loading' | 'success' | 'error' | 'warning';
@@ -12,6 +13,9 @@ interface ReCaptchaFeedbackProps {
   showRetry?: boolean;
   onRetry?: () => void;
   onSkip?: () => void;
+  score?: number;
+  action?: string;
+  details?: { [key: string]: any };
 }
 
 /**
@@ -27,7 +31,10 @@ export default function ReCaptchaFeedback({
   className,
   showRetry = true,
   onRetry,
-  onSkip
+  onSkip,
+  score,
+  action,
+  details
 }: ReCaptchaFeedbackProps) {
   // No icon for idle status
   if (status === 'idle') return null;
@@ -67,6 +74,12 @@ export default function ReCaptchaFeedback({
   };
 
   const config = statusConfig[status];
+  
+  // Get current domain
+  const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'unknown';
+  const isResumingDomain = PRODUCTION_DOMAINS.includes(currentDomain);
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const isProdEnvironment = process.env.NODE_ENV === 'production';
 
   // Detect specific error types for custom messages
   const isConfigError = status === 'error' && (
@@ -86,6 +99,19 @@ export default function ReCaptchaFeedback({
     message?.includes('token') || 
     message?.includes('verification')
   );
+  
+  const isLowScoreError = status === 'warning' && 
+    score !== undefined && 
+    score < 0.5;
+  
+  const isDomainError = status === 'error' && 
+    message?.includes('domain');
+
+  // Format score to 2 decimal places if available
+  const formattedScore = score !== undefined ? score.toFixed(2) : undefined;
+
+  // Format timestamp to display in error details
+  const currentTimestamp = new Date().toISOString();
 
   return (
     <motion.div
@@ -102,8 +128,22 @@ export default function ReCaptchaFeedback({
       <span className="mt-0.5 flex-shrink-0">{config.icon}</span>
       <div className="flex-1">
         <p className="font-medium">
-          {message || status === 'loading' ? 'Verifying...' : status === 'success' ? 'Verification successful' : 'Verification failed'}
+          {message || (
+            status === 'loading' ? 'Verifying your request...' : 
+            status === 'success' ? 'Verification successful' : 
+            status === 'warning' ? 'Verification needs attention' :
+            'Verification failed'
+          )}
         </p>
+        
+        {/* Show score information if available */}
+        {score !== undefined && status === 'success' && (
+          <p className="text-xs mt-1 flex items-center">
+            <Info className="h-3 w-3 mr-1" />
+            Trust score: <span className="font-medium ml-1">{formattedScore}</span>
+            {action && <span className="ml-1">({action})</span>}
+          </p>
+        )}
         
         {isConfigError && (
           <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
@@ -116,27 +156,36 @@ export default function ReCaptchaFeedback({
             
             <div className="mt-2 text-xs space-y-1">
               <p className="font-medium text-gray-700 dark:text-gray-300">Troubleshooting:</p>
-              <p>
-                <span className="inline-block w-4 h-4 bg-gray-200 dark:bg-gray-700 rounded-full text-center text-xs mr-1">1</span>
-                Check if your site is properly registered in the
-                <a 
-                  href="https://www.google.com/recaptcha/admin" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-blue-600 dark:text-blue-400 hover:underline ml-1 inline-flex items-center"
-                >
-                  reCAPTCHA admin console
-                  <ExternalLink className="h-3 w-3 ml-0.5" />
-                </a>
-              </p>
-              <p>
-                <span className="inline-block w-4 h-4 bg-gray-200 dark:bg-gray-700 rounded-full text-center text-xs mr-1">2</span>
-                Verify that your domain is in the list of allowed domains
-              </p>
-              <p>
-                <span className="inline-block w-4 h-4 bg-gray-200 dark:bg-gray-700 rounded-full text-center text-xs mr-1">3</span>
-                Ensure environment variables are properly set
-              </p>
+              {isResumingDomain ? (
+                <p>
+                  <span className="inline-block w-4 h-4 bg-gray-200 dark:bg-gray-700 rounded-full text-center text-xs mr-1">!</span>
+                  This is unexpected on the resuming.ai domain. Please try again or contact support.
+                </p>
+              ) : (
+                <>
+                  <p>
+                    <span className="inline-block w-4 h-4 bg-gray-200 dark:bg-gray-700 rounded-full text-center text-xs mr-1">1</span>
+                    Check if your site is properly registered in the
+                    <a 
+                      href="https://www.google.com/recaptcha/admin" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-blue-600 dark:text-blue-400 hover:underline ml-1 inline-flex items-center"
+                    >
+                      reCAPTCHA admin console
+                      <ExternalLink className="h-3 w-3 ml-0.5" />
+                    </a>
+                  </p>
+                  <p>
+                    <span className="inline-block w-4 h-4 bg-gray-200 dark:bg-gray-700 rounded-full text-center text-xs mr-1">2</span>
+                    Verify that your domain ({currentDomain}) is in the list of allowed domains
+                  </p>
+                  <p>
+                    <span className="inline-block w-4 h-4 bg-gray-200 dark:bg-gray-700 rounded-full text-center text-xs mr-1">3</span>
+                    Ensure environment variables for NEXT_PUBLIC_RECAPTCHA_SITE_KEY and RECAPTCHA_SECRET_KEY are properly set
+                  </p>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -148,7 +197,16 @@ export default function ReCaptchaFeedback({
               <li>Check your internet connection</li>
               <li>Disable any browser extensions that might block scripts</li>
               <li>Try refreshing the page</li>
+              {isResumingDomain && (
+                <li>This is unexpected on resuming.ai. Please try again or contact support if the issue persists.</li>
+              )}
             </ul>
+            
+            {isDevelopment && (
+              <p className="mt-1 p-1.5 bg-gray-100 dark:bg-gray-800 rounded">
+                <span className="font-medium">Debug info:</span> Network error on {currentDomain} at {currentTimestamp.slice(0, 19)}
+              </p>
+            )}
           </div>
         )}
         
@@ -160,6 +218,90 @@ export default function ReCaptchaFeedback({
               <li>The verification request was rejected</li>
               <li>There was an error communicating with Google servers</li>
             </ul>
+            
+            {isResumingDomain && isProdEnvironment ? (
+              <p className="mt-1 text-red-600 dark:text-red-400">
+                This is unexpected on the resuming.ai production site. 
+                Please try again later or contact support if the issue persists.
+              </p>
+            ) : (
+              <p className="mt-1 text-gray-500 dark:text-gray-500">
+                You can try again or continue without verification during development.
+              </p>
+            )}
+            
+            {details && (
+              <div className="mt-1 p-1.5 bg-gray-100 dark:bg-gray-800 rounded text-xs font-mono">
+                {Object.entries(details).map(([key, value]) => (
+                  <div key={key} className="flex">
+                    <span className="font-medium w-24 truncate">{key}:</span>
+                    <span className="ml-1">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
+                  </div>
+                ))}
+                <div className="flex">
+                  <span className="font-medium w-24 truncate">domain:</span>
+                  <span className="ml-1">{currentDomain}</span>
+                </div>
+                <div className="flex">
+                  <span className="font-medium w-24 truncate">time:</span>
+                  <span className="ml-1">{currentTimestamp}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        
+        {isLowScoreError && (
+          <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+            <p className="mb-1">Our security check flagged this request as potentially suspicious:</p>
+            <ul className="list-disc pl-4 space-y-0.5">
+              <li>Trust score: <span className="font-medium">{formattedScore}</span> (below threshold)</li>
+              {action && <li>Action: {action}</li>}
+              <li>Please try again or use a different method to verify</li>
+            </ul>
+            <p className="mt-1 text-gray-500 dark:text-gray-500 text-xs italic">
+              This doesn't necessarily mean you're a bot - it could be due to network issues,
+              VPNs, or unusual browsing patterns.
+            </p>
+            
+            {isDevelopment && details && (
+              <div className="mt-1 p-1.5 bg-gray-100 dark:bg-gray-800 rounded text-xs font-mono">
+                <div className="flex">
+                  <span className="font-medium w-24 truncate">score:</span>
+                  <span className="ml-1">{formattedScore}</span>
+                </div>
+                <div className="flex">
+                  <span className="font-medium w-24 truncate">action:</span>
+                  <span className="ml-1">{action || 'unknown'}</span>
+                </div>
+                <div className="flex">
+                  <span className="font-medium w-24 truncate">domain:</span>
+                  <span className="ml-1">{currentDomain}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        
+        {isDomainError && (
+          <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+            <p className="mb-1">Domain verification issue:</p>
+            <ul className="list-disc pl-4 space-y-0.5">
+              <li>Current domain: <span className="font-medium">{currentDomain}</span></li>
+              <li>Allowed domains: <span className="font-medium">{PRODUCTION_DOMAINS.join(', ')}</span></li>
+              <li>This application should only run on the approved domains</li>
+            </ul>
+            
+            {isDevelopment ? (
+              <p className="mt-1 text-yellow-600 dark:text-yellow-400">
+                You're in development mode on {currentDomain}. You can continue, but production features may be limited.
+              </p>
+            ) : (
+              <p className="mt-1 text-red-600 dark:text-red-400">
+                This application is designed to run on {PRODUCTION_DOMAINS.join(' or ')}. 
+                Please access the site through the correct domain.
+              </p>
+            )}
           </div>
         )}
         
@@ -177,15 +319,21 @@ export default function ReCaptchaFeedback({
               </motion.button>
             )}
             
-            {onSkip && (isConfigError || status === 'warning') && (
-              <motion.button 
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                onClick={onSkip}
-                className="text-xs font-medium bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 transition-colors"
-              >
-                Continue Without Verification
-              </motion.button>
+            {onSkip && (
+              // Show skip button only in certain conditions
+              ((isConfigError || status === 'warning') || 
+              (!isProdEnvironment && status === 'error') || 
+              (isDevelopment && currentDomain !== 'resuming.ai' && currentDomain !== 'www.resuming.ai')) && (
+                <motion.button 
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={onSkip}
+                  className="text-xs font-medium bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 transition-colors inline-flex items-center"
+                >
+                  <ArrowRight className="h-3 w-3 mr-1.5" />
+                  Continue Without Verification
+                </motion.button>
+              )
             )}
           </div>
         )}

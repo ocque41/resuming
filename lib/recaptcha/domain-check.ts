@@ -9,6 +9,9 @@
 export const RECAPTCHA_TEST_SITE_KEY = '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
 export const RECAPTCHA_TEST_SECRET_KEY = '6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe';
 
+// Production domains registered with reCAPTCHA
+export const PRODUCTION_DOMAINS = ['resuming.ai', 'www.resuming.ai'];
+
 /**
  * Check if the test keys are being used
  * Google provides test keys that pass verification but should not be used in production
@@ -42,8 +45,14 @@ export function getCurrentDomain(): string {
   // Check various sources for domain info
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
   const vercelUrl = process.env.VERCEL_URL;
+  const siteUrl = process.env.SITE_URL;
   
-  // Parse from APP_URL if available (preferred source)
+  // Use SITE_URL if available as it's specifically set
+  if (siteUrl) {
+    return siteUrl;
+  }
+  
+  // Parse from APP_URL if available
   if (appUrl) {
     try {
       const url = new URL(appUrl.startsWith('http') ? appUrl : `https://${appUrl}`);
@@ -63,8 +72,8 @@ export function getCurrentDomain(): string {
     return 'localhost';
   }
   
-  // Fallback
-  return 'unknown';
+  // Fallback to production domain
+  return PRODUCTION_DOMAINS[0];
 }
 
 /**
@@ -99,9 +108,9 @@ export function formatDomain(domain: string): string {
  * Check if the current domain is a development domain
  * Development domains don't need to be registered with reCAPTCHA
  */
-export function isDevelopmentDomain(): boolean {
-  const domain = getCurrentDomain();
-  const formattedDomain = formatDomain(domain);
+export function isDevelopmentDomain(domain?: string): boolean {
+  const domainToCheck = domain || getCurrentDomain();
+  const formattedDomain = formatDomain(domainToCheck);
   
   // Check for local development domains
   const developmentDomains = [
@@ -123,11 +132,24 @@ export function isDevelopmentDomain(): boolean {
 }
 
 /**
+ * Check if the domain is a registered production domain
+ */
+export function isProductionDomain(domain?: string): boolean {
+  const domainToCheck = domain || getCurrentDomain();
+  const formattedDomain = formatDomain(domainToCheck);
+  
+  // Check against normalized production domains
+  const normalizedProductionDomains = PRODUCTION_DOMAINS.map(formatDomain);
+  
+  return normalizedProductionDomains.includes(formattedDomain);
+}
+
+/**
  * Check if domain is a Vercel preview deployment
  */
-export function isVercelPreviewDomain(): boolean {
-  const domain = getCurrentDomain();
-  return domain.includes('vercel.app') && !domain.includes('-production');
+export function isVercelPreviewDomain(domain?: string): boolean {
+  const domainToCheck = domain || getCurrentDomain();
+  return domainToCheck.includes('vercel.app') && !domainToCheck.includes('-production');
 }
 
 /**
@@ -145,8 +167,9 @@ export function getRecaptchaConfigStatus() {
   // Check domain information
   const domain = getCurrentDomain();
   const formattedDomain = formatDomain(domain);
-  const isDevelopment = isDevelopmentDomain();
-  const isVercelPreview = isVercelPreviewDomain();
+  const isDevelopment = isDevelopmentDomain(domain);
+  const isProduction = isProductionDomain(domain);
+  const isVercelPreview = isVercelPreviewDomain(domain);
   
   // Check if using test keys
   const usingTestKeys = isUsingTestKeys();
@@ -160,6 +183,7 @@ export function getRecaptchaConfigStatus() {
     hasSecretKey,
     usingTestKeys,
     isDevelopment,
+    isProduction,
     nodeEnv
   );
   
@@ -168,6 +192,7 @@ export function getRecaptchaConfigStatus() {
     hasSiteKey && 
     hasSecretKey && 
     (nodeEnv !== 'production' || !usingTestKeys) && // No test keys in production
+    (isDevelopment || isProduction) &&
     potentialIssues.length === 0
   );
 
@@ -178,7 +203,9 @@ export function getRecaptchaConfigStatus() {
     originalDomain: domain,
     usingTestKeys,
     isDevelopment,
+    isProduction,
     isVercelPreview,
+    allowedDomains: PRODUCTION_DOMAINS,
     environment: nodeEnv,
     isProperlyConfigured,
     potentialIssues,
@@ -195,6 +222,7 @@ function getPotentialIssues(
   hasSecretKey: boolean,
   usingTestKeys: boolean,
   isDevelopment: boolean,
+  isProduction: boolean,
   nodeEnv: string
 ): string[] {
   const issues: string[] = [];
@@ -213,9 +241,9 @@ function getPotentialIssues(
     issues.push('Using test keys in production environment');
   }
   
-  // Domain mismatch warnings (can't be determined server-side with certainty)
-  if (!isDevelopment && nodeEnv === 'production' && !usingTestKeys) {
-    issues.push('Verify that your domain is properly registered in the reCAPTCHA admin console');
+  // Domain issues
+  if (!isDevelopment && !isProduction && nodeEnv === 'production') {
+    issues.push(`Current domain is not registered. Allowed domains: ${PRODUCTION_DOMAINS.join(', ')}`);
   }
   
   return issues;
@@ -233,8 +261,13 @@ export function isRecaptchaConfigured(): boolean {
 /**
  * Checks if a domain matches or is a subdomain of an allowed domain
  */
-export function isDomainAllowed(domain: string, allowedDomains: string[]): boolean {
+export function isDomainAllowed(domain: string, allowedDomains: string[] = PRODUCTION_DOMAINS): boolean {
   const formattedDomain = formatDomain(domain);
+  
+  // Development domains are always allowed
+  if (isDevelopmentDomain(domain)) {
+    return true;
+  }
   
   // Check for exact match or subdomain match
   return allowedDomains.some(allowedDomain => {
