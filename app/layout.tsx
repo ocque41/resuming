@@ -7,8 +7,6 @@ import { ThemeProvider } from 'app/theme-provider';
 import { I18nProvider } from '@/components/i18n-provider';
 import { Inter } from "next/font/google";
 import { cn } from '@/lib/utils';
-import { ReCaptchaProvider } from '@/lib/recaptcha/recaptcha-context';
-import { RECAPTCHA_ACTIONS } from '@/lib/recaptcha/actions';
 
 export const metadata: Metadata = {
   title: 'CV Optimizer - AI-powered CV Analysis & Optimization',
@@ -106,20 +104,11 @@ export default function RootLayout({
             `,
           }}
         />
-        {/* Environment variables loader - helps with reCAPTCHA */}
-        <script src="/env-loader.js" />
       </head>
       <body className="min-h-[100dvh] bg-[#050505] font-borna">
         <I18nProvider>
           <ThemeProvider defaultTheme="dark" storageKey="app-theme">
-            <ReCaptchaProvider 
-              defaultAction={RECAPTCHA_ACTIONS.GENERIC}
-              skipForDevelopment={false}
-              useTestKeysInDev={true}
-              tokenRefreshInterval={108000}
-            >
-              {children}
-            </ReCaptchaProvider>
+            {children}
           </ThemeProvider>
         </I18nProvider>
       </body>

@@ -10,205 +10,25 @@ import { Loader } from "lucide-react";
 import Image from "next/image";
 import { Card, CardHeader, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
 import { useState, useRef, useEffect } from "react";
-import { useReCaptcha } from "@/components/ui/recaptcha-v3";
-import ReCaptchaFeedback from "@/components/ui/recaptcha-feedback";
-import { useReCaptchaContext } from "@/lib/recaptcha/recaptcha-context";
-import ReCaptchaBadge from "@/components/ui/recaptcha-badge";
+import CustomCaptchaGame from "@/components/CustomCaptchaGame";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { signIn, signUp } from "./actions";
 import { ActionState } from "@/lib/auth/middleware";
 
-// Import our reCAPTCHA utilities
-import { RECAPTCHA_ACTIONS, getMinScoreForAction, getErrorMessageForAction } from "@/lib/recaptcha/actions";
-import { 
-  isRecaptchaConfigured, 
-  getRecaptchaConfigStatus, 
-  isDevelopmentDomain,
-  isProductionDomain,
-  PRODUCTION_DOMAINS 
-} from "@/lib/recaptcha/domain-check";
-
-// Create a global window object to store environment variables
-// This helps with client-side environment variable access
-const setupEnv = () => {
-  if (typeof window !== 'undefined') {
-    if (!window.__env) {
-      window.__env = {};
-    }
-    
-    // Set reCAPTCHA site key if available
-    if (process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY && !window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
-      window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
-    }
-    
-    // Attempt to get from URL parameters (useful for testing)
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlSiteKey = urlParams.get('recaptchaKey');
-    if (urlSiteKey) {
-      window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = urlSiteKey;
-    }
-    
-    // Store domain information
-    window.__env.domain = window.location.hostname;
-    window.__env.isProductionDomain = PRODUCTION_DOMAINS.includes(window.location.hostname);
-    window.__env.isDevelopmentDomain = 
-      window.location.hostname === 'localhost' || 
-      window.location.hostname === '127.0.0.1' ||
-      window.location.hostname.endsWith('.local') ||
-      window.location.hostname.endsWith('.test');
-  }
-};
-
-// Enhanced debugging for reCAPTCHA
-if (typeof window !== 'undefined') {
-  setupEnv();
-  
-  const isDev = process.env.NODE_ENV === 'development';
-  const currentDomain = window.location.hostname;
-  const isProdDomain = PRODUCTION_DOMAINS.includes(currentDomain);
-  
-  if (isDev || isProdDomain) {
-    console.log(`[reCAPTCHA Debug] Environment: ${process.env.NODE_ENV}`);
-    console.log(`[reCAPTCHA Debug] Domain: ${currentDomain}`);
-    console.log(`[reCAPTCHA Debug] Is Production Domain: ${isProdDomain}`);
-    console.log(`[reCAPTCHA Debug] Site Key available: ${!!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY}`);
-    console.log(`[reCAPTCHA Debug] Window __env available: ${!!window.__env}`);
-    
-    if (window.__env?.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
-      console.log(`[reCAPTCHA Debug] Window __env Site Key length: ${window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.length}`);
-      console.log(`[reCAPTCHA Debug] Window __env Site Key first 5 chars: ${window.__env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.substring(0, 5)}`);
-      console.log(`[reCAPTCHA Debug] Using test key: ${window.__env.usingTestKey === true}`);
-    } else if (process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
-      console.log(`[reCAPTCHA Debug] Process env Site Key length: ${process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.length}`);
-      console.log(`[reCAPTCHA Debug] Process env Site Key first 5 chars: ${process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY.substring(0, 5)}`);
-    } else {
-      console.warn(`[reCAPTCHA Debug] No reCAPTCHA site key found in environment variables`);
-    }
-    
-    // Special logging for resuming.ai domain
-    if (isProdDomain) {
-      console.log(`[reCAPTCHA Debug] ✅ Running on production domain: ${currentDomain}`);
-      
-      // Get reCAPTCHA configuration status
-      const configStatus = getRecaptchaConfigStatus();
-      console.log(`[reCAPTCHA Debug] Configuration status: ${JSON.stringify(configStatus)}`);
-    }
-  }
-}
-
-// Add to window global interface
-declare global {
-  interface Window {
-    __env?: {
-      [key: string]: any;
-      NEXT_PUBLIC_RECAPTCHA_SITE_KEY?: string;
-      domain?: string;
-      isProductionDomain?: boolean;
-      isDevelopmentDomain?: boolean;
-      usingTestKey?: boolean;
-    };
-  }
-}
-
-// Type for auth mode
-type AuthMode = "signin" | "signup";
-
-/**
- * Create the appropriate action function based on the authentication mode
- * This ensures the return type is compatible with ActionState
- */
-const createAction = (mode: AuthMode) => (data: FormData) => {
-  // Convert the response to ensure it's compatible with ActionState
-  const convertToActionState = (response: any): ActionState => {
-    // If the response has 'success' as boolean, convert it to string
-    if (response && typeof response.success === 'boolean') {
-      return {
-        ...response,
-        success: response.success === true ? "true" : "",
-        message: response.message || ""
-      };
-    }
-    return response || { error: "", email: "", password: "" };
-  };
-
+const createAction = (mode: "signin" | "signup") => (data: FormData) => {
   if (mode === "signin") {
-    return signIn({ error: "", email: "", password: "" }, data)
-      .then(res => convertToActionState(res));
+    return signIn({ error: "", email: "", password: "" }, data).then(
+      (res) => res ?? { error: "", email: "", password: "" }
+    );
   } else {
-    return signUp({ error: "", email: "", password: "" }, data)
-      .then(res => convertToActionState(res));
+    return signUp({ error: "", email: "", password: "" }, data).then(
+      (res) => res ?? { error: "", email: "", password: "" }
+    );
   }
 };
 
-/**
- * Determine if reCAPTCHA verification should be skipped based on environment
- */
-function shouldSkipVerification(mode: AuthMode): boolean {
-  // For sign-in, we typically have less strict requirements
-  if (mode === "signin") {
-    return true; // We can optionally enable verification for suspicious logins
-  }
-  
-  // Get environment information
-  const isDev = process.env.NODE_ENV === 'development';
-  const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '';
-  const isLocalhost = currentDomain === 'localhost' || currentDomain === '127.0.0.1';
-  const isTestDomain = currentDomain.endsWith('.local') || currentDomain.endsWith('.test');
-  const isVercelPreview = currentDomain.includes('vercel.app');
-  const isProdDomain = PRODUCTION_DOMAINS.includes(currentDomain);
-  const usingTestKeys = typeof window !== 'undefined' && window.__env?.usingTestKey === true;
-  const skipRecaptcha = process.env.SKIP_RECAPTCHA === 'true';
-  
-  // Always verify on production domains
-  if (isProdDomain) {
-    console.log(`[reCAPTCHA] Verification required for production domain: ${currentDomain}`);
-    return false;
-  }
-  
-  // Skip in development with SKIP_RECAPTCHA flag
-  if (isDev && skipRecaptcha) {
-    console.log(`[reCAPTCHA] Skipping verification: SKIP_RECAPTCHA flag is set`);
-    return true;
-  }
-  
-  // Skip for localhost in development
-  if (isDev && (isLocalhost || isTestDomain)) {
-    console.log(`[reCAPTCHA] Skipping verification: ${currentDomain} in development`);
-    return true;
-  }
-  
-  // Skip for Vercel preview deployments
-  if (isVercelPreview) {
-    console.log(`[reCAPTCHA] Skipping verification: Vercel preview deployment`);
-    return true;
-  }
-  
-  return false;
-}
-
-/**
- * Handle skipping verification based on mode and environment
- */
-function handleSkipVerification(mode: AuthMode, formData: FormData, formAction: (formData: FormData) => void) {
-  if (mode === "signin") {
-    console.log("Signin: Verification not required");
-    formAction(formData);
-    return true;
-  }
-  
-  const shouldSkip = shouldSkipVerification(mode);
-  
-  if (shouldSkip) {
-    console.log(`Skipping verification for ${mode}`);
-    formAction(formData);
-    return true;
-  }
-  
-  return false;
-}
-
-function AuthForm({ mode }: { mode: AuthMode }) {
+function AuthForm({ mode }: { mode: "signin" | "signup" }) {
   const searchParams = useSearchParams();
   const redirect = searchParams?.get("redirect");
   const priceId = searchParams?.get("priceId");
@@ -218,364 +38,152 @@ function AuthForm({ mode }: { mode: AuthMode }) {
     { error: "", email: "", password: "" }
   );
   
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [captchaAttempts, setCaptchaAttempts] = useState(0);
-  const [submitAllowed, setSubmitAllowed] = useState(false);
-  const formRef = useRef<HTMLFormElement>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaError, setCaptchaError] = useState<string>("");
   
-  // Use our ReCaptchaContext instead of direct hook
-  const {
-    token,
-    isLoading: recaptchaLoading,
-    error: recaptchaError,
-    isConfigured: recaptchaConfigured,
-    verificationStatus,
-    verificationMessage,
-    verificationScore,
-    executeVerification,
-    resetVerification,
-    setCustomMessage,
-    skipVerification
-  } = useReCaptchaContext();
-
-  // Effect to handle reCAPTCHA errors
+  // Reset captcha when form is submitted or errors occur
   useEffect(() => {
-    if (recaptchaError) {
-      console.error('reCAPTCHA error:', recaptchaError);
-      setCustomMessage(recaptchaError.message, 'error');
+    if (state.error) {
+      setCaptchaToken(null);
     }
-  }, [recaptchaError, setCustomMessage]);
+  }, [state.error]);
 
-  // If token is loaded after user started submitting, continue submission
-  useEffect(() => {
-    if (isSubmitting && token && formRef.current) {
-      console.log("Token received while submitting, continuing submission");
-      const formData = new FormData(formRef.current);
-      
-      // Only append captcha token for signup mode
-      if (mode === "signup") {
-        formData.append("captchaToken", token);
-      }
-      
-      formAction(formData);
-      setIsSubmitting(false);
-    }
-  }, [token, isSubmitting, formAction, mode]);
-
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     
-    if (isSubmitting) return;
-    setIsSubmitting(true);
-    
-    try {
-      // Get form data
-      const formData = new FormData(event.currentTarget);
-      
-      // Check if we should skip verification
-      if (handleSkipVerification(mode, formData, formAction)) {
-        setIsSubmitting(false);
-        return;
-      }
-      
-      // If we get here, we need to verify (mostly for signup)
-      console.log(`[reCAPTCHA] ${mode} form submission started - requires verification`);
-      resetVerification();
-      setCustomMessage("Verifying your request...", 'loading');
-      
-      // Execute reCAPTCHA verification
-      const captchaAction = mode === "signup" ? RECAPTCHA_ACTIONS.SIGNUP : RECAPTCHA_ACTIONS.LOGIN;
-      
-      try {
-        // Get domain information
-        const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '';
-        const isProdDomain = isProductionDomain(currentDomain);
-        
-        // Check reCAPTCHA configuration first
-        const configStatus = getRecaptchaConfigStatus();
-        if (!configStatus.isProperlyConfigured) {
-          throw new Error(`reCAPTCHA is not properly configured: ${configStatus.potentialIssues.join(', ')}`);
-        }
-        
-        // Attempt to get a verification token
-        const captchaToken = await executeVerification(captchaAction);
-        
-        if (captchaToken) {
-          // Success! Submit the form with the token
-          console.log(`[reCAPTCHA] Verification successful for ${mode}`);
-          
-          // Add detailed logging for production domains
-          if (isProdDomain) {
-            console.log(`[reCAPTCHA] ✅ Successful verification on production domain: ${currentDomain}`);
-          }
-          
-          setCustomMessage("Verification successful", 'success');
-          
-          // Create form data and add token
-          const formData = new FormData(event.currentTarget);
-          formData.append("captchaToken", captchaToken);
-          
-          // Submit the form with the token
-          formAction(formData);
-        } else {
-          // No token, but no error either (unusual)
-          console.warn(`[reCAPTCHA] Returned no token for ${mode}`);
-          
-          // Different messaging based on domain
-          if (isProdDomain) {
-            setCustomMessage(`Verification incomplete on ${currentDomain}. Please refresh the page and try again.`, 'warning');
-            
-            // Log the issue for production domains
-            console.error(`[reCAPTCHA] No token returned on production domain: ${currentDomain}`, {
-              action: captchaAction,
-              time: new Date().toISOString(),
-              domain: currentDomain
-            });
-          } else {
-            setCustomMessage("Verification incomplete. Please try again.", 'warning');
-          }
-          
-          setIsSubmitting(false);
-        }
-      } catch (error) {
-        console.error(`[reCAPTCHA] Verification error for ${mode}:`, error);
-        
-        // Handle domain-specific errors
-        const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '';
-        const isProdDomain = isProductionDomain(currentDomain);
-        const errorMessage = error instanceof Error ? error.message : "Verification failed";
-        
-        // Determine if this is a configuration error
-        const isConfigError = errorMessage.includes('not properly configured') || 
-                              errorMessage.includes('missing') ||
-                              errorMessage.includes('site key');
-        
-        // Check for network errors
-        const isNetworkError = errorMessage.includes('network') || 
-                               errorMessage.includes('fetch') || 
-                               errorMessage.includes('timeout');
-        
-        if (isProdDomain) {
-          // On production site, provide specific error guidance
-          if (isConfigError) {
-            setCustomMessage(
-              `Critical: reCAPTCHA configuration error on ${currentDomain}. Please contact support.`, 
-              'error'
-            );
-          } else if (isNetworkError) {
-            setCustomMessage(
-              `Network error during verification on ${currentDomain}. Please check your connection and try again.`, 
-              'error'
-            );
-          } else {
-            setCustomMessage(
-              `Verification error on ${currentDomain}. Please try again or contact support.`, 
-              'error'
-            );
-          }
-          
-          // For production domains, log the error with more details
-          console.error("[reCAPTCHA] Production domain verification error:", {
-            domain: currentDomain,
-            mode,
-            error: errorMessage,
-            isConfigError,
-            isNetworkError,
-            time: new Date().toISOString(),
-            action: captchaAction
-          });
-        } else {
-          // On development or other domains, show more details
-          setCustomMessage(
-            `Verification error (${mode}): ${errorMessage}`, 
-            'error'
-          );
-          
-          // After a short delay, offer to continue without verification on non-prod
-          if (mode === "signup" && process.env.NODE_ENV !== 'production') {
-            setTimeout(() => {
-              setCustomMessage(
-                "Continue without verification in development mode?", 
-                'warning'
-              );
-              setSubmitAllowed(true);
-            }, 2000);
-          }
-        }
-        
-        setIsSubmitting(false);
-      }
-    } catch (error) {
-      console.error("[Form] Submission error:", error);
-      const errorMsg = `Error: ${error instanceof Error ? error.message : "Unknown error"}`;
-      setCustomMessage(errorMsg, 'error');
-      setIsSubmitting(false);
+    // Debug output for form submission
+    console.log("Form submission - mode:", mode);
+    if (mode === "signup") {
+      console.log("CAPTCHA token available:", !!captchaToken);
     }
+    
+    // Only check CAPTCHA for sign-up
+    if (mode === "signup" && !captchaToken) {
+      setCaptchaError("Please complete the CAPTCHA verification");
+      return;
+    }
+    
+    const formData = new FormData(event.currentTarget);
+    
+    // Add CAPTCHA token to form data if available
+    if (captchaToken) {
+      formData.append("captchaToken", captchaToken);
+      console.log("CAPTCHA token added to form data, length:", captchaToken.length);
+    }
+    
+    formAction(formData);
   };
 
   return (
-    <>
-      <form
-        ref={formRef}
-        className="space-y-6"
-        onSubmit={handleSubmit}
-      >
-        <input type="hidden" name="redirect" value={redirect || ""} />
-        <input type="hidden" name="priceId" value={priceId || ""} />
-        <input type="hidden" name="inviteId" value={inviteId || ""} />
-        <div>
-          <Label htmlFor="email" className="block text-sm font-medium text-white">
-            Email
-          </Label>
-          <div className="mt-1">
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              defaultValue={state.email}
-              required
-              maxLength={50}
-              className="appearance-none rounded-full block w-full px-3 py-2 border border-[#B4916C]/30 placeholder-[#B4916C] text-white bg-[#9E7C57] focus:outline-none focus:ring-[#B4916C] focus:border-[#B4916C] sm:text-sm"
-              placeholder="Enter your email"
-            />
+    <form
+      className="space-y-6"
+      onSubmit={handleSubmit}
+    >
+      <input type="hidden" name="redirect" value={redirect || ""} />
+      <input type="hidden" name="priceId" value={priceId || ""} />
+      <input type="hidden" name="inviteId" value={inviteId || ""} />
+      <div>
+        <Label htmlFor="email" className="block text-sm font-medium text-white">
+          Email
+        </Label>
+        <div className="mt-1">
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            defaultValue={state.email}
+            required
+            maxLength={50}
+            // Changed input background to a darker shade
+            className="appearance-none rounded-full block w-full px-3 py-2 border border-[#B4916C]/30 placeholder-[#B4916C] text-white bg-[#9E7C57] focus:outline-none focus:ring-[#B4916C] focus:border-[#B4916C] sm:text-sm"
+            placeholder="Enter your email"
+          />
+        </div>
+      </div>
+
+      <div>
+        <Label htmlFor="password" className="block text-sm font-medium text-white">
+          Password
+        </Label>
+        <div className="mt-1">
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete={mode === "signin" ? "current-password" : "new-password"}
+            defaultValue={state.password}
+            required
+            minLength={8}
+            maxLength={100}
+            className="appearance-none rounded-full block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-white bg-[#9E7C57] focus:outline-none focus:ring-[#B4916C] focus:border-[#B4916C] sm:text-sm"
+            placeholder="Enter your password"
+          />
+        </div>
+      </div>
+
+      {mode === "signup" && (
+        <div className="flex flex-col items-center">
+          <div className="mb-2 text-xs text-gray-400">
+            Please verify that you are human
+          </div>
+          <CustomCaptchaGame
+            onSuccess={(token) => {
+              console.log("CAPTCHA token received:", token ? "Yes (length: " + token.length + ")" : "No");
+              setCaptchaToken(token);
+              setCaptchaError("");
+            }}
+            onError={() => {
+              setCaptchaToken(null);
+              setCaptchaError("CAPTCHA verification failed, please try again");
+            }}
+          />
+          {captchaError && <div className="text-red-500 text-sm mt-2">{captchaError}</div>}
+          
+          <div className="text-sm text-[#F9F6EE] mt-4 text-center max-w-xs">
+            By signing up you are agreeing to our{" "}
+            <a 
+              href="https://chromad.vercel.app/docs/products/resuming/privacy-policy" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-[#F9F6EE] underline hover:text-[#B4916C] transition-colors"
+            >
+              Terms of Service and Policies
+            </a>
           </div>
         </div>
+      )}
 
-        <div>
-          <Label htmlFor="password" className="block text-sm font-medium text-white">
-            Password
-          </Label>
-          <div className="mt-1">
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete={mode === "signin" ? "current-password" : "new-password"}
-              defaultValue={state.password}
-              required
-              minLength={8}
-              maxLength={100}
-              className="appearance-none rounded-full block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-white bg-[#9E7C57] focus:outline-none focus:ring-[#B4916C] focus:border-[#B4916C] sm:text-sm"
-              placeholder="Enter your password"
-            />
-          </div>
-        </div>
+      {state?.error && <div className="text-red-500 text-sm">{state.error}</div>}
 
-        {/* Only show reCAPTCHA feedback for signup or if verification is active */}
-        {(mode === "signup" || verificationStatus !== 'idle') && (
-          <div className="flex flex-col items-center">
-            {/* Use ReCaptchaFeedback with our context state */}
-            <div className="w-full my-2">
-              <ReCaptchaFeedback 
-                status={verificationStatus}
-                message={verificationMessage}
-                score={verificationScore}
-                action={mode === "signup" ? RECAPTCHA_ACTIONS.SIGNUP : RECAPTCHA_ACTIONS.LOGIN}
-                details={{
-                  configError: verificationMessage?.includes('not properly configured') || 
-                              verificationMessage?.includes('missing') ||
-                              verificationMessage?.includes('site key'),
-                  networkError: verificationMessage?.includes('network') || 
-                                verificationMessage?.includes('fetch') || 
-                                verificationMessage?.includes('timeout'),
-                  tokenError: verificationMessage?.includes('token') || 
-                             verificationMessage?.includes('verification'),
-                  domainError: verificationMessage?.includes('domain')
-                }}
-                onRetry={() => {
-                  resetVerification();
-                  setCaptchaAttempts(prev => prev + 1);
-                  setIsSubmitting(false);
-                  
-                  // Add a retry counter to limit potential abuse
-                  if (captchaAttempts < 3) {
-                    executeVerification(mode === "signup" ? RECAPTCHA_ACTIONS.SIGNUP : RECAPTCHA_ACTIONS.LOGIN);
-                  } else {
-                    setCustomMessage(
-                      "Too many verification attempts. Please refresh the page and try again.",
-                      "warning"
-                    );
-                  }
-                }}
-                onSkip={() => {
-                  if (formRef.current) {
-                    // Only allow skipping on non-production domains
-                    const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '';
-                    const isProdDomain = isProductionDomain(currentDomain);
-                    
-                    if (isProdDomain) {
-                      setCustomMessage(
-                        `Verification required on ${currentDomain}. Please try again or contact support.`,
-                        "error"
-                      );
-                      return;
-                    }
-                    
-                    // Skip verification and continue with form submission
-                    console.log(`[reCAPTCHA] Skipping verification for ${mode} form submission`);
-                    setCustomMessage(
-                      "Continuing without verification. This may reduce security.", 
-                      "warning"
-                    );
-                    
-                    // Create form data
-                    const formData = new FormData(formRef.current);
-                    formAction(formData);
-                  }
-                }}
-              />
-            </div>
-            
-            {mode === "signup" && (
-              <div className="text-sm text-[#F9F6EE] mt-4 text-center max-w-xs">
-                By signing up you are agreeing to our{" "}
-                <a 
-                  href="https://chromad.vercel.app/docs/products/resuming/privacy-policy" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-[#F9F6EE] underline hover:text-[#B4916C] transition-colors"
-                >
-                  Terms of Service and Policies
-                </a>
-              </div>
-            )}
-          </div>
-        )}
-
-        {state?.error && <div className="text-red-500 text-sm">{state.error}</div>}
-
-        <div>
-          <Button
-            type="submit"
-            className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-white bg-[#B4916C] hover:bg-[#B4916C]/75 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#B4916C]"
-            disabled={pending || isSubmitting || (recaptchaLoading && mode === "signup" && recaptchaConfigured && !submitAllowed)}
-          >
-            {pending || isSubmitting ? (
-              <>
-                <Loader className="animate-spin mr-2 h-4 w-4" />
-                {isSubmitting ? "Verifying..." : "Loading..."}
-              </>
-            ) : mode === "signin" ? (
-              "Sign in"
-            ) : (
-              "Sign up"
-            )}
-          </Button>
-        </div>
-      </form>
-    </>
+      <div>
+        <Button
+          type="submit"
+          className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-white bg-[#B4916C] hover:bg-[#B4916C]/75 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#B4916C]"
+          disabled={pending || (mode === "signup" && !captchaToken)}
+        >
+          {pending ? (
+            <>
+              <Loader className="animate-spin mr-2 h-4 w-4" />
+              Loading...
+            </>
+          ) : mode === "signin" ? (
+            "Sign in"
+          ) : (
+            "Sign up"
+          )}
+        </Button>
+      </div>
+    </form>
   );
 }
 
-export function Login({ mode = "signin" }: { mode?: AuthMode }) {
+export function Login({ mode = "signin" }: { mode?: "signin" | "signup" }) {
   const router = useRouter();
 
-  // Debug log on component mount
+  // Reset CAPTCHA when switching between signin and signup
   useEffect(() => {
-    console.log("Login mode:", mode);
-    // Setup environment variables
-    setupEnv();
+    console.log("Login mode changed:", mode);
   }, [mode]);
 
   return (
@@ -626,14 +234,6 @@ export function Login({ mode = "signin" }: { mode?: AuthMode }) {
             </div>
           </CardFooter>
         </Card>
-        
-        {/* Use the ReCaptchaBadge component instead of hardcoded attribution */}
-        <ReCaptchaBadge 
-          position="bottom-right"
-          variant="dark"
-          size="small"
-          minimalist
-        />
       </div>
     </div>
   );

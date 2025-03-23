@@ -6,7 +6,9 @@ import Link from 'next/link';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle, X, Loader2, ArrowRight, RefreshCw } from 'lucide-react';
+import { CheckCircle, X, Loader2, ArrowRight, RefreshCw, Mail } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 interface VerifyEmailClientProps {
   token: string;
@@ -23,6 +25,7 @@ export default function VerifyEmailClient({ token, email }: VerifyEmailClientPro
   const [subscribeToNewsletter, setSubscribeToNewsletter] = useState(true);
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [subscriptionSuccess, setSubscriptionSuccess] = useState(false);
+  const [subscriptionError, setSubscriptionError] = useState('');
 
   useEffect(() => {
     const verifyEmail = async () => {
@@ -48,7 +51,7 @@ export default function VerifyEmailClient({ token, email }: VerifyEmailClientPro
         if (response.ok) {
           setIsSuccess(true);
           
-          // Auto-subscribe to newsletter if the user verified email successfully
+          // Auto-subscribe to newsletter if the user opted in and verified email successfully
           if (subscribeToNewsletter) {
             handleNewsletterSubscription();
           }
@@ -63,7 +66,7 @@ export default function VerifyEmailClient({ token, email }: VerifyEmailClientPro
     };
 
     verifyEmail();
-  }, [token, email, subscribeToNewsletter]);
+  }, [token, email]);
 
   const handleResendVerification = async () => {
     setIsResending(true);
@@ -98,6 +101,7 @@ export default function VerifyEmailClient({ token, email }: VerifyEmailClientPro
     if (isSubscribing) return;
     
     setIsSubscribing(true);
+    setSubscriptionError('');
     
     try {
       const response = await fetch('/api/subscribe', {
@@ -112,11 +116,23 @@ export default function VerifyEmailClient({ token, email }: VerifyEmailClientPro
       
       if (response.ok) {
         setSubscriptionSuccess(true);
+      } else {
+        setSubscriptionError(data.error || 'Failed to subscribe to newsletter');
       }
     } catch (err) {
+      setSubscriptionError('An unexpected error occurred');
       console.error('Error subscribing to newsletter:', err);
     } finally {
       setIsSubscribing(false);
+    }
+  };
+
+  const handleToggleNewsletter = (checked: boolean) => {
+    setSubscribeToNewsletter(checked);
+    
+    if (checked && isSuccess && !subscriptionSuccess && !isSubscribing) {
+      // If they're toggling subscription on after already verifying, subscribe them
+      handleNewsletterSubscription();
     }
   };
 
@@ -169,11 +185,44 @@ export default function VerifyEmailClient({ token, email }: VerifyEmailClientPro
                     </p>
                   </div>
                   
-                  {subscriptionSuccess && (
-                    <div className="mt-4 p-3 bg-[#0D1F15]/50 rounded-lg text-green-500 text-sm">
-                      You've been successfully subscribed to our newsletter.
+                  <div className="mt-4 w-full max-w-xs p-4 bg-[#161616] rounded-lg border border-[#222222]">
+                    <div className="flex items-center justify-between space-x-2 mb-2">
+                      <div className="flex items-center">
+                        <Mail className="h-4 w-4 text-[#B4916C] mr-2" />
+                        <Label htmlFor="newsletter-subscribe" className="text-[#F9F6EE] font-borna text-sm">
+                          Subscribe to our newsletter
+                        </Label>
+                      </div>
+                      <Switch
+                        id="newsletter-subscribe"
+                        checked={subscribeToNewsletter}
+                        onCheckedChange={handleToggleNewsletter}
+                        disabled={isSubscribing || subscriptionSuccess}
+                      />
                     </div>
-                  )}
+                    <p className="text-[#8A8782] text-xs">
+                      Get the latest updates, tips, and exclusive offers
+                    </p>
+                    
+                    {isSubscribing && (
+                      <div className="mt-2 flex items-center justify-center">
+                        <Loader2 className="h-3 w-3 text-[#B4916C] animate-spin mr-1" />
+                        <span className="text-xs text-[#C5C2BA]">Subscribing...</span>
+                      </div>
+                    )}
+                    
+                    {subscriptionSuccess && (
+                      <div className="mt-2 text-xs text-green-500">
+                        Successfully subscribed to our newsletter!
+                      </div>
+                    )}
+                    
+                    {subscriptionError && (
+                      <div className="mt-2 text-xs text-red-400">
+                        {subscriptionError}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="flex flex-col items-center space-y-4">
