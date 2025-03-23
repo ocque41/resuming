@@ -181,18 +181,40 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   }
 
   // Create verification token and send verification email
+  let emailSendingFailed = false;
+  let emailErrorMessage = '';
+  
   try {
     const verificationToken = await createVerificationToken(email);
-    await sendVerificationEmail(email, verificationToken);
     
-    // Also send a welcome/confirmation email
-    await sendConfirmationEmail(email);
-  } catch (error) {
-    console.error("Failed to send verification email:", error);
-    // Continue with sign up even if email sending fails
+    try {
+      await sendVerificationEmail(email, verificationToken);
+      console.log("Successfully sent verification email to:", email);
+    } catch (emailError: any) {
+      console.error("Error sending verification email:", emailError);
+      emailSendingFailed = true;
+      emailErrorMessage = emailError?.message || 'Unknown email error';
+      // Continue with sign up even if email sending fails
+    }
+    
+    try {
+      // Also send a welcome/confirmation email
+      await sendConfirmationEmail(email);
+      console.log("Successfully sent welcome email to:", email);
+    } catch (welcomeError: any) {
+      console.error("Error sending confirmation email:", welcomeError);
+      // Non-critical error, continue with sign up
+    }
+  } catch (tokenError: any) {
+    console.error("Failed to create verification token:", tokenError);
+    // Continue with sign up even if token creation fails
+    // Users can request verification email later from dashboard
   }
 
-  // Add user to Notion - this is MANDATORY, not optional
+  // Add user to Notion - handling failures gracefully
+  let notionIntegrationFailed = false;
+  let notionErrorMessage = '';
+  
   try {
     // Use addOrUpdateNotionUser with default Free plan and newsletter subscription preference
     await addOrUpdateNotionUser(email, "Free", subscribeToNewsletter, "Pending");
@@ -202,7 +224,9 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     if (subscribeToNewsletter) {
       console.log("User subscribed to newsletter:", email);
     }
-  } catch (error) {
+  } catch (error: any) {
+    notionIntegrationFailed = true;
+    notionErrorMessage = error?.message || 'Unknown Notion error';
     console.error("Failed to add user to Notion:", error);
     // Log the error but continue with sign-up process
     // We don't want to block the user registration if Notion has issues
@@ -341,8 +365,20 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       return createCheckoutSession({ team: createdTeam, priceId });
     }
 
-    // For new users, redirect to the pricing page first
-    redirect(`/signup-success?newsletter=${subscribeToNewsletter}`);
+    // Include error states in the redirect URL for the success page to handle
+    let redirectParams = `newsletter=${subscribeToNewsletter}`;
+    
+    if (emailSendingFailed) {
+      redirectParams += `&emailError=${encodeURIComponent(emailErrorMessage)}`;
+    }
+    
+    if (notionIntegrationFailed) {
+      redirectParams += `&notionError=${encodeURIComponent(notionErrorMessage)}`;
+    }
+
+    // For new users, redirect to the success page with status parameters
+    // Return the redirect URL instead of directly redirecting to avoid NEXT_REDIRECT error in catch block
+    return { redirectTo: `/signup-success?${redirectParams}` };
   } catch (error) {
     console.error('Error during sign-up completion:', error);
     
@@ -366,8 +402,19 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       // Try to set the session again
       await setSession(createdUser);
       
-      // Attempt to redirect again
-      redirect(`/signup-success?newsletter=${subscribeToNewsletter}`);
+      // Attempt to redirect again with error information
+      let redirectParams = `newsletter=${subscribeToNewsletter}`;
+      
+      if (emailSendingFailed) {
+        redirectParams += `&emailError=${encodeURIComponent(emailErrorMessage)}`;
+      }
+      
+      if (notionIntegrationFailed) {
+        redirectParams += `&notionError=${encodeURIComponent(notionErrorMessage)}`;
+      }
+      
+      // Return the redirect URL instead of directly redirecting
+      return { redirectTo: `/signup-success?${redirectParams}` };
     } catch (recoveryError) {
       console.error('Failed to recover from sign-up error:', recoveryError);
       return {
@@ -611,3 +658,11 @@ export const inviteTeamMember = validatedActionWithUser(
     return { success: 'Invitation sent successfully' };
   },
 );
+
+// At the end of the file, add this helper to handle redirects properly from server actions
+export function handleRedirectResponse(result: any) {
+  if (result && result.redirectTo) {
+    redirect(result.redirectTo);
+  }
+  return result;
+}

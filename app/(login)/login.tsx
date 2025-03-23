@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Mail } from "lucide-react";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { signIn, signUp } from "./actions";
+import { signIn, signUp, handleRedirectResponse } from "./actions";
 import { ActionState } from "@/lib/auth/middleware";
 
 const createAction = (mode: "signin" | "signup") => (data: FormData) => {
@@ -43,6 +43,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaError, setCaptchaError] = useState<string>("");
   const [subscribeToNewsletter, setSubscribeToNewsletter] = useState<boolean>(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Reset captcha when form is submitted or errors occur
   useEffect(() => {
@@ -51,16 +52,10 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
     }
   }, [state.error]);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     
-    // Debug output for form submission
-    console.log("Form submission - mode:", mode);
-    if (mode === "signup") {
-      console.log("CAPTCHA token available:", !!captchaToken);
-    }
-    
-    // Only check CAPTCHA for sign-up
+    // Skip the rest of the submission if CAPTCHA is not verified for sign up
     if (mode === "signup" && !captchaToken) {
       setCaptchaError("Please complete the CAPTCHA verification");
       return;
@@ -68,17 +63,38 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
     
     const formData = new FormData(event.currentTarget);
     
+    // Add form data
+    if (redirect) {
+      formData.append("redirect", redirect);
+    }
+    
+    if (priceId) {
+      formData.append("priceId", priceId);
+    }
+    
+    if (inviteId) {
+      formData.append("inviteId", inviteId);
+    }
+    
+    // Add newsletter subscription preference
+    if (mode === "signup") {
+      formData.append("subscribeToNewsletter", subscribeToNewsletter.toString());
+    }
+    
+    const email = formData.get("email") as string;
+    
+    // Store email in localStorage for potential recovery on the success page
+    if (email && mode === "signup") {
+      localStorage.setItem('userEmail', email);
+    }
+    
     // Add CAPTCHA token to form data if available
-    if (captchaToken) {
-      formData.append("captchaToken", captchaToken);
+    if (captchaToken && mode === "signup") {
+      formData.append("token", captchaToken);
       console.log("CAPTCHA token added to form data, length:", captchaToken.length);
     }
     
-    // Add newsletter subscription preference to form data
-    if (mode === "signup") {
-      formData.append("subscribeToNewsletter", subscribeToNewsletter ? "true" : "false");
-    }
-    
+    // Submit the form with the existing formAction
     formAction(formData);
   };
 

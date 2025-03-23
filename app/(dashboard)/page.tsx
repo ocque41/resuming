@@ -96,7 +96,7 @@ export default function HomePage() {
               <Article className="text-center max-w-3xl mx-auto">
                 <motion.div variants={fadeInUp}>
                   <ArticleTitle className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold text-white font-safiro">
-                    The Jobs Playground
+                    The Work Playground
                   </ArticleTitle>
                 </motion.div>
                 

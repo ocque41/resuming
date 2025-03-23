@@ -14,11 +14,11 @@ export interface BlogPost {
 export const blogPosts: BlogPost[] = [
   {
     id: 1,
-    title: "The Jobs Playground",
+    title: "The Work Playground",
     excerpt: "Explore all AI possibilities tailored for generating, editing and improving paper ready documents. Discover how our platform revolutionizes your career journey.",
-    content: `In today's competitive job market, having the right tools at your disposal can make all the difference in your career journey. The Jobs Playground is your all-in-one solution for document creation, optimization, and career advancement.
+    content: `In today's competitive job market, having the right tools at your disposal can make all the difference in your career journey. The Work Playground is your all-in-one solution for document creation, optimization, and career advancement.
 
-Our platform offers a comprehensive suite of AI-powered tools designed to streamline your professional documentation needs and enhance your job search experience. Let's explore the key features that make The Jobs Playground an essential resource for professionals at any stage of their career.
+Our platform offers a comprehensive suite of AI-powered tools designed to streamline your professional documentation needs and enhance your job search experience. Let's explore the key features that make The Work Playground an essential resource for professionals at any stage of their career.
 
 ## CV Collection and Management
 
