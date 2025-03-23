@@ -9,10 +9,10 @@ import { Inter } from "next/font/google";
 import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
-  title: 'Resuming.ai - The First Engineer-Recruiter AI Platform',
-  description: 'Designed for technical professionals and emerging talent alike, our platform leverages advanced AI to perfect resumes, analyze documents, and connect you with the right career opportunities.',
+  title: 'Resuming - The First Engineer-Recruiter AI Platform | Optimize Your Technical Career',
+  description: 'Resuming.ai offers AI-powered resume optimization, CV analysis, and career enhancement tools designed specifically for engineers and technical professionals.',
   keywords: 'CV, resume, job search, career, AI, optimization, analysis, engineer, recruiter, technical professionals, emerging talent',
-  authors: [{ name: 'Resuming.ai Team' }],
+  authors: [{ name: 'Resuming Team', url: 'https://resuming.ai' }],
   creator: 'Resuming.ai',
   publisher: 'Resuming.ai',
   formatDetection: {
@@ -26,25 +26,25 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'Resuming',
-    description: 'The first Engineer - Recruiter AI Platform',
-    url: 'https://resuming.ai',
-    siteName: 'Resuming.ai',
+    description: 'The first Engineer - Recruiter AI Platform.',
     images: [
       {
-        url: '/1.png',
+        url: 'https://resuming.ai/1.png',
         width: 1200,
         height: 630,
-        alt: 'Resuming - The First Engineer-Recruiter AI Platform',
+        alt: 'Resuming - AI Platform for Engineers and Recruiters',
       },
     ],
     locale: 'en_US',
     type: 'website',
+    siteName: 'Resuming',
+    url: 'https://resuming.ai',
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Resuming',
-    description: 'The first Engineer - Recruiter AI Platform',
-    images: ['/1.png'],
+    description: 'The first Engineer - Recruiter AI Platform.',
+    images: ['https://resuming.ai/1.png'],
     creator: '@resumingai',
   },
   icons: {
@@ -88,6 +88,17 @@ export default function RootLayout({
       className={`${manrope.className} ${safiroFont.variable} ${bornaFont.variable} ${inter.className}`}
     >
       <head>
+        <meta name="format-detection" content="telephone=no, date=no, email=no, address=no" />
+        <meta name="robots" content="index, follow, max-image-preview:large" />
+        <meta name="revisit-after" content="7 days" />
+        <meta name="rating" content="general" />
+        <meta name="googlebot" content="index,follow" />
+        <meta name="google" content="notranslate" />
+        <meta name="google-site-verification" content="your-verification-code" />
+        <meta name="msvalidate.01" content="your-bing-verification-code" />
+        <meta name="application-name" content="Resuming" />
+        <link rel="canonical" href="https://resuming.ai" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link
           rel="stylesheet"
           href="https://unpkg.com/franken-ui@1.1.0/dist/css/core.min.css"
@@ -104,6 +115,13 @@ export default function RootLayout({
             `,
           }}
         />
+        
+        {/* AI-specific meta tags */}
+        <meta name="ai-content-type" content="ai-platform, career-tools, resume-optimization, job-matching" />
+        <meta name="ai-audience" content="engineers, developers, technical professionals, recruiters, hiring managers" />
+        <meta name="ai-use-case" content="resume optimization, job matching, skills analysis, career advancement" />
+        <meta name="ai-features" content="resume analysis, job matching, skills assessment, ai recommendations" />
+        <meta name="ai-data-policy" content="user-data-protected, privacy-first, gdpr-compliant" />
       </head>
       <body className="min-h-[100dvh] bg-[#050505] font-borna">
         <I18nProvider>
