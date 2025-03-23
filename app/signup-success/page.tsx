@@ -1,13 +1,22 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, CheckCircle, Mail } from 'lucide-react';
+import { ArrowRight, CheckCircle, Mail, Bell } from 'lucide-react';
 
 export default function SignupSuccessPage() {
+  const [isSubscribed, setIsSubscribed] = useState<boolean | null>(null);
+  
+  // Check if user opted in for newsletter by parsing URL params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const newsletter = params.get('newsletter');
+    setIsSubscribed(newsletter === 'true');
+  }, []);
+
   return (
     <div className="min-h-screen flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 bg-[#050505]">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
@@ -52,6 +61,18 @@ export default function SignupSuccessPage() {
                     </li>
                   </ul>
                 </div>
+                
+                {isSubscribed && (
+                  <div className="bg-[#0D1F15] p-4 rounded-lg border border-[#1A2E22]">
+                    <div className="flex items-center mb-2">
+                      <Bell className="text-green-500 h-5 w-5 mr-2" />
+                      <p className="text-[#F9F6EE] font-medium">Newsletter Subscription</p>
+                    </div>
+                    <p className="text-[#A7D5A7] text-sm">
+                      You've been subscribed to our newsletter. You'll receive updates, tips, and exclusive offers!
+                    </p>
+                  </div>
+                )}
                 
                 <p className="text-[#8A8782] font-borna">
                   Please verify your email to unlock all features of your account.

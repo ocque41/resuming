@@ -113,6 +113,7 @@ const signUpSchema = z.object({
 export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   const { email, password, inviteId } = data;
   const captchaToken = formData.get("captchaToken") as string;
+  const subscribeToNewsletter = formData.get("subscribeToNewsletter") === "true";
 
   // Verify CAPTCHA
   if (!captchaToken) {
@@ -193,9 +194,14 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
 
   // Add user to Notion - this is MANDATORY, not optional
   try {
-    // Use addOrUpdateNotionUser with default Free plan and not subscribed to newsletter
-    await addOrUpdateNotionUser(email, "Free", false, "Pending");
+    // Use addOrUpdateNotionUser with default Free plan and newsletter subscription preference
+    await addOrUpdateNotionUser(email, "Free", subscribeToNewsletter, "Pending");
     console.log("Successfully added user to Notion:", email);
+    
+    // If user opted into newsletter, log it
+    if (subscribeToNewsletter) {
+      console.log("User subscribed to newsletter:", email);
+    }
   } catch (error) {
     console.error("Failed to add user to Notion:", error);
     // Log the error but continue with sign-up process
@@ -336,7 +342,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     }
 
     // For new users, redirect to the pricing page first
-    redirect('/signup-success');
+    redirect(`/signup-success?newsletter=${subscribeToNewsletter}`);
   } catch (error) {
     console.error('Error during sign-up completion:', error);
     
@@ -361,7 +367,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       await setSession(createdUser);
       
       // Attempt to redirect again
-      redirect('/signup-success');
+      redirect(`/signup-success?newsletter=${subscribeToNewsletter}`);
     } catch (recoveryError) {
       console.error('Failed to recover from sign-up error:', recoveryError);
       return {

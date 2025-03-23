@@ -11,6 +11,8 @@ import Image from "next/image";
 import { Card, CardHeader, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
 import { useState, useRef, useEffect } from "react";
 import CustomCaptchaGame from "@/components/CustomCaptchaGame";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Mail } from "lucide-react";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { signIn, signUp } from "./actions";
@@ -40,6 +42,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
   
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaError, setCaptchaError] = useState<string>("");
+  const [subscribeToNewsletter, setSubscribeToNewsletter] = useState<boolean>(true);
   
   // Reset captcha when form is submitted or errors occur
   useEffect(() => {
@@ -69,6 +72,11 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
     if (captchaToken) {
       formData.append("captchaToken", captchaToken);
       console.log("CAPTCHA token added to form data, length:", captchaToken.length);
+    }
+    
+    // Add newsletter subscription preference to form data
+    if (mode === "signup") {
+      formData.append("subscribeToNewsletter", subscribeToNewsletter ? "true" : "false");
     }
     
     formAction(formData);
@@ -139,6 +147,27 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
             }}
           />
           {captchaError && <div className="text-red-500 text-sm mt-2">{captchaError}</div>}
+          
+          {/* Newsletter Subscription Option */}
+          <div className="mt-4 w-full max-w-xs p-4 bg-[#161616] rounded-lg border border-[#222222]">
+            <div className="flex items-center space-x-2 mb-2">
+              <Checkbox 
+                id="newsletter-subscribe" 
+                checked={subscribeToNewsletter}
+                onCheckedChange={(checked) => setSubscribeToNewsletter(checked as boolean)}
+                className="data-[state=checked]:bg-[#B4916C] data-[state=checked]:border-[#B4916C]"
+              />
+              <div className="flex items-center">
+                <Mail className="h-4 w-4 text-[#B4916C] mr-2" />
+                <Label htmlFor="newsletter-subscribe" className="text-[#F9F6EE] font-medium text-sm cursor-pointer">
+                  Subscribe to our newsletter
+                </Label>
+              </div>
+            </div>
+            <p className="text-[#8A8782] text-xs ml-6">
+              Get the latest updates, tips, and exclusive offers
+            </p>
+          </div>
           
           <div className="text-sm text-[#F9F6EE] mt-4 text-center max-w-xs">
             By signing up you are agreeing to our{" "}
