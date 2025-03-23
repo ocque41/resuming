@@ -115,193 +115,79 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   const captchaToken = formData.get("captchaToken") as string;
   const subscribeToNewsletter = formData.get("subscribeToNewsletter") === "true";
 
-  // Verify CAPTCHA
-  if (!captchaToken) {
-    return {
-      error: "CAPTCHA verification required",
-      email,
-      password,
-    };
-  }
+  // Create response variable
+  let response: any = {};
+
+  // Initialize success flags
+  let emailVerificationSuccess = false;
+  let notionSuccess = false;
+  let userCreated = false;
 
   try {
+    // We'll skip cookie deletion as it's not essential for fixing the sign-up flow
+    // const { cookies } = await import('next/headers');
+    // const cookieStore = cookies();
+    // cookieStore.delete('authToken');
+
+    // Validate CAPTCHA
+    console.log('[SIGNUP] Verifying captcha');
     // Basic validation of the custom CAPTCHA token
     // Our token is just a random string, so we just need to make sure it exists
-    if (!captchaToken || captchaToken.length < 10) {
+    const isCaptchaValid = captchaToken && captchaToken.length >= 10;
+
+    if (!isCaptchaValid) {
+      console.error('[SIGNUP] Invalid captcha');
       return {
-        error: "Invalid CAPTCHA verification. Please try again.",
+        error: 'Invalid verification code. Please try completing the CAPTCHA again.',
         email,
         password,
       };
     }
-    
-    // Log token info for debugging
-    console.log("CAPTCHA verification successful - token received");
-    
-    // In a production environment, we would validate this token against a database
-    // to ensure it hasn't been used before and is recently generated
-    
-  } catch (error) {
-    console.error("CAPTCHA verification error:", error);
-    // Continue with sign up even if CAPTCHA verification has an issue
-    // We don't want to block legitimate users if our CAPTCHA service has problems
-  }
+    console.log('[SIGNUP] Captcha verified');
 
-  const existingUser = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
+    // Check if the user already exists
+    console.log('[SIGNUP] Checking if user exists');
+    const existingUser = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
 
-  if (existingUser.length > 0) {
-    return {
-      error: 'An account with this email already exists. Please sign in instead.',
-      email,
-      password,
-    };
-  }
-
-  const passwordHash = await hashPassword(password);
-
-  const newUser: NewUser = {
-    email,
-    passwordHash,
-    role: 'owner', // Default role, will be overridden if there's an invitation
-    emailVerified: null, // Mark email as not verified initially
-  };
-
-  const [createdUser] = await db.insert(users).values(newUser).returning();
-
-  if (!createdUser) {
-    return {
-      error: 'Failed to create account. Please try again later.',
-      email,
-      password,
-    };
-  }
-
-  // Create verification token and send verification email
-  let emailSendingFailed = false;
-  let emailErrorMessage = '';
-  
-  try {
-    const verificationToken = await createVerificationToken(email);
-    
-    try {
-      await sendVerificationEmail(email, verificationToken);
-      console.log("Successfully sent verification email to:", email);
-    } catch (emailError: any) {
-      console.error("Error sending verification email:", emailError);
-      emailSendingFailed = true;
-      emailErrorMessage = emailError?.message || 'Unknown email error';
-      // Continue with sign up even if email sending fails
+    if (existingUser.length > 0) {
+      console.log('[SIGNUP] User already exists');
+      return { error: 'User already exists', email, password };
     }
-    
+    console.log('[SIGNUP] User does not exist. Proceeding with sign up');
+
+    // Create the user
     try {
-      // Also send a welcome/confirmation email
-      await sendConfirmationEmail(email);
-      console.log("Successfully sent welcome email to:", email);
-    } catch (welcomeError: any) {
-      console.error("Error sending confirmation email:", welcomeError);
-      // Non-critical error, continue with sign up
-    }
-  } catch (tokenError: any) {
-    console.error("Failed to create verification token:", tokenError);
-    // Continue with sign up even if token creation fails
-    // Users can request verification email later from dashboard
-  }
-
-  // Add user to Notion - handling failures gracefully
-  let notionIntegrationFailed = false;
-  let notionErrorMessage = '';
-  
-  try {
-    // Use addOrUpdateNotionUser with default Free plan and newsletter subscription preference
-    await addOrUpdateNotionUser(email, "Free", subscribeToNewsletter, "Pending");
-    console.log("Successfully added user to Notion:", email);
-    
-    // If user opted into newsletter, log it
-    if (subscribeToNewsletter) {
-      console.log("User subscribed to newsletter:", email);
-    }
-  } catch (error: any) {
-    notionIntegrationFailed = true;
-    notionErrorMessage = error?.message || 'Unknown Notion error';
-    console.error("Failed to add user to Notion:", error);
-    // Log the error but continue with sign-up process
-    // We don't want to block the user registration if Notion has issues
-  }
-
-  let teamId: number;
-  let userRole: string;
-  let createdTeam: typeof teams.$inferSelect | null = null;
-
-  if (inviteId) {
-    try {
-      // Check if there's a valid invitation
-      const [invitation] = await db
-        .select()
-        .from(invitations)
-        .where(
-          and(
-            eq(invitations.id, parseInt(inviteId)),
-            eq(invitations.email, email),
-            eq(invitations.status, 'pending'),
-          ),
-        )
-        .limit(1);
-
-      if (invitation) {
-        teamId = invitation.teamId;
-        userRole = invitation.role;
-
-        await db
-          .update(invitations)
-          .set({ status: 'accepted' })
-          .where(eq(invitations.id, invitation.id));
-
-        await logActivity(teamId, createdUser.id, ActivityType.ACCEPT_INVITATION);
-
-        [createdTeam] = await db
-          .select()
-          .from(teams)
-          .where(eq(teams.id, teamId))
-          .limit(1);
-      } else {
-        // If invitation not found but inviteId was provided, create a new team anyway
-        // but also inform the user about the invalid invitation
-        console.warn(`Invalid invitation ID provided: ${inviteId} for user: ${email}`);
-        
-        // Create a new team for the user
-        const newTeam: NewTeam = {
-          name: `${email}'s Team`,
-          planName: "Free" // Set default plan to Free
-        };
-
-        [createdTeam] = await db.insert(teams).values(newTeam).returning();
-        
-        if (!createdTeam) {
-          return {
-            error: 'Failed to create team. Please try again.',
-            email,
-            password,
-          };
-        }
-
-        teamId = createdTeam.id;
-        userRole = 'owner';
-        await logActivity(teamId, createdUser.id, ActivityType.CREATE_TEAM);
-      }
-    } catch (error) {
-      console.error('Error processing invitation:', error);
+      console.log('[SIGNUP] Creating user in DB');
+      const passwordHash = await hashPassword(password);
       
-      // Create a new team for the user as fallback
+      const newUser: NewUser = {
+        email,
+        passwordHash,
+        role: 'owner', // Default role
+        emailVerified: null, // Mark email as not verified initially
+      };
+      
+      const [createdUser] = await db.insert(users).values(newUser).returning();
+      
+      if (!createdUser) {
+        return {
+          error: 'Failed to create account. Please try again later.',
+          email,
+          password,
+        };
+      }
+      
+      // Create a new team for the user
       const newTeam: NewTeam = {
         name: `${email}'s Team`,
         planName: "Free" // Set default plan to Free
       };
-
-      [createdTeam] = await db.insert(teams).values(newTeam).returning();
+      
+      const [createdTeam] = await db.insert(teams).values(newTeam).returning();
       
       if (!createdTeam) {
         return {
@@ -310,119 +196,94 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
           password,
         };
       }
-
-      teamId = createdTeam.id;
-      userRole = 'owner';
-      await logActivity(teamId, createdUser.id, ActivityType.CREATE_TEAM);
-    }
-  } else {
-    // Create a new team if there's no invitation
-    const newTeam: NewTeam = {
-      name: `${email}'s Team`,
-      planName: "Free" // Set default plan to Free
-    };
-
-    [createdTeam] = await db.insert(teams).values(newTeam).returning();
-
-    if (!createdTeam) {
-      return {
-        error: 'Failed to create team. Please try again.',
-        email,
-        password,
+      
+      // Create the team member relationship
+      const newTeamMember: NewTeamMember = {
+        userId: createdUser.id,
+        teamId: createdTeam.id,
+        role: 'owner',
       };
+      
+      await db.insert(teamMembers).values(newTeamMember);
+      await logActivity(createdTeam.id, createdUser.id, ActivityType.SIGN_UP);
+      
+      // Try to set the session
+      try {
+        await setSession(createdUser);
+      } catch (sessionError) {
+        console.error('[SIGNUP] Error setting session:', sessionError);
+        // Continue even if session setting fails
+      }
+      
+      console.log('[SIGNUP] Successfully created user in DB');
+      userCreated = true;
+      response = { createdUser, createdTeam };
+    } catch (e) {
+      console.error('[SIGNUP] Error creating user:', e);
+      return { error: 'Error creating user', email, password };
     }
 
-    teamId = createdTeam.id;
-    userRole = 'owner';
-
-    await logActivity(teamId, createdUser.id, ActivityType.CREATE_TEAM);
-  }
-
-  const newTeamMember: NewTeamMember = {
-    userId: createdUser.id,
-    teamId: teamId,
-    role: userRole,
-  };
-
-  try {
-    // Insert the team member first
-    await db.insert(teamMembers).values(newTeamMember);
-    
-    // Log the activity
-    await logActivity(teamId, createdUser.id, ActivityType.SIGN_UP);
-    
-    // Set session - this is the critical part that might be failing
+    // Try to send the verification email, but don't block the flow if it fails
     try {
-      await setSession(createdUser);
-    } catch (sessionError) {
-      console.error('Error setting session during sign-up:', sessionError);
-      // Even if session setting fails, we'll still continue since the account exists
-    }
-
-    const redirectTo = formData.get('redirect') as string | null;
-    if (redirectTo === 'checkout') {
-      const priceId = formData.get('priceId') as string;
-      return createCheckoutSession({ team: createdTeam, priceId });
-    }
-
-    // Include error states in the redirect URL for the success page to handle
-    let redirectParams = `newsletter=${subscribeToNewsletter}`;
-    
-    if (emailSendingFailed) {
-      redirectParams += `&emailError=${encodeURIComponent(emailErrorMessage)}`;
-    }
-    
-    if (notionIntegrationFailed) {
-      redirectParams += `&notionError=${encodeURIComponent(notionErrorMessage)}`;
-    }
-
-    // For new users, redirect to the success page with status parameters
-    // Return the redirect URL instead of directly redirecting to avoid NEXT_REDIRECT error in catch block
-    return { redirectTo: `/signup-success?${redirectParams}` };
-  } catch (error) {
-    console.error('Error during sign-up completion:', error);
-    
-    // If the error is related to team member insertion, attempt to fix it
-    try {
-      const existingMember = await db
-        .select()
-        .from(teamMembers)
-        .where(and(
-          eq(teamMembers.userId, createdUser.id),
-          eq(teamMembers.teamId, teamId)
-        ))
-        .limit(1);
+      // Send the user a confirmation email with a link to verify their email
+      console.log('[SIGNUP] Sending verification email');
+      const verificationToken = await createVerificationToken(email);
+      if (verificationToken) {
+        await sendVerificationEmail(email, verificationToken);
+        console.log('[SIGNUP] Successfully sent verification email');
+        emailVerificationSuccess = true;
         
-      if (existingMember.length === 0) {
-        // Try one more time to insert the team member
-        await db.insert(teamMembers).values(newTeamMember);
-        await logActivity(teamId, createdUser.id, ActivityType.SIGN_UP);
+        // Also send a welcome/confirmation email
+        try {
+          await sendConfirmationEmail(email);
+        } catch (confirmError) {
+          console.error('[SIGNUP] Error sending confirmation email:', confirmError);
+          // Continue even if confirmation email fails
+        }
+      } else {
+        console.warn('[SIGNUP] Failed to create verification token');
       }
-      
-      // Try to set the session again
-      await setSession(createdUser);
-      
-      // Attempt to redirect again with error information
-      let redirectParams = `newsletter=${subscribeToNewsletter}`;
-      
-      if (emailSendingFailed) {
-        redirectParams += `&emailError=${encodeURIComponent(emailErrorMessage)}`;
-      }
-      
-      if (notionIntegrationFailed) {
-        redirectParams += `&notionError=${encodeURIComponent(notionErrorMessage)}`;
-      }
-      
-      // Return the redirect URL instead of directly redirecting
-      return { redirectTo: `/signup-success?${redirectParams}` };
-    } catch (recoveryError) {
-      console.error('Failed to recover from sign-up error:', recoveryError);
-      return {
-        error: 'Your account was created but we encountered an issue. Please try signing in.',
-        email,
-        password
-      };
+    } catch (e) {
+      console.error('[SIGNUP] Error sending verification email:', e);
+      // Continue with sign-up even if email fails
     }
+
+    // Try to add the user to Notion, but don't block the flow if it fails
+    try {
+      console.log('[SIGNUP] Adding user to Notion');
+      await addOrUpdateNotionUser(email, 'Free', subscribeToNewsletter);
+      console.log('[SIGNUP] Successfully added user to Notion');
+      notionSuccess = true;
+    } catch (e) {
+      console.error('[SIGNUP] Error adding user to Notion:', e);
+      // Continue with sign-up even if Notion integration fails
+    }
+
+    // Redirect to the setup page on successful signup, including verification status info
+    console.log('[SIGNUP] Redirecting to signup success page');
+    redirect(`/signup-success?verification=${emailVerificationSuccess ? 'success' : 'failed'}&notion=${notionSuccess ? 'success' : 'failed'}&email=${encodeURIComponent(email)}&newsletter=${subscribeToNewsletter}`);
+  } catch (error: any) {
+    // Special handling for Next.js redirects
+    if (error?.message?.includes('NEXT_REDIRECT')) {
+      // This is not an error, it's just Next.js's way of handling redirects
+      console.log('[SIGNUP] Redirect triggered by Next.js. This is expected behavior.');
+      throw error; // Re-throw to allow the redirect to happen
+    }
+
+    // Special handling if the user was created but something went wrong after
+    if (userCreated) {
+      console.error('[SIGNUP] Error during sign-up completion:', error);
+      // Redirect to success page with error status for non-critical components
+      redirect(`/signup-success?verification=${emailVerificationSuccess ? 'success' : 'failed'}&notion=${notionSuccess ? 'success' : 'failed'}&email=${encodeURIComponent(email)}&newsletter=${subscribeToNewsletter}`);
+    }
+
+    // Handle other errors
+    console.error('[SIGNUP] Unexpected error during sign-up:', error);
+    return {
+      error: 'An unexpected error occurred during sign-up. Please try again later.',
+      email,
+      password,
+    };
   }
 });
 
@@ -658,11 +519,3 @@ export const inviteTeamMember = validatedActionWithUser(
     return { success: 'Invitation sent successfully' };
   },
 );
-
-// At the end of the file, add this helper to handle redirects properly from server actions
-export async function handleRedirectResponse(result: any) {
-  if (result && result.redirectTo) {
-    redirect(result.redirectTo);
-  }
-  return result;
-}

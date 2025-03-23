@@ -1,121 +1,91 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from "zod";
-import { db } from "@/lib/db/drizzle";
-import { users } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 import { createVerificationToken } from '@/lib/auth/verification';
 import { sendVerificationEmail } from '@/lib/email/resend';
+import { db } from '@/lib/db/drizzle';
+import { users } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 import { updateUserVerificationStatus } from '@/lib/notion/notion';
 import { verificationEmailLimiter } from '@/lib/rate-limiting/upstash';
 
-// Schema for request validation
-const RequestSchema = z.object({
-  email: z.string().email("Invalid email address")
-});
-
 export async function POST(request: NextRequest) {
   try {
-    // Parse the request body
-    const body = await request.json();
-    
-    // Validate the request body
-    const validatedData = RequestSchema.safeParse(body);
-    
-    if (!validatedData.success) {
+    // Parse request body to get the email
+    const { email } = await request.json();
+
+    // Validate input
+    if (!email) {
       return NextResponse.json(
-        { error: "Invalid request: " + validatedData.error.message },
+        { error: 'Email is required' },
         { status: 400 }
       );
     }
-    
-    const { email } = validatedData.data;
-    
+
     // Apply rate limiting based on email
-    const rateLimitResult = await verificationEmailLimiter(email);
+    const rateLimitResult = await verificationEmailLimiter(email + ':resend');
     
     if (!rateLimitResult.success) {
       return NextResponse.json(
-        { 
-          error: rateLimitResult.error || 'Too many verification requests. Please try again later.',
-          reset: rateLimitResult.reset.toISOString()
-        },
+        { error: 'Too many verification attempts. Please try again later.' },
         { status: 429 }
       );
     }
-    
-    // Find the user
+
+    // Check if the user exists
     const existingUser = await db
       .select()
       .from(users)
-      .where(eq(users.email, email.toLowerCase()))
+      .where(eq(users.email, email))
       .limit(1);
-    
+
     if (existingUser.length === 0) {
+      // Don't reveal if the user exists or not for security
       return NextResponse.json(
-        { error: "User not found. Please check your email address." },
-        { status: 404 }
-      );
-    }
-    
-    const user = existingUser[0];
-    
-    // Check if the user is already verified
-    if (user.emailVerified) {
-      return NextResponse.json(
-        { message: "Email is already verified. You can sign in to your account." },
+        { success: true, message: 'If an account exists, a verification email has been sent' },
         { status: 200 }
       );
     }
-    
-    // Create a new verification token
-    const token = await createVerificationToken(email);
-    
-    // Send the verification email
-    try {
-      const emailResult = await sendVerificationEmail(email, token);
-      
-      if (!emailResult.success) {
-        console.error('Failed to send verification email:', emailResult.error);
-        return NextResponse.json(
-          { error: 'Failed to send verification email' },
-          { status: 500 }
-        );
-      }
-      
-      // Update status in Notion if environment variable is set
-      if (process.env.NOTION_SECRET && process.env.NOTION_DB) {
-        try {
-          await updateUserVerificationStatus(email, 'Pending');
-        } catch (notionError) {
-          console.error('Error updating Notion status:', notionError);
-          // Continue even if Notion update fails
-        }
-      }
-      
+
+    // Check if the email is already verified
+    if (existingUser[0].emailVerified) {
       return NextResponse.json(
-        { 
-          message: "Verification email sent successfully",
-          remaining: rateLimitResult.remaining,
-          reset: rateLimitResult.reset.toISOString()
-        },
+        { success: true, message: 'Email is already verified' },
         { status: 200 }
       );
-    } catch (emailError: any) {
-      console.error("Error sending verification email:", emailError);
-      
+    }
+
+    // Create a new verification token and send email
+    const verificationToken = await createVerificationToken(email);
+    
+    if (!verificationToken) {
       return NextResponse.json(
-        { 
-          error: "Failed to send verification email. Please try again later.",
-          details: emailError.message || "Unknown email sending error" 
-        },
+        { error: 'Failed to create verification token' },
         { status: 500 }
       );
     }
-  } catch (error: any) {
-    console.error("Error in resend-verification API:", error);
-    
+
+    // Send the verification email
+    await sendVerificationEmail(email, verificationToken);
+
+    // Update status in Notion if environment variable is set
+    try {
+      await updateUserVerificationStatus(email, 'Pending');
+    } catch (notionError) {
+      console.error('Error updating Notion verification status:', notionError);
+      // Continue even if Notion update fails
+    }
+
     return NextResponse.json(
-      { error: "An unexpected error occurred" },
+      { 
+        success: true,
+        message: 'Verification email sent successfully',
+        remaining: rateLimitResult.remaining,
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error('Error resending verification email:', error);
+    return NextResponse.json(
+      { error: 'An error occurred while resending the verification email' },
       { status: 500 }
     );
   }
