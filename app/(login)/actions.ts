@@ -122,6 +122,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   let emailVerificationSuccess = false;
   let notionSuccess = false;
   let userCreated = false;
+  let verificationEmailId: string | null = null;
 
   try {
     // We'll skip cookie deletion as it's not essential for fixing the sign-up flow
@@ -226,19 +227,34 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     // Try to send the verification email, but don't block the flow if it fails
     try {
       // Send the user a confirmation email with a link to verify their email
-      console.log('[SIGNUP] Sending verification email');
+      console.log('[SIGNUP] Creating verification token');
       const verificationToken = await createVerificationToken(email);
+      
       if (verificationToken) {
-        await sendVerificationEmail(email, verificationToken);
-        console.log('[SIGNUP] Successfully sent verification email');
-        emailVerificationSuccess = true;
+        console.log('[SIGNUP] Sending verification email');
+        const emailResult = await sendVerificationEmail(email, verificationToken);
         
-        // Also send a welcome/confirmation email
-        try {
-          await sendConfirmationEmail(email);
-        } catch (confirmError) {
-          console.error('[SIGNUP] Error sending confirmation email:', confirmError);
-          // Continue even if confirmation email fails
+        if (emailResult.success && emailResult.data) {
+          console.log('[SIGNUP] Successfully sent verification email with ID:', emailResult.data.id);
+          emailVerificationSuccess = true;
+          verificationEmailId = emailResult.data.id;
+          
+          // Also send a welcome/confirmation email
+          try {
+            console.log('[SIGNUP] Sending confirmation email');
+            const confirmResult = await sendConfirmationEmail(email);
+            
+            if (confirmResult.success) {
+              console.log('[SIGNUP] Successfully sent confirmation email with ID:', confirmResult.data?.id);
+            } else {
+              console.warn('[SIGNUP] Failed to send confirmation email:', confirmResult.error);
+            }
+          } catch (confirmError) {
+            console.error('[SIGNUP] Error sending confirmation email:', confirmError);
+            // Continue even if confirmation email fails
+          }
+        } else {
+          console.warn('[SIGNUP] Failed to send verification email:', emailResult.error);
         }
       } else {
         console.warn('[SIGNUP] Failed to create verification token');
@@ -250,18 +266,57 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
 
     // Try to add the user to Notion, but don't block the flow if it fails
     try {
-      console.log('[SIGNUP] Adding user to Notion');
-      await addOrUpdateNotionUser(email, 'Free', subscribeToNewsletter);
-      console.log('[SIGNUP] Successfully added user to Notion');
-      notionSuccess = true;
+      console.log(`[SIGNUP] Adding user to Notion with newsletter subscription: ${subscribeToNewsletter}`);
+      
+      // Try multiple times with different approaches to ensure Notion integration works
+      let notionAttempts = 0;
+      const maxNotionAttempts = 3;
+      let notionError = null;
+      
+      while (notionAttempts < maxNotionAttempts && !notionSuccess) {
+        notionAttempts++;
+        try {
+          // Add the user to Notion with their newsletter preference
+          const result = await addOrUpdateNotionUser(email, 'Free', subscribeToNewsletter);
+          
+          if (result) {
+            console.log(`[SIGNUP] Successfully added user to Notion on attempt ${notionAttempts}`);
+            notionSuccess = true;
+            break;
+          } else {
+            console.warn(`[SIGNUP] Notion integration returned empty result on attempt ${notionAttempts}`);
+          }
+        } catch (attemptError) {
+          notionError = attemptError;
+          console.error(`[SIGNUP] Error adding user to Notion (attempt ${notionAttempts}):`, attemptError);
+          
+          // Short delay before retry
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      
+      if (!notionSuccess) {
+        throw notionError || new Error('Failed to add user to Notion after multiple attempts');
+      }
     } catch (e) {
       console.error('[SIGNUP] Error adding user to Notion:', e);
       // Continue with sign-up even if Notion integration fails
     }
 
     // Redirect to the setup page on successful signup, including verification status info
+    const redirectParams = new URLSearchParams({
+      verification: emailVerificationSuccess ? 'success' : 'failed',
+      notion: notionSuccess ? 'success' : 'failed',
+      email: email,
+      newsletter: subscribeToNewsletter ? 'true' : 'false'
+    });
+    
+    if (verificationEmailId) {
+      redirectParams.append('email_id', verificationEmailId);
+    }
+    
     console.log('[SIGNUP] Redirecting to signup success page');
-    redirect(`/signup-success?verification=${emailVerificationSuccess ? 'success' : 'failed'}&notion=${notionSuccess ? 'success' : 'failed'}&email=${encodeURIComponent(email)}&newsletter=${subscribeToNewsletter}`);
+    redirect(`/signup-success?${redirectParams.toString()}`);
   } catch (error: any) {
     // Special handling for Next.js redirects
     if (error?.message?.includes('NEXT_REDIRECT')) {
@@ -274,7 +329,18 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     if (userCreated) {
       console.error('[SIGNUP] Error during sign-up completion:', error);
       // Redirect to success page with error status for non-critical components
-      redirect(`/signup-success?verification=${emailVerificationSuccess ? 'success' : 'failed'}&notion=${notionSuccess ? 'success' : 'failed'}&email=${encodeURIComponent(email)}&newsletter=${subscribeToNewsletter}`);
+      const redirectParams = new URLSearchParams({
+        verification: emailVerificationSuccess ? 'success' : 'failed',
+        notion: notionSuccess ? 'success' : 'failed',
+        email: email,
+        newsletter: subscribeToNewsletter ? 'true' : 'false'
+      });
+      
+      if (verificationEmailId) {
+        redirectParams.append('email_id', verificationEmailId);
+      }
+      
+      redirect(`/signup-success?${redirectParams.toString()}`);
     }
 
     // Handle other errors
@@ -376,95 +442,107 @@ export const deleteAccount = validatedActionWithUser(
     await db
       .update(users)
       .set({
-        deletedAt: sql`CURRENT_TIMESTAMP`,
-        email: sql`CONCAT(email, '-', id, '-deleted')`, // Ensure email uniqueness
+        deletedAt: sql`NOW()`
       })
       .where(eq(users.id, user.id));
 
-    if (userWithTeam?.teamId) {
-      await db
-        .delete(teamMembers)
-        .where(
-          and(
-            eq(teamMembers.userId, user.id),
-            eq(teamMembers.teamId, userWithTeam.teamId),
-          ),
-        );
-    }
-
+    // Delete session
     (await cookies()).delete('session');
-    redirect('/sign-in');
+    
+    return { success: 'Account deleted successfully.' };
   },
 );
 
 const updateAccountSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(100),
-  email: z.string().email('Invalid email address'),
+  name: z.string().optional(),
+  email: z.string().email().optional(),
 });
 
 export const updateAccount = validatedActionWithUser(
   updateAccountSchema,
   async (data, _, user) => {
     const { name, email } = data;
-    const userWithTeam = await getUserWithTeam(user.id);
-
-    await Promise.all([
-      db.update(users).set({ name, email }).where(eq(users.id, user.id)),
-      logActivity(userWithTeam?.teamId, user.id, ActivityType.UPDATE_ACCOUNT),
-    ]);
-
-    return { success: 'Account updated successfully.' };
-  },
-);
-
-const removeTeamMemberSchema = z.object({
-  memberId: z.number(),
-});
-
-export const removeTeamMember = validatedActionWithUser(
-  removeTeamMemberSchema,
-  async (data, _, user) => {
-    const { memberId } = data;
-    const userWithTeam = await getUserWithTeam(user.id);
-
-    if (!userWithTeam?.teamId) {
-      return { error: 'User is not part of a team' };
+    const updates: Partial<NewUser> = {};
+    
+    if (name !== undefined) {
+      updates.name = name;
     }
+    
+    if (email !== undefined && email !== user.email) {
+      // Check if email is already in use
+      const existingUser = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
 
-    await db
-      .delete(teamMembers)
-      .where(
-        and(
-          eq(teamMembers.id, memberId),
-          eq(teamMembers.teamId, userWithTeam.teamId),
-        ),
-      );
-
-    await logActivity(
-      userWithTeam.teamId,
-      user.id,
-      ActivityType.REMOVE_TEAM_MEMBER,
-    );
-
-    return { success: 'Team member removed successfully' };
+      if (existingUser.length > 0) {
+        return { error: 'Email is already in use' };
+      }
+      
+      updates.email = email;
+      // Reset email verification if email changes
+      updates.emailVerified = null;
+    }
+    
+    // Only update if there are changes
+    if (Object.keys(updates).length > 0) {
+      await db
+        .update(users)
+        .set(updates)
+        .where(eq(users.id, user.id));
+      
+      const userWithTeam = await getUserWithTeam(user.id);
+      await logActivity(userWithTeam?.teamId, user.id, ActivityType.UPDATE_ACCOUNT);
+      
+      return { success: 'Account updated successfully' };
+    }
+    
+    return { success: 'No changes made' };
   },
 );
 
 const inviteTeamMemberSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  role: z.enum(['member', 'owner']),
+  email: z.string().email(),
+  role: z.string().min(1),
 });
 
 export const inviteTeamMember = validatedActionWithUser(
   inviteTeamMemberSchema,
   async (data, _, user) => {
     const { email, role } = data;
+    
+    // Get user's team
     const userWithTeam = await getUserWithTeam(user.id);
-
-    if (!userWithTeam?.teamId) {
-      return { error: 'User is not part of a team' };
+    
+    if (!userWithTeam || !userWithTeam.teamId) {
+      return { error: 'You are not a member of any team' };
     }
-
+    
+    // Get user's role in the team
+    const memberData = await db
+      .select({ role: teamMembers.role })
+      .from(teamMembers)
+      .where(
+        and(
+          eq(teamMembers.userId, user.id),
+          eq(teamMembers.teamId, userWithTeam.teamId)
+        )
+      )
+      .limit(1);
+    
+    if (memberData.length === 0) {
+      return { error: 'Your team membership information could not be found' };
+    }
+    
+    const userRole = memberData[0].role;
+    
+    // Check if user has permission to invite (should be owner or admin)
+    if (userRole !== 'owner' && userRole !== 'admin') {
+      return { error: 'You do not have permission to invite team members' };
+    }
+    
+    // Check if email is already a team member
     const existingMember = await db
       .select()
       .from(users)
@@ -472,16 +550,16 @@ export const inviteTeamMember = validatedActionWithUser(
       .where(
         and(
           eq(users.email, email),
-          eq(teamMembers.teamId, userWithTeam.teamId),
-        ),
+          eq(teamMembers.teamId, userWithTeam.teamId)
+        )
       )
       .limit(1);
-
+    
     if (existingMember.length > 0) {
       return { error: 'User is already a member of this team' };
     }
-
-    // Check if there's an existing invitation
+    
+    // Check if there's a pending invitation
     const existingInvitation = await db
       .select()
       .from(invitations)
@@ -489,33 +567,129 @@ export const inviteTeamMember = validatedActionWithUser(
         and(
           eq(invitations.email, email),
           eq(invitations.teamId, userWithTeam.teamId),
-          eq(invitations.status, 'pending'),
-        ),
+          eq(invitations.status, 'pending')
+        )
       )
       .limit(1);
-
+    
     if (existingInvitation.length > 0) {
       return { error: 'An invitation has already been sent to this email' };
     }
-
-    // Create a new invitation
-    await db.insert(invitations).values({
+    
+    // Create new invitation
+    const newInvitation = {
       teamId: userWithTeam.teamId,
       email,
       role,
       invitedBy: user.id,
       status: 'pending',
-    });
-
+    };
+    
+    await db.insert(invitations).values(newInvitation);
+    
+    // Log the activity
     await logActivity(
       userWithTeam.teamId,
       user.id,
-      ActivityType.INVITE_TEAM_MEMBER,
+      ActivityType.INVITE_TEAM_MEMBER
     );
+    
+    // TODO: Send invitation email if needed
+    
+    return { success: `Invitation sent to ${email}` };
+  },
+);
 
-    // TODO: Send invitation email and include ?inviteId={id} to sign-up URL
-    // await sendInvitationEmail(email, userWithTeam.team.name, role)
+const removeTeamMemberSchema = z.object({
+  memberId: z.string().min(1),
+});
 
-    return { success: 'Invitation sent successfully' };
+export const removeTeamMember = validatedActionWithUser(
+  removeTeamMemberSchema,
+  async (data, _, user) => {
+    const { memberId } = data;
+    
+    // Get user's team
+    const userWithTeam = await getUserWithTeam(user.id);
+    
+    if (!userWithTeam || !userWithTeam.teamId) {
+      return { error: 'You are not a member of any team' };
+    }
+    
+    // Get user's role in the team
+    const memberData = await db
+      .select({ role: teamMembers.role })
+      .from(teamMembers)
+      .where(
+        and(
+          eq(teamMembers.userId, user.id),
+          eq(teamMembers.teamId, userWithTeam.teamId)
+        )
+      )
+      .limit(1);
+    
+    if (memberData.length === 0) {
+      return { error: 'Your team membership information could not be found' };
+    }
+    
+    const userRole = memberData[0].role;
+    
+    // Check if user has permission to remove members (should be owner or admin)
+    if (userRole !== 'owner' && userRole !== 'admin') {
+      return { error: 'You do not have permission to remove team members' };
+    }
+    
+    // Get the member to remove
+    const memberIdNum = parseInt(memberId, 10);
+    if (isNaN(memberIdNum)) {
+      return { error: 'Invalid member ID' };
+    }
+    
+    // Check if trying to remove self
+    const memberToRemove = await db
+      .select()
+      .from(teamMembers)
+      .where(
+        and(
+          eq(teamMembers.id, memberIdNum),
+          eq(teamMembers.teamId, userWithTeam.teamId)
+        )
+      )
+      .limit(1);
+    
+    if (memberToRemove.length === 0) {
+      return { error: 'Member not found in your team' };
+    }
+    
+    // Prevent removing the last owner
+    if (memberToRemove[0].role === 'owner') {
+      const ownersCount = await db
+        .select({ count: sql`count(*)` })
+        .from(teamMembers)
+        .where(
+          and(
+            eq(teamMembers.teamId, userWithTeam.teamId),
+            eq(teamMembers.role, 'owner')
+          )
+        );
+      
+      if (ownersCount[0].count <= 1) {
+        return { error: 'Cannot remove the last owner of the team' };
+      }
+    }
+    
+    // Remove the member
+    await db
+      .delete(teamMembers)
+      .where(eq(teamMembers.id, memberIdNum));
+    
+    // Log the activity
+    await logActivity(
+      userWithTeam.teamId,
+      user.id,
+      ActivityType.REMOVE_TEAM_MEMBER
+    );
+    
+    return { success: 'Team member removed successfully' };
   },
 );

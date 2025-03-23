@@ -1,7 +1,77 @@
 import { Resend } from 'resend';
+import { trackEmailSent } from './monitor';
 
 // Initialize Resend client
 const resend = new Resend(process.env.RESEND_API_KEY);
+
+// Maximum number of retry attempts for email sending
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 1000; // 1 second delay between retries
+
+/**
+ * Send an email with retry mechanism
+ * @param options - Email options
+ * @returns The result of the email sending operation
+ */
+async function sendEmailWithRetry(options: {
+  from: string;
+  to: string;
+  subject: string;
+  html: string;
+  cc?: string[];
+  bcc?: string[];
+  replyTo?: string;
+  type?: 'verification' | 'confirmation' | 'reset' | 'invite' | 'other';
+}) {
+  let lastError = null;
+  const emailType = options.type || 'other';
+  const { type, ...emailOptions } = options; // Extract type from options
+  
+  for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+    try {
+      console.log(`[EMAIL] Attempt ${attempt} of ${MAX_RETRY_ATTEMPTS} to send email to ${options.to}`);
+      
+      const { data, error } = await resend.emails.send(emailOptions);
+      
+      if (error) {
+        console.error(`[EMAIL] Error on attempt ${attempt}:`, error);
+        lastError = error;
+        
+        // If this wasn't the last attempt, wait before retrying
+        if (attempt < MAX_RETRY_ATTEMPTS) {
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * attempt));
+          continue;
+        }
+        
+        // Track failure on last attempt
+        if (attempt === MAX_RETRY_ATTEMPTS) {
+          await trackEmailSent(undefined, options.to, emailType, false);
+        }
+      } else {
+        // Success, track and return data
+        console.log(`[EMAIL] Successfully sent email on attempt ${attempt}`, { id: data?.id });
+        await trackEmailSent(data?.id, options.to, emailType, true);
+        return { success: true, data };
+      }
+    } catch (error) {
+      console.error(`[EMAIL] Exception on attempt ${attempt}:`, error);
+      lastError = error;
+      
+      // If this wasn't the last attempt, wait before retrying
+      if (attempt < MAX_RETRY_ATTEMPTS) {
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * attempt));
+        continue;
+      }
+      
+      // Track failure on last attempt
+      if (attempt === MAX_RETRY_ATTEMPTS) {
+        await trackEmailSent(undefined, options.to, emailType, false);
+      }
+    }
+  }
+  
+  return { success: false, error: lastError };
+}
 
 /**
  * Send a verification email to a user
@@ -11,13 +81,21 @@ const resend = new Resend(process.env.RESEND_API_KEY);
  */
 export async function sendVerificationEmail(email: string, verificationToken: string) {
   try {
+    console.log(`[EMAIL] Preparing verification email to ${email}`);
     const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
     const verificationUrl = `${baseUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(email)}`;
 
-    const { data, error } = await resend.emails.send({
-      from: 'noreply@resuming.ai',
+    // Using a verified sender format with name + verified email address
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+    const formattedFrom = `Resuming.ai <${fromEmail}>`;
+    
+    console.log(`[EMAIL] Using sender: ${formattedFrom}`);
+
+    return await sendEmailWithRetry({
+      from: formattedFrom,
       to: email,
       subject: 'Verify your email address - Resuming.ai',
+      type: 'verification',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #050505; color: #F9F6EE;">
           <div style="text-align: center; margin-bottom: 20px;">
@@ -55,15 +133,9 @@ export async function sendVerificationEmail(email: string, verificationToken: st
         </div>
       `,
     });
-
-    if (error) {
-      console.error('Error sending verification email:', error);
-      return { success: false, error };
-    }
-
-    return { success: true, data };
   } catch (error) {
-    console.error('Exception sending verification email:', error);
+    console.error('[EMAIL] Exception sending verification email:', error);
+    await trackEmailSent(undefined, email, 'verification', false);
     return { success: false, error };
   }
 }
@@ -75,14 +147,22 @@ export async function sendVerificationEmail(email: string, verificationToken: st
  */
 export async function sendConfirmationEmail(email: string) {
   try {
+    console.log(`[EMAIL] Preparing confirmation email to ${email}`);
     const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
     const dashboardUrl = `${baseUrl}/dashboard`;
     const pricingUrl = `${baseUrl}/dashboard/pricing`;
 
-    const { data, error } = await resend.emails.send({
-      from: 'welcome@resuming.ai',
+    // Using a verified sender format with name + verified email address
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+    const formattedFrom = `Resuming.ai <${fromEmail}>`;
+    
+    console.log(`[EMAIL] Using sender: ${formattedFrom}`);
+
+    return await sendEmailWithRetry({
+      from: formattedFrom,
       to: email,
       subject: 'Welcome to Resuming.ai!',
+      type: 'confirmation',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #050505; color: #F9F6EE;">
           <div style="text-align: center; margin-bottom: 20px;">
@@ -121,15 +201,30 @@ export async function sendConfirmationEmail(email: string) {
         </div>
       `,
     });
+  } catch (error) {
+    console.error('[EMAIL] Exception sending confirmation email:', error);
+    await trackEmailSent(undefined, email, 'confirmation', false);
+    return { success: false, error };
+  }
+}
 
+/**
+ * Check the status of a sent email
+ * @param emailId - The ID of the email to check
+ * @returns Information about the email status
+ */
+export async function checkEmailStatus(emailId: string) {
+  try {
+    const { data, error } = await resend.emails.get(emailId);
+    
     if (error) {
-      console.error('Error sending confirmation email:', error);
+      console.error('[EMAIL] Error checking email status:', error);
       return { success: false, error };
     }
-
+    
     return { success: true, data };
   } catch (error) {
-    console.error('Exception sending confirmation email:', error);
+    console.error('[EMAIL] Exception checking email status:', error);
     return { success: false, error };
   }
 } 

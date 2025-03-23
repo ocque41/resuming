@@ -7,7 +7,12 @@ const protectedRoutes = [
   '/dashboard',
   '/dashboard/enhance',
   '/dashboard/settings',
-  '/dashboard/pricing'
+  '/dashboard/pricing',
+  '/api/user(.*)',
+  '/api/notion(.*)',
+  '/api/team(.*)',
+  '/api/email-stats(.*)',
+  '/admin(.*)',
 ];
 
 // Define routes that are for authentication (sign-in, sign-up)
@@ -26,6 +31,7 @@ const publicRoutes = [
   '/api/unsubscribe',
   '/api/resend-verification',
   '/api/verify-email',
+  '/api/verification-status',
   '/api/subscription-status'
 ];
 

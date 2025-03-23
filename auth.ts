@@ -10,6 +10,7 @@ declare module "next-auth" {
       name?: string | null;
       email?: string | null;
       image?: string | null;
+      admin?: boolean;
     }
   }
 }
@@ -34,10 +35,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const customSession = await getSession();
         
         if (customSession && customSession.user) {
-          // Add the user ID to the session
+          // Add the user ID and admin status to the session
           session.user = {
             ...session.user,
-            id: customSession.user.id.toString()
+            id: customSession.user.id.toString(),
+            admin: customSession.user.admin || false
           };
         }
         
