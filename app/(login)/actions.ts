@@ -660,7 +660,7 @@ export const inviteTeamMember = validatedActionWithUser(
 );
 
 // At the end of the file, add this helper to handle redirects properly from server actions
-export function handleRedirectResponse(result: any) {
+export async function handleRedirectResponse(result: any) {
   if (result && result.redirectTo) {
     redirect(result.redirectTo);
   }
