@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { AlertCircle, CheckCircle, Info, Loader2, RefreshCw, SkipForward } from 'lucide-react';
+import { AlertCircle, CheckCircle, Info, Loader2, RefreshCw, SkipForward, AlertTriangle, X, type LucideIcon } from 'lucide-react';
 import { Button } from './button';
 import { cn } from '@/lib/utils';
 import { getErrorMessageForAction } from '@/lib/recaptcha/actions';
@@ -77,72 +77,114 @@ export default function ReCaptchaFeedback({
 
   // Handle different error types with specific messages
   const getDisplayMessage = () => {
-    // If a custom message is provided, use that
     if (message) return message;
 
-    // Format score for display if available
-    const formattedScore = score !== undefined ? score.toFixed(2) : undefined;
+    // Define status-specific default messages
+    const statusConfig: Record<typeof status, { 
+      icon: LucideIcon; 
+      textColor: string; 
+      bgColor: string; 
+      iconColor: string;
+    }> = {
+      idle: {
+        icon: AlertCircle,
+        textColor: 'text-gray-500',
+        bgColor: 'bg-gray-100',
+        iconColor: 'text-gray-500'
+      },
+      loading: {
+        icon: Loader2,
+        textColor: 'text-blue-500',
+        bgColor: 'bg-blue-50',
+        iconColor: 'text-blue-500'
+      },
+      success: {
+        icon: CheckCircle,
+        textColor: 'text-green-500',
+        bgColor: 'bg-green-50',
+        iconColor: 'text-green-500'
+      },
+      error: {
+        icon: X,
+        textColor: 'text-red-500',
+        bgColor: 'bg-red-50',
+        iconColor: 'text-red-500'
+      },
+      warning: {
+        icon: AlertTriangle,
+        textColor: 'text-amber-500',
+        bgColor: 'bg-amber-50',
+        iconColor: 'text-amber-500'
+      }
+    };
 
-    // Get current domain
+    // Detect specific error types for better messages
+    const errorMessage = details?.error?.message || '';
+    const errorType = details?.error?.type || '';
     const domain = typeof window !== 'undefined' ? window.location.hostname : '';
-    const isProdDomain = isProductionDomain(domain);
-    const currentDomain = formatDomain(domain);
+    const isProduction = domain === 'resuming.ai' || domain === 'www.resuming.ai';
     
-    // Default messages based on status
+    // Check for specific error types
+    const isConfigError = errorMessage.includes('not configured') || 
+                         errorMessage.includes('missing') || 
+                         errorType === 'config';
+                         
+    const isNetworkError = errorMessage.includes('network') || 
+                         errorMessage.includes('timeout') || 
+                         errorType === 'network';
+                         
+    const isTokenError = errorMessage.includes('token') || 
+                        errorType === 'token';
+                        
+    const isLowScoreError = score !== undefined && score < 0.5;
+    const isDomainError = errorMessage.includes('domain') || errorType === 'domain';
+    
     switch (status) {
       case 'idle':
-        return 'Waiting for verification...';
+        return 'Preparing verification...';
+      
       case 'loading':
         return 'Verifying your request...';
+      
       case 'success':
-        return formattedScore
-          ? `Verification successful with trust score: ${formattedScore}`
-          : 'Verification successful';
+        if (score !== undefined) {
+          return `Verification successful (Trust score: ${score.toFixed(2)})`;
+        }
+        return 'Verification successful';
+      
       case 'error':
-        // Detect specific error types from details
-        if (details) {
-          // Configuration errors
-          if (details.configError || details.missingKey) {
-            return isProdDomain
-              ? `Critical: reCAPTCHA site key and secret key are missing on production domain ${currentDomain}`
-              : 'reCAPTCHA is not properly configured. Missing API keys.';
+        // Domain-specific error messages
+        if (isProduction) {
+          if (isConfigError) {
+            return 'Critical: reCAPTCHA site key and secret key are missing on production domain resuming.ai';
+          } else if (isNetworkError) {
+            return 'Network error: Unable to connect to verification service. Please check your internet connection and try again.';
+          } else if (isTokenError) {
+            return 'Verification token error: The security token could not be verified. Please try again.';
+          } else if (isDomainError) {
+            return 'Domain verification error: This verification is only configured for resuming.ai domains.';
           }
-          
-          // Network errors
-          if (details.networkError) {
-            return isProdDomain
-              ? `Network error while verifying on ${currentDomain}. Please check your connection and try again.`
-              : 'Network error during verification. Please check your connection.';
+          return 'Verification failed. Please try again or contact support if the issue persists.';
+        } else {
+          // Development/other domains
+          if (isConfigError) {
+            return 'reCAPTCHA configuration error: API keys are missing or invalid';
+          } else if (isNetworkError) {
+            return 'Network error: Could not connect to reCAPTCHA services';
+          } else if (isTokenError) {
+            return 'Token error: Invalid or expired verification token';
+          } else if (isDomainError) {
+            return 'Domain error: This domain is not registered for reCAPTCHA';
           }
-          
-          // Token errors
-          if (details.tokenError) {
-            return isProdDomain
-              ? `Error verifying your token on ${currentDomain}. Please try again.`
-              : 'Error verifying your token. Please try again.';
-          }
-          
-          // Low score errors
-          if (details.lowScore && formattedScore) {
-            return `Verification failed: Trust score ${formattedScore} is too low${action ? ` for ${action}` : ''}`;
-          }
-          
-          // Domain errors
-          if (details.domainError) {
-            return `Domain verification issue:\n\nCurrent domain: ${currentDomain}\nAllowed domains: resuming.ai, www.resuming.ai\nThis application should only run on the approved domains`;
-          }
+          return 'Verification failed. Please check console for details.';
         }
-        
-        // Default error message based on action
-        return action
-          ? getErrorMessageForAction(action, score)
-          : 'Verification failed. Please try again.';
-        
+      
       case 'warning':
-        if (isProdDomain) {
-          return `This is unexpected on the ${currentDomain} domain. Please try again or contact support.`;
+        if (isLowScoreError) {
+          return `Low trust score (${score?.toFixed(2)}). Additional verification may be required.`;
         }
-        return 'Verification warning. You may need to try again.';
+        return 'Verification completed with warnings';
+      
       default:
         return 'Verification status unknown';
     }
@@ -153,32 +195,34 @@ export default function ReCaptchaFeedback({
     if (status !== 'error') return null;
     
     const domain = typeof window !== 'undefined' ? window.location.hostname : '';
-    const isProdDomain = isProductionDomain(domain);
-
-    if (details?.configError || details?.missingKey) {
-      return isProdDomain ? (
-        <div className="mt-2 text-xs opacity-80">
+    const isProduction = domain === 'resuming.ai' || domain === 'www.resuming.ai';
+    
+    // Different guidance based on domain
+    if (isProduction) {
+      return (
+        <div className="mt-2 text-xs text-gray-500">
           <p>The reCAPTCHA service is not properly configured. This could be due to:</p>
-          <ul className="list-disc pl-4 mt-1 space-y-1">
+          <ul className="list-disc list-inside mt-1 ml-2">
             <li>Missing reCAPTCHA API keys in the environment</li>
             <li>Incorrect domain configuration in Google reCAPTCHA admin</li>
             <li>Browser extensions blocking the reCAPTCHA script</li>
           </ul>
-          <p className="mt-2">This application is designed to run on resuming.ai or www.resuming.ai. Please access the site through the correct domain.</p>
-        </div>
-      ) : (
-        <div className="mt-2 text-xs opacity-80">
-          <p>The reCAPTCHA configuration is missing. Developers should:</p>
-          <ul className="list-disc pl-4 mt-1 space-y-1">
-            <li>Check if NEXT_PUBLIC_RECAPTCHA_SITE_KEY is set in environment variables</li>
-            <li>Verify RECAPTCHA_SECRET_KEY is set on the server</li>
-            <li>Ensure domains are configured in the Google reCAPTCHA admin console</li>
-          </ul>
+          <p className="mt-1">This application is designed to run on resuming.ai or www.resuming.ai. Please access the site through the correct domain.</p>
         </div>
       );
     }
     
-    return null;
+    // Development/other domains
+    return (
+      <div className="mt-2 text-xs text-gray-500">
+        <p>Troubleshooting:</p>
+        <ul className="list-disc list-inside mt-1 ml-2">
+          <li>Check if NEXT_PUBLIC_RECAPTCHA_SITE_KEY is set in .env</li>
+          <li>Verify domain configuration in Google reCAPTCHA admin console</li>
+          <li>Try disabling any content/script blockers in your browser</li>
+        </ul>
+      </div>
+    );
   };
 
   // Determine if retry and skip buttons should be shown

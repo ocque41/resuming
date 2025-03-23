@@ -114,9 +114,9 @@ export default function RootLayout({
           <ThemeProvider defaultTheme="dark" storageKey="app-theme">
             <ReCaptchaProvider 
               defaultAction={RECAPTCHA_ACTIONS.GENERIC}
-              skipForDevelopment={process.env.NODE_ENV === 'development' && process.env.SKIP_RECAPTCHA === 'true'}
-              useTestKeysInDev={process.env.NODE_ENV === 'development'}
-              tokenRefreshInterval={120000 * 0.9} // 90% of 2 minutes (token expiry)
+              skipForDevelopment={false}
+              useTestKeysInDev={true}
+              tokenRefreshInterval={108000}
             >
               {children}
             </ReCaptchaProvider>
