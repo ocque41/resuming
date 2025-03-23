@@ -10,11 +10,15 @@ declare module "next-auth" {
       id?: string;
       /** The user's admin status. */
       admin?: boolean;
+      /** The user's email verification status. */
+      emailVerified?: boolean;
     } & DefaultSession["user"];
   }
   
   interface User {
     /** The user's admin status. */
     admin?: boolean;
+    /** The user's email verification status. */
+    emailVerified?: boolean | Date;
   }
 } 

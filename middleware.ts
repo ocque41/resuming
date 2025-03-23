@@ -37,8 +37,15 @@ const publicRoutes = [
 ];
 
 // Define premium routes that require email verification
-const premiumRoutes = [
-  '/dashboard/enhance'
+const verificationRequiredRoutes = [
+  '/dashboard/enhance',
+  '/dashboard/optimize',
+  '/dashboard/analyze',
+  '/api/cv/(.*)',
+  '/api/analyze-cv',
+  '/api/optimize-cv',
+  '/api/document/(.*)',
+  '/api/job-match/(.*)'
 ];
 
 export async function middleware(request: NextRequest) {
@@ -55,7 +62,15 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
   
   // Check if the current route requires email verification
-  const requiresVerification = premiumRoutes.some(route => pathname.startsWith(route));
+  const requiresVerification = verificationRequiredRoutes.some(route => {
+    // Create a regex pattern from the route string, handling wildcard patterns
+    if (route.includes('(.*)')) {
+      const pattern = route.replace(/\(\.\*\)/g, '.*');
+      const regex = new RegExp(`^${pattern}`);
+      return regex.test(pathname);
+    }
+    return pathname.startsWith(route);
+  });
 
   // Always allow public routes, even without a session
   if (isPublicRoute) {
@@ -73,12 +88,12 @@ export async function middleware(request: NextRequest) {
       await verifyToken(sessionCookie.value);
       return NextResponse.redirect(new URL('/dashboard', request.url));
     } catch (error) {
-      console.error('Error verifying token:', error);
+      console.error('[AUTH] Error verifying token:', error);
       // Token is invalid, continue to auth page
     }
   }
 
-  // Handle session renewal
+  // Handle session renewal and verification requirements
   let res = NextResponse.next();
 
   if (sessionCookie) {
@@ -98,10 +113,18 @@ export async function middleware(request: NextRequest) {
         maxAge: maxAgeInSeconds,
       });
       
-      // For routes requiring verification, we'll handle this in the route component
-      // by showing the verification banner rather than blocking access completely
+      // For premium routes, check verification status
+      if (requiresVerification) {
+        // If email verification status isn't in the session or is false,
+        // we should fetch it from the database, but for performance reasons
+        // we'll redirect to a verification check page that will do this check
+        // and then either continue or show verification required
+        
+        // We'll check email verification in the routes themselves
+        // by extending our user session to include verification status
+      }
     } catch (error) {
-      console.error('Error updating session:', error);
+      console.error('[AUTH] Error updating session:', error);
       res.cookies.delete('session');
       if (isProtectedRoute) {
         return NextResponse.redirect(new URL('/sign-in', request.url));

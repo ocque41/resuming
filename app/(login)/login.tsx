@@ -111,7 +111,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
             required
             maxLength={50}
             // Changed input background to a darker shade
-              className="appearance-none rounded-full block w-full px-3 py-2 border border-[#F9F6EE]/30 placeholder-[#333333] text-[#050505] bg-[#9E7C57] focus:outline-none focus:ring-[#B4916C] focus:border-[#B4916C] sm:text-sm"
+              className="appearance-none rounded-full block w-full px-3 py-2 border border-[#F9F6EE]/30 placeholder-[#333333] text-[#050505] bg-[#F9F6EE] focus:outline-none focus:ring-[#B4916C] focus:border-[#B4916C] sm:text-sm"
               placeholder="Enter your email"
           />
         </div>
@@ -172,7 +172,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
               </div>
             </div>
             <p className="text-[#8A8782] text-xs ml-6">
-              Get the tips, articlesand exclusive offers
+              Get the tips, articles and exclusive offers
             </p>
           </div>
           
@@ -195,7 +195,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
       <div>
         <Button
           type="submit"
-          className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-white bg-[#B4916C] hover:bg-[#B4916C]/75 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#B4916C]"
+          className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-[#050505] bg-[#B4916C] hover:bg-[#B4916C]/75 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#B4916C]"
           disabled={pending || (mode === "signup" && !captchaToken)}
         >
           {pending ? (
@@ -239,16 +239,16 @@ export function Login({ mode = "signin" }: { mode?: "signin" | "signup" }) {
             <div className="flex w-full justify-center space-x-2 mb-4">
               <Link
                 href="/sign-in"
-                className={`w-full text-center py-2 px-4 rounded-md transition-colors duration-300 hover:bg-[#F9F6EE] ${
-                  mode === "signin" ? "bg-[#F9F6EE]/50" : ""
+                className={`w-full text-center py-2 px-4 rounded-md transition-colors duration-300 hover:bg-[#F9F6EE]/50 ${
+                  mode === "signin" ? "bg-[#333333]" : ""
                 }`}
               >
                 Sign In
               </Link>
               <Link
                 href="/sign-up"
-                className={`w-full text-center py-2 px-4 rounded-md transition-colors duration-300 hover:bg-[#F9F6EE] ${
-                  mode === "signup" ? "bg-[#F9F6EE]/50" : ""
+                className={`w-full text-center py-2 px-4 rounded-md transition-colors duration-300 hover:bg-[#F9F6EE]/50 ${
+                  mode === "signup" ? "bg-[#333333]" : ""
                 }`}
               >
                 Sign Up
@@ -259,7 +259,7 @@ export function Login({ mode = "signin" }: { mode?: "signin" | "signup" }) {
             </div>
           </CardContent>
           <CardFooter className="p-6">
-            <div className="text-sm text-white">
+            <div className="text-sm text-[#F9F6EE]">
               {mode === "signin" ? "New to our platform? " : "Already have an account? "}
               <Link
                 href={mode === "signin" ? "/sign-up" : "/sign-in"}

@@ -11,6 +11,7 @@ declare module "next-auth" {
       email?: string | null;
       image?: string | null;
       admin?: boolean;
+      emailVerified?: boolean;
     }
   }
 }
@@ -35,17 +36,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const customSession = await getSession();
         
         if (customSession && customSession.user) {
-          // Add the user ID and admin status to the session
+          // Add the user ID, admin status, and email verification status to the session
           session.user = {
             ...session.user,
             id: customSession.user.id.toString(),
-            admin: customSession.user.admin || false
+            admin: customSession.user.admin || false,
+            emailVerified: customSession.user.emailVerified || false
           };
         }
         
         return session;
       } catch (error) {
-        console.error("Error in session callback:", error);
+        console.error("[AUTH] Error in session callback:", error);
         return session;
       }
     }

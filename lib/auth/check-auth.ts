@@ -27,4 +27,32 @@ export async function isAdmin(): Promise<boolean> {
     console.error('[AUTH] Error checking admin status:', error);
     return false;
   }
+}
+
+/**
+ * Check if a user's email is verified
+ * @returns boolean indicating if the user's email is verified
+ */
+export async function isEmailVerified(): Promise<boolean> {
+  try {
+    const session = await auth();
+    return !!session?.user?.emailVerified;
+  } catch (error) {
+    console.error('[AUTH] Error checking email verification status:', error);
+    return false;
+  }
+}
+
+/**
+ * Get the user's email from the session
+ * @returns The user's email if authenticated, null otherwise
+ */
+export async function getUserEmail(): Promise<string | null> {
+  try {
+    const session = await auth();
+    return session?.user?.email || null;
+  } catch (error) {
+    console.error('[AUTH] Error getting user email:', error);
+    return null;
+  }
 } 

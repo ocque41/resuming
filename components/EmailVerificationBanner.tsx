@@ -1,22 +1,77 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, X, Loader2, AlertTriangle } from 'lucide-react';
+import { Mail, X, Loader2, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface EmailVerificationBannerProps {
   email: string;
+  onVerified?: () => void;
+  dismissable?: boolean;
 }
 
-export default function EmailVerificationBanner({ email }: EmailVerificationBannerProps) {
+export default function EmailVerificationBanner({ 
+  email, 
+  onVerified,
+  dismissable = true 
+}: EmailVerificationBannerProps) {
   const [isVisible, setIsVisible] = useState(true);
   const [isResending, setIsResending] = useState(false);
+  const [isChecking, setIsChecking] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
   const [resendError, setResendError] = useState('');
+  const [isVerified, setIsVerified] = useState(false);
+  
+  useEffect(() => {
+    // Check verification status on mount
+    checkVerificationStatus();
+    
+    // Set up interval to check status every 20 seconds if not verified
+    const interval = setInterval(() => {
+      if (!isVerified) {
+        checkVerificationStatus();
+      } else {
+        clearInterval(interval);
+      }
+    }, 20000);
+    
+    return () => clearInterval(interval);
+  }, [isVerified]);
+  
+  const checkVerificationStatus = async () => {
+    if (isChecking || isVerified) return;
+    
+    setIsChecking(true);
+    
+    try {
+      const response = await fetch(`/api/verification-status?email=${encodeURIComponent(email)}`);
+      const data = await response.json();
+      
+      if (response.ok && data.verified) {
+        setIsVerified(true);
+        
+        // Notify parent component if needed
+        if (onVerified) {
+          onVerified();
+        }
+        
+        // Auto-hide banner after 3 seconds when verified
+        setTimeout(() => {
+          setIsVisible(false);
+        }, 3000);
+      }
+    } catch (err) {
+      console.error('Error checking verification status:', err);
+    } finally {
+      setIsChecking(false);
+    }
+  };
   
   const handleClose = () => {
-    setIsVisible(false);
+    if (dismissable) {
+      setIsVisible(false);
+    }
   };
   
   const handleResendVerification = async () => {
@@ -37,12 +92,27 @@ export default function EmailVerificationBanner({ email }: EmailVerificationBann
       
       if (response.ok) {
         setResendSuccess(true);
+        
+        // Auto-clear success message after 5 seconds
+        setTimeout(() => {
+          setResendSuccess(false);
+        }, 5000);
       } else {
         setResendError(data.error || 'Failed to resend verification email');
+        
+        // Auto-clear error message after 5 seconds
+        setTimeout(() => {
+          setResendError('');
+        }, 5000);
       }
     } catch (err) {
       setResendError('An unexpected error occurred');
       console.error('Error resending verification email:', err);
+      
+      // Auto-clear error message after 5 seconds
+      setTimeout(() => {
+        setResendError('');
+      }, 5000);
     } finally {
       setIsResending(false);
     }
@@ -61,52 +131,83 @@ export default function EmailVerificationBanner({ email }: EmailVerificationBann
           <div className="container mx-auto px-4 py-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center">
-                <Mail className="text-[#B4916C] h-5 w-5 mr-2 flex-shrink-0" />
+                {isVerified ? (
+                  <CheckCircle className="text-green-500 h-5 w-5 mr-2 flex-shrink-0" />
+                ) : (
+                  <Mail className="text-[#B4916C] h-5 w-5 mr-2 flex-shrink-0" />
+                )}
                 <p className="text-[#F9F6EE] font-borna text-sm">
-                  <span className="font-medium">Please verify your email address: </span>
+                  {isVerified ? (
+                    <span className="font-medium">Email verified successfully! </span>
+                  ) : (
+                    <span className="font-medium">Please verify your email address: </span>
+                  )}
                   {email}
                 </p>
               </div>
               
               <div className="flex items-center space-x-2">
-                {!isResending && !resendSuccess ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleResendVerification}
-                    className="text-xs h-8 bg-transparent text-[#B4916C] border border-[#B4916C]/40 hover:bg-[#B4916C]/10"
-                  >
-                    Resend Verification Email
-                  </Button>
-                ) : isResending ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled
-                    className="text-xs h-8 bg-transparent text-[#B4916C] border border-[#B4916C]/40"
-                  >
-                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                    Sending...
-                  </Button>
-                ) : (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="text-green-500 text-xs bg-green-500/10 py-1 px-2 rounded-md"
-                  >
-                    Verification email sent
-                  </motion.div>
+                {!isVerified && (
+                  <>
+                    {!isResending && !resendSuccess ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleResendVerification}
+                        className="text-xs h-8 bg-transparent text-[#B4916C] border border-[#B4916C]/40 hover:bg-[#B4916C]/10"
+                      >
+                        Resend Verification Email
+                      </Button>
+                    ) : isResending ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled
+                        className="text-xs h-8 bg-transparent text-[#B4916C] border border-[#B4916C]/40"
+                      >
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        Sending...
+                      </Button>
+                    ) : (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="text-green-500 text-xs bg-green-500/10 py-1 px-2 rounded-md flex items-center"
+                      >
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Verification email sent
+                      </motion.div>
+                    )}
+                    
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={checkVerificationStatus}
+                      disabled={isChecking}
+                      className="h-8 w-8 rounded-full text-[#C5C2BA] hover:text-[#F9F6EE] hover:bg-[#111111]/40"
+                      title="Check verification status"
+                    >
+                      {isChecking ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4" />
+                      )}
+                      <span className="sr-only">Check status</span>
+                    </Button>
+                  </>
                 )}
                 
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleClose}
-                  className="h-8 w-8 rounded-full text-[#C5C2BA] hover:text-[#F9F6EE] hover:bg-[#111111]/40"
-                >
-                  <X className="h-4 w-4" />
-                  <span className="sr-only">Close</span>
-                </Button>
+                {dismissable && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleClose}
+                    className="h-8 w-8 rounded-full text-[#C5C2BA] hover:text-[#F9F6EE] hover:bg-[#111111]/40"
+                  >
+                    <X className="h-4 w-4" />
+                    <span className="sr-only">Close</span>
+                  </Button>
+                )}
               </div>
             </div>
             
