@@ -1,14 +1,16 @@
 "use client";
 
 import { Suspense } from "react";
-import { Check, AlertTriangle } from "lucide-react";
+import { Check, AlertTriangle, ArrowRight, Loader2, Star } from "lucide-react";
 import { PremiumCard, PremiumCardContent } from "@/components/ui/premium-card";
 import { motion } from "framer-motion";
 import dynamic from 'next/dynamic';
 import PricingErrorBoundary from './PricingErrorBoundary';
 import { PricingProvider } from './PricingContext';
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 
-// Dynamically import the client component
+// Dynamically import the Pro plan component
 const PricingCardClient = dynamic(
   () => import('./PricingCardClient'),
   { 
@@ -43,6 +45,9 @@ export default function PricingPageClient({
   products, 
   pricingError 
 }: PricingPageClientProps) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
   // Ensure we have fallbacks for all data
   const freePlan = products.find((product) => product.name === "Pro") || 
     { id: "free-fallback", name: "Pro" };
@@ -55,6 +60,49 @@ export default function PricingPageClient({
   
   const moonlightingPrice = prices.find((price) => price.productId === moonlightingPlan?.id) || 
     { id: "price_1R5vvRFYYYXM77wG8jVM2pGC", productId: "moonlighting-fallback", unitAmount: 1499 };
+    
+  // Handle Moonlighting plan checkout
+  const handleMoonlightingCheckout = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // Always use the hardcoded Moonlighting price ID
+      const moonlightingPriceId = "price_1R5vvRFYYYXM77wG8jVM2pGC";
+      console.log('Initiating Moonlighting checkout, Price ID:', moonlightingPriceId);
+      
+      // Create form data
+      const formData = new FormData();
+      formData.append('priceId', moonlightingPriceId);
+      formData.append('returnUrl', '/dashboard');
+
+      // Submit form to server action
+      const response = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to initiate checkout' }));
+        throw new Error(errorData.message || 'Failed to initiate checkout');
+      }
+
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('No checkout URL returned');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+      console.error('Checkout error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <Suspense fallback={<PricingPageSkeleton />}>
@@ -110,24 +158,96 @@ export default function PricingPageClient({
                     priceId={freePrice?.id}
                     animationDelay={0.2}
                   />
-                  <PricingCardClient
-                    name="Moonlighting"
-                    price={1499}
-                    interval="month"
-                    features={[
-                      "Everything in Pro Plan ⓘ",
-                      "Unlimited Access to Create Suite ⓘ",
-                      "Access to Remin Agent ⓘ",
-                    ]}
-                    tooltips={{
-                      "Everything in Pro Plan ⓘ": "All features from the Pro plan included",
-                      "Unlimited Access to Create Suite ⓘ": "Unlimited access to the Create suite for advanced content creation",
-                      "Access to Remin Agent ⓘ": "Access the unlimited power of \"Remin\" the most powerful Agent",
-                    }}
-                    highlight={true}
-                    priceId="price_1R5vvRFYYYXM77wG8jVM2pGC"
-                    animationDelay={0.3}
-                  />
+                  
+                  {/* Custom Moonlighting Card with hardcoded upgrade button */}
+                  <motion.div
+                    className="rounded-xl overflow-hidden transition-all duration-300 border border-[#B4916C] bg-[#0A0A0A]"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.3 }}
+                    whileHover={{ y: -8, transition: { duration: 0.3, ease: "easeOut" } }}
+                  >
+                    <div className="bg-gradient-to-r from-[#B4916C]/30 to-[#B4916C]/10 py-6 px-6 relative overflow-hidden">
+                      <Star className="absolute top-3 right-3 h-5 w-5 text-[#B4916C]" />
+                      
+                      <h2 className="text-2xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
+                        Moonlighting
+                        <span className="ml-2 text-xs bg-[#B4916C]/20 text-[#B4916C] px-2 py-1 rounded-full font-borna">
+                          Most Popular
+                        </span>
+                        <div className="mt-1 text-sm text-[#C5C2BA] font-borna">
+                          Upgrade from Pro to unlock all features
+                        </div>
+                      </h2>
+                      
+                      <p className="text-4xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
+                        $14.99
+                        <span className="text-xl font-normal text-[#8A8782] ml-1 font-borna">
+                          /month
+                        </span>
+                      </p>
+                      
+                      <div className="absolute inset-0 opacity-20 overflow-hidden pointer-events-none">
+                        <motion.div
+                          className="absolute h-[200%] w-[25%] bg-white top-[-120%] left-[-10%] transform rotate-45 blur-lg"
+                          animate={{
+                            left: ["0%", "120%"],
+                          }}
+                          transition={{
+                            repeat: Infinity,
+                            repeatDelay: 3,
+                            duration: 2.5,
+                            ease: "easeInOut",
+                          }}
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="p-6 flex flex-col h-full">
+                      <ul className="space-y-4 flex-grow mb-8">
+                        {["Everything in Pro Plan ⓘ", "Unlimited Access to Create Suite ⓘ", "Access to Remin Agent ⓘ"].map((feature, index) => (
+                          <li key={index} className="flex items-start group relative">
+                            <div className="h-5 w-5 mr-3 rounded-full flex items-center justify-center flex-shrink-0 text-[#B4916C] bg-[#B4916C]/10">
+                              <Check className="h-3 w-3" />
+                            </div>
+                            <span className="text-[#C5C2BA] font-borna text-sm">
+                              {feature.replace(" ⓘ", "")}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      
+                      <div className="text-center mb-6 text-[#B4916C] font-borna">
+                        <p>Unlock premium features today!</p>
+                      </div>
+                      
+                      {error && (
+                        <div className="text-red-400 text-sm mb-4 p-3 bg-red-500/10 rounded-lg flex items-start border border-red-900/30">
+                          <AlertTriangle className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
+                          <span>{error}</span>
+                        </div>
+                      )}
+                      
+                      <div className="w-full mt-auto">
+                        <motion.div
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          className="w-full"
+                        >
+                          <Button
+                            onClick={handleMoonlightingCheckout}
+                            disabled={isLoading}
+                            className="w-full h-14 bg-[#B4916C] hover:bg-[#A3815B] text-[#050505] rounded-lg flex items-center justify-center font-bold text-lg"
+                          >
+                            {isLoading ? "Processing..." : "UPGRADE NOW"}
+                          </Button>
+                        </motion.div>
+                        <div className="mt-2 text-xs text-[#8A8782] text-center">
+                          Price ID: price_1R5vvRFYYYXM77wG8jVM2pGC
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
                 </div>
               </PricingErrorBoundary>
             </PricingProvider>
