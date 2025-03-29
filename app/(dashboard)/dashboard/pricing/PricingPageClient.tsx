@@ -221,6 +221,37 @@ export default function PricingPageClient({
                         <p>Unlock premium features today!</p>
                       </div>
                       
+                      {/* Extra visible upgrade button */}
+                      <motion.div
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="w-full mb-4"
+                      >
+                        <Button
+                          onClick={handleMoonlightingCheckout}
+                          disabled={isLoading}
+                          className="w-full bg-gradient-to-r from-[#B4916C] to-[#A3815B] text-[#050505] rounded-xl py-6 flex items-center justify-center transition-colors duration-300 text-lg font-bold shadow-xl border-none relative"
+                        >
+                          {isLoading ? (
+                            <>
+                              <Loader2 className="animate-spin mr-2 h-5 w-5" />
+                              <span className="font-safiro">Processing...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="font-safiro">CLICK TO UPGRADE</span>
+                              <motion.div
+                                initial={{ x: 0 }}
+                                whileHover={{ x: 4 }}
+                                transition={{ duration: 0.2 }}
+                              >
+                                <ArrowRight className="ml-2 h-5 w-5" />
+                              </motion.div>
+                            </>
+                          )}
+                        </Button>
+                      </motion.div>
+                      
                       {error && (
                         <div className="text-red-400 text-sm mb-4 p-3 bg-red-500/10 rounded-lg flex items-start border border-red-900/30">
                           <AlertTriangle className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />

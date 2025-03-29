@@ -9,6 +9,7 @@ import { Suspense } from "react";
 
 // Import the client component for rendering the pricing UI
 import PricingPageClient, { PricingPageSkeleton } from './PricingPageClient';
+import UpgradeButton from './UpgradeButton';
 
 // Define types for data
 interface ActivityLog {
@@ -113,6 +114,45 @@ export default async function DashboardPricingPage() {
             pricingError={pricingError}
           />
         </Suspense>
+        
+        {/* Direct inline upgrade button as a fallback that should work regardless of components */}
+        <div style={{
+          position: 'relative',
+          width: '100%',
+          maxWidth: '600px',
+          margin: '0 auto',
+          marginTop: '20px',
+          textAlign: 'center',
+          padding: '10px',
+          border: '2px solid #B4916C',
+          borderRadius: '10px',
+          background: '#0A0A0A',
+          boxShadow: '0 4px 12px rgba(180, 145, 108, 0.3)'
+        }}>
+          <h3 style={{
+            fontSize: '20px',
+            fontWeight: 'bold',
+            color: '#F9F6EE',
+            marginBottom: '12px'
+          }}>
+            Upgrade to Moonlighting Plan
+          </h3>
+          <p style={{
+            fontSize: '16px',
+            color: '#C5C2BA',
+            marginBottom: '16px'
+          }}>
+            Get access to all premium features for only $14.99/month
+          </p>
+          <Link href="/api/upgrade-direct?priceId=price_1R5vvRFYYYXM77wG8jVM2pGC">
+            <Button className="bg-[#B4916C] hover:bg-[#A3815B] text-[#050505] px-8 py-3 text-xl font-bold rounded-lg">
+              UPGRADE NOW
+            </Button>
+          </Link>
+        </div>
+        
+        {/* Add a standalone upgrade button that will always be visible */}
+        <UpgradeButton />
       </PremiumPageLayout>
     );
   } catch (error) {
