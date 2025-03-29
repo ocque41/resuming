@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle, X, Loader2, ArrowRight, RefreshCw, Mail } from 'lucide-react';
+import { CheckCircle, X, Loader2, ArrowRight, RefreshCw, Mail, Check } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 
@@ -50,6 +50,21 @@ export default function VerifyEmailClient({ token, email }: VerifyEmailClientPro
 
         if (response.ok) {
           setIsSuccess(true);
+          
+          // Check subscription status after verification
+          try {
+            const subscriptionResponse = await fetch('/api/user/subscription');
+            if (subscriptionResponse.ok) {
+              const subscriptionData = await subscriptionResponse.json();
+              if (subscriptionData.subscriptionStatus === 'active') {
+                console.log('Subscription successfully activated');
+              } else {
+                console.warn('Subscription status not active after verification:', subscriptionData);
+              }
+            }
+          } catch (subscriptionError) {
+            console.error('Error checking subscription status:', subscriptionError);
+          }
           
           // Auto-subscribe to newsletter if the user opted in and verified email successfully
           if (subscribeToNewsletter) {
@@ -186,6 +201,12 @@ export default function VerifyEmailClient({ token, email }: VerifyEmailClientPro
                     <p className="text-[#8A8782] font-borna">
                       You can now access all features of your account.
                     </p>
+                    <div className="bg-[#0D1F15] p-3 rounded-md border border-[#1A2E22] my-4">
+                      <p className="text-green-500 font-borna">
+                        <Check className="inline h-4 w-4 mr-2" />
+                        Your Pro subscription has been activated
+                      </p>
+                    </div>
                   </div>
                   
                   <div className="mt-4 w-full max-w-xs p-4 bg-[#161616] rounded-lg border border-[#222222]">

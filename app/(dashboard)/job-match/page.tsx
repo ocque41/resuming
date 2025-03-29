@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getUser, getTeamForUser, getActivityLogs } from "@/lib/db/queries.server";
-import JobMatchAnalysisVisualizer from "../../components/JobMatchAnalysisVisualizer.client";
+import JobMatchAnalysisVisualizer from "@/app/components/JobMatchAnalysisVisualizer.client";
 import PremiumPageLayout from "@/components/PremiumPageLayout";
 
 export default async function JobMatchPage() {

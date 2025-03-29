@@ -67,12 +67,6 @@ export default function MobileNavigation() {
       description: "Analyze CV against job descriptions",
     },
     {
-      href: "/dashboard/jobs",
-      label: "Find Matching Jobs",
-      icon: Briefcase,
-      description: "Discover jobs that match your CV",
-    },
-    {
       href: "/settings",
       label: "Settings",
       icon: Settings,

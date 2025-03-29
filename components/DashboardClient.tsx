@@ -247,17 +247,6 @@ export default function DashboardClient({
             animationDelay={0.3}
             withElevation
           />
-          
-          <PremiumFeatureCard 
-            href="/dashboard/jobs"
-            icon={Briefcase}
-            title="Job Opportunities"
-            description="Discover the best jobs you can get now with your current CV"
-            fullWidth
-            accentBorder
-            animationDelay={0.35}
-            withElevation
-          />
         </motion.div>
       </motion.div>
     </PremiumPageLayout>
