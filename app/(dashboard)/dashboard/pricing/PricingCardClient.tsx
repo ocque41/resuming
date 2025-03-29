@@ -64,7 +64,52 @@ export default function PricingCardClient({
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // If it's the current plan, no checkout needed
+    // For Moonlighting plan, always allow checkout
+    if (name === "Moonlighting") {
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        // Always use the specific Moonlighting price ID
+        const moonlightingPriceId = "price_1R5vvRFYYYXM77wG8jVM2pGC";
+        console.log('Initiating Moonlighting checkout, Price ID:', moonlightingPriceId);
+        
+        // Create form data
+        const formData = new FormData();
+        formData.append('priceId', moonlightingPriceId);
+        formData.append('returnUrl', '/dashboard');
+
+        // Submit form to server action
+        const response = await fetch('/api/stripe/checkout', {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ message: 'Failed to initiate checkout' }));
+          throw new Error(errorData.message || 'Failed to initiate checkout');
+        }
+
+        const data = await response.json();
+        if (data.url) {
+          window.location.href = data.url;
+        } else {
+          throw new Error('No checkout URL returned');
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred');
+        console.error('Checkout error:', err);
+      } finally {
+        setIsLoading(false);
+      }
+      
+      return;
+    }
+    
+    // Regular plan checkout logic (for non-Moonlighting plans)
     if (isCurrentPlan) {
       return;
     }
@@ -73,16 +118,11 @@ export default function PricingCardClient({
     setError(null);
 
     try {
-      // Always use the specific price ID for Moonlighting plan
-      const checkoutPriceId = name === "Moonlighting" 
-        ? "price_1R5vvRFYYYXM77wG8jVM2pGC" 
-        : priceId;
-        
-      console.log('Initiating checkout for:', name, 'Price ID:', checkoutPriceId);
+      console.log('Initiating checkout for:', name, 'Price ID:', priceId);
       
       // Create form data
       const formData = new FormData();
-      formData.append('priceId', checkoutPriceId || '');
+      formData.append('priceId', priceId || '');
       formData.append('returnUrl', '/dashboard');
 
       // Submit form to server action
@@ -154,9 +194,6 @@ export default function PricingCardClient({
         {highlight && (
           <>
             <Star className="absolute top-3 right-3 h-5 w-5 text-[#B4916C]" />
-            <div className="absolute -right-12 top-7 bg-[#B4916C] text-[#050505] px-10 py-1 transform rotate-45 font-bold text-xs tracking-wider shadow-md">
-              RECOMMENDED
-            </div>
           </>
         )}
         <h2 className="text-2xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
@@ -249,47 +286,26 @@ export default function PricingCardClient({
           </div>
         )}
         
-        <form onSubmit={handleCheckout} className="w-full mt-auto">
-          {name === "Moonlighting" && !isCurrentPlan ? (
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="w-full"
+        {/* Special handling for Moonlighting plan */}
+        {name === "Moonlighting" ? (
+          <form onSubmit={handleCheckout} className="w-full mt-auto">
+            <Button
+              type="submit"
+              disabled={isLoading}
+              className="w-full h-14 bg-[#B4916C] hover:bg-[#A3815B] text-[#050505] rounded-lg flex items-center justify-center font-bold text-lg"
             >
-              <Button
-                type="submit"
-                disabled={isLoading}
-                className="w-full bg-[#B4916C] hover:bg-[#A3815B] text-[#050505] rounded-xl py-6 flex items-center justify-center transition-colors duration-300 text-base font-medium shadow-lg border-none relative"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="animate-spin mr-2 h-4 w-4" />
-                    <span className="font-safiro">Processing...</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="font-safiro">Upgrade Now</span>
-                    <motion.div
-                      initial={{ x: 0 }}
-                      whileHover={{ x: 4 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </motion.div>
-                    <div className="absolute inset-0 -z-10 rounded-xl bg-[#B4916C]/20 blur-[6px]"></div>
-                  </>
-                )}
-              </Button>
-            </motion.div>
-          ) : (
+              {isLoading ? "Processing..." : "UPGRADE NOW"}
+            </Button>
+            <div className="mt-2 text-xs text-[#8A8782] text-center">
+              Price ID: price_1R5vvRFYYYXM77wG8jVM2pGC
+            </div>
+          </form>
+        ) : (
+          <form onSubmit={handleCheckout} className="w-full mt-auto">
             <Button
               type="submit"
               disabled={isLoading || isCurrentPlan}
-              className={`w-full font-medium font-safiro h-12 ${
-                highlight
-                  ? "bg-[#B4916C] hover:bg-[#A3815B] text-[#050505] rounded-xl py-6 flex items-center justify-center transition-colors duration-300 text-base shadow-lg border-none"
-                  : "bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"
-              }`}
+              className="w-full font-medium font-safiro h-12 bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"
             >
               {isLoading ? (
                 <>
@@ -299,26 +315,11 @@ export default function PricingCardClient({
               ) : isCurrentPlan ? (
                 "Current Plan"
               ) : (
-                <>
-                  {highlight ? (
-                    <>
-                      <span className="font-safiro">Upgrade Now</span>
-                      <motion.div
-                        initial={{ x: 0 }}
-                        whileHover={{ x: 4 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </motion.div>
-                    </>
-                  ) : (
-                    "Select Plan"
-                  )}
-                </>
+                "Select Plan"
               )}
             </Button>
-          )}
-        </form>
+          </form>
+        )}
       </div>
     </motion.div>
   );
