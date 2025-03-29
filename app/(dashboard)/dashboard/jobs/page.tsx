@@ -9,6 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default async function JobMatchingPage() {
+  // Redirect to dashboard as this feature is no longer available
+  redirect("/dashboard");
+  
+  // The code below will not execute due to the redirect
   const user = await getUser();
   if (!user) {
     redirect("/sign-in");
