@@ -217,10 +217,6 @@ export default function PricingPageClient({
                         ))}
                       </ul>
                       
-                      <div className="text-center mb-6 text-[#B4916C] font-borna">
-                        <p>Get access to all premium features for only $14.99/month</p>
-                      </div>
-                      
                       {/* SIMPLE MOONLIGHTING UPGRADE BUTTON */}
                       <div className="mb-4">
                         <button
@@ -239,27 +235,12 @@ export default function PricingPageClient({
                             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
                           }}
                         >
-                          {isLoading ? "PROCESSING..." : "UPGRADE NOW"}
+                          {isLoading ? "Processing..." : "Upgrade"}
                         </button>
                       </div>
-
-                      {/* DIRECT LINK FALLBACK */}
-                      <div className="text-center mb-4">
-                        <a 
-                          href="/api/upgrade-direct?priceId=price_1R5vvRFYYYXM77wG8jVM2pGC"
-                          style={{
-                            display: 'inline-block',
-                            padding: '10px 20px',
-                            backgroundColor: '#A3815B',
-                            color: '#050505',
-                            borderRadius: '8px',
-                            textDecoration: 'none',
-                            fontWeight: 'bold',
-                            fontSize: '14px'
-                          }}
-                        >
-                          ALTERNATIVE UPGRADE LINK
-                        </a>
+                      
+                      <div className="text-center mb-6 text-[#B4916C] font-borna">
+                        <p>Get access to all premium features today</p>
                       </div>
                       
                       {error && (
