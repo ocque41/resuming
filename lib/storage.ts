@@ -2,7 +2,9 @@ import fs from "fs/promises";
 import path from "path";
 import crossFetch from "cross-fetch";
 import { getDropboxClient, updateDropboxAccessToken } from "./dropboxAdmin";
+import { getSignedS3Url } from "./s3Storage";
 import pdfParse from "pdf-parse";
+import { logger } from "./logger";
 
 const pdfCache = new Map<string, Uint8Array>();
 
@@ -14,10 +16,10 @@ async function fetchWithRetry(url: string, retries = 1): Promise<Response> {
       return res;
     }
     if (i < retries) {
-      console.warn(`Fetch failed for URL: ${url}. Retrying (${i + 1}/${retries})...`);
+      logger.warn(`Fetch failed for URL: ${url}. Retrying (${i + 1}/${retries})...`);
     } else {
       const text = await res.text();
-      console.error(`Failed to fetch URL after ${retries + 1} attempts. Status: ${res.status} - ${res.statusText}. Response: ${text}`);
+      logger.error(`Failed to fetch URL after ${retries + 1} attempts. Status: ${res.status} - ${res.statusText}. Response: ${text}`);
       throw new Error(`Failed to download PDF from URL: ${url}`);
     }
   }
@@ -25,60 +27,90 @@ async function fetchWithRetry(url: string, retries = 1): Promise<Response> {
 }
 
 /**
+ * Determines if a path is stored in S3
+ * @param path - The file path to check
+ * @returns true if the path is in S3, false otherwise
+ */
+function isS3Path(path: string): boolean {
+  // Check if the path is in S3 format (starts with common S3 path patterns)
+  return path.startsWith('pdfs/') || 
+         path.startsWith('docx/') || 
+         path.startsWith('txt/');
+}
+
+/**
  * Retrieves the original PDF bytes for a given CV record.
  * If the record's filepath is missing, uses a default PDF.
- * If the filepath is a Dropbox path (e.g., "/pdfs/filename.pdf"),
- * obtains a fresh temporary link via Dropbox API before downloading.
+ * - If the filepath is a Dropbox path (e.g., "/pdfs/filename.pdf"),
+ *   obtains a fresh temporary link via Dropbox API before downloading.
+ * - If the filepath is an S3 path (e.g., "pdfs/filename.pdf"),
+ *   generates a signed URL for the S3 object before downloading.
  *
  * @param cvRecord - The CV record object from the database.
  * @returns A Promise that resolves with the PDF bytes as a Uint8Array.
  */
 export async function getOriginalPdfBytes(cvRecord: any): Promise<Uint8Array> {
   let storedPath: string = cvRecord.filepath;
+  const storageType = cvRecord.metadata ? JSON.parse(cvRecord.metadata)?.storageType : null;
   
   // If storedPath is missing or empty, fall back to a default PDF.
   if (!storedPath || storedPath.trim() === "") {
-    console.warn("No valid PDF path found for CV record", cvRecord.id, "- using default PDF.");
+    logger.warn(`No valid PDF path found for CV record ${cvRecord.id} - using default PDF.`);
     storedPath = "https://next-js-saas-starter-three-resuming.vercel.app/pdfs/default.pdf";
   }
   
-  // If storedPath is a Dropbox path (starts with "/pdfs/"), get a fresh temporary link.
+  // Determine the file URL based on storage type
   let fileUrl: string;
-  if (storedPath.startsWith("/pdfs/")) {
+  
+  if (storageType === 's3' || (!storageType && isS3Path(storedPath))) {
+    // For S3 storage, generate a signed URL
+    try {
+      fileUrl = await getSignedS3Url(storedPath);
+      logger.info(`Generated signed S3 URL for: ${storedPath}`);
+    } catch (err) {
+      logger.error(`Error generating signed URL for S3: ${err}`);
+      throw new Error(`Failed to generate signed URL for S3 file at path: ${storedPath}`);
+    }
+  } else if (storedPath.startsWith("/pdfs/")) {
+    // For Dropbox storage, get a temporary link
     const dbx = getDropboxClient();
     try {
       const tempLinkResult = await dbx.filesGetTemporaryLink({ path: storedPath });
       fileUrl = tempLinkResult.result.link;
-      console.log("Fresh temporary link obtained:", fileUrl);
+      logger.info(`Fresh Dropbox temporary link obtained: ${fileUrl}`);
     } catch (err) {
-      console.error("Error getting temporary link for Dropbox file:", err);
+      logger.error(`Error getting temporary link for Dropbox file: ${err}`);
       throw new Error(`Failed to get temporary link for Dropbox file at path: ${storedPath}`);
     }
   } else {
+    // Direct URL or other storage
     fileUrl = storedPath;
   }
   
-  // Do not cache Dropbox temporary links.
-  if (!fileUrl.startsWith("http") || !fileUrl.includes("dl.dropboxusercontent.com")) {
-    if (pdfCache.has(fileUrl)) {
-      return pdfCache.get(fileUrl)!;
-    }
+  // Do not cache temporary URLs (from Dropbox or S3)
+  const isTempUrl = fileUrl.includes("dl.dropboxusercontent.com") || 
+                   fileUrl.includes("amazonaws.com") && fileUrl.includes("X-Amz-Signature");
+  
+  if (!isTempUrl && pdfCache.has(fileUrl)) {
+    return pdfCache.get(fileUrl)!;
   }
   
   let response;
   try {
     response = await fetchWithRetry(fileUrl, 1);
   } catch (err) {
-    console.error("Error fetching PDF from URL:", err);
+    logger.error(`Error fetching PDF from URL: ${err}`);
     throw new Error(`Failed to download PDF from URL: ${fileUrl}`);
   }
   
   const arrayBuffer = await response.arrayBuffer();
   const pdfBytes = new Uint8Array(arrayBuffer);
-  // Cache non-Dropbox URLs if desired.
-  if (!fileUrl.includes("dl.dropboxusercontent.com")) {
+  
+  // Cache only permanent URLs
+  if (!isTempUrl) {
     pdfCache.set(fileUrl, pdfBytes);
   }
+  
   return pdfBytes;
 }
 

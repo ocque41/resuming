@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getUser } from "@/lib/db/queries.server";
-import JobDescriptionGenerator from "../../components/JobDescriptionGenerator.client";
+import JobDescriptionGenerator from "@/app/components/JobDescriptionGenerator.client";
 import PageLayout from "@/components/PageLayout";
 
 export default async function JobDescriptionPage() {

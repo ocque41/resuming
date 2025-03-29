@@ -13,6 +13,7 @@ import {
 } from './schema';
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth/session';
+import { logger } from "@/lib/logger";
 
 export async function getUser() {
   const sessionCookie = (await cookies()).get('session');
@@ -139,7 +140,32 @@ export async function getTeamForUser(userId: number) {
 }
 
 export async function getCVsForUser(userId: number) {
-  return await db.select().from(cvs).where(eq(cvs.userId, userId));
+  try {
+    const results = await db.query.cvs.findMany({
+      where: eq(cvs.userId, userId),
+      orderBy: [desc(cvs.createdAt)],
+    });
+    
+    // Process file URLs for different storage types
+    const processedResults = results.map(cv => {
+      // Parse metadata to check storage type
+      const metadata = cv.metadata ? JSON.parse(cv.metadata) : {};
+      const storageType = metadata.storageType || (cv.filepath?.startsWith('/') ? 'dropbox' : 's3');
+      
+      // For the client, store the storage type if it's missing
+      if (!metadata.storageType) {
+        metadata.storageType = storageType;
+        cv.metadata = JSON.stringify(metadata);
+      }
+      
+      return cv;
+    });
+    
+    return processedResults;
+  } catch (error) {
+    console.error("Error getting CVs for user:", error);
+    return [];
+  }
 }
 
 // ------------------------------
@@ -152,82 +178,47 @@ export async function getCVsForUser(userId: number) {
  */
 export async function getCVByFileName(fileName: string) {
   console.log(`getCVByFileName called with: "${fileName}"`);
-  
-  // Check if the filename contains a pipe character with an ID
-  if (fileName.includes('|')) {
-    // Extract the actual filename part (before the pipe)
-    const actualFileName = fileName.split('|')[0];
-    console.log(`Filename contains pipe character. Using actual filename: "${actualFileName}"`);
+  try {
+    // Attempt to find by exact filename
+    let cv = await db.query.cvs.findFirst({
+      where: eq(cvs.fileName, fileName),
+    });
     
-    // Try to find by the actual filename
-    const fileNameMatch = await db
-      .select()
-      .from(cvs)
-      .where(eq(cvs.fileName, actualFileName))
-      .limit(1);
-    
-    if (fileNameMatch.length) {
-      console.log(`Found CV by actual filename: ${actualFileName}`);
-      return fileNameMatch[0];
+    // If not found, try finding by filepath containing the filename
+    if (!cv) {
+      const cvs = await db.query.cvs.findMany();
+      cv = cvs.find((cv) => 
+        cv.filepath?.includes(fileName) || 
+        cv.fileName?.includes(fileName)
+      );
     }
     
-    // If not found, try to find by ID (after the pipe)
-    const idPart = fileName.split('|')[1];
-    if (idPart && !isNaN(parseInt(idPart))) {
-      const cvId = parseInt(idPart);
-      console.log(`Trying to find CV by ID: ${cvId}`);
+    if (cv) {
+      // Parse metadata to check storage type
+      const metadata = cv.metadata ? JSON.parse(cv.metadata) : {};
+      const storageType = metadata.storageType || (cv.filepath?.startsWith('/') ? 'dropbox' : 's3');
       
-      const idMatch = await db
-        .select()
-        .from(cvs)
-        .where(eq(cvs.id, cvId))
-        .limit(1);
-      
-      if (idMatch.length) {
-        console.log(`Found CV by ID: ${cvId}`);
-        return idMatch[0];
+      // For the client, store the storage type if it's missing
+      if (!metadata.storageType) {
+        metadata.storageType = storageType;
+        cv.metadata = JSON.stringify(metadata);
+        
+        // Update the record with the storage type info
+        try {
+          await db.update(cvs)
+            .set({ metadata: cv.metadata })
+            .where(eq(cvs.id, cv.id));
+        } catch (updateError) {
+          console.error("Error updating CV storage type:", updateError);
+        }
       }
     }
+    
+    return cv;
+  } catch (error) {
+    console.error("Error getting CV by filename:", error);
+    return null;
   }
-  
-  // First try exact match
-  const exactMatch = await db
-    .select()
-    .from(cvs)
-    .where(eq(cvs.fileName, fileName))
-    .limit(1);
-  
-  if (exactMatch.length) {
-    console.log(`Found CV by exact filename match: ${fileName}`);
-    return exactMatch[0];
-  }
-  
-  // If no exact match, try case-insensitive match
-  const caseInsensitiveMatch = await db
-    .select()
-    .from(cvs)
-    .where(ilike(cvs.fileName, fileName))
-    .limit(1);
-  
-  if (caseInsensitiveMatch.length) {
-    console.log(`Found CV by case-insensitive match: ${fileName}`);
-    return caseInsensitiveMatch[0];
-  }
-  
-  // If still no match, try partial match (filename might be stored with path)
-  const partialMatch = await db
-    .select()
-    .from(cvs)
-    .where(like(cvs.fileName, `%${fileName}%`))
-    .limit(1);
-  
-  if (partialMatch.length) {
-    console.log(`Found CV by partial match: ${fileName}`);
-    return partialMatch[0];
-  }
-  
-  console.log(`No CV found for filename: ${fileName}`);
-  return null;
 }
 
 /**
