@@ -45,7 +45,7 @@ export default function PricingPageClient({
 }: PricingPageClientProps) {
   // Ensure we have fallbacks for all data
   const freePlan = products.find((product) => product.name === "Pro") || 
-    { id: "free-fallback", name: "Free" };
+    { id: "free-fallback", name: "Pro" };
   
   const moonlightingPlan = products.find((product) => product.name === "Moonlighting") || 
     { id: "moonlighting-fallback", name: "Moonlighting" };

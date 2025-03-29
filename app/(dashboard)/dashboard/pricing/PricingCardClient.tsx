@@ -2,9 +2,10 @@
 
 import { Check, Star } from "lucide-react";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2, AlertTriangle } from "lucide-react";
+import { usePricing } from './PricingContext';
 
 interface PricingCardClientProps {
   name: string;
@@ -29,12 +30,38 @@ export default function PricingCardClient({
 }: PricingCardClientProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isCurrentPlan, setIsCurrentPlan] = useState(false);
+  const { prices, products, error: pricingError } = usePricing();
+
+  // Check if this is the user's current plan
+  useEffect(() => {
+    const checkCurrentPlan = async () => {
+      try {
+        const response = await fetch('/api/user/subscription');
+        if (!response.ok) {
+          throw new Error('Failed to fetch subscription details');
+        }
+        
+        const data = await response.json();
+        // Check if the current plan matches this card's plan
+        setIsCurrentPlan(data.planName === name || 
+          // Also check if this is the Pro plan and user has Free plan
+          (name === "Pro" && data.planName === "Free"));
+      } catch (err) {
+        console.error('Error checking subscription:', err);
+        // Default to Free plan if there's an error
+        setIsCurrentPlan(name === "Pro");
+      }
+    };
+
+    checkCurrentPlan();
+  }, [name]);
 
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // If it's the Pro plan, no checkout needed
-    if (name === "Pro" || price === 0) {
+    // If it's the current plan, no checkout needed
+    if (isCurrentPlan) {
       return;
     }
     
@@ -137,6 +164,14 @@ export default function PricingCardClient({
           )}
         </p>
         
+        {isCurrentPlan && (
+          <div className="absolute top-0 right-0 mt-2 mr-2">
+            <span className="bg-green-500/20 text-green-400 px-2 py-1 text-xs rounded-full font-borna">
+              Current Plan
+            </span>
+          </div>
+        )}
+        
         {highlight && (
           <div className="absolute inset-0 opacity-20 overflow-hidden pointer-events-none">
             <motion.div
@@ -190,7 +225,7 @@ export default function PricingCardClient({
         <form onSubmit={handleCheckout} className="w-full mt-auto">
           <Button
             type="submit"
-            disabled={isLoading || (name === "Pro" || price === 0)}
+            disabled={isLoading || isCurrentPlan}
             className={`w-full font-medium font-safiro h-12 ${
               highlight
                 ? "bg-[#B4916C] hover:bg-[#A3815B] text-[#050505]"
@@ -202,7 +237,7 @@ export default function PricingCardClient({
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Processing...
               </>
-            ) : name === "Pro" || price === 0 ? (
+            ) : isCurrentPlan ? (
               "Current Plan"
             ) : (
               <>{highlight ? "Upgrade Now" : "Select Plan"}</>

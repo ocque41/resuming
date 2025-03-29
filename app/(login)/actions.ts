@@ -186,7 +186,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       // Create a new team for the user
       const newTeam: NewTeam = {
         name: `${email}'s Team`,
-        planName: "Free" // Set default plan to Free
+        planName: "Pro" // Set default plan to Pro instead of Free
       };
       
       const [createdTeam] = await db.insert(teams).values(newTeam).returning();
@@ -278,7 +278,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
         notionAttempts++;
         try {
           // Add the user to Notion with their newsletter preference
-          const result = await addOrUpdateNotionUser(email, 'Free', subscribeToNewsletter);
+          const result = await addOrUpdateNotionUser(email, 'Pro', subscribeToNewsletter);
           
           if (result) {
             console.log(`[SIGNUP] Successfully added user to Notion on attempt ${notionAttempts}`);
