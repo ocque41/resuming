@@ -221,12 +221,24 @@ export default function PricingPageClient({
                         <p>Get access to all premium features for only $14.99/month</p>
                       </div>
                       
-                      {/* Extra visible upgrade button */}
+                      {/* Moonlighting plan upgrade button */}
                       <motion.div
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        className="w-full mb-4"
+                        className="w-full mb-4 relative"
                       >
+                        <motion.div 
+                          className="absolute inset-0 rounded-xl bg-[#B4916C]/40 blur-md -z-10"
+                          animate={{ 
+                            scale: [1, 1.05, 1],
+                            opacity: [0.6, 0.8, 0.6] 
+                          }}
+                          transition={{ 
+                            duration: 2, 
+                            repeat: Infinity,
+                            repeatType: "reverse" 
+                          }}
+                        />
                         <Button
                           onClick={handleMoonlightingCheckout}
                           disabled={isLoading}
