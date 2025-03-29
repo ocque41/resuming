@@ -125,7 +125,7 @@ export default function PricingPageClient({
                       "Access to Remin Agent ⓘ": "Access the unlimited power of \"Remin\" the most powerful Agent",
                     }}
                     highlight={true}
-                    priceId={moonlightingPrice?.id}
+                    priceId="price_1R5vvRFYYYXM77wG8jVM2pGC"
                     animationDelay={0.3}
                   />
                 </div>

@@ -43,9 +43,14 @@ export default function PricingCardClient({
         
         const data = await response.json();
         // Check if the current plan matches this card's plan
-        setIsCurrentPlan(data.planName === name || 
-          // Also check if this is the Pro plan and user has Free plan
-          (name === "Pro" && data.planName === "Free"));
+        // Only Pro/Free should be marked as current plan if that's what the user has
+        if (name === "Moonlighting") {
+          setIsCurrentPlan(data.planName === "Moonlighting");
+        } else {
+          setIsCurrentPlan(data.planName === name || 
+            // Also check if this is the Pro plan and user has Free plan
+            (name === "Pro" && data.planName === "Free"));
+        }
       } catch (err) {
         console.error('Error checking subscription:', err);
         // Default to Free plan if there's an error
@@ -68,11 +73,16 @@ export default function PricingCardClient({
     setError(null);
 
     try {
-      console.log('Initiating checkout for price ID:', priceId);
+      // Always use the specific price ID for Moonlighting plan
+      const checkoutPriceId = name === "Moonlighting" 
+        ? "price_1R5vvRFYYYXM77wG8jVM2pGC" 
+        : priceId;
+        
+      console.log('Initiating checkout for:', name, 'Price ID:', checkoutPriceId);
       
       // Create form data
       const formData = new FormData();
-      formData.append('priceId', highlight ? 'price_1R5vvRFYYYXM77wG8jVM2pGC' : (priceId || ''));
+      formData.append('priceId', checkoutPriceId || '');
       formData.append('returnUrl', '/dashboard');
 
       // Submit form to server action
@@ -142,7 +152,12 @@ export default function PricingCardClient({
         } py-6 px-6 relative overflow-hidden`}
       >
         {highlight && (
-          <Star className="absolute top-3 right-3 h-5 w-5 text-[#B4916C]" />
+          <>
+            <Star className="absolute top-3 right-3 h-5 w-5 text-[#B4916C]" />
+            <div className="absolute -right-12 top-7 bg-[#B4916C] text-[#050505] px-10 py-1 transform rotate-45 font-bold text-xs tracking-wider shadow-md">
+              RECOMMENDED
+            </div>
+          </>
         )}
         <h2 className="text-2xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
           {name}
@@ -221,6 +236,12 @@ export default function PricingCardClient({
           ))}
         </ul>
         
+        {highlight && !isCurrentPlan && (
+          <div className="text-center mb-6 text-[#B4916C] font-borna">
+            <p>Unlock premium features today!</p>
+          </div>
+        )}
+        
         {error && (
           <div className="text-red-400 text-sm mb-4 p-3 bg-red-500/10 rounded-lg flex items-start border border-red-900/30">
             <AlertTriangle className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
@@ -229,25 +250,23 @@ export default function PricingCardClient({
         )}
         
         <form onSubmit={handleCheckout} className="w-full mt-auto">
-          <Button
-            type="submit"
-            disabled={isLoading || isCurrentPlan}
-            className={`w-full font-medium font-safiro h-12 ${
-              highlight
-                ? "bg-[#B4916C] hover:bg-[#A3815B] text-[#050505] rounded-xl py-6 flex items-center justify-center transition-colors duration-300 text-base shadow-lg border-none"
-                : "bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"
-            }`}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Processing...
-              </>
-            ) : isCurrentPlan ? (
-              "Current Plan"
-            ) : (
-              <>
-                {highlight ? (
+          {name === "Moonlighting" && !isCurrentPlan ? (
+            <motion.div
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full"
+            >
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-[#B4916C] hover:bg-[#A3815B] text-[#050505] rounded-xl py-6 flex items-center justify-center transition-colors duration-300 text-base font-medium shadow-lg border-none relative"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                    <span className="font-safiro">Processing...</span>
+                  </>
+                ) : (
                   <>
                     <span className="font-safiro">Upgrade Now</span>
                     <motion.div
@@ -257,13 +276,48 @@ export default function PricingCardClient({
                     >
                       <ArrowRight className="ml-2 h-4 w-4" />
                     </motion.div>
+                    <div className="absolute inset-0 -z-10 rounded-xl bg-[#B4916C]/20 blur-[6px]"></div>
                   </>
-                ) : (
-                  "Select Plan"
                 )}
-              </>
-            )}
-          </Button>
+              </Button>
+            </motion.div>
+          ) : (
+            <Button
+              type="submit"
+              disabled={isLoading || isCurrentPlan}
+              className={`w-full font-medium font-safiro h-12 ${
+                highlight
+                  ? "bg-[#B4916C] hover:bg-[#A3815B] text-[#050505] rounded-xl py-6 flex items-center justify-center transition-colors duration-300 text-base shadow-lg border-none"
+                  : "bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"
+              }`}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : isCurrentPlan ? (
+                "Current Plan"
+              ) : (
+                <>
+                  {highlight ? (
+                    <>
+                      <span className="font-safiro">Upgrade Now</span>
+                      <motion.div
+                        initial={{ x: 0 }}
+                        whileHover={{ x: 4 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </motion.div>
+                    </>
+                  ) : (
+                    "Select Plan"
+                  )}
+                </>
+              )}
+            </Button>
+          )}
         </form>
       </div>
     </motion.div>
