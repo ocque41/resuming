@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
 interface Props {
-  children: ReactNode;
+  children: ReactNode:
 }
+
 
 interface State {
   hasError: boolean;
