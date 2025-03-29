@@ -3,16 +3,18 @@ import path from 'path';
 import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
 import { getDropboxClient } from './dropboxAdmin';
+import { uploadFileToS3, getFileFromS3, deleteFileFromS3, getSignedS3Url } from './s3Storage';
+import { logger } from './logger';
 
 /**
  * File Storage Service
  * 
  * This service provides a unified interface for storing and retrieving files,
- * with support for both local file system and Dropbox storage.
+ * with support for local file system, Dropbox, and S3 storage.
  */
 
 // Define storage types
-export type StorageType = 'local' | 'dropbox';
+export type StorageType = 'local' | 'dropbox' | 's3';
 
 // Define file types
 export type FileType = 'pdf' | 'docx' | 'txt';
@@ -63,6 +65,12 @@ export async function saveFile(
       // Save to Dropbox
       filePath = await saveToDropbox(buffer, fullFileName, fileType);
       url = await getDropboxTemporaryLink(filePath);
+    } else if (storageType === 's3') {
+      // Save to S3
+      const basePath = fileType === 'pdf' ? 'pdfs' : fileType === 'docx' ? 'docx' : 'txt';
+      const s3Path = `${basePath}/${fullFileName}`;
+      filePath = await uploadFileToS3(buffer, s3Path);
+      url = await getSignedS3Url(filePath);
     } else {
       // Save to local file system
       filePath = await saveToLocalFileSystem(buffer, fullFileName);
@@ -82,7 +90,7 @@ export async function saveFile(
     
     return metadata;
   } catch (error) {
-    console.error('Error saving file:', error);
+    logger.error(`Failed to save file: ${error instanceof Error ? error.message : String(error)}`);
     throw new Error(`Failed to save file: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
@@ -102,12 +110,15 @@ export async function retrieveFile(
     if (storageType === 'dropbox') {
       // Retrieve from Dropbox
       return await retrieveFromDropbox(filePath);
+    } else if (storageType === 's3') {
+      // Retrieve from S3
+      return await getFileFromS3(filePath);
     } else {
       // Retrieve from local file system
       return await retrieveFromLocalFileSystem(filePath);
     }
   } catch (error) {
-    console.error('Error retrieving file:', error);
+    logger.error(`Failed to retrieve file: ${error instanceof Error ? error.message : String(error)}`);
     throw new Error(`Failed to retrieve file: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
@@ -127,12 +138,15 @@ export async function deleteFile(
     if (storageType === 'dropbox') {
       // Delete from Dropbox
       return await deleteFromDropbox(filePath);
+    } else if (storageType === 's3') {
+      // Delete from S3
+      return await deleteFileFromS3(filePath);
     } else {
       // Delete from local file system
       return await deleteFromLocalFileSystem(filePath);
     }
   } catch (error) {
-    console.error('Error deleting file:', error);
+    logger.error(`Failed to delete file: ${error instanceof Error ? error.message : String(error)}`);
     throw new Error(`Failed to delete file: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
@@ -152,12 +166,15 @@ export async function getFileUrl(
     if (storageType === 'dropbox') {
       // Get a temporary link from Dropbox
       return await getDropboxTemporaryLink(filePath);
+    } else if (storageType === 's3') {
+      // Get a signed URL from S3
+      return await getSignedS3Url(filePath);
     } else {
       // For local files, we can't provide a URL
       throw new Error('URL generation not supported for local files');
     }
   } catch (error) {
-    console.error('Error getting file URL:', error);
+    logger.error(`Failed to get file URL: ${error instanceof Error ? error.message : String(error)}`);
     throw new Error(`Failed to get file URL: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
@@ -340,4 +357,4 @@ function sanitizeFileName(fileName: string): string {
   }
   
   return sanitized;
-} 
+}
