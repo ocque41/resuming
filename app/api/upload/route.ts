@@ -1,144 +1,99 @@
 export const dynamic = "force-dynamic"; // Prevent pre-rendering at build time
 
 import { NextResponse } from "next/server";
-import formidable from "formidable";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/drizzle";
 import { cvs } from "@/lib/db/schema";
-import { Readable } from "stream";
-import { IncomingMessage } from "http";
 import fs from "fs/promises";
 import path from "path";
-import { eq } from "drizzle-orm";
 import { extractTextFromPdf } from "@/lib/metadata/extract";
-import { saveFile, FileMetadata } from "@/lib/fileStorage"; // Use the storage abstraction
+import { saveFile } from "@/lib/fileStorage";
 import { processCVWithAI } from "@/lib/utils/cvProcessor";
 import { logger } from "@/lib/logger";
+import { v4 as uuidv4 } from 'uuid';
+import os from 'os';
 
 // Maximum file size (10MB)
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-// Helper function to sanitize file names
-function sanitizeFileName(fileName: string): string {
-  // Remove invalid characters
-  let sanitized = fileName.replace(/[<>:"/\\|?*]/g, '_');
-  
-  // Ensure the file name is not too long
-  if (sanitized.length > 200) {
-    sanitized = sanitized.substring(0, 200);
-  }
-  
-  return sanitized;
-}
-
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
-// Helper function to handle form data
-async function parseFormData(req: Request): Promise<{ fields: formidable.Fields, files: formidable.Files }> {
-  return new Promise((resolve, reject) => {
-    const bufs: Buffer[] = [];
-    let size = 0;
-    
-    const stream = new Readable({
-      read() {}
-    });
-    
-    req.body?.getReader().read().then(function process({ done, value }): Promise<void> | void {
-      if (done) {
-        stream.push(null);
-        return;
-      }
-      
-      size += value.length;
-      if (size > MAX_FILE_SIZE) {
-        reject(new Error("File size too large"));
-        return;
-      }
-      
-      bufs.push(Buffer.from(value));
-      stream.push(Buffer.from(value));
-      
-      return req.body?.getReader().read().then(process);
-    });
-    
-    // Use the formidable to parse the request
-    const form = formidable({ multiples: true });
-    
-    form.parse(stream as unknown as IncomingMessage, (err, fields, files) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      resolve({ fields, files });
-    });
-  });
-}
-
 export async function POST(request: Request) {
-  // Retrieve the session.
-  const session = await getSession();
-  if (!session || !session.user || !session.user.id) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
-  
   try {
+    // Authentication check
+    const session = await getSession();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+    
     const userId = session.user.id;
     
-    // Parse the form data
-    const { files } = await parseFormData(request);
-    const uploadedFile = files.file?.[0];
-    
-    if (!uploadedFile) {
-      return NextResponse.json(
-        { message: "No file was uploaded." },
-        { status: 400 }
-      );
+    // Get content type
+    const contentType = request.headers.get("content-type") || "";
+    if (!contentType.includes("multipart/form-data")) {
+      return NextResponse.json({ error: "Expected multipart form data" }, { status: 400 });
     }
-
-    const fileName = uploadedFile.originalFilename || "UnnamedDocument";
-    const localFilePath = uploadedFile.filepath;
-    logger.info(`File saved at: ${localFilePath}, original name: ${fileName}`);
     
-    // Get file type/extension
+    // Get FormData from request
+    const formData = await request.formData();
+    const file = formData.get("file");
+    
+    if (!file || !(file instanceof File)) {
+      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+    }
+    
+    // Check file size
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: "File too large" }, { status: 400 });
+    }
+    
+    // Get file info
+    const fileName = file.name;
+    const fileType = file.type;
     const fileExt = path.extname(fileName).toLowerCase();
-    const fileType = uploadedFile.mimetype || 'application/octet-stream';
     
-    // Read the file buffer
-    const fileBuffer = await fs.readFile(localFilePath);
-    
-    // Use S3 storage for the file (provide "s3" as storageType)
+    // Create temp file
+    const tempDir = path.join(os.tmpdir(), 'cv-optimizer');
     try {
-      // Determine the appropriate file type for our system
-      const storageFileType = fileExt === '.pdf' ? 'pdf' : 
-                              fileExt === '.docx' ? 'docx' : 'txt';
-      
+      await fs.mkdir(tempDir, { recursive: true });
+    } catch (err) {
+      // Directory might already exist
+    }
+    
+    const tempFilePath = path.join(tempDir, `${uuidv4()}${fileExt}`);
+    
+    // Write file to disk
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    await fs.writeFile(tempFilePath, buffer);
+    
+    logger.info(`File saved temporarily at: ${tempFilePath}`);
+    
+    // Determine storage file type
+    const storageFileType = fileExt === '.pdf' ? 'pdf' : 
+                            fileExt === '.docx' ? 'docx' : 'txt';
+    
+    try {
+      // Upload to S3
       const fileMetadata = await saveFile(
-        fileBuffer, 
-        fileName, 
+        buffer,
+        fileName,
         storageFileType,
         's3' // Use S3 storage
       );
       
       logger.info(`File saved to S3: ${fileMetadata.filePath}`);
       
-      // Extract raw text from the file if it's a PDF
+      // Extract text from PDF if applicable
       let rawText = "";
       try {
         if (fileExt === '.pdf' || fileType.includes('pdf')) {
-          rawText = await extractTextFromPdf(localFilePath);
+          rawText = await extractTextFromPdf(tempFilePath);
           logger.info(`Extracted raw text (first 200 chars): ${rawText.slice(0, 200)}`);
-        } else {
-          logger.info(`Skipping text extraction for non-PDF file: ${fileName}`);
         }
       } catch (err) {
         logger.error(`Error extracting text: ${err}`);
       }
       
-      // Create initial metadata
+      // Initial metadata
       const initialMetadata = {
         fileType: fileType,
         fileExt: fileExt,
@@ -152,7 +107,7 @@ export async function POST(request: Request) {
         lastUpdated: new Date().toISOString()
       };
       
-      // Save to database - note the field is 'filepath' not 'filePath'
+      // Save to database
       const [createdCv] = await db
         .insert(cvs)
         .values({
@@ -164,7 +119,7 @@ export async function POST(request: Request) {
         })
         .returning();
       
-      // Process CV with AI in the background (don't await)
+      // Process CV with AI in background
       if (createdCv && rawText) {
         processCVWithAI(
           createdCv.id,
@@ -177,30 +132,34 @@ export async function POST(request: Request) {
         });
       }
       
-      // Clean up the temporary file
-      try {
-        await fs.unlink(localFilePath);
-      } catch (unlinkError) {
-        logger.warn(`Error removing temporary file: ${unlinkError}`);
-      }
+      // Clean up temp file
+      await fs.unlink(tempFilePath).catch(err => {
+        logger.warn(`Failed to delete temp file: ${err}`);
+      });
       
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: true,
         id: createdCv.id,
         message: "CV uploaded successfully",
         fileName: fileName,
-        fileUrl: fileMetadata.url, // Use the URL from fileMetadata
+        fileUrl: fileMetadata.url
       });
       
     } catch (storageError) {
-      logger.error(`S3 storage error: ${storageError}`);
-      return NextResponse.json({ error: "File storage failed" }, { status: 500 });
+      // Try to clean up temp file
+      await fs.unlink(tempFilePath).catch(() => {});
+      
+      logger.error(`Storage error: ${storageError}`);
+      return NextResponse.json(
+        { error: `Storage failed: ${storageError instanceof Error ? storageError.message : String(storageError)}` },
+        { status: 500 }
+      );
     }
     
   } catch (error) {
     logger.error(`Upload error: ${error}`);
     return NextResponse.json(
-      { message: `Upload failed: ${error instanceof Error ? error.message : String(error)}` },
+      { error: `Upload failed: ${error instanceof Error ? error.message : String(error)}` },
       { status: 500 }
     );
   }
