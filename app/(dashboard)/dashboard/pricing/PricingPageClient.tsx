@@ -204,7 +204,7 @@ export default function PricingPageClient({
                     </div>
                     
                     <div className="p-6 flex flex-col h-full">
-                      <ul className="space-y-4 flex-grow mb-8">
+                      <ul className="space-y-4 mb-4">
                         {["Everything in Pro Plan ⓘ", "Unlimited Access to Create Suite ⓘ", "Access to Remin Agent ⓘ"].map((feature, index) => (
                           <li key={index} className="flex items-start group relative">
                             <div className="h-5 w-5 mr-3 rounded-full flex items-center justify-center flex-shrink-0 text-[#B4916C] bg-[#B4916C]/10">
@@ -217,6 +217,10 @@ export default function PricingPageClient({
                         ))}
                       </ul>
                       
+                      <div className="text-center mb-3 text-[#B4916C] font-borna">
+                        <p>Get access to all premium features today</p>
+                      </div>
+                      
                       {/* SIMPLE MOONLIGHTING UPGRADE BUTTON */}
                       <div className="mb-4">
                         <button
@@ -224,23 +228,19 @@ export default function PricingPageClient({
                           disabled={isLoading}
                           style={{
                             width: '100%',
-                            padding: '16px',
+                            padding: '16px 12px',
                             backgroundColor: '#B4916C',
                             color: '#050505',
                             borderRadius: '8px',
                             fontWeight: 'bold',
-                            fontSize: '18px',
+                            fontSize: '20px',
                             cursor: 'pointer',
                             border: 'none',
-                            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                            boxShadow: '0 4px 10px rgba(0, 0, 0, 0.2)'
                           }}
                         >
                           {isLoading ? "Processing..." : "Upgrade"}
                         </button>
-                      </div>
-                      
-                      <div className="text-center mb-6 text-[#B4916C] font-borna">
-                        <p>Get access to all premium features today</p>
                       </div>
                       
                       {error && (
