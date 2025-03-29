@@ -218,7 +218,7 @@ export default function PricingPageClient({
                       </ul>
                       
                       <div className="text-center mb-6 text-[#B4916C] font-borna">
-                        <p>Unlock premium features today!</p>
+                        <p>Get access to all premium features for only $14.99/month</p>
                       </div>
                       
                       {/* Extra visible upgrade button */}
@@ -239,7 +239,7 @@ export default function PricingPageClient({
                             </>
                           ) : (
                             <>
-                              <span className="font-safiro">CLICK TO UPGRADE</span>
+                              <span className="font-safiro">UPGRADE NOW</span>
                               <motion.div
                                 initial={{ x: 0 }}
                                 whileHover={{ x: 4 }}
@@ -258,25 +258,6 @@ export default function PricingPageClient({
                           <span>{error}</span>
                         </div>
                       )}
-                      
-                      <div className="w-full mt-auto">
-                        <motion.div
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          className="w-full"
-                        >
-                          <Button
-                            onClick={handleMoonlightingCheckout}
-                            disabled={isLoading}
-                            className="w-full h-14 bg-[#B4916C] hover:bg-[#A3815B] text-[#050505] rounded-lg flex items-center justify-center font-bold text-lg"
-                          >
-                            {isLoading ? "Processing..." : "UPGRADE NOW"}
-                          </Button>
-                        </motion.div>
-                        <div className="mt-2 text-xs text-[#8A8782] text-center">
-                          Price ID: price_1R5vvRFYYYXM77wG8jVM2pGC
-                        </div>
-                      </div>
                     </div>
                   </motion.div>
                 </div>
