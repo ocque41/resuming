@@ -221,48 +221,46 @@ export default function PricingPageClient({
                         <p>Get access to all premium features for only $14.99/month</p>
                       </div>
                       
-                      {/* Moonlighting plan upgrade button */}
-                      <motion.div
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        className="w-full mb-4 relative"
-                      >
-                        <motion.div 
-                          className="absolute inset-0 rounded-xl bg-[#B4916C]/40 blur-md -z-10"
-                          animate={{ 
-                            scale: [1, 1.05, 1],
-                            opacity: [0.6, 0.8, 0.6] 
-                          }}
-                          transition={{ 
-                            duration: 2, 
-                            repeat: Infinity,
-                            repeatType: "reverse" 
-                          }}
-                        />
-                        <Button
+                      {/* SIMPLE MOONLIGHTING UPGRADE BUTTON */}
+                      <div className="mb-4">
+                        <button
                           onClick={handleMoonlightingCheckout}
                           disabled={isLoading}
-                          className="w-full bg-gradient-to-r from-[#B4916C] to-[#A3815B] text-[#050505] rounded-xl py-6 flex items-center justify-center transition-colors duration-300 text-lg font-bold shadow-xl border-none relative"
+                          style={{
+                            width: '100%',
+                            padding: '16px',
+                            backgroundColor: '#B4916C',
+                            color: '#050505',
+                            borderRadius: '8px',
+                            fontWeight: 'bold',
+                            fontSize: '18px',
+                            cursor: 'pointer',
+                            border: 'none',
+                            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                          }}
                         >
-                          {isLoading ? (
-                            <>
-                              <Loader2 className="animate-spin mr-2 h-5 w-5" />
-                              <span className="font-safiro">Processing...</span>
-                            </>
-                          ) : (
-                            <>
-                              <span className="font-safiro">UPGRADE NOW</span>
-                              <motion.div
-                                initial={{ x: 0 }}
-                                whileHover={{ x: 4 }}
-                                transition={{ duration: 0.2 }}
-                              >
-                                <ArrowRight className="ml-2 h-5 w-5" />
-                              </motion.div>
-                            </>
-                          )}
-                        </Button>
-                      </motion.div>
+                          {isLoading ? "PROCESSING..." : "UPGRADE NOW"}
+                        </button>
+                      </div>
+
+                      {/* DIRECT LINK FALLBACK */}
+                      <div className="text-center mb-4">
+                        <a 
+                          href="/api/upgrade-direct?priceId=price_1R5vvRFYYYXM77wG8jVM2pGC"
+                          style={{
+                            display: 'inline-block',
+                            padding: '10px 20px',
+                            backgroundColor: '#A3815B',
+                            color: '#050505',
+                            borderRadius: '8px',
+                            textDecoration: 'none',
+                            fontWeight: 'bold',
+                            fontSize: '14px'
+                          }}
+                        >
+                          ALTERNATIVE UPGRADE LINK
+                        </a>
+                      </div>
                       
                       {error && (
                         <div className="text-red-400 text-sm mb-4 p-3 bg-red-500/10 rounded-lg flex items-start border border-red-900/30">
