@@ -29,7 +29,6 @@ export async function GET(request: NextRequest) {
       client_reference_id: user.id.toString(),
       allow_promotion_codes: true,
       subscription_data: {
-        trial_period_days: 1, // 24 hours trial
         metadata: {
           tier: 'moonlighting',
           features: JSON.stringify({

@@ -228,15 +228,15 @@ export default function PricingPageClient({
                           disabled={isLoading}
                           style={{
                             width: '100%',
-                            padding: '16px 12px',
+                            padding: '12px 10px',
                             backgroundColor: '#B4916C',
                             color: '#050505',
-                            borderRadius: '8px',
+                            borderRadius: '6px',
                             fontWeight: 'bold',
-                            fontSize: '20px',
+                            fontSize: '16px',
                             cursor: 'pointer',
                             border: 'none',
-                            boxShadow: '0 4px 10px rgba(0, 0, 0, 0.2)'
+                            boxShadow: '0 3px 6px rgba(0, 0, 0, 0.15)'
                           }}
                         >
                           {isLoading ? "Processing..." : "Upgrade"}
