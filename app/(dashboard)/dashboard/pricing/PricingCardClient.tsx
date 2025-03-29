@@ -1,10 +1,9 @@
 "use client";
 
-import { Check, Star } from "lucide-react";
+import { Check, Star, ArrowRight, Loader2, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2, AlertTriangle } from "lucide-react";
 import { usePricing } from './PricingContext';
 
 interface PricingCardClientProps {
@@ -69,9 +68,11 @@ export default function PricingCardClient({
     setError(null);
 
     try {
+      console.log('Initiating checkout for price ID:', priceId);
+      
       // Create form data
       const formData = new FormData();
-      formData.append('priceId', priceId || '');
+      formData.append('priceId', highlight ? 'price_1R5vvRFYYYXM77wG8jVM2pGC' : (priceId || ''));
       formData.append('returnUrl', '/dashboard');
 
       // Submit form to server action
@@ -146,9 +147,14 @@ export default function PricingCardClient({
         <h2 className="text-2xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
           {name}
           {highlight && (
-            <span className="ml-2 text-xs bg-[#B4916C]/20 text-[#B4916C] px-2 py-1 rounded-full font-borna">
-              Most Popular
-            </span>
+            <>
+              <span className="ml-2 text-xs bg-[#B4916C]/20 text-[#B4916C] px-2 py-1 rounded-full font-borna">
+                Most Popular
+              </span>
+              <div className="mt-1 text-sm text-[#C5C2BA] font-borna">
+                Upgrade from Pro to unlock all features
+              </div>
+            </>
           )}
         </h2>
         <p className="text-4xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
@@ -228,7 +234,7 @@ export default function PricingCardClient({
             disabled={isLoading || isCurrentPlan}
             className={`w-full font-medium font-safiro h-12 ${
               highlight
-                ? "bg-[#B4916C] hover:bg-[#A3815B] text-[#050505]"
+                ? "bg-[#B4916C] hover:bg-[#A3815B] text-[#050505] rounded-xl py-6 flex items-center justify-center transition-colors duration-300 text-base shadow-lg border-none"
                 : "bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"
             }`}
           >
@@ -240,7 +246,22 @@ export default function PricingCardClient({
             ) : isCurrentPlan ? (
               "Current Plan"
             ) : (
-              <>{highlight ? "Upgrade Now" : "Select Plan"}</>
+              <>
+                {highlight ? (
+                  <>
+                    <span className="font-safiro">Upgrade Now</span>
+                    <motion.div
+                      initial={{ x: 0 }}
+                      whileHover={{ x: 4 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </motion.div>
+                  </>
+                ) : (
+                  "Select Plan"
+                )}
+              </>
             )}
           </Button>
         </form>

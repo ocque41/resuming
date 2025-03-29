@@ -54,7 +54,7 @@ export default function PricingPageClient({
     { id: "price_free", productId: "free-fallback", unitAmount: 0 };
   
   const moonlightingPrice = prices.find((price) => price.productId === moonlightingPlan?.id) || 
-    { id: "price-moonlighting-fallback", productId: "moonlighting-fallback", unitAmount: 1499 };
+    { id: "price_1R5vvRFYYYXM77wG8jVM2pGC", productId: "moonlighting-fallback", unitAmount: 1499 };
 
   return (
     <Suspense fallback={<PricingPageSkeleton />}>
