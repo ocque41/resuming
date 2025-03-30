@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     
     // Analyze the CV to identify strengths and weaknesses
     const analysisResults = analyzeCVContent(cvText);
-    console.log(`CV Analysis completed: ${analysisResults.strengths.length} strengths, ${analysisResults.weaknesses.length} weaknesses identified`);
+    console.log(`CV Analysis completed: ${analysisResults.strengths.length} strengths, ${analysisResults.weaknesses.length} weaknesses identified, industry: ${analysisResults.detectedIndustry}`);
     
     // If we have a custom optimization prompt, use it
     if (optimizationPrompt) {
@@ -87,9 +87,9 @@ export async function POST(req: NextRequest) {
         
         // Success response with the optimized CV
         return NextResponse.json({
-          optimizedCV,
-          message: "CV optimization completed successfully",
-          analysis: analysisResults
+            optimizedCV,
+            message: "CV optimization completed successfully",
+            analysis: analysisResults
         });
       } catch (aiError) {
         console.error("Error calling OpenAI API:", aiError);
@@ -97,9 +97,9 @@ export async function POST(req: NextRequest) {
         const fallbackCV = createEnhancedOptimizedCV(cvText, templateId || 'default', analysisResults);
         
         return NextResponse.json({
-          optimizedCV: fallbackCV,
-          message: "CV optimization completed with fallback method due to AI service error",
-          analysis: analysisResults
+            optimizedCV: fallbackCV,
+            message: "CV optimization completed with fallback method due to AI service error",
+            analysis: analysisResults
         });
       }
     } 
@@ -142,6 +142,8 @@ function createEnhancedOptimizedCV(originalText: string, templateId: string, ana
     strengths = analysisData.strengths || [];
     weaknesses = analysisData.weaknesses || [];
     improvementSuggestions = analysisData.improvementSuggestions || {};
+    
+    console.log(`Analysis data: Industry=${industry}, Strengths=${strengths.length}, Weaknesses=${weaknesses.length}`);
   }
   
   // Get industry-specific keywords to boost ATS score

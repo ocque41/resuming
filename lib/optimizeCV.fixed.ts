@@ -510,6 +510,7 @@ export function analyzeCVContent(cvText: string): {
   strengths: string[];
   weaknesses: string[];
   improvementSuggestions: Record<string, string[]>;
+  detectedIndustry: string;
   metrics: {
     quantifiedAchievements: number;
     actionVerbs: number;
@@ -517,16 +518,328 @@ export function analyzeCVContent(cvText: string): {
     industryKeywords: number;
   }
 } {
-  return {
-    strengths: [],
-    weaknesses: [],
-    improvementSuggestions: {},
-    metrics: {
-      quantifiedAchievements: 0,
-      actionVerbs: 0,
-      technicalTerms: 0,
-      industryKeywords: 0
+  try {
+    // Extract sections to analyze each part of the CV
+    const sections = extractSections(cvText);
+    
+    // Detect industry based on CV content
+    const detectedIndustry = detectIndustryFromText(cvText);
+    
+    // Identify strengths
+    const strengths = identifyActualStrengths(cvText, sections);
+    
+    // Identify weaknesses
+    const weaknesses = identifyActualWeaknesses(cvText, sections);
+    
+    // Generate improvement suggestions
+    const improvementSuggestions = generateImprovementSuggestions(cvText, sections, weaknesses);
+    
+    // Calculate metrics
+    const metrics = calculateCVMetrics(cvText, sections, detectedIndustry);
+    
+    console.log(`CV analysis complete: ${strengths.length} strengths, ${weaknesses.length} weaknesses, industry: ${detectedIndustry}`);
+    
+    return {
+      strengths,
+      weaknesses,
+      improvementSuggestions,
+      detectedIndustry,
+      metrics
+    };
+  } catch (error) {
+    console.error("Error during CV analysis:", error);
+    
+    // Return fallback data to ensure UI doesn't break
+    return {
+      strengths: ["Basic CV structure detected"],
+      weaknesses: ["CV could benefit from more detailed analysis"],
+      improvementSuggestions: {
+        "General": [
+          "Add more quantifiable achievements",
+          "Use industry-specific keywords",
+          "Ensure each section is clearly defined",
+          "Include a well-structured skills section"
+        ]
+      },
+      detectedIndustry: "General",
+      metrics: {
+        quantifiedAchievements: 0,
+        actionVerbs: 0,
+        technicalTerms: 0,
+        industryKeywords: 0
+      }
+    };
+  }
+}
+
+// Detect industry based on CV content
+function detectIndustryFromText(text: string): string {
+  const industries = [
+    { name: "Technology", keywords: ["software", "developer", "programming", "agile", "scrum", "web", "application", "javascript", "python", "java", "cloud", "database", "analytics"] },
+    { name: "Finance", keywords: ["finance", "accounting", "banking", "investment", "financial", "budget", "audit", "tax", "revenue", "profit", "fiscal", "assets"] },
+    { name: "Healthcare", keywords: ["healthcare", "medical", "clinical", "patient", "hospital", "doctor", "nurse", "therapy", "diagnosis", "treatment", "health"] },
+    { name: "Marketing", keywords: ["marketing", "advertising", "brand", "social media", "campaign", "content", "seo", "market research", "digital marketing", "analytics"] },
+    { name: "Education", keywords: ["education", "teaching", "teacher", "learning", "student", "curriculum", "instructor", "training", "academic", "professor", "school", "university"] },
+    { name: "Sales", keywords: ["sales", "business development", "account manager", "revenue", "client", "customer", "crm", "negotiation", "quota", "pipeline"] },
+    { name: "Engineering", keywords: ["engineering", "mechanical", "electrical", "civil", "structural", "design", "technical", "specifications", "cad", "project"] },
+    { name: "Human Resources", keywords: ["hr", "human resources", "recruitment", "talent", "hiring", "employee", "compensation", "benefits", "workforce", "onboarding"] },
+    { name: "Legal", keywords: ["legal", "law", "attorney", "counsel", "compliance", "regulation", "litigation", "contract", "policy", "regulatory"] },
+    { name: "Consulting", keywords: ["consulting", "consultant", "advisor", "strategy", "solution", "client", "engagement", "analysis", "recommendation"] }
+  ];
+
+  const lowerCaseText = text.toLowerCase();
+  let matchCounts: Record<string, number> = {};
+
+  // Count matches for each industry
+  industries.forEach(industry => {
+    matchCounts[industry.name] = 0;
+    industry.keywords.forEach(keyword => {
+      // Use regex with word boundaries to avoid partial matches
+      const regex = new RegExp(`\\b${keyword}\\b`, 'ig');
+      const matches = lowerCaseText.match(regex);
+      if (matches) {
+        matchCounts[industry.name] += matches.length;
+      }
+    });
+  });
+
+  // Find the industry with the most matches
+  let bestMatch = "General";
+  let highestCount = 0;
+
+  for (const [industry, count] of Object.entries(matchCounts)) {
+    if (count > highestCount) {
+      highestCount = count;
+      bestMatch = industry;
     }
+  }
+
+  // If no strong matches, default to "General"
+  return highestCount > 2 ? bestMatch : "General";
+}
+
+// Identify actual strengths in the CV
+function identifyActualStrengths(text: string, sections: Record<string, string>): string[] {
+  const strengths: string[] = [];
+  const lowercaseText = text.toLowerCase();
+  
+  // Check for quantifiable achievements
+  if (/increased|improved|reduced|generated|saved|delivered|achieved|grew|exceeded/i.test(text) && 
+      /\b\d+%|\$\d+|\d+ (percent|million|thousand|users|clients|customers|projects)/i.test(text)) {
+    strengths.push("Contains quantifiable achievements");
+  }
+  
+  // Check for detailed experience
+  if (sections.experience && sections.experience.length > 300) {
+    strengths.push("Detailed work experience");
+    
+    // Check for action verbs in experience
+    const actionVerbs = ["led", "managed", "developed", "created", "implemented", "designed", "launched", "coordinated"];
+    const actionVerbCount = actionVerbs.filter(verb => lowercaseText.includes(verb)).length;
+    
+    if (actionVerbCount >= 3) {
+      strengths.push("Good use of action verbs");
+    }
+  }
+  
+  // Check for education section
+  if (sections.education && sections.education.length > 100) {
+    strengths.push("Strong educational background");
+  }
+  
+  // Check for skills section
+  if (sections.skills && sections.skills.length > 150) {
+    strengths.push("Comprehensive skills section");
+  }
+  
+  // Check for technical keywords
+  const technicalKeywords = ["certified", "programming", "software", "analysis", "design", "development", "project management", "leadership"];
+  const technicalKeywordCount = technicalKeywords.filter(kw => lowercaseText.includes(kw)).length;
+  
+  if (technicalKeywordCount >= 3) {
+    strengths.push("Rich in technical keywords");
+  }
+  
+  // Check for concise profile/summary
+  if (sections.profile && sections.profile.length > 50 && sections.profile.length < 500) {
+    strengths.push("Effective professional summary");
+  }
+  
+  // Ensure we have at least one strength
+  if (strengths.length === 0) {
+    // Look for anything positive to highlight
+    if (text.length > 1000) {
+      strengths.push("Comprehensive CV content");
+    } else if (sections.contact) {
+      strengths.push("Clear contact information");
+    } else {
+      strengths.push("Basic CV structure present");
+    }
+  }
+  
+  return strengths;
+}
+
+// Identify actual weaknesses in the CV
+function identifyActualWeaknesses(text: string, sections: Record<string, string>): string[] {
+  const weaknesses: string[] = [];
+  const lowercaseText = text.toLowerCase();
+  
+  // Check for missing sections
+  if (!sections.skills || sections.skills.length < 50) {
+    weaknesses.push("Skills section is missing or underdeveloped");
+  }
+  
+  if (!sections.experience || sections.experience.length < 200) {
+    weaknesses.push("Work experience section needs more detail");
+  }
+  
+  if (!sections.education) {
+    weaknesses.push("Education section is missing");
+  }
+  
+  if (!sections.profile && !sections.summary) {
+    weaknesses.push("Professional summary/profile is missing");
+  }
+  
+  // Check for lack of achievements
+  if (!sections.achievements && !/increased|improved|reduced|generated|saved|delivered|achieved/i.test(text)) {
+    weaknesses.push("No quantifiable achievements highlighted");
+  }
+  
+  // Check for passive language
+  if (/was responsible for|duties included|responsible for/i.test(text) && 
+      !/led|managed|developed|created|implemented|designed|launched/i.test(text)) {
+    weaknesses.push("Uses passive language instead of action verbs");
+  }
+  
+  // Check for bullet point formatting in experience section
+  if (sections.experience && !sections.experience.includes('•') && !sections.experience.includes('-')) {
+    weaknesses.push("Experience section lacks bullet points for readability");
+  }
+  
+  // Ensure we have at least one weakness for improvement suggestions
+  if (weaknesses.length === 0) {
+    weaknesses.push("Could benefit from more quantifiable achievements");
+  }
+  
+  return weaknesses;
+}
+
+// Generate improvement suggestions based on weaknesses
+function generateImprovementSuggestions(text: string, sections: Record<string, string>, weaknesses: string[]): Record<string, string[]> {
+  const suggestions: Record<string, string[]> = {};
+  
+  // Add suggestions based on identified weaknesses
+  weaknesses.forEach(weakness => {
+    if (weakness.includes("skills section")) {
+      suggestions["Skills"] = [
+        "Add a dedicated skills section with relevant technical and soft skills",
+        "Organize skills by categories (technical, soft, industry-specific)",
+        "Include proficiency levels for technical skills where appropriate"
+      ];
+    } else if (weakness.includes("experience section")) {
+      suggestions["Experience"] = [
+        "Use bullet points to highlight responsibilities and achievements",
+        "Begin each bullet point with a strong action verb",
+        "Include measurable results and achievements with metrics",
+        "Focus on accomplishments rather than just responsibilities"
+      ];
+    } else if (weakness.includes("education section")) {
+      suggestions["Education"] = [
+        "List education in reverse chronological order",
+        "Include degrees, institutions, locations, and graduation dates",
+        "Mention relevant coursework, honors, or academic achievements"
+      ];
+    } else if (weakness.includes("summary/profile")) {
+      suggestions["Profile"] = [
+        "Add a concise professional summary at the top of your CV",
+        "Highlight your most relevant skills and experience",
+        "Tailor your summary to the specific job or industry"
+      ];
+    } else if (weakness.includes("achievements")) {
+      suggestions["Achievements"] = [
+        "Add specific, quantifiable achievements with metrics",
+        "Use numbers and percentages to demonstrate impact",
+        "Highlight increases in efficiency, revenue, or customer satisfaction"
+      ];
+    } else if (weakness.includes("passive language")) {
+      suggestions["Language"] = [
+        "Replace passive phrases with strong action verbs",
+        "Begin bullet points with verbs like 'Led', 'Developed', 'Implemented'",
+        "Focus on what you accomplished, not just what you were 'responsible for'"
+      ];
+    } else if (weakness.includes("bullet points")) {
+      suggestions["Formatting"] = [
+        "Use bullet points to improve readability",
+        "Keep bullet points concise (1-2 lines each)",
+        "Ensure consistent formatting throughout"
+      ];
+    }
+  });
+  
+  // Add general improvement suggestions if none were added
+  if (Object.keys(suggestions).length === 0) {
+    suggestions["General"] = [
+      "Tailor your CV to each specific job application",
+      "Use industry-specific keywords to pass ATS screening",
+      "Quantify achievements with specific metrics where possible",
+      "Ensure consistent formatting throughout your CV"
+    ];
+  }
+  
+  return suggestions;
+}
+
+// Calculate metrics for the CV
+function calculateCVMetrics(text: string, sections: Record<string, string>, industry: string): {
+  quantifiedAchievements: number;
+  actionVerbs: number;
+  technicalTerms: number;
+  industryKeywords: number;
+} {
+  const lowercaseText = text.toLowerCase();
+  
+  // Count quantified achievements
+  const quantifiedPattern = /\b(\d+%|\d+\s*percent|\$\d+|\d+\s*million|\d+\s*billion|\d+\s*users|\d+\s*customers|\d+\s*clients|\d+\s*projects|\d+\s*times|\d+\s*days|\d+\s*months|\d+\s*years)\b/gi;
+  const quantifiedMatches = text.match(quantifiedPattern) || [];
+  const quantifiedAchievements = quantifiedMatches.length;
+  
+  // Count action verbs
+  const actionVerbs = ["achieved", "improved", "increased", "reduced", "developed", "implemented", "created", "managed", "led", "designed", "launched", "delivered", "generated", "negotiated", "secured"];
+  let actionVerbCount = 0;
+  
+  actionVerbs.forEach(verb => {
+    const regex = new RegExp(`\\b${verb}\\b`, 'gi');
+    const matches = text.match(regex) || [];
+    actionVerbCount += matches.length;
+  });
+  
+  // Count technical terms
+  const technicalTerms = ["software", "programming", "development", "analysis", "design", "implementation", "system", "database", "application", "framework", "methodology", "certified", "technology"];
+  let technicalTermCount = 0;
+  
+  technicalTerms.forEach(term => {
+    const regex = new RegExp(`\\b${term}\\b`, 'gi');
+    const matches = text.match(regex) || [];
+    technicalTermCount += matches.length;
+  });
+  
+  // Count industry-specific keywords
+  const industryKeywords = getIndustrySpecificKeywords(industry);
+  let industryKeywordCount = 0;
+  
+  industryKeywords.forEach(keyword => {
+    if (lowercaseText.includes(keyword.toLowerCase())) {
+      industryKeywordCount++;
+    }
+  });
+  
+  return {
+    quantifiedAchievements,
+    actionVerbs: actionVerbCount,
+    technicalTerms: technicalTermCount,
+    industryKeywords: industryKeywordCount
   };
 }
 
