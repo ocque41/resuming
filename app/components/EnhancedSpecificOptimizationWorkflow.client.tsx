@@ -12,6 +12,7 @@ import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle, A
 import { analyzeCVContent, optimizeCVForJob } from '@/lib/services/mistral.service';
 import { tailorCVForJob } from '@/app/lib/services/tailorCVService';
 import { useToast } from "@/hooks/use-toast";
+import JobMatchDetailedAnalysis from './JobMatchDetailedAnalysis';
 import { downloadDocument, withDownloadTimeout, generateDocumentWithRetry } from '../utils/documentUtils';
 import DocumentGenerationProgress from './DocumentGenerationProgress';
 import DocumentDownloadStatus from './DocumentDownloadStatus';
@@ -70,6 +71,33 @@ interface StructuredCV {
     location?: string;
     linkedin?: string;
     website?: string;
+  };
+}
+
+interface JobMatchAnalysis {
+  score: number;
+  matchedKeywords: KeywordMatch[];
+  missingKeywords: MissingKeyword[];
+  recommendations: string[];
+  skillGap: string;
+  dimensionalScores: {
+    skillsMatch: number;
+    experienceMatch: number;
+    educationMatch: number;
+    industryFit: number;
+    overallCompatibility: number;
+    keywordDensity: number;
+    formatCompatibility: number;
+    contentRelevance: number;
+  };
+  detailedAnalysis: string;
+  improvementPotential: number;
+  sectionAnalysis: {
+    profile: { score: number; feedback: string };
+    skills: { score: number; feedback: string };
+    experience: { score: number; feedback: string };
+    education: { score: number; feedback: string };
+    achievements: { score: number; feedback: string };
   };
 }
 
@@ -509,9 +537,173 @@ const escapeRegExp = (string: string): string => {
 };
 
 // Update the analyzeJobMatch function
-const analyzeJobMatch = (cvText: string, jobDescription: string) => {
-  // This function has been removed as part of the JobMatch Analysis removal
-  return null;
+const analyzeJobMatch = (cvText: string, jobDescription: string): JobMatchAnalysis => {
+  const cvKeywords = extractKeywords(cvText);
+  const jobKeywords = extractKeywords(jobDescription, true);
+  
+  // Find keywords that match in the CV
+  const matchedKeywords: KeywordMatch[] = [];
+  jobKeywords.forEach(keyword => {
+    try {
+      const escapedKeyword = escapeRegExp(keyword);
+      const frequency = (cvText.match(new RegExp(escapedKeyword, 'gi')) || []).length;
+      if (frequency > 0) {
+        const placement = determineKeywordPlacement(cvText, escapedKeyword);
+      const relevance = calculateKeywordRelevance(keyword, jobDescription, placement, frequency);
+        matchedKeywords.push({ keyword, relevance, frequency, placement });
+      }
+    } catch (e) {
+      // Fallback to simple string match if regex fails
+      if (cvText.toLowerCase().includes(keyword.toLowerCase())) {
+        matchedKeywords.push({ 
+        keyword,
+          relevance: 70, // Default relevance score
+          frequency: 1,  // At least one occurrence
+          placement: 'Unknown' 
+        });
+      }
+    }
+    });
+
+  // Calculate missing keywords with importance scores
+  const missingKeywords: MissingKeyword[] = jobKeywords
+    .filter((keyword: string) => !cvKeywords.includes(keyword))
+    .map((keyword: string) => ({
+      keyword,
+      importance: calculateKeywordImportance(keyword, jobDescription),
+      suggestedPlacement: suggestKeywordPlacement(keyword, jobDescription)
+    }));
+
+  // Calculate dimensional scores
+  const skillsMatch = calculateSkillsMatch(cvText, jobDescription);
+  const experienceMatch = calculateExperienceMatch(cvText, jobDescription);
+  const educationMatch = calculateEducationMatch(cvText, jobDescription);
+  const industryFit = calculateIndustryFit(cvText, jobDescription);
+  const keywordDensity = calculateKeywordDensity(cvText, jobKeywords);
+  const formatCompatibility = calculateFormatCompatibility(cvText);
+  const contentRelevance = calculateContentRelevance(cvText, jobDescription);
+
+  // Calculate overall compatibility score with weighted components
+  const overallCompatibility = Math.round(
+    (skillsMatch * 0.25) +
+    (experienceMatch * 0.25) +
+    (educationMatch * 0.15) +
+    (industryFit * 0.15) +
+    (keywordDensity * 0.1) +
+    (formatCompatibility * 0.05) +
+    (contentRelevance * 0.05)
+  );
+
+  // Generate section analysis
+  const sectionAnalysis = {
+    profile: analyzeCVSection(cvText, 'profile', jobDescription),
+    skills: analyzeCVSection(cvText, 'skills', jobDescription),
+    experience: analyzeCVSection(cvText, 'experience', jobDescription),
+    education: analyzeCVSection(cvText, 'education', jobDescription),
+    achievements: analyzeCVSection(cvText, 'achievements', jobDescription)
+  };
+
+  // Calculate improvement potential
+  const improvementPotential = 100 - overallCompatibility;
+
+  // Generate recommendations
+  const recommendations = generateRecommendations(cvKeywords, jobKeywords, matchedKeywords, missingKeywords, overallCompatibility, sectionAnalysis);
+
+  // Generate detailed analysis
+  const detailedAnalysis = generateDetailedAnalysis({
+    matchedKeywords,
+    missingKeywords,
+    dimensionalScores: {
+      skillsMatch,
+      experienceMatch,
+      educationMatch,
+      industryFit,
+      overallCompatibility,
+      keywordDensity,
+      formatCompatibility,
+      contentRelevance
+    },
+    sectionAnalysis
+  });
+
+  // Generate skill gap analysis with categorization
+  const skillGap = generateEnhancedSkillGapAnalysis(missingKeywords, jobDescription);
+
+  return {
+    score: overallCompatibility,
+    matchedKeywords,
+    missingKeywords,
+    recommendations,
+    skillGap,
+    dimensionalScores: {
+      skillsMatch,
+      experienceMatch,
+      educationMatch,
+      industryFit,
+      overallCompatibility,
+      keywordDensity,
+      formatCompatibility,
+      contentRelevance
+    },
+    detailedAnalysis,
+    improvementPotential,
+    sectionAnalysis
+  };
+};
+
+// Update determineKeywordPlacement
+const determineKeywordPlacement = (text: string, keyword: string): string => {
+  try {
+    const escapedKeyword = escapeRegExp(keyword);
+    const sectionNames = ['summary', 'profile', 'experience', 'skills', 'education', 'achievements'];
+    
+    for (const section of sectionNames) {
+      const sectionStart = text.toLowerCase().indexOf(section.toLowerCase());
+      if (sectionStart !== -1) {
+        const keywordMatch = text.slice(sectionStart).match(new RegExp(escapedKeyword, 'i'));
+      if (keywordMatch) {
+          return section.charAt(0).toUpperCase() + section.slice(1);
+        }
+      }
+    }
+    return 'Other';
+  } catch (e) {
+    return 'Other'; // Fallback if regex fails
+  }
+};
+
+// Update calculateKeywordRelevance
+const calculateKeywordRelevance = (
+  keyword: string,
+  jobDescription: string,
+  placement: string,
+  frequency: number
+): number => {
+  try {
+    const escapedKeyword = escapeRegExp(keyword);
+    // Base relevance score
+    let relevance = 70;
+    
+    // Adjust based on frequency of the keyword in the job description
+    const keywordEmphasis = (jobDescription.match(new RegExp(escapedKeyword, 'gi')) || []).length;
+    relevance += Math.min(keywordEmphasis * 2, 10); // Max +10 for emphasis
+
+  // Placement bonus
+  const placementScores: Record<string, number> = {
+    profile: 20,
+    skills: 25,
+    experience: 30,
+    achievements: 15,
+    education: 10,
+    various: 5
+  };
+  relevance += placementScores[placement] || 0;
+
+  // Normalize to 0-100
+    return Math.min(Math.max(relevance, 30), 100); // Keep within 30-100 range
+  } catch (e) {
+    return 70; // Default relevance if regex fails
+  }
 };
 
 // Update calculateKeywordImportance
@@ -3886,7 +4078,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
                   Optimized CV
                 </button>
               </div>
-            </div>
+              </div>
             
             {/* Tab content */}
             <div className="p-4 bg-[#0D0D0D] rounded-lg">
