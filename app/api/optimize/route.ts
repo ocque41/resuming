@@ -8,7 +8,8 @@ import {
   getIndustrySpecificKeywords, 
   analyzeCVContent, 
   verifyContentPreservation,
-  extractSections
+  extractSections,
+  calculateATSScore
 } from "@/lib/optimizeCV.fixed";
 import { standardizeCV } from "@/lib/cv-formatter";
 
@@ -41,7 +42,10 @@ export async function POST(req: NextRequest) {
     
     // Analyze the CV to identify strengths and weaknesses
     const analysisResults = analyzeCVContent(cvText);
-    console.log(`CV Analysis completed: ${analysisResults.strengths.length} strengths, ${analysisResults.weaknesses.length} weaknesses identified, industry: ${analysisResults.detectedIndustry}`);
+    
+    // Calculate original ATS score
+    const originalAtsScore = analysisResults.atsScore;
+    console.log(`CV Analysis completed: ${analysisResults.strengths.length} strengths, ${analysisResults.weaknesses.length} weaknesses identified, industry: ${analysisResults.detectedIndustry}, ATS Score: ${originalAtsScore}`);
     
     // If we have a custom optimization prompt, use it
     if (optimizationPrompt) {
@@ -73,15 +77,27 @@ export async function POST(req: NextRequest) {
         // Verify content preservation
         const verification = verifyContentPreservation(cvText, optimizedCV);
         
+        // Calculate improved ATS score
+        const improvedAtsScore = calculateATSScore(optimizedCV, true);
+        console.log(`Improved ATS score: ${improvedAtsScore} (Original: ${originalAtsScore})`);
+        
         if (!verification.preserved) {
           console.warn(`AI optimization failed content preservation check. Score: ${verification.keywordScore}%. Using enhanced fallback.`);
           // Fall back to enhanced optimization
           const fallbackCV = createEnhancedOptimizedCV(cvText, templateId || 'default', analysisResults);
           
+          // Calculate fallback ATS score
+          const fallbackAtsScore = calculateATSScore(fallbackCV, true);
+          console.log(`Fallback ATS score: ${fallbackAtsScore} (Original: ${originalAtsScore})`);
+          
           return NextResponse.json({
             optimizedCV: fallbackCV,
             message: "CV optimization completed with enhanced fallback due to content preservation failure",
-            analysis: analysisResults
+            analysis: {
+              ...analysisResults,
+              originalAtsScore,
+              improvedAtsScore: fallbackAtsScore
+            }
           });
         }
         
@@ -89,17 +105,29 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
             optimizedCV,
             message: "CV optimization completed successfully",
-            analysis: analysisResults
+            analysis: {
+              ...analysisResults,
+              originalAtsScore,
+              improvedAtsScore
+            }
         });
       } catch (aiError) {
         console.error("Error calling OpenAI API:", aiError);
         // Fall back to enhanced optimization on AI service error
         const fallbackCV = createEnhancedOptimizedCV(cvText, templateId || 'default', analysisResults);
         
+        // Calculate fallback ATS score
+        const fallbackAtsScore = calculateATSScore(fallbackCV, true);
+        console.log(`Fallback ATS score: ${fallbackAtsScore} (Original: ${originalAtsScore})`);
+        
         return NextResponse.json({
             optimizedCV: fallbackCV,
             message: "CV optimization completed with fallback method due to AI service error",
-            analysis: analysisResults
+            analysis: {
+              ...analysisResults,
+              originalAtsScore,
+              improvedAtsScore: fallbackAtsScore
+            }
         });
       }
     } 
@@ -108,11 +136,19 @@ export async function POST(req: NextRequest) {
       // Create an enhanced optimized version with ATS focus
       const optimizedCV = createEnhancedOptimizedCV(cvText, templateId || 'default', analysisResults);
       
+      // Calculate improved ATS score
+      const improvedAtsScore = calculateATSScore(optimizedCV, true);
+      console.log(`Improved ATS score: ${improvedAtsScore} (Original: ${originalAtsScore})`);
+      
       // Success response
       return NextResponse.json({
         optimizedCV,
         message: "CV optimization completed successfully",
-        analysis: analysisResults
+        analysis: {
+          ...analysisResults,
+          originalAtsScore,
+          improvedAtsScore
+        }
       });
     }
   } catch (error: any) {
@@ -152,13 +188,41 @@ function createEnhancedOptimizedCV(originalText: string, templateId: string, ana
   // Extract original keywords to ensure preservation
   const originalKeywords = extractCriticalKeywords(originalText);
   
-  // Create a more structured CV with template-inspired format
+  // Create a more structured CV with template-inspired format and ATS best practices
+  // Use standard section headers that ATS can recognize
   let optimizedCV = ``;
 
-  // Add contact section if found
+  // Add contact section if found - place at top for ATS recognition
   if (sections.contact) {
-    optimizedCV += `## CONTACT
+    optimizedCV += `## CONTACT INFORMATION
 ${sections.contact.trim()}
+
+`;
+  }
+
+  // Add professional summary or profile for ATS keyword optimization
+  if (sections.profile || sections.summary) {
+    const profileText = sections.profile || sections.summary || '';
+    // Enhance with industry keywords if needed
+    let enhancedProfile = profileText;
+    
+    // ATS optimization - add important industry keywords if they don't exist
+    const missingKeywords = industryKeywords
+      .slice(0, 5)
+      .filter(keyword => !profileText.toLowerCase().includes(keyword.toLowerCase()));
+    
+    if (missingKeywords.length > 0) {
+      enhancedProfile += `\n\nProficient in ${missingKeywords.join(', ')}.`;
+    }
+    
+    optimizedCV += `## PROFESSIONAL SUMMARY
+${enhancedProfile.trim()}
+
+`;
+  } else {
+    // Create a summary if none exists - important for ATS
+    optimizedCV += `## PROFESSIONAL SUMMARY
+Experienced ${industry} professional with a proven track record of delivering results. Skilled in ${industryKeywords.slice(0, 5).join(', ')}.
 
 `;
   }
@@ -196,205 +260,171 @@ ${sections.contact.trim()}
     }
   }
   
-  // Add achievements section with quantified accomplishments
-  optimizedCV += `## ACHIEVEMENTS
+  // Add achievements section with quantified accomplishments - important for ATS
+  optimizedCV += `## KEY ACHIEVEMENTS
 ${achievementsContent}
 
 `;
 
-  // Add profile/summary if found with industry keywords
-  if (sections.profile) {
-    // Add industry keywords to profile
-    let enhancedProfile = sections.profile.trim();
-    const profileLower = enhancedProfile.toLowerCase();
+  // Add professional experience with consistent formatting - critical for ATS parsing
+  if (sections.experience || sections["work experience"] || sections["employment history"]) {
+    const experienceContent = sections.experience || sections["work experience"] || sections["employment history"] || '';
     
-    // Add a few industry keywords if not already present
-    const keywordsToAdd = industryKeywords
-      .slice(0, 3)
-      .filter((kw: string) => !profileLower.includes(kw.toLowerCase()));
+    // Ensure consistent date formatting for ATS
+    const dateStandardized = standardizeDates(experienceContent);
     
-    if (keywordsToAdd.length > 0) {
-      enhancedProfile += ` Skilled in ${keywordsToAdd.join(', ')}.`;
-    }
+    // Ensure bullet points for each responsibility/achievement
+    const bulletedExperience = ensureBulletPoints(dateStandardized);
     
-    optimizedCV += `## PROFESSIONAL SUMMARY
-${enhancedProfile}
-
-`;
-  }
-
-  // Add experience with bullet points and quantified achievements
-  if (sections.experience) {
-    // Convert paragraphs to bullet points
-    let bulletedExperience = '';
-    const experienceLines = sections.experience.split('\n');
-    
-    for (let i = 0; i < experienceLines.length; i++) {
-      const line = experienceLines[i].trim();
-      
-      if (!line) {
-        bulletedExperience += '\n';
-        continue;
-      }
-      
-      // If it looks like a header or job title, keep as is
-      if (line.length < 30 || line.includes(':')) {
-        bulletedExperience += line + '\n';
-      } else if (!line.startsWith('•')) {
-        // Convert paragraph to bullet point
-        bulletedExperience += '• ' + line + '\n';
-      } else {
-        // Already a bullet point
-        bulletedExperience += line + '\n';
-      }
-    }
-    
-    // Add quantified metrics to bullet points
-    const quantifiedExperience = bulletedExperience.replace(
-      /•\s+(.*?)(?=\n|$)/g, 
-      (match, p1) => {
-        // If bullet point doesn't have metrics, add some
-        if (!/\d+%|\$\d+|\d+ (percent|million|thousand|users|customers|clients|projects)/.test(p1)) {
-          // Add metrics based on context
-          if (/manage|lead|direct|supervise/.test(p1.toLowerCase())) {
-            return `• ${p1}, improving team efficiency by 30%`;
-          } else if (/develop|create|build|implement/.test(p1.toLowerCase())) {
-            return `• ${p1}, resulting in 25% cost reduction`;
-          } else if (/analyze|research|study/.test(p1.toLowerCase())) {
-            return `• ${p1}, identifying opportunities that increased revenue by 20%`;
-          } else {
-            return `• ${p1}, achieving 15% improvement in results`;
-          }
-        }
-        return match;
-      }
-    );
+    // Add industry-specific keywords in experience if missing
+    const keywordEnhanced = enhanceWithKeywords(bulletedExperience, industryKeywords);
     
     optimizedCV += `## PROFESSIONAL EXPERIENCE
-${quantifiedExperience}
+${keywordEnhanced}
 
 `;
   }
 
-  // Add education section
-  if (sections.education) {
-    optimizedCV += `## EDUCATION
-${sections.education.trim()}
-
-`;
-  }
-
-  // Add skills section with industry keywords
-  if (sections.skills) {
-    let enhancedSkills = sections.skills.trim();
+  // Add skills section formatted as ATS-friendly bullet points
+  if (sections.skills || sections["technical skills"] || sections.competencies) {
+    const skillsContent = sections.skills || sections["technical skills"] || sections.competencies || '';
     
-    // Convert to bullet points if not already
-    if (!enhancedSkills.includes('•')) {
-      enhancedSkills = enhancedSkills.split('\n')
-        .map(line => line.trim())
-        .filter(line => line.length > 0)
-        // Remove any ### markers
-        .map(line => line.replace(/^###\s*/, ''))
-        .map(line => {
-          // Limit line length to prevent overflow
-          if (line.length > 50) {
-            return `• ${line.substring(0, 50)}...`;
-          }
-          return `• ${line}`;
-        })
-        .join('\n');
-    }
-    
-    // Add industry keywords as bullet points
-    const skillsLower = enhancedSkills.toLowerCase();
-    const keywordsToAdd = industryKeywords
-      .filter((kw: string) => !skillsLower.includes(kw.toLowerCase()))
-      .slice(0, 4); // Limit to fewer keywords to prevent overflow
-    
-    if (keywordsToAdd.length > 0) {
-      enhancedSkills += '\n\n// Additional Industry Expertise\n';
-      for (const keyword of keywordsToAdd) {
-        enhancedSkills += `• ${keyword}\n`;
-      }
-    }
+    // Format skills as bullet points and organize categories
+    const formattedSkills = formatSkillsForATS(skillsContent, industryKeywords);
     
     optimizedCV += `## SKILLS
-${enhancedSkills}
+${formattedSkills}
 
 `;
   } else {
-    // If no skills section, create one with industry keywords
+    // Create skills section if none exists - critical for ATS
     optimizedCV += `## SKILLS
-• ${industryKeywords.slice(0, 6).join('\n• ')}
+• ${industryKeywords.slice(0, 10).join('\n• ')}
 
 `;
   }
 
-  // Add languages section if present
-  if (sections.languages) {
-    optimizedCV += `## LANGUAGES
-${sections.languages.trim()}
+  // Add education with consistent formatting - important for ATS
+  if (sections.education || sections["academic background"]) {
+    const educationContent = sections.education || sections["academic background"] || '';
+    
+    // Format education section with consistent date formats
+    const formattedEducation = standardizeDates(educationContent);
+    
+    optimizedCV += `## EDUCATION
+${formattedEducation}
 
 `;
   }
 
-  // Add projects section if present
-  if (sections.projects) {
-    optimizedCV += `## PROJECTS
-${sections.projects.trim()}
-
-`;
-  }
-
-  // Add certifications section if present
+  // Add additional sections if present in the original
   if (sections.certifications) {
     optimizedCV += `## CERTIFICATIONS
-${sections.certifications.trim()}
+${sections.certifications}
 
 `;
   }
 
-  // Add any additional sections
-  for (const [key, value] of Object.entries(sections)) {
-    if (!['contact', 'profile', 'experience', 'education', 'skills', 'languages', 'projects', 'certifications', 'achievements'].includes(key) && value.trim()) {
-      optimizedCV += `## ${key.toUpperCase()}
-${value.trim()}
+  if (sections.languages) {
+    optimizedCV += `## LANGUAGES
+${sections.languages}
 
 `;
-    }
-  }
-
-  // Verify content preservation
-  const verification = verifyContentPreservation(originalText, optimizedCV);
-  
-  if (!verification.preserved) {
-    console.warn(`Content preservation check failed. Score: ${verification.keywordScore}%. Adding missing keywords.`);
-    
-    // Add missing keywords in a way that preserves the CV structure
-    if (verification.missingItems.length > 0) {
-      // Try to add missing keywords to the skills section
-      if (optimizedCV.includes('## SKILLS')) {
-        // Find the skills section and add missing keywords
-        const skillsPattern = /## SKILLS\n([\s\S]*?)(?=\n##|$)/;
-        const skillsMatch = optimizedCV.match(skillsPattern);
-        
-        if (skillsMatch) {
-          const skillsSection = skillsMatch[1];
-          const updatedSkillsSection = skillsSection + `\n\n### Additional Keywords:\n• ${verification.missingItems.map(item => item.trim()).join('\n• ')}\n`;
-          
-          optimizedCV = optimizedCV.replace(skillsPattern, `## SKILLS\n${updatedSkillsSection}`);
-        }
-      } else {
-        // If no skills section, add one with missing keywords
-        optimizedCV += `## ADDITIONAL KEYWORDS
-• ${verification.missingItems.map(item => item.trim()).join('\n• ')}
-
-`;
-      }
-    }
   }
 
   return optimizedCV;
+}
+
+// Helper function to standardize date formats for ATS parsing
+function standardizeDates(text: string): string {
+  // Replace various date formats with consistent MM/YYYY format
+  return text.replace(
+    /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* (\d{4})\b/gi,
+    (match, month, year) => {
+      const monthMap: Record<string, string> = {
+        'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04', 'may': '05', 'jun': '06',
+        'jul': '07', 'aug': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
+      };
+      const monthKey = month.toLowerCase().substring(0, 3);
+      return `${monthMap[monthKey]}/${year}`;
+    }
+  );
+}
+
+// Helper function to ensure all items have bullet points
+function ensureBulletPoints(text: string): string {
+  // Split into paragraphs
+  const paragraphs = text.split(/\n\s*\n/);
+  
+  return paragraphs.map(paragraph => {
+    // Skip short lines (likely headers/titles)
+    if (paragraph.length < 30) return paragraph;
+    
+    // Split into lines
+    const lines = paragraph.split('\n');
+    
+    return lines.map(line => {
+      line = line.trim();
+      if (!line) return '';
+      
+      // If not already a bullet point and not a short title/header
+      if (!line.startsWith('•') && !line.startsWith('-') && !line.startsWith('*') && line.length > 30) {
+        return `• ${line}`;
+      }
+      
+      return line;
+    }).join('\n');
+  }).join('\n\n');
+}
+
+// Helper function to enhance content with industry keywords
+function enhanceWithKeywords(text: string, keywords: string[]): string {
+  const textLower = text.toLowerCase();
+  const missingKeywords = keywords
+    .slice(0, 5)
+    .filter(keyword => !textLower.includes(keyword.toLowerCase()));
+  
+  if (missingKeywords.length === 0) return text;
+  
+  // Add missing keywords in a natural way
+  return text + `\n\n• Demonstrated proficiency in ${missingKeywords.join(', ')} throughout professional career.`;
+}
+
+// Helper function to format skills for ATS readability
+function formatSkillsForATS(skillsText: string, industryKeywords: string[]): string {
+  // Ensure skills are in bullet point format
+  let skills = skillsText.trim();
+  
+  // If skills aren't already in bullet points, convert them
+  if (!skills.includes('•') && !skills.includes('-') && !skills.includes('*')) {
+    // Check if comma-separated
+    if (skills.includes(',')) {
+      skills = skills.split(',')
+        .map(skill => skill.trim())
+        .filter(skill => skill.length > 0)
+        .map(skill => `• ${skill}`)
+        .join('\n');
+    } else {
+      // Assume line-separated
+      skills = skills.split('\n')
+        .map(skill => skill.trim())
+        .filter(skill => skill.length > 0)
+        .map(skill => skill.startsWith('•') ? skill : `• ${skill}`)
+        .join('\n');
+    }
+  }
+  
+  // Add missing industry keywords as skills if not present
+  const skillsLower = skills.toLowerCase();
+  const missingKeywords = industryKeywords
+    .slice(0, 7)
+    .filter(keyword => !skillsLower.includes(keyword.toLowerCase()));
+  
+  if (missingKeywords.length > 0) {
+    skills += '\n' + missingKeywords.map(keyword => `• ${keyword}`).join('\n');
+  }
+  
+  return skills;
 }
 
 // Helper functions
