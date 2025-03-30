@@ -30,6 +30,7 @@ export default function PricingCardClient({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isCurrentPlan, setIsCurrentPlan] = useState(false);
+  const [currentUserPlan, setCurrentUserPlan] = useState<string>('');
   const { prices, products, error: pricingError } = usePricing();
 
   // Check if this is the user's current plan
@@ -42,8 +43,10 @@ export default function PricingCardClient({
         }
         
         const data = await response.json();
+        // Save the current user plan for later reference
+        setCurrentUserPlan(data.planName || 'Pro');
+        
         // Check if the current plan matches this card's plan
-        // Only Pro/Free should be marked as current plan if that's what the user has
         if (name === "Moonlighting") {
           setIsCurrentPlan(data.planName === "Moonlighting");
         } else {
@@ -54,6 +57,7 @@ export default function PricingCardClient({
       } catch (err) {
         console.error('Error checking subscription:', err);
         // Default to Free plan if there's an error
+        setCurrentUserPlan('Pro');
         setIsCurrentPlan(name === "Pro");
       }
     };
@@ -109,7 +113,45 @@ export default function PricingCardClient({
       return;
     }
     
+    // Handle downgrade to Pro from Moonlighting
+    if (currentUserPlan === "Moonlighting" && name === "Pro") {
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        console.log('Downgrading from Moonlighting to Pro plan');
+        
+        const response = await fetch('/api/user/downgrade', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ message: 'Failed to downgrade plan' }));
+          throw new Error(errorData.message || 'Failed to downgrade plan');
+        }
+
+        const data = await response.json();
+        if (data.success) {
+          // Refresh the page to show updated plan status
+          window.location.reload();
+        } else {
+          throw new Error(data.message || 'Failed to downgrade plan');
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred');
+        console.error('Downgrade error:', err);
+      } finally {
+        setIsLoading(false);
+      }
+      
+      return;
+    }
+    
     // Regular plan checkout logic (for non-Moonlighting plans)
+    // Don't return early if this is a downgrade from Moonlighting to Pro
     if (isCurrentPlan) {
       return;
     }
@@ -291,10 +333,10 @@ export default function PricingCardClient({
           <form onSubmit={handleCheckout} className="w-full mt-auto">
             <Button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || isCurrentPlan}
               className="w-full h-14 bg-[#B4916C] hover:bg-[#A3815B] text-[#050505] rounded-lg flex items-center justify-center font-bold text-lg"
             >
-              {isLoading ? "Processing..." : "UPGRADE NOW"}
+              {isLoading ? "Processing..." : isCurrentPlan ? "Current Plan" : "UPGRADE NOW"}
             </Button>
             <div className="mt-2 text-xs text-[#8A8782] text-center">
               Price ID: price_1R5vvRFYYYXM77wG8jVM2pGC
@@ -304,7 +346,7 @@ export default function PricingCardClient({
           <form onSubmit={handleCheckout} className="w-full mt-auto">
             <Button
               type="submit"
-              disabled={isLoading || isCurrentPlan}
+              disabled={isLoading || (isCurrentPlan && currentUserPlan !== "Moonlighting")}
               className="w-full font-medium font-safiro h-12 bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"
             >
               {isLoading ? (
@@ -314,6 +356,8 @@ export default function PricingCardClient({
                 </>
               ) : isCurrentPlan ? (
                 "Current Plan"
+              ) : currentUserPlan === "Moonlighting" && name === "Pro" ? (
+                "Downgrade"
               ) : (
                 "Select Plan"
               )}
