@@ -330,9 +330,6 @@ function DocumentRow({ document, isResume = false }: { document: any, isResume?:
   // Check if the document is optimized
   const isOptimized = document.metadata?.optimized || false;
   
-  // Get ATS score if available
-  const atsScore = document.metadata?.atsScore || null;
-  
   return (
     <PremiumCard className="border border-[#222222] bg-[#111111] hover:border-[#333333] transition-all duration-300">
       <div className="flex items-center justify-between p-4">
@@ -360,15 +357,6 @@ function DocumentRow({ document, isResume = false }: { document: any, isResume?:
                   <span className="mx-2 text-[#333333]">•</span>
                   <Badge className="text-xs bg-[#0D1F15] text-[#4ADE80] border-[#1A4332]">
                     Optimized
-                  </Badge>
-                </>
-              )}
-              
-              {isResume && atsScore && (
-                <>
-                  <span className="mx-2 text-[#333333]">•</span>
-                  <Badge variant="outline" className="text-xs bg-[#161616] border-[#222222]">
-                    ATS Score: <span className="text-[#4ADE80] ml-1">{atsScore}%</span>
                   </Badge>
                 </>
               )}
@@ -431,5 +419,5 @@ function isResumeDocument(fileName: string, metadata: any): boolean {
                            metadata?.isResume === true ||
                            metadata?.type === 'resume';
   
-  return hasResumeKeyword || isResumeMetadata || metadata?.atsScore !== undefined;
+  return hasResumeKeyword || isResumeMetadata;
 } 

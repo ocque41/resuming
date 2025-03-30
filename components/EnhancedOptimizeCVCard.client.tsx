@@ -87,10 +87,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   const [processingStatus, setProcessingStatus] = useState<string | null>("");
   const [error, setError] = useState<string | null>(null);
   
-  // State for ATS scores
-  const [originalAtsScore, setOriginalAtsScore] = useState<number>(0);
-  const [improvedAtsScore, setImprovedAtsScore] = useState<number>(0);
-  
   // State for UI views
   const [originalText, setOriginalText] = useState<string>("");
   const [optimizedText, setOptimizedText] = useState<string>("");
@@ -1140,15 +1136,7 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
           if (data.improvements) {
             setImprovements(data.improvements);
           }
-          
-            if (data.atsScore) {
-              setOriginalAtsScore(data.atsScore);
-            }
-            
-            if (data.improvedAtsScore) {
-              setImprovedAtsScore(data.improvedAtsScore);
-            }
-          } else if (data.error) {
+        } else if (data.error) {
             // Processing encountered an error
             setIsProcessing(false);
             setError(`Processing error: ${data.error}`);
@@ -1242,8 +1230,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       
       // Prepare metadata to include in the document generation
       const metadata = {
-        atsScore: originalAtsScore,
-        improvedAtsScore: improvedAtsScore,
         improvements: improvements,
         experienceEntries: structuredCV.experience,
         industry: structuredCV.industry || ''
@@ -1402,44 +1388,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         {/* Results Section */}
         {isProcessed && (
           <div className="animate-fade-in-up">
-            {/* Score Comparison */}
-            <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-5 rounded-xl bg-[#0D0D0D] border border-[#222222] shadow-md">
-                <h3 className="text-[#F9F6EE] font-safiro mb-2">Original ATS Score</h3>
-                <div className="flex items-center">
-                  <span className="text-3xl font-bold font-safiro" style={{ 
-                    color: originalAtsScore > 80 
-                      ? '#4ade80' 
-                      : originalAtsScore > 60 
-                        ? '#facc15' 
-                        : '#f87171'
-                  }}>
-                    {originalAtsScore}%
-                  </span>
-                </div>
-              </div>
-              
-              <div className="p-5 rounded-xl bg-[#0D0D0D] border border-[#222222] shadow-md">
-                <h3 className="text-[#F9F6EE] font-safiro mb-2">Improved ATS Score</h3>
-                <div className="flex items-center">
-                  <span className="text-3xl font-bold font-safiro" style={{ 
-                    color: improvedAtsScore > 80 
-                      ? '#4ade80' 
-                      : improvedAtsScore > 60 
-                        ? '#facc15' 
-                        : '#f87171'
-                  }}>
-                    {improvedAtsScore}%
-                  </span>
-                  {improvedAtsScore > originalAtsScore && (
-                    <span className="ml-2 text-sm px-2 py-1 rounded-lg bg-emerald-900/30 text-emerald-300 font-borna">
-                      +{improvedAtsScore - originalAtsScore}%
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
             {/* CV Content */}
             <div className="mb-6 rounded-xl bg-[#0D0D0D] border border-[#222222] shadow-md overflow-hidden">
               <div className="p-5">

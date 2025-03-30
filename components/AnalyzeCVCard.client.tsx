@@ -394,28 +394,6 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
         
         {analysis && !loading && (
           <div className="space-y-6 animate-fade-in-up">
-            {/* ATS Score */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 md:p-5 rounded-xl bg-[#0D0D0D] border border-[#222222]">
-              <div className="space-y-1">
-                <h3 className="text-[#F9F6EE] font-safiro text-lg flex items-center">
-                  <FileText className="text-[#333333] w-5 h-5 mr-2" />
-                  ATS Compatibility Score
-                </h3>
-                <p className="text-[#F9F6EE]/60 text-sm font-borna">How well your CV performs against Applicant Tracking Systems</p>
-              </div>
-              <div className="flex items-center justify-center bg-[#050505] rounded-lg p-3 min-w-[90px]">
-                <span className="text-2xl font-bold font-safiro" style={{ 
-                  color: parseInt(formatAtsScore(analysis.atsScore)) > 80 
-                    ? '#4ade80' 
-                    : parseInt(formatAtsScore(analysis.atsScore)) > 60 
-                      ? '#facc15' 
-                      : '#f87171'
-                }}>
-                  {formatAtsScore(analysis.atsScore)}
-                </span>
-              </div>
-            </div>
-            
             {/* Industry and Language */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-4 rounded-xl bg-[#0D0D0D] border border-[#222222]">

@@ -40,10 +40,6 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
   
   // State to track if we should force re-optimization
   const [forceReoptimize, setForceReoptimize] = useState<boolean>(false);
-  
-  // State for ATS scores
-  const [originalAtsScore, setOriginalAtsScore] = useState<number>(65);
-  const [improvedAtsScore, setImprovedAtsScore] = useState<number>(0);
 
   // Add a state for DOCX download loading
   const [isDownloadingDocx, setIsDownloadingDocx] = useState<boolean>(false);
@@ -185,15 +181,6 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
         setProgress(100);
         setOptimizationStep("Optimization complete");
         
-        // Update ATS scores if available
-        if (statusData.originalAtsScore) {
-          setOriginalAtsScore(statusData.originalAtsScore);
-        }
-        
-        if (statusData.improvedAtsScore) {
-          setImprovedAtsScore(statusData.improvedAtsScore);
-        }
-        
         // Enter preview mode
         setIsPreviewMode(true);
         
@@ -332,11 +319,6 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
       }
       
       const data = await response.json();
-      
-      // Set ATS scores
-      if (data.originalAtsScore) {
-        setOriginalAtsScore(data.originalAtsScore);
-      }
       
       // Set PDF and DOCX data
       if (data.pdfBase64) {
@@ -667,27 +649,6 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
           <div className="mt-4 p-4 bg-[#121212] rounded-lg border border-[#B4916C]/20">
             <h3 className="text-[#B4916C] font-medium mb-2">Optimization Results</h3>
             
-            <div className="mb-4">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-white font-medium">ATS Score:</span>
-                <div className="flex items-center">
-                  <span className="text-[#B4916C] font-bold">{originalAtsScore}%</span>
-                  {improvedAtsScore > originalAtsScore && (
-                    <span className="ml-2 text-sm px-2 py-1 rounded-lg bg-emerald-900/30 text-emerald-300">
-                      ➚ {improvedAtsScore}%
-                    </span>
-                  )}
-                </div>
-              </div>
-              
-              <div className="w-full bg-gray-700 rounded-full h-2.5">
-                <div 
-                  className="bg-[#B4916C] h-2.5 rounded-full" 
-                  style={{ width: `${originalAtsScore}%` }}
-                ></div>
-              </div>
-            </div>
-            
             <div className="flex flex-col space-y-3">
               <div className="flex items-center space-x-3">
                 <Button 
@@ -753,24 +714,6 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
           <div className="mt-4">
             <div className="bg-[#121212] p-4 rounded-t-lg border border-[#B4916C]/20">
               <h3 className="text-[#B4916C] font-medium mb-2">CV Preview</h3>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-white font-medium">ATS Score:</span>
-                <div className="flex items-center">
-                  <span className="text-[#B4916C] font-bold">{originalAtsScore}%</span>
-                  {improvedAtsScore > originalAtsScore && (
-                    <span className="ml-2 text-sm px-2 py-1 rounded-lg bg-emerald-900/30 text-emerald-300">
-                      ➚ {improvedAtsScore}%
-                    </span>
-                  )}
-                </div>
-              </div>
-              
-              <div className="w-full bg-gray-700 rounded-full h-2.5 mb-4">
-                <div 
-                  className="bg-[#B4916C] h-2.5 rounded-full" 
-                  style={{ width: `${originalAtsScore}%` }}
-                ></div>
-              </div>
             </div>
             
             <div className="border border-[#B4916C]/20 border-t-0 rounded-b-lg overflow-hidden">

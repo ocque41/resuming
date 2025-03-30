@@ -15,7 +15,7 @@ import {
   Info, 
   ArrowLeft 
 } from "lucide-react";
-import { formatDistance } from "date-fns";
+import { formatDistance, formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -100,24 +100,18 @@ export default async function DocumentDetailPage({
     // Determine file type
     const fileType = getFileTypeFromName(document.fileName);
     
+    // Determine if this document is a resume
+    const isResume = isResumeDocument(document?.fileName || "", metadata || {});
+    
+    // Format the date
+    const formattedDate = document?.createdAt ? formatDistanceToNow(new Date(document.createdAt), { addSuffix: true }) : null;
+    
     // Format upload date
     const uploadDate = new Date(document.createdAt);
-    const formattedDate = uploadDate.toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
     const formattedTime = uploadDate.toLocaleTimeString(undefined, {
       hour: '2-digit',
       minute: '2-digit'
     });
-    const relativeTime = formatDistance(uploadDate, new Date(), { addSuffix: true });
-    
-    // Determine if the document is a resume/CV
-    const isResume = isResumeDocument(document.fileName, metadata);
-    
-    // Get ATS score if available for resumes
-    const atsScore = metadata?.atsScore ? parseInt(metadata.atsScore) : null;
     
     return (
       <PremiumPageLayout
@@ -145,7 +139,7 @@ export default async function DocumentDetailPage({
                       <CardDescription className="text-[#8A8782] text-sm font-borna">
                         <div className="flex items-center gap-1 mt-0.5">
                           <Calendar className="h-3.5 w-3.5 mr-0.5" />
-                          <span>Uploaded {relativeTime}</span>
+                          <span>Uploaded {formattedDate}</span>
                         </div>
                       </CardDescription>
                     </div>
@@ -206,11 +200,6 @@ export default async function DocumentDetailPage({
                   <TabsTrigger value="details" className="data-[state=active]:bg-[#161616] data-[state=active]:text-[#F9F6EE]">
                     Details
                   </TabsTrigger>
-                  {isResume && (
-                    <TabsTrigger value="ats-score" className="data-[state=active]:bg-[#161616] data-[state=active]:text-[#F9F6EE]">
-                      ATS Score
-                    </TabsTrigger>
-                  )}
                   <TabsTrigger value="metadata" className="data-[state=active]:bg-[#161616] data-[state=active]:text-[#F9F6EE]">
                     Metadata
                   </TabsTrigger>
@@ -272,10 +261,6 @@ export default async function DocumentDetailPage({
                             <span className="text-[#8A8782] text-sm">Time</span>
                             <span className="text-[#F9F6EE] font-borna">{formattedTime}</span>
                           </div>
-                          <div className="flex justify-between">
-                            <span className="text-[#8A8782] text-sm">Relative</span>
-                            <span className="text-[#F9F6EE] font-borna">{relativeTime}</span>
-                          </div>
                         </div>
                       </div>
                       
@@ -316,83 +301,6 @@ export default async function DocumentDetailPage({
                     </div>
                   )}
                 </TabsContent>
-                
-                {isResume && (
-                  <TabsContent value="ats-score">
-                    <div className="space-y-4">
-                      <div className="bg-[#080808] border border-[#222222] rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-4">
-                          <h4 className="text-[#F9F6EE] font-safiro">ATS Compatibility Score</h4>
-                          <Badge className={getScoreBadgeColor(atsScore)}>
-                            {atsScore !== null ? `${atsScore}%` : 'Not Available'}
-                          </Badge>
-                        </div>
-                        
-                        {atsScore !== null && (
-                          <>
-                            <div className="w-full h-3 bg-[#161616] rounded-full mb-2 overflow-hidden">
-                              <div 
-                                className={`h-full ${getScoreBarColor(atsScore)}`} 
-                                style={{ width: `${atsScore}%` }}
-                              ></div>
-                            </div>
-                            
-                            <div className="text-sm text-[#8A8782] mb-4">
-                              {atsScore >= 80 ? (
-                                <p>Great! Your resume has a high chance of passing through ATS systems.</p>
-                              ) : atsScore >= 60 ? (
-                                <p>Your resume has a moderate chance of passing ATS systems. Consider optimizing it further.</p>
-                              ) : (
-                                <p>Your resume may have difficulty passing through ATS systems. We recommend optimizing it.</p>
-                              )}
-                            </div>
-                            
-                            {atsScore < 80 && (
-                              <Link href={`/dashboard/optimize?documentId=${params.id}`}>
-                                <Button className="bg-[#B4916C] hover:bg-[#A3815C] text-white">
-                                  <BarChart2 className="h-4 w-4 mr-1.5" />
-                                  Optimize for ATS
-                                </Button>
-                              </Link>
-                            )}
-                          </>
-                        )}
-                        
-                        {atsScore === null && (
-                          <div className="text-center py-6">
-                            <Info className="h-12 w-12 text-[#333333] mx-auto mb-3" />
-                            <p className="text-[#8A8782] mb-3">
-                              This document hasn't been analyzed for ATS compatibility yet.
-                            </p>
-                            <Link href={`/dashboard/optimize?documentId=${params.id}`}>
-                              <Button className="bg-[#B4916C] hover:bg-[#A3815C] text-white">
-                                <BarChart2 className="h-4 w-4 mr-1.5" />
-                                Analyze for ATS
-                              </Button>
-                            </Link>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {isResume && metadata?.keySkills && (
-                        <div className="bg-[#080808] border border-[#222222] rounded-lg p-4">
-                          <h4 className="text-[#F9F6EE] font-safiro mb-3">Detected Skills</h4>
-                          <div className="flex flex-wrap gap-2">
-                            {Array.isArray(metadata.keySkills) ? (
-                              metadata.keySkills.map((skill: string, index: number) => (
-                                <Badge key={index} className="bg-[#161616] text-[#B4916C] border-[#333333]">
-                                  {skill}
-                                </Badge>
-                              ))
-                            ) : (
-                              <p className="text-sm text-[#8A8782]">No skills detected yet.</p>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </TabsContent>
-                )}
                 
                 <TabsContent value="metadata">
                   <div className="bg-[#080808] border border-[#222222] rounded-lg overflow-hidden">
@@ -620,31 +528,9 @@ function formatFileSize(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
 }
 
-function getScoreBadgeColor(score: number | null): string {
-  if (score === null) return 'bg-[#161616] text-[#8A8782]';
-  if (score >= 80) return 'bg-[#0D1F15] text-[#4ADE80]';
-  if (score >= 60) return 'bg-[#382917] text-[#FFB74D]';
-  return 'bg-[#3A1F24] text-[#E57373]';
-}
-
-function getScoreBarColor(score: number): string {
-  if (score >= 80) return 'bg-[#4ADE80]';
-  if (score >= 60) return 'bg-[#FFB74D]';
-  return 'bg-[#E57373]';
-}
-
 function isResumeDocument(fileName: string, metadata: any): boolean {
-  const lowerFileName = fileName.toLowerCase();
-  const fileType = getFileTypeFromName(fileName);
-  
-  // Check if the filename contains resume-related keywords
-  const resumeKeywords = ['resume', 'cv', 'curriculum'];
-  const hasResumeKeyword = resumeKeywords.some(keyword => lowerFileName.includes(keyword));
-  
-  // Check if the metadata indicates this is a resume
-  const isResumeMetadata = metadata?.documentType === 'resume' || 
-                           metadata?.isResume === true ||
-                           metadata?.type === 'resume';
-  
-  return hasResumeKeyword || isResumeMetadata || metadata?.atsScore !== undefined;
+  const hasResumeKeyword = fileName.toLowerCase().includes('resume') || 
+                          fileName.toLowerCase().includes('cv');
+  const isResumeMetadata = metadata?.docType === 'resume' || metadata?.docType === 'cv';
+  return hasResumeKeyword || isResumeMetadata;
 } 
