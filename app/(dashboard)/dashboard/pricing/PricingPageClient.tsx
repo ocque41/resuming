@@ -7,7 +7,7 @@ import { motion } from "framer-motion";
 import dynamic from 'next/dynamic';
 import PricingErrorBoundary from './PricingErrorBoundary';
 import { PricingProvider } from './PricingContext';
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 
 // Dynamically import the Pro plan component
@@ -47,6 +47,24 @@ export default function PricingPageClient({
 }: PricingPageClientProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentPlan, setCurrentPlan] = useState<string>('Pro');
+  
+  // Fetch user's current plan
+  useEffect(() => {
+    const fetchUserPlan = async () => {
+      try {
+        const response = await fetch('/api/user/subscription');
+        if (response.ok) {
+          const data = await response.json();
+          setCurrentPlan(data.planName || 'Pro');
+        }
+      } catch (err) {
+        console.error('Error fetching subscription:', err);
+      }
+    };
+    
+    fetchUserPlan();
+  }, []);
   
   // Ensure we have fallbacks for all data
   const freePlan = products.find((product) => product.name === "Pro") || 
@@ -104,6 +122,39 @@ export default function PricingPageClient({
     }
   };
 
+  // Handle downgrade from Moonlighting to Pro
+  const handleDowngrade = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const response = await fetch('/api/user/downgrade', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to downgrade plan' }));
+        throw new Error(errorData.message || 'Failed to downgrade plan');
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        // Refresh the page to show updated plan status
+        window.location.reload();
+      } else {
+        throw new Error(data.message || 'Failed to downgrade plan');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+      console.error('Downgrade error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <Suspense fallback={<PricingPageSkeleton />}>
       <PremiumCard className="mb-8 border border-[#222222] bg-[#0D0D0D]">
@@ -136,28 +187,85 @@ export default function PricingPageClient({
             >
               <PricingErrorBoundary>
                 <div className="grid md:grid-cols-2 gap-8 justify-center max-w-4xl mx-auto">
-                  <PricingCardClient
-                    name="Pro"
-                    price={0}
-                    interval="month"
-                    features={[
-                      "Optimize CV ⓘ",
-                      "Document Analysis ⓘ",
-                      "Job Description Generator ⓘ",
-                      "CV to Job Match ⓘ",
-                    ]}
-                    tooltips={{
-                      "Optimize CV ⓘ": "Analyze & optimize for ATS",
-                      "Document Analysis ⓘ": "Extract insights & visualize data",
-                      "Job Description Generator ⓘ": "Create detailed job descriptions",
-                      "CV to Job Match ⓘ": "Analyze CV against job descriptions",
-                    }}
-                    highlight={false}
-                    priceId={freePrice?.id}
-                    animationDelay={0.2}
-                  />
+                  {/* Custom Pro Plan Card */}
+                  <motion.div
+                    className="rounded-xl overflow-hidden transition-all duration-300 border border-[#222222] bg-[#111111]"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.2 }}
+                    whileHover={{ y: -8, transition: { duration: 0.3, ease: "easeOut" } }}
+                  >
+                    <div className="bg-[#0D0D0D] py-6 px-6 relative overflow-hidden">
+                      <h2 className="text-2xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
+                        Pro
+                      </h2>
+                      
+                      <p className="text-4xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
+                        FREE
+                      </p>
+                      
+                      {currentPlan === "Pro" && (
+                        <div className="absolute top-0 right-0 mt-2 mr-2">
+                          <span className="bg-green-500/20 text-green-400 px-2 py-1 text-xs rounded-full font-borna">
+                            Current Plan
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="p-6 flex flex-col h-full">
+                      <ul className="space-y-4 flex-grow mb-8">
+                        {[
+                          "Optimize CV ⓘ", 
+                          "Document Analysis ⓘ", 
+                          "Job Description Generator ⓘ", 
+                          "CV to Job Match ⓘ"
+                        ].map((feature, index) => (
+                          <li key={index} className="flex items-start group relative">
+                            <div className="h-5 w-5 mr-3 rounded-full flex items-center justify-center flex-shrink-0 text-[#8A8782] bg-[#222222]">
+                              <Check className="h-3 w-3" />
+                            </div>
+                            <span className="text-[#C5C2BA] font-borna text-sm">
+                              {feature.replace(" ⓘ", "")}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      
+                      {currentPlan === "Moonlighting" && (
+                        <button
+                          onClick={handleDowngrade}
+                          disabled={isLoading}
+                          className="w-full font-medium font-safiro h-12 bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333] rounded-lg"
+                        >
+                          {isLoading ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin inline" />
+                              Processing...
+                            </>
+                          ) : (
+                            "Downgrade"
+                          )}
+                        </button>
+                      )}
+                      
+                      {currentPlan === "Pro" && (
+                        <div className="w-full font-medium font-safiro h-12 bg-[#222222] flex items-center justify-center text-green-400 border border-[#333333] rounded-lg">
+                          Current Plan
+                        </div>
+                      )}
+                      
+                      {currentPlan !== "Pro" && currentPlan !== "Moonlighting" && (
+                        <button
+                          className="w-full font-medium font-safiro h-12 bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333] rounded-lg"
+                        >
+                          Select Plan
+                        </button>
+                      )}
+                    </div>
+                  </motion.div>
                   
-                  {/* Custom Moonlighting Card with hardcoded upgrade button */}
+                  {/* Custom Moonlighting Card */}
                   <motion.div
                     className="rounded-xl overflow-hidden transition-all duration-300 border border-[#B4916C] bg-[#0A0A0A]"
                     initial={{ opacity: 0, y: 20 }}
@@ -184,6 +292,14 @@ export default function PricingPageClient({
                           /month
                         </span>
                       </p>
+                      
+                      {currentPlan === "Moonlighting" && (
+                        <div className="absolute top-0 right-0 mt-2 mr-2">
+                          <span className="bg-green-500/20 text-green-400 px-2 py-1 text-xs rounded-full font-borna">
+                            Current Plan
+                          </span>
+                        </div>
+                      )}
                       
                       <div className="absolute inset-0 opacity-20 overflow-hidden pointer-events-none">
                         <motion.div
@@ -219,11 +335,11 @@ export default function PricingPageClient({
                         <p>Get access to all premium features today</p>
                       </div>
                       
-                      {/* SIMPLE MOONLIGHTING UPGRADE BUTTON */}
+                      {/* Moonlighting button */}
                       <div className="mb-4">
                         <button
                           onClick={handleMoonlightingCheckout}
-                          disabled={isLoading}
+                          disabled={isLoading || currentPlan === "Moonlighting"}
                           style={{
                             width: '100%',
                             padding: '12px 10px',
@@ -232,12 +348,13 @@ export default function PricingPageClient({
                             borderRadius: '6px',
                             fontWeight: 'bold',
                             fontSize: '16px',
-                            cursor: 'pointer',
+                            cursor: currentPlan === "Moonlighting" ? 'default' : 'pointer',
                             border: 'none',
-                            boxShadow: '0 3px 6px rgba(0, 0, 0, 0.15)'
+                            boxShadow: '0 3px 6px rgba(0, 0, 0, 0.15)',
+                            opacity: currentPlan === "Moonlighting" ? 0.7 : 1
                           }}
                         >
-                          {isLoading ? "Processing..." : "Upgrade"}
+                          {isLoading ? "Processing..." : currentPlan === "Moonlighting" ? "Current Plan" : "Upgrade"}
                         </button>
                       </div>
                       
@@ -256,6 +373,21 @@ export default function PricingPageClient({
         </PremiumCardContent>
       </PremiumCard>
     </Suspense>
+  );
+}
+
+// Page skeleton loader for the pricing page
+export function PricingPageSkeleton() {
+  return (
+    <div className="animate-pulse space-y-8">
+      <div className="h-12 bg-[#161616] rounded-lg w-3/4 mb-6"></div>
+      <div className="h-6 bg-[#161616] rounded-lg w-1/2 mb-8"></div>
+      
+      <div className="grid md:grid-cols-2 gap-8">
+        <PricingCardSkeleton />
+        <PricingCardSkeleton highlight={true} />
+      </div>
+    </div>
   );
 }
 
@@ -280,7 +412,7 @@ function PricingCardSkeleton({ highlight = false }) {
       </div>
       <div className="p-6 space-y-6">
         <div className="space-y-3">
-          {[1, 2, 3, 4, 5].map((j) => (
+          {[1, 2, 3, 4].map((j) => (
             <div key={j} className="h-5 bg-[#161616] rounded-lg flex items-center">
               <div className="h-4 w-4 bg-[#222222] rounded-full mr-3"></div>
               <div className="h-4 bg-[#161616] rounded-lg w-full"></div>
@@ -288,22 +420,6 @@ function PricingCardSkeleton({ highlight = false }) {
           ))}
         </div>
         <div className="h-10 bg-[#161616] rounded-lg w-full"></div>
-      </div>
-    </div>
-  );
-}
-
-// Page skeleton loader for the pricing page
-export function PricingPageSkeleton() {
-  return (
-    <div className="animate-pulse space-y-8">
-      <div className="h-12 bg-[#161616] rounded-lg w-3/4 mb-6"></div>
-      <div className="h-6 bg-[#161616] rounded-lg w-1/2 mb-8"></div>
-      
-      <div className="grid md:grid-cols-3 gap-8">
-        <PricingCardSkeleton />
-        <PricingCardSkeleton highlight={true} />
-        <PricingCardSkeleton />
       </div>
     </div>
   );
