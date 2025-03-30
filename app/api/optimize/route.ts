@@ -43,9 +43,9 @@ export async function POST(req: NextRequest) {
     // Analyze the CV to identify strengths and weaknesses
     const analysisResults = analyzeCVContent(cvText);
     
-    // Calculate original ATS score
-    const originalAtsScore = analysisResults.atsScore;
-    console.log(`CV Analysis completed: ${analysisResults.strengths.length} strengths, ${analysisResults.weaknesses.length} weaknesses identified, industry: ${analysisResults.detectedIndustry}, ATS Score: ${originalAtsScore}`);
+    // Calculate original ATS score - ensure we're using the same calculation method
+    const originalAtsScore = calculateATSScore(cvText, false);
+    console.log(`Original ATS Score: ${originalAtsScore}`);
     
     // If we have a custom optimization prompt, use it
     if (optimizationPrompt) {
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
         // Verify content preservation
         const verification = verifyContentPreservation(cvText, optimizedCV);
         
-        // Calculate improved ATS score
+        // Calculate improved ATS score with isOptimized=true
         const improvedAtsScore = calculateATSScore(optimizedCV, true);
         console.log(`Improved ATS score: ${improvedAtsScore} (Original: ${originalAtsScore})`);
         
@@ -95,6 +95,7 @@ export async function POST(req: NextRequest) {
             message: "CV optimization completed with enhanced fallback due to content preservation failure",
             analysis: {
               ...analysisResults,
+              atsScore: originalAtsScore, // Ensure consistent ATS score in analysis
               originalAtsScore,
               improvedAtsScore: fallbackAtsScore
             }
@@ -107,6 +108,7 @@ export async function POST(req: NextRequest) {
             message: "CV optimization completed successfully",
             analysis: {
               ...analysisResults,
+              atsScore: originalAtsScore, // Ensure consistent ATS score in analysis
               originalAtsScore,
               improvedAtsScore
             }
@@ -125,6 +127,7 @@ export async function POST(req: NextRequest) {
             message: "CV optimization completed with fallback method due to AI service error",
             analysis: {
               ...analysisResults,
+              atsScore: originalAtsScore, // Ensure consistent ATS score in analysis
               originalAtsScore,
               improvedAtsScore: fallbackAtsScore
             }
@@ -136,7 +139,7 @@ export async function POST(req: NextRequest) {
       // Create an enhanced optimized version with ATS focus
       const optimizedCV = createEnhancedOptimizedCV(cvText, templateId || 'default', analysisResults);
       
-      // Calculate improved ATS score
+      // Calculate improved ATS score with isOptimized=true flag
       const improvedAtsScore = calculateATSScore(optimizedCV, true);
       console.log(`Improved ATS score: ${improvedAtsScore} (Original: ${originalAtsScore})`);
       
@@ -146,6 +149,7 @@ export async function POST(req: NextRequest) {
         message: "CV optimization completed successfully",
         analysis: {
           ...analysisResults,
+          atsScore: originalAtsScore, // Ensure consistent ATS score in analysis
           originalAtsScore,
           improvedAtsScore
         }

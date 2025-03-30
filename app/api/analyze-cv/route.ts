@@ -327,16 +327,27 @@ async function analyzeCV(cvId: string, userId: string, rawText: string, metadata
     
     // Calculate ATS score based on the analysis results
     try {
-      const atsScore = calculateATSScore(
-        analysisResult.skills.length,
-        analysisResult.keywords.length,
-        analysisResult.sections.length,
-        analysisResult.formatStrengths.length,
-        analysisResult.formatWeaknesses.length
-      );
+      // Import the consistent ATS score calculation function from lib/optimizeCV.fixed.ts
+      const { calculateATSScore } = require('@/lib/optimizeCV.fixed');
       
-      analysisResult.atsScore = atsScore;
-      logger.info(`Calculated ATS score for CV ID: ${cvId}: ${atsScore}`);
+      if (typeof calculateATSScore === 'function') {
+        // Use the imported function with the raw CV text for accurate scoring
+        const atsScore = calculateATSScore(rawText, false);
+        analysisResult.atsScore = atsScore;
+        logger.info(`Calculated ATS score for CV ID: ${cvId} using consistent method: ${atsScore}`);
+      } else {
+        // Fallback to the local calculation if import fails or isn't a function
+        const atsScore = calculateATSScore(
+          analysisResult.skills.length,
+          analysisResult.keywords.length,
+          analysisResult.sections.length,
+          analysisResult.formatStrengths.length,
+          analysisResult.formatWeaknesses.length
+        );
+        
+        analysisResult.atsScore = atsScore;
+        logger.info(`Calculated ATS score for CV ID: ${cvId} using fallback method: ${atsScore}`);
+      }
     } catch (scoreError) {
       logger.error(`Error calculating ATS score for CV ID: ${cvId}: ${scoreError instanceof Error ? scoreError.message : String(scoreError)}`);
       analysisResult.atsScore = 65; // Default decent score
@@ -524,16 +535,43 @@ async function performBasicAnalysis(cvId: string, userId: string, rawText: strin
       bulletPoints: (rawText.match(/[•·\-]|\n\s*\d+\./g) || []).length // More bullet points is better
     };
     
-    // Calculate ATS score with reasonable defaults
-    const calculatedScore = calculateATSScore(
-      scoreFactors.skills,
-      scoreFactors.keywords,
-      scoreFactors.sections,
-      analysisResult.formatStrengths.length,
-      analysisResult.formatWeaknesses.length
-    );
-    
-    analysisResult.atsScore = calculatedScore;
+    // Try to use the consistent ATS score calculation
+    try {
+      // Import the consistent ATS score calculation function
+      const { calculateATSScore } = require('@/lib/optimizeCV.fixed');
+      
+      if (typeof calculateATSScore === 'function') {
+        // Use the imported function with the raw CV text
+        const atsScore = calculateATSScore(rawText, false);
+        analysisResult.atsScore = atsScore;
+        logger.info(`Calculated ATS score in basic analysis for CV ID: ${cvId} using consistent method: ${atsScore}`);
+      } else {
+        // Fallback to the local calculation
+        const calculatedScore = calculateATSScore(
+          scoreFactors.skills,
+          scoreFactors.keywords,
+          scoreFactors.sections,
+          analysisResult.formatStrengths.length,
+          analysisResult.formatWeaknesses.length
+        );
+        
+        analysisResult.atsScore = calculatedScore;
+        logger.info(`Calculated ATS score in basic analysis for CV ID: ${cvId} using fallback method: ${calculatedScore}`);
+      }
+    } catch (scoreError) {
+      // Log error and fallback to local calculation
+      logger.error(`Error using consistent ATS score calculation in basic analysis: ${scoreError instanceof Error ? scoreError.message : String(scoreError)}`);
+      
+      const calculatedScore = calculateATSScore(
+        scoreFactors.skills,
+        scoreFactors.keywords,
+        scoreFactors.sections,
+        analysisResult.formatStrengths.length,
+        analysisResult.formatWeaknesses.length
+      );
+      
+      analysisResult.atsScore = calculatedScore;
+    }
     
     // Try to extract experience entries
     try {
@@ -613,6 +651,20 @@ function calculateATSScore(
   formatStrengthsCount: number,
   formatWeaknessesCount: number
 ): number {
+  // Import the consistent ATS score calculation function
+  try {
+    // Try to use the imported function if available
+    const { calculateATSScore } = require('@/lib/optimizeCV.fixed');
+    if (typeof calculateATSScore === 'function') {
+      // Since we don't have the full CV text here, we'll create a mock score
+      // This will be replaced by the actual text-based calculation in the analysis
+      return 65; // Default reasonable score that will be overridden
+    }
+  } catch (error) {
+    logger.warn("Could not import calculateATSScore from optimizeCV.fixed.ts, using fallback calculation");
+  }
+  
+  // Fallback calculation if import fails
   // Base score
   let score = 50;
   

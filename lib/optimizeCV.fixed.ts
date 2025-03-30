@@ -526,9 +526,9 @@ export function analyzeCVContent(cvText: string): {
     // Detect industry based on CV content
     const detectedIndustry = detectIndustryFromText(cvText);
     
-    // Calculate ATS score
+    // Calculate ATS score using the standard calculation function
     const atsScore = calculateATSScore(cvText, false);
-    console.log(`Calculated ATS score: ${atsScore}`);
+    console.log(`Calculated ATS score for analysis: ${atsScore}`);
     
     // Identify strengths
     const strengths = identifyActualStrengths(cvText, sections);
@@ -542,7 +542,7 @@ export function analyzeCVContent(cvText: string): {
     // Calculate metrics
     const metrics = calculateCVMetrics(cvText, sections, detectedIndustry);
     
-    console.log(`CV analysis complete: ${strengths.length} strengths, ${weaknesses.length} weaknesses, industry: ${detectedIndustry}`);
+    console.log(`CV analysis complete: ${strengths.length} strengths, ${weaknesses.length} weaknesses, industry: ${detectedIndustry}, ATS Score: ${atsScore}`);
     
     return {
       strengths,
@@ -554,6 +554,14 @@ export function analyzeCVContent(cvText: string): {
     };
   } catch (error) {
     console.error("Error during CV analysis:", error);
+    
+    // Get a default ATS score even in case of error
+    let fallbackAtsScore = 65;
+    try {
+      fallbackAtsScore = calculateATSScore(cvText, false);
+    } catch (scoreError) {
+      console.error("Error calculating fallback ATS score:", scoreError);
+    }
     
     // Return fallback data to ensure UI doesn't break
     return {
@@ -568,7 +576,7 @@ export function analyzeCVContent(cvText: string): {
         ]
       },
       detectedIndustry: "General",
-      atsScore: 65, // Fallback score
+      atsScore: fallbackAtsScore, // Use calculated fallback score
       metrics: {
         quantifiedAchievements: 0,
         actionVerbs: 0,
