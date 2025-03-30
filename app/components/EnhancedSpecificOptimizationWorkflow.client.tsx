@@ -12,7 +12,6 @@ import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle, A
 import { analyzeCVContent, optimizeCVForJob } from '@/lib/services/mistral.service';
 import { tailorCVForJob } from '@/app/lib/services/tailorCVService';
 import { useToast } from "@/hooks/use-toast";
-import JobMatchDetailedAnalysis from './JobMatchDetailedAnalysis';
 import { downloadDocument, withDownloadTimeout, generateDocumentWithRetry } from '../utils/documentUtils';
 import DocumentGenerationProgress from './DocumentGenerationProgress';
 import DocumentDownloadStatus from './DocumentDownloadStatus';
@@ -71,33 +70,6 @@ interface StructuredCV {
     location?: string;
     linkedin?: string;
     website?: string;
-  };
-}
-
-interface JobMatchAnalysis {
-  score: number;
-  matchedKeywords: KeywordMatch[];
-  missingKeywords: MissingKeyword[];
-  recommendations: string[];
-  skillGap: string;
-  dimensionalScores: {
-    skillsMatch: number;
-    experienceMatch: number;
-    educationMatch: number;
-    industryFit: number;
-    overallCompatibility: number;
-    keywordDensity: number;
-    formatCompatibility: number;
-    contentRelevance: number;
-  };
-  detailedAnalysis: string;
-  improvementPotential: number;
-  sectionAnalysis: {
-    profile: { score: number; feedback: string };
-    skills: { score: number; feedback: string };
-    experience: { score: number; feedback: string };
-    education: { score: number; feedback: string };
-    achievements: { score: number; feedback: string };
   };
 }
 
@@ -2738,7 +2710,6 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   const [activeTab, setActiveTab] = useState('jobDescription');
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
-  const [activeAnalysisTab, setActiveAnalysisTab] = useState('keywords');
   
   // Result state
   const [originalText, setOriginalText] = useState<string | null>(null);
@@ -4038,174 +4009,6 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       {/* Results */}
       {isProcessed && (
         <div className="animate-fade-in-up">
-          {/* Job Match Analysis */}
-          <div className="mb-6 p-5 rounded-xl bg-[#111111] border border-[#222222] shadow-md overflow-hidden">
-            <h3 className="text-xl font-safiro mb-4 text-[#F9F6EE] flex items-center">
-              <FileText className="text-[#B4916C] w-5 h-5 mr-2" />
-              Job Match Analysis
-            </h3>
-            
-            {/* Tabs for different analysis sections */}
-            <div className="border-b border-[#222222] mb-5">
-              <div className="flex">
-                <button
-                  onClick={() => setActiveAnalysisTab('keywords')}
-                  className={`px-4 py-2.5 -mb-px text-sm font-borna ${
-                    activeAnalysisTab === 'keywords'
-                      ? 'border-b-2 border-[#B4916C] text-[#B4916C]'
-                      : 'text-[#F9F6EE]/60 hover:text-[#F9F6EE]'
-                  }`}
-                >
-                  Keywords
-                </button>
-                <button
-                  onClick={() => setActiveAnalysisTab('skills')}
-                  className={`px-4 py-2.5 -mb-px text-sm font-borna ${
-                    activeAnalysisTab === 'skills'
-                      ? 'border-b-2 border-[#B4916C] text-[#B4916C]'
-                      : 'text-[#F9F6EE]/60 hover:text-[#F9F6EE]'
-                  }`}
-                >
-                  Skills Match
-                </button>
-                <button
-                  onClick={() => setActiveAnalysisTab('strengths')}
-                  className={`px-4 py-2.5 -mb-px text-sm font-borna ${
-                    activeAnalysisTab === 'strengths'
-                      ? 'border-b-2 border-[#B4916C] text-[#B4916C]'
-                      : 'text-[#F9F6EE]/60 hover:text-[#F9F6EE]'
-                  }`}
-                >
-                  Strengths & Gaps
-                </button>
-              </div>
-            </div>
-            
-            {/* Tab content */}
-            <div className="p-4 bg-[#0D0D0D] rounded-lg">
-              {activeAnalysisTab === 'keywords' && (
-                <div>
-                  <h4 className="text-[#F9F6EE] font-safiro mb-3">Job Keyword Analysis</h4>
-                  <p className="text-[#F9F6EE]/70 text-sm mb-4 font-borna">
-                    These keywords appeared frequently in the job description and should be emphasized in your CV.
-                  </p>
-                  <div className="flex flex-wrap gap-2 mb-5">
-                    {['management', 'leadership', 'budget', 'team', 'strategy', 'communication', 'development'].map((keyword, index) => (
-                      <div 
-                        key={index} 
-                        className="px-3 py-1.5 bg-[#1a1a1a] rounded-lg border border-[#333333] text-[#B4916C] text-sm font-borna"
-                      >
-                        {keyword}
-                </div>
-                    ))}
-                  </div>
-                  
-                  <h4 className="text-[#F9F6EE] font-safiro mb-3 mt-6">Job Context</h4>
-                  <p className="text-[#F9F6EE]/70 text-sm font-borna">
-                    The job appears to be for a {jobTitle || 'professional'} role with emphasis on 
-                    team leadership, strategic planning, and budget management. Your optimized CV 
-                    highlights these areas while maintaining your professional voice.
-                  </p>
-              </div>
-            )}
-            
-              {activeAnalysisTab === 'skills' && (
-                <div>
-                  <h4 className="text-[#F9F6EE] font-safiro mb-3">Skills Match</h4>
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex justify-between mb-1.5">
-                        <span className="text-[#F9F6EE]/70 text-sm font-borna">Leadership</span>
-                        <span className="text-[#B4916C] text-sm font-borna">85%</span>
-                      </div>
-                      <div className="w-full h-1.5 bg-[#222222] rounded-full overflow-hidden">
-                        <div className="h-full bg-[#B4916C]" style={{ width: '85%' }}></div>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <div className="flex justify-between mb-1.5">
-                        <span className="text-[#F9F6EE]/70 text-sm font-borna">Technical Knowledge</span>
-                        <span className="text-[#B4916C] text-sm font-borna">70%</span>
-                      </div>
-                      <div className="w-full h-1.5 bg-[#222222] rounded-full overflow-hidden">
-                        <div className="h-full bg-[#B4916C]" style={{ width: '70%' }}></div>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <div className="flex justify-between mb-1.5">
-                        <span className="text-[#F9F6EE]/70 text-sm font-borna">Project Management</span>
-                        <span className="text-[#B4916C] text-sm font-borna">90%</span>
-                      </div>
-                      <div className="w-full h-1.5 bg-[#222222] rounded-full overflow-hidden">
-                        <div className="h-full bg-[#B4916C]" style={{ width: '90%' }}></div>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <div className="flex justify-between mb-1.5">
-                        <span className="text-[#F9F6EE]/70 text-sm font-borna">Communication</span>
-                        <span className="text-[#B4916C] text-sm font-borna">80%</span>
-                      </div>
-                      <div className="w-full h-1.5 bg-[#222222] rounded-full overflow-hidden">
-                        <div className="h-full bg-[#B4916C]" style={{ width: '80%' }}></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              {activeAnalysisTab === 'strengths' && (
-                <div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div>
-                      <h4 className="text-[#F9F6EE] font-safiro mb-3 flex items-center">
-                        <CheckCircle className="text-emerald-500 w-4 h-4 mr-2" />
-                        Your Strengths
-                      </h4>
-                      <ul className="space-y-2">
-                        <li className="text-[#F9F6EE]/80 text-sm font-borna flex items-start">
-                          <span className="text-emerald-500 mr-2">•</span>
-                          <span>Strong background in team leadership</span>
-                        </li>
-                        <li className="text-[#F9F6EE]/80 text-sm font-borna flex items-start">
-                          <span className="text-emerald-500 mr-2">•</span>
-                          <span>Proven project management skills</span>
-                        </li>
-                        <li className="text-[#F9F6EE]/80 text-sm font-borna flex items-start">
-                          <span className="text-emerald-500 mr-2">•</span>
-                          <span>Experience with budget oversight</span>
-                        </li>
-              </ul>
-            </div>
-            
-                    <div>
-                      <h4 className="text-[#F9F6EE] font-safiro mb-3 flex items-center">
-                        <AlertTriangle className="text-amber-500 w-4 h-4 mr-2" />
-                        Areas to Emphasize
-                      </h4>
-                      <ul className="space-y-2">
-                        <li className="text-[#F9F6EE]/80 text-sm font-borna flex items-start">
-                          <span className="text-amber-500 mr-2">•</span>
-                          <span>Add more quantifiable results</span>
-                        </li>
-                        <li className="text-[#F9F6EE]/80 text-sm font-borna flex items-start">
-                          <span className="text-amber-500 mr-2">•</span>
-                          <span>Highlight strategic planning experience</span>
-                        </li>
-                        <li className="text-[#F9F6EE]/80 text-sm font-borna flex items-start">
-                          <span className="text-amber-500 mr-2">•</span>
-                          <span>Include relevant technical certifications</span>
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-          
           {/* Optimized CV Section */}
           <div className="mb-6 p-5 rounded-xl bg-[#111111] border border-[#222222] shadow-md overflow-hidden">
             <h3 className="text-xl font-safiro mb-4 text-[#F9F6EE] flex items-center">
@@ -4247,7 +4050,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
                   Optimized CV
                 </button>
               </div>
-              </div>
+            </div>
             
             {/* Tab content */}
             <div className="p-4 bg-[#0D0D0D] rounded-lg">
