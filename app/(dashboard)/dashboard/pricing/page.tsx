@@ -6,9 +6,9 @@ import PremiumPageLayout from "@/components/PremiumPageLayout";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Suspense } from "react";
-
-// Import the client component for rendering the pricing UI
-import PricingPageClient, { PricingPageSkeleton } from './PricingPageClient';
+import PricingPageSkeleton from "./PricingPageSkeleton";
+import PricingPageClient from "./PricingPageClient";
+import DirectPricingStatus from "./DirectPricingStatus";
 
 // Define types for data
 interface ActivityLog {
@@ -17,6 +17,24 @@ interface ActivityLog {
   timestamp: Date;
   ipAddress: string | null;
   userName: string | null;
+  [key: string]: any;
+}
+
+// Define team data structure based on the error message
+interface TeamData {
+  teamMembers: {
+    team?: {
+      planName?: string;
+      id: number;
+      [key: string]: any;
+    };
+    user: {
+      id: any;
+      name: any;
+      email: any;
+    }[];
+    [key: string]: any;
+  }[];
   [key: string]: any;
 }
 
@@ -36,61 +54,46 @@ export const revalidate = 3600;
 
 export default async function DashboardPricingPage() {
   try {
-    // Ensure user is authenticated
+    // Get current user
     const user = await getUser();
     if (!user) {
-      redirect("/sign-in");
+      redirect('/sign-in');
     }
 
-    let teamData;
-    try {
-      teamData = await getTeamForUser(user.id);
-      if (!teamData) {
-        console.warn("Team not found, using fallback team data");
-        teamData = { id: "fallback", name: "Your Team" };
-      }
-    } catch (error) {
-      console.error("Error fetching team data:", error);
-      teamData = { id: "fallback", name: "Your Team" };
-    }
+    // Get required data for the page
+    const teamData = user ? await getTeamForUser(user.id) as unknown as TeamData : null;
     
+    // Get activity logs for the team menu if available
     let activityLogs: ActivityLog[] = [];
     try {
-      activityLogs = await getActivityLogs();
+      activityLogs = await getActivityLogs() as ActivityLog[];
     } catch (error) {
       console.error("Error fetching activity logs:", error);
     }
     
+    // Log the team plan data to see what's being provided to the client
+    console.log("Server-side team data:", {
+      planName: teamData?.teamMembers?.[0]?.team?.planName,
+      userId: user.id,
+      hasTeam: !!teamData
+    });
+    
     // Safely fetch data with fallbacks
+    let pricingError = null;
     let prices = [];
     let products = [];
-    let pricingError = null;
     
     try {
-      // Attempt to fetch real Stripe data
-      const [fetchedPrices, fetchedProducts] = await Promise.all([
+      const [pricesData, productsData] = await Promise.all([
         getStripePrices(),
-        getStripeProducts(),
+        getStripeProducts()
       ]);
       
-      // Only use fetched data if it's valid
-      if (fetchedPrices && fetchedPrices.length > 0) {
-        prices = fetchedPrices;
-      } else {
-        prices = fallbackPrices;
-      }
-      
-      if (fetchedProducts && fetchedProducts.length > 0) {
-        products = fetchedProducts;
-      } else {
-        products = fallbackProducts;
-      }
+      prices = pricesData;
+      products = productsData;
     } catch (error) {
-      console.error("Error fetching Stripe data:", error);
-      // Use fallback data
-      prices = fallbackPrices;
-      products = fallbackProducts;
-      pricingError = error instanceof Error ? error.message : "Failed to load pricing data";
+      console.error("Error fetching pricing data:", error);
+      pricingError = String(error);
     }
 
     return (
@@ -102,16 +105,20 @@ export default async function DashboardPricingPage() {
         withScrollIndicator
         animation="fade"
         teamData={teamData}
-        activityLogs={activityLogs}
+        activityLogs={activityLogs as ActivityLog[]}
         maxWidth="6xl"
       >
         <Suspense fallback={<PricingPageSkeleton />}>
-          {/* Pass data to client component */}
+          {/* Use our new direct status component */}
+          <DirectPricingStatus />
+          
+          {/* Hidden for debugging - old component 
           <PricingPageClient 
             prices={prices} 
             products={products} 
             pricingError={pricingError}
           />
+          */}
         </Suspense>
       </PremiumPageLayout>
     );
