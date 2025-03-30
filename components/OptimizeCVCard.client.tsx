@@ -43,6 +43,7 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
   
   // State for ATS scores
   const [originalAtsScore, setOriginalAtsScore] = useState<number>(65);
+  const [improvedAtsScore, setImprovedAtsScore] = useState<number>(0);
 
   // Add a state for DOCX download loading
   const [isDownloadingDocx, setIsDownloadingDocx] = useState<boolean>(false);
@@ -187,6 +188,10 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
         // Update ATS scores if available
         if (statusData.originalAtsScore) {
           setOriginalAtsScore(statusData.originalAtsScore);
+        }
+        
+        if (statusData.improvedAtsScore) {
+          setImprovedAtsScore(statusData.improvedAtsScore);
         }
         
         // Enter preview mode
@@ -667,6 +672,11 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
                 <span className="text-white font-medium">ATS Score:</span>
                 <div className="flex items-center">
                   <span className="text-[#B4916C] font-bold">{originalAtsScore}%</span>
+                  {improvedAtsScore > originalAtsScore && (
+                    <span className="ml-2 text-sm px-2 py-1 rounded-lg bg-emerald-900/30 text-emerald-300">
+                      ➚ {improvedAtsScore}%
+                    </span>
+                  )}
                 </div>
               </div>
               
@@ -747,6 +757,11 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
                 <span className="text-white font-medium">ATS Score:</span>
                 <div className="flex items-center">
                   <span className="text-[#B4916C] font-bold">{originalAtsScore}%</span>
+                  {improvedAtsScore > originalAtsScore && (
+                    <span className="ml-2 text-sm px-2 py-1 rounded-lg bg-emerald-900/30 text-emerald-300">
+                      ➚ {improvedAtsScore}%
+                    </span>
+                  )}
                 </div>
               </div>
               
