@@ -1403,9 +1403,9 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
         {isProcessed && (
           <div className="animate-fade-in-up">
             {/* Score Comparison */}
-            <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="mb-6 grid grid-cols-1 gap-4">
               <div className="p-5 rounded-xl bg-[#0D0D0D] border border-[#222222] shadow-md">
-                <h3 className="text-[#F9F6EE] font-safiro mb-2">Original ATS Score</h3>
+                <h3 className="text-[#F9F6EE] font-safiro mb-2">ATS Score</h3>
                 <div className="flex items-center">
                   <span className="text-3xl font-bold font-safiro" style={{ 
                     color: originalAtsScore > 80 
@@ -1416,26 +1416,6 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
                   }}>
                     {originalAtsScore}%
                   </span>
-                </div>
-              </div>
-              
-              <div className="p-5 rounded-xl bg-[#0D0D0D] border border-[#222222] shadow-md">
-                <h3 className="text-[#F9F6EE] font-safiro mb-2">Improved ATS Score</h3>
-                <div className="flex items-center">
-                  <span className="text-3xl font-bold font-safiro" style={{ 
-                    color: improvedAtsScore > 80 
-                      ? '#4ade80' 
-                      : improvedAtsScore > 60 
-                        ? '#facc15' 
-                        : '#f87171'
-                  }}>
-                    {improvedAtsScore}%
-                  </span>
-                  {improvedAtsScore > originalAtsScore && (
-                    <span className="ml-2 text-sm px-2 py-1 rounded-lg bg-emerald-900/30 text-emerald-300 font-borna">
-                      +{improvedAtsScore - originalAtsScore}%
-                    </span>
-                  )}
                 </div>
               </div>
             </div>

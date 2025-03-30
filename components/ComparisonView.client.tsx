@@ -62,10 +62,9 @@ export default function ComparisonView({
     }
   };
   
-  // Calculate score improvement
-  const scoreImprovement = optimizedContent && originalContent 
-    ? Math.max(0, optimizedContent.atsScore - originalContent.atsScore) 
-    : 0;
+  // Calculate score improvement for display
+  const originalScore = originalContent?.atsScore || 0;
+  const optimizedScore = optimizedContent?.atsScore || 0;
   
   return (
     <Card className="bg-[#0A0A0A] border-gray-800 shadow-xl overflow-hidden">
@@ -140,11 +139,6 @@ export default function ComparisonView({
                   <Badge variant="outline" className="text-[#B4916C] border-[#B4916C]/30">
                     ATS Score: {optimizedContent?.atsScore || 'N/A'}%
                   </Badge>
-                  {scoreImprovement > 0 && (
-                    <Badge className="bg-green-900/30 text-green-400 border-green-800">
-                      +{scoreImprovement}%
-                    </Badge>
-                  )}
                 </div>
               </div>
               
@@ -192,12 +186,6 @@ export default function ComparisonView({
                     <ArrowRight className="h-5 w-5 text-[#B4916C] hidden md:block" />
                     <div className="text-[#B4916C] md:ml-4">Optimized ATS Score: {optimizedContent?.atsScore || 'N/A'}%</div>
                   </div>
-                  
-                  {scoreImprovement > 0 && (
-                    <Badge className="bg-green-900/30 text-green-400 border-green-800">
-                      {scoreImprovement}% Improvement
-                    </Badge>
-                  )}
                 </div>
               </div>
             </div>

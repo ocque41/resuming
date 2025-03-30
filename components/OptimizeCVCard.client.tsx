@@ -43,7 +43,6 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
   
   // State for ATS scores
   const [originalAtsScore, setOriginalAtsScore] = useState<number>(65);
-  const [improvedAtsScore, setImprovedAtsScore] = useState<number>(85);
 
   // Add a state for DOCX download loading
   const [isDownloadingDocx, setIsDownloadingDocx] = useState<boolean>(false);
@@ -190,10 +189,6 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
           setOriginalAtsScore(statusData.originalAtsScore);
         }
         
-        if (statusData.improvedAtsScore) {
-          setImprovedAtsScore(statusData.improvedAtsScore);
-        }
-        
         // Enter preview mode
         setIsPreviewMode(true);
         
@@ -336,10 +331,6 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
       // Set ATS scores
       if (data.originalAtsScore) {
         setOriginalAtsScore(data.originalAtsScore);
-      }
-      
-      if (data.improvedAtsScore) {
-        setImprovedAtsScore(data.improvedAtsScore);
       }
       
       // Set PDF and DOCX data
@@ -673,17 +664,16 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
             
             <div className="mb-4">
               <div className="flex justify-between items-center mb-2">
-                <span className="text-white font-medium">ATS Score Improvement:</span>
+                <span className="text-white font-medium">ATS Score:</span>
                 <div className="flex items-center">
-                  <span className="text-gray-400 line-through mr-2">{originalAtsScore}%</span>
-                  <span className="text-[#B4916C] font-bold">{improvedAtsScore}%</span>
+                  <span className="text-[#B4916C] font-bold">{originalAtsScore}%</span>
                 </div>
               </div>
               
               <div className="w-full bg-gray-700 rounded-full h-2.5">
                 <div 
                   className="bg-[#B4916C] h-2.5 rounded-full" 
-                  style={{ width: `${improvedAtsScore}%` }}
+                  style={{ width: `${originalAtsScore}%` }}
                 ></div>
               </div>
             </div>
@@ -754,17 +744,16 @@ export default function OptimizeCVCard({ cvs = [] }: OptimizeCVCardProps) {
             <div className="bg-[#121212] p-4 rounded-t-lg border border-[#B4916C]/20">
               <h3 className="text-[#B4916C] font-medium mb-2">CV Preview</h3>
               <div className="flex justify-between items-center mb-2">
-                <span className="text-white font-medium">ATS Score Improvement:</span>
+                <span className="text-white font-medium">ATS Score:</span>
                 <div className="flex items-center">
-                  <span className="text-gray-400 line-through mr-2">{originalAtsScore}%</span>
-                  <span className="text-[#B4916C] font-bold">{improvedAtsScore}%</span>
+                  <span className="text-[#B4916C] font-bold">{originalAtsScore}%</span>
                 </div>
               </div>
               
               <div className="w-full bg-gray-700 rounded-full h-2.5 mb-4">
                 <div 
                   className="bg-[#B4916C] h-2.5 rounded-full" 
-                  style={{ width: `${improvedAtsScore}%` }}
+                  style={{ width: `${originalAtsScore}%` }}
                 ></div>
               </div>
             </div>
