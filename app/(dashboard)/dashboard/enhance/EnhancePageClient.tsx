@@ -108,22 +108,85 @@ export default function EnhancePageClient({
     setConversationStarted(true);
     setIsMessageSending(true);
     
-    try {
-      // Simulate a delay for the AI response
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        content: selectedDocument 
-          ? `I'm analyzing "${selectedDocument.name}".\nYour query was: "${query}"\nSimulated AI response regarding the document.`
-          : `General response to your query: "${query}".\nSimulated AI response for general professional document creation.`,
+    // Create a placeholder for the assistant's response
+    const assistantMessageId = (Date.now() + 1).toString();
+    setChatMessages(prev => [
+      ...prev, 
+      {
+        id: assistantMessageId,
+        content: "",
         role: "assistant",
         timestamp: new Date().toISOString()
-      };
+      }
+    ]);
+    
+    try {
+      // Connect to the OpenAI Agent backend
+      const response = await fetch("/api/agent/enhance", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          message: query,
+          documentId: selectedDocument?.id || null,
+          mode: selectedDocument ? "edit" : "create",
+          stream: true // Enable streaming
+        })
+      });
       
-      setChatMessages(prev => [...prev, assistantMessage]);
+      if (!response.ok) {
+        throw new Error(`API returned status code ${response.status}`);
+      }
+      
+      if (response.headers.get("content-type")?.includes("text/event-stream")) {
+        // Handle streaming response
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("Failed to get reader from response");
+        
+        const decoder = new TextDecoder();
+        let responseText = "";
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value);
+          responseText += chunk;
+          
+          // Update the message content with the cumulative text
+          setChatMessages(prev => 
+            prev.map(msg => 
+              msg.id === assistantMessageId
+                ? { ...msg, content: responseText }
+                : msg
+            )
+          );
+        }
+      } else {
+        // Handle regular JSON response
+        const data = await response.json();
+        
+        setChatMessages(prev => 
+          prev.map(msg => 
+            msg.id === assistantMessageId
+              ? { ...msg, content: data.response || "Sorry, I couldn't process your request." }
+              : msg
+          )
+        );
+      }
     } catch (error: any) {
+      console.error("Error sending message to agent:", error);
       setChatError("Failed to get response. Please try again.");
+      
+      // Update the message to show error
+      setChatMessages(prev => 
+        prev.map(msg => 
+          msg.id === assistantMessageId
+            ? { ...msg, content: "Sorry, I encountered an error while processing your request." }
+            : msg
+        )
+      );
     }
     
     setIsMessageSending(false);
