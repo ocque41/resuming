@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json();
-    
+
     // Validate required fields
     if (!body.message) {
       return NextResponse.json(
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    
+
     const { message, documentId, mode = 'edit', stream = false } = body;
     
     // Log the request
@@ -136,10 +136,10 @@ async function processWithAIAgent(message: string, document: any, mode: string, 
     
     // Make the request to Lambda
     const response = await fetch(lambdaEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
       body: JSON.stringify(requestBody)
     });
     

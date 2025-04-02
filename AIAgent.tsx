@@ -1,87 +1,183 @@
 import React, { useState } from 'react';
+import { Send, Paperclip, Loader } from 'lucide-react';
 
 interface AIAgentProps {
-  documentKey?: string;
   documentId?: string;
+  documentKey?: string;
+  initialMode?: 'analyze' | 'edit' | 'create';
 }
 
-const AIAgent: React.FC<AIAgentProps> = ({ documentKey, documentId }) => {
-  const [prompt, setPrompt] = useState('');
-  const [response, setResponse] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+const AIAgent: React.FC<AIAgentProps> = ({ 
+  documentId, 
+  documentKey,
+  initialMode = 'analyze'
+}) => {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [inputValue, setInputValue] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<'analyze' | 'edit' | 'create'>(initialMode);
+
+  const handleSendMessage = async () => {
+    if (!inputValue.trim() || isLoading) return;
     
-    if (!prompt.trim()) return;
+    // Add user message to chat
+    const userMessage: ChatMessage = {
+      role: 'user',
+      content: inputValue,
+      timestamp: new Date().toISOString()
+    };
     
-    setLoading(true);
-    setError('');
+    setMessages(prev => [...prev, userMessage]);
+    setInputValue('');
+    setIsLoading(true);
+    setError(null);
     
     try {
-      const result = await fetch('/api/ai-agent', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt,
-          documentKey,
-          documentId,
-        }),
-      });
+      // Determine if we should use documentId or documentKey (S3 key)
+      const payload: any = {
+        message: userMessage.content,
+        mode: mode,
+      };
       
-      if (!result.ok) {
-        const errorData = await result.json();
-        throw new Error(errorData.error || 'Failed to get AI response');
+      // Add either documentId or s3Key depending on what's available
+      if (documentId) {
+        payload.documentId = documentId;
+      } else if (documentKey) {
+        payload.s3Key = documentKey;
       }
       
-      const data = await result.json();
-      setResponse(data.response);
-    } catch (err: any) {
-      console.error('Error:', err);
-      setError(err.message || 'An error occurred');
+      // Call API endpoint
+      const response = await fetch('/api/agent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to get response from agent');
+      }
+      
+      const data = await response.json();
+      
+      // Add assistant message to chat
+      const assistantMessage: ChatMessage = {
+        role: 'assistant',
+        content: data.response || 'I couldn\'t process that request.',
+        timestamp: new Date().toISOString()
+      };
+      
+      setMessages(prev => [...prev, assistantMessage]);
+    } catch (err) {
+      console.error('Error communicating with agent:', err);
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="p-4 border rounded-lg shadow-sm bg-white">
-      <h2 className="text-xl font-bold mb-4">AI Document Assistant</h2>
+    <div className="border border-gray-300 rounded-md p-4 bg-gray-50">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-lg">AI Document Assistant</h3>
+        <div className="flex space-x-2">
+          <button
+            className={`px-3 py-1 rounded text-sm ${mode === 'analyze' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+            onClick={() => setMode('analyze')}
+          >
+            Analyze
+          </button>
+          <button
+            className={`px-3 py-1 rounded text-sm ${mode === 'edit' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+            onClick={() => setMode('edit')}
+          >
+            Edit
+          </button>
+          <button
+            className={`px-3 py-1 rounded text-sm ${mode === 'create' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+            onClick={() => setMode('create')}
+          >
+            Create
+          </button>
+        </div>
+      </div>
       
-      <form onSubmit={handleSubmit} className="mb-4">
-        <textarea
-          className="w-full p-2 border rounded-md"
-          rows={4}
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Ask about your document or request assistance..."
-          disabled={loading}
-        />
+      <div className="h-64 overflow-y-auto mb-4 p-3 border border-gray-200 rounded bg-white">
+        {messages.length === 0 ? (
+          <div className="text-gray-500 text-center mt-24">
+            Start a conversation with the AI Assistant
+          </div>
+        ) : (
+          messages.map((msg, index) => (
+            <div 
+              key={index} 
+              className={`mb-3 p-2 rounded-lg max-w-[80%] ${
+                msg.role === 'user' 
+                  ? 'bg-blue-100 ml-auto' 
+                  : 'bg-gray-100'
+              }`}
+            >
+              <div className="text-sm font-medium mb-1">
+                {msg.role === 'user' ? 'You' : 'AI Assistant'}
+              </div>
+              <div className="whitespace-pre-wrap">{msg.content}</div>
+              <div className="text-xs text-gray-500 mt-1">
+                {new Date(msg.timestamp).toLocaleTimeString()}
+              </div>
+            </div>
+          ))
+        )}
         
-        <button
-          type="submit"
-          disabled={loading || !prompt.trim()}
-          className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md disabled:bg-blue-300"
-        >
-          {loading ? 'Processing...' : 'Submit'}
-        </button>
-      </form>
+        {isLoading && (
+          <div className="flex items-center justify-center mt-4">
+            <div className="animate-spin h-5 w-5 border-2 border-blue-500 rounded-full border-t-transparent"></div>
+            <span className="ml-2 text-sm text-gray-500">Thinking...</span>
+          </div>
+        )}
+      </div>
       
       {error && (
-        <div className="p-3 bg-red-100 text-red-700 rounded-md mb-4">
+        <div className="mb-4 p-2 bg-red-100 border border-red-300 rounded text-red-700 text-sm">
           {error}
         </div>
       )}
       
-      {response && (
-        <div className="p-4 bg-gray-50 rounded-md">
-          <h3 className="font-medium mb-2">Response:</h3>
-          <div className="whitespace-pre-wrap">{response}</div>
-        </div>
-      )}
+      <div className="flex items-center">
+        <input
+          type="text"
+          className="flex-1 border border-gray-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder={`Ask a question or give instructions (${mode} mode)...`}
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSendMessage();
+            }
+          }}
+          disabled={isLoading}
+        />
+        <button
+          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-r-md disabled:opacity-50"
+          onClick={handleSendMessage}
+          disabled={!inputValue.trim() || isLoading}
+        >
+          {isLoading ? (
+            <div className="animate-spin h-5 w-5 border-2 border-white rounded-full border-t-transparent"></div>
+          ) : (
+            <Send size={18} />
+          )}
+        </button>
+      </div>
     </div>
   );
 };

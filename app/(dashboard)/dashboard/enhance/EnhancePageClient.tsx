@@ -253,16 +253,22 @@ export default function EnhancePageClient({
           fileName,
           fileType,
           metadata: {
-            uploadedVia: 'enhance-page'
+            uploadedVia: 'enhance-page',
+            uploadedAt: new Date().toISOString()
           }
         })
       });
       
       if (!response.ok) {
-        throw new Error(`Failed to save document: ${response.statusText}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Failed to save document: ${response.statusText}`);
       }
       
       const data = await response.json();
+      
+      if (!data.success || !data.document) {
+        throw new Error('Invalid response from server when creating document');
+      }
       
       // Refresh the documents list
       setDocumentsData(prevDocs => [data.document, ...prevDocs]);
@@ -270,12 +276,28 @@ export default function EnhancePageClient({
       // Select the new document
       setSelectedDocument(data.document);
       
-      // Show success message
-      alert('Document uploaded successfully!');
+      // Show success message in chat
+      const systemMessage: ChatMessage = {
+        id: Date.now().toString(),
+        content: `File "${fileName}" uploaded and saved successfully. You can now ask questions about this document.`,
+        role: "assistant",
+        timestamp: new Date().toISOString()
+      };
+      
+      setChatMessages(prev => [...prev, systemMessage]);
       
     } catch (error) {
       console.error('Error saving document to database:', error);
-      alert('Document was uploaded to storage but could not be saved to database');
+      
+      // Show error message in chat
+      const errorMessage: ChatMessage = {
+        id: Date.now().toString(),
+        content: `Error: Document was uploaded to storage but could not be saved to database. ${error instanceof Error ? error.message : 'Unknown error'}`,
+        role: "assistant",
+        timestamp: new Date().toISOString()
+      };
+      
+      setChatMessages(prev => [...prev, errorMessage]);
     }
   };
   
