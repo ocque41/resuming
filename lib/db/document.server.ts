@@ -1,6 +1,6 @@
 import { db } from '@/lib/db/drizzle';
 import { eq } from 'drizzle-orm';
-import { cvs } from '@/lib/db/schema';
+import { cvs, CV } from '@/lib/db/schema';
 
 /**
  * Get all documents for a specific user
@@ -9,7 +9,7 @@ export async function getAllDocuments(userId: string) {
   try {
     const documents = await db.query.cvs.findMany({
       where: eq(cvs.userId, parseInt(userId)),
-      orderBy: (cvs, { desc }) => [desc(cvs.createdAt)],
+      orderBy: (cvs: typeof import('@/lib/db/schema').cvs, { desc }: { desc: any }) => [desc(cvs.createdAt)],
     });
     
     return documents;
@@ -42,7 +42,7 @@ export async function getRecentDocuments(userId: string, limit: number = 10) {
   try {
     const documents = await db.query.cvs.findMany({
       where: eq(cvs.userId, parseInt(userId)),
-      orderBy: (cvs, { desc }) => [desc(cvs.createdAt)],
+      orderBy: (cvs: typeof import('@/lib/db/schema').cvs, { desc }: { desc: any }) => [desc(cvs.createdAt)],
       limit,
     });
     
@@ -59,12 +59,12 @@ export async function getRecentDocuments(userId: string, limit: number = 10) {
 export async function getDocumentsByType(userId: string, type: string) {
   try {
     const documents = await db.query.cvs.findMany({
-      where: (fields, { eq, and, like }) => 
+      where: (fields: any, { eq, and, like }: { eq: any, and: any, like: any }) => 
         and(
           eq(fields.userId, parseInt(userId)),
           like(fields.fileName, `%${type}%`),
         ),
-      orderBy: (cvs, { desc }) => [desc(cvs.createdAt)],
+      orderBy: (cvs: typeof import('@/lib/db/schema').cvs, { desc }: { desc: any }) => [desc(cvs.createdAt)],
     });
     
     return documents;
@@ -112,12 +112,12 @@ export async function updateDocumentMetadata(documentId: number, metadata: any) 
 export async function getDocumentsByExtension(userId: string, extension: string) {
   try {
     const documents = await db.query.cvs.findMany({
-      where: (fields, { eq, and, like }) => 
+      where: (fields: any, { eq, and, like }: { eq: any, and: any, like: any }) => 
         and(
           eq(fields.userId, parseInt(userId)),
           like(fields.fileName, `%.${extension}`),
         ),
-      orderBy: (cvs, { desc }) => [desc(cvs.createdAt)],
+      orderBy: (cvs: typeof import('@/lib/db/schema').cvs, { desc }: { desc: any }) => [desc(cvs.createdAt)],
     });
     
     return documents;
@@ -133,12 +133,12 @@ export async function getDocumentsByExtension(userId: string, extension: string)
 export async function searchDocumentsByName(userId: string, searchTerm: string) {
   try {
     const documents = await db.query.cvs.findMany({
-      where: (fields, { eq, and, like }) => 
+      where: (fields: any, { eq, and, like }: { eq: any, and: any, like: any }) => 
         and(
           eq(fields.userId, parseInt(userId)),
           like(fields.fileName, `%${searchTerm}%`),
         ),
-      orderBy: (cvs, { desc }) => [desc(cvs.createdAt)],
+      orderBy: (cvs: typeof import('@/lib/db/schema').cvs, { desc }: { desc: any }) => [desc(cvs.createdAt)],
     });
     
     return documents;
