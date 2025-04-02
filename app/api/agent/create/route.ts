@@ -24,7 +24,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { prompt, template = 'blank' } = validation.data;
+    const { prompt, role, document } = validation.data;
+    const template = document?.template || 'blank';
+    
     const context = {
       userId: session.user.id,
       settings: {

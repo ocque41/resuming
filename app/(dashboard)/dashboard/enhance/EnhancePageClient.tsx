@@ -289,7 +289,13 @@ export default function EnhancePageClient({
         },
         body: JSON.stringify({
           prompt,
-          template,
+          role: 'creator',
+          document: {
+            template,
+            title: 'New Document',
+            content: '',
+            type: 'markdown'
+          }
         }),
       });
 

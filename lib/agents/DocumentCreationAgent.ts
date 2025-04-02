@@ -62,7 +62,7 @@ export class DocumentCreationAgent {
   }
 
   private buildSystemPrompt(template: string): string {
-    const baseInstruction = AGENT_INSTRUCTIONS.CREATOR;
+    const baseInstruction = AGENT_INSTRUCTIONS.creator;
     const templateSpecific = this.getTemplateSpecificInstructions(template);
     return `${baseInstruction}\n\n${templateSpecific}`;
   }
