@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import AIAgent from "../../../../AIAgent";
 import FileUploader from "../../../../FileUploader";
+import { Button } from "@/components/ui/button";
 
 interface DocumentData {
   id: string;
@@ -47,6 +48,7 @@ export default function EnhancePageClient({
   const [isMessageSending, setIsMessageSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [conversationStarted, setConversationStarted] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // Refs for input fields and auto-scrolling
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -274,6 +276,34 @@ export default function EnhancePageClient({
     } catch (error) {
       console.error('Error saving document to database:', error);
       alert('Document was uploaded to storage but could not be saved to database');
+    }
+  };
+  
+  const createDocument = async (prompt: string, template: string = 'blank') => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/agent/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt,
+          template,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create document');
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error creating document:', error);
+      throw error;
+    } finally {
+      setLoading(false);
     }
   };
   
@@ -681,6 +711,26 @@ export default function EnhancePageClient({
             allowedFileTypes={['.pdf', '.doc', '.docx', '.txt']}
             maxSizeMB={10}
           />
+        </div>
+
+        {/* Add document creation button */}
+        <div className="mt-6 border-t pt-4">
+          <h3 className="text-lg font-semibold mb-3">Create New Document</h3>
+          <Button
+            onClick={async () => {
+              try {
+                const result = await createDocument('Create a professional resume', 'resume');
+                // Handle the created document
+                console.log('Created document:', result);
+              } catch (error) {
+                // Handle error
+                console.error('Error:', error);
+              }
+            }}
+            disabled={loading}
+          >
+            {loading ? 'Creating...' : 'Create Document'}
+          </Button>
         </div>
       </div>
     );
