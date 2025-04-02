@@ -1,6 +1,16 @@
-openai-agents>=0.1.0
-fastapi>=0.104.0
-uvicorn>=0.23.2
-python-dotenv>=1.0.0
-pydantic>=2.4.2
-httpx>=0.25.0 
+# Python backend requirements for OpenAI Agents SDK
+fastapi==0.104.1
+uvicorn==0.24.0
+python-dotenv==1.0.0
+openai-agents==0.2.0  # OpenAI Agents SDK
+openai==1.2.4         # OpenAI API
+pydantic==2.4.2       # Data validation
+python-multipart==0.0.6 # For file upload handling
+boto3==1.28.64        # For AWS S3 interaction
+requests==2.31.0      # HTTP requests
+python-jose==3.3.0    # JWT token handling
+pytest==7.4.2         # Testing
+httpx==0.25.0         # Async HTTP client
+pymupdf==1.23.5       # PDF processing
+python-docx==0.8.11   # DOCX processing
+starlette==0.27.0     # ASGI toolkit 

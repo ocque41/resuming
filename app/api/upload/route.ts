@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic"; // Prevent pre-rendering at build time
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/drizzle";
 import { cvs } from "@/lib/db/schema";
@@ -12,11 +12,24 @@ import { processCVWithAI } from "@/lib/utils/cvProcessor";
 import { logger } from "@/lib/logger";
 import { v4 as uuidv4 } from 'uuid';
 import os from 'os';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // Maximum file size (10MB)
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-export async function POST(request: Request) {
+// Configure S3 client
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION || 'us-east-1',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+  },
+});
+
+const BUCKET_NAME = process.env.S3_BUCKET_NAME || '';
+
+export async function POST(request: NextRequest) {
   try {
     // Authentication check
     const session = await getSession();
@@ -26,141 +39,61 @@ export async function POST(request: Request) {
     
     const userId = session.user.id;
     
-    // Get content type
-    const contentType = request.headers.get("content-type") || "";
-    if (!contentType.includes("multipart/form-data")) {
-      return NextResponse.json({ error: "Expected multipart form data" }, { status: 400 });
-    }
+    // Get file details from request
+    const { fileName, fileType, fileSize } = await request.json();
     
-    // Get FormData from request
-    const formData = await request.formData();
-    const file = formData.get("file");
-    
-    if (!file || !(file instanceof File)) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
-    }
-    
-    // Check file size
-    if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ error: "File too large" }, { status: 400 });
-    }
-    
-    // Get file info
-    const fileName = file.name;
-    const fileType = file.type;
-    const fileExt = path.extname(fileName).toLowerCase();
-    
-    // Create temp file
-    const tempDir = path.join(os.tmpdir(), 'cv-optimizer');
-    try {
-      await fs.mkdir(tempDir, { recursive: true });
-    } catch (err) {
-      // Directory might already exist
-    }
-    
-    const tempFilePath = path.join(tempDir, `${uuidv4()}${fileExt}`);
-    
-    // Write file to disk
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    await fs.writeFile(tempFilePath, buffer);
-    
-    logger.info(`File saved temporarily at: ${tempFilePath}`);
-    
-    // Determine storage file type
-    const storageFileType = fileExt === '.pdf' ? 'pdf' : 
-                            fileExt === '.docx' ? 'docx' : 'txt';
-    
-    try {
-      // Upload to S3
-      const fileMetadata = await saveFile(
-        buffer,
-        fileName,
-        storageFileType,
-        's3' // Use S3 storage
-      );
-      
-      logger.info(`File saved to S3: ${fileMetadata.filePath}`);
-      
-      // Extract text from PDF if applicable
-      let rawText = "";
-      try {
-        if (fileExt === '.pdf' || fileType.includes('pdf')) {
-          rawText = await extractTextFromPdf(tempFilePath);
-          logger.info(`Extracted raw text (first 200 chars): ${rawText.slice(0, 200)}`);
-        }
-      } catch (err) {
-        logger.error(`Error extracting text: ${err}`);
-      }
-      
-      // Initial metadata
-      const initialMetadata = {
-        fileType: fileType,
-        fileExt: fileExt,
-        originalName: fileName,
-        atsScore: "N/A", 
-        optimized: "No", 
-        sent: "No",
-        processing: false,
-        processingStatus: "Uploaded",
-        processingProgress: 0,
-        lastUpdated: new Date().toISOString()
-      };
-      
-      // Save to database
-      const [createdCv] = await db
-        .insert(cvs)
-        .values({
-          userId: userId,
-          fileName: fileName,
-          filepath: fileMetadata.filePath,
-          rawText: rawText,
-          metadata: JSON.stringify(initialMetadata),
-        })
-        .returning();
-      
-      // Process CV with AI in background
-      if (createdCv && rawText) {
-        processCVWithAI(
-          createdCv.id,
-          rawText,
-          initialMetadata,
-          false,
-          userId
-        ).catch(error => {
-          logger.error(`Error processing CV: ${error instanceof Error ? error.message : String(error)}`);
-        });
-      }
-      
-      // Clean up temp file
-      await fs.unlink(tempFilePath).catch(err => {
-        logger.warn(`Failed to delete temp file: ${err}`);
-      });
-      
-      return NextResponse.json({
-        success: true,
-        id: createdCv.id,
-        message: "CV uploaded successfully",
-        fileName: fileName,
-        fileUrl: fileMetadata.url
-      });
-      
-    } catch (storageError) {
-      // Try to clean up temp file
-      await fs.unlink(tempFilePath).catch(() => {});
-      
-      logger.error(`Storage error: ${storageError}`);
+    if (!fileName || !fileType) {
       return NextResponse.json(
-        { error: `Storage failed: ${storageError instanceof Error ? storageError.message : String(storageError)}` },
-        { status: 500 }
+        { error: 'Missing required fields' },
+        { status: 400 }
       );
     }
+    
+    // Validate file size (optional)
+    if (fileSize && fileSize > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: 'File too large. Maximum size is 10MB.' },
+        { status: 400 }
+      );
+    }
+    
+    // Generate unique file key
+    const fileId = uuidv4();
+    const fileKey = `uploads/${fileId}/${fileName}`;
+    
+    // Create S3 upload command
+    const putObjectCommand = new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: fileKey,
+      ContentType: fileType,
+    });
+    
+    // Generate pre-signed URL for direct upload
+    const uploadUrl = await getSignedUrl(s3Client, putObjectCommand, {
+      expiresIn: 3600, // URL expires in 1 hour
+    });
+    
+    // Return upload URL and file details to client
+    return NextResponse.json({
+      uploadUrl,
+      fileId,
+      fileKey,
+      s3Key: fileKey,
+      expiresIn: 3600,
+    });
     
   } catch (error) {
-    logger.error(`Upload error: ${error}`);
+    console.error('Error generating upload URL:', error);
     return NextResponse.json(
-      { error: `Upload failed: ${error instanceof Error ? error.message : String(error)}` },
+      { error: 'Failed to generate upload URL' },
       { status: 500 }
     );
   }
+}
+
+export async function GET() {
+  return NextResponse.json(
+    { message: 'Use POST to get a pre-signed upload URL' },
+    { status: 200 }
+  );
 }

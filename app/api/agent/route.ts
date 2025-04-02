@@ -38,6 +38,16 @@ export async function POST(req: NextRequest) {
       context = {} 
     } = body;
 
+    // Debug log the request for troubleshooting
+    logger.info('Request payload received:', {
+      message: message.substring(0, 100), // Log first 100 chars to avoid huge logs
+      documentId,
+      s3Key,
+      mode,
+      stream,
+      contextKeys: Object.keys(context)
+    });
+
     // Validate required fields
     if (!message) {
       return NextResponse.json({ 
@@ -45,10 +55,15 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
+    // Check for simple greeting to bypass document requirement
+    const isSimpleGreeting = /^(hello|hi|hey|greetings|howdy)(\s.*)?$/i.test(message.trim());
+    const isCreateMode = mode === 'create';
+    
     // At least one of documentId or s3Key should be provided
-    if (!documentId && !s3Key && mode !== 'create') {
+    // Skip this check for create mode or simple greetings
+    if (!documentId && !s3Key && !isCreateMode && !isSimpleGreeting) {
       return NextResponse.json({ 
-        error: 'Either documentId or s3Key is required except in create mode' 
+        error: 'Either documentId or s3Key is required except in create mode or for simple greetings' 
       }, { status: 400 });
     }
 
@@ -65,7 +80,8 @@ export async function POST(req: NextRequest) {
       userId: session.user.id,
       documentId,
       s3Key,
-      mode
+      mode,
+      isSimpleGreeting
     });
 
     // Prepare request payload
@@ -75,13 +91,25 @@ export async function POST(req: NextRequest) {
       s3Key,
       userId: session.user.id,
       userEmail: session.user.email,
-      mode,
+      mode: isSimpleGreeting && !isCreateMode ? 'create' : mode, // Force create mode for simple greetings
       stream,
       context: {
         ...context,
         timestamp: Date.now(),
+        isSimpleGreeting
       }
     };
+
+    // Debug log the actual payload we're sending to Lambda
+    logger.info('Sending payload to Lambda:', {
+      payloadSummary: {
+        messageLength: message.length,
+        mode: payload.mode,
+        hasDocumentId: !!documentId,
+        hasS3Key: !!s3Key,
+        streamEnabled: stream
+      }
+    });
 
     // Call AWS Lambda function
     const response = await fetch(lambdaEndpoint, {
@@ -124,10 +152,11 @@ export async function POST(req: NextRequest) {
     // For regular responses, we parse the JSON and return it
     const data = await response.json();
     
+    // Debug log the Lambda response
     logger.info('Successfully received response from AI Document Agent', {
       userId: session.user.id,
-      documentId,
-      responseLength: data.response ? data.response.length : 0
+      responseLength: data.response ? data.response.length : 0,
+      responsePreview: data.response ? data.response.substring(0, 100) : 'No response'
     });
     
     return NextResponse.json(data);

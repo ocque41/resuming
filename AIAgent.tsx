@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Send, Paperclip, Loader } from 'lucide-react';
 
 interface AIAgentProps {
@@ -24,13 +24,30 @@ const AIAgent: React.FC<AIAgentProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'analyze' | 'edit' | 'create'>(initialMode);
 
+  // Function to detect if a message is a simple greeting
+  const isSimpleGreeting = (message: string): boolean => {
+    return /^(hello|hi|hey|greetings|howdy)(\s.*)?$/i.test(message.trim());
+  };
+
+  // Automatically switch to create mode if no document is selected
+  useEffect(() => {
+    if (!documentId && !documentKey && mode !== 'create') {
+      setMode('create');
+    }
+  }, [documentId, documentKey, mode]);
+
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
+    
+    const trimmedInput = inputValue.trim();
+    const shouldUseCreateMode = mode === 'create' || 
+      (!documentId && !documentKey) || 
+      isSimpleGreeting(trimmedInput);
     
     // Add user message to chat
     const userMessage: ChatMessage = {
       role: 'user',
-      content: inputValue,
+      content: trimmedInput,
       timestamp: new Date().toISOString()
     };
     
@@ -40,18 +57,32 @@ const AIAgent: React.FC<AIAgentProps> = ({
     setError(null);
     
     try {
+      // Use create mode for greetings or when no document is available
+      const effectiveMode = shouldUseCreateMode ? 'create' : mode;
+      
       // Determine if we should use documentId or documentKey (S3 key)
       const payload: any = {
         message: userMessage.content,
-        mode: mode,
+        mode: effectiveMode,
       };
       
-      // Add either documentId or s3Key depending on what's available
-      if (documentId) {
-        payload.documentId = documentId;
-      } else if (documentKey) {
-        payload.s3Key = documentKey;
+      // Only add document references if not a simple greeting and we have them
+      if (!isSimpleGreeting(trimmedInput)) {
+        // Add either documentId or s3Key depending on what's available
+        if (documentId) {
+          payload.documentId = documentId;
+        } else if (documentKey) {
+          payload.s3Key = documentKey;
+        }
       }
+      
+      console.log('Sending request to agent:', {
+        message: trimmedInput.substring(0, 20) + (trimmedInput.length > 20 ? '...' : ''),
+        mode: effectiveMode,
+        hasDocumentId: !!payload.documentId,
+        hasS3Key: !!payload.s3Key,
+        isSimpleGreeting: isSimpleGreeting(trimmedInput)
+      });
       
       // Call API endpoint
       const response = await fetch('/api/agent', {
@@ -93,12 +124,16 @@ const AIAgent: React.FC<AIAgentProps> = ({
           <button
             className={`px-3 py-1 rounded text-sm ${mode === 'analyze' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
             onClick={() => setMode('analyze')}
+            disabled={!documentId && !documentKey}
+            title={!documentId && !documentKey ? 'Requires a document' : 'Analyze document'}
           >
             Analyze
           </button>
           <button
             className={`px-3 py-1 rounded text-sm ${mode === 'edit' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
             onClick={() => setMode('edit')}
+            disabled={!documentId && !documentKey}
+            title={!documentId && !documentKey ? 'Requires a document' : 'Edit document'}
           >
             Edit
           </button>
@@ -114,7 +149,10 @@ const AIAgent: React.FC<AIAgentProps> = ({
       <div className="h-64 overflow-y-auto mb-4 p-3 border border-gray-200 rounded bg-white">
         {messages.length === 0 ? (
           <div className="text-gray-500 text-center mt-24">
-            Start a conversation with the AI Assistant
+            {!documentId && !documentKey 
+              ? "No document selected. You can still say 'Hello' or ask for help."
+              : "Start a conversation with the AI Assistant"
+            }
           </div>
         ) : (
           messages.map((msg, index) => (
@@ -155,7 +193,10 @@ const AIAgent: React.FC<AIAgentProps> = ({
         <input
           type="text"
           className="flex-1 border border-gray-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder={`Ask a question or give instructions (${mode} mode)...`}
+          placeholder={!documentId && !documentKey 
+            ? "Type 'Hello' or ask a question..." 
+            : `Ask a question or give instructions (${mode} mode)...`
+          }
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={(e) => {
