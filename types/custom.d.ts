@@ -271,18 +271,52 @@ declare module '@clerk/nextjs' {
 
 // Add type declarations for database
 declare module '@/lib/db' {
+  interface Document {
+    id: string;
+    userId: string;
+    s3Key: string;
+    fileName: string;
+    fileType: string;
+    metadata: Record<string, any>;
+    createdAt: Date;
+    updatedAt: Date;
+    status: string;
+    type: string;
+    [key: string]: any;
+  }
+
   export const db: {
     query: {
+      document: {
+        findMany: (options?: any) => Promise<Document[]>;
+        findFirst: (options?: any) => Promise<Document | null>;
+        count: (options?: any) => Promise<number>;
+      },
       cv: {
-        findFirst: (options: { where: any }) => Promise<any>;
+        findMany: (options?: any) => Promise<any[]>;
+        findFirst: (options?: any) => Promise<any>;
       }
     },
-    update: (table: any) => {
-      set: (data: any) => {
-        where: (condition: any) => Promise<any>;
-      };
-    };
+    get: (table: string, conditions: Record<string, any>) => Promise<any>,
+    insert: (table: string, data: Record<string, any>) => Promise<any>,
+    update: (table: string, conditions: Record<string, any>, updates: Record<string, any>) => Promise<boolean>,
+    delete: (table: string, conditions: Record<string, any>) => Promise<boolean>,
+    document: {
+      findMany: (options: any) => Promise<Document[]>;
+    },
+    cv: {
+      findMany: (options: any) => Promise<Document[]>;
+    }
   };
+}
+
+// Add type declarations for drizzle database
+declare module '@/lib/db/drizzle' {
+  import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+  import * as schema from './schema';
+  
+  export const client: any;
+  export const db: PostgresJsDatabase<typeof schema>;
 }
 
 // Add type declarations for schema
