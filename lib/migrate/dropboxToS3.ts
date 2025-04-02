@@ -129,7 +129,7 @@ export async function migrateAllFilesToS3(limit?: number): Promise<MigrationResu
     });
 
     // Filter for Dropbox files only
-    const dropboxCvs = allCvs.filter(cv => cv.filepath && cv.filepath.startsWith('/'));
+    const dropboxCvs = allCvs.filter((cv: typeof cvs.$inferSelect) => cv.filepath && cv.filepath.startsWith('/'));
     
     logger.info(`Found ${dropboxCvs.length} files to migrate from Dropbox to S3`);
     
@@ -186,8 +186,8 @@ export async function getStorageStats(): Promise<{ total: number, dropbox: numbe
   try {
     const allCvs = await db.query.cvs.findMany();
     
-    const dropbox = allCvs.filter(cv => cv.filepath && cv.filepath.startsWith('/')).length;
-    const s3 = allCvs.filter(cv => {
+    const dropbox = allCvs.filter((cv: typeof cvs.$inferSelect) => cv.filepath && cv.filepath.startsWith('/')).length;
+    const s3 = allCvs.filter((cv: typeof cvs.$inferSelect) => {
       const metadata = cv.metadata ? JSON.parse(cv.metadata) : {};
       return metadata.storageType === 's3' || 
              (cv.filepath && !cv.filepath.startsWith('/') && 
