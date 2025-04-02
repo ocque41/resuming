@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { getDocumentsForUser } from '@/lib/document/queries.server';
-import { logger } from '@/lib/logger';
 import { createDocument } from '@/lib/document/mutations.server';
 import { Document } from '@/types/documents';
+
+// Use simple console logging to avoid any import issues
+const logger = {
+  info: (message: string, data?: any) => {
+    console.log(`[INFO] ${message}`, data || '');
+  },
+  error: (message: string, error?: any) => {
+    console.error(`[ERROR] ${message}`, error || '');
+  }
+};
 
 export const dynamic = 'force-dynamic';
 
@@ -135,8 +144,8 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    // Use the proper error method signature
-    logger.error('Error fetching documents', error instanceof Error ? error : 'Unknown error');
+    // Use a simpler error logging format
+    logger.error('Error fetching documents', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json(
       { error: 'Failed to fetch documents' },
       { status: 500 }
@@ -214,8 +223,8 @@ export async function POST(request: NextRequest) {
       document,
     });
   } catch (error) {
-    // Log the error
-    logger.error('Error creating document', error instanceof Error ? error : 'Unknown error');
+    // Use a simpler error logging format
+    logger.error('Error creating document', error instanceof Error ? error.message : 'Unknown error');
     
     // Return an error response
     return NextResponse.json(

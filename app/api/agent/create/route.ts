@@ -2,7 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { DocumentCreationAgent } from '@/lib/agents/DocumentCreationAgent';
 import { agentRequestSchema } from '@/lib/agents/config';
-import { logger } from '@/lib/logger';
+
+// Use simple console logging to avoid any import issues
+const logger = {
+  info: (message: string, data?: any) => {
+    console.log(`[INFO] ${message}`, data || '');
+  },
+  error: (message: string, error?: any) => {
+    console.error(`[ERROR] ${message}`, error || '');
+  }
+};
 
 export async function POST(request: NextRequest) {
   try {
