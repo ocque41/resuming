@@ -120,6 +120,9 @@ def test_reset_agents(mock_agent_class):
     # Reset the agents
     AgentFactory.reset_agents()
     
+    # Verify the agents dictionary is empty
+    assert len(AgentFactory._agents) == 0
+    
     # Get an analyzer agent again
     agent2 = AgentFactory.get_agent("analyze")
     
