@@ -78,7 +78,7 @@ export default async function DocumentDetailPage({
     }
     
     // Check if this document belongs to the current user
-    if (document.userId !== parseInt(user.id.toString())) {
+    if (String(document.userId) !== String(user.id)) {
       // This document doesn't belong to this user
       redirect("/dashboard/documents");
     }

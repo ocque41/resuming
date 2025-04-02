@@ -42,7 +42,7 @@ export async function DELETE(request: NextRequest) {
     console.log(`Found CV record: id=${cvRecord.id}, userId=${cvRecord.userId}, fileName=${cvRecord.fileName}`);
 
     // Check if the CV belongs to the user
-    if (cvRecord.userId !== user.id) {
+    if (String(cvRecord.userId) !== String(user.id)) {
       console.error(`User ${user.id} attempted to delete CV ${cvRecord.id} belonging to user ${cvRecord.userId}`);
       return NextResponse.json(
         { error: "Unauthorized" },

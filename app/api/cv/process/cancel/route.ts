@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Verify user owns this CV
-    if (cv.userId !== session.user.id) {
+    if (String(cv.userId) !== String(session.user.id)) {
       logger.warn(`User ${session.user.id} attempted to cancel processing for CV ${cvId} which belongs to user ${cv.userId}`);
       return NextResponse.json({ error: "Not authorized to cancel this CV's processing", success: false }, { status: 403 });
     }

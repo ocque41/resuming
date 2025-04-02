@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if the CV belongs to the authenticated user
-    if (cvRecord.userId !== parseInt(session.user.id)) {
+    if (String(cvRecord.userId) !== String(session.user.id)) {
       console.log(`Unauthorized access to CV: ${cvId}, belongs to user ${cvRecord.userId} not ${session.user.id}`);
       return NextResponse.json({ error: "Unauthorized access to CV" }, { status: 403 });
     }

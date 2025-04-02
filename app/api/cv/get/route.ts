@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       where: eq(cvs.id, cvId)
     });
     
-    if (!cv || cv.userId !== user.id) {
+    if (!cv || String(cv.userId) !== String(user.id)) {
       return NextResponse.json(
         { success: false, error: 'CV not found' },
         { status: 404 }
