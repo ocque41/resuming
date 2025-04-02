@@ -1,6 +1,7 @@
 ---
-description: the brand we must follow upon creating or adjusting components, pages, etc..
+description: 
 globs: 
+alwaysApply: true
 ---
 Brand
 

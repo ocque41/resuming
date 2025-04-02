@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { getDocumentsForUser } from '@/lib/document/queries.server';
 import { logger } from '@/lib/logger';
+import { createDocument } from '@/lib/document/mutations.server';
 
 export const dynamic = 'force-dynamic';
 
@@ -125,6 +126,87 @@ export async function GET(request: NextRequest) {
     logger.error('Error fetching documents', error instanceof Error ? error : 'Unknown error');
     return NextResponse.json(
       { error: 'Failed to fetch documents' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * POST /api/documents
+ * 
+ * Create a new document
+ * Required body parameters:
+ * - s3Key: string (S3 key of the uploaded file)
+ * - fileName: string (Original filename)
+ * - fileType: string (MIME type of the file)
+ * 
+ * Optional body parameters:
+ * - metadata: object (Additional metadata for the document)
+ */
+export async function POST(request: NextRequest) {
+  try {
+    // Get authenticated user
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    // Parse request body
+    const body = await request.json();
+    
+    // Validate required fields
+    if (!body.s3Key) {
+      return NextResponse.json(
+        { error: 'Missing required parameter: s3Key' },
+        { status: 400 }
+      );
+    }
+    
+    if (!body.fileName) {
+      return NextResponse.json(
+        { error: 'Missing required parameter: fileName' },
+        { status: 400 }
+      );
+    }
+    
+    if (!body.fileType) {
+      return NextResponse.json(
+        { error: 'Missing required parameter: fileType' },
+        { status: 400 }
+      );
+    }
+    
+    // Log the request
+    logger.info('Creating document', {
+      userId: session.user.id,
+      fileName: body.fileName,
+      fileType: body.fileType,
+    });
+
+    // Create the document
+    const document = await createDocument({
+      userId: session.user.id,
+      s3Key: body.s3Key,
+      fileName: body.fileName,
+      fileType: body.fileType,
+      metadata: body.metadata || {},
+    });
+
+    // Return the created document
+    return NextResponse.json({
+      success: true,
+      document,
+    });
+  } catch (error) {
+    // Log the error
+    logger.error('Error creating document', error instanceof Error ? error : 'Unknown error');
+    
+    // Return an error response
+    return NextResponse.json(
+      { error: 'Failed to create document' },
       { status: 500 }
     );
   }

@@ -14,6 +14,8 @@ import {
   Check,
   ChevronDown
 } from "lucide-react";
+import AIAgent from "../../../../AIAgent";
+import FileUploader from "../../../../FileUploader";
 
 interface DocumentData {
   id: string;
@@ -217,6 +219,62 @@ export default function EnhancePageClient({
     };
     
     setChatMessages(prev => [...prev, systemMessage]);
+  };
+  
+  // Handler for S3 upload completion
+  const handleUploadComplete = async (s3Key: string) => {
+    console.log("File uploaded to S3:", s3Key);
+    
+    try {
+      // Extract file name and type from s3Key
+      const fileName = s3Key.split('/').pop() || 'Unknown file';
+      const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
+      
+      // Map extension to MIME type
+      const mimeTypeMap: { [key: string]: string } = {
+        'pdf': 'application/pdf',
+        'doc': 'application/msword',
+        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'txt': 'text/plain'
+      };
+      
+      const fileType = mimeTypeMap[fileExtension] || 'application/octet-stream';
+      
+      // Create a new document in the database using API
+      const response = await fetch('/api/documents', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          s3Key,
+          fileName,
+          fileType,
+          metadata: {
+            uploadedVia: 'enhance-page'
+          }
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to save document: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // Refresh the documents list
+      setDocumentsData(prevDocs => [data.document, ...prevDocs]);
+      
+      // Select the new document
+      setSelectedDocument(data.document);
+      
+      // Show success message
+      alert('Document uploaded successfully!');
+      
+    } catch (error) {
+      console.error('Error saving document to database:', error);
+      alert('Document was uploaded to storage but could not be saved to database');
+    }
   };
   
   // Variants for animations
@@ -603,6 +661,27 @@ export default function EnhancePageClient({
             </motion.div>
           </motion.div>
         )}
+
+        {/* Add AI Agent section when a document is selected */}
+        {selectedDocument && (
+          <div className="mt-6 border-t pt-4">
+            <h3 className="text-lg font-semibold mb-3">AI Document Assistant</h3>
+            <AIAgent 
+              documentId={selectedDocument.id} 
+              documentKey={selectedDocument.id} // Adjust if your s3Key is stored differently
+            />
+          </div>
+        )}
+
+        {/* Add FileUploader component */}
+        <div className="mt-6 border-t pt-4">
+          <h3 className="text-lg font-semibold mb-3">Upload Document</h3>
+          <FileUploader
+            onUploadComplete={handleUploadComplete}
+            allowedFileTypes={['.pdf', '.doc', '.docx', '.txt']}
+            maxSizeMB={10}
+          />
+        </div>
       </div>
     );
   } catch (error: any) {

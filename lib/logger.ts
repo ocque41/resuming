@@ -218,4 +218,39 @@ export const apiLogger = createLogger('api');
 export const dbLogger = createLogger('db');
 export const cvLogger = createLogger('cv');
 export const authLogger = createLogger('auth');
-export const storageLogger = createLogger('storage'); 
+export const storageLogger = createLogger('storage');
+
+/**
+ * Simple logger utility for consistent logging
+ */
+export const simpleLogger = {
+  /**
+   * Log an info message
+   */
+  info: (message: string, data?: any) => {
+    console.log(`[INFO] ${message}`, data || '');
+  },
+  
+  /**
+   * Log a warning message
+   */
+  warn: (message: string, data?: any) => {
+    console.warn(`[WARN] ${message}`, data || '');
+  },
+  
+  /**
+   * Log an error message
+   */
+  error: (message: string, error?: any) => {
+    console.error(`[ERROR] ${message}`, error || '');
+  },
+  
+  /**
+   * Log a debug message (only in development)
+   */
+  debug: (message: string, data?: any) => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug(`[DEBUG] ${message}`, data || '');
+    }
+  }
+}; 
