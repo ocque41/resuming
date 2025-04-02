@@ -47,10 +47,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
-    logger.error('Error creating document', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error(`Error creating document: ${errorMessage}`);
 
     return NextResponse.json(
       { error: 'Failed to create document' },
