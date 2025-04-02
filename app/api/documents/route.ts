@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { getDocumentsForUser } from '@/lib/document/queries.server';
 import { logger } from '@/lib/logger';
 import { createDocument } from '@/lib/document/mutations.server';
+import { Document } from '@/types/documents';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,24 +58,36 @@ export async function GET(request: NextRequest) {
     
     // Filter by search term if provided
     if (search) {
-      filteredDocs = filteredDocs.filter(doc => 
-        doc.fileName.toLowerCase().includes(search.toLowerCase()) ||
-        (doc.metadata && doc.metadata.toLowerCase().includes(search.toLowerCase()))
-      );
+      filteredDocs = filteredDocs.filter((doc: Document) => {
+        const fileNameMatch = doc.fileName.toLowerCase().includes(search.toLowerCase());
+        
+        // Check metadata if it exists
+        let metadataMatch = false;
+        if (doc.metadata) {
+          if (typeof doc.metadata === 'string') {
+            metadataMatch = doc.metadata.toLowerCase().includes(search.toLowerCase());
+          } else if (typeof doc.metadata === 'object') {
+            // If metadata is an object, convert to JSON string for searching
+            metadataMatch = JSON.stringify(doc.metadata).toLowerCase().includes(search.toLowerCase());
+          }
+        }
+        
+        return fileNameMatch || metadataMatch;
+      });
     }
     
     // Filter by type if provided
     if (type) {
-      filteredDocs = filteredDocs.filter(doc => 
+      filteredDocs = filteredDocs.filter((doc: Document) => 
         doc.fileName.toLowerCase().includes(type.toLowerCase())
       );
     }
 
     // Apply sorting
-    filteredDocs.sort((a, b) => {
+    filteredDocs.sort((a: Document, b: Document) => {
       // Get the values to compare
-      const valueA = a[sortBy as keyof typeof a];
-      const valueB = b[sortBy as keyof typeof b];
+      const valueA = a[sortBy as keyof Document];
+      const valueB = b[sortBy as keyof Document];
       
       // Handle different data types
       if (valueA instanceof Date && valueB instanceof Date) {

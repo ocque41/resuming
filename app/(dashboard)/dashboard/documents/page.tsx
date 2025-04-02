@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { PremiumCard, PremiumCardContent, PremiumCardFooter, PremiumCardHeader, PremiumCardTitle } from "@/components/ui/premium-card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Document } from '@/types/documents';
 
 // Dynamically import client components
 const CVUploader = dynamic(() => import("@/components/CVUploader.client"));
@@ -54,8 +55,8 @@ export default async function DocumentsDashboardPage() {
     const activityLogs = await getActivityLogs();
     
     // Prepare documents for display
-    const mappedDocuments = documents.map(doc => ({
-      id: doc.id.toString(),
+    const mappedDocuments = (documents || []).map((doc: any) => ({
+      id: doc.id,
       fileName: doc.fileName,
       createdAt: doc.createdAt,
       filePath: doc.filepath,
@@ -65,12 +66,12 @@ export default async function DocumentsDashboardPage() {
       ) : {}
     }));
     
-    // Group documents by type
-    const resumeDocuments = mappedDocuments.filter(doc => 
+    // Group documents by type with proper typing
+    const resumeDocuments = mappedDocuments.filter((doc: Document) => 
       isResumeDocument(doc.fileName, doc.metadata)
     );
     
-    const otherDocuments = mappedDocuments.filter(doc => 
+    const otherDocuments = mappedDocuments.filter((doc: Document) => 
       !isResumeDocument(doc.fileName, doc.metadata)
     );
     
@@ -286,7 +287,7 @@ export default async function DocumentsDashboardPage() {
 }
 
 // Helper component for document rows
-function DocumentRow({ document, isResume = false }: { document: any, isResume?: boolean }) {
+function DocumentRow({ document, isResume = false }: { document: Document, isResume?: boolean }) {
   const fileType = getFileTypeFromName(document.fileName);
   
   const getFileIcon = () => {
@@ -328,7 +329,15 @@ function DocumentRow({ document, isResume = false }: { document: any, isResume?:
   };
   
   // Check if the document is optimized
-  const isOptimized = document.metadata?.optimized || false;
+  const isOptimized = typeof document.metadata === 'object' && 
+                     document.metadata !== null && 
+                     'optimized' in document.metadata ? 
+                     document.metadata.optimized : false;
+  
+  // Format createdAt correctly regardless of type
+  const formattedDate = typeof document.createdAt === 'string' ? 
+                       formatDate(document.createdAt) : 
+                       formatDate(document.createdAt.toISOString());
   
   return (
     <PremiumCard className="border border-[#222222] bg-[#111111] hover:border-[#333333] transition-all duration-300">
@@ -341,7 +350,7 @@ function DocumentRow({ document, isResume = false }: { document: any, isResume?:
             <h4 className="text-[#F9F6EE] font-safiro">{document.fileName}</h4>
             <div className="flex items-center mt-1">
               <Clock className="h-3.5 w-3.5 text-[#8A8782] mr-1.5" />
-              <span className="text-xs text-[#8A8782] font-borna">{formatDate(document.createdAt)}</span>
+              <span className="text-xs text-[#8A8782] font-borna">{formattedDate}</span>
               
               {fileType && (
                 <>
@@ -406,18 +415,23 @@ function getFileTypeFromName(fileName: string): string {
   return extension;
 }
 
-function isResumeDocument(fileName: string, metadata: any): boolean {
-  const lowerFileName = fileName.toLowerCase();
-  const fileType = getFileTypeFromName(fileName);
-  
+function isResumeDocument(fileName: string, metadata: Record<string, any> | string | undefined): boolean {
   // Check if the filename contains resume-related keywords
-  const resumeKeywords = ['resume', 'cv', 'curriculum'];
-  const hasResumeKeyword = resumeKeywords.some(keyword => lowerFileName.includes(keyword));
+  const resumeKeywords = ['resume', 'cv', 'curriculum', 'vitae'];
+  const lowerFileName = fileName.toLowerCase();
   
-  // Check if the metadata indicates this is a resume
-  const isResumeMetadata = metadata?.documentType === 'resume' || 
-                           metadata?.isResume === true ||
-                           metadata?.type === 'resume';
+  if (resumeKeywords.some(keyword => lowerFileName.includes(keyword))) {
+    return true;
+  }
   
-  return hasResumeKeyword || isResumeMetadata;
+  // Check if metadata indicates it's a resume
+  if (metadata) {
+    const metadataStr = typeof metadata === 'string' 
+      ? metadata.toLowerCase() 
+      : JSON.stringify(metadata).toLowerCase();
+    
+    return resumeKeywords.some(keyword => metadataStr.includes(keyword));
+  }
+  
+  return false;
 } 

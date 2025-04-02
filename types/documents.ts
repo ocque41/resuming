@@ -6,4 +6,6 @@ export interface Document {
   content?: string;
   type?: string;
   size?: number;
+  metadata?: string | Record<string, any>;
+  userId?: string | number;
 } 
