@@ -41,7 +41,7 @@ export async function generateMetadata({
 }: { 
   params: { id: string } 
 }): Promise<Metadata> {
-  const document = await getDocumentById(parseInt(params.id));
+  const document = await getDocumentById(params.id);
   
   if (!document) {
     return {
@@ -72,7 +72,7 @@ export default async function DocumentDetailPage({
       throw new Error("Team not found");
     }
     
-    const document = await getDocumentById(parseInt(params.id));
+    const document = await getDocumentById(params.id);
     if (!document) {
       redirect("/dashboard/documents");
     }
@@ -82,6 +82,8 @@ export default async function DocumentDetailPage({
       // This document doesn't belong to this user
       redirect("/dashboard/documents");
     }
+    
+    const documentIdNumber = parseInt(params.id);
     
     const activityLogs = await getActivityLogs();
     
@@ -187,7 +189,7 @@ export default async function DocumentDetailPage({
                           </DialogDescription>
                         </DialogHeader>
                         <div className="mt-4">
-                          <DeleteDocument documentId={parseInt(params.id)} />
+                          <DeleteDocument documentId={documentIdNumber} />
                         </div>
                       </DialogContent>
                     </Dialog>
