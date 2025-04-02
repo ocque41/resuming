@@ -12,6 +12,8 @@ type ErrorResponse = {
   error: string;
 };
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(
   req: NextRequest
 ) {
