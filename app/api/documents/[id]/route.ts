@@ -48,8 +48,8 @@ export async function GET(
       );
     }
 
-    // Ensure the user owns the document
-    if (document.userId !== parseInt(session.user.id)) {
+    // Ensure the user owns the document - compare as strings to avoid type issues
+    if (String(document.userId) !== String(session.user.id)) {
       logger.warn('Unauthorized access attempt to document', {
         userId: session.user.id,
         documentId,

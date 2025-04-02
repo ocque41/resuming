@@ -58,8 +58,8 @@ export async function POST(request: NextRequest) {
         );
       }
       
-      // Check document ownership
-      if (document.userId !== session.user.id) {
+      // Check document ownership - compare as strings to avoid type issues
+      if (String(document.userId) !== String(session.user.id)) {
         return NextResponse.json(
           { error: 'Access denied' },
           { status: 403 }
