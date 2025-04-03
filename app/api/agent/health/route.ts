@@ -17,6 +17,10 @@ export async function GET() {
   // Check AWS credentials
   const hasAwsCredentials = process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY;
   
+  // Check API Gateway authentication
+  const hasApiKey = process.env.AWS_LAMBDA_API_KEY || process.env.API_GATEWAY_KEY;
+  const hasAuthToken = process.env.AWS_LAMBDA_AUTH_TOKEN;
+  
   // Determine environment
   const environment = process.env.NODE_ENV || 'development';
   const mockMode = process.env.NEXT_PUBLIC_MOCK_BACKEND === 'true';
@@ -35,6 +39,8 @@ export async function GET() {
       agent: isLambdaConfigured ? 'configured' : 'missing',
       upload: isUploadConfigured ? 'configured' : 'missing',
       awsCredentials: hasAwsCredentials ? 'configured' : 'missing',
+      apiKeyAuth: hasApiKey ? 'configured' : 'missing',
+      tokenAuth: hasAuthToken ? 'configured' : 'missing',
     },
     timestamp: new Date().toISOString(),
   };

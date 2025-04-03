@@ -22,11 +22,30 @@ async function testAgentConnection() {
   console.log('------------------------------');
 
   try {
+    // Prepare headers with authentication
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    
+    // Add API key if configured
+    const apiKey = process.env.AWS_LAMBDA_API_KEY || process.env.API_GATEWAY_KEY;
+    if (apiKey && apiKey !== 'your-api-key-here') {
+      console.log('Using API key authentication');
+      headers['x-api-key'] = apiKey;
+    }
+    
+    // Add authorization header if configured
+    const authToken = process.env.AWS_LAMBDA_AUTH_TOKEN;
+    if (authToken && authToken !== 'your-authorization-token-here') {
+      console.log('Using Bearer token authentication');
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    
+    console.log('Request headers:', Object.keys(headers).join(', '));
+    
     const response = await fetch(AGENT_ENDPOINT, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         message: TEST_MESSAGE,
         mode: 'create', // Use create mode for simple greetings

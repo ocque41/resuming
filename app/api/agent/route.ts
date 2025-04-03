@@ -111,12 +111,28 @@ export async function POST(req: NextRequest) {
     };
 
     try {
-      // Call AWS Lambda function
+      // Call AWS Lambda function with proper authentication
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      // Add API key if configured (common auth method for API Gateway)
+      const apiKey = process.env.AWS_LAMBDA_API_KEY || process.env.API_GATEWAY_KEY;
+      if (apiKey) {
+        headers['x-api-key'] = apiKey;
+      }
+      
+      // Add authorization header if configured
+      const authToken = process.env.AWS_LAMBDA_AUTH_TOKEN;
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+      
+      console.log('Calling Lambda with headers:', Object.keys(headers));
+      
       const response = await fetch(lambdaEndpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify(payload),
       });
 
