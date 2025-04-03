@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { getDocumentsForUser } from '@/lib/document/queries.server';
 import { createDocument } from '@/lib/document/mutations.server';
 import { Document } from '@/types/documents';
+import { getSession } from '@/lib/auth/session';
 
 // Use simple console logging to avoid any import issues
 const logger = {
@@ -28,126 +29,29 @@ export const dynamic = 'force-dynamic';
  * - sortBy: string (default: 'createdAt')
  * - sortOrder: 'asc' | 'desc' (default: 'desc')
  */
-export async function GET(request: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
-    // Get authenticated user
-    const session = await auth();
+    // Check if user is authenticated
+    const session = await getSession();
     if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Get documents for the authenticated user
+    try {
+      const documents = await getDocumentsForUser(String(session.user.id));
+      return NextResponse.json({ documents });
+    } catch (dbError) {
+      console.error('Database error fetching documents:', dbError);
       return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
+        { error: 'Failed to fetch documents', documents: [] },
+        { status: 500 }
       );
     }
-
-    // Get query parameters
-    const searchParams = request.nextUrl.searchParams;
-    const limit = parseInt(searchParams.get('limit') || '100');
-    const page = parseInt(searchParams.get('page') || '1');
-    const search = searchParams.get('search') || '';
-    const type = searchParams.get('type') || '';
-    const sortBy = searchParams.get('sortBy') || 'createdAt';
-    const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
-
-    // Log the request
-    logger.info('Fetching documents', {
-      userId: session.user.id,
-      limit,
-      page,
-      search: search || undefined,
-      type: type || undefined,
-      sortBy,
-      sortOrder,
-    });
-
-    // Fetch documents
-    const documents = await getDocumentsForUser(session.user.id);
-
-    // Apply filtering if needed (since our database query might not support all filters)
-    let filteredDocs = documents;
-    
-    // Filter by search term if provided
-    if (search) {
-      filteredDocs = filteredDocs.filter((doc: Document) => {
-        const fileNameMatch = doc.fileName.toLowerCase().includes(search.toLowerCase());
-        
-        // Check metadata if it exists
-        let metadataMatch = false;
-        if (doc.metadata) {
-          if (typeof doc.metadata === 'string') {
-            metadataMatch = doc.metadata.toLowerCase().includes(search.toLowerCase());
-          } else if (typeof doc.metadata === 'object') {
-            // If metadata is an object, convert to JSON string for searching
-            metadataMatch = JSON.stringify(doc.metadata).toLowerCase().includes(search.toLowerCase());
-          }
-        }
-        
-        return fileNameMatch || metadataMatch;
-      });
-    }
-    
-    // Filter by type if provided
-    if (type) {
-      filteredDocs = filteredDocs.filter((doc: Document) => 
-        doc.fileName.toLowerCase().includes(type.toLowerCase())
-      );
-    }
-
-    // Apply sorting
-    filteredDocs.sort((a: Document, b: Document) => {
-      // Get the values to compare
-      const valueA = a[sortBy as keyof Document];
-      const valueB = b[sortBy as keyof Document];
-      
-      // Handle different data types
-      if (valueA instanceof Date && valueB instanceof Date) {
-        return sortOrder === 'desc' ? 
-          valueB.getTime() - valueA.getTime() : 
-          valueA.getTime() - valueB.getTime();
-      }
-      
-      if (typeof valueA === 'string' && typeof valueB === 'string') {
-        return sortOrder === 'desc' ? 
-          valueB.localeCompare(valueA) : 
-          valueA.localeCompare(valueB);
-      }
-      
-      if (typeof valueA === 'number' && typeof valueB === 'number') {
-        return sortOrder === 'desc' ? valueB - valueA : valueA - valueB;
-      }
-      
-      // Default fallback
-      return 0;
-    });
-
-    // Apply pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-    const paginatedDocs = filteredDocs.slice(startIndex, endIndex);
-
-    // Calculate pagination info
-    const totalDocs = filteredDocs.length;
-    const totalPages = Math.ceil(totalDocs / limit);
-    const hasNextPage = page < totalPages;
-    const hasPrevPage = page > 1;
-
-    // Return the documents and pagination info
-    return NextResponse.json({
-      success: true,
-      documents: paginatedDocs,
-      pagination: {
-        total: totalDocs,
-        page,
-        limit,
-        totalPages,
-        hasNextPage,
-        hasPrevPage,
-      },
-    });
   } catch (error) {
-    // Use a simpler error logging format
-    logger.error('Error fetching documents', error instanceof Error ? error.message : 'Unknown error');
+    console.error('Error in documents API:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch documents' },
+      { error: 'Internal server error', documents: [] },
       { status: 500 }
     );
   }

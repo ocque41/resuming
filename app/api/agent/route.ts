@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
-import { logger } from '@/lib/logger';
+import { getSession } from '@/lib/auth/session';
 
 /**
  * API route for AI Document Agent
@@ -19,8 +18,8 @@ import { logger } from '@/lib/logger';
  */
 export async function POST(req: NextRequest) {
   try {
-    // Authenticate user
-    const session = await auth();
+    // Authenticate user using a more reliable method
+    const session = await getSession();
     if (!session?.user?.id) {
       return NextResponse.json({ 
         error: 'Authentication required' 
@@ -38,14 +37,13 @@ export async function POST(req: NextRequest) {
       context = {} 
     } = body;
 
-    // Debug log the request for troubleshooting
-    logger.info('Request payload received:', {
-      message: message.substring(0, 100), // Log first 100 chars to avoid huge logs
+    // Simple logging
+    console.log('Agent API request:', {
+      messageLength: message?.length,
       documentId,
       s3Key,
       mode,
-      stream,
-      contextKeys: Object.keys(context)
+      stream
     });
 
     // Validate required fields
@@ -70,19 +68,11 @@ export async function POST(req: NextRequest) {
     // Get Lambda endpoint from environment variable
     const lambdaEndpoint = process.env.NEXT_PUBLIC_AWS_LAMBDA_AI_AGENT_ENDPOINT;
     if (!lambdaEndpoint) {
-      logger.error('AI Agent Lambda endpoint not configured', new Error('Missing Lambda endpoint configuration'));
+      console.error('AI Agent Lambda endpoint not configured');
       return NextResponse.json({ 
         error: 'AI Agent endpoint not configured' 
       }, { status: 500 });
     }
-
-    logger.info('Sending request to AI Document Agent', {
-      userId: session.user.id,
-      documentId,
-      s3Key,
-      mode,
-      isSimpleGreeting
-    });
 
     // Prepare request payload
     const payload = {
@@ -90,7 +80,6 @@ export async function POST(req: NextRequest) {
       documentId,
       s3Key,
       userId: session.user.id,
-      userEmail: session.user.email,
       mode: isSimpleGreeting && !isCreateMode ? 'create' : mode, // Force create mode for simple greetings
       stream,
       context: {
@@ -100,69 +89,53 @@ export async function POST(req: NextRequest) {
       }
     };
 
-    // Debug log the actual payload we're sending to Lambda
-    logger.info('Sending payload to Lambda:', {
-      payloadSummary: {
-        messageLength: message.length,
-        mode: payload.mode,
-        hasDocumentId: !!documentId,
-        hasS3Key: !!s3Key,
-        streamEnabled: stream
-      }
-    });
-
-    // Call AWS Lambda function
-    const response = await fetch(lambdaEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    // Handle response
-    if (!response.ok) {
-      let errorMessage = `HTTP error ${response.status}`;
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.error || errorMessage;
-      } catch (e) {
-        // If we can't parse the JSON, just use the status code message
-      }
-      
-      logger.error('Error from AI Agent Lambda', new Error(errorMessage), {
-        httpStatus: response.status,
-        httpStatusText: response.statusText
-      });
-      
-      throw new Error(errorMessage);
-    }
-
-    // For streaming responses, we need to forward the stream
-    if (stream) {
-      return new Response(response.body, {
+    try {
+      // Call AWS Lambda function
+      const response = await fetch(lambdaEndpoint, {
+        method: 'POST',
         headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify(payload),
       });
-    }
 
-    // For regular responses, we parse the JSON and return it
-    const data = await response.json();
-    
-    // Debug log the Lambda response
-    logger.info('Successfully received response from AI Document Agent', {
-      userId: session.user.id,
-      responseLength: data.response ? data.response.length : 0,
-      responsePreview: data.response ? data.response.substring(0, 100) : 'No response'
-    });
-    
-    return NextResponse.json(data);
-  } catch (error: any) {
+      // Handle response
+      if (!response.ok) {
+        let errorMessage = `HTTP error ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          // If we can't parse the JSON, just use the status code message
+        }
+        
+        console.error('Error from AI Agent Lambda:', errorMessage);
+        throw new Error(errorMessage);
+      }
+
+      // For streaming responses, we need to forward the stream
+      if (stream) {
+        return new Response(response.body, {
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          },
+        });
+      }
+
+      // For regular responses, we parse the JSON and return it
+      const data = await response.json();
+      return NextResponse.json(data);
+    } catch (fetchError) {
+      console.error('Fetch error in agent API:', fetchError);
+      return NextResponse.json({ 
+        error: fetchError instanceof Error ? fetchError.message : 'Error calling agent service'
+      }, { status: 500 });
+    }
+  } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    logger.error('Error in AI Document Agent API', error);
+    console.error('Error in AI Document Agent API:', errorMessage);
     
     return NextResponse.json({ 
       error: errorMessage

@@ -36,8 +36,21 @@ export default function DocumentSelector({
     const fetchDocuments = async () => {
       try {
         setLoading(true);
-        // This would typically be an API call
-        // For now, we'll use mock data
+        
+        // Try to fetch documents from the API
+        try {
+          const response = await fetch('/api/documents');
+          
+          if (response.ok) {
+            const data = await response.json();
+            setDocuments(data.documents || []);
+            return;
+          }
+        } catch (apiError) {
+          console.error('API error, falling back to mock data:', apiError);
+        }
+        
+        // Fallback to mock data if API fails
         const mockDocuments: Document[] = [
           { id: '1', name: 'Resume.pdf', type: 'pdf' },
           { id: '2', name: 'Cover Letter.docx', type: 'docx' },
@@ -47,6 +60,8 @@ export default function DocumentSelector({
         setDocuments(mockDocuments);
       } catch (error) {
         console.error('Error fetching documents:', error);
+        // Set empty array to prevent UI from being stuck in loading state
+        setDocuments([]);
       } finally {
         setLoading(false);
       }
