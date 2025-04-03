@@ -65,12 +65,33 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // Get Lambda endpoint from environment variable
-    const lambdaEndpoint = process.env.NEXT_PUBLIC_AWS_LAMBDA_AI_AGENT_ENDPOINT;
+    // Get Lambda endpoint from environment variable with multiple fallbacks
+    let lambdaEndpoint = process.env.NEXT_PUBLIC_AWS_LAMBDA_AI_AGENT_ENDPOINT || 
+                         process.env.AWS_LAMBDA_AI_AGENT_ENDPOINT;
+    
+    const mockMode = process.env.NEXT_PUBLIC_MOCK_BACKEND === 'true';
+    const isDevMode = process.env.NODE_ENV === 'development';
+    
+    // If endpoint is not configured, check if we should use fallbacks
     if (!lambdaEndpoint) {
-      console.error('AI Agent Lambda endpoint not configured');
+      // In development or mock mode, provide a fallback response
+      if (isDevMode || mockMode) {
+        console.warn('Using mock response for AI agent in development/mock mode');
+        return NextResponse.json({
+          response: `This is a mock response in ${isDevMode ? 'development' : 'mock'} mode. Your message was: "${message}"`,
+          documentId,
+          s3Key,
+          mode,
+          status: 'success',
+          mockResponse: true
+        });
+      }
+      
+      // In production with no endpoint, return a clear error
+      console.error('AI Agent Lambda endpoint not configured - please set NEXT_PUBLIC_AWS_LAMBDA_AI_AGENT_ENDPOINT in your environment');
       return NextResponse.json({ 
-        error: 'AI Agent endpoint not configured' 
+        error: 'AI Agent endpoint not configured - please check server environment variables',
+        details: 'Contact administrator to configure the Lambda endpoint'
       }, { status: 500 });
     }
 
@@ -129,6 +150,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(data);
     } catch (fetchError) {
       console.error('Fetch error in agent API:', fetchError);
+      
+      // If in development mode, provide a helpful mock response
+      if (isDevMode || mockMode) {
+        return NextResponse.json({
+          response: `This is a fallback response due to an error: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}. Your message was: "${message}"`,
+          documentId,
+          s3Key,
+          mode,
+          status: 'error_fallback',
+          mockResponse: true
+        });
+      }
+      
       return NextResponse.json({ 
         error: fetchError instanceof Error ? fetchError.message : 'Error calling agent service'
       }, { status: 500 });
