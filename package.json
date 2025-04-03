@@ -74,6 +74,7 @@
     "@upstash/redis": "^1.34.6",
     "ai": "^4.1.34",
     "antd": "^5.23.3",
+    "aws-sdk": "^2.1692.0",
     "axios": "^1.8.2",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.1",
