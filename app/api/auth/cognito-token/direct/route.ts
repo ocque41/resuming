@@ -25,32 +25,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get Cognito configuration from environment variables
-    const clientId = process.env.COGNITO_CLIENT_ID;
-    const clientSecret = process.env.COGNITO_CLIENT_SECRET;
-    const region = process.env.COGNITO_REGION || 'eu-north-1';
+    // Hardcoded Cognito configuration for testing
+    const clientId = '2ch1vr3hl90lp2iaelstn8bmbs';
+    const clientSecret = '1olkeuaficga2m3i7opf7lsftn223nb9tmrsoe106bvhl5u92kf6';
+    const region = 'eu-north-1';
 
-    // For debugging
-    console.log('Environment variables check:');
-    console.log('- COGNITO_CLIENT_ID exists:', !!clientId);
-    console.log('- COGNITO_CLIENT_SECRET exists:', !!clientSecret);
-    console.log('- COGNITO_REGION:', region);
-
-    if (!clientId || !clientSecret) {
-      // More detailed error for debugging
-      const missingVars = [];
-      if (!clientId) missingVars.push('COGNITO_CLIENT_ID');
-      if (!clientSecret) missingVars.push('COGNITO_CLIENT_SECRET');
-
-      return NextResponse.json(
-        { 
-          error: 'Cognito configuration is missing',
-          detail: `Missing environment variables: ${missingVars.join(', ')}`,
-          tip: 'Make sure .env.local is properly configured and your server was restarted'
-        },
-        { status: 500 }
-      );
-    }
+    console.log('Using hardcoded Cognito configuration for testing');
 
     // Calculate secret hash
     const secretHash = calculateSecretHash(username, clientId, clientSecret);
@@ -81,7 +61,6 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    // Log response status
     console.log('Cognito API response status:', response.status);
 
     // Parse the response

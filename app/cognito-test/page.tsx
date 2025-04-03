@@ -8,6 +8,7 @@ export default function CognitoTestPage() {
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [endpoint, setEndpoint] = useState('/api/auth/cognito-token/direct');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -16,7 +17,7 @@ export default function CognitoTestPage() {
     setResult(null);
 
     try {
-      const response = await fetch('/api/auth/cognito-token', {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -70,6 +71,21 @@ export default function CognitoTestPage() {
             className="w-full p-2 border rounded"
             required
           />
+        </div>
+
+        <div className="mb-4">
+          <label htmlFor="endpoint" className="block mb-1">
+            API Endpoint
+          </label>
+          <select
+            id="endpoint"
+            value={endpoint}
+            onChange={(e) => setEndpoint(e.target.value)}
+            className="w-full p-2 border rounded"
+          >
+            <option value="/api/auth/cognito-token">Using .env.local (default)</option>
+            <option value="/api/auth/cognito-token/direct">Using hardcoded values</option>
+          </select>
         </div>
 
         <button
