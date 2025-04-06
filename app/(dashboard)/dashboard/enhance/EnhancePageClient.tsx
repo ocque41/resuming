@@ -392,7 +392,8 @@ export default function EnhancePageClient({
 
       const assistantMessage: AgentMessage = {
         role: 'assistant',
-        content: response.message
+        content: response.message.content,
+        id: response.message.id
       };
 
       setMessages(prev => [...prev, assistantMessage]);
