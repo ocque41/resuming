@@ -5,7 +5,16 @@ import boto3
 import json
 from typing import Dict, Optional, Any, Tuple
 from botocore.exceptions import ClientError
-import fitz  # PyMuPDF for PDF handling
+
+# Try different import patterns for PyMuPDF
+try:
+    import fitz  # PyMuPDF for PDF handling
+except ImportError:
+    try:
+        import pymupdf as fitz  # Alternative import pattern
+    except ImportError:
+        from pymupdf import fitz  # Another alternative
+
 import docx  # python-docx for DOCX handling
 
 # Configure logging

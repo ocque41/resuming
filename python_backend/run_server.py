@@ -41,7 +41,7 @@ def main():
     
     # Run the server
     uvicorn.run(
-        "python_backend.main:app",
+        "main:app",
         host=host,
         port=port,
         reload=True,  # Enable auto-reload during development

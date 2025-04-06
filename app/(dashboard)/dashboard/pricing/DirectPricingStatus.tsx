@@ -153,12 +153,20 @@ export default function DirectPricingStatus() {
           
           <div className="p-6">
             <ul className="space-y-4 mb-6">
-              {["Optimize CV", "Document Analysis", "Job Description Generator", "CV to Job Match"].map((feature, i) => (
-                <li key={i} className="flex items-center">
-                  <div className="h-5 w-5 mr-3 rounded-full flex items-center justify-center flex-shrink-0 text-[#8A8782] bg-[#222222]">
+              {[
+                { name: "Optimize CV", desc: "Analyze & optimize for ATS (i)" },
+                { name: "Document Analysis", desc: "Extract insights & visualize data (i)" },
+                { name: "Job Description Generator", desc: "Create detailed job descriptions (i)" },
+                { name: "CV to Job Match", desc: "Analyze CV against job descriptions (i)" }
+              ].map((feature, i) => (
+                <li key={i} className="flex items-start">
+                  <div className="h-5 w-5 mr-3 rounded-full flex items-center justify-center flex-shrink-0 text-[#8A8782] bg-[#222222] mt-0.5">
                     <Check className="h-3 w-3" />
                   </div>
-                  <span className="text-[#C5C2BA] font-borna text-sm">{feature}</span>
+                  <div>
+                    <span className="text-[#C5C2BA] font-borna text-sm block">{feature.name}</span>
+                    <span className="text-[#8A8782] font-borna text-xs block mt-0.5">{feature.desc}</span>
+                  </div>
                 </li>
               ))}
             </ul>

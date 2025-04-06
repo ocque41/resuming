@@ -6,13 +6,23 @@ import os
 from typing import List, Dict, Any, Optional
 import asyncio
 from pydantic import BaseModel, Field
-import openai
 import time
 from threading import Thread
 
 # Import our Agent setup and Document handler
-from python_backend.agent_factory import AgentFactory
-from python_backend.document_handler import DocumentHandler
+import sys
+import os
+# Add the parent directory to sys.path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from agent_factory import AgentFactory
+from document_handler import DocumentHandler
+from agents import Runner
+
+# Define our own Message class
+class Message(BaseModel):
+    role: str
+    content: str
+    id: Optional[str] = None
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -21,11 +31,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
 # ---- Pydantic Models ----
-class Message(BaseModel):
-    role: str
-    content: str
-    id: Optional[str] = None
-    
 class DocumentRequest(BaseModel):
     document_id: str
     
@@ -96,35 +101,28 @@ async def process_agent_message(
         if not agent:
             raise HTTPException(status_code=500, detail=f"Failed to initialize agent for mode: {request.mode}")
         
-        # Prepare the messages for the agent
-        system_instruction = agent.instructions
-        if request.instruction:
-            system_instruction += f"\n\n{request.instruction}"
+        # Get the last user message
+        user_message = "Hello"  # Default message if none provided
+        for msg in reversed(request.messages):
+            if msg.role == "user":
+                user_message = msg.content
+                break
         
-        # Add document context to the system message if available
+        # Include document context in the user message if available
         if document_context and "content" in document_context:
-            system_instruction += f"\n\nDocument content:\n{document_context.get('content')}"
+            user_message = f"Document content:\n{document_context.get('content')}\n\nUser message: {user_message}"
         
-        # Format messages for OpenAI API
-        formatted_messages = [
-            {"role": "system", "content": system_instruction}
-        ]
-        
-        # Add user messages from the request
-        for msg in request.messages:
-            formatted_messages.append({"role": msg.role, "content": msg.content})
-        
-        # Call the OpenAI API
-        response = await agent.run(formatted_messages)
+        # Call the Agent using Runner
+        result = await Runner.run(agent, user_message)
         
         # Process the response
         response_message = Message(
             role="assistant",
-            content=response.content,
+            content=result.final_output,
             id=str(int(time.time() * 1000))  # Generate a timestamp-based ID
         )
         
-        # For now, just return the message
+        # Return the message
         return AgentResponse(
             message=response_message,
             document=document_context.get("metadata") if document_context else None
@@ -172,41 +170,29 @@ async def stream_agent_message(request: AgentMessageRequest):
                 yield f"data: {error_json}\n\n"
                 return
             
-            # Prepare the messages for the agent
-            system_instruction = agent.instructions
-            if request.instruction:
-                system_instruction += f"\n\n{request.instruction}"
+            # Get the last user message
+            user_message = "Hello"  # Default message if none provided
+            for msg in reversed(request.messages):
+                if msg.role == "user":
+                    user_message = msg.content
+                    break
             
-            # Add document context to the system message if available
+            # Include document context in the user message if available
             if document_context and "content" in document_context:
-                system_instruction += f"\n\nDocument content:\n{document_context.get('content')}"
+                user_message = f"Document content:\n{document_context.get('content')}\n\nUser message: {user_message}"
             
-            # Format messages for OpenAI API
-            formatted_messages = [
-                {"role": "system", "content": system_instruction}
-            ]
-            
-            # Add user messages from the request
-            for msg in request.messages:
-                formatted_messages.append({"role": msg.role, "content": msg.content})
-            
-            # Get streaming response from the agent
+            # Generate message ID
             message_id = str(int(time.time() * 1000))
             
-            async for chunk in agent.run_stream(formatted_messages):
-                chunk_data = {
-                    "id": message_id,
-                    "role": "assistant",
-                    "content": chunk.content,
-                    "is_complete": False
-                }
-                yield f"data: {json.dumps(chunk_data)}\n\n"
+            # For now, we'll simulate streaming by sending the full response at once
+            # Note: The current SDK version doesn't support streaming events easily
+            result = await Runner.run(agent, user_message)
             
-            # Send a final message indicating completion
+            # Send the final message
             final_data = {
                 "id": message_id,
                 "role": "assistant",
-                "content": "",
+                "content": result.final_output,
                 "is_complete": True,
                 "document": document_context.get("metadata") if document_context else None
             }

@@ -21,7 +21,7 @@ if not os.getenv("OPENAI_API_KEY"):
     raise ValueError("OPENAI_API_KEY must be set as an environment variable")
 
 # Import routers after environment variables are loaded
-from python_backend.routers.agent_router import router as agent_router
+from routers.agent_router import router as agent_router
 
 # Create FastAPI app
 app = FastAPI(
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     logger.info(f"Starting Document AI API on {host}:{port}")
     
     uvicorn.run(
-        "python_backend.main:app",
+        "main:app",
         host=host,
         port=port,
         reload=True,  # Enable auto-reload during development

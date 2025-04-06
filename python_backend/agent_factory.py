@@ -1,8 +1,7 @@
 import os
 import logging
 from typing import Dict, Any, Optional, List, AsyncGenerator
-from openai_agents import Agent, AgentStream, Message, AgentState, OpenAITool
-import openai
+from agents import Agent, set_default_openai_key, Runner
 from pydantic import BaseModel, Field
 from functools import lru_cache
 
@@ -16,8 +15,8 @@ if not OPENAI_API_KEY:
     logger.error("OPENAI_API_KEY environment variable is not set")
     raise ValueError("OPENAI_API_KEY environment variable must be set")
 
-# Configure OpenAI client
-openai_client = openai.AsyncClient(api_key=OPENAI_API_KEY)
+# Configure the agents SDK
+set_default_openai_key(OPENAI_API_KEY)
 
 # Define agent instructions
 DOCUMENT_ANALYZER_INSTRUCTIONS = """
@@ -84,91 +83,60 @@ class DocumentPart(BaseModel):
     content: str = Field(..., description="Content of the document part")
     section: str = Field(..., description="Section or heading for this part")
 
-# Define OpenAI tools
-summarize_tool = OpenAITool(
-    name="summarize_document",
-    description="Summarize the document or a specified section",
-    parameters={
-        "type": "object",
-        "properties": {
-            "section": {
-                "type": "string",
-                "description": "Optional section to summarize. If not provided, summarize the entire document."
-            },
-            "length": {
-                "type": "string",
-                "enum": ["brief", "detailed"],
-                "description": "Length of summary: brief (1-2 paragraphs) or detailed (3-5 paragraphs)"
-            }
-        },
-        "required": ["length"]
-    }
-)
+# Define tool functions
+def summarize_document(section: Optional[str] = None, length: str = "brief") -> str:
+    """
+    Summarize the document or a specified section.
+    
+    Args:
+        section: Optional section to summarize. If not provided, summarize the entire document.
+        length: Length of summary: brief (1-2 paragraphs) or detailed (3-5 paragraphs)
+        
+    Returns:
+        A summary of the document or section
+    """
+    return ""  # This will be implemented by the Agent
 
-extract_key_points_tool = OpenAITool(
-    name="extract_key_points",
-    description="Extract key points from the document",
-    parameters={
-        "type": "object",
-        "properties": {
-            "section": {
-                "type": "string",
-                "description": "Optional section to extract from. If not provided, extract from the entire document."
-            },
-            "max_points": {
-                "type": "integer",
-                "description": "Maximum number of key points to extract"
-            }
-        },
-        "required": ["max_points"]
-    }
-)
+def extract_key_points(max_points: int, section: Optional[str] = None) -> List[str]:
+    """
+    Extract key points from the document.
+    
+    Args:
+        max_points: Maximum number of key points to extract
+        section: Optional section to extract from. If not provided, extract from the entire document.
+        
+    Returns:
+        A list of key points
+    """
+    return []  # This will be implemented by the Agent
 
-edit_section_tool = OpenAITool(
-    name="edit_section",
-    description="Edit a section of the document",
-    parameters={
-        "type": "object",
-        "properties": {
-            "section": {
-                "type": "string",
-                "description": "Section to edit"
-            },
-            "new_content": {
-                "type": "string",
-                "description": "New content for the section"
-            },
-            "edit_reason": {
-                "type": "string",
-                "description": "Reason for the edit"
-            }
-        },
-        "required": ["section", "new_content", "edit_reason"]
-    }
-)
+def edit_section(section: str, new_content: str, edit_reason: str) -> str:
+    """
+    Edit a section of the document.
+    
+    Args:
+        section: Section to edit
+        new_content: New content for the section
+        edit_reason: Reason for the edit
+        
+    Returns:
+        A confirmation message
+    """
+    return ""  # This will be implemented by the Agent
 
-create_section_tool = OpenAITool(
-    name="create_section",
-    description="Create a new section for the document",
-    parameters={
-        "type": "object",
-        "properties": {
-            "section_title": {
-                "type": "string",
-                "description": "Title for the new section"
-            },
-            "content": {
-                "type": "string",
-                "description": "Content for the new section"
-            },
-            "position": {
-                "type": "string",
-                "description": "Position in the document (start, end, or after a specific section)"
-            }
-        },
-        "required": ["section_title", "content", "position"]
-    }
-)
+def create_section(section_title: str, content: str, position: str) -> str:
+    """
+    Create a new section for the document.
+    
+    Args:
+        section_title: Title for the new section
+        content: Content for the new section
+        position: Position in the document (start, end, or after a specific section)
+        
+    Returns:
+        A confirmation message
+    """
+    return ""  # This will be implemented by the Agent
 
 class AgentFactory:
     """Factory class for creating and managing different types of OpenAI Agents."""
@@ -213,11 +181,9 @@ class AgentFactory:
         """Create an agent for document analysis."""
         logger.info("Creating document analyzer agent")
         return Agent(
-            openai_client=openai_client,
-            model="gpt-4o",
+            name="document_analyzer",
             instructions=DOCUMENT_ANALYZER_INSTRUCTIONS,
-            tools=[summarize_tool, extract_key_points_tool],
-            name="document_analyzer"
+            tools=[summarize_document, extract_key_points]
         )
     
     @staticmethod
@@ -225,11 +191,9 @@ class AgentFactory:
         """Create an agent for document editing."""
         logger.info("Creating document editor agent")
         return Agent(
-            openai_client=openai_client,
-            model="gpt-4o",
+            name="document_editor",
             instructions=DOCUMENT_EDITOR_INSTRUCTIONS,
-            tools=[edit_section_tool],
-            name="document_editor"
+            tools=[edit_section]
         )
     
     @staticmethod
@@ -237,11 +201,9 @@ class AgentFactory:
         """Create an agent for document creation."""
         logger.info("Creating document creator agent")
         return Agent(
-            openai_client=openai_client,
-            model="gpt-4o",
+            name="document_creator",
             instructions=DOCUMENT_CREATOR_INSTRUCTIONS,
-            tools=[create_section_tool],
-            name="document_creator"
+            tools=[create_section]
         )
         
     @classmethod

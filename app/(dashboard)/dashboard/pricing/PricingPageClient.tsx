@@ -216,17 +216,28 @@ export default function PricingPageClient({
                     <div className="p-6 flex flex-col h-full">
                       <ul className="space-y-4 flex-grow mb-8">
                         {[
-                          "Optimize CV ⓘ", 
-                          "Document Analysis ⓘ", 
-                          "Job Description Generator ⓘ", 
-                          "CV to Job Match ⓘ"
+                          "Optimize CV (i)", 
+                          "Document Analysis (i)", 
+                          "Job Description Generator (i)", 
+                          "CV to Job Match (i)"
                         ].map((feature, index) => (
                           <li key={index} className="flex items-start group relative">
                             <div className="h-5 w-5 mr-3 rounded-full flex items-center justify-center flex-shrink-0 text-[#8A8782] bg-[#222222]">
                               <Check className="h-3 w-3" />
                             </div>
                             <span className="text-[#C5C2BA] font-borna text-sm">
-                              {feature.replace(" ⓘ", "")}
+                              {feature.includes("Optimize CV") && (
+                                <>Optimize CV <span className="text-[#8A8782]">Analyze & optimize for ATS (i)</span></>
+                              )}
+                              {feature.includes("Document Analysis") && (
+                                <>Document Analysis <span className="text-[#8A8782]">Extract insights & visualize data (i)</span></>
+                              )}
+                              {feature.includes("Job Description Generator") && (
+                                <>Job Description Generator <span className="text-[#8A8782]">Create detailed job descriptions (i)</span></>
+                              )}
+                              {feature.includes("CV to Job Match") && (
+                                <>CV to Job Match <span className="text-[#8A8782]">Analyze CV against job descriptions (i)</span></>
+                              )}
                             </span>
                           </li>
                         ))}

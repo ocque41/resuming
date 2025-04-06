@@ -4,7 +4,7 @@ import { ImageResponse } from 'next/og';
 export const runtime = 'edge';
 
 // Image metadata
-export const alt = 'Resuming - The First Engineer-Recruiter AI Platform';
+export const alt = 'The Jobs Playground - The AI CV Optimizer and Document Analysis Platform';
 export const size = {
   width: 1200,
   height: 630,

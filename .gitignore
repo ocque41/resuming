@@ -46,3 +46,14 @@ D:\repo\cvoptimizer\next-js-saas-starter\FLOW-MECHANISM.md
 
 # Cursor rules
 D:\repo\cvoptimizer\next-js-saas-starter\.cursorrules
+
+# Python backend
+/python_backend/venv/
+/python_backend/__pycache__/
+/python_backend/**/__pycache__/
+/python_backend/.vscode/
+/python_backend/**/.ipynb_checkpoints/
+/python_backend/**/*.pyc
+/python_backend/**/*.pyo
+/python_backend/**/*.pyd
+/python_backend/.pytest_cache/

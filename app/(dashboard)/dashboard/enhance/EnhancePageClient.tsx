@@ -17,6 +17,7 @@ import {
 import AIAgent from "@/AIAgent";
 import FileUploader from "../../../../FileUploader";
 import { Button } from "@/components/ui/button";
+import { sendMessageToAgent, streamMessageFromAgent, AgentMessage, AgentMode } from '@/lib/agent-api';
 
 interface DocumentData {
   id: string;
@@ -50,6 +51,9 @@ export default function EnhancePageClient({
   const [conversationStarted, setConversationStarted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [useAIAgentComponent, setUseAIAgentComponent] = useState(true);
+  const [messages, setMessages] = useState<AgentMessage[]>([]);
+  const [isAgentLoading, setIsAgentLoading] = useState(false);
+  const [agentError, setAgentError] = useState<string | null>(null);
 
   // Refs for input fields and auto-scrolling
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -364,7 +368,83 @@ export default function EnhancePageClient({
     setUseAIAgentComponent(prev => !prev);
   };
   
-  return (
+  /**
+   * Send a message to the agent and handle the response
+   */
+  const sendMessage = async (content: string, mode: AgentMode = 'edit') => {
+    if (!content.trim() || isAgentLoading) return;
+
+    const userMessage: AgentMessage = { role: 'user', content };
+    setMessages(prev => [...prev, userMessage]);
+    setIsAgentLoading(true);
+    setAgentError(null);
+
+    try {
+      // Use either the document ID from state or undefined
+      const documentId = selectedDocument ? selectedDocument.id : undefined;
+
+      // Option 1: Non-streaming response
+      const response = await sendMessageToAgent({
+        mode,
+        messages: [...messages, userMessage],
+        documentId
+      });
+
+      const assistantMessage: AgentMessage = {
+        role: 'assistant',
+        content: response.message
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
+
+      // Option 2: Streaming response (uncomment to use)
+      /*
+      let streamedContent = '';
+      
+      await streamMessageFromAgent(
+        {
+          mode,
+          messages: [...messages, userMessage],
+          documentId
+        },
+        (chunk) => {
+          streamedContent += chunk;
+          
+          // Update UI with partial response
+          setMessages(prev => {
+            const newMessages = [...prev];
+            // If we already have an assistant message, update it
+            if (newMessages[newMessages.length - 1]?.role === 'assistant') {
+              newMessages[newMessages.length - 1].content = streamedContent;
+            } else {
+              // Otherwise add a new assistant message
+              newMessages.push({
+                role: 'assistant',
+                content: streamedContent
+              });
+            }
+            return newMessages;
+          });
+        },
+        (fullResponse) => {
+          // Update is complete
+          console.log('Streaming complete', fullResponse);
+        },
+        (error) => {
+          console.error('Streaming error:', error);
+          setAgentError(`Error: ${error.message}`);
+        }
+      );
+      */
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setAgentError(`Failed to get response: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsAgentLoading(false);
+    }
+  };
+  
+    return (
     <div className="flex flex-col w-full h-full min-h-screen">
       {/* Header section - keep unchanged */}
       <header className="border-b border-[#222222] py-6 px-6 flex justify-between items-center bg-[#0A0A0A]">
@@ -406,7 +486,7 @@ export default function EnhancePageClient({
                   Switch to classic interface
                 </button>
               </div>
-            </div>
+                      </div>
           ) : (
             // Original chat implementation
             <div className="flex-1 flex flex-col p-6">
@@ -421,11 +501,11 @@ export default function EnhancePageClient({
                 >
                   Switch to AIAgent interface
                 </button>
-              </div>
+                  </div>
             </div>
-          )}
+        )}
+      </div>
         </div>
       </div>
-    </div>
-  );
+    );
 }

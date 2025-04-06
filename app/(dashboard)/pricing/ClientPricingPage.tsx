@@ -104,10 +104,10 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
               "CV to Job Match ⓘ",
             ]}
             tooltips={{
-              "Optimize CV ⓘ": "Analyze & optimize for ATS",
-              "Document Analysis ⓘ": "Extract insights & visualize data",
-              "Job Description Generator ⓘ": "Create detailed job descriptions",
-              "CV to Job Match ⓘ": "Analyze CV against job descriptions",
+              "Optimize CV ⓘ": "Analyze & optimize for ATS (i)",
+              "Document Analysis ⓘ": "Extract insights & visualize data (i)",
+              "Job Description Generator ⓘ": "Create detailed job descriptions (i)",
+              "CV to Job Match ⓘ": "Analyze CV against job descriptions (i)",
             }}
             highlight={false}
             priceId="price_free"

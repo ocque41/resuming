@@ -443,15 +443,15 @@ export default function HomePage() {
               <Article className="text-center max-w-3xl mx-auto">
                 <motion.div variants={fadeInUp}>
                   <ArticleTitle className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold text-white font-safiro">
-                    The Work Playground
+                    The Jobs Playground
                   </ArticleTitle>
                 </motion.div>
                 
                 <motion.div variants={fadeInUp}>
                   <ArticleContent className="mt-2 sm:mt-3 md:mt-4 text-base sm:text-lg md:text-xl lg:text-2xl text-gray-300 font-borna">
-                    <p>The First Engineer - Recruiter AI Platform</p>
+                    <p>Just Press Enter</p>
                     <p className="text-base sm:text-lg mt-2">
-                      Designed for technical professionals and emerging talent
+                      The AI CV Optimizer and Document Analysis Platform
                     </p>
                   </ArticleContent>
                 </motion.div>
@@ -465,7 +465,7 @@ export default function HomePage() {
                     size="lg"
                     className="bg-white text-[#050505] px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 rounded-md hover:bg-white/90 transition w-full sm:w-auto text-sm sm:text-base font-borna"
                   >
-                    <Link href="/sign-up">Try For Free</Link>
+                    <Link href="/sign-up">Enter</Link>
                   </Button>
                   <Button
                     asChild
