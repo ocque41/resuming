@@ -2992,195 +2992,10 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
 
     try {
       console.log(`Processing CV: ${selectedCVName} (ID: ${selectedCVId}) for specific job`);
-  
-  // Simulate processing with progress updates
-  const simulateProcessing = () => {
-    let progress = 0;
-    const interval = setInterval(() => {
-      // More granular progress updates based on current progress
-      const increment = progress < 60 ? Math.random() * 5 :  // Faster at start
-                       progress < 80 ? Math.random() * 3 :   // Slower in middle
-                       progress < 95 ? Math.random() * 1 :   // Very slow near end
-                       Math.random() * 0.5;                  // Extremely slow at final stage
       
-      progress += increment;
-          
-          // Set intermediate progress updates
-      setProcessingProgress(Math.floor(progress));
-      
-          // Update status messages
-      if (progress < 15) {
-        setProcessingStatus("Analyzing job description and requirements...");
-      } else if (progress < 30) {
-        setProcessingStatus("Extracting key skills and qualifications...");
-      } else if (progress < 45) {
-        setProcessingStatus("Analyzing CV content and structure...");
-      } else if (progress < 60) {
-        setProcessingStatus("Matching CV content to job requirements...");
-      } else if (progress < 75) {
-        setProcessingStatus("Optimizing CV sections and formatting...");
-      } else if (progress < 85) {
-        setProcessingStatus("Enhancing content relevance...");
-      } else if (progress < 95) {
-        setProcessingStatus("Finalizing optimizations...");
-      } else {
-        setProcessingStatus("Completing final adjustments...");
-      }
-          
-          // If we've reached 100%, complete the process
-          if (progress >= 100) {
-            clearInterval(interval);
-            completeOptimization();
-          }
-        }, 500); // Update interval
-        
-        // Run the actual optimization process
-        actualOptimizationProcess();
-    
-    // Set multiple timeouts for progressive warnings
-    setTimeout(() => {
-          if (isProcessing) {
-        setProcessingStatus(prevStatus => `${prevStatus} (Still processing...)`);
-      }
-    }, 15000); // 15 seconds
-    
-    setTimeout(() => {
-          if (isProcessing) {
-        setProcessingStatus(prevStatus => `${prevStatus} (Almost there...)`);
-      }
-    }, 25000); // 25 seconds
-    
-    setTimeout(() => {
-      if (isProcessing) {
-        setProcessingTooLong(true);
-        setProcessingStatus(prevStatus => 
-          prevStatus ? 
-            (prevStatus.includes("taking longer") 
-              ? prevStatus 
-              : `${prevStatus} (This is taking longer than usual, but please wait...)`)
-            : "Processing is taking longer than usual, please wait..."
-        );
-      }
-    }, 30000); // 30 seconds
-    
-    // Cleanup function
-    return () => {
-      clearInterval(interval);
-    };
-  };
-
-      // Actual optimization process using Mistral AI
-      const actualOptimizationProcess = async () => {
-        try {
-          if (!originalText || !jobDescription) {
-            throw new Error("Missing original CV text or job description");
-          }
-          
-          // Step 1: Call the tailoring API to optimize the CV
-          const tailoringResult: TailoringResult = await tailorCVForJob(
-            originalText || '',
-            jobDescription || '',
-            jobTitle || undefined
-          );
-          
-          if (!tailoringResult.success) {
-            throw new Error(`Failed to tailor CV: ${tailoringResult.error}`);
-          }
-          
-          // Store the optimized text and other results for use later
-          setOptimizedText(tailoringResult.tailoredContent);
-          setEnhancedProfile(tailoringResult.enhancedProfile || '');
-          setSectionImprovements(tailoringResult.sectionImprovements || {});
-          
-          // Store industry insights if available
-          if (tailoringResult.industryInsights) {
-            const insights = tailoringResult.industryInsights;
-            // Map API response data structure to match our interface
-            setIndustryInsights({
-              industry: insights.industry,
-              keySkills: insights.keySkills,
-              suggestedMetrics: insights.suggestedMetrics,
-              formatGuidance: insights.formatGuidance,
-              salaryRange: insights.salaryRange,
-              tips: insights.tips
-            });
-            console.log("Industry insights detected:", tailoringResult.industryInsights);
-          }
-          
-          // Step 2: Extract job title from job description if not already set
-          if (!jobTitle) {
-            const jobTitleMatch = jobDescription.match(/(?:job title|position|role|job)[:\s]+([^\n.]+)/i);
-            if (jobTitleMatch && jobTitleMatch[1]) {
-              setJobTitle(jobTitleMatch[1].trim());
-            }
-          }
-          
-          // Step 3: Generate structured CV from optimized text
-          const structured = generateStructuredCV(tailoringResult.tailoredContent, jobDescription);
-          setStructuredCV(structured);
-          
-        } catch (error) {
-          console.error("Error in CV tailoring process:", error);
-          
-          // If API fails, try regular optimization
-          try {
-            console.log("Tailoring API failed, falling back to standard optimization");
-            
-            // Try the standard optimization API
-            const optimizationResult = await optimizeCVForJob(
-              originalText || '',
-              jobDescription || ''
-            );
-            
-            if (!optimizationResult || !optimizationResult.optimizedContent) {
-              throw new Error("Failed to optimize CV content");
-            }
-            
-            // Ensure experience entries are preserved
-            const validatedContent = ensureExperiencePreservation(originalText || '', optimizationResult.optimizedContent);
-            
-            // Store the optimized text
-            setOptimizedText(validatedContent);
-            
-            // Generate structured CV
-            const structuredCV = generateStructuredCV(validatedContent, jobDescription);
-            setStructuredCV(structuredCV);
-            
-          } catch (optimizationError) {
-            console.error("Standard optimization also failed, using client-side fallback:", optimizationError);
-            
-            // Use client-side optimization as final fallback
-            const fallbackText = generateOptimizedText(originalText || '', jobDescription);
-            
-            // Ensure experience entries are preserved in the fallback as well
-            const validatedFallbackText = ensureExperiencePreservation(originalText || '', fallbackText);
-            
-            setOptimizedText(validatedFallbackText);
-            
-            // Generate structured CV
-            const structuredCV = generateStructuredCV(validatedFallbackText, jobDescription);
-            setStructuredCV(structuredCV);
-          }
-        }
-      };
-      
-      // Complete the optimization process
-      const completeOptimization = () => {
-        // If we haven't set optimized text yet (API calls failed), do it now
-        if (!optimizedText && originalText) {
-          const generatedText = generateOptimizedText(originalText, jobDescription);
-          setOptimizedText(generatedText);
-        }
-        
-        // Complete processing
-        setIsProcessing(false);
-        setIsProcessed(true);
-        setProcessingStatus("Optimization complete");
-        setActiveTab('optimizedCV');
-      };
-      
-      // Simulate processing with progress updates
-      simulateProcessing();
+      // Start simulated progress and actual optimization in parallel
+      startSimulatedProgress();
+      startOptimizationProcess();
       
     } catch (error) {
       console.error("Error optimizing CV for job:", error);
@@ -3189,7 +3004,327 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
       setProcessingProgress(0);
     }
   }, [selectedCVId, selectedCVName, jobDescription, originalText, jobTitle]);
-  
+
+  // Start simulated progress updates
+  const startSimulatedProgress = () => {
+    let progress = 0;
+    const interval = setInterval(() => {
+      if (!isProcessing) {
+        clearInterval(interval);
+        return;
+      }
+      
+      // More granular progress updates based on current progress
+      // Using smaller increment values to reduce UI updates frequency
+      const increment = progress < 60 ? 0.5 + Math.random() : // Faster at start
+                      progress < 80 ? 0.3 + Math.random() * 0.7 : // Slower in middle
+                      progress < 95 ? 0.1 + Math.random() * 0.4 : // Very slow near end
+                      0.05 + Math.random() * 0.2; // Extremely slow at final stage
+      
+      progress = Math.min(progress + increment, 99); // Cap at 99% until complete
+      
+      // Throttle UI updates using requestAnimationFrame
+      window.requestAnimationFrame(() => {
+        setProcessingProgress(Math.floor(progress));
+        
+        // Update status messages based on progress
+        if (progress < 15) {
+          setProcessingStatus("Analyzing job description and requirements...");
+        } else if (progress < 30) {
+          setProcessingStatus("Extracting key skills and qualifications...");
+        } else if (progress < 45) {
+          setProcessingStatus("Analyzing CV content and structure...");
+        } else if (progress < 60) {
+          setProcessingStatus("Matching CV content to job requirements...");
+        } else if (progress < 75) {
+          setProcessingStatus("Optimizing CV sections and formatting...");
+        } else if (progress < 85) {
+          setProcessingStatus("Enhancing content relevance...");
+        } else if (progress < 95) {
+          setProcessingStatus("Finalizing optimizations...");
+        } else {
+          setProcessingStatus("Completing final adjustments...");
+        }
+      });
+    }, 1000); // Use a longer interval to reduce UI pressure
+    
+    // Set timeouts for progressive warnings - use rAF to avoid UI blocking
+    setTimeout(() => {
+      if (isProcessing) {
+        window.requestAnimationFrame(() => {
+          setProcessingStatus(prev => `${prev} (Still processing...)`);
+        });
+      }
+    }, 15000);
+    
+    setTimeout(() => {
+      if (isProcessing) {
+        window.requestAnimationFrame(() => {
+          setProcessingStatus(prev => `${prev} (Almost there...)`);
+        });
+      }
+    }, 25000);
+    
+    setTimeout(() => {
+      if (isProcessing) {
+        window.requestAnimationFrame(() => {
+          setProcessingTooLong(true);
+          setProcessingStatus(prev => 
+            prev.includes("taking longer") ? prev : 
+            `${prev} (This is taking longer than usual, but please wait...)`
+          );
+        });
+      }
+    }, 30000);
+    
+    // Return cleanup function
+    return () => {
+      clearInterval(interval);
+    };
+  };
+
+  // Start the actual optimization process
+  const startOptimizationProcess = async () => {
+    // Break the heavy processing into smaller chunks
+    try {
+      // Step 1: Try API-based optimization
+      await tryApiOptimization();
+      
+      // Complete the process and mark as done
+      completeOptimization();
+    } catch (error) {
+      console.error("Error in optimization process:", error);
+      
+      // If still processing, show error
+      if (isProcessing) {
+        window.requestAnimationFrame(() => {
+          setError(error instanceof Error ? error.message : "An unexpected error occurred");
+          setIsProcessing(false);
+        });
+      }
+    }
+  };
+
+  // Try optimization through the API
+  const tryApiOptimization = async () => {
+    try {
+      if (!originalText || !jobDescription) {
+        throw new Error("Missing original CV text or job description");
+      }
+      
+      // Use a local timeout to prevent hanging on API calls
+      const tailoringPromise = tailorCVForJob(
+        originalText,
+        jobDescription,
+        jobTitle || undefined
+      );
+      
+      // Add a timeout to the API call
+      const timeoutPromise = new Promise<TailoringResult>((_, reject) => {
+        setTimeout(() => reject(new Error("API timeout - taking too long to process")), 45000);
+      });
+      
+      // Race the API call against the timeout
+      const tailoringResult = await Promise.race([tailoringPromise, timeoutPromise]);
+      
+      if (!tailoringResult.success) {
+        throw new Error(`Failed to tailor CV: ${tailoringResult.error}`);
+      }
+      
+      // Process the results in smaller batches with microtasks and rAF
+      await processApiResults(tailoringResult);
+      
+      return true;
+    } catch (error) {
+      console.warn("API optimization failed, falling back to client-side processing:", error);
+      
+      // Try fallback client-side processing
+      await tryClientSideOptimization();
+      return true;
+    }
+  };
+
+  // Process API results in smaller chunks to avoid UI blocking
+  const processApiResults = async (results: TailoringResult) => {
+    return new Promise<void>((resolve) => {
+      // Use setTimeout to break up processing
+      setTimeout(() => {
+        // Update optimized text
+        window.requestAnimationFrame(() => {
+          setOptimizedText(results.tailoredContent);
+        });
+        
+        setTimeout(() => {
+          // Update enhanced profile and improvements
+          window.requestAnimationFrame(() => {
+            setEnhancedProfile(results.enhancedProfile || '');
+            setSectionImprovements(results.sectionImprovements || {});
+          });
+          
+          setTimeout(() => {
+            // Process industry insights if available
+            if (results.industryInsights) {
+              const insights = results.industryInsights;
+              // Create a properly typed industry insights object
+              const insightsData: IndustryInsights = {
+                industry: insights.industry,
+                keySkills: insights.keySkills,
+                suggestedMetrics: insights.suggestedMetrics,
+                formatGuidance: insights.formatGuidance
+              };
+              
+              // Add optional properties if they exist
+              if ('salaryRange' in insights && insights.salaryRange) {
+                insightsData.salaryRange = insights.salaryRange;
+              }
+              
+              if ('tips' in insights && insights.tips) {
+                insightsData.tips = insights.tips;
+              }
+              
+              window.requestAnimationFrame(() => {
+                setIndustryInsights(insightsData);
+              });
+            }
+            
+            // Extract job title if needed
+            if (!jobTitle) {
+              const jobTitleMatch = jobDescription.match(/(?:job title|position|role|job)[:\s]+([^\n.]+)/i);
+              if (jobTitleMatch && jobTitleMatch[1]) {
+                window.requestAnimationFrame(() => {
+                  setJobTitle(jobTitleMatch[1].trim());
+                });
+              }
+            }
+            
+            // Generate structured CV with delay
+            setTimeout(() => {
+              try {
+                const structured = generateStructuredCV(results.tailoredContent, jobDescription);
+                window.requestAnimationFrame(() => {
+                  setStructuredCV(structured);
+                  resolve();
+                });
+              } catch (err) {
+                console.error("Error generating structured CV:", err);
+                resolve(); // Resolve anyway to continue
+              }
+            }, 100);
+          }, 100);
+        }, 100);
+      }, 100);
+    });
+  };
+
+  // Try client-side optimization as a fallback
+  const tryClientSideOptimization = async () => {
+    try {
+      // First try the standard optimization API
+      const optimizationResult = await optimizeCVForJob(originalText || '', jobDescription || '');
+      
+      if (optimizationResult?.optimizedContent) {
+        // Process results with throttling to avoid UI blocking
+        return new Promise<void>((resolve) => {
+          // Ensure experience entries are preserved
+          setTimeout(() => {
+            try {
+              const validatedContent = ensureExperiencePreservation(
+                originalText || '', 
+                optimizationResult.optimizedContent
+              );
+              
+              // Update state with minimal UI impact
+              window.requestAnimationFrame(() => {
+                setOptimizedText(validatedContent);
+              });
+              
+              // Generate structured CV with delay
+              setTimeout(() => {
+                try {
+                  const structuredCV = generateStructuredCV(validatedContent, jobDescription);
+                  window.requestAnimationFrame(() => {
+                    setStructuredCV(structuredCV);
+                    resolve();
+                  });
+                } catch (err) {
+                  console.error("Error generating structured CV:", err);
+                  resolve();
+                }
+              }, 100);
+            } catch (err) {
+              console.error("Error processing standard optimization:", err);
+              // Fall back to basic client processing
+              useFallbackProcessing().then(resolve);
+            }
+          }, 100);
+        });
+      } else {
+        throw new Error("No optimized content returned");
+      }
+    } catch (error) {
+      console.warn("Standard optimization failed, using basic client processing:", error);
+      return useFallbackProcessing();
+    }
+  };
+
+  // Use very basic client-side processing as last resort
+  const useFallbackProcessing = async () => {
+    return new Promise<void>((resolve) => {
+      // Use setTimeout to avoid UI blocking
+      setTimeout(() => {
+        try {
+          // Generate optimized text
+          const fallbackText = generateOptimizedText(originalText || '', jobDescription || '');
+          
+          // Ensure experience entries are preserved
+          const validatedFallbackText = ensureExperiencePreservation(
+            originalText || '', 
+            fallbackText
+          );
+          
+          // Update state with throttling
+          window.requestAnimationFrame(() => {
+            setOptimizedText(validatedFallbackText);
+          });
+          
+          // Generate structured CV with delay
+          setTimeout(() => {
+            try {
+              const structuredCV = generateStructuredCV(validatedFallbackText, jobDescription);
+              window.requestAnimationFrame(() => {
+                setStructuredCV(structuredCV);
+                resolve();
+              });
+            } catch (err) {
+              console.error("Error generating structured CV:", err);
+              resolve();
+            }
+          }, 100);
+        } catch (err) {
+          console.error("Error in fallback processing:", err);
+          resolve();
+        }
+      }, 100);
+    });
+  };
+
+  // Complete the optimization process
+  const completeOptimization = () => {
+    // Ensure we have optimized text
+    if (!optimizedText && originalText) {
+      const generatedText = generateOptimizedText(originalText, jobDescription);
+      setOptimizedText(generatedText);
+    }
+    
+    // Update UI state
+    window.requestAnimationFrame(() => {
+      setIsProcessing(false);
+      setIsProcessed(true);
+      setProcessingStatus("Optimization complete");
+      setActiveTab('optimizedCV');
+    });
+  };
+
   // Generate optimized text based on job description
   const generateOptimizedText = (originalText: string, jobDescription: string): string => {
     if (!originalText || !jobDescription) {
