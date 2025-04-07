@@ -9,7 +9,8 @@ import {
   trackEvent, 
   startPhase, 
   completePhase, 
-  trackOpenAICall 
+  trackOpenAICall,
+  ProcessingEvent
 } from "@/lib/utils/analytics";
 import {
   getVariantForUser,
@@ -19,37 +20,57 @@ import { ensureModelWarmedUp } from './warmupCache';
 import { shouldProcessInParallel, processInParallel } from './parallelProcessor';
 import { MistralRAGService } from './mistralRagService';
 
+// Initialize the OpenAI client
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
 // Define industry-specific keywords for local analysis
 const INDUSTRY_KEYWORDS: Record<string, string[]> = {
   'Technology': [
-    'software', 'development', 'programming', 'javascript', 'python', 'java', 'react', 'angular', 'node',
-    'aws', 'azure', 'cloud', 'devops', 'agile', 'scrum', 'git', 'api', 'microservices', 'docker',
-    'kubernetes', 'machine learning', 'ai', 'data science', 'full stack', 'frontend', 'backend'
+    'software', 'development', 'programming', 'agile', 'cloud', 'api',
+    'automation', 'scalability', 'infrastructure', 'security'
   ],
   'Finance': [
-    'financial analysis', 'accounting', 'budgeting', 'forecasting', 'investment', 'portfolio', 'risk management',
-    'financial reporting', 'audit', 'compliance', 'banking', 'securities', 'trading', 'equity', 'financial modeling'
-  ],
-  'Healthcare': [
-    'patient care', 'clinical', 'medical', 'healthcare', 'hospital', 'physician', 'nursing', 'treatment',
-    'diagnosis', 'therapy', 'pharmaceutical', 'health records', 'hipaa', 'electronic medical records',
-    'patient management', 'medical coding', 'medical billing', 'healthcare compliance'
+    'accounting', 'audit', 'financial analysis', 'risk management',
+    'investment', 'banking', 'compliance', 'forecasting'
   ],
   'Marketing': [
-    'marketing strategy', 'digital marketing', 'social media', 'content marketing', 'seo', 'sem', 'ppc',
-    'google analytics', 'facebook ads', 'instagram', 'brand management', 'market research',
-    'customer acquisition', 'customer retention', 'email marketing', 'marketing automation'
+    'digital marketing', 'brand strategy', 'market research', 'campaign management',
+    'social media', 'content creation', 'analytics', 'SEO'
+  ],
+  'Healthcare': [
+    'patient care', 'clinical', 'medical records', 'healthcare compliance',
+    'treatment planning', 'care coordination', 'health informatics'
   ],
   'Sales': [
-    'sales strategy', 'business development', 'account management', 'client relationship', 'negotiation',
-    'closing deals', 'sales pipeline', 'lead generation', 'prospecting', 'sales targets', 'revenue growth'
+    'business development', 'client relationship', 'revenue growth',
+    'pipeline management', 'negotiation', 'customer acquisition'
+  ],
+  'Manufacturing': [
+    'quality control', 'production planning', 'supply chain',
+    'lean manufacturing', 'inventory management', 'process improvement'
+  ],
+  'Education': [
+    'curriculum development', 'instructional design', 'educational technology',
+    'student assessment', 'learning outcomes', 'academic advising'
+  ],
+  'Legal': [
+    'legal research', 'compliance', 'contract review',
+    'regulatory', 'case management', 'legal writing'
   ]
 };
 
 // Action verbs that indicate achievements
 const ACTION_VERBS = [
-  'achieved', 'improved', 'increased', 'reduced', 'developed', 'implemented', 'created', 'managed',
-  'led', 'designed', 'launched', 'delivered', 'generated', 'negotiated', 'secured', 'streamlined'
+  'Achieved', 'Improved', 'Developed', 'Managed', 'Created', 
+  'Implemented', 'Coordinated', 'Increased', 'Reduced', 'Delivered',
+  'Led', 'Generated', 'Designed', 'Established', 'Streamlined',
+  'Transformed', 'Negotiated', 'Spearheaded', 'Executed', 'Administered',
+  'Built', 'Launched', 'Restructured', 'Resolved', 'Collaborated',
+  'Maintained', 'Analyzed', 'Directed', 'Initiated', 'Pioneered',
+  'Automated', 'Formulated', 'Supervised', 'Facilitated', 'Optimized',
+  'Authored', 'Conducted', 'Evaluated', 'Secured', 'Revitalized'
 ];
 
 /**
@@ -359,12 +380,12 @@ export async function processCVWithAI(
             } catch (apiError) {
               logger.warn(`API optimization failed for CV ${cvId}, falling back to direct optimization: ${apiError instanceof Error ? apiError.message : String(apiError)}`);
               // Fall back to direct optimization
-              cache.optimizedText = await performQuickOptimization(rawText, cache.analysis);
+              cache.optimizedText = await performQuickOptimization(rawText, cache.analysis, { cvId, startTime: cache.startTime });
             }
           } else {
             // No API URL configured, use direct optimization
             logger.info(`Using direct optimization for CV ${cvId} (no API URL configured)`);
-            cache.optimizedText = await performQuickOptimization(rawText, cache.analysis);
+            cache.optimizedText = await performQuickOptimization(rawText, cache.analysis, { cvId, startTime: cache.startTime });
           }
           
           // Clear timeout
@@ -877,109 +898,94 @@ async function performQuickAnalysis(rawText: string, localAnalysis: any): Promis
 }
 
 /**
- * Perform quick optimization of CV content
- * Enhanced with RAG using Mistral AI
+ * Performs a quick optimization of CV text using AI
+ * Uses a more concise prompt for faster response
  */
-async function performQuickOptimization(rawText: string, analysis: any): Promise<string> {
+async function performQuickOptimization(text: string, localAnalysis: any, metadata: any): Promise<string> {
+  logger.info("Performing quick CV optimization with OpenAI");
+  
   try {
-    // Set a timeout for the optimization process
-    const optimizationStartTime = Date.now();
-    const OPTIMIZATION_TIMEOUT = 30000; // 30 seconds timeout
+    // Create a more specific and detailed optimization prompt
+    const prompt = `
+You are a CV optimization expert. Please optimize the following CV text to make it more professional, impactful, and ATS (Applicant Tracking System) friendly. 
+
+Focus on these specific improvements:
+1. Optimize the format for better readability and ATS scanning
+2. Ensure ATS compatibility by using industry-specific keywords 
+3. Use standardized section headers for consistency
+4. Implement strong, impactful action verbs in experience descriptions
+5. Structure the content professionally for better visual scanning
+6. Reduce skills to the top 10 most relevant for the industry
+7. Add 3 most important career goals in bullet points (as a top section)
+8. Add 3 most important career achievements in bullet points (as a top section)
+
+Maintain all factual information and don't invent experience or qualifications.
+
+The CV text:
+${text}
+`;
+
+    // Set a timeout for the OpenAI API call to ensure we don't wait too long
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25-second timeout
     
-    // Log the start of optimization
-    logger.info('Starting CV optimization process');
-    
-    // Try direct OpenAI call first as it's more reliable
     try {
-      logger.info('Attempting direct API optimization with OpenAI');
+      // Call OpenAI API with the prompt
+      const completion = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo-16k",
+        messages: [
+          {
+            role: "system",
+            content: "You are a professional CV optimizing assistant that helps improve CVs for better job search results."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 8000,
+        top_p: 1,
+        frequency_penalty: 0,
+        presence_penalty: 0
+      }, { signal: controller.signal });
       
-      // Initialize OpenAI client with error handling
-      let openai: OpenAI;
-      try {
-        openai = new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY,
-        });
-      } catch (openaiInitError) {
-        logger.error('Failed to initialize OpenAI client:', 
-          openaiInitError instanceof Error ? openaiInitError.message : String(openaiInitError));
-        // Return enhanced text with local rules as fallback
-        logger.info('Falling back to local enhancement rules due to OpenAI client initialization failure');
-        return enhanceTextWithLocalRules(rawText, analysis);
-      }
-
-      // Try GPT-3.5-turbo for balance of speed and quality
-      try {
-        logger.info('Attempting optimization with GPT-3.5-turbo');
-        
-        // Create a promise for the direct API optimization
-        const directOptimizationPromise = openai.chat.completions.create({
-          model: "gpt-3.5-turbo",
-          messages: [
-            {
-              role: "system",
-              content: "You are a fast CV optimizer. Return ONLY the optimized CV text, no explanations."
-            },
-            {
-              role: "user",
-              content: `Quickly optimize this CV for ATS compatibility. Focus on:
-1. Adding relevant keywords for the ${analysis.industry || 'general'} industry
-2. Using action verbs for achievements
-3. Quantifying accomplishments
-4. Maintaining original structure and information
-5. Optimizing formatting for readability
-
-Return ONLY the optimized CV text, no explanations.
-
-CV text:
-${rawText.substring(0, 4000)}${rawText.length > 4000 ? '...' : ''}
-
-Key weaknesses to address:
-${analysis.weaknesses?.join(', ') || 'Improve overall ATS compatibility'}`
-            }
-          ],
-          temperature: 0.4,
-          max_tokens: 3000,
-        });
-        
-        // Create a timeout promise
-        const directTimeoutPromise = new Promise<any>((_, reject) => {
-          setTimeout(() => reject(new Error('Direct API optimization timed out')), 20000); // 20 seconds timeout
-        });
-        
-        // Race the direct optimization against the timeout
-        const response = await Promise.race([directOptimizationPromise, directTimeoutPromise]);
-        
-        const optimizedText = response.choices[0]?.message?.content || "";
-        
-        if (optimizedText && optimizedText.length > rawText.length * 0.5) {
-          logger.info('Successfully generated optimized CV content with GPT-3.5-turbo');
-          return optimizedText;
-        } else {
-          logger.warn('GPT-3.5-turbo response too short or empty, falling back to local enhancement');
-          throw new Error('GPT-3.5-turbo response validation failed');
-        }
-      } catch (gptError) {
-        logger.warn('GPT-3.5-turbo optimization failed or timed out, falling back to local enhancement', 
-          gptError instanceof Error ? gptError.message : String(gptError));
-        
-        // Fall back to local enhancement
-        return enhanceTextWithLocalRules(rawText, analysis);
-      }
-    } catch (directApiError) {
-      logger.error('All direct API optimization attempts failed', 
-        directApiError instanceof Error ? directApiError.message : String(directApiError));
+      clearTimeout(timeoutId);
       
-      // Return enhanced text with local rules as final fallback
-      logger.info('Falling back to local enhancement rules as final fallback');
-      return enhanceTextWithLocalRules(rawText, analysis);
+      // Get the response from OpenAI
+      const optimizedText = completion.choices[0].message.content;
+      
+      if (optimizedText && optimizedText.length > 100) {
+        logger.info("Successfully optimized CV with OpenAI");
+        
+        // Track usage for billing/monitoring using the safe function
+        trackProcessingEvent("cv_optimized", {
+          cvId: metadata?.cvId || 0,
+          optimizationType: "quick", 
+          characterCount: text.length,
+          processingTime: Date.now() - (metadata?.startTime || Date.now())
+        });
+        
+        return optimizedText;
+      } else {
+        logger.warn("OpenAI returned insufficient content for CV optimization");
+        throw new Error("AI response was too short or empty");
+      }
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      logger.error("Error in OpenAI optimization:", error.message);
+      
+      // If there's a timeout or API failure, fall back to local enhancement
+      logger.info("Falling back to local rules for CV enhancement");
+      return enhanceTextWithLocalRules(text, localAnalysis);
     }
-  } catch (error) {
-    // Handle any unexpected errors
-    logger.error('Unexpected error in performQuickOptimization:', 
-      error instanceof Error ? error.message : String(error));
+  } catch (error: any) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error("Error during quick optimization:", errorMessage);
     
-    // Return enhanced text with local rules as ultimate fallback
-    return enhanceTextWithLocalRules(rawText, analysis);
+    // Fall back to local enhancement if there's any error
+    logger.info("Falling back to local rules for CV enhancement due to error");
+    return enhanceTextWithLocalRules(text, localAnalysis);
   }
 }
 
@@ -1437,49 +1443,161 @@ function parseExperienceEntries(experienceText: string) {
  * Used as a fallback when AI optimization fails
  */
 function enhanceTextWithLocalRules(text: string, localAnalysis: any): string {
-  let enhancedText = text;
+  // Start with standardizing headers for consistency
+  let enhancedText = standardizeSectionHeaders(text);
   
-  // Simple enhancements:
+  // Extract experience entries if available
+  const experienceEntries = localAnalysis.experienceEntries || [];
   
-  // 1. Add standard section headers if missing
-  if (!text.match(/\b(summary|profile|objective)\b/i) && localAnalysis.hasContact) {
-    enhancedText = "PROFILE\nExperienced professional with skills in " + 
-      (localAnalysis.topIndustry || "the field") + ".\n\n" + enhancedText;
-  }
+  // Get industry from local analysis
+  const industry = localAnalysis.topIndustry || "General";
   
-  if (!text.match(/\b(skills|competencies|expertise)\b/i) && localAnalysis.hasSkills) {
-    // Add skills section at the end if it doesn't exist
-    enhancedText += "\n\nSKILLS\nProfessional expertise includes " + 
-      (localAnalysis.topIndustry ? getIndustryKeywords(localAnalysis.topIndustry).join(", ") : "relevant skills");
-  }
+  // Generate career achievements
+  const achievements = extractTopAchievements(text, experienceEntries);
   
-  // 2. Add action verbs to experience points
-  if (localAnalysis.hasExperience) {
-    const actionVerbs = [
-      "Achieved", "Improved", "Developed", "Managed", "Created", 
-      "Implemented", "Coordinated", "Increased", "Reduced", "Delivered"
-    ];
+  // Generate career goals
+  const careerGoals = generateCareerGoals(text, industry, experienceEntries);
+  
+  // Extract and prioritize skills
+  let skills: string[] = [];
+  
+  // Try to get skills from local analysis first
+  if (localAnalysis.skills && localAnalysis.skills.length > 0) {
+    skills = localAnalysis.skills;
+  } else {
+    // Extract skills from the text
+    const skillsSection = extractSection(text, 
+      ['skills', 'technical skills', 'core competencies', 'expertise']);
     
-    // Find bullet points or lines that don't start with action verbs
-    const lines = enhancedText.split("\n");
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
+    if (skillsSection) {
+      // Parse skills from the section
+      skills = parseSkillsFromText(skillsSection);
+    }
+  }
+  
+  // Prioritize skills based on industry
+  const prioritizedSkills = prioritizeSkillsByIndustry(skills, industry);
+  
+  // Replace the career goals placeholder with actual goals
+  enhancedText = enhancedText.replace(
+    /CAREER GOALS\n------------\n•.*\n•.*\n•.*/s,
+    `CAREER GOALS\n------------\n• ${careerGoals[0]}\n• ${careerGoals[1]}\n• ${careerGoals[2]}`
+  );
+  
+  // Replace the key achievements placeholder with actual achievements
+  enhancedText = enhancedText.replace(
+    /KEY ACHIEVEMENTS\n----------------\n•.*\n•.*\n•.*/s,
+    `KEY ACHIEVEMENTS\n----------------\n• ${achievements[0]}\n• ${achievements[1]}\n• ${achievements[2]}`
+  );
+  
+  // Find the skills section and replace it with the prioritized skills
+  if (prioritizedSkills.length > 0) {
+    // See if there's a skills section already
+    const skillsSectionRegex = /\n(SKILLS|TECHNICAL SKILLS|CORE COMPETENCIES|EXPERTISE)[\s\S]*?\n\n/i;
+    const skillsSectionMatch = enhancedText.match(skillsSectionRegex);
+    
+    if (skillsSectionMatch) {
+      // Format skills in a clean, structured manner
+      const formattedSkills = formatSkillsSection(prioritizedSkills);
       
-      // Check if line seems like a responsibility but doesn't start with an action verb
-      if ((line.startsWith("•") || line.startsWith("-") || line.startsWith("*")) && 
-          !ACTION_VERBS.some(verb => line.toLowerCase().includes(verb.toLowerCase()))) {
+      // Replace the existing skills section
+      enhancedText = enhancedText.replace(
+        skillsSectionMatch[0],
+        `\nSKILLS\n------\n${formattedSkills}\n\n`
+      );
+    } else {
+      // If no skills section exists, add one after the profile or at a logical position
+      const profileSectionRegex = /\n(PROFILE|SUMMARY|ABOUT ME)[\s\S]*?\n\n/i;
+      const profileSectionMatch = enhancedText.match(profileSectionRegex);
+      
+      if (profileSectionMatch) {
+        // Add skills after the profile section
+        const profileEndIndex = profileSectionMatch.index! + profileSectionMatch[0].length;
+        const formattedSkills = formatSkillsSection(prioritizedSkills);
         
-        // Add a random action verb
-        const randomVerb = actionVerbs[Math.floor(Math.random() * actionVerbs.length)];
-        lines[i] = lines[i].replace(/^([•\-\*]\s*)/, `$1${randomVerb} `);
+        enhancedText = enhancedText.substring(0, profileEndIndex) +
+          `SKILLS\n------\n${formattedSkills}\n\n` +
+          enhancedText.substring(profileEndIndex);
+      } else {
+        // If no profile section, add skills after the career goals and achievements
+        const experienceSectionRegex = /\n(PROFESSIONAL EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY)[\s\S]/i;
+        const experienceSectionMatch = enhancedText.match(experienceSectionRegex);
+        
+        if (experienceSectionMatch) {
+          // Add skills before the experience section
+          const experienceStartIndex = experienceSectionMatch.index!;
+          const formattedSkills = formatSkillsSection(prioritizedSkills);
+          
+          enhancedText = enhancedText.substring(0, experienceStartIndex) +
+            `\nSKILLS\n------\n${formattedSkills}\n\n` +
+            enhancedText.substring(experienceStartIndex);
+        } else {
+          // Just append skills section at the end
+          const formattedSkills = formatSkillsSection(prioritizedSkills);
+          enhancedText += `\n\nSKILLS\n------\n${formattedSkills}\n`;
+        }
       }
     }
-    
-    enhancedText = lines.join("\n");
   }
   
-  // 3. Format dates consistently
-  enhancedText = enhancedText.replace(/(\b\d{1,2}\/\d{1,2}\/\d{2,4}\b)/g, formatDate);
+  // Add action verbs to experience points if experience entries are available
+  if (experienceEntries && experienceEntries.length > 0) {
+    // Enhance experience entries with strong action verbs
+    experienceEntries.forEach((entry: any) => {
+      if (entry.responsibilities && entry.responsibilities.length > 0) {
+        entry.responsibilities = enhanceResponsibilitiesWithActionVerbs(entry.responsibilities);
+      }
+    });
+    
+    // Extract the experience section to replace it with the enhanced version
+    const experienceSection = extractSection(text, 
+      ['experience', 'work experience', 'employment history', 'professional experience']);
+      
+    if (experienceSection) {
+      // Format enhanced experience entries
+      const enhancedExperience = formatExperienceEntries(experienceEntries);
+      
+      // Replace the experience section with the enhanced version
+      const experienceSectionRegex = /\n(PROFESSIONAL EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY)[\s\S]*?(?=\n\n[A-Z]|\n[A-Z]|$)/i;
+      const experienceSectionMatch = enhancedText.match(experienceSectionRegex);
+      
+      if (experienceSectionMatch) {
+        enhancedText = enhancedText.replace(
+          experienceSectionMatch[0],
+          `\nPROFESSIONAL EXPERIENCE\n----------------------\n${enhancedExperience}\n`
+        );
+      }
+    }
+  }
+  
+  // Add industry-specific keywords to profile if missing
+  const profileSection = extractSection(text, ['profile', 'summary', 'about me']);
+  if (profileSection) {
+    // Get industry keywords
+    const industryKeywords = getIndustryKeywords(industry);
+    
+    // Check if keywords are already included
+    const missingKeywords = industryKeywords.filter(keyword => 
+      !profileSection.toLowerCase().includes(keyword.toLowerCase())
+    ).slice(0, 5); // Limit to top 5 missing keywords
+    
+    if (missingKeywords.length > 0) {
+      // Enhance the profile with industry keywords
+      const profileRegex = /\n(PROFILE|SUMMARY|ABOUT ME)[\s\S]*?(?=\n\n[A-Z]|\n[A-Z]|$)/i;
+      const profileMatch = enhancedText.match(profileRegex);
+      
+      if (profileMatch) {
+        const currentProfile = profileMatch[0];
+        const enhancedProfile = currentProfile + (currentProfile.endsWith('\n') ? '' : '\n') +
+          `\nSpecialized in: ${missingKeywords.join(', ')}\n`;
+        
+        enhancedText = enhancedText.replace(currentProfile, enhancedProfile);
+      }
+    }
+  }
+  
+  // Improve formatting for readability
+  enhancedText = enhanceFormatting(enhancedText);
   
   return enhancedText;
 }
@@ -1580,28 +1698,962 @@ function extractArrayFromText(text: string, key: string, defaultValue: string[])
   let bracketCount = 1;
   let endIndex = startIndex;
   
-  for (let i = startIndex; i < text.length; i++) {
-    if (text[i] === '[') bracketCount++;
-    if (text[i] === ']') bracketCount--;
+  while (bracketCount > 0) {
+    const char = text.charAt(endIndex);
+    if (char === '[') bracketCount++;
+    if (char === ']') bracketCount--;
+    endIndex++;
+  }
+  
+  const extractedArray = text.substring(startIndex, endIndex).split(',').map(item => item.trim());
+  return extractedArray.length === 0 ? defaultValue : extractedArray;
+}
+
+/**
+ * Standardizes section headers in the CV
+ * @param text The original CV text
+ * @returns CV text with standardized headers
+ */
+function standardizeSectionHeaders(text: string): string {
+  // Define standard section headers and their variations
+  const headerMappings: Record<string, string[]> = {
+    'PROFILE': [
+      'summary', 'professional summary', 'career summary', 'about me', 'personal profile', 
+      'professional profile', 'career profile', 'career objective', 'objective'
+    ],
+    'PROFESSIONAL EXPERIENCE': [
+      'experience', 'work experience', 'employment history', 'work history', 'professional history',
+      'career history', 'employment', 'relevant experience', 'professional background'
+    ],
+    'EDUCATION': [
+      'academic background', 'educational background', 'academic qualifications', 
+      'educational qualifications', 'academic history', 'degrees', 'schooling'
+    ],
+    'SKILLS': [
+      'technical skills', 'core skills', 'key skills', 'professional skills', 'competencies',
+      'areas of expertise', 'expertise', 'qualifications', 'strengths', 'capabilities'
+    ],
+    'CERTIFICATIONS': [
+      'professional certifications', 'licenses', 'licensure', 'certificates', 'credentials',
+      'accreditations', 'professional development'
+    ],
+    'ACHIEVEMENTS': [
+      'accomplishments', 'notable achievements', 'key achievements', 'honors', 'awards',
+      'recognitions', 'accolades', 'distinctions'
+    ],
+    'PROJECTS': [
+      'key projects', 'relevant projects', 'major projects', 'project experience', 
+      'project highlights', 'portfolio'
+    ],
+    'LANGUAGES': [
+      'language skills', 'language proficiency', 'foreign languages'
+    ],
+    'INTERESTS': [
+      'hobbies', 'activities', 'personal interests', 'extracurricular activities', 
+      'volunteer work', 'community involvement'
+    ],
+    'PUBLICATIONS': [
+      'research', 'research publications', 'published works', 'papers', 'articles'
+    ],
+    'REFERENCES': [
+      'professional references', 'recommendations', 'referees'
+    ],
+    'CAREER GOALS': [
+      'objectives', 'career objectives', 'professional goals', 'aspirations'
+    ],
+    'KEY ACHIEVEMENTS': [
+      'notable achievements', 'career achievements', 'professional achievements'
+    ]
+  };
+  
+  // Create a mapping from variations to standardized headers
+  const variationToStandard: Record<string, string> = {};
+  Object.entries(headerMappings).forEach(([standard, variations]) => {
+    variations.forEach(variation => {
+      variationToStandard[variation.toLowerCase()] = standard;
+    });
+    // Also add the standard itself in lowercase
+    variationToStandard[standard.toLowerCase()] = standard;
+  });
+  
+  // Split the text into lines
+  const lines = text.split('\n');
+  
+  // Process each line
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
     
-    if (bracketCount === 0) {
-      endIndex = i;
-      break;
+    // Check if this line might be a section header
+    // Headers are typically short, standalone, and sometimes have a trailing colon
+    if (line && line.length < 50) {
+      // Remove any trailing colon
+      const headerText = line.replace(/\s*:\s*$/, '').toLowerCase();
+      
+      // Check if this matches any of our variations
+      if (variationToStandard[headerText]) {
+        // Replace with the standardized version
+        const standardHeader = variationToStandard[headerText];
+        
+        // Format the header with consistent styling
+        lines[i] = `\n${standardHeader}\n${'-'.repeat(standardHeader.length)}`;
+        
+        // Add a blank line after if there isn't one already
+        if (i < lines.length - 1 && lines[i + 1].trim() !== '') {
+          lines[i] = lines[i] + '\n';
+        }
+      }
+      // Also handle capitalized headers (like "WORK EXPERIENCE")
+      else if (/^[A-Z\s]+$/.test(line)) {
+        const headerText = line.toLowerCase();
+        if (variationToStandard[headerText]) {
+          // Replace with the standardized version
+          const standardHeader = variationToStandard[headerText];
+          
+          // Format the header with consistent styling
+          lines[i] = `\n${standardHeader}\n${'-'.repeat(standardHeader.length)}`;
+          
+          // Add a blank line after if there isn't one already
+          if (i < lines.length - 1 && lines[i + 1].trim() !== '') {
+            lines[i] = lines[i] + '\n';
+          }
+        }
+      }
     }
   }
   
-  if (bracketCount !== 0) return defaultValue;
+  // Add Career Goals and Key Achievements sections if they don't exist
+  const textLower = text.toLowerCase();
+  let modifiedText = lines.join('\n');
   
-  const arrayText = text.substring(startIndex, endIndex);
-  const items = arrayText.split(',').map(item => {
-    const trimmed = item.trim();
-    // Remove quotes if present
-    return trimmed.startsWith('"') && trimmed.endsWith('"') 
-      ? trimmed.substring(1, trimmed.length - 1) 
-      : trimmed;
-  }).filter(item => item.length > 0);
+  if (!textLower.includes('career goals') && !textLower.includes('objectives') && !textLower.includes('aspirations')) {
+    // Add placeholder for Career Goals section at the top
+    modifiedText = `CAREER GOALS\n------------\n• [Goal 1]\n• [Goal 2]\n• [Goal 3]\n\n${modifiedText}`;
+  }
   
-  return items.length > 0 ? items : defaultValue;
+  if (!textLower.includes('key achievements') && !textLower.includes('notable achievements') && !textLower.includes('career achievements')) {
+    // Add placeholder for Key Achievements section at the top
+    // If Career Goals exists, add it after that
+    if (modifiedText.includes('CAREER GOALS')) {
+      const goalsSectionEnd = modifiedText.indexOf('CAREER GOALS') + 'CAREER GOALS'.length;
+      const insertPoint = modifiedText.indexOf('\n\n', goalsSectionEnd) + 2;
+      
+      modifiedText = modifiedText.substring(0, insertPoint) +
+        `KEY ACHIEVEMENTS\n----------------\n• [Achievement 1]\n• [Achievement 2]\n• [Achievement 3]\n\n` +
+        modifiedText.substring(insertPoint);
+    } else {
+      // Otherwise add at the top
+      modifiedText = `KEY ACHIEVEMENTS\n----------------\n• [Achievement 1]\n• [Achievement 2]\n• [Achievement 3]\n\n${modifiedText}`;
+    }
+  }
+  
+  return modifiedText;
+}
+
+/**
+ * Extract a section from the CV text
+ */
+function extractSection(text: string, sectionNames: string[]): string | null {
+  for (const name of sectionNames) {
+    const regex = new RegExp(`(?:^|\\n)\\s*(${name})\\s*(?:\\:|\\n)`, 'i');
+    const match = text.match(regex);
+    
+    if (match) {
+      const start = match.index || 0;
+      const nextSectionRegex = /(?:^|\n)\s*([A-Z][A-Z\s]+)(?:\:|\n)/i;
+      const nextMatch = text.substring(start + match[0].length).match(nextSectionRegex);
+      
+      const end = nextMatch 
+        ? start + match[0].length + (nextMatch.index || 0) 
+        : text.length;
+      
+      return text.substring(start + match[0].length, end).trim();
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Parse skills from text by looking for bullet points or comma-separated lists
+ */
+function parseSkillsFromText(text: string): string[] {
+  const skills: string[] = [];
+  
+  // Look for bullet points
+  const bulletRegex = /[•\-\*]\s*([^•\-\*\n]+)/g;
+  let match;
+  while ((match = bulletRegex.exec(text)) !== null) {
+    skills.push(match[1].trim());
+  }
+  
+  // If no bullet points, look for comma-separated lists
+  if (skills.length === 0) {
+    const lines = text.split('\n');
+    for (const line of lines) {
+      if (line.includes(',')) {
+        const items = line.split(',').map(item => item.trim());
+        skills.push(...items);
+      }
+    }
+  }
+  
+  // Remove duplicates and empty items
+  return Array.from(new Set(skills)).filter(skill => skill.length > 0);
+}
+
+/**
+ * Format skills in a clean, structured manner
+ */
+function formatSkillsSection(skills: string[]): string {
+  if (skills.length <= 5) {
+    // For a small number of skills, format as a simple list
+    return skills.map(skill => `• ${skill}`).join('\n');
+  } else {
+    // For more skills, format in multiple columns
+    const halfLength = Math.ceil(skills.length / 2);
+    const firstColumn = skills.slice(0, halfLength);
+    const secondColumn = skills.slice(halfLength);
+    
+    let formattedSkills = '';
+    for (let i = 0; i < halfLength; i++) {
+      formattedSkills += `• ${firstColumn[i]}`;
+      
+      if (secondColumn[i]) {
+        formattedSkills += `\t\t• ${secondColumn[i]}`;
+      }
+      
+      formattedSkills += '\n';
+    }
+    
+    return formattedSkills;
+  }
+}
+
+/**
+ * Extracts top achievements from CV content
+ * @param text The CV text content
+ * @param experienceEntries Optional parsed experience entries
+ * @returns Array of top 3 achievements
+ */
+function extractTopAchievements(text: string, experienceEntries?: any[]): string[] {
+  const achievements: {text: string, score: number}[] = [];
+  
+  // Look for achievement indicators in the text
+  // 1. First, try to find achievements in experience entries if provided
+  if (experienceEntries && experienceEntries.length > 0) {
+    experienceEntries.forEach(entry => {
+      if (entry.responsibilities && entry.responsibilities.length > 0) {
+        entry.responsibilities.forEach((resp: string) => {
+          // Score each responsibility to determine if it's an achievement
+          let score = 0;
+          
+          // Check for metrics (numbers, percentages, dollar amounts)
+          if (/\d+%|\$\d+|\d+\s+percent|\d+k|\d+\s+million|\d+\s+thousand/i.test(resp)) {
+            score += 30;
+          }
+          
+          // Check for achievement verbs
+          if (/\bachiev|\baccomplish|\bwin|\bexceed|\bsuccessful|\bincrease|\bimprove|\breduc|\bsave|\bgenerate|\bdeliver/i.test(resp)) {
+            score += 20;
+          }
+          
+          // Check for impact language
+          if (/\bimpact|\bresult|\boutcome|\blead to|\bconsequence|\bleading to|\bsignificant|\bmajor|\bimportant/i.test(resp)) {
+            score += 15;
+          }
+          
+          // Check for recognition language
+          if (/\baward|\brecognize|\backnowledge|\bhonor|\bpraise|\bcommend|\bcelebrate/i.test(resp)) {
+            score += 25;
+          }
+          
+          // Penalize for vague language
+          if (/\bresponsible for|\bduties include|\bhandled|\bworked on/i.test(resp)) {
+            score -= 10;
+          }
+          
+          // If the score is high enough, consider it an achievement
+          if (score >= 20) {
+            achievements.push({
+              text: resp,
+              score: score
+            });
+          }
+        });
+      }
+    });
+  }
+  
+  // 2. If we don't have enough achievements, look for achievement-like sentences in the text
+  if (achievements.length < 5) {
+    // Split the text into sentences
+    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+    
+    sentences.forEach(sentence => {
+      // Skip short sentences
+      if (sentence.trim().length < 20) return;
+      
+      // Skip if it's likely a header or title
+      if (sentence.trim().length < 50 && /^[A-Z\s]+$/.test(sentence.trim())) return;
+      
+      // Score the sentence
+      let score = 0;
+      
+      // Check for metrics
+      if (/\d+%|\$\d+|\d+\s+percent|\d+k|\d+\s+million|\d+\s+thousand/i.test(sentence)) {
+        score += 25;
+      }
+      
+      // Check for achievement verbs
+      if (/\bachiev|\baccomplish|\bwin|\bexceed|\bsuccessful|\bincrease|\bimprove|\breduc|\bsave|\bgenerate|\bdeliver/i.test(sentence)) {
+        score += 15;
+      }
+      
+      // Check for impact language
+      if (/\bimpact|\bresult|\boutcome|\blead to|\bconsequence|\bleading to|\bsignificant|\bmajor|\bimportant/i.test(sentence)) {
+        score += 10;
+      }
+      
+      // Check for recognition language
+      if (/\baward|\brecognize|\backnowledge|\bhonor|\bpraise|\bcommend|\bcelebrate/i.test(sentence)) {
+        score += 20;
+      }
+      
+      // Penalize for vague language
+      if (/\bresponsible for|\bduties include|\bhandled|\bworked on/i.test(sentence)) {
+        score -= 10;
+      }
+      
+      // If the score is high enough, consider it an achievement
+      if (score >= 20) {
+        // Avoid duplicates
+        const isDuplicate = achievements.some(existing => 
+          existing.text.toLowerCase().includes(sentence.trim().toLowerCase()) || 
+          sentence.trim().toLowerCase().includes(existing.text.toLowerCase())
+        );
+        
+        if (!isDuplicate) {
+          achievements.push({
+            text: sentence.trim(),
+            score: score
+          });
+        }
+      }
+    });
+  }
+  
+  // Sort achievements by score in descending order
+  achievements.sort((a, b) => b.score - a.score);
+  
+  // For the top achievements, enhance them if they're from responsibilities
+  const topAchievements = achievements.slice(0, 3).map(achievement => {
+    let text = achievement.text;
+    
+    // Check if it starts with an action verb, if not, add one
+    if (!/^[A-Z][a-z]+ed\b|^[A-Z][a-z]+ing\b/.test(text)) {
+      // Choose an appropriate action verb based on content
+      let actionVerb = "Achieved";
+      
+      if (/\bincrease|\bgrowth|\bexpand/i.test(text)) {
+        actionVerb = "Increased";
+      } else if (/\bimprov|\benhance|\bupgrad/i.test(text)) {
+        actionVerb = "Improved";
+      } else if (/\breduc|\bdecrease|\bcut/i.test(text)) {
+        actionVerb = "Reduced";
+      } else if (/\bgenerate|\bcreate|\bdevelop/i.test(text)) {
+        actionVerb = "Generated";
+      } else if (/\bdeliver|\bcomplete|\bfinish/i.test(text)) {
+        actionVerb = "Delivered";
+      } else if (/\blead|\bmanage|\bsupervis/i.test(text)) {
+        actionVerb = "Led";
+      } else if (/\bwin|\baward|\brecogniz/i.test(text)) {
+        actionVerb = "Received";
+      }
+      
+      // Make the first character lowercase if we're adding a verb
+      text = `${actionVerb} ${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+    }
+    
+    // Ensure it ends with a period
+    if (!text.endsWith('.')) {
+      text = `${text}.`;
+    }
+    
+    // Ensure the text isn't too long (limit to 100 characters)
+    if (text.length > 100) {
+      text = text.substring(0, 97) + '...';
+    }
+    
+    return text;
+  });
+  
+  // If we couldn't find enough achievements, generate placeholders with industry focus
+  if (topAchievements.length < 3) {
+    // Identify the likely industry from the text
+    let industry = 'general';
+    
+    if (/software|programming|developer|engineer|code|java|python|javascript|web/i.test(text)) {
+      industry = 'technology';
+    } else if (/finance|financial|accounting|investment|banking|budget/i.test(text)) {
+      industry = 'finance';
+    } else if (/marketing|campaign|digital|seo|social media|content/i.test(text)) {
+      industry = 'marketing';
+    } else if (/sales|revenue|client|account|business development/i.test(text)) {
+      industry = 'sales';
+    } else if (/healthcare|medical|hospital|patient|doctor|nurse/i.test(text)) {
+      industry = 'healthcare';
+    }
+    
+    // Generate generic achievements based on industry
+    const genericAchievements: Record<string, string[]> = {
+      'technology': [
+        "Led development of a core product feature that increased user engagement by 35%.",
+        "Improved application performance by 40% through code optimization and refactoring.",
+        "Developed automated testing framework that reduced QA time by 25%."
+      ],
+      'finance': [
+        "Identified and implemented cost-saving measures resulting in $250K annual savings.",
+        "Led financial analysis project that improved budget accuracy by 28%.",
+        "Streamlined reporting process, reducing month-end closing time by 40%."
+      ],
+      'marketing': [
+        "Implemented digital marketing strategy that increased lead generation by 45%.",
+        "Managed social media campaign resulting in 65% increase in engagement.",
+        "Redesigned email marketing approach, improving open rates by 32%."
+      ],
+      'sales': [
+        "Exceeded sales targets by 30% for three consecutive quarters.",
+        "Developed and implemented new client acquisition strategy resulting in 25% revenue growth.",
+        "Built and managed relationships with key accounts worth $2M in annual revenue."
+      ],
+      'healthcare': [
+        "Implemented patient care protocol that reduced readmission rates by 24%.",
+        "Led cross-functional team that improved patient satisfaction scores by 35%.",
+        "Developed staff training program that enhanced care quality metrics by 28%."
+      ],
+      'general': [
+        "Increased team productivity by 30% through implementation of streamlined workflows.",
+        "Successfully delivered major project 15% under budget and ahead of schedule.",
+        "Received recognition for outstanding performance and exceeding key performance targets."
+      ]
+    };
+    
+    // Add generic achievements to fill up to 3
+    const needed = 3 - topAchievements.length;
+    for (let i = 0; i < needed; i++) {
+      if (genericAchievements[industry] && genericAchievements[industry][i]) {
+        topAchievements.push(genericAchievements[industry][i]);
+      } else {
+        topAchievements.push(genericAchievements['general'][i]);
+      }
+    }
+  }
+  
+  return topAchievements;
+}
+
+/**
+ * Generates career goals based on CV content and industry
+ * @param text The CV text content
+ * @param industry Identified industry
+ * @param experienceEntries Optional parsed experience entries
+ * @returns Array of 3 career goals
+ */
+function generateCareerGoals(text: string, industry: string, experienceEntries?: any[]): string[] {
+  // Attempt to infer career level/seniority from the text
+  let careerLevel = 'mid'; // Default to mid-level
+  
+  // Check for executive indicators
+  if (/\bCEO\b|\bCTO\b|\bCFO\b|\bCOO\b|\bPresident\b|\bVice President\b|\bVP\b|\bChief\b|\bDirector\b/i.test(text)) {
+    careerLevel = 'executive';
+  } 
+  // Check for senior indicators
+  else if (/\bSenior\b|\bLead\b|\bHead\b|\bPrincipal\b|\bManager\b/i.test(text)) {
+    careerLevel = 'senior';
+  } 
+  // Check for entry indicators
+  else if (/\bJunior\b|\bEntry\b|\bIntern\b|\bAssistant\b|\bAssociate\b|\bGraduate\b|\bTrainee\b|\bRecent graduate\b/i.test(text)) {
+    careerLevel = 'entry';
+  }
+  
+  // Normalize industry name
+  const normalizedIndustry = industry.trim().toLowerCase();
+  
+  // Look for specific career ambitions in the text
+  const possibleGoals: string[] = [];
+  
+  // Check for leadership ambitions
+  if (/leadership|manage team|lead team|director|executive/i.test(text)) {
+    possibleGoals.push("Advance to a leadership position");
+  }
+  
+  // Check for specialization interests
+  if (/specialize|expertise|focus on|domain|deepen knowledge/i.test(text)) {
+    possibleGoals.push("Deepen expertise in specialized area");
+  }
+  
+  // Check for education/certification interests
+  if (/certification|degree|MBA|master|PhD|study|learn|education/i.test(text)) {
+    possibleGoals.push("Obtain advanced certifications or education");
+  }
+  
+  // Check for entrepreneurial interests
+  if (/entrepreneur|start.*business|found.*company|launch.*startup/i.test(text)) {
+    possibleGoals.push("Develop entrepreneurial ventures");
+  }
+  
+  // Check for international interests
+  if (/international|global|worldwide|abroad|overseas|different countries/i.test(text)) {
+    possibleGoals.push("Expand into international roles");
+  }
+  
+  // Check for innovation interests
+  if (/innovat|create|develop.*new|pioneer|breakthrough/i.test(text)) {
+    possibleGoals.push("Drive innovation in the industry");
+  }
+  
+  // Check for mentorship interests
+  if (/mentor|coach|train|guide|teach|develop.*others/i.test(text)) {
+    possibleGoals.push("Mentor and develop other professionals");
+  }
+  
+  // Industry-specific goals based on career level
+  const industryGoals: Record<string, Record<string, string[]>> = {
+    'technology': {
+      'entry': [
+        "Develop expertise in emerging technologies like AI, blockchain, or cloud computing",
+        "Contribute to open-source projects to build a professional portfolio",
+        "Master full-stack development skills across multiple platforms"
+      ],
+      'mid': [
+        "Lead technical projects that drive business value and innovation",
+        "Specialize in a high-demand area such as cybersecurity or data science",
+        "Transition into a technical leadership role combining coding and team management"
+      ],
+      'senior': [
+        "Shape technical strategy and architectural decisions for enterprise systems",
+        "Build and lead high-performing engineering teams",
+        "Drive digital transformation initiatives across the organization"
+      ],
+      'executive': [
+        "Direct technology vision and strategy at the enterprise level",
+        "Lead innovation initiatives that create new market opportunities",
+        "Establish governance frameworks that balance innovation and operational excellence"
+      ]
+    },
+    'finance': {
+      'entry': [
+        "Develop comprehensive knowledge of financial reporting and analysis",
+        "Gain experience across multiple finance functions",
+        "Obtain relevant professional certifications (CFA, CPA, etc.)"
+      ],
+      'mid': [
+        "Lead financial planning processes that drive strategic decision-making",
+        "Develop expertise in financial modeling and forecasting",
+        "Transition to a specialized finance role in M&A, treasury, or investment management"
+      ],
+      'senior': [
+        "Oversee financial strategy for a business unit or division",
+        "Lead financial transformation initiatives",
+        "Develop and implement risk management frameworks"
+      ],
+      'executive': [
+        "Shape financial strategy aligned with long-term business objectives",
+        "Drive shareholder value through strategic capital allocation",
+        "Lead digital transformation of finance operations"
+      ]
+    },
+    'marketing': {
+      'entry': [
+        "Build expertise in digital marketing channels and analytics",
+        "Develop content creation and storytelling skills",
+        "Gain experience managing integrated marketing campaigns"
+      ],
+      'mid': [
+        "Lead marketing initiatives that directly impact revenue growth",
+        "Develop specialized expertise in SEO, content strategy, or marketing automation",
+        "Transition into a role combining creative direction and data-driven strategy"
+      ],
+      'senior': [
+        "Direct brand strategy and positioning in competitive markets",
+        "Lead omnichannel marketing operations",
+        "Build and manage high-performing marketing teams"
+      ],
+      'executive': [
+        "Shape marketing vision and strategy at the enterprise level",
+        "Lead customer experience transformation across all touchpoints",
+        "Drive innovation in customer acquisition and retention strategies"
+      ]
+    },
+    'sales': {
+      'entry': [
+        "Consistently exceed sales targets and develop consultative selling skills",
+        "Build expertise in the product portfolio and competitive landscape",
+        "Develop account management and relationship building capabilities"
+      ],
+      'mid': [
+        "Transition from individual contributor to sales leadership",
+        "Develop expertise in complex enterprise sales cycles",
+        "Lead strategic account management for key clients"
+      ],
+      'senior': [
+        "Direct sales strategy for a region or product division",
+        "Build and lead high-performing sales teams",
+        "Develop and implement sales enablement frameworks"
+      ],
+      'executive': [
+        "Shape revenue strategy aligned with market opportunities",
+        "Lead sales transformation initiatives",
+        "Drive innovation in go-to-market approaches"
+      ]
+    },
+    'healthcare': {
+      'entry': [
+        "Develop comprehensive understanding of healthcare operations and compliance",
+        "Gain experience across multiple care delivery settings",
+        "Obtain relevant certifications and specialized training"
+      ],
+      'mid': [
+        "Lead initiatives that improve patient outcomes and satisfaction",
+        "Develop expertise in healthcare informatics or quality improvement",
+        "Transition into a specialized role combining clinical knowledge and administration"
+      ],
+      'senior': [
+        "Direct clinical or operational strategy for a healthcare service line",
+        "Lead healthcare quality and compliance initiatives",
+        "Build and manage cross-functional healthcare teams"
+      ],
+      'executive': [
+        "Shape healthcare delivery strategy at the enterprise level",
+        "Lead healthcare innovation and transformation initiatives",
+        "Establish frameworks that balance care quality and operational efficiency"
+      ]
+    }
+  };
+  
+  // Default goals for any industry by career level
+  const defaultGoals: Record<string, string[]> = {
+    'entry': [
+      "Develop core competencies and professional expertise",
+      "Gain broad experience across different functional areas",
+      "Build professional network and industry connections"
+    ],
+    'mid': [
+      "Take on leadership responsibilities for key projects and initiatives",
+      "Develop specialized expertise in high-impact areas",
+      "Transition into a role that combines technical skills and team leadership"
+    ],
+    'senior': [
+      "Lead strategic initiatives that drive organizational growth",
+      "Build and develop high-performing teams",
+      "Expand influence across multiple business functions"
+    ],
+    'executive': [
+      "Shape strategic vision and direction at the enterprise level",
+      "Drive transformation and innovation initiatives",
+      "Develop and mentor the next generation of leaders"
+    ]
+  };
+  
+  // Get appropriate goals based on industry and career level
+  let selectedGoals = industryGoals[normalizedIndustry]?.[careerLevel] || defaultGoals[careerLevel];
+  
+  // If we found specific goals in the text, prioritize those
+  let finalGoals: string[] = [];
+  
+  // Add goals from the text first (up to 2)
+  finalGoals = possibleGoals.slice(0, 2);
+  
+  // Fill the rest with industry-specific goals
+  for (let i = 0; finalGoals.length < 3 && i < selectedGoals.length; i++) {
+    // Check if this goal is too similar to ones we've already included
+    const isDuplicate = finalGoals.some(existing => 
+      stringSimilarity(existing.toLowerCase(), selectedGoals[i].toLowerCase()) > 0.6
+    );
+    
+    if (!isDuplicate) {
+      finalGoals.push(selectedGoals[i]);
+    }
+  }
+  
+  // If we still don't have 3 goals, add from default goals
+  if (finalGoals.length < 3) {
+    for (let i = 0; finalGoals.length < 3 && i < defaultGoals[careerLevel].length; i++) {
+      const isDuplicate = finalGoals.some(existing => 
+        stringSimilarity(existing.toLowerCase(), defaultGoals[careerLevel][i].toLowerCase()) > 0.6
+      );
+      
+      if (!isDuplicate) {
+        finalGoals.push(defaultGoals[careerLevel][i]);
+      }
+    }
+  }
+  
+  // Format each goal to ensure consistency
+  finalGoals = finalGoals.map(goal => {
+    // Ensure it doesn't end with a period
+    goal = goal.trim().replace(/\.$/, '');
+    
+    // Ensure first letter is capitalized
+    goal = goal.charAt(0).toUpperCase() + goal.slice(1);
+    
+    return goal;
+  });
+  
+  return finalGoals;
+}
+
+/**
+ * Calculate string similarity ratio using Levenshtein distance
+ * Used to avoid duplicate goals
+ */
+function stringSimilarity(str1: string, str2: string): number {
+  const maxLength = Math.max(str1.length, str2.length);
+  if (maxLength === 0) return 1.0;
+  
+  // Calculate Levenshtein distance
+  const distance = levenshteinDistance(str1, str2);
+  
+  // Return similarity ratio
+  return 1 - distance / maxLength;
+}
+
+/**
+ * Calculate Levenshtein distance between two strings
+ */
+function levenshteinDistance(str1: string, str2: string): number {
+  const track = Array(str2.length + 1).fill(null).map(() => 
+    Array(str1.length + 1).fill(null));
+  
+  for (let i = 0; i <= str1.length; i += 1) {
+    track[0][i] = i;
+  }
+  
+  for (let j = 0; j <= str2.length; j += 1) {
+    track[j][0] = j;
+  }
+  
+  for (let j = 1; j <= str2.length; j += 1) {
+    for (let i = 1; i <= str1.length; i += 1) {
+      const indicator = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      track[j][i] = Math.min(
+        track[j][i - 1] + 1, // deletion
+        track[j - 1][i] + 1, // insertion
+        track[j - 1][i - 1] + indicator, // substitution
+      );
+    }
+  }
+  
+  return track[str2.length][str1.length];
+}
+
+/**
+ * Prioritizes skills based on industry relevance
+ * @param skills Array of skills to prioritize
+ * @param industry Target industry for prioritization
+ * @returns Array of up to 10 prioritized skills
+ */
+function prioritizeSkillsByIndustry(skills: string[], industry: string): string[] {
+  if (!skills || skills.length === 0) {
+    return [];
+  }
+
+  // Normalize industry name
+  const normalizedIndustry = industry.trim().toLowerCase();
+  
+  // Define industry-specific priority keywords to rank skills
+  const industryPriorityKeywords: Record<string, string[]> = {
+    'technology': [
+      'programming', 'development', 'software', 'engineering', 'cloud', 'devops', 
+      'architecture', 'api', 'agile', 'data', 'security', 'full stack', 'frontend', 'backend'
+    ],
+    'finance': [
+      'analysis', 'accounting', 'financial', 'budget', 'forecast', 'investment', 'portfolio', 
+      'risk', 'compliance', 'audit', 'tax', 'banking', 'regulations'
+    ],
+    'healthcare': [
+      'patient', 'clinical', 'medical', 'health', 'care', 'treatment', 'diagnosis', 
+      'therapy', 'hipaa', 'electronic medical records', 'healthcare'
+    ],
+    'marketing': [
+      'digital', 'social media', 'content', 'seo', 'sem', 'analytics', 'campaign', 
+      'brand', 'market research', 'customer', 'strategy', 'advertising'
+    ],
+    'sales': [
+      'business development', 'account management', 'client', 'negotiation', 'pipeline', 
+      'lead generation', 'crm', 'revenue', 'closing', 'customer acquisition'
+    ],
+    'engineering': [
+      'design', 'technical', 'analysis', 'product development', 'testing', 'quality', 
+      'mechanical', 'electrical', 'civil', 'structural', 'cad', 'simulation'
+    ],
+    'education': [
+      'curriculum', 'instruction', 'teaching', 'assessment', 'learning', 'educational', 
+      'student', 'classroom', 'pedagogy', 'academic'
+    ],
+    'human resources': [
+      'recruitment', 'talent', 'employee relations', 'performance', 'compensation', 
+      'benefits', 'hr', 'compliance', 'workforce', 'organizational development'
+    ]
+  };
+  
+  // Use technology keywords as default
+  const priorityKeywords = industryPriorityKeywords[normalizedIndustry] || 
+                         industryPriorityKeywords['technology'];
+  
+  // Score each skill based on relevance to the industry
+  const scoredSkills = skills.map(skill => {
+    const skillLower = skill.toLowerCase();
+    let score = 0;
+    
+    // Check if the skill contains any priority keywords
+    priorityKeywords.forEach(keyword => {
+      if (skillLower.includes(keyword.toLowerCase())) {
+        score += 10;
+      }
+    });
+    
+    // Add additional score based on specific industry terms
+    if (normalizedIndustry === 'technology') {
+      if (/javascript|python|java|react|angular|node|aws|azure|docker|kubernetes|sql/i.test(skillLower)) {
+        score += 15;
+      }
+    } else if (normalizedIndustry === 'finance') {
+      if (/financial modeling|accounting|budgeting|forecasting|risk management|excel/i.test(skillLower)) {
+        score += 15;
+      }
+    } else if (normalizedIndustry === 'healthcare') {
+      if (/patient care|clinical|medical|healthcare|hospital|electronic medical records|hipaa/i.test(skillLower)) {
+        score += 15;
+      }
+    } else if (normalizedIndustry === 'marketing') {
+      if (/digital marketing|social media|seo|content|campaign|google analytics|brand/i.test(skillLower)) {
+        score += 15;
+      }
+    } else if (normalizedIndustry === 'sales') {
+      if (/account management|business development|negotiations|client|sales strategy|crm/i.test(skillLower)) {
+        score += 15;
+      }
+    }
+    
+    // Add score for soft skills relevant across industries
+    if (/leadership|communication|project management|teamwork|problem solving|analysis/i.test(skillLower)) {
+      score += 5;
+    }
+    
+    return { skill, score };
+  });
+  
+  // Sort skills by score (descending)
+  scoredSkills.sort((a, b) => b.score - a.score);
+  
+  // Return the top 10 skills or all if less than 10
+  return scoredSkills.slice(0, 10).map(item => item.skill);
+}
+
+/**
+ * Format experience entries in a structured manner
+ */
+function formatExperienceEntries(entries: any[]): string {
+  let formatted = '';
+  
+  entries.forEach(entry => {
+    // Format job title and company
+    formatted += `${entry.jobTitle || 'Position'}\n`;
+    formatted += `${entry.company || 'Company'}`;
+    
+    // Add date range if available
+    if (entry.dateRange) {
+      formatted += ` | ${entry.dateRange}`;
+    }
+    
+    // Add location if available
+    if (entry.location) {
+      formatted += ` | ${entry.location}`;
+    }
+    
+    formatted += '\n\n';
+    
+    // Add responsibilities
+    if (entry.responsibilities && entry.responsibilities.length > 0) {
+      entry.responsibilities.forEach((resp: string) => {
+        formatted += `• ${resp}\n`;
+      });
+      formatted += '\n';
+    }
+  });
+  
+  return formatted;
+}
+
+/**
+ * Enhance responsibilities with strong action verbs
+ */
+function enhanceResponsibilitiesWithActionVerbs(responsibilities: string[]): string[] {
+  const enhancedResponsibilities = responsibilities.map(resp => {
+    // Check if it already starts with a strong action verb
+    if (/^(Achieved|Improved|Developed|Managed|Created|Implemented|Coordinated|Increased|Reduced|Delivered|Led|Generated|Designed|Established|Streamlined|Transformed|Negotiated|Spearheaded|Executed|Administered)/i.test(resp)) {
+      return resp;
+    }
+    
+    // Replace weak verbs with stronger ones
+    let enhanced = resp
+      .replace(/^(Responsible for|In charge of|Handled|Worked on|Did|Made)/i, 'Managed')
+      .replace(/^(Helped|Assisted|Supported|Aided)/i, 'Contributed to')
+      .replace(/^(Used|Utilized|Employed)/i, 'Leveraged')
+      .replace(/^(Got|Received|Obtained)/i, 'Secured')
+      .replace(/^(Took part in|Participated in)/i, 'Collaborated on')
+      .replace(/^(Managed to|Was able to|Succeeded in)/i, 'Successfully')
+      .replace(/^(Started|Began|Initiated)/i, 'Launched');
+    
+    // If the string didn't change and doesn't start with a verb, add a default verb
+    if (enhanced === resp && !/^[A-Z][a-z]+ed|^[A-Z][a-z]+ing/i.test(resp)) {
+      const actionVerbs = [
+        'Executed', 'Implemented', 'Managed', 'Developed', 'Delivered',
+        'Achieved', 'Created', 'Established', 'Coordinated', 'Generated'
+      ];
+      
+      const randomVerb = actionVerbs[Math.floor(Math.random() * actionVerbs.length)];
+      enhanced = `${randomVerb} ${resp.charAt(0).toLowerCase()}${resp.slice(1)}`;
+    }
+    
+    return enhanced;
+  });
+  
+  return enhancedResponsibilities;
+}
+
+/**
+ * Enhance overall formatting for better readability
+ */
+function enhanceFormatting(text: string): string {
+  // Ensure consistent spacing between sections
+  let formatted = text.replace(/\n{3,}/g, '\n\n');
+  
+  // Ensure bullet points are consistent
+  formatted = formatted.replace(/^\s*[\*\-]\s+/gm, '• ');
+  
+  // Ensure header formatting is consistent
+  formatted = formatted.replace(/^([A-Z][A-Z\s]+)$/gm, (match) => {
+    return `\n${match}\n${'-'.repeat(match.length)}`;
+  });
+  
+  // Remove extra spaces from the beginning and end of lines
+  formatted = formatted.split('\n').map(line => line.trim()).join('\n');
+  
+  // Remove duplicate section headers
+  const sections = [
+    'PROFILE', 'PROFESSIONAL EXPERIENCE', 'EDUCATION', 'SKILLS', 
+    'CERTIFICATIONS', 'ACHIEVEMENTS', 'PROJECTS', 'LANGUAGES', 
+    'INTERESTS', 'PUBLICATIONS', 'REFERENCES', 'CAREER GOALS', 'KEY ACHIEVEMENTS'
+  ];
+  
+  for (const section of sections) {
+    const sectionRegex = new RegExp(`(${section}\\n[-=]+\\n[\\s\\S]*?)(\\n\\n${section}\\n[-=]+)`, 'i');
+    formatted = formatted.replace(sectionRegex, '$1');
+  }
+  
+  return formatted;
 }
 
 /**
@@ -1663,319 +2715,31 @@ function determineStartingPhase(metadata: any, forceRefresh: boolean): 'initial'
 }
 
 /**
- * Enhances experience entries by adding/improving metrics in responsibilities
- * @param entries The experience entries to enhance
- * @returns Enhanced experience entries with improved metrics
+ * Safely tracks event without TypeScript errors by only including known properties
  */
-export function enhanceExperienceWithMetrics(entries: Array<{
-  jobTitle: string;
-  company: string;
-  dateRange: string;
-  location?: string;
-  responsibilities: string[];
-}> = []): Array<{
-  jobTitle: string;
-  company: string;
-  dateRange: string;
-  location?: string;
-  responsibilities: string[];
-}> {
-  if (!entries || entries.length === 0) return [];
+function trackProcessingEvent(eventName: string, data: any) {
+  // Extract relevant properties
+  const { cvId, optimizationType, characterCount, processingTime } = data;
   
-  return entries.map(entry => {
-    // Create a new entry object to avoid modifying the original
-    const enhancedEntry = { ...entry };
-    
-    // Enhance responsibilities with metrics where applicable
-    if (enhancedEntry.responsibilities && enhancedEntry.responsibilities.length > 0) {
-      enhancedEntry.responsibilities = enhancedEntry.responsibilities.map(resp => {
-        // Skip if already has metrics
-        if (/\b\d+%|\$\d+|\d+\s+percent|\d+k|\d+\s+million|\b\d+\s+thousand/i.test(resp)) {
-          return resp;
-        }
-        
-        // Skip if it's not an achievement-oriented statement
-        if (!/\bincreas|\bgrowth|\bexpand|\bimprov|\bdelivery|\bmanag|\blead|\bachiev|\bdevelop/i.test(resp)) {
-          return resp;
-        }
-        
-        // For achievement-oriented statements, try to add realistic metrics
-        if (/\bincreas|\bgrowth|\bexpand/i.test(resp)) {
-          // Add percentage growth for increase-related achievements
-          const percentage = Math.floor(Math.random() * 35) + 15; // Random 15-50%
-          return resp.replace(/\.?$/, ` by ${percentage}%.`);
-        } else if (/\bimprov|\benhance|\boptimiz/i.test(resp)) {
-          // Add efficiency improvement for optimization-related achievements
-          const percentage = Math.floor(Math.random() * 25) + 10; // Random 10-35%
-          return resp.replace(/\.?$/, `, resulting in ${percentage}% improved efficiency.`);
-        } else if (/\bmanag|\blead|\bsupervis/i.test(resp)) {
-          // Add team size for management-related responsibilities
-          const teamSize = Math.floor(Math.random() * 8) + 3; // Random 3-10 people
-          return resp.replace(/\.?$/, ` for a team of ${teamSize} professionals.`);
-        } else if (/\bbudget|\bcost|\bexpens|\bsav/i.test(resp)) {
-          // Add dollar value for budget-related achievements
-          const amount = (Math.floor(Math.random() * 9) + 1) * 
-                        (Math.random() > 0.5 ? 10000 : 100000); // Random $10k-$90k or $100k-$900k
-          return resp.replace(/\.?$/, ` with a budget of $${(amount/1000).toFixed(0)}K.`);
-        } else if (/\bproject|\binitiative|\bprogram/i.test(resp)) {
-          // Add timeline for project-related achievements
-          const months = Math.floor(Math.random() * 9) + 3; // Random 3-12 months
-          return resp.replace(/\.?$/, ` completed ${months} months ahead of schedule.`);
-        }
-        
-        // Default: return unchanged
-        return resp;
-      });
+  // Create a properly typed ProcessingEvent object
+  const event: ProcessingEvent = {
+    eventType: 'cv_optimized' === eventName ? 'process_complete' : 'phase_complete',
+    cvId: cvId || 0,
+    timestamp: new Date().toISOString(),
+    duration: processingTime,
+    phase: optimizationType || 'optimization',
+    status: 'completed',
+    metadata: {
+      characterCount,
+      optimizationType
     }
-    
-    return enhancedEntry;
-  });
+  };
+  
+  // Call the trackEvent function
+  trackEvent(event);
+  
+  // Also log the processing time
+  if (processingTime) {
+    logger.info(`Processing time for ${eventName}: ${processingTime}ms`);
+  }
 }
-
-/**
- * Gets missing industry-specific keywords that should be added to a CV
- * @param industry The target industry
- * @param existingKeywords List of keywords already in the CV
- * @returns Array of industry keywords that are missing from the CV
- */
-export function getMissingIndustryKeywords(industry: string, existingKeywords: string[] = []): string[] {
-  // Normalize industry name
-  const normalizedIndustry = industry.trim().toLowerCase();
-  
-  // Define industry keyword mapping if not already defined in the file
-  const ALL_INDUSTRY_KEYWORDS: Record<string, string[]> = {
-    'technology': [
-      'software', 'development', 'programming', 'javascript', 'python', 'java', 'react', 'angular', 'node',
-      'aws', 'azure', 'cloud', 'devops', 'agile', 'scrum', 'git', 'api', 'microservices', 'docker',
-      'kubernetes', 'machine learning', 'ai', 'data science', 'full stack', 'frontend', 'backend',
-      'cybersecurity', 'database', 'sql', 'nosql', 'ci/cd', 'automation', 'testing', 'blockchain',
-      'ui/ux', 'architecture', 'iot', 'mobile development', 'requirements gathering'
-    ],
-    'finance': [
-      'financial analysis', 'accounting', 'budgeting', 'forecasting', 'investment', 'portfolio', 'risk management',
-      'financial reporting', 'audit', 'compliance', 'banking', 'securities', 'trading', 'equity', 'financial modeling',
-      'valuation', 'financial planning', 'wealth management', 'cash flow', 'balance sheet', 'income statement',
-      'regulatory', 'tax planning', 'capital markets', 'fintech', 'merger', 'acquisition', 'private equity',
-      'venture capital', 'asset management', 'derivatives', 'credit analysis'
-    ],
-    'healthcare': [
-      'patient care', 'clinical', 'medical', 'healthcare', 'hospital', 'physician', 'nursing', 'treatment',
-      'diagnosis', 'therapy', 'pharmaceutical', 'health records', 'hipaa', 'electronic medical records',
-      'patient management', 'medical coding', 'medical billing', 'healthcare compliance', 'telemedicine',
-      'healthcare analytics', 'clinical trials', 'regulatory affairs', 'healthcare policy', 'care coordination',
-      'health information systems', 'medical devices', 'biotechnology', 'population health', 'preventive care'
-    ],
-    'marketing': [
-      'marketing strategy', 'digital marketing', 'social media', 'content marketing', 'seo', 'sem', 'ppc',
-      'google analytics', 'facebook ads', 'instagram', 'brand management', 'market research',
-      'customer acquisition', 'customer retention', 'email marketing', 'marketing automation',
-      'conversion optimization', 'marketing campaigns', 'audience targeting', 'brand awareness',
-      'influencer marketing', 'marketing analytics', 'copywriting', 'marketing roi', 'crm',
-      'user experience', 'customer journey', 'segmentation', 'lead generation', 'product marketing'
-    ],
-    'sales': [
-      'sales strategy', 'business development', 'account management', 'client relationship', 'negotiation',
-      'closing deals', 'sales pipeline', 'lead generation', 'prospecting', 'sales targets', 'revenue growth',
-      'customer success', 'sales forecasting', 'territory management', 'sales enablement', 'solution selling',
-      'consultative selling', 'b2b sales', 'b2c sales', 'sales presentations', 'cross-selling', 'up-selling',
-      'sales operations', 'customer acquisition', 'value proposition', 'sales cycle', 'quota attainment'
-    ],
-    'engineering': [
-      'design specifications', 'technical documentation', 'engineering analysis', 'product development',
-      'testing procedures', 'quality assurance', 'mechanical design', 'electrical systems', 'civil engineering',
-      'structural analysis', 'prototyping', 'cad', 'simulation', 'requirements analysis', 'validation',
-      'engineering standards', 'technical review', 'process improvement', 'industrial engineering',
-      'systems integration', 'reliability engineering', 'manufacturing processes', 'engineering management'
-    ],
-    'education': [
-      'curriculum development', 'lesson planning', 'student assessment', 'instructional design',
-      'classroom management', 'educational technology', 'differentiated instruction', 'learning outcomes',
-      'student engagement', 'teaching methodologies', 'education policy', 'professional development',
-      'educational leadership', 'student success', 'academic advising', 'student support services',
-      'educational research', 'program evaluation', 'inclusive education', 'distance learning'
-    ],
-    'human resources': [
-      'recruitment', 'talent acquisition', 'employee relations', 'performance management', 'compensation',
-      'benefits administration', 'hr policies', 'hr compliance', 'workforce planning', 'organizational development',
-      'employee engagement', 'diversity and inclusion', 'hr analytics', 'succession planning', 'onboarding',
-      'employee training', 'labor relations', 'hr information systems', 'retention strategies', 'hr consulting'
-    ]
-  };
-  
-  // Get the appropriate industry keywords, defaulting to technology if the industry isn't recognized
-  const industryKeywords = ALL_INDUSTRY_KEYWORDS[normalizedIndustry] || 
-                          ALL_INDUSTRY_KEYWORDS['technology'];
-  
-  // Normalize existing keywords for comparison
-  const normalizedExistingKeywords = existingKeywords.map(kw => kw.trim().toLowerCase());
-  
-  // Find keywords that are missing
-  const missingKeywords = industryKeywords.filter(keyword => {
-    // Check if any existing keyword contains this industry keyword
-    return !normalizedExistingKeywords.some(existingKw => 
-      existingKw.includes(keyword) || keyword.includes(existingKw)
-    );
-  });
-  
-  // Return up to 10 missing keywords to avoid overwhelming recommendations
-  return missingKeywords.slice(0, 10);
-}
-
-/**
- * Generates industry-specific suggestions for CV improvement
- * @param industry The target industry
- * @param existingContent The current CV content
- * @returns Object containing industry-specific suggestions and missing keywords
- */
-export function generateIndustrySpecificSuggestions(existingContent: string, industry: string): {
-  missingKeywords: string[];
-  missingSoftSkills: string[];
-  missingHardSkills: string[];
-  suggestions: string[];
-} {
-  // Normalize industry name
-  const normalizedIndustry = industry.trim().toLowerCase();
-  
-  // Industry-specific suggestion templates
-  const industrySuggestions: Record<string, string[]> = {
-    'technology': [
-      'Include specific programming languages and technical skills in a dedicated skills section',
-      'Quantify technical achievements with metrics (e.g., improved application performance by 40%)',
-      'Highlight experience with popular frameworks and libraries relevant to your specialization',
-      'Include links to GitHub repositories or technical projects you\'ve contributed to',
-      'Mention any technical certifications you\'ve obtained (AWS, Microsoft, Google Cloud, etc.)'
-    ],
-    'finance': [
-      'Include specific financial analysis tools and software you\'re proficient with',
-      'Quantify financial impacts of your work (e.g., reduced costs by $2M annually)',
-      'Highlight regulatory compliance knowledge and experience',
-      'Mention any financial certifications (CFA, CPA, etc.) prominently',
-      'Include experience with financial modeling and forecasting methodologies'
-    ],
-    'healthcare': [
-      'Highlight knowledge of healthcare regulations and compliance (HIPAA, etc.)',
-      'Include experience with electronic medical records systems',
-      'Mention any specialized medical certifications or training',
-      'Emphasize patient care outcomes and improvements',
-      'Include experience with healthcare quality metrics and reporting'
-    ],
-    'marketing': [
-      'Include specific metrics showing campaign performance and ROI',
-      'Highlight experience with marketing analytics tools and platforms',
-      'Mention specific brands or notable campaigns you\'ve worked on',
-      'Include social media management and growth statistics',
-      'Emphasize content creation and audience engagement metrics'
-    ],
-    'sales': [
-      'Quantify sales achievements with specific revenue figures',
-      'Highlight consistent quota attainment and overachievement',
-      'Include client acquisition and retention metrics',
-      'Mention experience with CRM systems and sales methodologies',
-      'Emphasize negotiation and relationship-building skills with examples'
-    ]
-  };
-  
-  // Get suggestions for the industry, or use generic suggestions as fallback
-  const suggestions = industrySuggestions[normalizedIndustry] || [
-    'Quantify your achievements with specific numbers and percentages',
-    'Include industry-relevant keywords throughout your CV',
-    'Highlight transferable skills applicable to your target roles',
-    'Ensure your most relevant experience is prominently featured',
-    'Include certifications and continuous learning relevant to your field'
-  ];
-  
-  // Industry-specific hard skills
-  const industryHardSkills: Record<string, string[]> = {
-    'technology': [
-      'Programming languages', 'Cloud platforms', 'Database management', 'DevOps tools',
-      'Front-end frameworks', 'Back-end frameworks', 'Mobile development', 'API development',
-      'Containerization', 'Version control systems', 'Data structures', 'Algorithms'
-    ],
-    'finance': [
-      'Financial modeling', 'Accounting software', 'Financial reporting', 'Budgeting', 
-      'Forecasting', 'Risk assessment', 'Investment analysis', 'Portfolio management',
-      'Financial regulations', 'Tax preparation', 'Audit procedures', 'Banking systems'
-    ],
-    'healthcare': [
-      'Medical coding', 'Electronic health records', 'Medical terminology', 'Clinical procedures',
-      'Healthcare compliance', 'Patient management systems', 'Medical billing', 'Healthcare analytics',
-      'Medical devices', 'Clinical trials', 'Pharmaceutical knowledge', 'Treatment planning'
-    ],
-    'marketing': [
-      'SEO/SEM', 'Social media platforms', 'Analytics tools', 'CRM systems',
-      'Content management systems', 'Digital advertising', 'Email marketing platforms',
-      'Graphic design software', 'Marketing automation', 'A/B testing', 'UI/UX design'
-    ],
-    'sales': [
-      'CRM software', 'Sales automation tools', 'Sales analytics', 'Lead management systems',
-      'Presentation software', 'Proposal creation', 'Sales forecasting', 'Territory management',
-      'Pipeline management', 'Pricing strategies', 'Competitive analysis', 'Account mapping'
-    ]
-  };
-  
-  // Industry-specific soft skills
-  const industrySoftSkills: Record<string, string[]> = {
-    'technology': [
-      'Problem-solving', 'Attention to detail', 'Adaptability', 'Continuous learning',
-      'Collaboration', 'Communication', 'Critical thinking', 'Time management'
-    ],
-    'finance': [
-      'Analytical thinking', 'Attention to detail', 'Ethical judgment', 'Confidentiality',
-      'Communication', 'Problem-solving', 'Reliability', 'Compliance-oriented'
-    ],
-    'healthcare': [
-      'Empathy', 'Communication', 'Attention to detail', 'Ethics', 'Patience',
-      'Stress management', 'Teamwork', 'Cultural sensitivity', 'Emotional intelligence'
-    ],
-    'marketing': [
-      'Creativity', 'Communication', 'Adaptability', 'Collaboration', 'Critical thinking',
-      'Customer focus', 'Storytelling', 'Trend awareness', 'Strategic thinking'
-    ],
-    'sales': [
-      'Communication', 'Persuasion', 'Relationship building', 'Active listening', 'Resilience',
-      'Emotional intelligence', 'Adaptability', 'Confidence', 'Goal orientation'
-    ]
-  };
-  
-  // Default skills if industry not recognized
-  const defaultHardSkills = [
-    'Microsoft Office', 'Project management', 'Data analysis', 'Research',
-    'Technical writing', 'Presentation skills', 'Process improvement', 'Performance tracking'
-  ];
-  
-  const defaultSoftSkills = [
-    'Communication', 'Problem-solving', 'Teamwork', 'Adaptability',
-    'Time management', 'Critical thinking', 'Attention to detail', 'Leadership'
-  ];
-  
-  // Get appropriate skills for the industry
-  const hardSkills = industryHardSkills[normalizedIndustry] || defaultHardSkills;
-  const softSkills = industrySoftSkills[normalizedIndustry] || defaultSoftSkills;
-  
-  // Check which skills are mentioned in the CV
-  const normalizedContent = existingContent.toLowerCase();
-  
-  // Find missing hard skills (skills not mentioned in the CV)
-  const missingHardSkills = hardSkills.filter(skill => 
-    !normalizedContent.includes(skill.toLowerCase())
-  ).slice(0, 5); // Limit to 5 missing hard skills
-  
-  // Find missing soft skills
-  const missingSoftSkills = softSkills.filter(skill => 
-    !normalizedContent.includes(skill.toLowerCase())
-  ).slice(0, 5); // Limit to 5 missing soft skills
-  
-  // Get missing industry keywords
-  const missingKeywords = getMissingIndustryKeywords(industry, 
-    // Extract existing keywords from content
-    normalizedContent.split(/[\s,\.;:]/).filter(word => word.length > 3)
-  );
-  
-  // Return the complete result object
-  return {
-    missingKeywords,
-    missingSoftSkills,
-    missingHardSkills,
-    suggestions
-  };
-} 
