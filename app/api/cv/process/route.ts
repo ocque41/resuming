@@ -68,9 +68,21 @@ export async function POST(request: Request) {
     const userId = session.user.id;
     
     // Parse request body
-    const requestData = await request.json();
+    let requestData;
+    try {
+      requestData = await request.json();
+    } catch (parseError) {
+      logger.error("Failed to parse request body", 
+        parseError instanceof Error ? parseError.message : String(parseError));
+      return NextResponse.json(
+        { success: false, error: "Invalid request format. Please provide valid JSON." },
+        { status: 400 }
+      );
+    }
+    
     const { cvId, forceRefresh } = requestData;
     
+    // Validate cvId
     if (!cvId) {
       return NextResponse.json(
         { success: false, error: "Missing CV ID." },
@@ -78,10 +90,29 @@ export async function POST(request: Request) {
       );
     }
     
-    // Get CV record from database
-    const cvRecord = await db.query.cvs.findFirst({
-      where: eq(cvs.id, cvId),
-    });
+    // Use a timeout for database operations
+    let cvRecord;
+    try {
+      // Set up a timeout for the database query
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Database query timed out")), 5000);
+      });
+      
+      // Query the database
+      const dbQueryPromise = db.query.cvs.findFirst({
+        where: eq(cvs.id, cvId),
+      });
+      
+      // Race the query against the timeout
+      cvRecord = await Promise.race([dbQueryPromise, timeoutPromise]);
+    } catch (dbError) {
+      logger.error(`Database error fetching CV ${cvId}:`, 
+        dbError instanceof Error ? dbError.message : String(dbError));
+      return NextResponse.json(
+        { success: false, error: "Error accessing CV data. Please try again." },
+        { status: 500 }
+      );
+    }
     
     if (!cvRecord) {
       return NextResponse.json({ success: false, error: "CV not found." }, { status: 404 });
@@ -89,26 +120,34 @@ export async function POST(request: Request) {
     
     // Verify CV ownership
     if (cvRecord.userId !== userId) {
+      logger.warn(`User ${userId} attempted to access CV ${cvId} belonging to user ${cvRecord.userId}`);
       return NextResponse.json(
         { success: false, error: "You don't have permission to access this CV." },
         { status: 403 }
       );
     }
     
-    // Parse existing metadata
+    // Parse existing metadata with error handling
     let metadata = {};
-    if (cvRecord.metadata) {
-      try {
-        metadata = JSON.parse(cvRecord.metadata);
-      } catch (error) {
-        logger.error(`Error parsing metadata for CV ID ${cvId}:`, error instanceof Error ? error.message : String(error));
-      }
+    try {
+      metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
+    } catch (parseError) {
+      logger.error(`Error parsing metadata for CV ID ${cvId}:`, 
+        parseError instanceof Error ? parseError.message : String(parseError));
+      metadata = {}; // Reset to empty object in case of parsing error
     }
     
     // Check if CV is already being processed and not forcing refresh
     const isProcessing = metadata && (metadata as any).processing;
+    const lastUpdateTime = new Date((metadata as any).lastUpdated || 0);
+    const currentTime = new Date();
+    const minutesSinceLastUpdate = (currentTime.getTime() - lastUpdateTime.getTime()) / (1000 * 60);
     
-    if (isProcessing && !forceRefresh) {
+    // If processing for over 10 minutes, assume it's stalled
+    const isStalled = isProcessing && minutesSinceLastUpdate > 10;
+    
+    // Return status if already processing and not stalled or forced
+    if (isProcessing && !isStalled && !forceRefresh) {
       return NextResponse.json({
         success: true,
         message: "CV is already being processed.",
@@ -134,10 +173,55 @@ export async function POST(request: Request) {
     
     // Check if we have raw text content
     if (!cvRecord.rawText) {
-      return NextResponse.json(
-        { success: false, error: "CV text content not available." },
-        { status: 400 }
-      );
+      // Try to extract text if we don't have it
+      try {
+        const pdfBytes = await getOriginalPdfBytes(cvRecord);
+        // Convert pdfBytes to the correct format for extractTextFromPdf
+        // We need to specify the path for a temporary file or convert the bytes to a string
+        const filePath = path.join(process.cwd(), 'tmp', `${cvId}_${Date.now()}.pdf`);
+        
+        // Create the tmp directory if it doesn't exist
+        const tmpDir = path.join(process.cwd(), 'tmp');
+        try {
+          await fsPromises.mkdir(tmpDir, { recursive: true });
+        } catch (mkdirError) {
+          logger.warn(`Failed to create tmp directory: ${mkdirError instanceof Error ? mkdirError.message : String(mkdirError)}`);
+        }
+        
+        // Write the PDF bytes to a temporary file
+        await fsPromises.writeFile(filePath, pdfBytes);
+        
+        // Now extract text from the file
+        const extractedText = await extractTextFromPdf(filePath);
+        
+        // Clean up the temporary file
+        try {
+          await fsPromises.unlink(filePath);
+        } catch (unlinkError) {
+          logger.warn(`Failed to delete temporary file ${filePath}: ${unlinkError instanceof Error ? unlinkError.message : String(unlinkError)}`);
+        }
+        
+        if (!extractedText || extractedText.trim().length === 0) {
+          return NextResponse.json(
+            { success: false, error: "Could not extract text from the CV. Please upload a valid PDF." },
+            { status: 400 }
+          );
+        }
+        
+        // Update the CV with the extracted text
+        await db.update(cvs)
+          .set({ rawText: extractedText })
+          .where(eq(cvs.id, cvId));
+        
+        cvRecord.rawText = extractedText;
+      } catch (extractError) {
+        logger.error(`Failed to extract text from CV ${cvId}:`, 
+          extractError instanceof Error ? extractError.message : String(extractError));
+        return NextResponse.json(
+          { success: false, error: "Could not read the CV content. Please upload a valid PDF." },
+          { status: 400 }
+        );
+      }
     }
     
     // Update metadata to mark as processing
@@ -152,32 +236,52 @@ export async function POST(request: Request) {
     };
     
     // Update the CV record to mark as processing
-    await db.update(cvs)
-      .set({
-        metadata: JSON.stringify(updatedMetadata)
-      })
-      .where(eq(cvs.id, cvId));
+    try {
+      await db.update(cvs)
+        .set({
+          metadata: JSON.stringify(updatedMetadata)
+        })
+        .where(eq(cvs.id, cvId));
+    } catch (updateError) {
+      logger.error(`Failed to update CV ${cvId} metadata:`, 
+        updateError instanceof Error ? updateError.message : String(updateError));
+      return NextResponse.json(
+        { success: false, error: "Failed to start processing. Please try again." },
+        { status: 500 }
+      );
+    }
     
-    // Process CV asynchronously to avoid blocking the API response
-    processCVWithAI(cvId, cvRecord.rawText, updatedMetadata, forceRefresh)
+    // Process CV asynchronously in the background
+    // This allows the API to return immediately while processing continues
+    // We don't use await here intentionally
+    processCVWithAI(cvId, cvRecord.rawText, updatedMetadata, forceRefresh, userId)
       .catch((error) => {
-        logger.error(`Error processing CV ID ${cvId}:`, error instanceof Error ? error.message : String(error));
+        logger.error(`Unhandled error in background processing for CV ID ${cvId}:`, 
+          error instanceof Error ? error.message : String(error));
       });
     
-    // Return success response
+    // Return success response immediately
     return NextResponse.json({
       success: true,
       message: forceRefresh ? "CV processing restarted." : "CV processing started.",
       cvId,
       isProcessing: true,
       forceRefresh: !!forceRefresh,
+      estimatedTime: "30-60 seconds",
       metadata: updatedMetadata
     });
     
   } catch (error) {
-    logger.error("Error in CV process API:", error instanceof Error ? error.message : String(error));
+    logger.error("Unexpected error in CV process API:", 
+      error instanceof Error ? error.message : String(error));
+    
+    // Return a user-friendly error
     return NextResponse.json(
-      { success: false, error: "Failed to process CV." },
+      { 
+        success: false, 
+        error: "An unexpected error occurred. Please try again later.",
+        requestId: `req_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`
+      },
       { status: 500 }
     );
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -124,9 +124,12 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
   // State for DOCX download
   const [isDownloadingDocx, setIsDownloadingDocx] = useState<boolean>(false);
   
-  // State for status polling
+  // State for polling
   const [statusPollingEnabled, setStatusPollingEnabled] = useState<boolean>(false);
   const [statusPollingInterval, setStatusPollingInterval] = useState<number>(1000);
+  
+  // Error tracking for polling failures
+  const errorCount = useRef<number>(0);
   
   // State for processing too long detection
   const [processingTooLong, setProcessingTooLong] = useState<boolean>(false);
@@ -1087,65 +1090,81 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
       if (!statusPollingEnabled || !selectedCVId) return;
       
       try {
-        const response = await fetch(`/api/cv/process/status?cvId=${selectedCVId}`);
+        // Add a cache-busting parameter to avoid cached responses
+        const cacheBuster = Date.now();
+        const response = await fetch(`/api/cv/process/status?cvId=${selectedCVId}&_=${cacheBuster}`);
         
         if (response.ok) {
           const data = await response.json();
+          
+          // Update the timeout for the next poll based on server recommendation
+          const retryTime = data.retryIn || 2000;
+          setStatusPollingInterval(retryTime);
           
           if (data.processing) {
             // Still processing
             setIsProcessing(true);
             setProcessingStatus(data.step || "Processing...");
-            setProcessingProgress(data.progress || 0);
-        
-        // Check if processing is stuck
+            
+            // Only update progress if it's higher than current
+            // This prevents progress from jumping backward
+            if (data.progress > processingProgress) {
+              setProcessingProgress(data.progress || 0);
+            }
+            
+            // Check if processing is stuck
             if (data.isStuck) {
-              console.warn(`Processing appears stuck at ${data.progress}% for ${data.stuckMinutes} minutes`);
+              console.warn(`Processing appears stuck at ${data.progress}% for ${Math.round(data.stuckDuration / 60)} minutes`);
               
               // If stuck for more than 3 minutes, show error and offer retry
-              if (data.stuckMinutes > 3) {
-                setError(`Processing appears stuck at ${data.progress}%. You can wait or try again.`);
+              if (data.stuckDuration > 180) {
+                if (!processingTooLong) {
+                  setProcessingTooLong(true);
+                }
+                
+                // If stuck for more than 10 minutes, show error
+                if (data.stuckDuration > 600) {
+                  setError(`Processing appears stuck. You can wait or try again.`);
+                }
               }
             } else {
               // Clear error if processing is moving again
-              setError(null);
+              if (error) setError(null);
+              if (processingTooLong) setProcessingTooLong(false);
             }
-            
-            // Continue polling, but back off if progress is slow
-            const newInterval = data.progress > 80 ? 1000 :
-                               data.progress > 60 ? 2000 :
-                               data.progress > 40 ? 3000 : 2000;
-            
-            setStatusPollingInterval(newInterval);
-            timeoutId = setTimeout(checkStatus, newInterval);
           } else if (data.isComplete) {
             // Processing completed
-          setIsProcessing(false);
+            setIsProcessing(false);
             setIsProcessed(true);
             setProcessingStatus("Processing completed");
             setProcessingProgress(100);
             setStatusPollingEnabled(false);
             
             // Update state with optimization results
-          if (data.optimizedText) {
-            setOptimizedText(data.optimizedText);
+            if (data.optimizedText) {
+              setOptimizedText(data.optimizedText);
               // Process the optimized text
               setProcessedText(processOptimizedText(data.optimizedText));
-          }
-          
-          if (data.improvements) {
-            setImprovements(data.improvements);
-          }
-        } else if (data.error) {
+            }
+            
+            if (data.improvements) {
+              setImprovements(data.improvements);
+            }
+          } else if (data.error) {
             // Processing encountered an error
             setIsProcessing(false);
             setError(`Processing error: ${data.error}`);
             setStatusPollingEnabled(false);
-      } else {
+          } else {
             // Not processing or idle
             setIsProcessing(false);
             setProcessingStatus("");
-            setProcessingProgress(0);
+            
+            // If we were previously processing and now we're not, but not completed either,
+            // this could indicate an abnormal termination
+            if (isProcessing && !data.isComplete) {
+              setError("Processing was interrupted. Please try again.");
+            }
             
             // Stop polling if nothing is happening
             if (!data.processing && !data.isComplete) {
@@ -1153,24 +1172,61 @@ export default function EnhancedOptimizeCVCard({ cvs = [] }: EnhancedOptimizeCVC
             }
           }
         } else {
-          // Stop polling on error
-          setStatusPollingEnabled(false);
-          setError("Error checking processing status");
+          // Server error - handle based on status code
+          if (response.status === 429) {
+            // Rate limiting - back off polling
+            console.warn("Rate limited, backing off polling");
+            setStatusPollingInterval(Math.min(statusPollingInterval * 2, 10000));
+          } else if (response.status === 404) {
+            // CV not found
+            setError("CV not found. It may have been deleted.");
+            setStatusPollingEnabled(false);
+          } else {
+            // Other server errors - retry a few times then stop
+            console.error(`Server error: ${response.status}`);
+            
+            // Increment error count and stop after 3 errors
+            errorCount.current += 1;
+            if (errorCount.current > 3) {
+              setStatusPollingEnabled(false);
+              setError("Could not check processing status after multiple attempts.");
+            } else {
+              // Back off exponentially
+              setStatusPollingInterval(Math.min(statusPollingInterval * 2, 10000));
+            }
+          }
         }
       } catch (err) {
         console.error("Error checking CV processing status:", err);
-        setStatusPollingEnabled(false);
+        
+        // Increment error count and stop after 3 errors
+        errorCount.current += 1;
+        if (errorCount.current > 3) {
+          setStatusPollingEnabled(false);
+          setError("Connection error while checking processing status.");
+        } else {
+          // Back off exponentially
+          setStatusPollingInterval(Math.min(statusPollingInterval * 2, 10000));
+        }
+      }
+      
+      // Schedule next poll if polling is still enabled
+      if (statusPollingEnabled) {
+        timeoutId = setTimeout(checkStatus, statusPollingInterval);
       }
     };
     
+    // Start the polling process
     if (statusPollingEnabled) {
+      // Reset error count when starting polling
+      errorCount.current = 0;
       timeoutId = setTimeout(checkStatus, statusPollingInterval);
     }
     
     return () => {
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [statusPollingEnabled, statusPollingInterval, selectedCVId, processOptimizedText]);
+  }, [statusPollingEnabled, statusPollingInterval, selectedCVId, processOptimizedText, isProcessing, processingTooLong, error, processingProgress]);
   
   // Add a useEffect to detect when processing is taking too long
   useEffect(() => {

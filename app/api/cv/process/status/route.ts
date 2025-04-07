@@ -33,10 +33,28 @@ export async function GET(request: Request) {
       );
     }
     
-    // Get CV record from database
-    const cvRecord = await db.query.cvs.findFirst({
-      where: eq(cvs.id, parseInt(cvId)),
-    });
+    // Get CV record from database with timeout
+    let cvRecord;
+    try {
+      // Create a promise that rejects after 5 seconds
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Database query timed out")), 5000);
+      });
+      
+      // Database query promise
+      const dbQueryPromise = db.query.cvs.findFirst({
+        where: eq(cvs.id, parseInt(cvId)),
+      });
+      
+      // Race the query against the timeout
+      cvRecord = await Promise.race([dbQueryPromise, timeoutPromise]);
+    } catch (dbError) {
+      logger.error(`Database error fetching CV ${cvId}:`, dbError instanceof Error ? dbError.message : String(dbError));
+      return NextResponse.json(
+        { success: false, error: "Error accessing CV data. Please try again." },
+        { status: 500, headers: { 'Retry-After': '5' } }
+      );
+    }
     
     if (!cvRecord) {
       return NextResponse.json({ success: false, error: "CV not found." }, { status: 404 });
@@ -44,103 +62,93 @@ export async function GET(request: Request) {
     
     // Verify CV ownership
     if (cvRecord.userId !== userId) {
+      logger.error(`User ${userId} attempted to access CV ${cvId} belonging to user ${cvRecord.userId}`);
       return NextResponse.json(
         { success: false, error: "You don't have permission to access this CV." },
         { status: 403 }
       );
     }
     
-    // Parse metadata
+    // Parse metadata with error handling
     let metadata: Record<string, any> = {};
     try {
       metadata = cvRecord.metadata ? JSON.parse(cvRecord.metadata) : {};
-    } catch (error) {
-      logger.error(`Error parsing metadata for CV ID ${cvId}:`, error instanceof Error ? error.message : String(error));
-      return NextResponse.json(
-        { success: false, error: "Invalid CV metadata." },
-        { status: 500 }
-      );
+    } catch (parseError) {
+      logger.error(`Error parsing metadata for CV ID ${cvId}:`, parseError instanceof Error ? parseError.message : String(parseError));
+      
+      // Return partial information even if parsing fails
+      return NextResponse.json({
+        success: true,
+        error: "Failed to parse CV metadata",
+        processing: false,
+        isComplete: false,
+        step: null,
+        progress: 0,
+        partialData: true
+      });
     }
+    
+    // Calculate time-based metrics
+    const now = new Date();
+    const lastUpdated = metadata.lastUpdated ? new Date(metadata.lastUpdated) : null;
+    const processingStartTime = metadata.processingStartTime ? new Date(metadata.processingStartTime) : null;
+    const timeSinceLastUpdate = lastUpdated ? Math.floor((now.getTime() - lastUpdated.getTime()) / 1000) : 0;
+    const timeSinceStart = processingStartTime ? Math.floor((now.getTime() - processingStartTime.getTime()) / 1000) : 0;
     
     // Check if processing is completed
     let isCompleted = !metadata.processing && (metadata.processingCompleted || metadata.optimized || metadata.ready_for_optimization);
     
-    // Check if processing is stuck
+    // Check if processing is stuck based on multiple factors
     let isStuck = false;
-    let stuckMinutes = 0;
-    let stuckSince = null;
+    let stuckDuration = 0;
+    let stuckReason: string | null = null;
     
-    // More aggressive stuck detection - consider processing stuck if:
-    // 1. It's been more than 2 minutes since the last update
-    // 2. OR it's been more than 5 minutes since processing started and progress is less than 20%
-    // 3. OR it's been more than 3 minutes and the progress has been at the same value for that time
     if (metadata.processing && !isCompleted) {
-      const now = new Date();
-      
-      // Check for last update time
-      if (metadata.lastUpdated) {
-        const lastUpdated = new Date(metadata.lastUpdated);
-        const minutesSinceUpdate = Math.floor((now.getTime() - lastUpdated.getTime()) / (1000 * 60));
-        
-        if (minutesSinceUpdate >= 2) {
-          isStuck = true;
-          stuckMinutes = minutesSinceUpdate;
-          stuckSince = lastUpdated.toISOString();
-          
-          logger.warn(`CV ID ${cvId} processing appears stuck at ${metadata.processingProgress}% for ${stuckMinutes} minutes (no updates)`);
-        }
+      // No updates for over 2 minutes
+      if (lastUpdated && timeSinceLastUpdate > 120) {
+        isStuck = true;
+        stuckDuration = timeSinceLastUpdate;
+        stuckReason = 'no_updates';
       }
       
-      // Check for processing start time
-      if (!isStuck && metadata.processingStartTime) {
-        const startTime = new Date(metadata.processingStartTime);
-        const minutesSinceStart = Math.floor((now.getTime() - startTime.getTime()) / (1000 * 60));
-        
-        // If it's been more than 5 minutes and progress is less than 20%, consider it stuck
-        if (minutesSinceStart >= 5 && (metadata.processingProgress || 0) < 20) {
-          isStuck = true;
-          stuckMinutes = minutesSinceStart;
-          stuckSince = startTime.toISOString();
-          
-          logger.warn(`CV ID ${cvId} processing appears stuck at ${metadata.processingProgress}% for ${stuckMinutes} minutes (slow progress)`);
-        }
+      // Processing for over 5 minutes with low progress
+      if (!isStuck && processingStartTime && timeSinceStart > 300 && (metadata.processingProgress || 0) < 20) {
+        isStuck = true;
+        stuckDuration = timeSinceStart;
+        stuckReason = 'slow_progress';
       }
       
-      // Check for progress history if available
+      // Progress hasn't changed but time has passed
       if (!isStuck && metadata.progressHistory && Array.isArray(metadata.progressHistory)) {
-        const recentHistory = metadata.progressHistory.slice(-5); // Get last 5 progress entries
+        const recentHistory = metadata.progressHistory.slice(-5);
         
         if (recentHistory.length >= 3) {
-          // Check if the last 3 progress values are the same
           const lastProgress = recentHistory[recentHistory.length - 1]?.progress;
           const allSame = recentHistory.slice(-3).every(entry => entry.progress === lastProgress);
           
           if (allSame) {
             const lastProgressTime = new Date(recentHistory[recentHistory.length - 3]?.timestamp || now);
-            const minutesSinceProgressChange = Math.floor((now.getTime() - lastProgressTime.getTime()) / (1000 * 60));
+            const secondsSinceProgressChange = Math.floor((now.getTime() - lastProgressTime.getTime()) / 1000);
             
-            if (minutesSinceProgressChange >= 3) {
+            if (secondsSinceProgressChange > 180) {
               isStuck = true;
-              stuckMinutes = minutesSinceProgressChange;
-              stuckSince = lastProgressTime.toISOString();
-              
-              logger.warn(`CV ID ${cvId} processing appears stuck at ${lastProgress}% for ${stuckMinutes} minutes (no progress change)`);
+              stuckDuration = secondsSinceProgressChange;
+              stuckReason = 'progress_stalled';
             }
           }
         }
       }
       
-      // If stuck for over 10 minutes, log an error to make it more visible
-      if (isStuck && stuckMinutes >= 10) {
-        logger.error(`CV ID ${cvId} processing is CRITICALLY STUCK at ${metadata.processingProgress}% for ${stuckMinutes} minutes. Current step: ${metadata.processingStatus}`);
+      // Log critical stuck states
+      if (isStuck && stuckDuration > 600) {
+        logger.error(`CV ID ${cvId} processing is CRITICALLY STUCK at ${metadata.processingProgress}% for ${Math.floor(stuckDuration / 60)} minutes. Current step: ${metadata.processingStatus}`);
       }
     }
     
-    // Check if analysis is available but processing is stuck at local_analysis_complete
+    // Auto-recover: If analysis is available but processing seems stuck
     if (metadata.processing && metadata.processingStatus === 'local_analysis_complete' && 
         metadata.atsScore && metadata.strengths && metadata.weaknesses && metadata.recommendations) {
       // We have analysis results but the process is stuck at local_analysis_complete
-      // This means the RAG analysis completed but the process didn't continue
       logger.info(`CV ID ${cvId} has analysis results but is stuck at local_analysis_complete, marking as complete`);
       
       // Update the metadata to mark processing as complete
@@ -162,38 +170,14 @@ export async function GET(request: Request) {
         // Update the completed flag for the response
         isCompleted = true;
         isStuck = false;
+        metadata = updatedMetadata;
       } catch (updateError) {
         logger.error(`Error updating metadata for stuck CV ID ${cvId}:`, updateError instanceof Error ? updateError.message : String(updateError));
       }
     }
     
-    // Extract improvements from metadata or create default values
-    const improvements = metadata.improvements || [];
-    
-    // Extract optimized text from metadata
-    const optimizedText = metadata.optimizedText || "";
-    
-    // Extract analysis data
-    const strengths = metadata.strengths || [];
-    const weaknesses = metadata.weaknesses || [];
-    const recommendations = metadata.recommendations || [];
-    const industry = metadata.industry || "General";
-    const language = metadata.language || "English";
-    const keywordAnalysis = metadata.keywordAnalysis || {};
-    const formattingStrengths = metadata.formattingStrengths || [];
-    const formattingWeaknesses = metadata.formattingWeaknesses || [];
-    const formattingRecommendations = metadata.formattingRecommendations || [];
-    
-    // Collect debug info if requested
-    const debugInfo = debug ? {
-      metadata,
-      cvRecord: {
-        id: cvRecord.id,
-        userId: cvRecord.userId,
-        filename: cvRecord.fileName,
-        createdAt: cvRecord.createdAt
-      }
-    } : null;
+    // Extract data from metadata with safe defaults
+    const extractWithDefault = (key: string, defaultValue: any) => metadata[key] || defaultValue;
     
     // Prepare response data
     const responseData = {
@@ -202,38 +186,91 @@ export async function GET(request: Request) {
       isComplete: isCompleted,
       step: metadata.processingStatus || null,
       progress: metadata.processingProgress || 0,
-      improvements,
-      optimizedText,
-      error: metadata.processingError || null,
+      
+      // Timing information
+      lastUpdated: metadata.lastUpdated || null,
+      startedAt: metadata.processingStartTime || null,
+      completedAt: metadata.completedAt || null,
+      timeSinceLastUpdate: timeSinceLastUpdate,
+      timeSinceStart: timeSinceStart,
+      
+      // Stuck information
       isStuck,
-      stuckMinutes: isStuck ? stuckMinutes : 0,
-      stuckSince: isStuck ? stuckSince : null,
-      atsScore: metadata.atsScore || 0,
-      improvedAtsScore: metadata.improvedAtsScore || 0,
-      strengths,
-      weaknesses,
-      recommendations,
-      industry,
-      language,
-      keywordAnalysis,
-      formattingStrengths,
-      formattingWeaknesses,
-      formattingRecommendations,
-      analyzedAt: metadata.analyzedAt || null,
-      optimizedAt: metadata.optimizedAt || null,
-      debug: debugInfo
+      stuckDuration: isStuck ? stuckDuration : 0,
+      stuckReason: isStuck ? stuckReason : null,
+      
+      // Analysis results
+      atsScore: extractWithDefault('atsScore', 0),
+      improvedAtsScore: extractWithDefault('improvedAtsScore', 0),
+      optimizedText: isCompleted ? extractWithDefault('optimizedText', "") : null,
+      improvements: extractWithDefault('improvements', []),
+      error: extractWithDefault('processingError', null),
+      
+      // Analysis data
+      strengths: extractWithDefault('strengths', []),
+      weaknesses: extractWithDefault('weaknesses', []),
+      recommendations: extractWithDefault('recommendations', []),
+      industry: extractWithDefault('industry', "General"),
+      language: extractWithDefault('language', "English"),
+      keywordAnalysis: extractWithDefault('keywordAnalysis', {}),
+      formattingStrengths: extractWithDefault('formattingStrengths', []),
+      formattingWeaknesses: extractWithDefault('formattingWeaknesses', []),
+      formattingRecommendations: extractWithDefault('formattingRecommendations', []),
+      
+      // Retry information for polling
+      retryIn: isStuck ? 5000 : (isCompleted ? null : 2000),
+      
+      // Debug information if requested
+      debug: debug ? {
+        metadata,
+        cvRecord: {
+          id: cvRecord.id,
+          userId: cvRecord.userId,
+          filename: cvRecord.fileName,
+          createdAt: cvRecord.createdAt
+        },
+        timing: {
+          now: now.toISOString(),
+          lastUpdated: lastUpdated?.toISOString(),
+          processingStartTime: processingStartTime?.toISOString(),
+          timeSinceLastUpdate,
+          timeSinceStart
+        }
+      } : null
     };
     
-    return NextResponse.json(responseData);
+    // Add cache-control headers based on processing state
+    const headers: HeadersInit = {};
+    
+    if (isCompleted) {
+      // If complete, can cache longer
+      headers['Cache-Control'] = 'private, max-age=60';
+    } else if (isStuck) {
+      // If stuck, retry less frequently
+      headers['Cache-Control'] = 'no-cache';
+      headers['Retry-After'] = '5';
+    } else if (metadata.processing) {
+      // If actively processing, no caching
+      headers['Cache-Control'] = 'no-store';
+    }
+    
+    return NextResponse.json(responseData, { headers });
   } catch (error) {
     logger.error("Error checking CV processing status:", error instanceof Error ? error.message : String(error));
     
     return NextResponse.json(
       { 
         success: false, 
-        error: "Error checking CV processing status." 
+        error: "Error checking CV processing status.",
+        retryIn: 5000
       },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store',
+          'Retry-After': '5'
+        }
+      }
     );
   }
 } 

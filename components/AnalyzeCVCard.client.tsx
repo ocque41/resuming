@@ -414,18 +414,6 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
   const renderLoadingState = () => {
     return (
       <div className="flex flex-col items-center justify-center py-10">
-        <div className="w-full max-w-xs mb-6">
-          <div className="bg-[#222222] h-2 rounded-full overflow-hidden">
-            <div 
-              className="bg-[#B4916C] h-full rounded-full transition-all duration-500 ease-out"
-              style={{ width: `${analysisProgress}%` }}
-            ></div>
-          </div>
-          <p className="text-[#F9F6EE]/60 text-sm mt-2 text-center font-borna">
-            {analysisProgress}% complete
-          </p>
-        </div>
-        
         <div className="relative w-16 h-16 mb-5">
           <div className="absolute inset-0 border-4 border-[#111111] rounded-full"></div>
           <div className="absolute inset-0 border-4 border-t-[#333333] rounded-full animate-spin"></div>
