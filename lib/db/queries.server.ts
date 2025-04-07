@@ -47,6 +47,39 @@ export async function getUser() {
   return user[0];
 }
 
+/**
+ * Get a user by their ID
+ * 
+ * @param userId - The user ID as a string or number
+ * @returns The user object or null if not found
+ */
+export async function getUserById(userId: string | number): Promise<typeof users.$inferSelect | null> {
+  // Convert string ID to number if needed
+  const numericId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
+  
+  if (isNaN(numericId)) {
+    logger.error(`Invalid user ID format: ${userId}`);
+    return null;
+  }
+  
+  try {
+    const user = await db
+      .select()
+      .from(users)
+      .where(and(eq(users.id, numericId), isNull(users.deletedAt)))
+      .limit(1);
+
+    if (user.length === 0) {
+      return null;
+    }
+
+    return user[0];
+  } catch (error) {
+    logger.error(`Error fetching user by ID ${userId}:`, error instanceof Error ? error.message : String(error));
+    return null;
+  }
+}
+
 export async function getTeamByStripeCustomerId(customerId: string) {
   const result = await db
     .select()

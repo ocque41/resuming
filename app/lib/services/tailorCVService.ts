@@ -16,6 +16,9 @@ interface TailorCVResponse {
   success: boolean;
   result?: TailorCVResult;
   error?: string;
+  jobId?: string;
+  status?: string;
+  progress?: number;
 }
 
 /**
@@ -164,7 +167,7 @@ export function getIndustryOptimizationGuidance(jobDescription: string): {
     };
   }
   
-  // Ensure all required arrays exist
+  // Ensure all required arrays exist with fallbacks
   const importantSkills = Array.isArray(industry.importantSkills) && industry.importantSkills.length > 0 
     ? industry.importantSkills 
     : ['communication', 'teamwork', 'industry-specific knowledge'];
@@ -187,17 +190,88 @@ export function getIndustryOptimizationGuidance(jobDescription: string): {
 }
 
 /**
+ * Maximum time to wait for tailoring job to complete (in milliseconds)
+ */
+const MAX_POLLING_TIME = 45000; // 45 seconds
+
+/**
+ * Polling interval for checking job status (in milliseconds)
+ */
+const POLLING_INTERVAL = 2000; // 2 seconds
+
+/**
+ * Poll the API for job status until completion or timeout
+ */
+async function pollJobStatus(jobId: string): Promise<TailorCVResult> {
+  const startTime = Date.now();
+  
+  // Start polling
+  while (Date.now() - startTime < MAX_POLLING_TIME) {
+    try {
+      // Check job status
+      const response = await fetch(`/api/cv/tailor-for-job/status?jobId=${jobId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        logger.error(`Error polling job status: ${response.status} ${response.statusText}`);
+        
+        // If server error, wait a bit before retrying
+        if (response.status >= 500) {
+          await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL));
+          continue;
+        }
+        
+        throw new Error(`API error: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json() as TailorCVResponse;
+      
+      // If job completed successfully, return the result
+      if (data.success && data.status === 'completed' && data.result) {
+        logger.info(`Job ${jobId} completed successfully`);
+        return data.result;
+      }
+      
+      // If job failed, throw an error
+      if (data.status === 'error' || !data.success) {
+        throw new Error(data.error || 'Job processing failed');
+      }
+      
+      // Log progress
+      if (data.progress) {
+        logger.info(`Job ${jobId} progress: ${data.progress}%`);
+      }
+      
+      // Wait before next poll
+      await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL));
+    } catch (error) {
+      logger.error('Error polling job status:', error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+  }
+  
+  // If we reached here, we timed out
+  throw new Error(`Job processing timed out after ${MAX_POLLING_TIME / 1000} seconds`);
+}
+
+/**
  * Service function to call the tailor-for-job API
  * 
  * @param cvText - The original CV text to be tailored
  * @param jobDescription - The job description to tailor the CV for
  * @param jobTitle - Optional job title for better context
+ * @param cvId - The ID of the CV being tailored
  * @returns A promise that resolves to the tailored CV content and enhancements
  */
 export async function tailorCVForJob(
   cvText: string,
   jobDescription: string,
-  jobTitle?: string
+  jobTitle?: string,
+  cvId?: number
 ): Promise<{
   tailoredContent: string;
   enhancedProfile: string;
@@ -211,7 +285,7 @@ export async function tailorCVForJob(
     formatGuidance: string;
   };
 }> {
-  logger.info('Calling tailor-for-job API to optimize CV');
+  logger.info('Starting CV tailoring process');
   
   try {
     // Get industry-specific optimization guidance
@@ -244,7 +318,15 @@ export async function tailorCVForJob(
       };
     }
     
-    // Call the API
+    if (!cvId) {
+      logger.error('Missing cvId parameter for tailorCVForJob');
+      return {
+        ...defaultResult,
+        error: 'CV ID is required'
+      };
+    }
+    
+    // Start the tailoring job
     const response = await fetch('/api/cv/tailor-for-job', {
       method: 'POST',
       headers: {
@@ -254,7 +336,8 @@ export async function tailorCVForJob(
         cvText,
         jobDescription,
         jobTitle,
-        // Pass industry insights to the API for better tailoring with safety checks
+        cvId,
+        // Include industry insights for better tailoring
         industryInsights: {
           industry: industryInsights.industry || 'General',
           keySkills: Array.isArray(industryInsights.keySkills) ? industryInsights.keySkills : [],
@@ -267,7 +350,7 @@ export async function tailorCVForJob(
     // Handle non-OK responses
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error(`Error from tailor-for-job API: ${response.status} - ${errorText}`);
+      logger.error(`Error starting tailoring job: ${response.status} - ${errorText}`);
       return {
         ...defaultResult,
         error: `API error: ${response.status} ${response.statusText}`
@@ -278,7 +361,7 @@ export async function tailorCVForJob(
     const data = await response.json() as TailorCVResponse;
     
     // Handle API-level failures
-    if (!data.success || !data.result) {
+    if (!data.success || !data.jobId) {
       logger.error(`API reported failure: ${data.error || 'Unknown error'}`);
       return {
         ...defaultResult,
@@ -286,14 +369,25 @@ export async function tailorCVForJob(
       };
     }
     
-    // Return the successful result with industry insights
-    return {
-      tailoredContent: data.result.tailoredContent || cvText,
-      enhancedProfile: data.result.enhancedProfile || '',
-      sectionImprovements: data.result.sectionImprovements || {},
-      success: true,
-      industryInsights
-    };
+    // Poll for job completion
+    try {
+      const result = await pollJobStatus(data.jobId);
+      
+      // Return the successful result with industry insights
+      return {
+        tailoredContent: result.tailoredContent || cvText,
+        enhancedProfile: result.enhancedProfile || '',
+        sectionImprovements: result.sectionImprovements || {},
+        success: true,
+        industryInsights
+      };
+    } catch (pollError) {
+      logger.error('Error polling for job completion:', pollError instanceof Error ? pollError.message : String(pollError));
+      return {
+        ...defaultResult,
+        error: pollError instanceof Error ? pollError.message : 'Error during processing'
+      };
+    }
   } catch (error) {
     // Catch any unexpected errors
     logger.error('Error in tailorCVForJob:', error instanceof Error ? error.message : String(error));

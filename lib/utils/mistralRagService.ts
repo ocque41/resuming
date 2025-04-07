@@ -392,7 +392,7 @@ export class MistralRAGService {
       
       // If all chunks are cached, return the cached embeddings
       if (chunksToProcess.length === 0) {
-        return embeddings;
+      return embeddings;
       }
       
       // Process chunks in batches of 20 (OpenAI embedding API limit)
@@ -412,7 +412,7 @@ export class MistralRAGService {
           
           // Extract embeddings from response
           batchEmbeddings = response.data.map((item) => item.embedding);
-        } catch (error) {
+    } catch (error) {
           // If batch processing fails, fall back to individual processing
           logger.error(`Batch embedding failed, falling back to individual processing: ${error instanceof Error ? error.message : String(error)}`);
           
@@ -1653,8 +1653,8 @@ Example response format:
     sections: Array<{ name: string; content: string }>;
   }> {
     try {
-      logger.info('Starting comprehensive CV analysis with a single API call');
-      
+    logger.info('Starting comprehensive CV analysis with a single API call');
+    
       // Prevent overwhelming the LLM by limiting the context size
       // Get up to 10 representative chunks (beginning, middle, end) to cover the whole CV
       let contextChunks: string[] = [];
@@ -1679,8 +1679,8 @@ Example response format:
       
       // Race the analysis against the timeout
       const result = await Promise.race([analysisPromise, timeoutPromise]);
-      
-      logger.info('Successfully completed comprehensive CV analysis');
+        
+        logger.info('Successfully completed comprehensive CV analysis');
       return result;
     } catch (error) {
       logger.error(`Error in comprehensive CV analysis: ${error instanceof Error ? error.message : String(error)}`);
@@ -1784,7 +1784,7 @@ Be extremely concise and return ONLY the following JSON structure without ANY ad
       return this.getDefaultAnalysis();
     }
   }
-  
+
   /**
    * Get default analysis for fallback
    * @returns Default analysis

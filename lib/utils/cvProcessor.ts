@@ -99,7 +99,7 @@ export async function processCVWithAI(
   forceRefresh: boolean = false,
   userId?: number | string
 ) {
-  const processingStartTime = Date.now();
+    const processingStartTime = Date.now();
   const processingTimeout = MAX_TOTAL_PROCESSING_TIME;
   let isTimedOut = false;
   
@@ -126,8 +126,8 @@ export async function processCVWithAI(
         this.metadata = {
           ...this.metadata,
           processing: true,
-          processingStatus: status,
-          processingProgress: progress,
+        processingStatus: status,
+        processingProgress: progress,
           lastUpdated: new Date().toISOString(),
           ...additionalData
         };
@@ -211,9 +211,9 @@ export async function processCVWithAI(
     await progressTracker.update('starting', 5);
     
     // Track the processing start event
-    trackEvent({
+      trackEvent({
       eventType: 'process_start',
-      cvId,
+        cvId,
       userId,
       timestamp: new Date().toISOString()
     });
@@ -234,7 +234,7 @@ export async function processCVWithAI(
       await progressTracker.update('local_analysis_complete', 20, { 
         localAnalysis: cache.localAnalysis 
       });
-    } else {
+        } else {
       // Use existing analysis
       cache.localAnalysis = currentMetadata.localAnalysis;
       await progressTracker.update('using_existing_local_analysis', 20);
@@ -373,8 +373,8 @@ export async function processCVWithAI(
                   logger.info(`Successfully retrieved optimized text from API for CV ${cvId}`);
                 } else {
                   throw new Error(optimizeData.error || 'Optimization API failed');
-                }
-              } else {
+        }
+      } else {
                 throw new Error(`Optimization API returned status ${optimizeResponse.status}`);
               }
             } catch (apiError) {
@@ -426,7 +426,7 @@ export async function processCVWithAI(
           });
         }
       }
-    } catch (optimizationError) {
+        } catch (optimizationError) {
       logger.error(`All optimization attempts failed for CV ${cvId}:`, optimizationError instanceof Error ? optimizationError.message : String(optimizationError));
       // Don't fail the entire process, just use a basic enhanced version
       cache.optimizedText = enhanceTextWithLocalRules(rawText, cache.localAnalysis);
@@ -568,18 +568,18 @@ export async function processCVWithAI(
     }
     
     // Track completion event
-    trackEvent({
-      eventType: 'process_complete',
-      cvId,
-      userId,
-      timestamp: new Date().toISOString(),
+      trackEvent({
+        eventType: 'process_complete',
+        cvId,
+        userId,
+        timestamp: new Date().toISOString(),
       duration: Date.now() - processingStartTime
-    });
-    
+      });
+      
     // Clean up the timeout checker
     clearInterval(timeoutChecker);
-    
-  } catch (error) {
+      
+    } catch (error) {
     // Handle unexpected errors
     logger.error(`Unexpected error processing CV ${cvId}:`, error instanceof Error ? error.message : String(error));
     
@@ -620,7 +620,7 @@ export async function processCVWithAI(
         
         // Try to complete with emergency results
         const emergencyResults = {
-          processing: false,
+      processing: false,
           processingCompleted: true,
           optimizationCompleted: true,
           processingProgress: 100,
@@ -933,13 +933,13 @@ ${text}
       // Call OpenAI API with the prompt
       const completion = await openai.chat.completions.create({
         model: "gpt-3.5-turbo-16k",
-        messages: [
-          {
-            role: "system",
+          messages: [
+            {
+              role: "system",
             content: "You are a professional CV optimizing assistant that helps improve CVs for better job search results."
-          },
-          {
-            role: "user",
+            },
+            {
+              role: "user",
             content: prompt
           }
         ],
@@ -966,8 +966,8 @@ ${text}
           duration: Date.now() - (metadata?.startTime || Date.now()) // Rename processingTime to duration to match ProcessingEvent type
         });
         
-        return optimizedText;
-      } else {
+          return optimizedText;
+        } else {
         logger.warn("OpenAI returned insufficient content for CV optimization");
         throw new Error("AI response was too short or empty");
       }
@@ -2887,7 +2887,7 @@ export function getMissingIndustryKeywords(industry: string, existingKeywords: s
   
   // Get the appropriate industry keywords, defaulting to technology if the industry isn't recognized
   const industryKeywords = ALL_INDUSTRY_KEYWORDS[normalizedIndustry] || 
-                         ALL_INDUSTRY_KEYWORDS['technology'];
+                          ALL_INDUSTRY_KEYWORDS['technology'];
   
   // Normalize existing keywords for comparison
   const normalizedExistingKeywords = existingKeywords.map(kw => kw.trim().toLowerCase());
@@ -3061,4 +3061,4 @@ export function generateIndustrySpecificSuggestions(existingContent: string, ind
     missingHardSkills,
     suggestions
   };
-}
+} 
