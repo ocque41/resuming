@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle, AlertTriangle, ChevronDown } from "lucide-react";
+import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle, AlertTriangle, ChevronDown, Briefcase } from "lucide-react";
 import { analyzeCVContent, optimizeCVForJob } from '@/lib/services/mistral.service';
 import { tailorCVForJob } from '@/app/lib/services/tailorCVService';
 import { useToast } from "@/hooks/use-toast";
@@ -108,48 +108,211 @@ interface EnhancedSpecificOptimizationWorkflowProps {
   }[];
 }
 
+// Add industry insights to the interface
+interface IndustryInsights {
+  industry: string;
+  keySkills: string[];
+  suggestedMetrics: string[];
+  formatGuidance: string;
+  salaryRange?: string;
+  tips?: string;
+}
+
+// Add a type interface for the tailoring API response
+interface TailoringResult {
+  tailoredContent: string;
+  enhancedProfile: string;
+  sectionImprovements: Record<string, string>;
+  success: boolean;
+  error?: string;
+  industryInsights?: {
+    industry: string;
+    keySkills: string[];
+    suggestedMetrics: string[];
+    formatGuidance: string;
+    salaryRange?: string;
+    tips?: string;
+  };
+}
+
 // Utility functions
 const extractKeywords = (text: string, isJobDescription: boolean = false): string[] => {
   const commonWords = new Set([
     'the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i', 'it', 'for', 'not', 'on', 'with', 'he', 'as', 'you',
     'do', 'at', 'this', 'but', 'his', 'by', 'from', 'they', 'we', 'say', 'her', 'she', 'or', 'an', 'will', 'my', 'one',
-    'all', 'would', 'there', 'their', 'what', 'so', 'up', 'out', 'if', 'about', 'who', 'get', 'which', 'go', 'me'
+    'all', 'would', 'there', 'their', 'what', 'so', 'up', 'out', 'if', 'about', 'who', 'get', 'which', 'go', 'me',
+    'our', 'us', 'your', 'has', 'had', 'was', 'were', 'is', 'are', 'been', 'being', 'have', 'having', 'do', 'does',
+    'did', 'doing', 'can', 'could', 'should', 'may', 'might', 'must', 'shall', 'will', 'would', 'year', 'years',
+    'month', 'months', 'day', 'days', 'use', 'using', 'like', 'well', 'very', 'just', 'also', 'any', 'some', 'such'
   ]);
 
-  // Split text into words and clean them
-  const words = text.toLowerCase()
-    .replace(/[^\w\s]/g, ' ')
-    .split(/\s+/)
-    .filter(word => 
-      word.length > 2 && 
-      !commonWords.has(word) &&
-      !/^\d+$/.test(word)
+  // Enhanced job description specific keywords to focus on
+  const importanceIndicators = [
+    'required', 'must', 'should', 'need', 'essential', 'necessary', 'mandatory', 'critical',
+    'crucial', 'important', 'key', 'core', 'primary', 'significant', 'vital', 'fundamental'
+  ];
+
+  const skillIndicators = [
+    'skill', 'skills', 'proficiency', 'proficient', 'expertise', 'expert', 'experience',
+    'experienced', 'knowledge', 'ability', 'capable', 'competency', 'competent',
+    'familiar', 'understanding', 'mastery', 'qualification', 'qualified'
+  ];
+
+  // Extract phrases (2-3 word combinations that might be important)
+  const extractPhrases = (input: string): string[] => {
+    const words = input.toLowerCase()
+      .replace(/[^\w\s-]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 1);
+    
+    const phrases = [];
+    
+    // Extract 2-word phrases
+    for (let i = 0; i < words.length - 1; i++) {
+      if (!commonWords.has(words[i]) || !commonWords.has(words[i+1])) {
+        phrases.push(`${words[i]} ${words[i+1]}`);
+      }
+    }
+    
+    // Extract 3-word phrases for technical concepts
+    for (let i = 0; i < words.length - 2; i++) {
+      // Only include 3-word phrases if at least one word is not common
+      if (!commonWords.has(words[i]) || !commonWords.has(words[i+1]) || !commonWords.has(words[i+2])) {
+        phrases.push(`${words[i]} ${words[i+1]} ${words[i+2]}`);
+      }
+    }
+    
+    return phrases;
+  };
+  
+  // Extract single keywords
+  const extractSingleKeywords = (input: string): Map<string, number> => {
+    const wordFrequency = new Map<string, number>();
+    
+    const words = input.toLowerCase()
+      .replace(/[^\w\s-]/g, ' ')
+      .split(/\s+/)
+      .filter(word => 
+        word.length > 2 && 
+        !commonWords.has(word) &&
+        !/^\d+$/.test(word)
+      );
+    
+    words.forEach(word => {
+      wordFrequency.set(word, (wordFrequency.get(word) || 0) + 1);
+    });
+    
+    return wordFrequency;
+  };
+
+  // For job descriptions, focus on requirement-related words and phrases
+  if (isJobDescription) {
+    const lines = text.split('\n');
+    const requirementLines = lines.filter(line => 
+      importanceIndicators.some(indicator => line.toLowerCase().includes(indicator)) ||
+      skillIndicators.some(indicator => line.toLowerCase().includes(indicator))
     );
-
-  // Count word frequency
-  const wordFrequency = new Map<string, number>();
-  words.forEach(word => {
-    wordFrequency.set(word, (wordFrequency.get(word) || 0) + 1);
-  });
-
+    
+    // Join requirement lines for focused processing
+    const requirementText = requirementLines.join(' ');
+    
+    // Extract specific requirements with importance weighting
+    const weightedKeywords = new Map<string, number>();
+    
+    // Process each line to extract keywords with weights
+    lines.forEach(line => {
+      const lineLower = line.toLowerCase();
+      let lineWeight = 1;
+      
+      // Increase weight for lines with importance indicators
+      if (importanceIndicators.some(indicator => lineLower.includes(indicator))) {
+        lineWeight += 2;
+      }
+      
+      // Increase weight for lines with skill indicators
+      if (skillIndicators.some(indicator => lineLower.includes(indicator))) {
+        lineWeight += 1;
+      }
+      
+      // Extract words from this line and add them with appropriate weight
+      const lineWords = extractSingleKeywords(line);
+      lineWords.forEach((count, word) => {
+        weightedKeywords.set(word, (weightedKeywords.get(word) || 0) + (count * lineWeight));
+      });
+      
+      // Add phrases with higher weight as they're more specific
+      const linePhrases = extractPhrases(line);
+      linePhrases.forEach(phrase => {
+        if (phrase.length > 5) { // Only consider meaningful phrases (not just two small words)
+          weightedKeywords.set(phrase, (weightedKeywords.get(phrase) || 0) + (lineWeight * 1.5));
+        }
+      });
+    });
+    
+    // Extract phrases from the entire text to catch important multi-word terms
+    const allPhrases = extractPhrases(text);
+    allPhrases.forEach(phrase => {
+      // If a phrase appears in a bullet point or after a colon, increase its weight
+      const phraseRegex = new RegExp(`[•\\-\\*:]\\s*${phrase}|${phrase}\\s*:`, 'i');
+      if (phraseRegex.test(text)) {
+        weightedKeywords.set(phrase, (weightedKeywords.get(phrase) || 0) + 2);
+      } else {
+        weightedKeywords.set(phrase, (weightedKeywords.get(phrase) || 0) + 1);
+      }
+    });
+    
+    // Extract tech skills specifically - they often have special characters
+    const techSkillPattern = /(?:frameworks?|languages?|tools?|technologies|stacks?|platforms?|systems?|software|environments?|databases?)(?:\s+(?:like|such as|including|e\.g\.)\s+|:\s*)([^.!?]+)/gi;
+    let match;
+    while ((match = techSkillPattern.exec(text)) !== null) {
+      if (match[1]) {
+        const techList = match[1].split(/(?:[,;]|\s+and\s+|\s+or\s+)/);
+        techList.forEach(tech => {
+          const cleanTech = tech.trim().toLowerCase().replace(/[^\w\s-./+#]+/g, '');
+          if (cleanTech && cleanTech.length > 1) {
+            weightedKeywords.set(cleanTech, (weightedKeywords.get(cleanTech) || 0) + 3); // Higher weight for tech skills
+          }
+        });
+      }
+    }
+    
+    // Sort by weight and convert to array
+    const sortedKeywords = Array.from(weightedKeywords.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([word]) => word);
+    
+    // Remove duplicates (e.g., if "machine learning" and "learning" are both present, keep only "machine learning")
+    const filteredKeywords = sortedKeywords.filter((keyword, idx) => {
+      // Skip if this keyword is already processed
+      if (keyword === null) return false;
+      
+      // Check if this keyword is part of any longer keyword with higher priority
+      for (let i = 0; i < idx; i++) {
+        if (sortedKeywords[i] !== null && sortedKeywords[i].includes(keyword)) {
+          return false;
+        }
+      }
+      
+      // Check if this keyword contains any keywords with lower priority
+      for (let i = idx + 1; i < sortedKeywords.length; i++) {
+        if (sortedKeywords[i] !== null && keyword.includes(sortedKeywords[i])) {
+          sortedKeywords[i] = null as unknown as string; // Mark as processed
+        }
+      }
+      
+      return true;
+    }).filter(Boolean) as string[]; // Remove nulls
+    
+    return filteredKeywords;
+  }
+  
+  // For CV content, use a simpler approach focusing on frequency
+  const wordFrequency = extractSingleKeywords(text);
+  
   // Sort by frequency and get unique words
   const sortedWords = Array.from(wordFrequency.entries())
     .sort((a, b) => b[1] - a[1])
     .map(([word]) => word);
-
-  // For job descriptions, focus on requirement-related words
-  if (isJobDescription) {
-    const requirementIndicators = [
-      'required', 'must', 'should', 'need', 'essential', 'necessary',
-      'qualification', 'experience', 'skill', 'proficiency', 'knowledge'
-    ];
-
-    const requirements = sortedWords.filter(word =>
-      requirementIndicators.some(indicator => text.toLowerCase().includes(`${indicator} ${word}`))
-    );
-
-    return [...new Set([...requirements, ...sortedWords])];
-  }
 
   return [...new Set(sortedWords)];
 };
@@ -2721,12 +2884,12 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   const { toast } = useToast();
   
   // CV selection state
-  const [selectedCVId, setSelectedCVId] = useState<string | null>(null);
-  const [selectedCVName, setSelectedCVName] = useState<string | null>(null);
+  const [selectedCVId, setSelectedCVId] = useState<string>('');
+  const [selectedCVName, setSelectedCVName] = useState<string>('');
   
   // Job-related state
   const [jobDescription, setJobDescription] = useState<string>('');
-  const [jobTitle, setJobTitle] = useState<string | null>(null);
+  const [jobTitle, setJobTitle] = useState<string>('');
   
   // Processing state
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -2767,6 +2930,9 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
   // Add these state variables
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [isDownloadComplete, setIsDownloadComplete] = useState<boolean>(false);
+
+  // Add industry insights state
+  const [industryInsights, setIndustryInsights] = useState<IndustryInsights | null>(null);
 
   // Fetch original CV text
   const fetchOriginalText = useCallback(async (cvId: string) => {
@@ -2822,7 +2988,8 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     setProcessingProgress(0);
     setProcessingStatus("Starting job-specific optimization...");
     setError(null);
-    
+    setIndustryInsights(null); // Reset industry insights
+
     try {
       console.log(`Processing CV: ${selectedCVName} (ID: ${selectedCVId}) for specific job`);
   
@@ -2910,7 +3077,7 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           }
           
           // Step 1: Call the tailoring API to optimize the CV
-          const tailoringResult = await tailorCVForJob(
+          const tailoringResult: TailoringResult = await tailorCVForJob(
             originalText || '',
             jobDescription || '',
             jobTitle || undefined
@@ -2924,6 +3091,21 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
           setOptimizedText(tailoringResult.tailoredContent);
           setEnhancedProfile(tailoringResult.enhancedProfile || '');
           setSectionImprovements(tailoringResult.sectionImprovements || {});
+          
+          // Store industry insights if available
+          if (tailoringResult.industryInsights) {
+            const insights = tailoringResult.industryInsights;
+            // Map API response data structure to match our interface
+            setIndustryInsights({
+              industry: insights.industry,
+              keySkills: insights.keySkills,
+              suggestedMetrics: insights.suggestedMetrics,
+              formatGuidance: insights.formatGuidance,
+              salaryRange: insights.salaryRange,
+              tips: insights.tips
+            });
+            console.log("Industry insights detected:", tailoringResult.industryInsights);
+          }
           
           // Step 2: Extract job title from job description if not already set
           if (!jobTitle) {
@@ -3955,230 +4137,215 @@ export default function EnhancedSpecificOptimizationWorkflow({ cvs = [] }: Enhan
     return cleanedLines.join('\n');
   };
 
-  return (
-    <div className="w-full max-w-4xl mx-auto">
-      {/* File selection */}
-      <div className="mb-6">
-        <h3 className="text-lg font-safiro font-semibold mb-3 text-[#F9F6EE]">Select CV</h3>
-        <ModernFileDropdown 
-          cvs={cvs.map(cv => `${cv.name}|${cv.id}`)}
-          onSelect={handleSelectCV}
-          selectedCVName={selectedCVName}
-        />
-      </div>
-
-      {/* Job description input */}
-      <div className="mb-6">
-        <h3 className="text-lg font-safiro font-semibold mb-3 text-[#F9F6EE]">Job Description</h3>
-        <textarea
-          className="w-full h-48 p-4 bg-[#111111] border border-[#222222] rounded-lg text-[#F9F6EE] resize-none focus:border-[#B4916C] focus:ring-1 focus:ring-[#B4916C] focus:outline-none font-borna"
-          placeholder="Paste the job description here..."
-          value={jobDescription}
-          onChange={(e) => setJobDescription(e.target.value)}
-        />
-      </div>
-
-      {/* Process button */}
-      <div className="mb-6">
-        <button
-          onClick={processCV}
-          disabled={isProcessing || !selectedCVId || !jobDescription.trim()}
-          className={`w-full py-3.5 rounded-lg font-safiro text-base transition-colors duration-200 ${
-            isProcessing || !selectedCVId || !jobDescription.trim()
-              ? 'bg-[#222222] text-[#F9F6EE]/40 cursor-not-allowed'
-              : 'bg-[#B4916C] text-[#050505] hover:bg-[#A37F5C]'
-          }`}
-        >
-          {isProcessing ? 'Processing...' : 'Optimize CV for Job'}
-        </button>
-      </div>
-
-      {/* Processing status */}
-      {isProcessing && (
-        <div className="mb-6 p-5 rounded-xl bg-[#111111] border border-[#222222] shadow-md animate-fade-in-up">
-          <div className="flex items-center mb-3">
-            <RefreshCw className="w-5 h-5 mr-3 text-[#B4916C] animate-spin" />
+  // Function to render industry insights panel
+  const renderIndustryInsights = () => {
+    if (!industryInsights) return null;
+    
+    return (
+      <div className="mb-6 bg-[#1A1A1A] border border-[#333333] rounded-lg p-4">
+        <div className="flex items-center mb-2">
+          <Briefcase className="mr-2 h-5 w-5 text-[#B4916C]" />
+          <h3 className="text-lg font-medium text-[#F9F6EE]">Industry Insights: {industryInsights.industry}</h3>
+        </div>
+        
+        <div className="mt-3 space-y-3 text-sm text-[#F9F6EE]">
+          <div>
+            <p className="font-medium mb-1">Key Skills for {industryInsights.industry}:</p>
+            <div className="flex flex-wrap gap-2">
+              {industryInsights.keySkills.map((skill: string, i: number) => (
+                <span key={i} className="px-2 py-1 bg-[#333333] rounded-full text-xs">
+                  {skill}
+                </span>
+              ))}
+            </div>
+          </div>
+          
+          <div>
+            <p className="font-medium mb-1">Recommended Achievement Metrics:</p>
+            <div className="flex flex-wrap gap-2">
+              {industryInsights.suggestedMetrics.map((metric: string, i: number) => (
+                <span key={i} className="px-2 py-1 bg-[#333333] rounded-full text-xs">
+                  {metric}
+                </span>
+              ))}
+            </div>
+          </div>
+          
+          <div>
+            <p className="font-medium mb-1">Format Recommendations:</p>
+            <p className="text-xs italic">{industryInsights.formatGuidance}</p>
+          </div>
+          
+          {industryInsights.salaryRange && (
             <div>
-              <h3 className="text-[#F9F6EE] font-safiro">{processingStatus || "Processing..."}</h3>
-              <p className="text-[#F9F6EE]/60 text-sm font-borna mt-1">This may take a minute as our AI tailors your CV to the job description</p>
+              <p className="font-medium mb-1">Expected Salary Range:</p>
+              <p className="text-xs">{industryInsights.salaryRange}</p>
+            </div>
+          )}
+          
+          {industryInsights.tips && (
+            <div>
+              <p className="font-medium mb-1">Application Tips:</p>
+              <p className="text-xs">{industryInsights.tips}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+  
+  return (
+    <div className="w-full max-w-full">
+      <h1 className="text-2xl font-bold mb-6 text-[#F9F6EE] font-safiro">Job-Specific CV Optimization</h1>
+      
+      {/* Step 1: Select CV and enter job details */}
+      <div className="mb-8 p-6 border border-[#333333] rounded-md bg-[#050505]">
+        <h2 className="text-xl font-bold mb-4 text-[#F9F6EE]">Select CV & Job Details</h2>
+        
+        <div className="grid gap-6 mb-6">
+          {/* CV Selection */}
+          <div>
+            <label className="block mb-2 font-medium text-[#F9F6EE]">Select CV</label>
+            <select
+              className="w-full p-3 bg-[#050505] border border-[#333333] rounded-md text-[#F9F6EE] focus:outline-none focus:ring-1 focus:ring-[#B4916C]"
+              value={selectedCVId === null ? "" : selectedCVId}
+              onChange={(e) => {
+                const value = e.target.value;
+                setSelectedCVId(value);
+                const selectedCV = cvs.find(cv => cv.id === value);
+                if (selectedCV) {
+                  setSelectedCVName(selectedCV.name);
+                }
+                fetchOriginalText(value);
+              }}
+            >
+              <option value="">Select a CV</option>
+              {cvs.map(cv => (
+                <option key={cv.id} value={cv.id}>{cv.name}</option>
+              ))}
+            </select>
           </div>
-          </div>
-          <div className="relative w-full h-1.5 bg-[#222222] rounded-full overflow-hidden">
-            <div
-              className="absolute top-0 left-0 h-full bg-[#B4916C] transition-all duration-300 ease-in-out"
-              style={{ width: `${processingProgress}%` }}
+          
+          {/* Job Description */}
+          <div>
+            <label className="block mb-2 font-medium text-[#F9F6EE]">
+              Job Description
+              <span className="ml-1 text-xs text-[#B4916C]">(Required)</span>
+            </label>
+            <textarea
+              className="w-full h-32 p-3 bg-[#050505] border border-[#333333] rounded-md text-[#F9F6EE] focus:outline-none focus:ring-1 focus:ring-[#B4916C]"
+              placeholder="Paste the job description here..."
+              value={jobDescription}
+              onChange={(e) => setJobDescription(e.target.value)}
             />
           </div>
-          <div className="flex justify-between mt-2">
-            <span className="text-xs text-[#F9F6EE]/50 font-borna">{processingProgress}% complete</span>
+          
+          {/* Job Title (Optional) */}
+          <div>
+            <label className="block mb-2 font-medium text-[#F9F6EE]">
+              Job Title
+              <span className="ml-1 text-xs text-gray-400">(Optional)</span>
+            </label>
+            <input
+              type="text"
+              className="w-full p-3 bg-[#050505] border border-[#333333] rounded-md text-[#F9F6EE] focus:outline-none focus:ring-1 focus:ring-[#B4916C]"
+              placeholder="e.g. Senior Software Engineer"
+              value={jobTitle}
+              onChange={(e) => setJobTitle(e.target.value)}
+            />
+          </div>
+        </div>
+        
+        <div className="flex justify-end">
+          <Button
+            onClick={processCV}
+            disabled={isProcessing || !selectedCVId || !jobDescription}
+            className="bg-[#333333] hover:bg-[#444444] text-[#F9F6EE]"
+          >
+            {isProcessing ? (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>Optimize CV for This Job</>
+            )}
+          </Button>
+        </div>
+      </div>
+      
+      {/* Processing Status */}
+      {isProcessing && (
+        <div className="mb-8">
+          <div className="p-6 border border-[#333333] rounded-md bg-[#050505]">
+            <div className="flex items-center mb-4">
+              <Clock className="mr-2 h-5 w-5 text-[#B4916C]" />
+              <h2 className="text-xl font-bold text-[#F9F6EE]">Processing</h2>
+            </div>
+            
+            <div className="mb-4">
+              <Progress value={processingProgress} className="h-2 bg-[#333333]" />
+              <p className="mt-2 text-sm text-[#F9F6EE]">{processingStatus}</p>
+            </div>
+            
             {processingTooLong && (
-              <button
-                onClick={processCV}
-                className="px-3 py-1.5 bg-[#1a1a1a] hover:bg-[#222222] text-[#B4916C] border border-[#333333] rounded-md flex items-center text-xs transition-colors duration-200 font-borna"
-              >
-                <RefreshCw className="w-3 h-3 mr-1.5" />
-                Taking too long? Reset
-              </button>
+              <Alert className="mt-4 bg-[#B4916C]/10 border-[#B4916C]">
+                <AlertTriangle className="h-4 w-4 text-[#B4916C]" />
+                <AlertDescription className="text-[#F9F6EE]">
+                  This is taking longer than expected. We're still working on optimizing your CV for the best results.
+                </AlertDescription>
+              </Alert>
             )}
           </div>
         </div>
       )}
-
-      {/* Error message */}
+      
+      {/* Error Display */}
       {error && (
-        <div className="mb-6 p-5 bg-[#1a0505] border border-[#3d1a1a] rounded-lg text-[#f5c2c2]">
-          <div className="flex items-center">
-            <AlertCircle className="w-4 h-4 mr-2 text-red-400" />
-            <span className="font-borna">{error}</span>
-          </div>
-        </div>
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
-
-      {/* Results */}
+      
+      {/* Display Industry Insights */}
+      {isProcessed && industryInsights && renderIndustryInsights()}
+      
+      {/* Results Tabs */}
       {isProcessed && (
-        <div className="animate-fade-in-up">
-          {/* Optimized CV Section */}
-          <div className="mb-6 p-5 rounded-xl bg-[#111111] border border-[#222222] shadow-md overflow-hidden">
-            <h3 className="text-xl font-safiro mb-4 text-[#F9F6EE] flex items-center">
-              <FileText className="text-[#B4916C] w-5 h-5 mr-2" />
-              Job-Optimized CV
-            </h3>
-            
-            {/* Tab headers */}
-            <div className="border-b border-[#222222] mb-5">
-              <div className="flex">
-                <button 
-                  onClick={() => setActiveTab('jobDescription')}
-                  className={`px-4 py-2.5 -mb-px text-sm font-borna ${
-                    activeTab === 'jobDescription'
-                      ? 'border-b-2 border-[#B4916C] text-[#B4916C]'
-                      : 'text-[#F9F6EE]/60 hover:text-[#F9F6EE]'
-                  }`}
-                >
-                  Job Description
-                </button>
-                <button
-                  onClick={() => setActiveTab('originalCV')}
-                  className={`px-4 py-2.5 -mb-px text-sm font-borna ${
-                    activeTab === 'originalCV'
-                      ? 'border-b-2 border-[#B4916C] text-[#B4916C]'
-                      : 'text-[#F9F6EE]/60 hover:text-[#F9F6EE]'
-                  }`}
-                >
-                  Original CV
-                </button>
-                <button
-                  onClick={() => setActiveTab('optimizedCV')}
-                  className={`px-4 py-2.5 -mb-px text-sm font-borna ${
-                    activeTab === 'optimizedCV'
-                      ? 'border-b-2 border-[#B4916C] text-[#B4916C]'
-                      : 'text-[#F9F6EE]/60 hover:text-[#F9F6EE]'
-                  }`}
-                >
-                  Optimized CV
-                </button>
-              </div>
-              </div>
-            
-            {/* Tab content */}
-            <div className="p-4 bg-[#0D0D0D] rounded-lg">
-              {activeTab === 'jobDescription' && (
-                <div>
-                  <h4 className="text-[#F9F6EE] font-safiro mb-3">Job Description</h4>
-                  <div className="text-[#F9F6EE]/80 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto p-4 bg-[#0A0A0A] rounded-lg border border-[#222222] font-borna">
-                    {jobDescription}
-            </div>
-                </div>
-              )}
-              
-              {activeTab === 'originalCV' && (
-                <div>
-                  <h4 className="text-[#F9F6EE] font-safiro mb-3">Original CV</h4>
-                  <div className="text-[#F9F6EE]/80 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto p-4 bg-[#0A0A0A] rounded-lg border border-[#222222] font-borna">
-                    {originalText || "Original CV content not available."}
-          </div>
-        </div>
-      )}
-
-              {activeTab === 'optimizedCV' && (
-                <div>
-                  <h4 className="text-[#F9F6EE] font-safiro mb-3">Optimized CV for this Job</h4>
-                  <div className="text-[#F9F6EE]/80 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto p-4 bg-[#0A0A0A] rounded-lg border border-[#222222] font-borna">
-                    {optimizedText || "Optimized content not available yet."}
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            {/* Download button */}
-            <div className="mt-5">
-              <Button
-                onClick={handleGenerateDocument}
-                disabled={isGeneratingDocument || !optimizedText}
-                className="w-full bg-[#111111] hover:bg-[#1A1A1A] text-[#F9F6EE] border border-[#222222] h-12 font-safiro transition-colors duration-200"
-              >
-                {isGeneratingDocument ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Generating Document...
-                  </>
-                ) : (
-                  <>
-                    <Download className="h-4 w-4 mr-2" />
-                    Download Optimized CV
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {isGeneratingDocument && (
-        <div className="mt-6 p-5 rounded-xl bg-[#111111] border border-[#222222] shadow-md animate-fade-in-up">
-          <h3 className="text-lg font-safiro mb-3 text-[#F9F6EE]">Generating Document</h3>
-          
-          <div className="mb-3">
-            <div className="flex justify-between mb-1.5">
-              <span className="text-[#F9F6EE]/70 text-sm font-borna">{processingStatus || "Preparing..."}</span>
-              <span className="text-[#F9F6EE]/70 text-sm font-borna">{processingProgress}%</span>
-            </div>
-            <div className="relative w-full h-1.5 bg-[#222222] rounded-full overflow-hidden">
-              <div 
-                className="absolute top-0 left-0 h-full bg-[#B4916C] transition-all duration-300 ease-in-out" 
-                style={{ width: `${processingProgress}%` }}
-              />
-            </div>
-          </div>
-          
-          <p className="text-[#F9F6EE]/60 text-sm font-borna mb-3">
-            Please wait while we generate your optimized document. This may take a few moments.
-          </p>
-        </div>
-      )}
-      
-      {/* Document Error with Manual Download Option */}
-      {documentError && (
-        <div className="mt-6 p-5 bg-[#1a0505] border border-[#3d1a1a] rounded-lg text-[#f5c2c2] animate-fade-in-up">
-          <div className="flex items-center mb-3">
-            <AlertTriangle className="w-5 h-5 mr-2 text-red-400" />
-            <h3 className="text-lg font-safiro">Document Generation Error</h3>
-          </div>
-          <p className="text-[#f5c2c2]/80 mb-4 font-borna">{documentError}</p>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Button
-              onClick={handleGenerateDocument}
-              className="bg-[#2a0808] hover:bg-[#3a0a0a] border-[#4d1a1a] text-[#f5c2c2] font-borna transition-colors duration-200"
+        <div className="mb-6">
+          <div className="flex space-x-1 border-b border-[#333333]">
+            <button
+              onClick={() => setActiveTab('optimizedCV')}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'optimizedCV' 
+                  ? 'border-b-2 border-[#B4916C] text-[#F9F6EE]' 
+                  : 'text-[#F9F6EE]/60 hover:text-[#F9F6EE]/80'
+              }`}
             >
-              Try Again
-            </Button>
-            <Button
-              onClick={() => {navigator.clipboard.writeText(optimizedText || "")}}
-              className="bg-transparent hover:bg-[#2a0808] border border-[#4d1a1a] text-[#f5c2c2] font-borna transition-colors duration-200"
+              Optimized CV
+            </button>
+            <button
+              onClick={() => setActiveTab('originalCV')}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'originalCV' 
+                  ? 'border-b-2 border-[#B4916C] text-[#F9F6EE]' 
+                  : 'text-[#F9F6EE]/60 hover:text-[#F9F6EE]/80'
+              }`}
             >
-              Copy Text to Clipboard
-            </Button>
-            </div>
+              Original CV
+            </button>
+            <button
+              onClick={() => setActiveTab('improvements')}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'improvements' 
+                  ? 'border-b-2 border-[#B4916C] text-[#F9F6EE]' 
+                  : 'text-[#F9F6EE]/60 hover:text-[#F9F6EE]/80'
+              }`}
+            >
+              Improvements
+            </button>
+          </div>
         </div>
       )}
     </div>

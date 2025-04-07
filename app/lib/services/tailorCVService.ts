@@ -19,6 +19,161 @@ interface TailorCVResponse {
 }
 
 /**
+ * Interface representing an industry with its specific optimization parameters
+ */
+interface Industry {
+  name: string;
+  keywords: string[];
+  importantSkills: string[];
+  preferredFormats: string[];
+  achievementMetrics: string[];
+  commonTitles: string[];
+}
+
+/**
+ * Collection of major industries with their specific optimization parameters
+ */
+const INDUSTRIES: Industry[] = [
+  {
+    name: 'Technology',
+    keywords: ['software', 'development', 'programming', 'code', 'tech', 'digital', 'IT', 'computer', 'system', 'data', 'analytics', 'cloud', 'infrastructure', 'agile', 'DevOps', 'AI', 'machine learning', 'web', 'mobile', 'app', 'platform', 'API'],
+    importantSkills: ['programming languages', 'frameworks', 'databases', 'cloud services', 'version control', 'testing', 'deployment', 'architecture', 'algorithms', 'data structures'],
+    preferredFormats: ['skills-first', 'chronological', 'technical project summaries'],
+    achievementMetrics: ['code quality', 'system performance', 'optimization %', 'decreased load time', 'increased efficiency', 'reduced bugs', 'improved uptime'],
+    commonTitles: ['Software Engineer', 'Developer', 'Architect', 'DevOps Engineer', 'Data Scientist', 'Product Manager', 'Analyst', 'QA Engineer', 'Technical Lead', 'CTO']
+  },
+  {
+    name: 'Finance',
+    keywords: ['finance', 'bank', 'accounting', 'financial', 'audit', 'tax', 'revenue', 'budget', 'fiscal', 'investment', 'trading', 'assets', 'wealth', 'capital', 'portfolio', 'risk', 'compliance', 'securities', 'equity', 'profit', 'loss'],
+    importantSkills: ['financial analysis', 'accounting', 'Excel', 'financial modeling', 'forecasting', 'budgeting', 'risk assessment', 'regulatory compliance', 'portfolio management'],
+    preferredFormats: ['chronological', 'achievement-focused', 'formal'],
+    achievementMetrics: ['ROI', 'revenue growth', 'cost reduction', 'portfolio performance', 'efficiency savings', 'audit findings', 'risk mitigation'],
+    commonTitles: ['Financial Analyst', 'Accountant', 'Controller', 'Auditor', 'Investment Banker', 'Portfolio Manager', 'Risk Manager', 'CFO', 'Treasurer', 'Tax Specialist']
+  },
+  {
+    name: 'Healthcare',
+    keywords: ['healthcare', 'medical', 'clinical', 'patient', 'hospital', 'doctor', 'nurse', 'physician', 'therapy', 'diagnostic', 'treatment', 'pharmaceutical', 'health', 'care', 'wellness', 'disease', 'clinic'],
+    importantSkills: ['patient care', 'clinical experience', 'electronic medical records', 'medical terminology', 'treatment planning', 'regulatory compliance', 'medical software'],
+    preferredFormats: ['chronological', 'credential-focused', 'licensing-prominent'],
+    achievementMetrics: ['patient outcomes', 'compliance rates', 'treatment efficacy', 'patient satisfaction', 'reduced readmissions', 'care quality metrics'],
+    commonTitles: ['Physician', 'Nurse', 'Medical Director', 'Clinical Manager', 'Healthcare Administrator', 'Patient Care Coordinator', 'Medical Technician', 'Therapist']
+  },
+  {
+    name: 'Marketing',
+    keywords: ['marketing', 'brand', 'campaign', 'digital', 'social media', 'content', 'SEO', 'advertising', 'creative', 'strategy', 'audience', 'market', 'consumer', 'promotion', 'engagement', 'conversion', 'analytics', 'traffic'],
+    importantSkills: ['content creation', 'social media management', 'SEO', 'analytics tools', 'campaign management', 'audience targeting', 'creative direction', 'CRM'],
+    preferredFormats: ['achievement-focused', 'portfolio-linked', 'creative'],
+    achievementMetrics: ['conversion rates', 'engagement metrics', 'traffic growth', 'ROI', 'market share', 'brand awareness', 'customer acquisition cost'],
+    commonTitles: ['Marketing Manager', 'Digital Marketer', 'Content Strategist', 'Brand Manager', 'Social Media Specialist', 'SEO Expert', 'Marketing Director', 'Growth Hacker']
+  },
+  {
+    name: 'Sales',
+    keywords: ['sales', 'business development', 'account', 'revenue', 'client', 'customer', 'pipeline', 'target', 'quota', 'deal', 'lead', 'prospect', 'closing', 'negotiation', 'relationship', 'CRM', 'B2B', 'B2C'],
+    importantSkills: ['negotiation', 'relationship building', 'CRM software', 'pipeline management', 'closing techniques', 'prospecting', 'account management', 'sales presentations'],
+    preferredFormats: ['results-first', 'achievement-focused', 'metrics-driven'],
+    achievementMetrics: ['revenue generated', 'quota attainment', 'deal size', 'sales cycle reduction', 'client retention', 'upselling', 'conversion rate'],
+    commonTitles: ['Sales Representative', 'Account Executive', 'Business Development Manager', 'Sales Manager', 'Account Manager', 'Sales Director', 'VP of Sales', 'Customer Success Manager']
+  },
+  {
+    name: 'Engineering',
+    keywords: ['engineering', 'mechanical', 'electrical', 'civil', 'chemical', 'design', 'construction', 'manufacturing', 'industrial', 'product', 'technical', 'CAD', 'simulation', 'prototype', 'production', 'quality', 'standards'],
+    importantSkills: ['CAD software', 'design techniques', 'engineering analysis', 'quality control', 'project management', 'technical specifications', 'regulatory compliance', 'testing methodologies'],
+    preferredFormats: ['chronological', 'project-based', 'technical skills-prominent'],
+    achievementMetrics: ['design improvements', 'efficiency gains', 'cost reduction', 'quality metrics', 'production yield', 'compliance rates', 'innovation metrics'],
+    commonTitles: ['Mechanical Engineer', 'Electrical Engineer', 'Civil Engineer', 'Process Engineer', 'Product Engineer', 'Design Engineer', 'Project Engineer', 'Quality Engineer']
+  },
+  {
+    name: 'Education',
+    keywords: ['education', 'teaching', 'school', 'academic', 'student', 'learning', 'curriculum', 'classroom', 'instruction', 'educational', 'teacher', 'professor', 'faculty', 'pedagogy', 'assessment', 'training'],
+    importantSkills: ['curriculum development', 'classroom management', 'student assessment', 'educational technology', 'instructional design', 'differentiated instruction', 'lesson planning'],
+    preferredFormats: ['credential-first', 'chronological', 'teaching philosophy inclusion'],
+    achievementMetrics: ['student performance improvement', 'program development', 'assessment outcomes', 'student engagement', 'graduation rates', 'curriculum adoption'],
+    commonTitles: ['Teacher', 'Professor', 'Instructor', 'Principal', 'Academic Advisor', 'Education Coordinator', 'Dean', 'Department Chair', 'Curriculum Developer']
+  },
+  {
+    name: 'Legal',
+    keywords: ['legal', 'law', 'attorney', 'counsel', 'litigation', 'contract', 'compliance', 'regulatory', 'statute', 'court', 'judicial', 'legislation', 'policy', 'rights', 'investigation', 'claims', 'dispute'],
+    importantSkills: ['legal research', 'case management', 'contract drafting', 'negotiation', 'client counseling', 'litigation', 'regulatory compliance', 'legal writing'],
+    preferredFormats: ['credential-focused', 'chronological', 'formal'],
+    achievementMetrics: ['case outcomes', 'settlement amounts', 'compliance improvements', 'risk mitigation', 'contract efficiencies', 'successful negotiations'],
+    commonTitles: ['Attorney', 'Lawyer', 'Legal Counsel', 'Paralegal', 'Compliance Officer', 'Legal Assistant', 'General Counsel', 'Contract Manager', 'Litigation Specialist']
+  }
+];
+
+/**
+ * Identify industry from job description
+ * 
+ * @param jobDescription - The job description text
+ * @returns The identified industry or undefined if no clear match
+ */
+function identifyIndustry(jobDescription: string): Industry | undefined {
+  const jobText = jobDescription.toLowerCase();
+  
+  // Calculate a match score for each industry
+  const industryScores = INDUSTRIES.map(industry => {
+    let score = 0;
+    
+    // Check for industry keywords in the job description
+    industry.keywords.forEach(keyword => {
+      const regex = new RegExp(`\\b${keyword.toLowerCase()}\\b`, 'g');
+      const matches = jobText.match(regex);
+      if (matches) {
+        score += matches.length;
+      }
+    });
+    
+    // Check for common job titles
+    industry.commonTitles.forEach(title => {
+      if (jobText.includes(title.toLowerCase())) {
+        score += 3; // Higher weight for title matches
+      }
+    });
+    
+    return { industry, score };
+  });
+  
+  // Sort by score descending
+  const sortedIndustries = industryScores.sort((a, b) => b.score - a.score);
+  
+  // Return the industry with the highest score if it's significant (threshold of 3)
+  return sortedIndustries[0].score >= 3 ? sortedIndustries[0].industry : undefined;
+}
+
+/**
+ * Get industry-specific optimization guidance
+ * 
+ * @param jobDescription - The job description text
+ * @returns Object containing industry-specific optimization guidance
+ */
+export function getIndustryOptimizationGuidance(jobDescription: string): {
+  industry: string;
+  keySkills: string[];
+  suggestedMetrics: string[];
+  formatGuidance: string;
+} {
+  // Identify the industry
+  const industry = identifyIndustry(jobDescription);
+  
+  if (!industry) {
+    // Default generic guidance if no specific industry is detected
+    return {
+      industry: 'General',
+      keySkills: ['communication', 'teamwork', 'project management', 'problem-solving', 'organization'],
+      suggestedMetrics: ['efficiency improvements', 'cost savings', 'project completion', 'team coordination'],
+      formatGuidance: 'Use a clean, chronological format with clear section headings'
+    };
+  }
+  
+  // Return industry-specific guidance
+  return {
+    industry: industry.name,
+    keySkills: industry.importantSkills,
+    suggestedMetrics: industry.achievementMetrics,
+    formatGuidance: `Consider using ${industry.preferredFormats.join(' or ')} format for ${industry.name} roles`
+  };
+}
+
+/**
  * Service function to call the tailor-for-job API
  * 
  * @param cvText - The original CV text to be tailored
@@ -36,17 +191,27 @@ export async function tailorCVForJob(
   sectionImprovements: Record<string, string>;
   success: boolean;
   error?: string;
+  industryInsights?: {
+    industry: string;
+    keySkills: string[];
+    suggestedMetrics: string[];
+    formatGuidance: string;
+  };
 }> {
   logger.info('Calling tailor-for-job API to optimize CV');
   
   try {
+    // Get industry-specific optimization guidance
+    const industryInsights = getIndustryOptimizationGuidance(jobDescription);
+    
     // Default empty result
     const defaultResult = {
       tailoredContent: '',
       enhancedProfile: '',
       sectionImprovements: {},
       success: false,
-      error: 'Failed to tailor CV'
+      error: 'Failed to tailor CV',
+      industryInsights
     };
     
     // Check required parameters
@@ -75,7 +240,12 @@ export async function tailorCVForJob(
       body: JSON.stringify({
         cvText,
         jobDescription,
-        jobTitle
+        jobTitle,
+        // Pass industry insights to the API for better tailoring
+        industryInsights: {
+          industry: industryInsights.industry,
+          keySkills: industryInsights.keySkills
+        }
       }),
     });
     
@@ -101,12 +271,13 @@ export async function tailorCVForJob(
       };
     }
     
-    // Return the successful result
+    // Return the successful result with industry insights
     return {
       tailoredContent: data.result.tailoredContent || cvText,
       enhancedProfile: data.result.enhancedProfile || '',
       sectionImprovements: data.result.sectionImprovements || {},
-      success: true
+      success: true,
+      industryInsights
     };
   } catch (error) {
     // Catch any unexpected errors
@@ -116,7 +287,8 @@ export async function tailorCVForJob(
       enhancedProfile: '',
       sectionImprovements: {},
       success: false,
-      error: error instanceof Error ? error.message : 'An unknown error occurred'
+      error: error instanceof Error ? error.message : 'An unknown error occurred',
+      industryInsights: getIndustryOptimizationGuidance(jobDescription)
     };
   }
 } 

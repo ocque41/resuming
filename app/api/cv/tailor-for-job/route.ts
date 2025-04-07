@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const { cvText, jobDescription, jobTitle } = body || {};
+    const { cvText, jobDescription, jobTitle, industryInsights } = body || {};
 
     if (!cvText) {
       logger.error('Missing cvText parameter in tailor-for-job request');
@@ -53,38 +53,72 @@ export async function POST(request: NextRequest) {
       throw new Error('Mistral client not initialized');
     }
     
-    logger.info(`Tailoring CV for job: ${jobTitle || 'Unspecified position'}`);
+    const detectedIndustry = industryInsights?.industry || 'General';
+    logger.info(`Tailoring CV for job: ${jobTitle || 'Unspecified position'} in ${detectedIndustry} industry`);
     
+    // Include industry-specific guidance in the system prompt if available
+    let industryGuidance = '';
+    if (industryInsights) {
+      industryGuidance = `
+INDUSTRY-SPECIFIC GUIDANCE FOR ${industryInsights.industry.toUpperCase()}:
+1. Focus on these key skills for this industry: ${industryInsights.keySkills.join(', ')}
+2. Where possible, include these types of metrics in achievements: ${industryInsights.suggestedMetrics.join(', ')}
+3. ${industryInsights.formatGuidance}
+`;
+    }
+
     // Define system prompt for the CV tailoring
-    const systemPrompt = `You are an expert CV optimizer specialized in tailoring CVs to specific job descriptions.
-Your task is to analyze the CV and job description, then optimize the CV content to highlight relevant experiences, 
-skills, and qualifications that match the job requirements.
+    const systemPrompt = `You are an expert CV optimizer and Applicant Tracking System (ATS) specialist with deep experience tailoring CVs for specific job descriptions across diverse industries.
 
-Follow these guidelines:
-1. Preserve the original structure and sections of the CV
-2. Find the existing profile/summary/about me section in the CV and enhance it to highlight relevant qualifications for this specific job
-3. DO NOT generate a generic profile - always use the actual profile content from the CV as a base
-4. Look for profile sections labeled as "PROFILE", "SUMMARY", "ABOUT ME", "PROFESSIONAL SUMMARY", or similar
-5. If no explicit profile section exists, identify and use the first substantial paragraph of the CV that appears to be an introduction
-6. Tailor the language to include keywords from the job description
-7. Prioritize achievements that demonstrate relevant skills
-8. Ensure all content is factual and based only on information in the original CV
-9. Do not fabricate experiences, skills, or qualifications
-10. Return the content in a structured format that preserves sections
+Your task is to analyze the CV and job description, then optimize the CV content to maximize relevance and ATS compatibility while highlighting relevant experiences, skills, and qualifications that match the job requirements.
 
-CRITICAL REQUIREMENT:
+CORE OPTIMIZATION GOALS:
+1. Improve ATS compatibility by including exact terminology from the job description
+2. Enhance the profile/summary to highlight qualifications specifically relevant to this job
+3. Tailor bullet points in experience sections to emphasize achievements relevant to the job requirements
+4. Ensure skills section reflects both existing skills and job-required keywords where applicable
+5. Maintain professional formatting and structure throughout
+
+DETAILED TAILORING GUIDELINES:
+1. Preserve the original structure, sections, and overall format of the CV
+2. Find the existing profile/summary/about me section and enhance it to highlight relevant qualifications for this job
+   - DO NOT generate a generic profile - always use the actual CV content as your base
+   - Look for profile sections labeled as "PROFILE", "SUMMARY", "ABOUT ME", "PROFESSIONAL SUMMARY", or similar
+   - If no explicit profile section exists, identify the first substantial paragraph as the introduction
+3. Quantify achievements where possible (add metrics like percentages, numbers, timeframes, team sizes)
+4. Improve keyword density and placement:
+   - Identify 10-15 key skills/terms from the job description
+   - Naturally incorporate these terms into relevant sections, especially in the first 1/3 of the document
+   - Ensure each skill appears 2-3 times throughout the CV in contextually appropriate ways
+5. Use industry-specific terminology relevant to the position
+6. Enhance technical skills presentation:
+   - Group similar skills together under logical categories
+   - Order skills based on relevance to the job description (most relevant first)
+   - Add proficiency levels to key skills if not already present
+${industryGuidance}
+CRITICAL PRESERVATION REQUIREMENTS:
 - You MUST preserve all original work experience entries exactly as they appear in the CV
 - Keep all job titles, company names, dates, and locations exactly as written in the original
 - DO NOT rearrange, remove, or modify any work history items
 - Only enhance descriptions within experience entries without changing their core information
 - The chronology and basic structure of the experience section must remain unaltered
+- Maintain all certifications, education details, and other credentials exactly as presented
 
-Most importantly:
-- Identify and extract the name and contact details from the original CV and maintain them
-- Ensure the profile/summary is directly based on the actual content from the original CV, enhanced with relevant keywords from the job description`;
+MOST IMPORTANT CONSIDERATIONS:
+1. Identify and maintain the name and contact details exactly as they appear in the original CV
+2. Ensure the enhanced profile is directly based on actual content from the original CV
+3. Focus on relevance - every enhancement should directly connect CV content to job requirements
+4. Be factual - only use information that exists in the original CV
+5. Preserve truthfulness - never fabricate experiences, skills, or qualifications`;
 
     // Use rate limiter for the API call
     const result = await mistralRateLimiter.execute(async () => {
+      // Include industry details in the user prompt if available
+      let industryContext = '';
+      if (industryInsights) {
+        industryContext = `\nThe job appears to be in the ${industryInsights.industry} industry, where these skills are particularly valued: ${industryInsights.keySkills.join(', ')}.`;
+      }
+      
       const response = await client.chat({
         model: 'mistral-large-latest',
         messages: [
@@ -100,18 +134,34 @@ Here is the job description I'm applying for:
 ---
 ${jobDescription}
 ---
-${jobTitle ? `\nPosition: ${jobTitle}` : ''}
+${jobTitle ? `\nPosition: ${jobTitle}` : ''}${industryContext}
 
-Please tailor my CV for this job. First, locate my existing profile/summary/about me section in the CV and enhance it specifically to match this job's requirements. Use my actual profile content as the base for any enhancements.
+Please tailor my CV for this specific job opportunity. First, analyze the job description to identify:
+1. Key required skills and qualifications
+2. Important technical competencies
+3. Soft skills and interpersonal qualities valued
+4. Industry-specific terminology and keywords
+
+Then, locate my existing profile/summary/about me section in the CV and enhance it to strategically highlight my most relevant qualifications for this position. Use my actual profile content as the foundation, incorporating key terminology from the job posting.
+
+For experience sections:
+- Maintain all original job titles, companies, dates, and locations exactly as written
+- Enhance bullet points to emphasize achievements that demonstrate relevant skills
+- Add quantifiable metrics where appropriate (percentages, numbers, results)
+- Ensure keywords from the job description appear naturally within context
+
+For skills sections:
+- Reorganize skills to prioritize those most relevant to this position
+- Group related skills into logical categories where appropriate
+- Ensure technical skills align with job requirements
+- Add proficiency indicators for key skills if not already present
 
 IMPORTANT: You must preserve ALL my original work experience entries exactly as they appear in the CV. Keep all job titles, company names, dates, and locations unchanged. Do not modify, remove, or rearrange my work history - only enhance descriptions while keeping the original structure intact.
 
-If there's no explicit profile section, use the first substantive paragraph that introduces my background and experience.
-
 Return the optimized content in a JSON format with these fields:
-1. tailoredContent: The complete tailored CV with my enhanced profile section
+1. tailoredContent: The complete tailored CV with all enhancements
 2. enhancedProfile: The specifically enhanced profile section (based on my original profile)
-3. sectionImprovements: A summary of improvements made to each section`
+3. sectionImprovements: A detailed summary of improvements made to each section, including key keywords incorporated`
           }
         ],
         temperature: 0.3,
