@@ -360,29 +360,119 @@ export class MistralRAGService {
   }
 
   /**
-   * Create embeddings for all chunks
+   * Create embeddings for text chunks using batched processing
    * @param chunks Array of text chunks
    * @returns Array of embeddings
    */
   private async createEmbeddingsForChunks(chunks: string[]): Promise<number[][]> {
     try {
-      // Create embeddings in batches to avoid rate limiting
-      const embeddings: number[][] = [];
+      // If no chunks, return empty array
+      if (!chunks || chunks.length === 0) {
+        return [];
+      }
       
-      // Process chunks in batches of 5
-      for (let i = 0; i < chunks.length; i += 5) {
-        const batch = chunks.slice(i, i + 5);
-        const batchEmbeddings = await Promise.all(batch.map(chunk => this.createEmbedding(chunk)));
-        embeddings.push(...batchEmbeddings);
+      const embeddings: number[][] = [];
+      const chunksToProcess: string[] = [];
+      const chunkIndices: number[] = [];
+      
+      // Check which chunks are already in cache to avoid redundant API calls
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        const cacheKey = this.getEmbeddingCacheKey(chunk);
+        
+        // Check if embedding is in cache and not expired
+        const cachedEmbedding = this.embeddingCache[cacheKey];
+        if (cachedEmbedding && cachedEmbedding.timestamp > Date.now() - this.cacheTTL) {
+          embeddings[i] = cachedEmbedding.embedding;
+        } else {
+          chunksToProcess.push(chunk);
+          chunkIndices.push(i);
+        }
+      }
+      
+      // If all chunks are cached, return the cached embeddings
+      if (chunksToProcess.length === 0) {
+        return embeddings;
+      }
+      
+      // Process chunks in batches of 20 (OpenAI embedding API limit)
+      const BATCH_SIZE = 20;
+      for (let i = 0; i < chunksToProcess.length; i += BATCH_SIZE) {
+        const batchChunks = chunksToProcess.slice(i, i + BATCH_SIZE);
+        const batchIndices = chunkIndices.slice(i, i + BATCH_SIZE);
+        
+        let batchEmbeddings: number[][] = [];
+        
+        // Try to use OpenAI embedding API for batch processing
+        try {
+          const response = await this.openaiClient.embeddings.create({
+            model: this.embeddingModel,
+            input: batchChunks,
+          });
+          
+          // Extract embeddings from response
+          batchEmbeddings = response.data.map((item) => item.embedding);
+        } catch (error) {
+          // If batch processing fails, fall back to individual processing
+          logger.error(`Batch embedding failed, falling back to individual processing: ${error instanceof Error ? error.message : String(error)}`);
+          
+          // Process each chunk individually with error handling
+          batchEmbeddings = await Promise.all(
+            batchChunks.map(async (chunk) => {
+              try {
+                const response = await this.openaiClient.embeddings.create({
+                  model: this.embeddingModel,
+                  input: chunk,
+                });
+                return response.data[0].embedding;
+              } catch (chunkError) {
+                logger.error(`Error generating embedding for chunk: ${chunkError instanceof Error ? chunkError.message : String(chunkError)}`);
+                // Return a zero vector as fallback
+                return new Array(1536).fill(0);
+              }
+            })
+          );
+        }
+        
+        // Add embeddings to results and cache
+        for (let j = 0; j < batchEmbeddings.length; j++) {
+          const chunkIndex = batchIndices[j];
+          const chunk = chunksToProcess[j];
+          const embedding = batchEmbeddings[j];
+          
+          // Store in results array
+          embeddings[chunkIndex] = embedding;
+          
+          // Cache the embedding
+          const cacheKey = this.getEmbeddingCacheKey(chunk);
+          this.embeddingCache[cacheKey] = {
+            embedding,
+            timestamp: Date.now(),
+          };
+        }
       }
       
       return embeddings;
     } catch (error) {
-      // Fix error type handling for logger
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error creating embeddings for chunks: ${errorMessage}`);
+      logger.error(`Error in createEmbeddingsForChunks: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
+  }
+  
+  /**
+   * Generate a cache key for an embedding
+   * @param text Text to generate key for
+   * @returns Cache key
+   */
+  private getEmbeddingCacheKey(text: string): string {
+    // Use a hash of the text as the cache key
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) {
+      const char = text.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return `emb_${hash}`;
   }
 
   /**
@@ -1541,384 +1631,182 @@ Example response format:
   }
 
   /**
-   * Comprehensive CV analysis in a single API call
-   * Combines multiple analysis steps to reduce API call count
-   * @returns All CV analysis data in a single object
+   * Perform a comprehensive CV analysis with a single API call
+   * @returns Comprehensive CV analysis result
    */
   public async analyzeCVComprehensive(): Promise<{
     skills: string[];
     keywords: string[];
     keyRequirements: string[];
-    formatAnalysis: { strengths: string[]; weaknesses: string[]; recommendations: string[] };
-    contentAnalysis: { strengths: string[]; weaknesses: string[]; recommendations: string[] };
+    formatAnalysis: {
+      strengths: string[];
+      weaknesses: string[];
+      recommendations: string[];
+    };
+    contentAnalysis: {
+      strengths: string[];
+      weaknesses: string[];
+      recommendations: string[];
+    };
     industry: string;
     language: string;
     sections: Array<{ name: string; content: string }>;
-    achievements?: string[];
-    goals?: string[];
   }> {
-    logger.info('Starting comprehensive CV analysis with a single API call');
-    
-    // Default values in case of error
-    const defaultResult = {
-      skills: [] as string[],
-      keywords: [] as string[],
-      keyRequirements: ['Professional experience', 'Relevant education', 'Technical skills', 'Communication skills', 'Problem-solving abilities'] as string[],
-      formatAnalysis: {
-        strengths: ['Professional structure'] as string[],
-        weaknesses: ['Could improve formatting'] as string[],
-        recommendations: ['Enhance layout for better readability'] as string[]
-      },
-      contentAnalysis: {
-        strengths: ['Experience clearly presented'] as string[],
-        weaknesses: ['Consider adding more accomplishments'] as string[],
-        recommendations: ['Quantify achievements with specific metrics'] as string[]
-      },
-      industry: 'General',
-      language: 'English',
-      sections: [{ name: 'Experience', content: '' }, { name: 'Education', content: '' }, { name: 'Skills', content: '' }] as Array<{ name: string; content: string }>,
-      achievements: [] as string[],
-      goals: [] as string[]
-    };
-    
-    // If no CV text is available, return default values
-    if (!this.originalCVText || this.originalCVText.trim() === '') {
-      logger.warn('No CV text available for analysis, returning default values');
-      return defaultResult;
-    }
-    
     try {
-      // Create a comprehensive prompt that asks for all aspects of the analysis
-      const comprehensivePrompt = `
-You are a professional CV/resume analyzer with expertise in career development and recruitment. Analyze the following CV thoroughly and provide a complete assessment in JSON format.
-
-CV CONTENT:
-${this.originalCVText}
-
-Provide a comprehensive analysis with the following structure exactly (valid JSON format required):
-{
-  "skills": ["skill1", "skill2", ...], // List of 10-15 professional skills found in the CV
-  "keywords": ["keyword1", "keyword2", ...], // List of 10-15 important keywords relevant for job searches
-  "keyRequirements": ["requirement1", "requirement2", ...], // List of 5-7 key professional requirements/qualifications the candidate has
-  "formatAnalysis": {
-    "strengths": ["strength1", "strength2", ...], // 3 strengths of the CV format
-    "weaknesses": ["weakness1", "weakness2", ...], // 3 weaknesses of the CV format
-    "recommendations": ["recommendation1", "recommendation2", ...] // 3 recommendations to improve CV format
-  },
-  "contentAnalysis": {
-    "strengths": ["strength1", "strength2", ...], // 3 strengths of the CV content
-    "weaknesses": ["weakness1", "weakness2", ...], // 3 weaknesses of the CV content 
-    "recommendations": ["recommendation1", "recommendation2", ...] // 3 recommendations to improve CV content
-  },
-  "industry": "The most likely industry for this CV", // Single most relevant industry
-  "language": "Language of the CV", // Primary language of the document
-  "sections": [
-    {"name": "section1", "content": "brief summary of section"}, 
-    {"name": "section2", "content": "brief summary of section"},
-    ...
-  ], // 3-7 main sections identified in the CV with brief content summaries
-  "achievements": ["achievement1", "achievement2", ...], // List of 3-5 achievements mentioned in the CV (if any), include quantified results when possible
-  "goals": ["goal1", "goal2", ...] // List of 1-3 career goals or objectives mentioned in the CV (if any)
-}
-
-You MUST return ONLY properly formatted JSON - no additional text, explanations, or markdown.
-`;
+      logger.info('Starting comprehensive CV analysis with a single API call');
       
-      // Make a single API call instead of multiple separate ones
-      const response = await this.generateDirectResponse(comprehensivePrompt);
-      
-      // Parse the response as JSON
-      try {
-        const analysisResult = JSON.parse(response);
-        
-        // Validate the structure and ensure all required fields exist
-        if (!analysisResult.skills) analysisResult.skills = defaultResult.skills;
-        if (!analysisResult.keywords) analysisResult.keywords = defaultResult.keywords;
-        if (!analysisResult.keyRequirements) analysisResult.keyRequirements = defaultResult.keyRequirements;
-        if (!analysisResult.formatAnalysis) analysisResult.formatAnalysis = defaultResult.formatAnalysis;
-        if (!analysisResult.contentAnalysis) analysisResult.contentAnalysis = defaultResult.contentAnalysis;
-        if (!analysisResult.industry) analysisResult.industry = defaultResult.industry;
-        if (!analysisResult.language) analysisResult.language = defaultResult.language;
-        if (!analysisResult.sections) analysisResult.sections = defaultResult.sections;
-        
-        // Check if achievements and goals were detected
-        const hasAchievements = analysisResult.achievements && Array.isArray(analysisResult.achievements) && analysisResult.achievements.length > 0;
-        const hasGoals = analysisResult.goals && Array.isArray(analysisResult.goals) && analysisResult.goals.length > 0;
-        
-        // Generate achievements and goals if they are missing or empty
-        if (!hasAchievements) {
-          logger.info('No achievements found in CV, generating them');
-          try {
-            analysisResult.achievements = await this.generateAchievements(5);
-          } catch (achievementsError) {
-            logger.error(`Error generating achievements: ${achievementsError instanceof Error ? achievementsError.message : String(achievementsError)}`);
-            analysisResult.achievements = defaultResult.achievements;
-          }
-        }
-        
-        if (!hasGoals) {
-          logger.info('No career goals found in CV, generating them');
-          try {
-            analysisResult.goals = await this.generateGoals(3);
-          } catch (goalsError) {
-            logger.error(`Error generating goals: ${goalsError instanceof Error ? goalsError.message : String(goalsError)}`);
-            analysisResult.goals = defaultResult.goals;
-          }
-        }
-        
-        logger.info('Successfully completed comprehensive CV analysis');
-        return analysisResult;
-      } catch (parseError) {
-        logger.error(`Error parsing JSON response from comprehensive analysis: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-        logger.error(`Response that couldn't be parsed: ${response.substring(0, 200)}...`);
-        
-        // Instead of returning default values immediately, attempt to extract structured data from the text response
-        const structuredResult = this.extractStructuredDataFromText(response) || defaultResult;
-        
-        // Generate achievements and goals if needed
-        if (!structuredResult.achievements || structuredResult.achievements.length === 0) {
-          try {
-            structuredResult.achievements = await this.generateAchievements(5);
-          } catch (achievementsError) {
-            logger.error(`Error generating achievements: ${achievementsError instanceof Error ? achievementsError.message : String(achievementsError)}`);
-            structuredResult.achievements = defaultResult.achievements;
-          }
-        }
-        
-        if (!structuredResult.goals || structuredResult.goals.length === 0) {
-          try {
-            structuredResult.goals = await this.generateGoals(3);
-          } catch (goalsError) {
-            logger.error(`Error generating goals: ${goalsError instanceof Error ? goalsError.message : String(goalsError)}`);
-            structuredResult.goals = defaultResult.goals;
-          }
-        }
-        
-        return structuredResult;
-      }
-    } catch (error) {
-      logger.error(`Error during comprehensive CV analysis: ${error instanceof Error ? error.message : String(error)}`);
-      
-      // Try to generate achievements and goals even if the main analysis failed
-      const result = { ...defaultResult };
-      
-      try {
-        result.achievements = await this.generateAchievements(5);
-      } catch (achievementsError) {
-        logger.error(`Error generating achievements after main analysis failed: ${achievementsError instanceof Error ? achievementsError.message : String(achievementsError)}`);
+      // Prevent overwhelming the LLM by limiting the context size
+      // Get up to 10 representative chunks (beginning, middle, end) to cover the whole CV
+      let contextChunks: string[] = [];
+      if (this.chunks.length <= 10) {
+        contextChunks = this.chunks;
+      } else {
+        // Take representative chunks from beginning, middle, and end
+        const beginning = this.chunks.slice(0, 3);
+        const middle = this.chunks.slice(Math.floor(this.chunks.length / 2) - 2, Math.floor(this.chunks.length / 2) + 1);
+        const end = this.chunks.slice(this.chunks.length - 3);
+        contextChunks = [...beginning, ...middle, ...end];
       }
       
-      try {
-        result.goals = await this.generateGoals(3);
-      } catch (goalsError) {
-        logger.error(`Error generating goals after main analysis failed: ${goalsError instanceof Error ? goalsError.message : String(goalsError)}`);
-      }
+      // Create focused context to prevent token overflow
+      const context = contextChunks.join('\n\n');
       
+      // Set a reasonable timeout for the analysis (15 seconds)
+      const analysisPromise = this.performLightweightAnalysis(context);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('CV analysis timed out')), 15000); // 15 second timeout
+      });
+      
+      // Race the analysis against the timeout
+      const result = await Promise.race([analysisPromise, timeoutPromise]);
+      
+      logger.info('Successfully completed comprehensive CV analysis');
       return result;
+    } catch (error) {
+      logger.error(`Error in comprehensive CV analysis: ${error instanceof Error ? error.message : String(error)}`);
+      
+      // Return default analysis as fallback
+      return this.getDefaultAnalysis();
     }
   }
   
   /**
-   * Attempts to extract structured data from a text response that couldn't be parsed as JSON
-   * @param text The response text to parse
-   * @returns Partially structured data or null if parsing fails
+   * Perform a lightweight analysis focused on essential CV metrics
+   * @param context The CV context to analyze
+   * @returns Focused analysis result
    */
-  private extractStructuredDataFromText(text: string): null | {
-    skills: string[];
-    keywords: string[];
-    keyRequirements: string[];
-    formatAnalysis: { strengths: string[]; weaknesses: string[]; recommendations: string[] };
-    contentAnalysis: { strengths: string[]; weaknesses: string[]; recommendations: string[] };
-    industry: string;
-    language: string;
-    sections: Array<{ name: string; content: string }>;
-    achievements?: string[];
-    goals?: string[];
-  } {
-    try {
-      // Try to find JSON in the text (sometimes the model adds explanatory text around the JSON)
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const jsonStr = jsonMatch[0];
-        try {
-          const result = JSON.parse(jsonStr);
-          logger.info('Successfully extracted JSON from text response');
-          return result;
-        } catch (e) {
-          logger.warn('Found JSON-like structure but still failed to parse');
-        }
-      }
-      
-      // If we couldn't extract JSON, return null
-      return null;
-    } catch (error) {
-      logger.error(`Error extracting structured data from text: ${error instanceof Error ? error.message : String(error)}`);
-      return null;
-    }
-  }
+  private async performLightweightAnalysis(context: string): Promise<any> {
+    // Create a focused system prompt to extract only the essential information quickly
+    const systemPrompt = `
+You are a CV/resume analyzer specialized in quick, focused analysis. Extract only the following essential information:
+1. Skills (list of technical and soft skills)
+2. Key industry keywords
+3. Job requirements mentioned
+4. Document format analysis (3 strengths, 3 weaknesses, 3 recommendations)
+5. Content analysis (3 strengths, 3 weaknesses, 3 recommendations)
+6. Industry and language
+7. Major document sections
 
-  /**
-   * Generates achievement statements based on the CV content
-   * @param count Number of achievements to generate
-   * @returns Array of achievement statements
-   */
-  public async generateAchievements(count: number = 5): Promise<string[]> {
-    logger.info(`Generating ${count} achievements based on CV content`);
-    
-    if (!this.originalCVText || this.originalCVText.trim() === '') {
-      logger.warn('No CV text available for generating achievements');
-      return [
-        "Increased operational efficiency by 30% through implementation of streamlined workflows",
-        "Reduced department costs by 25% while maintaining service quality standards",
-        "Led cross-functional team of 8 professionals to deliver project 15% under budget",
-        "Implemented new customer service protocol resulting in 40% improvement in satisfaction scores",
-        "Developed innovative marketing strategy that expanded client base by 35% in 12 months"
-      ];
-    }
-    
-    try {
-      const prompt = `
-You are a professional CV writer with expertise in creating compelling, achievement-oriented bullet points. Based on the CV content below, generate ${count} impressive professional achievements that are:
-
-1. Relevant to the person's career and industry
-2. Quantified with specific metrics (percentages, numbers, dollar amounts)
-3. Action-oriented, starting with strong impact verbs
-4. Focused on results and business impact
-5. Credible and realistic based on the career level
-
-CV CONTENT:
-${this.originalCVText}
-
-Generate ONLY a JSON array of ${count} achievement statements. Each achievement should be one sentence, properly formatted, and include specific metrics. Do not include explanations or additional text.
-
-Example format:
-["Increased department productivity by 27% through implementation of new workflow processes.", "Reduced customer service response time by 45% by introducing an automated ticketing system."]
+Be extremely concise and return ONLY the following JSON structure without ANY additional text:
+{
+  "skills": ["skill1", "skill2", ...],
+  "keywords": ["keyword1", "keyword2", ...],
+  "keyRequirements": ["requirement1", "requirement2", ...],
+  "formatAnalysis": {
+    "strengths": ["strength1", "strength2", "strength3"],
+    "weaknesses": ["weakness1", "weakness2", "weakness3"],
+    "recommendations": ["recommendation1", "recommendation2", "recommendation3"]
+  },
+  "contentAnalysis": {
+    "strengths": ["strength1", "strength2", "strength3"],
+    "weaknesses": ["weakness1", "weakness2", "weakness3"],
+    "recommendations": ["recommendation1", "recommendation2", "recommendation3"]
+  },
+  "industry": "detected industry",
+  "language": "detected language code (en, es, fr, etc.)",
+  "sections": [
+    { "name": "section name", "content": "brief section content summary" }
+  ]
+}
 `;
 
-      const response = await this.generateDirectResponse(prompt);
+    try {
+      // Use the OpenAI client for better reliability in JSON responses
+      const response = await this.openaiClient.chat.completions.create({
+        model: 'gpt-3.5-turbo-1106', // Using 3.5 model for better performance and JSON support
+        response_format: { type: 'json_object' }, // Enforce JSON output
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt
+          },
+          {
+            role: 'user',
+            content: `Analyze this CV/resume and provide only the requested information in JSON format:\n\n${context}`
+          }
+        ],
+        temperature: 0.3, // Lower temperature for more deterministic output
+        max_tokens: 1200 // Limit the response size
+      });
       
-      // Parse response as JSON
+      // Parse the JSON response
+      const content = response.choices[0]?.message?.content || '{}';
+      let result: any;
+      
       try {
-        const achievements = JSON.parse(response);
-        if (Array.isArray(achievements) && achievements.length > 0) {
-          // Take only the requested number and ensure they're strings
-          return achievements
-            .filter(item => typeof item === 'string')
-            .slice(0, count)
-            .map(achievement => {
-              // Ensure they start with action verbs
-              if (!/^[A-Z][a-z]+ed\b|^[A-Z][a-z]+ing\b/.test(achievement)) {
-                const actionVerbs = ["Achieved", "Increased", "Reduced", "Implemented", "Developed", "Led", "Created", "Launched", "Managed", "Delivered"];
-                const randomVerb = actionVerbs[Math.floor(Math.random() * actionVerbs.length)];
-                return `${randomVerb} ${achievement.charAt(0).toLowerCase()}${achievement.slice(1)}`;
-              }
-              return achievement;
-            });
-        }
+        result = JSON.parse(content);
       } catch (parseError) {
-        logger.error(`Error parsing achievements JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-        // Try to extract achievements from the text response using regex
-        const achievementMatches = response.match(/"([^"]+)"/g);
-        if (achievementMatches && achievementMatches.length > 0) {
-          return achievementMatches
-            .map(match => match.replace(/"/g, ''))
-            .slice(0, count);
-        }
+        logger.error(`Error parsing JSON response: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+        return this.getDefaultAnalysis();
       }
       
-      logger.error('Failed to generate achievements from AI response');
-      return [
-        "Increased operational efficiency by 30% through implementation of streamlined workflows",
-        "Reduced department costs by 25% while maintaining service quality standards",
-        "Led cross-functional team of 8 professionals to deliver project 15% under budget",
-        "Implemented new customer service protocol resulting in 40% improvement in satisfaction scores",
-        "Developed innovative marketing strategy that expanded client base by 35% in 12 months"
-      ];
+      // Ensure all required fields are present
+      return {
+        skills: result.skills || [],
+        keywords: result.keywords || [],
+        keyRequirements: result.keyRequirements || [],
+        formatAnalysis: {
+          strengths: result.formatAnalysis?.strengths || ['Clear section organization', 'Consistent formatting', 'Professional layout'],
+          weaknesses: result.formatAnalysis?.weaknesses || ['Could improve visual hierarchy', 'Consider adding more white space', 'Ensure consistent alignment'],
+          recommendations: result.formatAnalysis?.recommendations || ['Use bullet points for achievements', 'Add more white space between sections', 'Ensure consistent date formatting']
+        },
+        contentAnalysis: {
+          strengths: result.contentAnalysis?.strengths || ['Clear presentation of professional experience', 'Includes contact information', 'Lists relevant skills'],
+          weaknesses: result.contentAnalysis?.weaknesses || ['Could benefit from more quantifiable achievements', 'May need more specific examples of skills application', 'Consider adding more industry-specific keywords'],
+          recommendations: result.contentAnalysis?.recommendations || ['Add measurable achievements with numbers and percentages', 'Include more industry-specific keywords', 'Ensure all experience is relevant to target positions']
+        },
+        industry: result.industry || 'General',
+        language: result.language || 'en',
+        sections: result.sections || []
+      };
     } catch (error) {
-      logger.error(`Error generating achievements: ${error instanceof Error ? error.message : String(error)}`);
-      return [
-        "Increased operational efficiency by 30% through implementation of streamlined workflows",
-        "Reduced department costs by 25% while maintaining service quality standards",
-        "Led cross-functional team of 8 professionals to deliver project 15% under budget",
-        "Implemented new customer service protocol resulting in 40% improvement in satisfaction scores",
-        "Developed innovative marketing strategy that expanded client base by 35% in 12 months"
-      ];
+      logger.error(`Error in lightweight analysis: ${error instanceof Error ? error.message : String(error)}`);
+      return this.getDefaultAnalysis();
     }
   }
-
+  
   /**
-   * Generates career goals based on the CV content
-   * @param count Number of goals to generate
-   * @returns Array of goal statements
+   * Get default analysis for fallback
+   * @returns Default analysis
    */
-  public async generateGoals(count: number = 3): Promise<string[]> {
-    logger.info(`Generating ${count} career goals based on CV content`);
-    
-    if (!this.originalCVText || this.originalCVText.trim() === '') {
-      logger.warn('No CV text available for generating goals');
-      return [
-        "Seeking to leverage my expertise in project management to transition into a senior leadership role",
-        "Aiming to expand my technical skills through professional certifications and hands-on experience",
-        "Working toward building a high-performing team that consistently exceeds organizational objectives"
-      ];
-    }
-    
-    try {
-      const industry = await this.determineIndustry();
-      
-      const prompt = `
-You are a career development expert. Based on the CV content below, generate ${count} forward-looking career goals that are:
-
-1. Relevant to the person's career trajectory and industry (${industry})
-2. Specific and action-oriented
-3. Forward-looking and aspirational yet realistic
-4. Aligned with current skills while showing growth ambition
-5. Professional in tone and focused on value contribution
-
-CV CONTENT:
-${this.originalCVText}
-
-Generate ONLY a JSON array of ${count} career goal statements. Each goal should be one sentence and be professionally phrased. Do not include explanations or additional text.
-
-Example format:
-["Seeking to leverage my expertise in digital marketing to lead innovative campaigns for global brands.", "Aiming to enhance my leadership capabilities through executive education and mentoring opportunities."]
-`;
-
-      const response = await this.generateDirectResponse(prompt);
-      
-      // Parse response as JSON
-      try {
-        const goals = JSON.parse(response);
-        if (Array.isArray(goals) && goals.length > 0) {
-          // Take only the requested number and ensure they're strings
-          return goals
-            .filter(item => typeof item === 'string')
-            .slice(0, count);
-        }
-      } catch (parseError) {
-        logger.error(`Error parsing goals JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-        // Try to extract goals from the text response using regex
-        const goalMatches = response.match(/"([^"]+)"/g);
-        if (goalMatches && goalMatches.length > 0) {
-          return goalMatches
-            .map(match => match.replace(/"/g, ''))
-            .slice(0, count);
-        }
-      }
-      
-      logger.error('Failed to generate goals from AI response');
-      return [
-        "Seeking to leverage my expertise in project management to transition into a senior leadership role",
-        "Aiming to expand my technical skills through professional certifications and hands-on experience",
-        "Working toward building a high-performing team that consistently exceeds organizational objectives"
-      ];
-    } catch (error) {
-      logger.error(`Error generating goals: ${error instanceof Error ? error.message : String(error)}`);
-      return [
-        "Seeking to leverage my expertise in project management to transition into a senior leadership role",
-        "Aiming to expand my technical skills through professional certifications and hands-on experience",
-        "Working toward building a high-performing team that consistently exceeds organizational objectives"
-      ];
-    }
+  private getDefaultAnalysis(): any {
+    return {
+      skills: ['Communication', 'Problem Solving', 'Teamwork'],
+      keywords: ['experience', 'skills', 'education'],
+      keyRequirements: [],
+      formatAnalysis: {
+        strengths: ['Clear section organization', 'Consistent formatting', 'Professional layout'],
+        weaknesses: ['Could improve visual hierarchy', 'Consider adding more white space', 'Ensure consistent alignment'],
+        recommendations: ['Use bullet points for achievements', 'Add more white space between sections', 'Ensure consistent date formatting']
+      },
+      contentAnalysis: {
+        strengths: ['Clear presentation of professional experience', 'Includes contact information', 'Lists relevant skills'],
+        weaknesses: ['Could benefit from more quantifiable achievements', 'May need more specific examples of skills application', 'Consider adding more industry-specific keywords'],
+        recommendations: ['Add measurable achievements with numbers and percentages', 'Include more industry-specific keywords', 'Ensure all experience is relevant to target positions']
+      },
+      industry: 'General',
+      language: 'en',
+      sections: []
+    };
   }
 } 

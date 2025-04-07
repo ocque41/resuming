@@ -87,6 +87,9 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allowProceed, setAllowProceed] = useState<boolean>(false);
+  const [analysisStatus, setAnalysisStatus] = useState<string>('not_started');
+  const [analysisProgress, setAnalysisProgress] = useState<number>(0);
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
 
   // Auto-select the first CV if available
   useEffect(() => {
@@ -98,12 +101,103 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
       }
     }
   }, [cvs, selectedCVId]);
+
+  // Clean up polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [pollingInterval]);
   
   // Handle CV selection
   const handleCVSelect = useCallback((cvId: string, cvName: string) => {
     console.log("CV selected for analysis:", cvName, "ID:", cvId);
     setSelectedCVId(cvId);
     setSelectedCVName(cvName);
+  }, []);
+
+  // Poll for analysis status
+  const pollAnalysisStatus = useCallback(async (cvId: string) => {
+    try {
+      const response = await fetch(`/api/cv/analysis-status?cvId=${cvId}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to get analysis status");
+      }
+      
+      const data = await response.json();
+      
+      // Update status and progress
+      setAnalysisStatus(data.status);
+      if (data.progress) {
+        setAnalysisProgress(data.progress);
+      }
+      
+      // If analysis is complete, update analysis data
+      if (data.status === 'complete' && data.analysis) {
+        setAnalysis(mapAnalysisData(data.analysis));
+        setLoading(false);
+        
+        // Clear polling interval
+        if (pollingInterval) {
+          clearInterval(pollingInterval);
+          setPollingInterval(null);
+        }
+        
+        // Call completion callback if provided
+        if (onAnalysisComplete) {
+          setAllowProceed(true);
+          onAnalysisComplete(cvId);
+        }
+      }
+      
+      // If analysis failed, show error
+      if (data.status === 'failed') {
+        setError(data.error || "Analysis failed");
+        setLoading(false);
+        
+        // Clear polling interval
+        if (pollingInterval) {
+          clearInterval(pollingInterval);
+          setPollingInterval(null);
+        }
+      }
+    } catch (error) {
+      console.error("Error polling analysis status:", error);
+      // Don't set error or stop loading yet - we'll try again
+    }
+  }, [pollingInterval, onAnalysisComplete]);
+
+  // Convert API response to AnalysisResult
+  const mapAnalysisData = useCallback((apiData: any): AnalysisResult => {
+    return {
+      atsScore: typeof apiData.atsScore === 'number' || typeof apiData.atsScore === 'string' 
+        ? apiData.atsScore 
+        : 0,
+      language: typeof apiData.language === 'string' ? apiData.language : undefined,
+      industry: typeof apiData.industry === 'string' ? apiData.industry : 'General',
+      strengths: Array.isArray(apiData.strengths) ? apiData.strengths : [],
+      weaknesses: Array.isArray(apiData.weaknesses) ? apiData.weaknesses : [],
+      recommendations: Array.isArray(apiData.recommendations) ? apiData.recommendations : [],
+      keywordAnalysis: typeof apiData.keywords === 'object' ? 
+        apiData.keywords.reduce((acc: Record<string, number>, keyword: string) => {
+          acc[keyword] = 1;
+          return acc;
+        }, {}) : {},
+      formattingStrengths: Array.isArray(apiData.formatStrengths) ? apiData.formatStrengths : [],
+      formattingWeaknesses: Array.isArray(apiData.formatWeaknesses) ? apiData.formatWeaknesses : [],
+      formattingRecommendations: Array.isArray(apiData.formatRecommendations) ? apiData.formatRecommendations : [],
+      sectionBreakdown: Array.isArray(apiData.sections) ? 
+        apiData.sections.reduce((acc: Record<string, string>, section: {name: string, content: string}) => {
+          acc[section.name] = section.content;
+          return acc;
+        }, {}) : {},
+      targetRoles: Array.isArray(apiData.targetRoles) ? apiData.targetRoles : undefined,
+      experienceEntries: Array.isArray(apiData.experienceEntries) ? apiData.experienceEntries : undefined,
+    };
   }, []);
 
   async function handleAnalyze() {
@@ -115,91 +209,68 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
     setLoading(true);
     setError(null);
     setAnalysis(null);
+    setAnalysisStatus('starting');
+    setAnalysisProgress(0);
 
     try {
       console.log(`Analyzing CV: ${selectedCVName} (ID: ${selectedCVId})`);
       const encodedFileName = selectedCVName ? encodeURIComponent(selectedCVName) : '';
       const encodedCVId = encodeURIComponent(selectedCVId);
-      const response = await fetch(`/api/analyze-cv?fileName=${encodedFileName}&cvId=${encodedCVId}`);
+      
+      // Start analysis
+      const response = await fetch(`/api/analyze-cv?fileName=${encodedFileName}&cvId=${encodedCVId}&forceRefresh=true`);
       
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to analyze CV");
+        throw new Error(errorData.error || "Failed to start CV analysis");
       }
       
       const data = await response.json();
       
       if (!data.success) {
-        throw new Error(data.error || "Analysis failed");
+        throw new Error(data.error || "Failed to start analysis");
       }
       
-      // Create a safe version of the analysis data with proper type checking
-      const safeData = {
-        atsScore: typeof data.analysis.atsScore === 'number' || typeof data.analysis.atsScore === 'string' 
-          ? data.analysis.atsScore 
-          : 0,
-        language: typeof data.analysis.language === 'string' ? data.analysis.language : undefined,
-        industry: typeof data.analysis.industry === 'string' ? data.analysis.industry : 'General',
-        strengths: Array.isArray(data.analysis.strengths) ? data.analysis.strengths : [],
-        weaknesses: Array.isArray(data.analysis.weaknesses) ? data.analysis.weaknesses : [],
-        recommendations: Array.isArray(data.analysis.recommendations) ? data.analysis.recommendations : [],
-        keywordAnalysis: typeof data.analysis.keywordAnalysis === 'object' ? data.analysis.keywordAnalysis : {},
-        formattingStrengths: Array.isArray(data.analysis.formattingStrengths) ? data.analysis.formattingStrengths : [],
-        formattingWeaknesses: Array.isArray(data.analysis.formattingWeaknesses) ? data.analysis.formattingWeaknesses : [],
-        formattingRecommendations: Array.isArray(data.analysis.formattingRecommendations) ? data.analysis.formattingRecommendations : [],
-        sectionBreakdown: typeof data.analysis.sectionBreakdown === 'object' ? data.analysis.sectionBreakdown : {},
-        industryInsight: typeof data.analysis.industryInsight === 'string' ? data.analysis.industryInsight : undefined,
-        targetRoles: Array.isArray(data.analysis.targetRoles) ? data.analysis.targetRoles : undefined,
-        experienceEntries: Array.isArray(data.analysis.experienceEntries) ? data.analysis.experienceEntries : undefined,
-      };
-      
-      // If industry is detected but no industry insight is provided, get one
-      if (safeData.industry && !safeData.industryInsight) {
-        try {
-          const insight = getIndustrySpecificAtsInsights(safeData.industry);
-          safeData.industryInsight = insight;
-        } catch (error) {
-          console.error("Error getting industry insights:", error);
-          // Continue without insight
-        }
-      }
-      
-      // Set the analysis result
-      setAnalysis(safeData);
-      
-      // Store the analysis in the database
-      try {
-        const updateResponse = await fetch('/api/update-cv-analysis', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            cvId: selectedCVId,
-            analysis: safeData
-          }),
-        });
+      // If analysis is already complete, update state and return
+      if (data.fromCache && data.analysis) {
+        console.log("Using cached analysis results");
+        setAnalysis(mapAnalysisData(data.analysis));
+        setLoading(false);
         
-        if (!updateResponse.ok) {
-          console.error("Failed to update CV analysis in database");
+        if (onAnalysisComplete) {
+          setAllowProceed(true);
+          onAnalysisComplete(selectedCVId);
         }
-      } catch (updateError) {
-        console.error("Error updating CV analysis:", updateError);
+        return;
       }
       
-      // Call the onAnalysisComplete callback if provided
-      if (onAnalysisComplete && typeof onAnalysisComplete === 'function') {
-        try {
-          onAnalysisComplete(selectedCVId);
-        } catch (callbackError) {
-          console.error("Error in onAnalysisComplete callback:", callbackError);
+      // If analysis is in progress, start polling for status
+      if (data.inProgress) {
+        console.log("Analysis in progress, starting polling");
+        setAnalysisStatus('in_progress');
+        
+        // Clear any existing interval
+        if (pollingInterval) {
+          clearInterval(pollingInterval);
         }
+        
+        // Start polling
+        const interval = setInterval(() => {
+          pollAnalysisStatus(selectedCVId);
+        }, 2000); // Poll every 2 seconds
+        
+        setPollingInterval(interval);
       }
     } catch (error) {
-      console.error("Analysis error:", error);
-      setError(error instanceof Error ? error.message : "An unknown error occurred");
-    } finally {
+      console.error("Error analyzing CV:", error);
+      setError(error instanceof Error ? error.message : "Failed to analyze CV");
       setLoading(false);
+      
+      // Clear polling interval if it exists
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+        setPollingInterval(null);
+      }
     }
   }
 
@@ -339,6 +410,51 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
     );
   };
 
+  // Render loading state with progress
+  const renderLoadingState = () => {
+    return (
+      <div className="flex flex-col items-center justify-center py-10">
+        <div className="w-full max-w-xs mb-6">
+          <div className="bg-[#222222] h-2 rounded-full overflow-hidden">
+            <div 
+              className="bg-[#B4916C] h-full rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${analysisProgress}%` }}
+            ></div>
+          </div>
+          <p className="text-[#F9F6EE]/60 text-sm mt-2 text-center font-borna">
+            {analysisProgress}% complete
+          </p>
+        </div>
+        
+        <div className="relative w-16 h-16 mb-5">
+          <div className="absolute inset-0 border-4 border-[#111111] rounded-full"></div>
+          <div className="absolute inset-0 border-4 border-t-[#333333] rounded-full animate-spin"></div>
+        </div>
+        
+        <p className="text-[#F9F6EE] text-center font-safiro">
+          {getAnalysisStatusMessage()}
+        </p>
+        <p className="text-[#F9F6EE]/50 text-sm text-center mt-2 font-borna">
+          This may take a minute as our AI evaluates your document.
+        </p>
+      </div>
+    );
+  };
+  
+  // Get status message based on current analysis status
+  const getAnalysisStatusMessage = () => {
+    switch(analysisStatus) {
+      case 'starting':
+        return 'Starting CV analysis...';
+      case 'in_progress':
+        return 'Analyzing your CV...';
+      case 'failed':
+        return 'Analysis failed';
+      default:
+        return 'Analyzing your CV...';
+    }
+  };
+
   return (
     <Card className="w-full border border-[#222222] bg-[#111111] rounded-xl shadow-md overflow-hidden">
       <CardHeader className="bg-[#0D0D0D] border-b border-[#222222] px-5 py-4">
@@ -374,16 +490,7 @@ export default function AnalyzeCVCard({ cvs, onAnalysisComplete, children }: Ana
           </div>
         )}
         
-        {loading && (
-          <div className="flex flex-col items-center justify-center py-10">
-            <div className="relative w-16 h-16 mb-5">
-              <div className="absolute inset-0 border-4 border-[#111111] rounded-full"></div>
-              <div className="absolute inset-0 border-4 border-t-[#333333] rounded-full animate-spin"></div>
-            </div>
-            <p className="text-[#F9F6EE] text-center font-safiro">Analyzing your CV...</p>
-            <p className="text-[#F9F6EE]/50 text-sm text-center mt-2 font-borna">This may take a minute as our AI evaluates your document.</p>
-          </div>
-        )}
+        {loading && renderLoadingState()}
         
         {error && (
           <Alert className="mb-5 bg-[#1a0505] border border-[#3d1a1a] text-[#f5c2c2] rounded-lg">

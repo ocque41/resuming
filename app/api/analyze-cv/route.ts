@@ -48,9 +48,10 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const fileName = searchParams.get("fileName");
     const cvId = searchParams.get("cvId");
+    const forceRefresh = searchParams.get("forceRefresh") === "true";
 
     // Early validations with helpful error messages
-  if (!fileName) {
+    if (!fileName) {
       console.error("Missing fileName parameter in analyze-cv request");
       return new Response(JSON.stringify({ 
         error: "Missing fileName parameter",
@@ -134,11 +135,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Perform CV analysis to determine industry, language, and calculate ATS score
-    const analysis = await analyzeCV(cvId, String(cv.userId), cvContent, cv.metadata);
-    console.log(`Analysis completed for CV ${cvId} with ATS score: ${analysis.atsScore}`);
-
-    // Merge with existing metadata (if any)
+    // Initialize or parse existing metadata
     let metadata = {};
     if (cv.metadata) {
       try {
@@ -150,57 +147,99 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Create updated metadata with analysis results
+    // Check if analysis is already in progress
+    const isAnalyzing = metadata && (metadata as any).analyzing === true;
+    
+    // Check if analysis is already completed and not forcing refresh
+    const isAnalyzed = metadata && 
+                       (metadata as any).analyzedAt && 
+                       (metadata as any).atsScore && 
+                       !forceRefresh;
+    
+    // If analysis is completed and not forcing refresh, return cached results
+    if (isAnalyzed) {
+      console.log(`Using cached analysis for CV ${cvId} (analyzed at ${(metadata as any).analyzedAt})`);
+      return new Response(JSON.stringify({
+        success: true,
+        analysis: {
+          cvId,
+          userId: cv.userId,
+          atsScore: (metadata as any).atsScore,
+          language: (metadata as any).language || 'en',
+          industry: (metadata as any).industry || 'General',
+          keywords: (metadata as any).keywordAnalysis || [],
+          strengths: (metadata as any).strengths || [],
+          weaknesses: (metadata as any).weaknesses || [],
+          recommendations: (metadata as any).recommendations || [],
+          formatStrengths: (metadata as any).formattingStrengths || [],
+          formatWeaknesses: (metadata as any).formattingWeaknesses || [],
+          formatRecommendations: (metadata as any).formattingRecommendations || [],
+          metadata,
+          sections: (metadata as any).sections || [],
+          skills: (metadata as any).skills || [],
+          experienceEntries: (metadata as any).experienceEntries || [],
+          industryKeywords: (metadata as any).industryKeywords || [],
+          missingSoftSkills: (metadata as any).missingSoftSkills || [],
+          missingHardSkills: (metadata as any).missingHardSkills || [],
+          industrySuggestions: (metadata as any).industrySuggestions || []
+        },
+        message: "Using cached CV analysis",
+        fromCache: true
+      }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    
+    // If analysis is already in progress, return status
+    if (isAnalyzing && !forceRefresh) {
+      console.log(`Analysis already in progress for CV ${cvId}`);
+      return new Response(JSON.stringify({
+        success: true,
+        message: "CV analysis is in progress",
+        inProgress: true,
+        startedAt: (metadata as any).analysisStartedAt,
+        metadata
+      }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    
+    // Update metadata to mark CV as being analyzed
     const updatedMetadata = {
       ...metadata,
-      atsScore: analysis.atsScore,
-      language: analysis.language,
-      industry: analysis.industry,
-      keywordAnalysis: analysis.keywords,
-      strengths: analysis.strengths,
-      weaknesses: analysis.weaknesses,
-      recommendations: analysis.recommendations,
-      formattingStrengths: analysis.formatStrengths,
-      formattingWeaknesses: analysis.formatWeaknesses,
-      formattingRecommendations: analysis.formatRecommendations,
-      skills: analysis.skills,
-      experienceEntries: analysis.experienceEntries,
-      industryKeywords: analysis.industryKeywords,
-      missingSoftSkills: analysis.missingSoftSkills,
-      missingHardSkills: analysis.missingHardSkills,
-      industrySuggestions: analysis.industrySuggestions,
-      analyzedAt: new Date().toISOString(),
-      ready_for_optimization: true,
-      analysis_status: 'complete'
+      analyzing: true,
+      analysisStartedAt: new Date().toISOString(),
+      analysisStatus: 'starting',
+      analysisProgress: 0
     };
-
-    // Update CV record with metadata safely
+    
+    // Update CV record with analysis status
     try {
       await db.update(cvs)
         .set({ metadata: JSON.stringify(updatedMetadata) })
         .where(eq(cvs.id, cvIdNumber));
       
-      console.log(`Successfully updated metadata for CV ${cvId}`);
+      console.log(`Updated metadata to mark CV ${cvId} as being analyzed`);
     } catch (updateError) {
       console.error(`Error updating metadata for CV ${cvId}:`, updateError);
-      return new Response(JSON.stringify({ 
-        error: "Failed to update CV metadata",
-        details: updateError instanceof Error ? updateError.message : "Unknown database error",
-        success: false
-      }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
+      // Continue even if update fails
     }
-
-    // Return analysis results
-    return new Response(JSON.stringify({ 
-      success: true, 
-      analysis,
-      message: "CV analyzed successfully"
+    
+    // Start analysis in background (don't await to prevent timeout)
+    startBackgroundAnalysis(cvIdNumber, String(cv.userId), cvContent, updatedMetadata);
+    
+    // Return immediate response that analysis has started
+    return new Response(JSON.stringify({
+      success: true,
+      message: "CV analysis started",
+      inProgress: true,
+      startedAt: updatedMetadata.analysisStartedAt,
+      metadata: updatedMetadata,
+      pollingEndpoint: `/api/cv/analysis-status?cvId=${cvId}`
     }), {
       headers: { "Content-Type": "application/json" },
     });
+    
   } catch (error) {
     // Log the detailed error
     console.error(`Unexpected error analyzing CV:`, error);
@@ -214,6 +253,84 @@ export async function GET(request: NextRequest) {
       status: 500,
       headers: { "Content-Type": "application/json" },
     });
+  }
+}
+
+/**
+ * Start background analysis process without awaiting completion
+ */
+async function startBackgroundAnalysis(
+  cvId: number, 
+  userId: string, 
+  cvContent: string, 
+  initialMetadata: any
+): Promise<void> {
+  try {
+    // Run analysis without awaiting its completion to prevent timeout
+    analyzeCV(String(cvId), userId, cvContent, initialMetadata)
+      .then(async (analysis) => {
+        // Update metadata with analysis results
+        const updatedMetadata = {
+          ...initialMetadata,
+          analyzing: false,
+          analyzedAt: new Date().toISOString(),
+          atsScore: analysis.atsScore,
+          language: analysis.language,
+          industry: analysis.industry,
+          keywordAnalysis: analysis.keywords,
+          strengths: analysis.strengths,
+          weaknesses: analysis.weaknesses,
+          recommendations: analysis.recommendations,
+          formattingStrengths: analysis.formatStrengths,
+          formattingWeaknesses: analysis.formatWeaknesses,
+          formattingRecommendations: analysis.formatRecommendations,
+          skills: analysis.skills,
+          experienceEntries: analysis.experienceEntries,
+          industryKeywords: analysis.industryKeywords,
+          missingSoftSkills: analysis.missingSoftSkills,
+          missingHardSkills: analysis.missingHardSkills,
+          industrySuggestions: analysis.industrySuggestions,
+          ready_for_optimization: true,
+          analysis_status: 'complete',
+          analysisProgress: 100
+        };
+        
+        // Update CV record with analysis results
+        try {
+          await db.update(cvs)
+            .set({ metadata: JSON.stringify(updatedMetadata) })
+            .where(eq(cvs.id, cvId));
+          
+          console.log(`Successfully updated metadata with analysis results for CV ${cvId}`);
+        } catch (updateError) {
+          console.error(`Error updating metadata with analysis results for CV ${cvId}:`, updateError);
+        }
+      })
+      .catch((error) => {
+        console.error(`Error in background analysis for CV ${cvId}:`, error);
+        
+        // Update metadata to mark analysis as failed
+        const failedMetadata = {
+          ...initialMetadata,
+          analyzing: false,
+          analysisError: error instanceof Error ? error.message : "Unknown error",
+          analysisStatus: 'failed',
+          analysisFailedAt: new Date().toISOString()
+        };
+        
+        // Update CV record with failure status
+        db.update(cvs)
+          .set({ metadata: JSON.stringify(failedMetadata) })
+          .where(eq(cvs.id, cvId))
+          .catch((updateError) => {
+            console.error(`Failed to update metadata after analysis error for CV ${cvId}:`, updateError);
+          });
+      });
+    
+    console.log(`Started background analysis for CV ${cvId}`);
+  } catch (error) {
+    console.error(`Error starting background analysis for CV ${cvId}:`, error);
+    throw error;
   }
 }
 
