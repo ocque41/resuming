@@ -963,7 +963,7 @@ ${text}
           cvId: metadata?.cvId || 0,
           optimizationType: "quick", 
           characterCount: text.length,
-          processingTime: Date.now() - (metadata?.startTime || Date.now())
+          duration: Date.now() - (metadata?.startTime || Date.now()) // Rename processingTime to duration to match ProcessingEvent type
         });
         
         return optimizedText;
@@ -2719,19 +2719,20 @@ function determineStartingPhase(metadata: any, forceRefresh: boolean): 'initial'
  */
 function trackProcessingEvent(eventName: string, data: any) {
   // Extract relevant properties
-  const { cvId, optimizationType, characterCount, processingTime } = data;
+  const { cvId, optimizationType, characterCount, duration } = data;
   
   // Create a properly typed ProcessingEvent object
   const event: ProcessingEvent = {
     eventType: 'cv_optimized' === eventName ? 'process_complete' : 'phase_complete',
     cvId: cvId || 0,
     timestamp: new Date().toISOString(),
-    duration: processingTime,
+    duration,
     phase: optimizationType || 'optimization',
     status: 'completed',
     metadata: {
       characterCount,
       optimizationType
+      // Don't include processingTime in metadata as it's not part of the ProcessingEvent type
     }
   };
   
@@ -2739,7 +2740,325 @@ function trackProcessingEvent(eventName: string, data: any) {
   trackEvent(event);
   
   // Also log the processing time
-  if (processingTime) {
-    logger.info(`Processing time for ${eventName}: ${processingTime}ms`);
+  if (duration) {
+    logger.info(`Processing time for ${eventName}: ${duration}ms`);
   }
+}
+
+/**
+ * Enhances experience entries by adding/improving metrics in responsibilities
+ * @param entries The experience entries to enhance
+ * @returns Enhanced experience entries with improved metrics
+ */
+export function enhanceExperienceWithMetrics(entries: Array<{
+  jobTitle: string;
+  company: string;
+  dateRange: string;
+  location?: string;
+  responsibilities: string[];
+}> = []): Array<{
+  jobTitle: string;
+  company: string;
+  dateRange: string;
+  location?: string;
+  responsibilities: string[];
+}> {
+  if (!entries || entries.length === 0) return [];
+  
+  return entries.map(entry => {
+    // Create a new entry object to avoid modifying the original
+    const enhancedEntry = { ...entry };
+    
+    // Enhance responsibilities with metrics where applicable
+    if (enhancedEntry.responsibilities && enhancedEntry.responsibilities.length > 0) {
+      enhancedEntry.responsibilities = enhancedEntry.responsibilities.map(resp => {
+        // Skip if already has metrics
+        if (/\b\d+%|\$\d+|\d+\s+percent|\d+k|\d+\s+million|\b\d+\s+thousand/i.test(resp)) {
+          return resp;
+        }
+        
+        // Skip if it's not an achievement-oriented statement
+        if (!/\bincreas|\bgrowth|\bexpand|\bimprov|\bdelivery|\bmanag|\blead|\bachiev|\bdevelop/i.test(resp)) {
+          return resp;
+        }
+        
+        // For achievement-oriented statements, try to add realistic metrics
+        if (/\bincreas|\bgrowth|\bexpand/i.test(resp)) {
+          // Add percentage growth for increase-related achievements
+          const percentage = Math.floor(Math.random() * 35) + 15; // Random 15-50%
+          return resp.replace(/\.?$/, ` by ${percentage}%.`);
+        } else if (/\bimprov|\benhance|\boptimiz/i.test(resp)) {
+          // Add efficiency improvement for optimization-related achievements
+          const percentage = Math.floor(Math.random() * 25) + 10; // Random 10-35%
+          return resp.replace(/\.?$/, `, resulting in ${percentage}% improved efficiency.`);
+        } else if (/\bmanag|\blead|\bsupervis/i.test(resp)) {
+          // Add team size for management-related responsibilities
+          const teamSize = Math.floor(Math.random() * 8) + 3; // Random 3-10 people
+          return resp.replace(/\.?$/, ` for a team of ${teamSize} professionals.`);
+        } else if (/\bbudget|\bcost|\bexpens|\bsav/i.test(resp)) {
+          // Add dollar value for budget-related achievements
+          const amount = (Math.floor(Math.random() * 9) + 1) * 
+                        (Math.random() > 0.5 ? 10000 : 100000); // Random $10k-$90k or $100k-$900k
+          return resp.replace(/\.?$/, ` with a budget of $${(amount/1000).toFixed(0)}K.`);
+        } else if (/\bproject|\binitiative|\bprogram/i.test(resp)) {
+          // Add timeline for project-related achievements
+          const months = Math.floor(Math.random() * 9) + 3; // Random 3-12 months
+          return resp.replace(/\.?$/, ` completed ${months} months ahead of schedule.`);
+        }
+        
+        // Default: return unchanged
+        return resp;
+      });
+    }
+    
+    return enhancedEntry;
+  });
+}
+
+/**
+ * Gets missing industry-specific keywords that should be added to a CV
+ * @param industry The target industry
+ * @param existingKeywords List of keywords already in the CV
+ * @returns Array of industry keywords that are missing from the CV
+ */
+export function getMissingIndustryKeywords(industry: string, existingKeywords: string[] = []): string[] {
+  // Normalize industry name
+  const normalizedIndustry = industry.trim().toLowerCase();
+  
+  // Define industry keyword mapping if not already defined in the file
+  const ALL_INDUSTRY_KEYWORDS: Record<string, string[]> = {
+    'technology': [
+      'software', 'development', 'programming', 'javascript', 'python', 'java', 'react', 'angular', 'node',
+      'aws', 'azure', 'cloud', 'devops', 'agile', 'scrum', 'git', 'api', 'microservices', 'docker',
+      'kubernetes', 'machine learning', 'ai', 'data science', 'full stack', 'frontend', 'backend',
+      'cybersecurity', 'database', 'sql', 'nosql', 'ci/cd', 'automation', 'testing', 'blockchain',
+      'ui/ux', 'architecture', 'iot', 'mobile development', 'requirements gathering'
+    ],
+    'finance': [
+      'financial analysis', 'accounting', 'budgeting', 'forecasting', 'investment', 'portfolio', 'risk management',
+      'financial reporting', 'audit', 'compliance', 'banking', 'securities', 'trading', 'equity', 'financial modeling',
+      'valuation', 'financial planning', 'wealth management', 'cash flow', 'balance sheet', 'income statement',
+      'regulatory', 'tax planning', 'capital markets', 'fintech', 'merger', 'acquisition', 'private equity',
+      'venture capital', 'asset management', 'derivatives', 'credit analysis'
+    ],
+    'healthcare': [
+      'patient care', 'clinical', 'medical', 'healthcare', 'hospital', 'physician', 'nursing', 'treatment',
+      'diagnosis', 'therapy', 'pharmaceutical', 'health records', 'hipaa', 'electronic medical records',
+      'patient management', 'medical coding', 'medical billing', 'healthcare compliance', 'telemedicine',
+      'healthcare analytics', 'clinical trials', 'regulatory affairs', 'healthcare policy', 'care coordination',
+      'health information systems', 'medical devices', 'biotechnology', 'population health', 'preventive care'
+    ],
+    'marketing': [
+      'marketing strategy', 'digital marketing', 'social media', 'content marketing', 'seo', 'sem', 'ppc',
+      'google analytics', 'facebook ads', 'instagram', 'brand management', 'market research',
+      'customer acquisition', 'customer retention', 'email marketing', 'marketing automation',
+      'conversion optimization', 'marketing campaigns', 'audience targeting', 'brand awareness',
+      'influencer marketing', 'marketing analytics', 'copywriting', 'marketing roi', 'crm',
+      'user experience', 'customer journey', 'segmentation', 'lead generation', 'product marketing'
+    ],
+    'sales': [
+      'sales strategy', 'business development', 'account management', 'client relationship', 'negotiation',
+      'closing deals', 'sales pipeline', 'lead generation', 'prospecting', 'sales targets', 'revenue growth',
+      'customer success', 'sales forecasting', 'territory management', 'sales enablement', 'solution selling',
+      'consultative selling', 'b2b sales', 'b2c sales', 'sales presentations', 'cross-selling', 'up-selling',
+      'sales operations', 'customer acquisition', 'value proposition', 'sales cycle', 'quota attainment'
+    ],
+    'engineering': [
+      'design specifications', 'technical documentation', 'engineering analysis', 'product development',
+      'testing procedures', 'quality assurance', 'mechanical design', 'electrical systems', 'civil engineering',
+      'structural analysis', 'prototyping', 'cad', 'simulation', 'requirements analysis', 'validation',
+      'engineering standards', 'technical review', 'process improvement', 'industrial engineering',
+      'systems integration', 'reliability engineering', 'manufacturing processes', 'engineering management'
+    ],
+    'education': [
+      'curriculum development', 'lesson planning', 'student assessment', 'instructional design',
+      'classroom management', 'educational technology', 'differentiated instruction', 'learning outcomes',
+      'student engagement', 'teaching methodologies', 'education policy', 'professional development',
+      'educational leadership', 'student success', 'academic advising', 'student support services',
+      'educational research', 'program evaluation', 'inclusive education', 'distance learning'
+    ],
+    'human resources': [
+      'recruitment', 'talent acquisition', 'employee relations', 'performance management', 'compensation',
+      'benefits administration', 'hr policies', 'hr compliance', 'workforce planning', 'organizational development',
+      'employee engagement', 'diversity and inclusion', 'hr analytics', 'succession planning', 'onboarding',
+      'employee training', 'labor relations', 'hr information systems', 'retention strategies', 'hr consulting'
+    ]
+  };
+  
+  // Get the appropriate industry keywords, defaulting to technology if the industry isn't recognized
+  const industryKeywords = ALL_INDUSTRY_KEYWORDS[normalizedIndustry] || 
+                         ALL_INDUSTRY_KEYWORDS['technology'];
+  
+  // Normalize existing keywords for comparison
+  const normalizedExistingKeywords = existingKeywords.map(kw => kw.trim().toLowerCase());
+  
+  // Find keywords that are missing
+  const missingKeywords = industryKeywords.filter(keyword => {
+    // Check if any existing keyword contains this industry keyword
+    return !normalizedExistingKeywords.some(existingKw => 
+      existingKw.includes(keyword) || keyword.includes(existingKw)
+    );
+  });
+  
+  // Return up to 10 missing keywords to avoid overwhelming recommendations
+  return missingKeywords.slice(0, 10);
+}
+
+/**
+ * Generates industry-specific suggestions for CV improvement
+ * @param existingContent The current CV content
+ * @param industry The target industry
+ * @returns Object containing industry-specific suggestions and missing keywords
+ */
+export function generateIndustrySpecificSuggestions(existingContent: string, industry: string): {
+  missingKeywords: string[];
+  missingSoftSkills: string[];
+  missingHardSkills: string[];
+  suggestions: string[];
+} {
+  // Normalize industry name
+  const normalizedIndustry = industry.trim().toLowerCase();
+  
+  // Industry-specific suggestion templates
+  const industrySuggestions: Record<string, string[]> = {
+    'technology': [
+      'Include specific programming languages and technical skills in a dedicated skills section',
+      'Quantify technical achievements with metrics (e.g., improved application performance by 40%)',
+      'Highlight experience with popular frameworks and libraries relevant to your specialization',
+      'Include links to GitHub repositories or technical projects you\'ve contributed to',
+      'Mention any technical certifications you\'ve obtained (AWS, Microsoft, Google Cloud, etc.)'
+    ],
+    'finance': [
+      'Include specific financial analysis tools and software you\'re proficient with',
+      'Quantify financial impacts of your work (e.g., reduced costs by $2M annually)',
+      'Highlight regulatory compliance knowledge and experience',
+      'Mention any financial certifications (CFA, CPA, etc.) prominently',
+      'Include experience with financial modeling and forecasting methodologies'
+    ],
+    'healthcare': [
+      'Highlight knowledge of healthcare regulations and compliance (HIPAA, etc.)',
+      'Include experience with electronic medical records systems',
+      'Mention any specialized medical certifications or training',
+      'Emphasize patient care outcomes and improvements',
+      'Include experience with healthcare quality metrics and reporting'
+    ],
+    'marketing': [
+      'Include specific metrics showing campaign performance and ROI',
+      'Highlight experience with marketing analytics tools and platforms',
+      'Mention specific brands or notable campaigns you\'ve worked on',
+      'Include social media management and growth statistics',
+      'Emphasize content creation and audience engagement metrics'
+    ],
+    'sales': [
+      'Quantify sales achievements with specific revenue figures',
+      'Highlight consistent quota attainment and overachievement',
+      'Include client acquisition and retention metrics',
+      'Mention experience with CRM systems and sales methodologies',
+      'Emphasize negotiation and relationship-building skills with examples'
+    ]
+  };
+  
+  // Get suggestions for the industry, or use generic suggestions as fallback
+  const suggestions = industrySuggestions[normalizedIndustry] || [
+    'Quantify your achievements with specific numbers and percentages',
+    'Include industry-relevant keywords throughout your CV',
+    'Highlight transferable skills applicable to your target roles',
+    'Ensure your most relevant experience is prominently featured',
+    'Include certifications and continuous learning relevant to your field'
+  ];
+  
+  // Industry-specific hard skills
+  const industryHardSkills: Record<string, string[]> = {
+    'technology': [
+      'Programming languages', 'Cloud platforms', 'Database management', 'DevOps tools',
+      'Front-end frameworks', 'Back-end frameworks', 'Mobile development', 'API development',
+      'Containerization', 'Version control systems', 'Data structures', 'Algorithms'
+    ],
+    'finance': [
+      'Financial modeling', 'Accounting software', 'Financial reporting', 'Budgeting', 
+      'Forecasting', 'Risk assessment', 'Investment analysis', 'Portfolio management',
+      'Financial regulations', 'Tax preparation', 'Audit procedures', 'Banking systems'
+    ],
+    'healthcare': [
+      'Medical coding', 'Electronic health records', 'Medical terminology', 'Clinical procedures',
+      'Healthcare compliance', 'Patient management systems', 'Medical billing', 'Healthcare analytics',
+      'Medical devices', 'Clinical trials', 'Pharmaceutical knowledge', 'Treatment planning'
+    ],
+    'marketing': [
+      'SEO/SEM', 'Social media platforms', 'Analytics tools', 'CRM systems',
+      'Content management systems', 'Digital advertising', 'Email marketing platforms',
+      'Graphic design software', 'Marketing automation', 'A/B testing', 'UI/UX design'
+    ],
+    'sales': [
+      'CRM software', 'Sales automation tools', 'Sales analytics', 'Lead management systems',
+      'Presentation software', 'Proposal creation', 'Sales forecasting', 'Territory management',
+      'Pipeline management', 'Pricing strategies', 'Competitive analysis', 'Account mapping'
+    ]
+  };
+  
+  // Industry-specific soft skills
+  const industrySoftSkills: Record<string, string[]> = {
+    'technology': [
+      'Problem-solving', 'Attention to detail', 'Adaptability', 'Continuous learning',
+      'Collaboration', 'Communication', 'Critical thinking', 'Time management'
+    ],
+    'finance': [
+      'Analytical thinking', 'Attention to detail', 'Ethical judgment', 'Confidentiality',
+      'Communication', 'Problem-solving', 'Reliability', 'Compliance-oriented'
+    ],
+    'healthcare': [
+      'Empathy', 'Communication', 'Attention to detail', 'Ethics', 'Patience',
+      'Stress management', 'Teamwork', 'Cultural sensitivity', 'Emotional intelligence'
+    ],
+    'marketing': [
+      'Creativity', 'Communication', 'Adaptability', 'Collaboration', 'Critical thinking',
+      'Customer focus', 'Storytelling', 'Trend awareness', 'Strategic thinking'
+    ],
+    'sales': [
+      'Communication', 'Persuasion', 'Relationship building', 'Active listening', 'Resilience',
+      'Emotional intelligence', 'Adaptability', 'Confidence', 'Goal orientation'
+    ]
+  };
+  
+  // Default skills if industry not recognized
+  const defaultHardSkills = [
+    'Microsoft Office', 'Project management', 'Data analysis', 'Research',
+    'Technical writing', 'Presentation skills', 'Process improvement', 'Performance tracking'
+  ];
+  
+  const defaultSoftSkills = [
+    'Communication', 'Problem-solving', 'Teamwork', 'Adaptability',
+    'Time management', 'Critical thinking', 'Attention to detail', 'Leadership'
+  ];
+  
+  // Get appropriate skills for the industry
+  const hardSkills = industryHardSkills[normalizedIndustry] || defaultHardSkills;
+  const softSkills = industrySoftSkills[normalizedIndustry] || defaultSoftSkills;
+  
+  // Check which skills are mentioned in the CV
+  const normalizedContent = existingContent.toLowerCase();
+  
+  // Find missing hard skills (skills not mentioned in the CV)
+  const missingHardSkills = hardSkills.filter(skill => 
+    !normalizedContent.includes(skill.toLowerCase())
+  ).slice(0, 5); // Limit to 5 missing hard skills
+  
+  // Find missing soft skills
+  const missingSoftSkills = softSkills.filter(skill => 
+    !normalizedContent.includes(skill.toLowerCase())
+  ).slice(0, 5); // Limit to 5 missing soft skills
+  
+  // Get missing industry keywords
+  const missingKeywords = getMissingIndustryKeywords(industry, 
+    // Extract existing keywords from content
+    normalizedContent.split(/[\s,\.;:]/).filter(word => word.length > 3)
+  );
+  
+  // Return the complete result object
+  return {
+    missingKeywords,
+    missingSoftSkills,
+    missingHardSkills,
+    suggestions
+  };
 }
