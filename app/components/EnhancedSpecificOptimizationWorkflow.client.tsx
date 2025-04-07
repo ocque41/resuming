@@ -2116,21 +2116,38 @@ const EnhancedSpecificOptimizationWorkflow: React.FC<EnhancedSpecificOptimizatio
   
   const fetchOriginalText = async (cvId: string) => {
     try {
-      const response = await fetch(`/api/cv/${cvId}/content`);
+      const response = await fetch(`/api/cv/get-text?cvId=${cvId}`);
       if (!response.ok) {
         throw new Error('Failed to fetch CV content');
       }
       const data = await response.json();
-      setOriginalText(data.content);
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to fetch CV content');
+      }
+      setOriginalText(data.text);
     } catch (error) {
-      setError('Error fetching CV content');
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Error fetching CV content';
+      setError(errorMessage);
       console.error('Error fetching CV content:', error);
+      
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
     }
   };
   
   const handleOptimize = async () => {
     if (!selectedCVId || !jobDescription) {
       setError('Please select a CV and enter a job description');
+      return;
+    }
+
+    if (!originalText) {
+      setError('CV content is not available. Please select a different CV.');
       return;
     }
     
@@ -2183,7 +2200,10 @@ const EnhancedSpecificOptimizationWorkflow: React.FC<EnhancedSpecificOptimizatio
       });
     } catch (error) {
       console.error('Optimization error:', error);
-      setError('Failed to optimize CV. Please try again.');
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Failed to optimize CV. Please try again.';
+      setError(errorMessage);
     } finally {
       setIsProcessing(false);
       setProcessingStatus(null);
