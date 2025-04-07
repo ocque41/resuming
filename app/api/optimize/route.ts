@@ -180,12 +180,168 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// Helper function to extract name from CV text
+function extractNameFromCV(text: string): string {
+  // Split text into lines and take the first few lines where name is usually found
+  const lines = text.split('\n').slice(0, 5).map(line => line.trim()).filter(line => line);
+  
+  // Try to find name in standard formats
+  // Look for lines that appear to be just a name
+  const nameLinePattern = /^([A-Z][a-z]*[-']?[a-z]+(?:\s+[A-Z]\.?)?(?:\s+[A-Z][a-z]*[-']?[a-z]+)+)(?:\s*,\s*(?:Jr\.|Sr\.|I{1,3}|IV|V|MD|PhD|MBA|CPA|PE))?$/;
+  
+  // Check for common prefixes that indicate a name line
+  const prefixPattern = /^(?:Dr\.|Mr\.|Mrs\.|Ms\.|Prof\.|Sir|Mx\.|Miss)\s+([A-Z][a-z]*[-']?[a-z]+(?:\s+[A-Z]\.?)?(?:\s+(?:van|von|de|da|del|della|di|du|le|la|den|der|dos|el|al)\s+)?(?:\s+[A-Z][a-z]*[-']?[a-z]+)+)(?:\s*,\s*(?:Jr\.|Sr\.|I{1,3}|IV|V|MD|PhD|MBA|CPA|PE))?$/;
+
+  // Try to find name at the beginning of the document (prioritize first line)
+  for (const line of lines) {
+    // Check for name with or without prefix
+    const nameMatch = line.match(nameLinePattern);
+    if (nameMatch) {
+      return nameMatch[1];
+    }
+    
+    // Check for name with prefix
+    const prefixMatch = line.match(prefixPattern);
+    if (prefixMatch) {
+      return prefixMatch[1];
+    }
+  }
+  
+  // Fall back to broader patterns if no clear name line is found
+  const combinedText = lines.join(' ');
+  
+  // Look for any capitalized name-like pattern
+  const broadPattern = /([A-Z][a-z]*[-']?[a-z]+(?:\s+[A-Z]\.?)?(?:\s+(?:van|von|de|da|del|della|di|du|le|la|den|der|dos|el|al)\s+)?(?:\s+[A-Z][a-z]*[-']?[a-z]+)+)/;
+  const broadMatch = combinedText.match(broadPattern);
+  
+  if (broadMatch) {
+    return broadMatch[1];
+  }
+  
+  // If even the broad pattern can't find anything, look for any capitalized words
+  const lastResortPattern = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/;
+  const lastResortMatch = combinedText.match(lastResortPattern);
+  
+  return lastResortMatch ? lastResortMatch[1] : 'Professional Resume';
+}
+
+// Add this function after extractNameFromCV
+function extractContactInformation(text: string): string {
+  let contactInfo = '';
+  
+  // Extract email addresses
+  const emailPattern = /([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/g;
+  const emailMatches = [...text.matchAll(emailPattern)];
+  if (emailMatches.length > 0) {
+    contactInfo += `Email: ${emailMatches[0][1]}\n`;
+  }
+  
+  // Extract phone numbers with various formats
+  const phonePatterns = [
+    /(\+\d{1,3}[\s.-]?\d{3}[\s.-]?\d{3}[\s.-]?\d{4})/g, // International format
+    /(\(\d{3}\)[\s.-]?\d{3}[\s.-]?\d{4})/g, // (123) 456-7890
+    /(\d{3}[\s.-]?\d{3}[\s.-]?\d{4})/g // 123-456-7890
+  ];
+  
+  let phoneFound = false;
+  for (const pattern of phonePatterns) {
+    const phoneMatches = [...text.matchAll(pattern)];
+    if (phoneMatches.length > 0 && !phoneFound) {
+      contactInfo += `Phone: ${phoneMatches[0][1]}\n`;
+      phoneFound = true;
+      break;
+    }
+  }
+  
+  // Extract LinkedIn profiles
+  const linkedinPattern = /(linkedin\.com\/in\/[a-zA-Z0-9_-]+)/g;
+  const linkedinMatches = [...text.matchAll(linkedinPattern)];
+  if (linkedinMatches.length > 0) {
+    contactInfo += `LinkedIn: ${linkedinMatches[0][1]}\n`;
+  }
+  
+  // Extract locations/addresses - look for city, state/country patterns
+  const locationPatterns = [
+    /([A-Z][a-z]+,\s*[A-Z]{2})/g, // City, ST
+    /([A-Z][a-z]+,\s*[A-Z][a-z]+)/g // City, State
+  ];
+  
+  let locationFound = false;
+  for (const pattern of locationPatterns) {
+    const locationMatches = [...text.matchAll(pattern)];
+    if (locationMatches.length > 0 && !locationFound) {
+      contactInfo += `Location: ${locationMatches[0][1]}\n`;
+      locationFound = true;
+      break;
+    }
+  }
+  
+  // Extract websites/portfolios
+  const websitePattern = /(https?:\/\/(?:www\.)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?)/g;
+  const websiteMatches = [...text.matchAll(websitePattern)];
+  if (websiteMatches.length > 0) {
+    // Filter out LinkedIn which is already extracted
+    const nonLinkedIn = websiteMatches.filter(match => !match[1].includes('linkedin'));
+    if (nonLinkedIn.length > 0) {
+      contactInfo += `Website: ${nonLinkedIn[0][1]}\n`;
+    }
+  }
+  
+  return contactInfo.trim();
+}
+
+// Helper function to personalize the summary with the name
+function personalizeProfileSummary(summary: string, name: string): string {
+  // If the summary already starts with the name, return as is
+  if (summary.startsWith(name)) {
+    return summary;
+  }
+  
+  // Check if summary starts with common third-person phrases
+  const thirdPersonStarts = [
+    'is a', 'is an', 'has', 'brings', 'offers', 'provides',
+    'specializes', 'focused', 'experienced', 'skilled'
+  ];
+  
+  // If summary starts with one of these phrases, prepend the name
+  for (const phrase of thirdPersonStarts) {
+    if (summary.toLowerCase().startsWith(phrase)) {
+      return `${name} ${summary}`;
+    }
+  }
+  
+  // If summary starts with first-person phrases, convert to third person
+  if (summary.toLowerCase().startsWith('i am') || summary.toLowerCase().startsWith('i have') || 
+      summary.toLowerCase().startsWith('i\'m')) {
+    // Replace first-person with third-person + name
+    return summary
+      .replace(/^I am/i, `${name} is`)
+      .replace(/^I'm/i, `${name} is`)
+      .replace(/^I have/i, `${name} has`);
+  }
+  
+  // For other cases, keep the summary as is
+  return summary;
+}
+
 // Enhanced function to create an optimized CV with ATS focus
 function createEnhancedOptimizedCV(originalText: string, templateId: string, analysisData: any = null): string {
   console.log(`Creating enhanced optimized CV with template: ${templateId}`);
   
   // Extract basic sections
   const sections = extractSections(originalText);
+  
+  // Extract name from CV
+  const personName = extractNameFromCV(originalText);
+  
+  // Extract contact information if not already in sections
+  let contactSection = sections.contact || '';
+  if (!contactSection || contactSection.trim().length < 10) {
+    const extractedContact = extractContactInformation(originalText);
+    if (extractedContact) {
+      contactSection = extractedContact;
+    }
+  }
   
   // If we have analysis data, use it to enhance the CV
   let industry = "General";
@@ -210,12 +366,14 @@ function createEnhancedOptimizedCV(originalText: string, templateId: string, ana
   
   // Create a more structured CV with template-inspired format and ATS best practices
   // Use standard section headers that ATS can recognize
-  let optimizedCV = ``;
+  let optimizedCV = `# ${personName}'s CV
+
+`;
 
   // Add contact section if found - place at top for ATS recognition
-  if (sections.contact) {
+  if (contactSection) {
     optimizedCV += `## CONTACT INFORMATION
-${sections.contact.trim()}
+${contactSection.trim()}
 
 `;
   }
@@ -225,6 +383,9 @@ ${sections.contact.trim()}
     const profileText = sections.profile || sections.summary || '';
     // Enhance with industry keywords if needed
     let enhancedProfile = profileText;
+    
+    // Personalize the summary with the name
+    enhancedProfile = personalizeProfileSummary(enhancedProfile, personName);
     
     // ATS optimization - add important industry keywords if they don't exist
     const missingKeywords = industryKeywords
@@ -242,7 +403,7 @@ ${enhancedProfile.trim()}
   } else {
     // Create a summary if none exists - important for ATS
     optimizedCV += `## PROFESSIONAL SUMMARY
-Experienced ${industry} professional with a proven track record of delivering results. Skilled in ${industryKeywords.slice(0, 5).join(', ')}.
+${personName} is an experienced ${industry} professional with a proven track record of delivering results. Skilled in ${industryKeywords.slice(0, 5).join(', ')}.
 
 `;
   }
