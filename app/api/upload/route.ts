@@ -15,6 +15,7 @@ import os from 'os';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { eq } from 'drizzle-orm';
+import { mkdir } from 'fs/promises';
 
 // Maximum file size (10MB)
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -103,18 +104,46 @@ export async function POST(request: NextRequest) {
         }),
       }).returning();
       
+      if (!Array.isArray(result)) {
+        throw new Error('Unexpected result format');
+      }
+
       // Extract text from PDF if it's a PDF file
       if (file.type === 'application/pdf') {
         try {
-          const text = await extractTextFromPdf(buffer.toString('utf-8'));
-          if (text && result[0]) {
+          // Create a temporary directory for processing PDFs
+          const tempDir = path.join(os.tmpdir(), 'cvoptimizer');
+          await mkdir(tempDir, { recursive: true }).catch(err => {
+            if (err.code !== 'EEXIST') throw err;
+          });
+          
+          // Save the buffer to a temporary file
+          const tempFilePath = path.join(tempDir, `${uuidv4()}.pdf`);
+          await fs.writeFile(tempFilePath, buffer);
+          console.log(`Saved uploaded PDF to temporary file: ${tempFilePath}`);
+          
+          // Extract text from the PDF using the file path
+          const text = await extractTextFromPdf(tempFilePath);
+          
+          // Clean up temporary file
+          try {
+            await fs.unlink(tempFilePath);
+            console.log(`Deleted temporary file: ${tempFilePath}`);
+          } catch (deleteErr) {
+            console.error('Error deleting temporary file:', deleteErr);
+          }
+          
+          // Update the CV record with the extracted text
+          if (text) {
+            console.log(`Successfully extracted text from PDF (${text.length} characters)`);
             await db.update(cvs)
               .set({ rawText: text })
-              .where(eq(cvs.id, result[0].id));
+              .where(eq(cvs.id, Number(result[0].id)));
+          } else {
+            console.warn(`Failed to extract text from PDF for CV ID: ${result[0].id}`);
           }
-        } catch (extractError) {
-          logger.error('Error extracting text from PDF', extractError as Error);
-          // Continue without text extraction
+        } catch (extractErr) {
+          console.error('Error processing PDF content:', extractErr);
         }
       }
       
