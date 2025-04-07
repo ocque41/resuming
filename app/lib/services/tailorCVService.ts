@@ -164,12 +164,25 @@ export function getIndustryOptimizationGuidance(jobDescription: string): {
     };
   }
   
-  // Return industry-specific guidance
+  // Ensure all required arrays exist
+  const importantSkills = Array.isArray(industry.importantSkills) && industry.importantSkills.length > 0 
+    ? industry.importantSkills 
+    : ['communication', 'teamwork', 'industry-specific knowledge'];
+    
+  const achievementMetrics = Array.isArray(industry.achievementMetrics) && industry.achievementMetrics.length > 0
+    ? industry.achievementMetrics
+    : ['efficiency improvements', 'cost savings', 'project completion'];
+    
+  const preferredFormats = Array.isArray(industry.preferredFormats) && industry.preferredFormats.length > 0
+    ? industry.preferredFormats
+    : ['chronological', 'achievement-focused'];
+  
+  // Return industry-specific guidance with validated arrays
   return {
     industry: industry.name,
-    keySkills: industry.importantSkills,
-    suggestedMetrics: industry.achievementMetrics,
-    formatGuidance: `Consider using ${industry.preferredFormats.join(' or ')} format for ${industry.name} roles`
+    keySkills: importantSkills,
+    suggestedMetrics: achievementMetrics,
+    formatGuidance: `Consider using ${preferredFormats.join(' or ')} format for ${industry.name} roles`
   };
 }
 
@@ -241,10 +254,12 @@ export async function tailorCVForJob(
         cvText,
         jobDescription,
         jobTitle,
-        // Pass industry insights to the API for better tailoring
+        // Pass industry insights to the API for better tailoring with safety checks
         industryInsights: {
-          industry: industryInsights.industry,
-          keySkills: industryInsights.keySkills
+          industry: industryInsights.industry || 'General',
+          keySkills: Array.isArray(industryInsights.keySkills) ? industryInsights.keySkills : [],
+          suggestedMetrics: Array.isArray(industryInsights.suggestedMetrics) ? industryInsights.suggestedMetrics : [],
+          formatGuidance: industryInsights.formatGuidance || ''
         }
       }),
     });

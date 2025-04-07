@@ -59,11 +59,16 @@ export async function POST(request: NextRequest) {
     // Include industry-specific guidance in the system prompt if available
     let industryGuidance = '';
     if (industryInsights) {
+      // Ensure all properties exist and are arrays before using join
+      const keySkills = Array.isArray(industryInsights.keySkills) ? industryInsights.keySkills.join(', ') : 'relevant skills';
+      const metrics = Array.isArray(industryInsights.suggestedMetrics) ? industryInsights.suggestedMetrics.join(', ') : 'quantifiable achievements';
+      const guidance = industryInsights.formatGuidance || 'Follow professional CV formatting conventions';
+      
       industryGuidance = `
 INDUSTRY-SPECIFIC GUIDANCE FOR ${industryInsights.industry.toUpperCase()}:
-1. Focus on these key skills for this industry: ${industryInsights.keySkills.join(', ')}
-2. Where possible, include these types of metrics in achievements: ${industryInsights.suggestedMetrics.join(', ')}
-3. ${industryInsights.formatGuidance}
+1. Focus on these key skills for this industry: ${keySkills}
+2. Where possible, include these types of metrics in achievements: ${metrics}
+3. ${guidance}
 `;
     }
 
@@ -116,7 +121,9 @@ MOST IMPORTANT CONSIDERATIONS:
       // Include industry details in the user prompt if available
       let industryContext = '';
       if (industryInsights) {
-        industryContext = `\nThe job appears to be in the ${industryInsights.industry} industry, where these skills are particularly valued: ${industryInsights.keySkills.join(', ')}.`;
+        // Safely access keySkills array
+        const keySkills = Array.isArray(industryInsights.keySkills) ? industryInsights.keySkills.join(', ') : 'relevant skills';
+        industryContext = `\nThe job appears to be in the ${industryInsights.industry} industry, where these skills are particularly valued: ${keySkills}.`;
       }
       
       const response = await client.chat({
