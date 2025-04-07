@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle, AlertTriangle, ChevronDown, Briefcase } from "lucide-react";
 import { analyzeCVContent, optimizeCVForJob } from '@/lib/services/mistral.service';
-import { tailorCVForJob } from '@/app/lib/services/tailorCVService';
+import { tailorCVForJob as origTailorCVForJob, getIndustryOptimizationGuidance } from '@/app/lib/services/tailorCVService';
 import { useToast } from "@/hooks/use-toast";
 import JobMatchDetailedAnalysis from './JobMatchDetailedAnalysis';
 import { downloadDocument, withDownloadTimeout, generateDocumentWithRetry } from '../utils/documentUtils';
@@ -2046,6 +2046,29 @@ const extractLanguages = (text: string): string[] => {
   
   // Deduplicate
   return [...new Set(languages)];
+};
+
+// Wrapper for tailorCVForJob to match the component's usage
+const tailorCVForJob = async ({
+  cvId,
+  cvName,
+  jobTitle,
+  jobDescription,
+  originalText
+}: {
+  cvId: string;
+  cvName: string;
+  jobTitle: string;
+  jobDescription: string;
+  originalText: string;
+}) => {
+  // Call the original function with the expected parameters
+  return origTailorCVForJob(
+    originalText,
+    jobDescription,
+    jobTitle,
+    parseInt(cvId)
+  );
 };
 
 // Main component implementation

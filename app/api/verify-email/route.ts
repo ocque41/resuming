@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { validateVerificationToken, markEmailAsVerified } from '@/lib/auth/verification';
 import { updateUserVerificationStatus } from '@/lib/notion/notion';

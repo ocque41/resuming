@@ -1,3 +1,6 @@
+// Add the runtime directive at the top of the file
+export const runtime = 'nodejs';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserById } from '@/lib/db/queries.server';
 import MistralClient from '@mistralai/mistralai';
@@ -5,8 +8,6 @@ import { logger } from '@/lib/logger';
 import { mistralRateLimiter } from '@/app/lib/services/rate-limiter';
 import { kv } from '@vercel/kv';
 
-// Set runtime to edge for better performance
-export const runtime = 'edge';
 // Increase max duration for this function
 export const maxDuration = 60; // 60 seconds
 

@@ -4,7 +4,7 @@ import { logger } from '@/lib/logger';
 import { getIndustryOptimizationGuidance } from '@/app/lib/services/tailorCVService';
 
 // Define status endpoint for client polling
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 /**
  * Main entry point for starting CV tailoring

@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { generateDocx } from '@/lib/docx/docxGenerator';
 import { getUser, getCVsForUser } from '@/lib/db/queries.server';

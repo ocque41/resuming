@@ -1,11 +1,11 @@
+export const runtime = 'nodejs';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser } from '@/lib/db/queries.server';
 import { logger } from '@/lib/logger';
 import { kv } from '@vercel/kv';
 
 // Define status endpoint for client polling
-export const runtime = 'edge';
-
 /**
  * Get the status of a CV tailoring job
  */
