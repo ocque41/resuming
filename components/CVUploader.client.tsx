@@ -35,6 +35,33 @@ export default function CVUploader() {
     }
     
     if (acceptedFiles.length > 0) {
+      const file = acceptedFiles[0];
+      console.log('File selected:', {
+        name: file.name,
+        type: file.type,
+        size: file.size
+      });
+      
+      // Set accepted file types
+      const acceptedTypes = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'text/plain'
+      ];
+      
+      // Check if file type is acceptable 
+      if (!file.type || !acceptedTypes.includes(file.type)) {
+        // For files without a type, check extension
+        const extension = file.name.split('.').pop()?.toLowerCase();
+        const acceptableExtensions = ['pdf', 'doc', 'docx', 'txt'];
+        
+        if (!extension || !acceptableExtensions.includes(extension)) {
+          setError(`Unsupported file type. Please upload PDF, DOC, DOCX, or TXT files.`);
+          return;
+        }
+      }
+      
       setFiles(acceptedFiles);
       setError(null);
       setSuccess(null);
@@ -87,6 +114,8 @@ export default function CVUploader() {
 
     const formData = new FormData();
     formData.append('file', files[0]);
+    
+    console.log('Starting upload for file:', files[0].name);
 
     try {
       // Simulate progress updates
@@ -104,12 +133,21 @@ export default function CVUploader() {
       });
 
       clearInterval(progressInterval);
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Upload failed');
+      
+      let responseData;
+      try {
+        responseData = await response.json();
+      } catch (parseError) {
+        console.error('Error parsing response:', parseError);
+        throw new Error('Failed to parse server response');
       }
 
+      if (!response.ok) {
+        console.error('Upload failed with status:', response.status, responseData);
+        throw new Error(responseData?.error || `Upload failed with status: ${response.status}`);
+      }
+
+      console.log('Upload successful:', responseData);
       setUploadProgress(100);
       setSuccess('Document uploaded successfully!');
       
