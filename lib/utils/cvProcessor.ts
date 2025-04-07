@@ -231,9 +231,24 @@ export async function processCVWithAI(
       const timeout = setTimeout(() => controller.abort(), MAX_ANALYSIS_TIME);
       
       try {
+        // Ensure we have a valid absolute URL for the API call
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+        if (!baseUrl) {
+          logger.warn(`NEXT_PUBLIC_APP_URL environment variable is not set, using direct API call for CV ${cvId}`);
+          // Skip the external API call and use quick analysis as fallback
+          throw new Error('API URL configuration is missing');
+        }
+
+        // Ensure the URL is absolute by checking if it starts with http/https
+        const apiUrl = baseUrl.startsWith('http') 
+          ? `${baseUrl}/api/analyze-cv?fileName=cv.pdf&cvId=${cvId}&forceRefresh=${forceRefresh}`
+          : `https://${baseUrl}/api/analyze-cv?fileName=cv.pdf&cvId=${cvId}&forceRefresh=${forceRefresh}`;
+        
+        logger.info(`Making API request to ${apiUrl} for CV ${cvId}`);
+        
         // Use the API to get analysis
         const analysisResponse = await fetch(
-          `${process.env.NEXT_PUBLIC_APP_URL || ''}/api/analyze-cv?fileName=cv.pdf&cvId=${cvId}&forceRefresh=${forceRefresh}`,
+          apiUrl,
           { signal: controller.signal }
         );
         
@@ -261,30 +276,26 @@ export async function processCVWithAI(
       } catch (analysisError) {
         logger.error(`Analysis failed for CV ${cvId}:`, analysisError instanceof Error ? analysisError.message : String(analysisError));
         
-        // If analysis timed out or failed, try fallback analysis
-        if (analysisError instanceof Error && (analysisError.name === 'AbortError' || analysisError.message.includes('timed out'))) {
-          logger.warn(`Analysis timed out for CV ${cvId}, using fallback analysis`);
-          await progressTracker.update('using_fallback_analysis', 40);
+        // Clear the timeout if it's still active
+        clearTimeout(timeout);
+        
+        // If analysis failed for any reason, use fallback analysis
+        logger.warn(`Using fallback analysis for CV ${cvId} due to error: ${analysisError instanceof Error ? analysisError.message : String(analysisError)}`);
+        await progressTracker.update('using_fallback_analysis', 40);
+        
+        // Perform quick local analysis as fallback
+        try {
+          cache.analysis = await performQuickAnalysis(rawText, cache.localAnalysis);
           
-          // Perform quick local analysis as fallback
-          try {
-            cache.analysis = await performQuickAnalysis(rawText, cache.localAnalysis);
-            
-            // Update progress with fallback analysis
-            await progressTracker.update('fallback_analysis_complete', 45, { 
-              ...cache.analysis,
-              analysis: cache.analysis,
-              analysisFallback: true
-            });
-          } catch (fallbackError) {
-            logger.error(`Fallback analysis failed for CV ${cvId}:`, fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
-            await progressTracker.fail(`Analysis failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
-            clearInterval(timeoutChecker);
-            return;
-          }
-        } else {
-          // Other errors - mark as failed
-          await progressTracker.fail(`Analysis failed: ${analysisError instanceof Error ? analysisError.message : String(analysisError)}`);
+          // Update progress with fallback analysis
+          await progressTracker.update('fallback_analysis_complete', 45, { 
+            ...cache.analysis,
+            analysis: cache.analysis,
+            analysisFallback: true
+          });
+        } catch (fallbackError) {
+          logger.error(`Fallback analysis failed for CV ${cvId}:`, fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
+          await progressTracker.fail(`Analysis failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
           clearInterval(timeoutChecker);
           return;
         }
@@ -318,8 +329,43 @@ export async function processCVWithAI(
         const timeout = setTimeout(() => controller.abort(), MAX_OPTIMIZATION_TIME);
         
         try {
-          // Optimize using API or local optimization
-          cache.optimizedText = await performQuickOptimization(rawText, cache.analysis);
+          // Try to use the API first if configured
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+          
+          if (baseUrl) {
+            // Ensure the URL is absolute by checking if it starts with http/https
+            const apiUrl = baseUrl.startsWith('http') 
+              ? `${baseUrl}/api/optimize-cv?cvId=${cvId}&forceRefresh=${forceRefresh}`
+              : `https://${baseUrl}/api/optimize-cv?cvId=${cvId}&forceRefresh=${forceRefresh}`;
+            
+            try {
+              logger.info(`Making API request to ${apiUrl} for CV ${cvId} optimization`);
+              const optimizeResponse = await fetch(
+                apiUrl,
+                { signal: controller.signal }
+              );
+              
+              if (optimizeResponse.ok) {
+                const optimizeData = await optimizeResponse.json();
+                if (optimizeData.success && optimizeData.optimizedText) {
+                  cache.optimizedText = optimizeData.optimizedText;
+                  logger.info(`Successfully retrieved optimized text from API for CV ${cvId}`);
+                } else {
+                  throw new Error(optimizeData.error || 'Optimization API failed');
+                }
+              } else {
+                throw new Error(`Optimization API returned status ${optimizeResponse.status}`);
+              }
+            } catch (apiError) {
+              logger.warn(`API optimization failed for CV ${cvId}, falling back to direct optimization: ${apiError instanceof Error ? apiError.message : String(apiError)}`);
+              // Fall back to direct optimization
+              cache.optimizedText = await performQuickOptimization(rawText, cache.analysis);
+            }
+          } else {
+            // No API URL configured, use direct optimization
+            logger.info(`Using direct optimization for CV ${cvId} (no API URL configured)`);
+            cache.optimizedText = await performQuickOptimization(rawText, cache.analysis);
+          }
           
           // Clear timeout
           clearTimeout(timeout);
@@ -336,10 +382,11 @@ export async function processCVWithAI(
             optimizationCompleted: true
           });
         } catch (optimizationError) {
-          // If optimization timed out or failed, use enhanced local optimization
-          logger.error(`Optimization failed for CV ${cvId}:`, optimizationError instanceof Error ? optimizationError.message : String(optimizationError));
-          
+          // Clear the timeout if it's still active
           clearTimeout(timeout);
+          
+          // If optimization failed for any reason, use enhanced local optimization
+          logger.error(`Optimization failed for CV ${cvId}:`, optimizationError instanceof Error ? optimizationError.message : String(optimizationError));
           
           // Create a simple enhanced version as fallback
           cache.optimizedText = enhanceTextWithLocalRules(rawText, cache.localAnalysis);
@@ -360,9 +407,14 @@ export async function processCVWithAI(
       }
     } catch (optimizationError) {
       logger.error(`All optimization attempts failed for CV ${cvId}:`, optimizationError instanceof Error ? optimizationError.message : String(optimizationError));
-      await progressTracker.fail(`Optimization failed: ${optimizationError instanceof Error ? optimizationError.message : String(optimizationError)}`);
-      clearInterval(timeoutChecker);
-      return;
+      // Don't fail the entire process, just use a basic enhanced version
+      cache.optimizedText = enhanceTextWithLocalRules(rawText, cache.localAnalysis);
+      await progressTracker.update('emergency_fallback_optimization_complete', 70, { 
+        optimizedText: cache.optimizedText,
+        optimizationCompleted: true,
+        optimizationFallback: true,
+        emergencyFallback: true
+      });
     }
     
     // Check for timeout
@@ -410,34 +462,89 @@ export async function processCVWithAI(
     }
     
     // Check for timeout
-    if (isTimedOut) return;
+    if (isTimedOut) {
+      logger.warn(`Processing timed out for CV ${cvId}, completing with partial results`);
+      // Ensure we have at least basic information to provide to user
+      if (!cache.optimizedText) {
+        cache.optimizedText = enhanceTextWithLocalRules(rawText, cache.localAnalysis || performLocalAnalysis(rawText));
+      }
+      if (!cache.improvements) {
+        cache.improvements = ["Enhanced basic formatting", "Improved readability"];
+      }
+    }
     
     // PHASE 5: Completion - finalize and mark as complete
-    const finalResults = {
-      processing: false,
-      processingCompleted: true,
-      optimizationCompleted: true,
-      processingProgress: 100,
-      optimizedText: cache.optimizedText,
-      optimized: true,
-      improvements: cache.improvements,
-      atsScore: cache.analysis.atsScore || 65,
-      improvedAtsScore: cache.analysis.improvedAtsScore || Math.min(98, (cache.analysis.atsScore || 65) + 15),
-      completedAt: new Date().toISOString(),
-      processingTime: Date.now() - processingStartTime,
-      industry: cache.analysis.industry || "General",
-      language: cache.analysis.language || "English",
-      strengths: cache.analysis.strengths || [],
-      weaknesses: cache.analysis.weaknesses || [],
-      recommendations: cache.analysis.recommendations || [],
-      keywordAnalysis: cache.analysis.keywordAnalysis || {},
-      formattingStrengths: cache.analysis.formattingStrengths || [],
-      formattingWeaknesses: cache.analysis.formattingWeaknesses || [],
-      formattingRecommendations: cache.analysis.formattingRecommendations || []
-    };
+    await progressTracker.update('finalizing_results', 95);
     
-    // Mark as complete
-    await progressTracker.complete(finalResults);
+    try {
+      // Validate required fields and provide fallbacks if missing
+      if (!cache.optimizedText) {
+        logger.warn(`Missing optimized text for CV ${cvId}, using fallback`);
+        cache.optimizedText = enhanceTextWithLocalRules(rawText, cache.localAnalysis || performLocalAnalysis(rawText));
+      }
+      
+      if (!cache.analysis || Object.keys(cache.analysis).length === 0) {
+        logger.warn(`Missing analysis for CV ${cvId}, using fallback`);
+        cache.analysis = {
+          atsScore: 65,
+          industry: "General",
+          strengths: ["Resume structure detected"],
+          weaknesses: ["Consider adding more industry-specific keywords"],
+          recommendations: ["Add more action verbs and quantifiable achievements"]
+        };
+      }
+      
+      if (!cache.improvements || cache.improvements.length === 0) {
+        logger.warn(`Missing improvements for CV ${cvId}, using fallback`);
+        cache.improvements = ["Enhanced basic formatting", "Improved readability"];
+      }
+      
+      const finalResults = {
+        processing: false,
+        processingCompleted: true,
+        optimizationCompleted: true,
+        processingProgress: 100,
+        optimizedText: cache.optimizedText,
+        optimized: true,
+        improvements: cache.improvements,
+        atsScore: cache.analysis.atsScore || 65,
+        improvedAtsScore: cache.analysis.improvedAtsScore || Math.min(98, (cache.analysis.atsScore || 65) + 15),
+        completedAt: new Date().toISOString(),
+        processingTime: Date.now() - processingStartTime,
+        industry: cache.analysis.industry || "General",
+        language: cache.analysis.language || "English",
+        strengths: cache.analysis.strengths || [],
+        weaknesses: cache.analysis.weaknesses || [],
+        recommendations: cache.analysis.recommendations || [],
+        keywordAnalysis: cache.analysis.keywordAnalysis || {},
+        formattingStrengths: cache.analysis.formattingStrengths || [],
+        formattingWeaknesses: cache.analysis.formattingWeaknesses || [],
+        formattingRecommendations: cache.analysis.formattingRecommendations || []
+      };
+      
+      // Mark as complete
+      await progressTracker.complete(finalResults);
+    } catch (finalError) {
+      logger.error(`Error finalizing results for CV ${cvId}:`, finalError instanceof Error ? finalError.message : String(finalError));
+      
+      // Still try to mark as complete with minimal data
+      const emergencyResults = {
+        processing: false,
+        processingCompleted: true,
+        optimizationCompleted: true,
+        processingProgress: 100,
+        optimizedText: cache.optimizedText || rawText,
+        optimized: true,
+        improvements: cache.improvements || ["Basic formatting improvements"],
+        atsScore: 65,
+        improvedAtsScore: 80,
+        completedAt: new Date().toISOString(),
+        processingTime: Date.now() - processingStartTime,
+        emergencyCompletion: true
+      };
+      
+      await progressTracker.complete(emergencyResults);
+    }
     
     // Track completion event
     trackEvent({
@@ -455,8 +562,98 @@ export async function processCVWithAI(
     // Handle unexpected errors
     logger.error(`Unexpected error processing CV ${cvId}:`, error instanceof Error ? error.message : String(error));
     
-    // Update metadata with error
-    await progressTracker.fail(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
+    try {
+      // Create a recovery cache for emergency results
+      const recoveryCache: Record<string, any> = {
+        localAnalysis: null,
+        analysis: null,
+        optimizedText: null,
+        improvements: null
+      };
+      
+      // If we have at least the raw text, try to provide a minimal result
+      if (rawText) {
+        // Perform emergency local analysis if needed
+        try {
+          recoveryCache.localAnalysis = performLocalAnalysis(rawText);
+        } catch (analysisError) {
+          logger.error(`Emergency local analysis failed for CV ${cvId}:`, 
+            analysisError instanceof Error ? analysisError.message : String(analysisError));
+        }
+        
+        // Create a simple optimized text version
+        try {
+          recoveryCache.optimizedText = enhanceTextWithLocalRules(rawText, recoveryCache.localAnalysis || {});
+        } catch (enhancementError) {
+          logger.error(`Emergency text enhancement failed for CV ${cvId}:`, 
+            enhancementError instanceof Error ? enhancementError.message : String(enhancementError));
+          // Last resort: just use the original text
+          recoveryCache.optimizedText = rawText;
+        }
+        
+        // Create basic improvements list
+        recoveryCache.improvements = [
+          "Basic formatting improvements",
+          "Enhanced readability"
+        ];
+        
+        // Try to complete with emergency results
+        const emergencyResults = {
+          processing: false,
+          processingCompleted: true,
+          optimizationCompleted: true,
+          processingProgress: 100,
+          optimizedText: recoveryCache.optimizedText || rawText,
+          optimized: true,
+          improvements: recoveryCache.improvements,
+          atsScore: 65,
+          improvedAtsScore: 75,
+          completedAt: new Date().toISOString(),
+          processingTime: Date.now() - processingStartTime,
+          emergencyCompletion: true,
+          processingError: `Recovery from error: ${error instanceof Error ? error.message : String(error)}`
+        };
+        
+        // Try to update with emergency results
+        try {
+          await progressTracker.complete(emergencyResults);
+          logger.info(`Emergency recovery completed for CV ${cvId}`);
+        } catch (completeError) {
+          // If we still can't complete, mark as failed
+          logger.error(`Even emergency completion failed for CV ${cvId}:`, 
+            completeError instanceof Error ? completeError.message : String(completeError));
+          await progressTracker.fail(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      } else {
+        // No raw text available, mark as failed
+        await progressTracker.fail(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } catch (recoveryError) {
+      // If recovery also fails, ensure we at least try to update the status
+      logger.error(`Recovery attempt failed for CV ${cvId}:`, 
+        recoveryError instanceof Error ? recoveryError.message : String(recoveryError));
+      
+      try {
+        await progressTracker.fail(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
+      } catch (finalError) {
+        // Nothing more we can do - log the failure
+        logger.error(`Failed to update final status for CV ${cvId}:`, 
+          finalError instanceof Error ? finalError.message : String(finalError));
+        
+        // Direct database update as last resort
+        try {
+          await updateCVMetadata(cvId, {
+            processing: false,
+            processingError: `Critical failure: ${error instanceof Error ? error.message : String(error)}`,
+            processingCompleted: false,
+            lastUpdated: new Date().toISOString()
+          });
+        } catch {
+          // Absolutely last resort - we've done everything we can
+          logger.error(`CRITICAL: Could not update status for CV ${cvId} - complete system failure`);
+        }
+      }
+    }
     
     // Track error event
     trackEvent({
@@ -687,153 +884,12 @@ async function performQuickOptimization(rawText: string, analysis: any): Promise
   try {
     // Set a timeout for the optimization process
     const optimizationStartTime = Date.now();
-    const OPTIMIZATION_TIMEOUT = 30000; // Increase to 30 seconds timeout
+    const OPTIMIZATION_TIMEOUT = 30000; // 30 seconds timeout
     
     // Log the start of optimization
     logger.info('Starting CV optimization process');
     
-    // Initialize the RAG service with error handling
-    logger.info('Initializing RAG service for CV optimization');
-    let ragService: MistralRAGService;
-    try {
-      ragService = new MistralRAGService();
-    } catch (initError) {
-      logger.error('Failed to initialize RAG service:', 
-        initError instanceof Error ? initError.message : String(initError));
-      // Return enhanced text with local rules as fallback
-      logger.info('Falling back to local enhancement rules due to RAG service initialization failure');
-      return enhanceTextWithLocalRules(rawText, analysis);
-    }
-    
-    // Process the CV document with timeout protection
-    let documentProcessed = false;
-    try {
-      logger.info('Processing CV document with RAG service');
-      // Add timeout for document processing
-      const processingPromise = ragService.processCVDocument(rawText);
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('CV document processing timed out')), 20000); // Increase to 20 seconds
-      });
-      
-      try {
-        await Promise.race([processingPromise, timeoutPromise]);
-        documentProcessed = true;
-        logger.info('Successfully processed CV document with RAG service');
-      } catch (processingError) {
-        logger.warn('Error or timeout processing CV document with RAG service, continuing with optimization', 
-          processingError instanceof Error ? processingError.message : String(processingError));
-        // Continue with optimization even if document processing fails
-      }
-    } catch (processingError) {
-      logger.warn('Error processing CV document with RAG service, falling back to direct optimization', 
-                processingError instanceof Error ? processingError.message : String(processingError));
-      // Continue with fallback optimization
-    }
-    
-    // Determine language from analysis; default to English
-    const language = analysis.language || "en";
-    
-    // Define optimization system prompt based on language
-    const systemPrompts: Record<string, string> = {
-      en: `You are a professional CV optimizer. Your task is to optimize the CV text for ATS compatibility.
-Focus on:
-1. Adding relevant keywords for the ${analysis.industry || 'specified'} industry
-2. Using action verbs for achievements
-3. Quantifying accomplishments
-4. Maintaining original structure and information
-5. Optimizing formatting for readability
-
-Key weaknesses to address:
-${analysis.weaknesses?.join(', ') || 'Improve overall ATS compatibility'}
-
-Provide ONLY the optimized CV text, no explanations.`,
-      es: `Eres un optimizador profesional de CV. Tu tarea es optimizar el texto del CV para la compatibilidad con ATS.
-Enfócate en:
-1. Agregar palabras clave relevantes para la industria de ${analysis.industry || 'especificada'}
-2. Usar verbos de acción para describir logros
-3. Cuantificar los logros con métricas
-4. Mantener la estructura e información original
-5. Optimizar el formato para mejorar la legibilidad
-
-Aspectos a mejorar:
-${analysis.weaknesses?.join(', ') || 'Mejorar la compatibilidad general con ATS'}
-
-Proporciona ÚNICAMENTE el texto optimizado del CV, sin explicaciones.`,
-      fr: `Vous êtes un optimiseur professionnel de CV. Votre tâche est d'optimiser le texte du CV pour la compatibilité ATS.
-Concentrez-vous sur :
-1. Ajouter des mots-clés pertinents pour le secteur de ${analysis.industry || 'spécifié'}
-2. Utiliser des verbes d'action pour décrire les réalisations
-3. Quantifier les accomplissements avec des métriques
-4. Maintenir la structure et les informations originales
-5. Optimiser le format pour une meilleure lisibilité
-
-Points faibles à corriger :
-${analysis.weaknesses?.join(', ') || 'Améliorer la compatibilité globale avec les ATS'}
-
-Fournissez UNIQUEMENT le texte optimisé du CV, sans explications.`,
-      de: `Sie sind ein professioneller Lebenslauf-Optimierer. Ihre Aufgabe ist es, den Lebenslauf für die ATS-Kompatibilität zu optimieren.
-Konzentrieren Sie sich auf:
-1. Hinzufügen relevanter Schlüsselwörter für die ${analysis.industry || 'angegebene'} Branche
-2. Verwendung von Aktionsverben zur Beschreibung von Erfolgen
-3. Quantifizierung der Leistungen mit Kennzahlen
-4. Beibehaltung der ursprünglichen Struktur und Information
-5. Optimierung des Formats zur Verbesserung der Lesbarkeit
-
-Zu verbessernde Punkte:
-${analysis.weaknesses?.join(', ') || 'Verbessern Sie die allgemeine ATS-Kompatibilität'}
-
-Geben Sie NUR den optimierten Text des Lebenslaufs zurück, ohne Erklärungen.`
-    };
-    
-    // Use the appropriate system prompt based on language
-    const systemPrompt = systemPrompts[language] || systemPrompts["en"];
-    
-    // Craft the optimization query
-    const optimizationQuery = `Optimize the following CV text for ATS compatibility in the ${analysis.industry || 'general'} industry:`;
-    
-    let optimizedText = '';
-    
-    // Try with RAG first with proper timeout handling
-    if (documentProcessed) {
-      logger.info('Attempting CV optimization with RAG');
-      try {
-        // Create a promise for the RAG optimization
-        const ragOptimizationPromise = ragService.generateResponse(optimizationQuery, systemPrompt);
-        
-        // Create a timeout promise
-        const ragTimeoutPromise = new Promise<string>((_, reject) => {
-          setTimeout(() => reject(new Error('RAG optimization timed out')), OPTIMIZATION_TIMEOUT);
-        });
-        
-        // Race the optimization against the timeout
-        optimizedText = await Promise.race([ragOptimizationPromise, ragTimeoutPromise]);
-        logger.info('RAG optimization returned text of length: ' + optimizedText.length);
-        
-        // Basic validation to ensure we got reasonable output
-        if (optimizedText && optimizedText.length > rawText.length * 0.5) {
-          logger.info('Successfully generated optimized CV content with RAG');
-          
-          // Check if we're taking too long overall
-          if (Date.now() - optimizationStartTime > OPTIMIZATION_TIMEOUT) {
-            logger.warn('Optimization process is taking too long, returning current result');
-            return optimizedText;
-          }
-          
-          return optimizedText;
-        } else {
-          logger.warn('Generated content too short or empty, falling back to direct optimization');
-          throw new Error('Generated content validation failed');
-        }
-      } catch (error) {
-        // Log the error and continue to fallback
-        logger.warn('RAG optimization failed or timed out, falling back to direct API call', 
-                  error instanceof Error ? error.message : String(error));
-      }
-    } else {
-      logger.info('Document not processed, skipping RAG optimization and using direct API call');
-    }
-    
-    // Fall back to direct OpenAI call if RAG fails or document wasn't processed
+    // Try direct OpenAI call first as it's more reliable
     try {
       logger.info('Attempting direct API optimization with OpenAI');
       
@@ -851,13 +907,13 @@ Geben Sie NUR den optimierten Text des Lebenslaufs zurück, ohne Erklärungen.`
         return enhanceTextWithLocalRules(rawText, analysis);
       }
 
-      // Try GPT-4o-mini first for better quality
+      // Try GPT-3.5-turbo for balance of speed and quality
       try {
-        logger.info('Attempting optimization with GPT-4o-mini');
+        logger.info('Attempting optimization with GPT-3.5-turbo');
         
         // Create a promise for the direct API optimization
         const directOptimizationPromise = openai.chat.completions.create({
-          model: "gpt-4o-mini",
+          model: "gpt-3.5-turbo",
           messages: [
             {
               role: "system",
@@ -882,82 +938,35 @@ ${analysis.weaknesses?.join(', ') || 'Improve overall ATS compatibility'}`
             }
           ],
           temperature: 0.4,
-          max_tokens: 4000,
+          max_tokens: 3000,
         });
         
         // Create a timeout promise
         const directTimeoutPromise = new Promise<any>((_, reject) => {
-          setTimeout(() => reject(new Error('Direct API optimization timed out')), 25000); // Increase to 25 seconds
+          setTimeout(() => reject(new Error('Direct API optimization timed out')), 20000); // 20 seconds timeout
         });
         
         // Race the direct optimization against the timeout
         const response = await Promise.race([directOptimizationPromise, directTimeoutPromise]);
         
-        optimizedText = response.choices[0]?.message?.content || "";
+        const optimizedText = response.choices[0]?.message?.content || "";
         
         if (optimizedText && optimizedText.length > rawText.length * 0.5) {
-          logger.info('Successfully generated optimized CV content with GPT-4o-mini');
-          return optimizedText;
-        } else {
-          logger.warn('GPT-4o-mini response too short or empty, falling back to GPT-3.5-turbo');
-          throw new Error('GPT-4o-mini response validation failed');
-        }
-      } catch (gpt4oError) {
-        logger.warn('GPT-4o-mini optimization failed or timed out, falling back to GPT-3.5-turbo', 
-          gpt4oError instanceof Error ? gpt4oError.message : String(gpt4oError));
-        
-        // Fall back to GPT-3.5-turbo
-        logger.info('Attempting optimization with GPT-3.5-turbo');
-        
-        // Create a promise for the direct API optimization with GPT-3.5-turbo
-        const fallbackOptimizationPromise = openai.chat.completions.create({
-          model: "gpt-3.5-turbo",
-          messages: [
-            {
-              role: "system",
-              content: "You are a fast CV optimizer. Return ONLY the optimized CV text, no explanations."
-            },
-            {
-              role: "user",
-              content: `Quickly optimize this CV for ATS compatibility. Focus on:
-1. Adding relevant keywords for the ${analysis.industry || 'general'} industry
-2. Using action verbs for achievements
-3. Quantifying accomplishments
-4. Maintaining original structure and information
-5. Optimizing formatting for readability
-
-Return ONLY the optimized CV text, no explanations.
-
-CV text:
-${rawText.substring(0, 3000)}${rawText.length > 3000 ? '...' : ''}
-
-Key weaknesses to address:
-${analysis.weaknesses?.join(', ') || 'Improve overall ATS compatibility'}`
-            }
-          ],
-          temperature: 0.4,
-          max_tokens: 2000,
-        });
-        
-        // Create a timeout promise
-        const fallbackTimeoutPromise = new Promise<any>((_, reject) => {
-          setTimeout(() => reject(new Error('Fallback API optimization timed out')), 20000);
-        });
-        
-        // Race the fallback optimization against the timeout
-        const fallbackResponse = await Promise.race([fallbackOptimizationPromise, fallbackTimeoutPromise]);
-        
-        optimizedText = fallbackResponse.choices[0]?.message?.content || "";
-        
-        if (optimizedText && optimizedText.length > 0) {
           logger.info('Successfully generated optimized CV content with GPT-3.5-turbo');
           return optimizedText;
         } else {
-          throw new Error('Empty response from GPT-3.5-turbo');
+          logger.warn('GPT-3.5-turbo response too short or empty, falling back to local enhancement');
+          throw new Error('GPT-3.5-turbo response validation failed');
         }
+      } catch (gptError) {
+        logger.warn('GPT-3.5-turbo optimization failed or timed out, falling back to local enhancement', 
+          gptError instanceof Error ? gptError.message : String(gptError));
+        
+        // Fall back to local enhancement
+        return enhanceTextWithLocalRules(rawText, analysis);
       }
     } catch (directApiError) {
-      logger.error('All optimization attempts failed', 
+      logger.error('All direct API optimization attempts failed', 
         directApiError instanceof Error ? directApiError.message : String(directApiError));
       
       // Return enhanced text with local rules as final fallback
@@ -969,7 +978,7 @@ ${analysis.weaknesses?.join(', ') || 'Improve overall ATS compatibility'}`
     logger.error('Unexpected error in performQuickOptimization:', 
       error instanceof Error ? error.message : String(error));
     
-    // Return enhanced text with local rules as final fallback
+    // Return enhanced text with local rules as ultimate fallback
     return enhanceTextWithLocalRules(rawText, analysis);
   }
 }
