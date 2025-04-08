@@ -3,7 +3,9 @@ export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser } from '@/lib/db/queries.server';
 import { logger } from '@/lib/logger';
-import { kv } from '@vercel/kv';
+import { db } from '@/lib/db/drizzle';
+import { eq } from 'drizzle-orm';
+import { jobStatus } from '@/lib/db/schema';
 
 // Define status endpoint for client polling
 /**
@@ -27,45 +29,47 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Job ID is required' }, { status: 400 });
     }
 
-    // Get job status from KV store
-    const [status, progress, result, error, startTime, completedAt] = await Promise.all([
-      kv.get(`tailor:${jobId}:status`),
-      kv.get(`tailor:${jobId}:progress`),
-      kv.get(`tailor:${jobId}:result`),
-      kv.get(`tailor:${jobId}:error`),
-      kv.get(`tailor:${jobId}:startTime`),
-      kv.get(`tailor:${jobId}:completedAt`)
-    ]);
+    // Get job status from database
+    const jobEntry = await db.query.jobStatus.findFirst({
+      where: eq(jobStatus.jobId, jobId)
+    });
+
+    if (!jobEntry) {
+      return NextResponse.json(
+        { success: false, error: 'Job not found' },
+        { status: 404 }
+      );
+    }
 
     // Calculate duration if available
     let duration = null;
-    if (startTime) {
-      if (completedAt) {
-        duration = Number(completedAt) - Number(startTime);
+    if (jobEntry.startTime) {
+      if (jobEntry.completedAt) {
+        duration = Number(jobEntry.completedAt) - Number(jobEntry.startTime);
       } else {
-        duration = Date.now() - Number(startTime);
+        duration = Date.now() - Number(jobEntry.startTime);
       }
     }
 
     // If job is completed and result is available, return the tailored CV
-    if (status === 'completed' && result) {
+    if (jobEntry.status === 'completed' && jobEntry.result) {
       logger.info(`Retrieved completed job ${jobId} result`);
       return NextResponse.json({
         success: true,
-        status,
+        status: jobEntry.status,
         progress: 100,
-        result,
+        result: jobEntry.result,
         duration
       });
     }
 
     // If job failed, return the error
-    if (status === 'error') {
-      logger.warn(`Retrieved failed job ${jobId} status: ${error}`);
+    if (jobEntry.status === 'error') {
+      logger.warn(`Retrieved failed job ${jobId} status: ${jobEntry.error}`);
       return NextResponse.json({
         success: false,
-        status,
-        error: error || 'Unknown error',
+        status: jobEntry.status,
+        error: jobEntry.error || 'Unknown error',
         duration
       });
     }
@@ -73,8 +77,8 @@ export async function GET(request: NextRequest) {
     // Job is still processing
     return NextResponse.json({
       success: true,
-      status: status || 'unknown',
-      progress: progress || 0,
+      status: jobEntry.status || 'unknown',
+      progress: jobEntry.progress || 0,
       duration
     });
   } catch (error) {

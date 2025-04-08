@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUser } from '@/lib/db/queries.server';
 import { logger } from '@/lib/logger';
 import { getIndustryOptimizationGuidance } from '@/app/lib/services/tailorCVService';
+import { db } from '@/lib/db/drizzle';
+import { jobStatus } from '@/lib/db/schema';
 
 // Define status endpoint for client polling
 export const runtime = 'nodejs';
@@ -58,6 +60,16 @@ export async function POST(request: NextRequest) {
       const detectedIndustry = industryInsights?.industry || 'General';
       
       logger.info(`Initiating CV tailoring job ${jobId} for: ${jobTitle || 'Unspecified position'} in ${detectedIndustry} industry`);
+      
+      // Create initial job entry in database
+      await db.insert(jobStatus).values({
+        jobId,
+        userId: user.id,
+        cvId: parseInt(cvId.toString()),
+        status: 'queued',
+        progress: 0,
+        jobType: 'tailor'
+      });
       
       // Trigger background processing without waiting for completion
       // This will run as a separate serverless function

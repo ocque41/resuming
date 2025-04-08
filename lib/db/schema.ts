@@ -244,6 +244,33 @@ export const verificationTokensRelations = relations(verificationTokens, ({ one 
   }),
 }));
 
+export const jobStatus = pgTable('job_status', {
+  id: serial('id').primaryKey(),
+  jobId: text('job_id').notNull().unique(),
+  userId: integer('user_id').notNull().references(() => users.id),
+  cvId: integer('cv_id').notNull().references(() => cvs.id),
+  status: varchar('status', { length: 50 }).notNull().default('processing'),
+  progress: integer('progress').notNull().default(0),
+  result: jsonb('result'),
+  error: text('error'),
+  startTime: timestamp('start_time').notNull().defaultNow(),
+  completedAt: timestamp('completed_at'),
+  jobType: varchar('job_type', { length: 50 }).notNull().default('tailor'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const jobStatusRelations = relations(jobStatus, ({ one }) => ({
+  user: one(users, {
+    fields: [jobStatus.userId],
+    references: [users.id],
+  }),
+  cv: one(cvs, {
+    fields: [jobStatus.cvId],
+    references: [cvs.id],
+  }),
+}));
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Team = typeof teams.$inferSelect;
@@ -286,3 +313,6 @@ export type DocumentAnalysisId = z.infer<typeof documentAnalysisIdSchema>["id"];
 
 export type VerificationToken = typeof verificationTokens.$inferSelect;
 export type NewVerificationToken = typeof verificationTokens.$inferInsert;
+
+export type JobStatus = typeof jobStatus.$inferSelect;
+export type NewJobStatus = typeof jobStatus.$inferInsert;

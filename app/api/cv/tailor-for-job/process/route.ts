@@ -6,7 +6,9 @@ import { getUserById } from '@/lib/db/queries.server';
 import MistralClient from '@mistralai/mistralai';
 import { logger } from '@/lib/logger';
 import { mistralRateLimiter } from '@/app/lib/services/rate-limiter';
-import { kv } from '@vercel/kv';
+import { db } from '@/lib/db/drizzle';
+import { jobStatus } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 
 // Increase max duration for this function
 export const maxDuration = 60; // 60 seconds
@@ -55,17 +57,43 @@ export async function POST(request: NextRequest) {
 
     const { cvText, jobDescription, jobTitle, cvId, industryInsights } = body || {};
 
-    // Update job status to processing
-    await kv.set(`tailor:${jobId}:status`, 'processing');
-    await kv.set(`tailor:${jobId}:progress`, 10);
-    await kv.set(`tailor:${jobId}:startTime`, Date.now());
+    // Create or update job status in database
+    const existingJob = await db.query.jobStatus.findFirst({
+      where: eq(jobStatus.jobId, jobId)
+    });
+
+    if (!existingJob) {
+      // Create new job entry
+      await db.insert(jobStatus).values({
+        jobId,
+        userId: parseInt(userId),
+        cvId: parseInt(cvId),
+        status: 'processing',
+        progress: 10,
+        jobType: 'tailor',
+      });
+    } else {
+      // Update existing job
+      await db.update(jobStatus)
+        .set({
+          status: 'processing',
+          progress: 10,
+          updatedAt: new Date()
+        })
+        .where(eq(jobStatus.jobId, jobId));
+    }
 
     // Get Mistral client
     const client = getMistralClient();
     if (!client) {
       logger.error(`Mistral client not initialized for job ${jobId}`);
-      await kv.set(`tailor:${jobId}:status`, 'error');
-      await kv.set(`tailor:${jobId}:error`, 'AI service unavailable');
+      await db.update(jobStatus)
+        .set({
+          status: 'error',
+          error: 'AI service unavailable',
+          updatedAt: new Date()
+        })
+        .where(eq(jobStatus.jobId, jobId));
       return NextResponse.json({ success: false, error: 'AI service unavailable' }, { status: 500 });
     }
     
@@ -76,25 +104,40 @@ export async function POST(request: NextRequest) {
     (async () => {
       try {
         // Update progress
-        await kv.set(`tailor:${jobId}:progress`, 20);
+        await db.update(jobStatus)
+          .set({
+            progress: 20,
+            updatedAt: new Date()
+          })
+          .where(eq(jobStatus.jobId, jobId));
         
         // Generate tailoring prompt with safety checks for industryInsights
         const result = await generateTailoredCV(client, cvText, jobDescription, jobTitle, industryInsights);
         
-        // Store result in KV store
-        await kv.set(`tailor:${jobId}:result`, result);
-        await kv.set(`tailor:${jobId}:status`, 'completed');
-        await kv.set(`tailor:${jobId}:progress`, 100);
-        await kv.set(`tailor:${jobId}:completedAt`, Date.now());
+        // Store result in database
+        await db.update(jobStatus)
+          .set({
+            status: 'completed',
+            progress: 100,
+            result,
+            completedAt: new Date(),
+            updatedAt: new Date()
+          })
+          .where(eq(jobStatus.jobId, jobId));
         
         logger.info(`CV tailoring completed successfully for job ${jobId}`);
       } catch (error) {
         logger.error(`Error in background processing for job ${jobId}:`, error instanceof Error ? error.message : String(error));
         
-        // Store error in KV store
-        await kv.set(`tailor:${jobId}:status`, 'error');
-        await kv.set(`tailor:${jobId}:error`, error instanceof Error ? error.message : 'Unknown error');
-        await kv.set(`tailor:${jobId}:progress`, 0);
+        // Store error in database
+        await db.update(jobStatus)
+          .set({
+            status: 'error',
+            error: error instanceof Error ? error.message : 'Unknown error',
+            progress: 0,
+            updatedAt: new Date()
+          })
+          .where(eq(jobStatus.jobId, jobId));
       }
     })().catch(error => {
       logger.error(`Unhandled error in background processing for job ${jobId}:`, error instanceof Error ? error.message : String(error));
