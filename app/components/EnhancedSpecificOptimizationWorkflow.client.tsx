@@ -2165,7 +2165,7 @@ const EnhancedSpecificOptimizationWorkflow: React.FC<EnhancedSpecificOptimizatio
     }
   };
   
-  // Add a function to check status of a timed-out job
+  // Add a function to check status of a timed-out job with optimized polling
   const checkTimeoutJobStatus = async () => {
     if (!jobId) return;
     
@@ -2181,54 +2181,87 @@ const EnhancedSpecificOptimizationWorkflow: React.FC<EnhancedSpecificOptimizatio
         throw new Error(`Failed to check job status: ${response.status}`);
       }
       
-      const data = await response.json();
+      const statusData = await response.json();
       
       // If job is still processing, let the user know we're continuing to wait
-      if (data.status === 'processing') {
-        setProcessingStatus(`Still processing optimization (${data.progress || 0}%)...`);
-        setProcessingProgress(data.progress || 50);
+      if (statusData.status === 'processing') {
+        setProcessingStatus(`Still processing optimization (${statusData.progress || 0}%)...`);
+        setProcessingProgress(statusData.progress || 50);
         setLongRunningJob(true);
         
-        // Start polling again
-        const pollInterval = setInterval(async () => {
-          try {
-            const pollResponse = await fetch(`/api/cv/tailor-for-job/status?jobId=${jobId}`);
-            const pollData = await pollResponse.json();
-            
-            if (pollData.status === 'completed' && pollData.result) {
-              clearInterval(pollInterval);
-              setTailoringResult(pollData.result);
-              setOptimizedText(pollData.result.tailoredContent);
-              setProcessingProgress(100);
-              setCompletedOptimization(true);
-              setIsProcessing(false);
-              setJobTimeoutOccurred(false);
-              
-              toast({
-                title: "Optimization Complete",
-                description: "Your CV has been tailored for the job description.",
-              });
-            } else if (pollData.status === 'error') {
-              clearInterval(pollInterval);
-              throw new Error(pollData.error || 'Job processing failed');
-            } else {
-              // Update progress
-              setProcessingProgress(pollData.progress || 50);
-              setProcessingStatus(`Still working on your optimization (${pollData.progress || 0}%)...`);
-            }
-          } catch (pollError) {
-            console.error('Error polling for status:', pollError);
-          }
-        }, 5000); // Poll every 5 seconds
+        // Create a more efficient polling function
+        let isPolling = true;
         
-        // Cleanup on component unmount
-        return () => clearInterval(pollInterval);
+        const pollWithBackoff = async () => {
+          let attempt = 0;
+          
+          while (isPolling && attempt < 30) { // Limit attempts
+            attempt++;
+            
+            // Exponential backoff - increase delay between polls
+            const delay = Math.min(5000 * Math.pow(1.2, attempt), 25000);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            
+            try {
+              // Skip polling if component unmounted/changed
+              if (!isPolling) break;
+              
+              const pollResponse = await fetch(`/api/cv/tailor-for-job/status?jobId=${jobId}`);
+              if (!pollResponse.ok) throw new Error(`Poll failed: ${pollResponse.status}`);
+              
+              const pollData = await pollResponse.json();
+              
+              // Handle completed status
+              if (pollData.status === 'completed' && pollData.result) {
+                const resultData = pollData.result;
+                setTailoringResult(resultData);
+                setOptimizedText(resultData.tailoredContent || '');
+                setProcessingProgress(100);
+                setCompletedOptimization(true);
+                setIsProcessing(false);
+                setJobTimeoutOccurred(false);
+                
+                toast({
+                  title: "Optimization Complete",
+                  description: "Your CV has been tailored for the job description.",
+                });
+                
+                // Exit polling loop
+                isPolling = false;
+                break;
+              } 
+              // Handle error status
+              else if (pollData.status === 'error') {
+                throw new Error(pollData.error || 'Job processing failed');
+              } 
+              // Update progress for in-progress status
+              else {
+                setProcessingProgress(pollData.progress || 50);
+                setProcessingStatus(`Still working on your optimization (${pollData.progress || 0}%)...`);
+              }
+            } catch (pollError) {
+              console.error('Error polling for status:', pollError);
+              // Keep polling despite error, unless max attempts reached
+              if (attempt >= 30) {
+                setError(`Failed to check status after multiple attempts: ${
+                  pollError instanceof Error ? pollError.message : 'Unknown error'
+                }`);
+                setIsProcessing(false);
+                isPolling = false;
+              }
+            }
+          }
+        };
+        
+        // Start polling with cleanup on component unmount
+        pollWithBackoff();
+        return () => { isPolling = false; };
       } 
       
       // If job completed while we were waiting, use the result
-      if (data.status === 'completed' && data.result) {
-        setTailoringResult(data.result);
-        setOptimizedText(data.result.tailoredContent);
+      else if (statusData.status === 'completed' && statusData.result) {
+        setTailoringResult(statusData.result);
+        setOptimizedText(statusData.result.tailoredContent || '');
         setProcessingProgress(100);
         setCompletedOptimization(true);
         setJobTimeoutOccurred(false);
@@ -2237,17 +2270,15 @@ const EnhancedSpecificOptimizationWorkflow: React.FC<EnhancedSpecificOptimizatio
           title: "Optimization Complete",
           description: "Your CV has been tailored for the job description.",
         });
-      } else if (data.status === 'error') {
-        throw new Error(data.error || 'Job processing failed');
+      } 
+      // Handle error status
+      else if (statusData.status === 'error') {
+        throw new Error(statusData.error || 'Job processing failed');
       }
     } catch (error) {
       console.error('Error checking job status:', error);
       setError(`Failed to retrieve job status: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      if (!completedOptimization) {
-        setIsProcessing(false);
-        setProcessingStatus(null);
-      }
+      setIsProcessing(false);
     }
   };
   
@@ -2334,42 +2365,64 @@ const EnhancedSpecificOptimizationWorkflow: React.FC<EnhancedSpecificOptimizatio
     }
   };
   
+  // Simplified document generation with better performance
   const generateDocument = async () => {
     if (!optimizedText || !selectedCVId) return;
     
-    setDocumentDownloadRequested(true);
+    setIsGeneratingDocument(true);
+    setDocumentGenerationProgress(10);
+    setDocumentGenerationStatus('Preparing document...');
     setDocumentDownloadError(null);
     
     try {
-      setProcessingStatus("Generating document...");
-      setIsProcessing(true);
-        
-      const response = await fetch('/api/cv/specific-generate-docx', {
+      // Use a more direct approach for faster generation
+      setDocumentGenerationStatus("Creating document from optimized content...");
+      setDocumentGenerationProgress(30);
+      
+      // Simplified document generation request
+      const response = await fetch('/api/cv/generate-docx-simple', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           cvId: selectedCVId,
-          optimizedContent: optimizedText,
+          content: optimizedText,
           jobTitle: jobTitle || 'Specified Position',
+          // Add minimal metadata to reduce processing overhead
+          metadata: {
+            timestamp: new Date().toISOString(),
+            source: 'cv-optimizer'
+          }
         }),
       });
-        
+      
       if (!response.ok) {
         throw new Error(`Failed to generate document: ${response.status}`);
       }
-        
+      
+      setDocumentGenerationProgress(80);
+      setDocumentGenerationStatus("Document ready!");
+      
+      // Get document as blob and create URL
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
+      setDocumentDownloadUrl(url);
+      
+      // Immediately trigger download
       const a = document.createElement('a');
       a.href = url;
       a.download = `${selectedCVName || 'cv'}_optimized.docx`;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-        
+      
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(a);
+      }, 100);
+      
+      setDocumentGenerationProgress(100);
+      
       toast({
         title: "Document Generated",
         description: "Your optimized CV has been downloaded.",
@@ -2382,9 +2435,7 @@ const EnhancedSpecificOptimizationWorkflow: React.FC<EnhancedSpecificOptimizatio
           : 'Failed to generate document. Please try again.'
       );
     } finally {
-      setIsProcessing(false);
-      setProcessingStatus(null);
-      setDocumentDownloadRequested(false);
+      setIsGeneratingDocument(false);
     }
   };
   
@@ -2693,7 +2744,13 @@ const EnhancedSpecificOptimizationWorkflow: React.FC<EnhancedSpecificOptimizatio
                 {Object.entries(tailoringResult.sectionImprovements).map(([section, improvement]) => (
                   <div key={section} className="bg-[#050505] border border-[#333333] rounded-lg p-4">
                     <h4 className="text-[#F9F6EE] font-medium mb-2 capitalize">{section}</h4>
-                    <p className="text-[#F9F6EE]/90 font-borna text-sm">{improvement}</p>
+                    <p className="text-[#F9F6EE]/90 font-borna text-sm">
+                      {typeof improvement === 'string' 
+                        ? improvement 
+                        : typeof improvement === 'object' && improvement !== null
+                          ? JSON.stringify(improvement)
+                          : 'Improvement details not available'}
+                    </p>
                   </div>
                 ))}
               </div>

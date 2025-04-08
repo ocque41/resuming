@@ -13,7 +13,24 @@ const ensureServer = () => {
 const getMistralClient = () => {
   // Only initialize on the server
   if (typeof window === 'undefined') {
-    return new MistralClient(process.env.MISTRAL_API_KEY || '');
+    const apiKey = process.env.MISTRAL_API_KEY;
+    
+    if (!apiKey) {
+      logger.error('MISTRAL_API_KEY environment variable is not set');
+      return null;
+    }
+    
+    if (apiKey.trim() === '') {
+      logger.error('MISTRAL_API_KEY environment variable is empty');
+      return null;
+    }
+    
+    try {
+      return new MistralClient(apiKey);
+    } catch (error) {
+      logger.error('Failed to initialize Mistral client:', error instanceof Error ? error.message : String(error));
+      return null;
+    }
   }
   return null;
 };
@@ -25,13 +42,50 @@ const OVERLAP_SIZE = 300; // Tokens for context overlap
 /**
  * Execute a Mistral API call with rate limiting and error handling
  */
-async function executeMistralRequest<T>(requestFn: () => Promise<T>): Promise<T> {
-  try {
-    return await mistralRateLimiter.execute(requestFn);
-  } catch (error) {
-    logger.error('Rate-limited Mistral API call failed:', error instanceof Error ? error.message : String(error));
-    throw error;
+async function executeMistralRequest<T>(requestFn: () => Promise<T>, maxRetries = 2): Promise<T> {
+  let lastError: Error | null = null;
+  let retryCount = 0;
+  
+  while (retryCount <= maxRetries) {
+    try {
+      return await mistralRateLimiter.execute(requestFn);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      // Check if the error is retryable
+      const isRetryable = 
+        // Network errors are often temporary
+        lastError.message.includes('network') || 
+        // Rate limit errors can be retried
+        lastError.message.includes('rate limit') ||
+        lastError.message.includes('429') ||
+        // Server errors (5xx) can be retried
+        lastError.message.includes('500') ||
+        lastError.message.includes('503');
+      
+      if (isRetryable && retryCount < maxRetries) {
+        // Exponential backoff with jitter
+        const baseDelay = 1000; // 1 second
+        const exponentialDelay = baseDelay * Math.pow(2, retryCount);
+        const jitter = Math.random() * 1000; // Add up to 1 second of jitter
+        const delay = exponentialDelay + jitter;
+        
+        logger.warn(`Retryable error in Mistral API call (attempt ${retryCount + 1}/${maxRetries}). Retrying in ${Math.round(delay)}ms...`, lastError.message);
+        
+        // Wait before retry
+        await new Promise(resolve => setTimeout(resolve, delay));
+        retryCount++;
+        continue;
+      }
+      
+      // Non-retryable error or max retries reached
+      logger.error(`${retryCount > 0 ? `Failed after ${retryCount} retries. ` : ''}Mistral API call failed:`, lastError.message);
+      throw lastError;
+    }
   }
+  
+  // This should never happen, but TypeScript requires it
+  throw lastError || new Error('Unknown error in executeMistralRequest');
 }
 
 /**
@@ -564,15 +618,15 @@ export async function analyzeJobMatch(cvText: string, jobDescription: string): P
 }
 
 /**
- * Extract JSON from a response that might include markdown formatting
- * @param content The response content string
- * @returns Extracted JSON object or null if extraction fails
+ * Extract JSON from a Mistral AI response, handling various formats
  */
 function extractJSONFromResponse(content: string): any | null {
   try {
     // First try: direct parse if it's already valid JSON
     try {
-      return JSON.parse(content);
+      const parsed = JSON.parse(content);
+      logger.debug('Successfully parsed JSON directly');
+      return parsed;
     } catch (directParseError) {
       // Continue to other methods if direct parsing fails
       logger.debug('Direct JSON parsing failed, trying markdown extraction');
@@ -584,7 +638,9 @@ function extractJSONFromResponse(content: string): any | null {
     
     if (markdownMatch && markdownMatch[1]) {
       try {
-        return JSON.parse(markdownMatch[1]);
+        const parsed = JSON.parse(markdownMatch[1]);
+        logger.debug('Successfully parsed JSON from markdown block');
+        return parsed;
       } catch (markdownParseError) {
         logger.warn('Failed to parse JSON from markdown block', markdownParseError instanceof Error ? markdownParseError.message : String(markdownParseError));
       }
@@ -597,13 +653,16 @@ function extractJSONFromResponse(content: string): any | null {
     if (jsonStart >= 0 && jsonEnd > jsonStart) {
       const jsonStr = content.substring(jsonStart, jsonEnd + 1);
       try {
-        return JSON.parse(jsonStr);
+        const parsed = JSON.parse(jsonStr);
+        logger.debug('Successfully parsed JSON from braces extraction');
+        return parsed;
       } catch (bracesParseError) {
         logger.warn('Failed to parse JSON from braces extraction', bracesParseError instanceof Error ? bracesParseError.message : String(bracesParseError));
       }
     }
     
     // No valid JSON found
+    logger.error('No valid JSON found in response');
     return null;
   } catch (error) {
     logger.error('Error in JSON extraction:', error instanceof Error ? error.message : String(error));
@@ -729,11 +788,24 @@ Do not include markdown code blocks, backticks, or any formatting around the JSO
       const parsed = extractJSONFromResponse(content);
       
       if (parsed) {
-        return parsed as {
-          tailoredContent: string;
-          enhancedProfile: string;
-          sectionImprovements: Record<string, string>;
-        };
+        // Validate the parsed response has the required fields
+        const hasTailoredContent = typeof parsed.tailoredContent === 'string' && parsed.tailoredContent.length > 0;
+        const hasEnhancedProfile = typeof parsed.enhancedProfile === 'string';
+        const hasSectionImprovements = parsed.sectionImprovements && typeof parsed.sectionImprovements === 'object';
+        
+        if (hasTailoredContent && hasEnhancedProfile && hasSectionImprovements) {
+          return parsed as {
+            tailoredContent: string;
+            enhancedProfile: string;
+            sectionImprovements: Record<string, string>;
+          };
+        } else {
+          logger.warn('Parsed JSON missing required fields', {
+            hasTailoredContent,
+            hasEnhancedProfile,
+            hasSectionImprovements
+          });
+        }
       }
       
       // If JSON extraction fails, create a structured response from the raw content
@@ -788,28 +860,95 @@ function identifyCVSections(cvText: string): {
 
 /**
  * Structure a raw text response into a proper result format
+ * This is used as a fallback when JSON parsing fails
  */
 function structureRawResponse(content: string, originalCV: string): {
   tailoredContent: string;
   enhancedProfile: string;
   sectionImprovements: Record<string, string>;
 } {
-  // Extract what looks like a profile section (usually first paragraph)
-  const paragraphs = content.split('\n\n').filter(p => p.trim().length > 0);
-  const enhancedProfile = paragraphs.length > 0 ? paragraphs[0] : '';
+  // Clean the content from any markdown artifacts
+  let cleanContent = content
+    .replace(/```json/g, '')
+    .replace(/```/g, '')
+    .trim();
   
-  // Create basic section improvements feedback
-  const sectionImprovements: Record<string, string> = {
-    'profile': 'Enhanced to highlight relevant qualifications',
-    'skills': 'Reorganized to prioritize job-relevant skills',
-    'experience': 'Updated descriptions to emphasize relevant achievements',
-    'education': 'Maintained with minor formatting improvements',
-    'overall': 'Improved keyword density and relevance to job description'
-  };
+  logger.info('Processing raw text response as fallback');
+  
+  // Try to extract the profile section using various common patterns
+  let enhancedProfile = '';
+  
+  // Look for common profile section headers
+  const profileRegexes = [
+    /(?:profile|summary|professional summary|about me)(?:\s*:|\n)(.*?)(?=\n\s*(?:skills|experience|education|achievements|qualifications|employment|work history|contact)\s*(?::|$)|\n\s*$)/is,
+    /^([^:\n]+(?:\n[^:\n]+){0,3})\n\s*(?:skills|experience|education)/is // Assume first few lines might be profile
+  ];
+  
+  for (const regex of profileRegexes) {
+    const match = cleanContent.match(regex);
+    if (match && match[1] && match[1].trim().length > 30) { // Must be at least 30 chars to be a real profile
+      enhancedProfile = match[1].trim();
+      break;
+    }
+  }
+  
+  // If no profile found yet, use first paragraph
+  if (!enhancedProfile) {
+    const paragraphs = cleanContent.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+    if (paragraphs.length > 0) {
+      enhancedProfile = paragraphs[0].trim();
+    }
+  }
+  
+  // Generate section improvements based on basic comparison with original CV
+  const sections = ['profile', 'skills', 'experience', 'education', 'achievements'];
+  const sectionImprovements: Record<string, string> = {};
+  
+  // Basic detection of changes by comparing text density in different sections
+  sections.forEach(section => {
+    // Create regex to extract this section from both original and new CV
+    const sectionRegex = new RegExp(
+      `(?:${section})(?:\\s*:|\\s*\\n)(.*?)(?=\\n\\s*(?:${sections.filter(s => s !== section).join('|')})\\s*(?::|$)|$)`,
+      'is'
+    );
+    
+    const originalMatch = originalCV.match(sectionRegex);
+    const newMatch = cleanContent.match(sectionRegex);
+    
+    const originalText = originalMatch ? originalMatch[1].trim() : '';
+    const newText = newMatch ? newMatch[1].trim() : '';
+    
+    if (originalText && newText) {
+      if (newText.length > originalText.length * 1.1) {
+        sectionImprovements[section] = 'Enhanced with more relevant details';
+      } else if (newText.length < originalText.length * 0.9) {
+        sectionImprovements[section] = 'Streamlined to focus on most relevant information';
+      } else {
+        sectionImprovements[section] = 'Refined with job-specific keywords';
+      }
+    } else if (!originalText && newText) {
+      sectionImprovements[section] = 'Created new section based on CV information';
+    } else if (originalText && !newText) {
+      sectionImprovements[section] = 'Section maintained with original content';
+    }
+  });
+  
+  // Add overall improvement note
+  sectionImprovements['overall'] = 'Enhanced keyword density and relevance to job description';
+  
+  // If we failed to detect any sections, provide generic improvements
+  if (Object.keys(sectionImprovements).length <= 1) {
+    sectionImprovements['profile'] = 'Enhanced to highlight relevant qualifications';
+    sectionImprovements['skills'] = 'Reorganized to prioritize job-relevant skills';
+    sectionImprovements['experience'] = 'Updated descriptions to emphasize relevant achievements';
+    sectionImprovements['education'] = 'Maintained with minor formatting improvements';
+  }
+  
+  logger.info('Successfully created structured response from raw text');
   
   return {
-    tailoredContent: content,
-    enhancedProfile,
+    tailoredContent: cleanContent || originalCV, // Fallback to original if empty
+    enhancedProfile: enhancedProfile || 'Professional profile tailored to highlight relevant experience and skills',
     sectionImprovements
   };
 } 
