@@ -9,7 +9,6 @@ import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, RefreshCw, Clock, Info, Download, FileText, CheckCircle, AlertTriangle, ChevronDown, Briefcase } from "lucide-react";
-import { analyzeCVContent, optimizeCVForJob } from '@/lib/services/mistral.service';
 import { tailorCVForJob as origTailorCVForJob, getIndustryOptimizationGuidance } from '@/app/lib/services/tailorCVService';
 import { useToast } from "@/hooks/use-toast";
 import JobMatchDetailedAnalysis from './JobMatchDetailedAnalysis';
