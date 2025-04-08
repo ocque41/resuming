@@ -1,7 +1,13 @@
 import MistralClient from '@mistralai/mistralai';
-import 'server-only';
 import { logger } from '@/lib/logger';
 import { mistralRateLimiter } from './rate-limiter';
+
+// Function to ensure we're running on the server
+const ensureServer = () => {
+  if (typeof window !== 'undefined') {
+    throw new Error('This function can only be called from the server');
+  }
+};
 
 // Initialize Mistral client
 const getMistralClient = () => {
@@ -92,6 +98,9 @@ export async function processLargeText<T>(
   processingFunction: (textChunk: string, jobDesc: string) => Promise<T>,
   combinationFunction: (results: T[]) => T
 ): Promise<T> {
+  // Ensure this is running on the server
+  ensureServer();
+  
   // Split text into manageable chunks
   const chunks = splitTextIntoChunks(text);
   
@@ -156,7 +165,9 @@ export async function analyzeCVContent(cvText: string): Promise<CVAnalysisResult
       return data.analysis;
     }
     
-    // Server-side processing
+    // Server-side processing - explicitly ensure we're on the server
+    ensureServer();
+    
     const client = getMistralClient();
     if (!client) {
       throw new Error('Mistral client not initialized');
@@ -309,7 +320,9 @@ export async function optimizeCVForJob(cvText: string, jobDescription: string): 
       return data.result;
     }
     
-    // Server-side processing
+    // Server-side processing - explicitly ensure we're on the server
+    ensureServer();
+    
     const client = getMistralClient();
     if (!client) {
       throw new Error('Mistral client not initialized');
@@ -471,7 +484,9 @@ export async function analyzeJobMatch(cvText: string, jobDescription: string): P
       return data.analysis;
     }
     
-    // Server-side processing
+    // Server-side processing - explicitly ensure we're on the server
+    ensureServer();
+    
     const client = getMistralClient();
     if (!client) {
       throw new Error('Mistral client not initialized');
@@ -628,7 +643,9 @@ export async function tailorCVForSpecificJob(cvText: string, jobDescription: str
       return data.result;
     }
     
-    // Server-side processing
+    // Server-side processing - explicitly ensure we're on the server
+    ensureServer();
+    
     const client = getMistralClient();
     if (!client) {
       throw new Error('Mistral client not initialized');
