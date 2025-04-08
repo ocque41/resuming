@@ -192,41 +192,105 @@ export function getIndustryOptimizationGuidance(jobDescription: string): {
 /**
  * Maximum time to wait for tailoring job to complete (in milliseconds)
  */
-const MAX_POLLING_TIME = 45000; // 45 seconds
+const MAX_POLLING_TIME = 180000; // 3 minutes (increased from 45 seconds)
 
 /**
  * Polling interval for checking job status (in milliseconds)
  */
-const POLLING_INTERVAL = 2000; // 2 seconds
+const POLLING_INTERVAL = 5000;  // 5 seconds (increased from 2 seconds)
 
 /**
- * Poll the API for job status until completion or timeout
+ * Maximum number of retries for API calls
  */
-async function pollJobStatus(jobId: string): Promise<TailorCVResult> {
+const MAX_RETRIES = 3;
+
+/**
+ * Retry backoff factor (milliseconds)
+ */
+const RETRY_BACKOFF_FACTOR = 2;
+
+/**
+ * Retry an async function with exponential backoff
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>, 
+  maxRetries: number = MAX_RETRIES,
+  backoff: number = RETRY_BACKOFF_FACTOR
+): Promise<T> {
+  let lastError: any;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      logger.warn(`Attempt ${attempt + 1}/${maxRetries} failed:`, error instanceof Error ? error.message : String(error));
+      // Exponential backoff with jitter
+      const delay = backoff * Math.pow(2, attempt) * (0.9 + Math.random() * 0.2);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError;
+}
+
+/**
+ * Poll for job status with a timeout
+ */
+export async function pollJobStatus(jobId: string): Promise<TailorCVResult> {
+  logger.info(`Polling job status for job ${jobId}`);
+  
+  // Track last progress update to reduce log noise
+  let lastProgressUpdate = 0;
+  let consecutiveErrors = 0;
+  
   const startTime = Date.now();
   
-  // Start polling
   while (Date.now() - startTime < MAX_POLLING_TIME) {
     try {
-      // Check job status
-      const response = await fetch(`/api/cv/tailor-for-job/status?jobId=${jobId}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      // Add retries for network issues
+      let retryCount = 0;
+      let response = null;
+      
+      while (retryCount <= MAX_RETRIES) {
+        try {
+          response = await fetch(`/api/cv/tailor-for-job/status?jobId=${jobId}`);
+          break; // Success, exit retry loop
+        } catch (error) {
+          retryCount++;
+          logger.warn(`Fetch attempt ${retryCount} failed for job ${jobId}: ${error instanceof Error ? error.message : String(error)}`);
+          
+          if (retryCount > MAX_RETRIES) {
+            throw error; // Re-throw if we've exhausted retries
+          }
+          
+          // Exponential backoff before retry
+          const backoffTime = 1000 * Math.pow(RETRY_BACKOFF_FACTOR, retryCount - 1);
+          await new Promise(resolve => setTimeout(resolve, backoffTime));
+        }
+      }
+      
+      if (!response) {
+        throw new Error('Failed to connect to status API after maximum retries');
+      }
       
       if (!response.ok) {
         logger.error(`Error polling job status: ${response.status} ${response.statusText}`);
         
         // If server error, wait a bit before retrying
         if (response.status >= 500) {
-          await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL));
+          consecutiveErrors++;
+          // If we get multiple errors in a row, wait longer
+          const errorBackoff = Math.min(POLLING_INTERVAL * Math.pow(2, consecutiveErrors - 1), 10000);
+          await new Promise(resolve => setTimeout(resolve, errorBackoff));
           continue;
         }
         
         throw new Error(`API error: ${response.status} ${response.statusText}`);
       }
+      
+      // Reset error counter on successful response
+      consecutiveErrors = 0;
       
       const data = await response.json() as TailorCVResponse;
       
@@ -241,21 +305,32 @@ async function pollJobStatus(jobId: string): Promise<TailorCVResult> {
         throw new Error(data.error || 'Job processing failed');
       }
       
-      // Log progress
-      if (data.progress) {
+      // Log progress only when it changes significantly
+      if (data.progress && Math.abs(data.progress - lastProgressUpdate) >= 5) {
         logger.info(`Job ${jobId} progress: ${data.progress}%`);
+        lastProgressUpdate = data.progress;
       }
       
       // Wait before next poll
       await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL));
     } catch (error) {
+      consecutiveErrors++;
       logger.error('Error polling job status:', error instanceof Error ? error.message : String(error));
-      throw error;
+      
+      // If we get too many consecutive errors, fail the job
+      if (consecutiveErrors >= 5) {
+        throw new Error('Too many consecutive errors while polling job status');
+      }
+      
+      // Wait with increasing backoff before retrying
+      const errorBackoff = Math.min(POLLING_INTERVAL * Math.pow(2, consecutiveErrors - 1), 10000);
+      await new Promise(resolve => setTimeout(resolve, errorBackoff));
     }
   }
   
-  // If we reached here, we timed out
-  throw new Error(`Job processing timed out after ${MAX_POLLING_TIME / 1000} seconds`);
+  // If we reached here, we timed out but job might still be processing
+  logger.warn(`Job ${jobId} timed out after ${MAX_POLLING_TIME / 1000} seconds, but may still complete in the background`);
+  throw new Error(`Job processing timed out after ${MAX_POLLING_TIME / 1000} seconds. The job is still processing in the background and may complete later.`);
 }
 
 /**
@@ -278,6 +353,7 @@ export async function tailorCVForJob(
   sectionImprovements: Record<string, string>;
   success: boolean;
   error?: string;
+  jobId?: string;
   industryInsights?: {
     industry: string;
     keySkills: string[];
@@ -379,6 +455,7 @@ export async function tailorCVForJob(
         enhancedProfile: result.enhancedProfile || '',
         sectionImprovements: result.sectionImprovements || {},
         success: true,
+        jobId: data.jobId,
         industryInsights
       };
     } catch (pollError) {
