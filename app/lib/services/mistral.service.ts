@@ -549,6 +549,54 @@ export async function analyzeJobMatch(cvText: string, jobDescription: string): P
 }
 
 /**
+ * Extract JSON from a response that might include markdown formatting
+ * @param content The response content string
+ * @returns Extracted JSON object or null if extraction fails
+ */
+function extractJSONFromResponse(content: string): any | null {
+  try {
+    // First try: direct parse if it's already valid JSON
+    try {
+      return JSON.parse(content);
+    } catch (directParseError) {
+      // Continue to other methods if direct parsing fails
+      logger.debug('Direct JSON parsing failed, trying markdown extraction');
+    }
+    
+    // Second try: Extract JSON from markdown code blocks
+    const markdownJsonRegex = /```(?:json)?\s*({[\s\S]*?})\s*```/;
+    const markdownMatch = content.match(markdownJsonRegex);
+    
+    if (markdownMatch && markdownMatch[1]) {
+      try {
+        return JSON.parse(markdownMatch[1]);
+      } catch (markdownParseError) {
+        logger.warn('Failed to parse JSON from markdown block', markdownParseError instanceof Error ? markdownParseError.message : String(markdownParseError));
+      }
+    }
+    
+    // Third try: Find any JSON-like structure with braces
+    const jsonStart = content.indexOf('{');
+    const jsonEnd = content.lastIndexOf('}');
+    
+    if (jsonStart >= 0 && jsonEnd > jsonStart) {
+      const jsonStr = content.substring(jsonStart, jsonEnd + 1);
+      try {
+        return JSON.parse(jsonStr);
+      } catch (bracesParseError) {
+        logger.warn('Failed to parse JSON from braces extraction', bracesParseError instanceof Error ? bracesParseError.message : String(bracesParseError));
+      }
+    }
+    
+    // No valid JSON found
+    return null;
+  } catch (error) {
+    logger.error('Error in JSON extraction:', error instanceof Error ? error.message : String(error));
+    return null;
+  }
+}
+
+/**
  * Tailors the CV content for a specific job using Mistral AI
  * This is an enhanced function specifically for the specific-optimize workflow
  */
@@ -618,6 +666,8 @@ OPTIMIZATION GUIDELINES:
 6. Do not fabricate experiences, skills, or qualifications
 7. Return the content in a structured format that clearly separates sections
 
+IMPORTANT: Your response must be valid JSON without any markdown formatting or code blocks. The JSON should directly contain the output fields without any surrounding text or formatting.
+
 Most importantly, identify and extract the name and contact details from the original CV and maintain them.`;
 
     // Process the data through Mistral AI
@@ -641,10 +691,12 @@ ${jobTitle ? `\nPosition: ${jobTitle}` : ''}
 
 Please tailor my CV for this job. For each section (Profile, Skills, Experience, Education, Achievements), either enhance the existing section or create an appropriate one if missing.
 
-Return the optimized content in a JSON format with these fields:
+Return ONLY valid JSON with these fields:
 1. tailoredContent: The complete tailored CV with all sections properly organized
 2. enhancedProfile: A specifically enhanced profile section
-3. sectionImprovements: A summary of improvements made to each section`
+3. sectionImprovements: A summary of improvements made to each section
+
+Do not include markdown code blocks, backticks, or any formatting around the JSON.`
           }
         ],
         temperature: 0.3,
@@ -653,40 +705,23 @@ Return the optimized content in a JSON format with these fields:
         response_format: { type: 'json_object' }
       });
       
-      try {
-        // First try direct parsing
-        return JSON.parse(response.choices[0].message.content) as {
+      // Get the raw response content
+      const content = response.choices[0].message.content;
+      
+      // Try parsing the response with our enhanced extractor
+      const parsed = extractJSONFromResponse(content);
+      
+      if (parsed) {
+        return parsed as {
           tailoredContent: string;
           enhancedProfile: string;
           sectionImprovements: Record<string, string>;
         };
-      } catch (parseError) {
-        // If direct parsing fails, extract JSON from the response
-        logger.warn('Failed to parse Mistral response as JSON directly', parseError);
-        
-        // Try to extract JSON from the response
-        const content = response.choices[0].message.content;
-        const jsonStart = content.indexOf('{');
-        const jsonEnd = content.lastIndexOf('}');
-        
-        if (jsonStart >= 0 && jsonEnd > jsonStart) {
-          const jsonStr = content.substring(jsonStart, jsonEnd + 1);
-          try {
-            return JSON.parse(jsonStr) as {
-              tailoredContent: string;
-              enhancedProfile: string;
-              sectionImprovements: Record<string, string>;
-            };
-          } catch (nestedParseError) {
-            logger.error('Error parsing extracted JSON:', nestedParseError instanceof Error ? nestedParseError.message : String(nestedParseError));
-          }
-        }
-        
-        // If JSON extraction fails, create a structured response from the raw content
-        logger.error('Failed to extract JSON from Mistral response, creating structured response');
-        const structuredContent = structureRawResponse(content, cvText);
-        return structuredContent;
       }
+      
+      // If JSON extraction fails, create a structured response from the raw content
+      logger.error(`Failed to extract JSON from Mistral response: ${content.substring(0, 100)}...`);
+      return structureRawResponse(content, cvText);
     });
     
     logger.info('Successfully tailored CV for job');

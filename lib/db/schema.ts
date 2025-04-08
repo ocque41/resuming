@@ -258,6 +258,7 @@ export const jobStatus = pgTable('job_status', {
   jobType: varchar('job_type', { length: 50 }).notNull().default('tailor'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  metadata: jsonb('metadata'),
 });
 
 export const jobStatusRelations = relations(jobStatus, ({ one }) => ({

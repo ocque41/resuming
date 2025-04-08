@@ -16,9 +16,13 @@ interface TailorCVResponse {
   success: boolean;
   result?: TailorCVResult;
   error?: string;
+  errorCode?: string;
   jobId?: string;
   status?: string;
   progress?: number;
+  continuePolling?: boolean;
+  estimatedTimeRemaining?: number;
+  timeoutLevel?: string;
 }
 
 /**
@@ -192,22 +196,31 @@ export function getIndustryOptimizationGuidance(jobDescription: string): {
 /**
  * Maximum time to wait for tailoring job to complete (in milliseconds)
  */
-const MAX_POLLING_TIME = 180000; // 3 minutes (increased from 45 seconds)
+const MAX_POLLING_TIME = 300000; // 5 minutes (increased from 3 minutes)
 
 /**
  * Polling interval for checking job status (in milliseconds)
  */
-const POLLING_INTERVAL = 5000;  // 5 seconds (increased from 2 seconds)
+const POLLING_INTERVAL = 4000;  // 4 seconds
 
 /**
  * Maximum number of retries for API calls
  */
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 4;
 
 /**
  * Retry backoff factor (milliseconds)
  */
-const RETRY_BACKOFF_FACTOR = 2;
+const RETRY_BACKOFF_FACTOR = 1.5;
+
+/**
+ * Timeout thresholds for different levels
+ */
+const TIMEOUT_THRESHOLDS = {
+  SHORT: 45000,   // 45 seconds
+  MEDIUM: 120000, // 2 minutes
+  LONG: 240000,   // 4 minutes
+};
 
 /**
  * Retry an async function with exponential backoff
@@ -215,7 +228,8 @@ const RETRY_BACKOFF_FACTOR = 2;
 async function retryWithBackoff<T>(
   fn: () => Promise<T>, 
   maxRetries: number = MAX_RETRIES,
-  backoff: number = RETRY_BACKOFF_FACTOR
+  backoff: number = RETRY_BACKOFF_FACTOR,
+  retryableErrors: string[] = []
 ): Promise<T> {
   let lastError: any;
   
@@ -224,7 +238,19 @@ async function retryWithBackoff<T>(
       return await fn();
     } catch (error) {
       lastError = error;
-      logger.warn(`Attempt ${attempt + 1}/${maxRetries} failed:`, error instanceof Error ? error.message : String(error));
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      logger.warn(`Attempt ${attempt + 1}/${maxRetries} failed:`, errorMessage);
+      
+      // Check if this is a retryable error
+      const shouldRetry = retryableErrors.length === 0 || 
+                          retryableErrors.some(errType => errorMessage.includes(errType));
+      
+      if (!shouldRetry) {
+        logger.error(`Error type not retryable: ${errorMessage}`);
+        throw error;
+      }
+      
       // Exponential backoff with jitter
       const delay = backoff * Math.pow(2, attempt) * (0.9 + Math.random() * 0.2);
       await new Promise(resolve => setTimeout(resolve, delay));
@@ -235,44 +261,56 @@ async function retryWithBackoff<T>(
 }
 
 /**
- * Poll for job status with a timeout
+ * Poll for job status with a timeout and progress updates
+ * 
+ * @param jobId The job ID to poll for status
+ * @param progressCallback Optional callback to report progress during polling
+ * @param options Additional options for polling behavior
+ * @returns Promise resolving to the tailoring result
  */
-export async function pollJobStatus(jobId: string): Promise<TailorCVResult> {
+export async function pollJobStatus(
+  jobId: string, 
+  progressCallback?: (progress: number) => Promise<void>,
+  options: {
+    maxPollingTime?: number;
+    pollingInterval?: number;
+    retryOnTimeout?: boolean;
+    abortSignal?: AbortSignal;
+  } = {}
+): Promise<TailorCVResult> {
   logger.info(`Polling job status for job ${jobId}`);
+  
+  // Setup options with defaults
+  const maxPollingTime = options.maxPollingTime || MAX_POLLING_TIME;
+  const pollingInterval = options.pollingInterval || POLLING_INTERVAL;
+  const abortSignal = options.abortSignal;
   
   // Track last progress update to reduce log noise
   let lastProgressUpdate = 0;
   let consecutiveErrors = 0;
+  let lastTimeoutLevel: string | null = null;
   
+  // Track total time spent polling
   const startTime = Date.now();
   
-  while (Date.now() - startTime < MAX_POLLING_TIME) {
+  // Response tracker for detecting patterns
+  const responseHistory: Array<{time: number, progress: number, status: string}> = [];
+  
+  while (Date.now() - startTime < maxPollingTime) {
+    // Check for abort signal
+    if (abortSignal?.aborted) {
+      logger.warn(`Polling aborted for job ${jobId}`);
+      throw new Error('Polling was aborted');
+    }
+    
     try {
       // Add retries for network issues
-      let retryCount = 0;
-      let response = null;
-      
-      while (retryCount <= MAX_RETRIES) {
-        try {
-          response = await fetch(`/api/cv/tailor-for-job/status?jobId=${jobId}`);
-          break; // Success, exit retry loop
-        } catch (error) {
-          retryCount++;
-          logger.warn(`Fetch attempt ${retryCount} failed for job ${jobId}: ${error instanceof Error ? error.message : String(error)}`);
-          
-          if (retryCount > MAX_RETRIES) {
-            throw error; // Re-throw if we've exhausted retries
-          }
-          
-          // Exponential backoff before retry
-          const backoffTime = 1000 * Math.pow(RETRY_BACKOFF_FACTOR, retryCount - 1);
-          await new Promise(resolve => setTimeout(resolve, backoffTime));
-        }
-      }
-      
-      if (!response) {
-        throw new Error('Failed to connect to status API after maximum retries');
-      }
+      const response = await retryWithBackoff(
+        async () => await fetch(`/api/cv/tailor-for-job/status?jobId=${jobId}`),
+        MAX_RETRIES,
+        RETRY_BACKOFF_FACTOR,
+        ['network', 'timeout', 'failed to fetch']
+      );
       
       if (!response.ok) {
         logger.error(`Error polling job status: ${response.status} ${response.statusText}`);
@@ -281,9 +319,14 @@ export async function pollJobStatus(jobId: string): Promise<TailorCVResult> {
         if (response.status >= 500) {
           consecutiveErrors++;
           // If we get multiple errors in a row, wait longer
-          const errorBackoff = Math.min(POLLING_INTERVAL * Math.pow(2, consecutiveErrors - 1), 10000);
+          const errorBackoff = Math.min(pollingInterval * Math.pow(2, consecutiveErrors - 1), 10000);
           await new Promise(resolve => setTimeout(resolve, errorBackoff));
           continue;
+        }
+        
+        // For 404 (job not found), this is a terminal error
+        if (response.status === 404) {
+          throw new Error(`Job ${jobId} not found`);
         }
         
         throw new Error(`API error: ${response.status} ${response.statusText}`);
@@ -294,65 +337,181 @@ export async function pollJobStatus(jobId: string): Promise<TailorCVResult> {
       
       const data = await response.json() as TailorCVResponse;
       
+      // Add response to history for pattern detection
+      if (data.progress !== undefined && data.status) {
+        responseHistory.push({
+          time: Date.now() - startTime,
+          progress: data.progress,
+          status: data.status
+        });
+      }
+      
+      // Handle timeout indication from server with different severity levels
+      if (data.status === 'timeout') {
+        lastTimeoutLevel = data.timeoutLevel || 'medium';
+        
+        logger.warn(`Job ${jobId} timeout level: ${lastTimeoutLevel}`);
+        
+        // For short timeouts, continue polling normally
+        if (lastTimeoutLevel === 'short') {
+          // Just log and continue
+          logger.info(`Short timeout for job ${jobId}, continuing polling`);
+        }
+        
+        // For medium timeouts, adjust polling interval
+        if (lastTimeoutLevel === 'medium') {
+          logger.warn(`Medium timeout for job ${jobId}, adjusting polling interval`);
+          // Increase polling interval to reduce load
+          await new Promise(resolve => setTimeout(resolve, pollingInterval * 1.5));
+          
+          // Continue if server says to
+          if (data.continuePolling === false) {
+            logger.warn(`Server requested to stop polling for job ${jobId}`);
+            throw new Error(`Job processing timed out after ${Math.round((Date.now() - startTime) / 1000)} seconds. The job may complete in the background.`);
+          }
+          continue;
+        }
+        
+        // For long timeouts, decide whether to continue based on server instruction and options
+        if (lastTimeoutLevel === 'long') {
+          logger.error(`Long timeout for job ${jobId}`);
+          
+          if (data.continuePolling === false || !options.retryOnTimeout) {
+            logger.warn(`Giving up on job ${jobId} due to long timeout`);
+            throw new Error(`Job processing timed out after ${Math.round((Date.now() - startTime) / 1000)} seconds. The job may still complete in the background.`);
+          } else {
+            logger.info(`Continuing to poll for job ${jobId} despite long timeout`);
+            // Increase polling interval significantly
+            await new Promise(resolve => setTimeout(resolve, pollingInterval * 2));
+            continue;
+          }
+        }
+      }
+      
       // If job completed successfully, return the result
       if (data.success && data.status === 'completed' && data.result) {
-        logger.info(`Job ${jobId} completed successfully`);
+        logger.info(`Job ${jobId} completed successfully after ${Math.round((Date.now() - startTime) / 1000)} seconds`);
+        
+        // Final progress update
+        if (progressCallback && data.progress && data.progress < 100) {
+          await progressCallback(100);
+        }
+        
         return data.result;
       }
       
-      // If job failed, throw an error
+      // If job failed, throw an error with details
       if (data.status === 'error' || !data.success) {
-        throw new Error(data.error || 'Job processing failed');
+        const errorMessage = data.error || 'Job processing failed';
+        const errorCode = data.errorCode || 'UNKNOWN_ERROR';
+        
+        logger.error(`Job ${jobId} failed with error code ${errorCode}: ${errorMessage}`);
+        
+        const error = new Error(errorMessage);
+        (error as any).code = errorCode;
+        (error as any).jobId = jobId;
+        
+        throw error;
       }
       
-      // Log progress only when it changes significantly
-      if (data.progress && Math.abs(data.progress - lastProgressUpdate) >= 5) {
-        logger.info(`Job ${jobId} progress: ${data.progress}%`);
+      // Report progress if it has changed significantly
+      if (progressCallback && data.progress !== undefined && Math.abs(data.progress - lastProgressUpdate) >= 5) {
+        await progressCallback(data.progress);
         lastProgressUpdate = data.progress;
+        
+        // Log progress
+        logger.info(`Job ${jobId} progress: ${data.progress}%`);
+        
+        // Show estimated time remaining if available
+        if (data.estimatedTimeRemaining) {
+          logger.info(`Estimated time remaining for job ${jobId}: ${data.estimatedTimeRemaining} seconds`);
+        }
       }
       
-      // Wait before next poll
-      await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL));
+      // Detect progress stalls by analyzing response history
+      if (responseHistory.length >= 3) {
+        const lastThreeResponses = responseHistory.slice(-3);
+        const allSameProgress = lastThreeResponses.every(r => r.progress === lastThreeResponses[0].progress);
+        const timeSpan = lastThreeResponses[2].time - lastThreeResponses[0].time;
+        
+        // If progress hasn't changed in over 60 seconds across 3 polls
+        if (allSameProgress && timeSpan > 60000 && lastThreeResponses[0].progress < 95) {
+          logger.warn(`Progress appears stalled at ${lastThreeResponses[0].progress}% for job ${jobId}`);
+          
+          // But don't give up immediately, just log the warning
+          // We'll let the server-side timeout handling deal with truly stuck jobs
+        }
+      }
+      
+      // Wait before next poll with small jitter to avoid thundering herd
+      const jitter = Math.random() * 500;
+      await new Promise(resolve => setTimeout(resolve, pollingInterval + jitter));
     } catch (error) {
       consecutiveErrors++;
-      logger.error('Error polling job status:', error instanceof Error ? error.message : String(error));
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      logger.error(`Error polling job status for ${jobId} (attempt ${consecutiveErrors}):`, errorMessage);
       
       // If we get too many consecutive errors, fail the job
       if (consecutiveErrors >= 5) {
-        throw new Error('Too many consecutive errors while polling job status');
+        throw new Error(`Too many consecutive errors while polling job status: ${errorMessage}`);
       }
       
+      // If the error is a network error, retry with longer interval
+      const isNetworkError = 
+        errorMessage.includes('network') || 
+        errorMessage.includes('fetch') || 
+        errorMessage.includes('timeout');
+      
       // Wait with increasing backoff before retrying
-      const errorBackoff = Math.min(POLLING_INTERVAL * Math.pow(2, consecutiveErrors - 1), 10000);
+      const errorBackoff = isNetworkError
+        ? Math.min(pollingInterval * Math.pow(1.5, consecutiveErrors - 1), 15000)
+        : Math.min(pollingInterval * Math.pow(2, consecutiveErrors - 1), 10000);
+        
       await new Promise(resolve => setTimeout(resolve, errorBackoff));
     }
   }
   
   // If we reached here, we timed out but job might still be processing
-  logger.warn(`Job ${jobId} timed out after ${MAX_POLLING_TIME / 1000} seconds, but may still complete in the background`);
-  throw new Error(`Job processing timed out after ${MAX_POLLING_TIME / 1000} seconds. The job is still processing in the background and may complete later.`);
+  logger.warn(`Polling timeout for job ${jobId} after ${maxPollingTime / 1000} seconds, but job may still complete in the background`);
+  
+  // Create a detailed timeout error
+  const timeoutError = new Error(`Job processing timed out after ${maxPollingTime / 1000} seconds. The job is still processing in the background and may complete later.`);
+  (timeoutError as any).code = 'POLLING_TIMEOUT';
+  (timeoutError as any).jobId = jobId;
+  (timeoutError as any).timeSpent = Math.round((Date.now() - startTime) / 1000);
+  (timeoutError as any).lastProgress = lastProgressUpdate;
+  (timeoutError as any).lastTimeoutLevel = lastTimeoutLevel;
+  
+  throw timeoutError;
 }
 
 /**
  * Service function to call the tailor-for-job API
  * 
  * @param cvText - The original CV text to be tailored
- * @param jobDescription - The job description to tailor the CV for
- * @param jobTitle - Optional job title for better context
- * @param cvId - The ID of the CV being tailored
+ * @param params - Parameters for tailoring including jobDescription, jobTitle, etc.
+ * @param progressCallback - Optional callback to report progress during processing
  * @returns A promise that resolves to the tailored CV content and enhancements
  */
 export async function tailorCVForJob(
   cvText: string,
-  jobDescription: string,
-  jobTitle?: string,
-  cvId?: number
+  params: {
+    jobDescription?: string;
+    jobTitle?: string;
+    industry?: string;
+    keySkills?: string[];
+    cvId: string;
+    priority?: string;
+  },
+  progressCallback?: (progress: number) => Promise<void>
 ): Promise<{
   tailoredContent: string;
   enhancedProfile: string;
   sectionImprovements: Record<string, string>;
   success: boolean;
   error?: string;
+  errorCode?: string;
   jobId?: string;
   industryInsights?: {
     industry: string;
@@ -364,8 +523,18 @@ export async function tailorCVForJob(
   logger.info('Starting CV tailoring process');
   
   try {
-    // Get industry-specific optimization guidance
-    const industryInsights = getIndustryOptimizationGuidance(jobDescription);
+    // Extract parameters
+    const { jobDescription, jobTitle, cvId, priority } = params;
+    
+    // Get industry-specific optimization guidance if we have a job description
+    const industryInsights = jobDescription ? 
+      getIndustryOptimizationGuidance(jobDescription) : 
+      {
+        industry: 'General',
+        keySkills: ['communication', 'teamwork', 'problem-solving'],
+        suggestedMetrics: ['efficiency improvements', 'project completion'],
+        formatGuidance: 'Use a clean, chronological format with clear section headings'
+      };
     
     // Default empty result
     const defaultResult = {
@@ -402,79 +571,157 @@ export async function tailorCVForJob(
       };
     }
     
-    // Start the tailoring job
-    const response = await fetch('/api/cv/tailor-for-job', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        cvText,
-        jobDescription,
-        jobTitle,
-        cvId,
-        // Include industry insights for better tailoring
-        industryInsights: {
-          industry: industryInsights.industry || 'General',
-          keySkills: Array.isArray(industryInsights.keySkills) ? industryInsights.keySkills : [],
-          suggestedMetrics: Array.isArray(industryInsights.suggestedMetrics) ? industryInsights.suggestedMetrics : [],
-          formatGuidance: industryInsights.formatGuidance || ''
-        }
-      }),
-    });
-    
-    // Handle non-OK responses
-    if (!response.ok) {
-      const errorText = await response.text();
-      logger.error(`Error starting tailoring job: ${response.status} - ${errorText}`);
-      return {
-        ...defaultResult,
-        error: `API error: ${response.status} ${response.statusText}`
-      };
+    // Report initial progress
+    if (progressCallback) {
+      await progressCallback(5);
     }
     
-    // Parse response
-    const data = await response.json() as TailorCVResponse;
-    
-    // Handle API-level failures
-    if (!data.success || !data.jobId) {
-      logger.error(`API reported failure: ${data.error || 'Unknown error'}`);
-      return {
-        ...defaultResult,
-        error: data.error || 'Unknown error from API'
-      };
-    }
-    
-    // Poll for job completion
     try {
-      const result = await pollJobStatus(data.jobId);
+      // Use the Mistral service for direct processing when server-side
+      if (typeof window === 'undefined') {
+        logger.info('Using direct Mistral processing for tailoring');
+        
+        // Import the Mistral service
+        const { tailorCVForSpecificJob } = await import('@/app/lib/services/mistral.service');
+        
+        // Update progress
+        if (progressCallback) {
+          await progressCallback(25);
+        }
+        
+        // Process with the Mistral AI service
+        const result = await tailorCVForSpecificJob(cvText, jobDescription, jobTitle);
+        
+        // Update progress
+        if (progressCallback) {
+          await progressCallback(90);
+        }
+        
+        // Return successful result with industry insights
+        return {
+          tailoredContent: result.tailoredContent || cvText,
+          enhancedProfile: result.enhancedProfile || '',
+          sectionImprovements: result.sectionImprovements || {},
+          success: true,
+          industryInsights
+        };
+      }
       
-      // Return the successful result with industry insights
-      return {
-        tailoredContent: result.tailoredContent || cvText,
-        enhancedProfile: result.enhancedProfile || '',
-        sectionImprovements: result.sectionImprovements || {},
-        success: true,
-        jobId: data.jobId,
-        industryInsights
-      };
-    } catch (pollError) {
-      logger.error('Error polling for job completion:', pollError instanceof Error ? pollError.message : String(pollError));
+      // If client-side, use the API endpoint
+      logger.info('Starting tailoring job via API');
+      
+      // Determine if this is a high-priority job
+      const isPriorityJob = priority === 'high';
+      
+      // Start the tailoring job
+      const response = await fetch('/api/cv/tailor-for-job', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cvText,
+          jobDescription,
+          jobTitle,
+          cvId,
+          priority: isPriorityJob ? 'high' : 'normal',
+          // Include industry insights for better tailoring
+          industryInsights: {
+            industry: industryInsights.industry || 'General',
+            keySkills: Array.isArray(industryInsights.keySkills) ? industryInsights.keySkills : [],
+            suggestedMetrics: Array.isArray(industryInsights.suggestedMetrics) ? industryInsights.suggestedMetrics : [],
+            formatGuidance: industryInsights.formatGuidance || ''
+          }
+        }),
+      });
+      
+      // Handle non-OK responses
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error(`Error starting tailoring job: ${response.status} - ${errorText}`);
+        return {
+          ...defaultResult,
+          error: `API error: ${response.status} ${response.statusText}`
+        };
+      }
+      
+      // Parse response
+      const data = await response.json() as TailorCVResponse;
+      
+      // Handle API-level failures
+      if (!data.success || !data.jobId) {
+        logger.error(`API reported failure: ${data.error || 'Unknown error'}`);
+        return {
+          ...defaultResult,
+          error: data.error || 'Unknown error from API',
+          errorCode: data.errorCode
+        };
+      }
+      
+      // Poll for job completion
+      try {
+        // Update progress
+        if (progressCallback) {
+          await progressCallback(15);
+        }
+        
+        // Set up abort controller for timeout
+        const abortController = new AbortController();
+        
+        // Set up polling options based on priority
+        const pollingOptions = {
+          maxPollingTime: isPriorityJob ? MAX_POLLING_TIME + 120000 : MAX_POLLING_TIME, // Add 2 minutes for high priority
+          pollingInterval: isPriorityJob ? POLLING_INTERVAL - 1000 : POLLING_INTERVAL, // Poll faster for high priority
+          retryOnTimeout: isPriorityJob, // Auto-retry on timeout for high priority
+          abortSignal: abortController.signal
+        };
+        
+        // Poll for job status with appropriate options
+        const result = await pollJobStatus(data.jobId, progressCallback, pollingOptions);
+        
+        // Return the successful result with industry insights
+        return {
+          tailoredContent: result.tailoredContent || cvText,
+          enhancedProfile: result.enhancedProfile || '',
+          sectionImprovements: result.sectionImprovements || {},
+          success: true,
+          jobId: data.jobId,
+          industryInsights
+        };
+      } catch (pollError) {
+        const errorMessage = pollError instanceof Error ? pollError.message : String(pollError);
+        const errorCode = (pollError as any)?.code || 'UNKNOWN_ERROR';
+        
+        logger.error(`Error polling for job completion (${errorCode}): ${errorMessage}`);
+        
+        return {
+          ...defaultResult,
+          error: errorMessage,
+          errorCode: errorCode,
+          jobId: data.jobId, // Include jobId so client can retry if needed
+        };
+      }
+    } catch (processingError) {
+      const errorMessage = processingError instanceof Error ? processingError.message : String(processingError);
+      logger.error(`Error in CV processing: ${errorMessage}`);
+      
       return {
         ...defaultResult,
-        error: pollError instanceof Error ? pollError.message : 'Error during processing'
+        error: errorMessage
       };
     }
   } catch (error) {
     // Catch any unexpected errors
-    logger.error('Error in tailorCVForJob:', error instanceof Error ? error.message : String(error));
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Error in tailorCVForJob: ${errorMessage}`);
+    
     return {
       tailoredContent: '',
       enhancedProfile: '',
       sectionImprovements: {},
       success: false,
-      error: error instanceof Error ? error.message : 'An unknown error occurred',
-      industryInsights: getIndustryOptimizationGuidance(jobDescription)
+      error: errorMessage,
+      industryInsights: params.jobDescription ? getIndustryOptimizationGuidance(params.jobDescription) : undefined
     };
   }
 } 

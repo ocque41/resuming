@@ -2063,13 +2063,13 @@ const tailorCVForJob = async ({
   jobDescription: string;
   originalText: string;
 }) => {
-  // Call the original function with the expected parameters
-  return origTailorCVForJob(
-    originalText,
+  // Call the original function with the expected parameters - it requires cvText and params object
+  return origTailorCVForJob(originalText, {
     jobDescription,
     jobTitle,
-    parseInt(cvId)
-  );
+    cvId,
+    priority: 'normal'
+  });
 };
 
 // Main component implementation
