@@ -15,7 +15,7 @@ import { getIndustryOptimizationGuidance } from '@/app/lib/services/tailorCVServ
  */
 export async function POST(request: NextRequest) {
   try {
-    // Check authentication
+    // Check authentication using getUser() which uses the session cookie
     const user = await getUser();
     if (!user) {
       logger.warn('Unauthorized access attempt to tailor-for-job/process API');
@@ -46,6 +46,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Job not found' },
         { status: 404 }
+      );
+    }
+    
+    // Verify the job belongs to the authenticated user
+    if (jobRecord.userId !== user.id) {
+      logger.warn(`User ${user.id} attempted to access job ${jobId} belonging to user ${jobRecord.userId}`);
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized access to job' },
+        { status: 403 }
       );
     }
     
