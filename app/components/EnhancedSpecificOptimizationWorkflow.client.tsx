@@ -2116,15 +2116,35 @@ const EnhancedSpecificOptimizationWorkflow: React.FC<EnhancedSpecificOptimizatio
   
   const fetchOriginalText = async (cvId: string) => {
     try {
-      const response = await fetch(`/api/cv/get-text?cvId=${cvId}`);
+      // Try the new endpoint first
+      let response = await fetch(`/api/cv/get-text?cvId=${cvId}`);
+      
+      // If new endpoint fails, try the legacy endpoint as fallback
       if (!response.ok) {
-        throw new Error('Failed to fetch CV content');
+        console.warn(`Failed to fetch CV content from new endpoint, trying legacy endpoint for CV ${cvId}`);
+        response = await fetch(`/api/cv/${cvId}/content`);
       }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch CV content (Status: ${response.status})`);
+      }
+      
       const data = await response.json();
+      
+      // Handle data format from both endpoints
       if (!data.success) {
         throw new Error(data.error || 'Failed to fetch CV content');
       }
-      setOriginalText(data.text);
+      
+      // Handle different property names (text vs content)
+      const cvText = data.text || data.content; 
+      
+      if (!cvText) {
+        throw new Error('CV text is empty or unavailable');
+      }
+      
+      setOriginalText(cvText);
+      
     } catch (error) {
       const errorMessage = error instanceof Error 
         ? error.message 
