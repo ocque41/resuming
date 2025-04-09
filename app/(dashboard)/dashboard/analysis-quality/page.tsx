@@ -4,18 +4,18 @@ import { PremiumCard, PremiumCardContent, PremiumCardHeader, PremiumCardTitle } 
 import PremiumPageLayout from "@/components/PremiumPageLayout";
 import dynamic from "next/dynamic";
 
-// Dynamically import client components
-const AnalyticsVisualizer = dynamic(() => import("@/components/analytics/AnalyticsVisualizer.client"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex flex-col items-center justify-center w-full h-64 bg-[#111111] border border-[#222222] rounded-md">
-      <div className="w-8 h-8 border-2 border-t-transparent border-[#B4916C] rounded-full animate-spin mb-2"></div>
-      <p className="text-[#F9F6EE]">Loading analytics...</p>
-    </div>
-  )
-});
-
 export default async function AnalysisQualityPage() {
+  // Dynamically import client components inside the component function
+  const AnalyticsVisualizer = dynamic(() => import("@/components/analytics/AnalyticsVisualizer.client"), {
+    ssr: false,
+    loading: () => (
+      <div className="flex flex-col items-center justify-center w-full h-64 bg-[#111111] border border-[#222222] rounded-md">
+        <div className="w-8 h-8 border-2 border-t-transparent border-[#B4916C] rounded-full animate-spin mb-2"></div>
+        <p className="text-[#F9F6EE]">Loading analytics...</p>
+      </div>
+    )
+  });
+
   const user = await getUser();
   if (!user) {
     redirect("/sign-in");
