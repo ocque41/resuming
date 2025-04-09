@@ -363,6 +363,109 @@ const renderSuggestionItems = (suggestions: Array<{title: string; description: s
   </div>
 );
 
+// Add this new component to showcase the system enhancements
+const EnhancementsHighlight = () => {
+  return (
+    <div className="mb-6 bg-gradient-to-r from-[#151515] to-[#111111] border border-[#222222] rounded-lg overflow-hidden">
+      <div className="p-4 bg-[#B4916C]/10 border-b border-[#B4916C]/20">
+        <h3 className="text-lg font-safiro text-[#F9F6EE] flex items-center">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-[#B4916C]" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          </svg>
+          Enhanced Document Analysis System
+        </h3>
+      </div>
+      <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-[#171717] p-4 rounded-md">
+          <div className="flex items-center mb-2">
+            <div className="bg-[#B4916C] rounded-full p-1 mr-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#111111]" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
+                <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <h4 className="text-[#F9F6EE] font-medium">Multi-Format Support</h4>
+          </div>
+          <p className="text-[#C5C2BA] text-sm">
+            Now supporting PDF, DOCX, TXT, and more document formats with specialized analysis for each type.
+          </p>
+        </div>
+        
+        <div className="bg-[#171717] p-4 rounded-md">
+          <div className="flex items-center mb-2">
+            <div className="bg-[#B4916C] rounded-full p-1 mr-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#111111]" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <h4 className="text-[#F9F6EE] font-medium">Enhanced CV Analysis</h4>
+          </div>
+          <p className="text-[#C5C2BA] text-sm">
+            Improved ATS compatibility scoring, industry keyword detection, and skill gap analysis.
+          </p>
+        </div>
+        
+        <div className="bg-[#171717] p-4 rounded-md">
+          <div className="flex items-center mb-2">
+            <div className="bg-[#B4916C] rounded-full p-1 mr-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#111111]" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <h4 className="text-[#F9F6EE] font-medium">AI-Powered Insights</h4>
+          </div>
+          <p className="text-[#C5C2BA] text-sm">
+            Advanced AI models provide deeper insights and personalized improvement recommendations.
+          </p>
+        </div>
+      </div>
+      
+      <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-[#171717] p-4 rounded-md">
+          <div className="flex items-center mb-2">
+            <div className="bg-[#B4916C] rounded-full p-1 mr-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#111111]" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <h4 className="text-[#F9F6EE] font-medium">Quality Feedback System</h4>
+          </div>
+          <p className="text-[#C5C2BA] text-sm">
+            New feedback system allows you to rate analyses and provide suggestions for continuous improvement.
+          </p>
+        </div>
+        
+        <div className="bg-[#171717] p-4 rounded-md">
+          <div className="flex items-center mb-2">
+            <div className="bg-[#B4916C] rounded-full p-1 mr-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#111111]" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M3 12v3c0 1.657 3.134 3 7 3s7-1.343 7-3v-3c0 1.657-3.134 3-7 3s-7-1.343-7-3z" />
+                <path d="M3 7v3c0 1.657 3.134 3 7 3s7-1.343 7-3V7c0 1.657-3.134 3-7 3S3 8.657 3 7z" />
+                <path d="M17 5c0 1.657-3.134 3-7 3S3 6.657 3 5s3.134-3 7-3 7 1.343 7 3z" />
+              </svg>
+            </div>
+            <h4 className="text-[#F9F6EE] font-medium">Advanced Analytics</h4>
+          </div>
+          <p className="text-[#C5C2BA] text-sm">
+            View quality metrics and performance analytics for document analyses in the new analytics dashboard.
+          </p>
+          <div className="mt-2">
+            <a
+              href="/dashboard/analysis-quality"
+              className="inline-flex items-center text-sm text-[#B4916C] hover:text-[#C5A17C] transition-colors"
+            >
+              View Analytics Dashboard
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [documentPurpose, setDocumentPurpose] = useState<string>("general");
@@ -1426,6 +1529,8 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   return (
     <div className="w-full">
       <div className="space-y-4">
+        <EnhancementsHighlight />
+        
         <div className="mb-4">
           <label className="block mb-2 text-[#F9F6EE] font-borna">Select Document</label>
           <DocSelector
