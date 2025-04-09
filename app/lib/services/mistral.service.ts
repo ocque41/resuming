@@ -703,19 +703,24 @@ export async function tailorCVForSpecificJob(
     // Use a more targeted prompt for CV tailoring that explicitly requests
     // a well-formatted CV document instead of a JSON structure
     const systemPrompt = `You are an expert CV writer and job application specialist. 
-Your task is to tailor the provided CV to make it more relevant and appealing for the specific job position.
+Your task is to enhance the provided CV to align with the specific job position.
 
 IMPORTANT FORMATTING INSTRUCTIONS:
-- Output a well-formatted CV document, NOT JSON. 
-- START with the person's name and contact details.
-- Create clear section headings (bold or with clear separation).
-- Maintain a professional, concise structure.
-- Include these sections: Profile/Summary, Goals, Skills, Experience, Education, and Achievements.
-- Enhance content to highlight relevance to the job, but maintain facts - don't invent qualifications.
-- Focus on tailoring content to match job requirements while keeping original structure.
-- Keep overall length similar to the original CV.
+- Output a well-formatted CV document, NOT JSON
+- Maintain the person's name and contact details at the top
+- Create clear section headings
+- Maintain professional structure
+- Include these sections in order:
+  1. Profile/Summary (using keywords from job description)
+  2. Objectives (3 specific goals for this role)
+  3. Skills (add 1 critical skill from job requirements)
+  4. Experience
+  5. Education
+  6. Industry Focus (aligned with target job)
+- Keep overall length similar to original CV
+- Preserve factual information - don't invent qualifications
 
-After tailoring the CV, briefly explain your main changes in a section titled "## ANALYSIS" at the very end.`;
+After adjusting the CV, briefly explain your main changes in a section titled "## ANALYSIS" at the very end.`;
 
     const userPrompt = `JOB TITLE: ${jobTitle}
 
@@ -725,7 +730,11 @@ ${truncatedJobDescription}
 ORIGINAL CV:
 ${cvText}
 
-Please tailor this CV for the specific job position described above. The CV should begin with the person's name and contact information, followed by a clear structure with sections for Profile/Summary, Goals, Skills, Experience, Education, and Achievements.`;
+Please adjust this CV for the specific job position described above, following the formatting instructions exactly.
+Extract top 10 keywords from the job description and incorporate them naturally into the profile section.
+The objectives should be 3 specific goals the candidate aims to achieve in this role.
+Add exactly one critical skill from the job requirements if not already present.
+Update the industry focus to match the target job's industry.`;
 
     let result: string = '';
     
@@ -1004,20 +1013,16 @@ function generateSectionImprovements(
   jobTitle: string, 
   jobDescription: string
 ): string {
-  // Basic comparison to generate analysis
-  const originalWords = originalCV.split(/\s+/).length;
-  const tailoredWords = tailoredCV.split(/\s+/).length;
-  
   const analysis = `## ANALYSIS
 
-The CV has been tailored for the ${jobTitle} position. Key improvements include:
+The CV has been aligned with the ${jobTitle} position. Key changes include:
 
-1. **Targeted Content:** The CV now emphasizes relevant skills and experiences for the ${jobTitle} role.
-2. **Achievements Focus:** Highlighted specific achievements that demonstrate value.
-3. **Structure Enhancement:** Organized information in a clear, professional format.
-4. **Job-Specific Skills:** Emphasized skills mentioned in the job description.
+1. **Profile Focus:** Updated profile section with relevant keywords and experience highlights
+2. **Clear Objectives:** Added specific goals aligned with the role requirements
+3. **Skills Enhancement:** Included critical skills required for the position
+4. **Industry Alignment:** Updated industry focus to match the target role
 
-The tailored CV maintains your core qualifications while presenting them in a way that directly addresses the job requirements. I've included a Goals section to show career alignment with this position.`;
+The CV maintains your core qualifications while presenting them in a way that directly connects with this specific position.`;
 
   return analysis;
 } 
