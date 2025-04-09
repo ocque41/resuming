@@ -194,6 +194,175 @@ const EmptyDocumentState = () => (
   </div>
 );
 
+// Feedback component for document analysis
+const AnalysisFeedback = ({ documentId, analysisType }: { documentId: string, analysisType: string }) => {
+  const [rating, setRating] = useState<number | null>(null);
+  const [feedbackText, setFeedbackText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!rating) return;
+    
+    setSubmitting(true);
+    
+    try {
+      const response = await fetch('/api/document/analyze/feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          documentId,
+          analysisType,
+          rating,
+          feedbackText: feedbackText.trim() || undefined
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to submit feedback');
+      }
+      
+      setSubmitted(true);
+      setTimeout(() => {
+        setRating(null);
+        setFeedbackText("");
+        setSubmitted(false);
+      }, 5000);
+    } catch (error) {
+      console.error('Error submitting feedback:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  
+  // Skip rendering if no document ID
+  if (!documentId) return null;
+  
+  return (
+    <div className="mt-6 border border-[#222222] rounded-md p-4 bg-[#111111]">
+      <h4 className="text-[#F9F6EE] font-semibold mb-3">Was this analysis helpful?</h4>
+      
+      {submitted ? (
+        <div className="flex items-center justify-center py-4">
+          <div className="flex items-center gap-2 text-[#B4916C]">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            <span>Thank you for your feedback!</span>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-2 mb-4">
+            {[1, 2, 3, 4, 5].map((value) => (
+              <button
+                key={value}
+                onClick={() => setRating(value)}
+                className={`w-8 h-8 flex items-center justify-center rounded-full ${
+                  rating === value ? 'bg-[#B4916C] text-[#111111]' : 'bg-[#222222] text-[#F9F6EE] hover:bg-[#333333]'
+                }`}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+          
+          <textarea
+            placeholder="Optional: Add any suggestions for improving the analysis..."
+            value={feedbackText}
+            onChange={(e) => setFeedbackText(e.target.value)}
+            className="w-full p-3 bg-[#171717] border border-[#222222] rounded-md text-[#F9F6EE] placeholder-[#555555] focus:outline-none focus:ring-1 focus:ring-[#B4916C] focus:border-transparent resize-none h-24"
+          />
+          
+          <div className="mt-3">
+            <button
+              onClick={handleSubmit}
+              disabled={!rating || submitting}
+              className="px-4 py-2 bg-[#333333] text-[#F9F6EE] rounded-md hover:bg-[#444444] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+            >
+              {submitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-t-transparent border-[#B4916C] rounded-full animate-spin"></div>
+                  <span>Submitting...</span>
+                </>
+              ) : (
+                <>
+                  <span>Submit Feedback</span>
+                </>
+              )}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+// Add the missing types for the map functions
+// For keywords
+const renderKeywordChips = (keywords: string[]) => (
+  <div className="flex flex-wrap gap-2 mt-2">
+    {keywords.map((keyword: string, index: number) => (
+      <div key={index} className="px-3 py-1 bg-[#1A1A1A] text-[#F9F6EE] rounded-full text-xs">
+        {keyword}
+      </div>
+    ))}
+  </div>
+);
+
+// For missing keywords
+const renderMissingKeywords = (keywords: string[]) => (
+  <div className="flex flex-wrap gap-2 mt-2">
+    {keywords.map((keyword: string, index: number) => (
+      <div key={index} className="px-3 py-1 bg-[#1A1A1A] text-[#F9F6EE]/60 border border-[#333333] rounded-full text-xs flex items-center">
+        <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        {keyword}
+      </div>
+    ))}
+  </div>
+);
+
+// For skill titles
+const renderSkillTitles = (titles: string[]) => (
+  <div className="flex flex-wrap gap-2 mt-3">
+    {titles.map((title: string, index: number) => (
+      <div key={index} className="px-3 py-1 bg-[#1A1A1A] text-[#F9F6EE] rounded-full text-xs font-medium">
+        {title}
+      </div>
+    ))}
+  </div>
+);
+
+// For issues
+const renderIssueItems = (issues: Array<{title: string; description: string}>) => (
+  <div className="space-y-3 mt-3">
+    {issues.map((issue: {title: string; description: string}, index: number) => (
+      <div key={index} className="p-3 bg-[#1A1A1A] rounded-md">
+        <div className="font-medium text-[#F9F6EE]">{issue.title}</div>
+        <div className="text-[#F9F6EE]/70 text-sm mt-1">{issue.description}</div>
+      </div>
+    ))}
+  </div>
+);
+
+// For suggestions
+const renderSuggestionItems = (suggestions: Array<{title: string; description: string}>) => (
+  <div className="space-y-3 mt-3">
+    {suggestions.map((suggestion: {title: string; description: string}, index: number) => (
+      <div key={index} className="p-3 bg-[#171717] border border-[#222222] rounded-md">
+        <div className="font-medium text-[#B4916C]">{suggestion.title}</div>
+        <div className="text-[#F9F6EE]/70 text-sm mt-1">{suggestion.description}</div>
+      </div>
+    ))}
+  </div>
+);
+
 export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [documentPurpose, setDocumentPurpose] = useState<string>("general");
@@ -206,10 +375,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   // Get the selected document's file name
   const selectedDocument = documents.find(doc => doc.id === selectedDocumentId);
   
-  // Check if the selected document is a PDF
-  const isSelectedDocumentPdf = selectedDocument ? isPdfFile(selectedDocument.fileName) : false;
-  
-  // Analysis type is now primarily determined by document purpose, not file type
+  // Analysis type is primarily determined by document purpose
   const analysisType = documentPurpose;
 
   // Function to fetch document content by ID
@@ -245,12 +411,6 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   const handleAnalyze = async () => {
     if (!selectedDocumentId) {
       setError("Please select a document to analyze");
-      return;
-    }
-    
-    // Validate that the selected document is a PDF
-    if (selectedDocument && !isSelectedDocumentPdf) {
-      setError("Only PDF documents are supported for analysis. Please select a PDF document.");
       return;
     }
 
@@ -966,403 +1126,299 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
   const renderCVAnalysis = () => {
     if (!analysisResult) return null;
     
-    // For CV analysis, we'll reuse the existing key information section
-    // but with some enhancements specific to CVs
+    // Extract CV-specific analysis data
+    const insights = analysisResult.insights || {};
+    const cvAnalysis = analysisResult.cvAnalysis || {};
+    const experienceAnalysis = analysisResult.experienceAnalysis || {};
+    const skillsAnalysis = analysisResult.skillsAnalysis || {};
+    const industryInsights = analysisResult.industryInsights || {};
+    const atsAnalysis = analysisResult.atsAnalysis || {};
+    
     return (
       <div className="space-y-6">
-        <Card title="CV Quality Analysis">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div>
-              <div className="text-[#C5C2BA] mb-2">Document Type</div>
-              <div className="text-lg font-safiro text-[#F9F6EE]">CV / Resume</div>
+        {/* CV Quality Overview Card */}
+        <Card title="CV Quality Analysis" className="border border-[#222222] bg-[#111111]">
+          <div className="mb-6">
+            <div className="flex justify-center">
+              <Progress
+                type="circle"
+                percent={insights.overallScore || 0}
+                format={(percent) => `${percent}`}
+                strokeColor={{
+                  '0%': '#333333',
+                  '100%': '#B4916C',
+                }}
+                width={120}
+              />
             </div>
-            <div>
-              <div className="text-[#C5C2BA] mb-2">Overall Quality</div>
+            <p className="text-center mt-4 text-[#F9F6EE] font-borna">
+              {(insights.overallScore || 0) >= 80 
+                ? "Excellent CV! Your document is well-structured and effective."
+                : (insights.overallScore || 0) >= 60 
+                  ? "Good CV with some room for improvement."
+                  : "This CV could benefit from significant improvements."}
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="text-center p-3 bg-[#171717] rounded-lg">
+              <div className="text-[#C5C2BA] text-sm mb-1">ATS Compatibility</div>
               <Progress 
-                percent={analysisResult.insights?.overallScore || 0} 
+                percent={insights.atsCompatibility || atsAnalysis.atsCompatibilityScore || 0} 
                 strokeColor="#B4916C" 
+                size="small"
+              />
+            </div>
+            <div className="text-center p-3 bg-[#171717] rounded-lg">
+              <div className="text-[#C5C2BA] text-sm mb-1">Industry Alignment</div>
+              <Progress 
+                percent={industryInsights.industryAlignment || 0} 
+                strokeColor="#B4916C" 
+                size="small"
+              />
+            </div>
+            <div className="text-center p-3 bg-[#171717] rounded-lg">
+              <div className="text-[#C5C2BA] text-sm mb-1">Achievement Focus</div>
+              <Progress 
+                percent={experienceAnalysis.achievementsToResponsibilitiesRatio || 0} 
+                strokeColor="#B4916C" 
+                size="small"
               />
             </div>
           </div>
         </Card>
         
-        <Card title="Content Breakdown">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <h4 className="text-[#F9F6EE] font-medium mb-3">Key Strengths</h4>
-              <ul className="list-disc list-inside text-[#C5C2BA] space-y-2">
-                {Array.isArray(analysisResult.keyPoints) ? 
-                  analysisResult.keyPoints.slice(0, 3).map((point: string, index: number) => (
-                    <li key={index}>{point}</li>
-                  )) : 
-                  <li>No key strengths identified</li>
-                }
-              </ul>
+        {/* Industry Insights Card */}
+        <Card 
+          title={
+            <div className="flex items-center">
+              <span className="text-[#F9F6EE] mr-2">Industry Analysis</span>
+              <span className="bg-[#333333] text-[#B4916C] px-2 py-0.5 rounded text-sm">
+                {industryInsights.identifiedIndustry || "General"}
+              </span>
             </div>
+          } 
+          className="border border-[#222222] bg-[#111111]"
+        >
+          <div className="space-y-4">
+            {/* Industry Keywords */}
             <div>
-              <h4 className="text-[#F9F6EE] font-medium mb-3">Areas for Improvement</h4>
-              <ul className="list-disc list-inside text-[#C5C2BA] space-y-2">
-                {Array.isArray(analysisResult.recommendations) ? 
-                  analysisResult.recommendations.map((rec: string, index: number) => (
-                    <li key={index}>{rec}</li>
-                  )) : 
-                  <li>No recommendations available</li>
-                }
-              </ul>
+              <h4 className="text-[#F9F6EE] font-semibold mb-2">Industry Keywords Found</h4>
+              {renderKeywordChips(industryInsights.industryKeywords || [])}
+            </div>
+            
+            {/* Missing Industry Keywords */}
+            <div>
+              <h4 className="text-[#F9F6EE] font-semibold mb-2">Missing Industry Keywords</h4>
+              {renderMissingKeywords(industryInsights.missingIndustryKeywords || [])}
+            </div>
+            
+            {/* Industry Trends */}
+            {industryInsights.recruitmentTrends && (
+              <div>
+                <h4 className="text-[#F9F6EE] font-semibold mb-2">Recruitment Trends</h4>
+                <p className="text-[#C5C2BA]">{industryInsights.recruitmentTrends}</p>
+              </div>
+            )}
+          </div>
+        </Card>
+        
+        {/* Experience Analysis Card */}
+        <Card title="Experience Analysis" className="border border-[#222222] bg-[#111111]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div>
+              <h4 className="text-[#F9F6EE] font-semibold mb-3">Experience Overview</h4>
+              <div className="space-y-3">
+                <div>
+                  <div className="flex justify-between text-[#C5C2BA] text-sm mb-1">
+                    <span>Relevant Experience</span>
+                    <span>{experienceAnalysis.experienceRelevance || 0}/100</span>
+                  </div>
+                  <Progress 
+                    percent={experienceAnalysis.experienceRelevance || 0} 
+                    strokeColor="#B4916C" 
+                    size="small"
+                    showInfo={false}
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between text-[#C5C2BA] text-sm mb-1">
+                    <span>Action Verbs</span>
+                    <span>{experienceAnalysis.actionVerbUsage || 0}/100</span>
+                  </div>
+                  <Progress 
+                    percent={experienceAnalysis.actionVerbUsage || 0} 
+                    strokeColor="#B4916C" 
+                    size="small"
+                    showInfo={false}
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between text-[#C5C2BA] text-sm mb-1">
+                    <span>Quantified Results</span>
+                    <span>{experienceAnalysis.quantifiedResults || 0}/100</span>
+                  </div>
+                  <Progress 
+                    percent={experienceAnalysis.quantifiedResults || 0} 
+                    strokeColor="#B4916C" 
+                    size="small"
+                    showInfo={false}
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <h4 className="text-[#F9F6EE] font-semibold mb-3">Job History</h4>
+              {experienceAnalysis.experienceInYears && (
+                <div className="mb-2 text-[#F9F6EE]">
+                  <span className="font-bold text-[#B4916C]">{experienceAnalysis.experienceInYears}</span> years of experience
+                </div>
+              )}
+              <div className="max-h-40 overflow-y-auto scrollbar-thin scrollbar-thumb-[#333333] scrollbar-track-[#111111]">
+                {(experienceAnalysis.jobTitles || []).map((title: string, index: number) => {
+                  const company = experienceAnalysis.companies?.[index] || '';
+                  return (
+                    <div key={index} className="mb-2 pb-2 border-b border-[#222222] last:border-0">
+                      <div className="text-[#F9F6EE]">{title}</div>
+                      {company && <div className="text-[#8A8782] text-sm">{company}</div>}
+                    </div>
+                  );
+                })}
+                {(!experienceAnalysis.jobTitles || experienceAnalysis.jobTitles.length === 0) && (
+                  <div className="text-[#8A8782]">No job history detected</div>
+                )}
+              </div>
             </div>
           </div>
         </Card>
         
-        <Card title="CV Metrics">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {analysisResult.insights && Object.entries(analysisResult.insights).map(([key, value]: [string, any], index: number) => {
-              // Skip the overall score as we already display it
-              if (key === 'overallScore') return null;
-              
-              return (
-                <div key={index} className="text-center">
-                  <div className="text-[#C5C2BA] mb-2 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</div>
-                  <Progress 
-                    type="circle" 
-                    percent={value || 0} 
-                    width={70} 
-                    strokeColor="#B4916C" 
-                  />
-                </div>
-              );
-            })}
+        {/* ATS Analysis Card */}
+        <Card title="ATS Optimization" className="border border-[#222222] bg-[#111111]">
+          <div className="mb-4">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-[#F9F6EE] font-semibold">ATS Compatibility Score</span>
+              <span className="text-[#F9F6EE]">{atsAnalysis.atsCompatibilityScore || 0}/100</span>
+            </div>
+            <Progress 
+              percent={atsAnalysis.atsCompatibilityScore || 0} 
+              strokeColor={{
+                '0%': '#ff4d4f',
+                '50%': '#faad14',
+                '100%': '#52c41a',
+              }}
+            />
+          </div>
+          
+          <div className="space-y-4">
+            {/* ATS Issues */}
+            <div>
+              <h4 className="text-[#F9F6EE] font-semibold mb-2">Formatting Issues</h4>
+              {renderIssueItems(atsAnalysis.formatIssues || [])}
+            </div>
+            
+            {/* Improvement Suggestions */}
+            <div>
+              <h4 className="text-[#F9F6EE] font-semibold mb-2">ATS Improvement Suggestions</h4>
+              {renderSuggestionItems(atsAnalysis.improvementSuggestions || [])}
+            </div>
+          </div>
+        </Card>
+        
+        {/* Skills Analysis Card */}
+        <Card title="Skills Analysis" className="border border-[#222222] bg-[#111111]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div>
+              <h4 className="text-[#F9F6EE] font-semibold mb-3">Technical Skills</h4>
+              {renderSkillTitles(skillsAnalysis.technicalSkills || [])}
+            </div>
+            
+            <div>
+              <h4 className="text-[#F9F6EE] font-semibold mb-3">Soft Skills</h4>
+              {renderSkillTitles(skillsAnalysis.softSkills || [])}
+            </div>
+          </div>
+          
+          <div className="mt-4">
+            <h4 className="text-[#F9F6EE] font-semibold mb-2">Skill Gaps</h4>
+            {renderMissingKeywords(skillsAnalysis.skillsGaps || [])}
+          </div>
+        </Card>
+        
+        {/* Recommendations Card */}
+        <Card 
+          title="Improvement Recommendations" 
+          className="border border-[#222222] bg-[#111111]"
+        >
+          <div className="space-y-3">
+            {(analysisResult.recommendations || []).map((recommendation: string, index: number) => (
+              <div 
+                key={index} 
+                className="p-3 bg-[#171717] rounded-lg border-l-4 border-[#B4916C]"
+              >
+                <p className="text-[#F9F6EE]">{recommendation}</p>
+              </div>
+            ))}
+            {(!analysisResult.recommendations || analysisResult.recommendations.length === 0) && (
+              <p className="text-[#8A8782]">No recommendations available</p>
+            )}
           </div>
         </Card>
       </div>
     );
   };
   
-  // Helper function to render scientific paper analysis
+  // Helper function to render scientific analysis
   const renderScientificAnalysis = () => {
-    if (!analysisResult) return <Empty description="No analysis data available" />;
-
-    // Access the scientific paper specific data
-    const {
-      researchStructure,
-      researchQuality,
-      citationAnalysis,
-      contentAssessment,
-      researchGaps,
-      futureWorkSuggestions
-    } = analysisResult;
-
+    if (!analysisResult) {
+      return <Empty description="No scientific analysis available" />;
+    }
+    
+    // Access the scientific paper specific data with fallbacks
+    const researchQuality = analysisResult.researchQuality || {
+      overall: "neutral",
+      score: 0.5
+    };
+    
     return (
-      <div className="space-y-6">
-        <div className="mb-4">
-          <h3 className="text-xl text-[#F9F6EE] font-safiro mb-3">Research Paper Analysis</h3>
-          <p className="text-[#C5C2BA] font-borna">
-            Detailed analysis of the research paper's structure, methodology, and contribution to the field.
-          </p>
-        </div>
-
-        {/* Research Structure */}
-        <div className="space-y-4">
-          <h4 className="text-lg text-[#F9F6EE] font-safiro border-b border-[#333333] pb-2">
-            Research Structure
-          </h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Structure components */}
-            <div className="bg-[#171717] rounded-xl p-4 border border-[#222222]">
-              <h5 className="text-[#B4916C] font-safiro mb-3">Structure Components</h5>
-              <div className="space-y-2">
-                {researchStructure && (
-                  <ul className="grid grid-cols-1 gap-2">
-                    <li className="flex items-center">
-                      <div className={`h-4 w-4 rounded-full mr-2 ${researchStructure.hasAbstract ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                      <span className="text-[#F9F6EE] font-borna">Abstract</span>
-                    </li>
-                    <li className="flex items-center">
-                      <div className={`h-4 w-4 rounded-full mr-2 ${researchStructure.hasIntroduction ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                      <span className="text-[#F9F6EE] font-borna">Introduction</span>
-                    </li>
-                    <li className="flex items-center">
-                      <div className={`h-4 w-4 rounded-full mr-2 ${researchStructure.hasMethodology ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                      <span className="text-[#F9F6EE] font-borna">Methodology</span>
-                    </li>
-                    <li className="flex items-center">
-                      <div className={`h-4 w-4 rounded-full mr-2 ${researchStructure.hasResults ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                      <span className="text-[#F9F6EE] font-borna">Results</span>
-                    </li>
-                    <li className="flex items-center">
-                      <div className={`h-4 w-4 rounded-full mr-2 ${researchStructure.hasDiscussion ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                      <span className="text-[#F9F6EE] font-borna">Discussion</span>
-                    </li>
-                    <li className="flex items-center">
-                      <div className={`h-4 w-4 rounded-full mr-2 ${researchStructure.hasConclusion ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                      <span className="text-[#F9F6EE] font-borna">Conclusion</span>
-                    </li>
-                    <li className="flex items-center">
-                      <div className={`h-4 w-4 rounded-full mr-2 ${researchStructure.hasReferences ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                      <span className="text-[#F9F6EE] font-borna">References</span>
-                    </li>
-                  </ul>
-                )}
-              </div>
+      <div className="grid grid-cols-1 gap-6">
+        <Card title="Research Quality">
+          <div className="flex flex-col items-center justify-center mb-6">
+            <div className="text-xl font-bold mb-2 capitalize text-[#F9F6EE]">
+              {researchQuality.overall}
             </div>
-
-            {/* Structure Quality */}
-            <div className="bg-[#171717] rounded-xl p-4 border border-[#222222]">
-              <h5 className="text-[#B4916C] font-safiro mb-3">Structure Quality</h5>
-              {researchStructure && (
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-[#F9F6EE] font-borna">Completeness</span>
-                      <span className="text-[#B4916C] font-borna">{researchStructure.structureCompleteness || 0}%</span>
-                    </div>
-                    <div className="w-full bg-[#333333] rounded-full h-2.5">
-                      <div 
-                        className="bg-[#B4916C] h-2.5 rounded-full" 
-                        style={{ width: `${researchStructure.structureCompleteness || 0}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-[#F9F6EE] font-borna">Quality</span>
-                      <span className="text-[#B4916C] font-borna">{researchStructure.structureQuality || 0}%</span>
-                    </div>
-                    <div className="w-full bg-[#333333] rounded-full h-2.5">
-                      <div 
-                        className="bg-[#B4916C] h-2.5 rounded-full" 
-                        style={{ width: `${researchStructure.structureQuality || 0}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                </div>
-              )}
+            <Progress 
+              percent={Math.round((researchQuality.score || 0) * 100)} 
+              status={
+                researchQuality.overall === "positive" ? "success" : 
+                researchQuality.overall === "negative" ? "exception" : 
+                "normal"
+              }
+              strokeColor={
+                researchQuality.overall === "positive" ? "#52c41a" :
+                researchQuality.overall === "negative" ? "#ff4d4f" :
+                "#B4916C"
+              }
+            />
+            <div className="mt-2 text-sm text-[#F9F6EE]">
+              Research Score: {Math.round((researchQuality.score || 0) * 100)}%
             </div>
           </div>
-        </div>
-
-        {/* Research Quality */}
-        <div className="space-y-4">
-          <h4 className="text-lg text-[#F9F6EE] font-safiro border-b border-[#333333] pb-2">
-            Research Quality Assessment
-          </h4>
-          {researchQuality && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-[#171717] rounded-xl p-4 border border-[#222222]">
-                <h5 className="text-[#B4916C] font-safiro mb-3">Methodology & Analysis</h5>
-                <div className="space-y-3">
-                  <div>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-[#F9F6EE] font-borna">Methodology Rigor</span>
-                      <span className="text-[#B4916C] font-borna">{researchQuality.methodologyRigor || 0}%</span>
-                    </div>
-                    <div className="w-full bg-[#333333] rounded-full h-2.5">
-                      <div 
-                        className="bg-[#B4916C] h-2.5 rounded-full" 
-                        style={{ width: `${researchQuality.methodologyRigor || 0}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-[#F9F6EE] font-borna">Data Quality</span>
-                      <span className="text-[#B4916C] font-borna">{researchQuality.dataQuality || 0}%</span>
-                    </div>
-                    <div className="w-full bg-[#333333] rounded-full h-2.5">
-                      <div 
-                        className="bg-[#B4916C] h-2.5 rounded-full" 
-                        style={{ width: `${researchQuality.dataQuality || 0}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-[#F9F6EE] font-borna">Analysis Depth</span>
-                      <span className="text-[#B4916C] font-borna">{researchQuality.analysisDepth || 0}%</span>
-                    </div>
-                    <div className="w-full bg-[#333333] rounded-full h-2.5">
-                      <div 
-                        className="bg-[#B4916C] h-2.5 rounded-full" 
-                        style={{ width: `${researchQuality.analysisDepth || 0}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-[#171717] rounded-xl p-4 border border-[#222222]">
-                <h5 className="text-[#B4916C] font-safiro mb-3">Contribution & Impact</h5>
-                <div className="space-y-3">
-                  <div>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-[#F9F6EE] font-borna">Originality</span>
-                      <span className="text-[#B4916C] font-borna">{researchQuality.originalityScore || 0}%</span>
-                    </div>
-                    <div className="w-full bg-[#333333] rounded-full h-2.5">
-                      <div 
-                        className="bg-[#B4916C] h-2.5 rounded-full" 
-                        style={{ width: `${researchQuality.originalityScore || 0}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-[#F9F6EE] font-borna">Impact Potential</span>
-                      <span className="text-[#B4916C] font-borna">{researchQuality.impactPotential || 0}%</span>
-                    </div>
-                    <div className="w-full bg-[#333333] rounded-full h-2.5">
-                      <div 
-                        className="bg-[#B4916C] h-2.5 rounded-full" 
-                        style={{ width: `${researchQuality.impactPotential || 0}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-[#F9F6EE] font-borna">Overall Quality</span>
-                      <span className="text-[#B4916C] font-borna">{researchQuality.overallQuality || 0}%</span>
-                    </div>
-                    <div className="w-full bg-[#333333] rounded-full h-2.5">
-                      <div 
-                        className="bg-[#B4916C] h-2.5 rounded-full" 
-                        style={{ width: `${researchQuality.overallQuality || 0}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Citation Analysis */}
-        {citationAnalysis && (
-          <div className="space-y-4">
-            <h4 className="text-lg text-[#F9F6EE] font-safiro border-b border-[#333333] pb-2">
-              Citation Analysis
-            </h4>
-            <div className="bg-[#171717] rounded-xl p-4 border border-[#222222]">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                <div className="flex flex-col items-center p-3 bg-[#111111] rounded-lg">
-                  <span className="text-[#B4916C] text-3xl font-safiro">{citationAnalysis.estimatedCitationCount || 0}</span>
-                  <span className="text-[#C5C2BA] text-sm mt-1">Citations</span>
-                </div>
-                <div className="flex flex-col items-center p-3 bg-[#111111] rounded-lg">
-                  <span className="text-[#B4916C] text-3xl font-safiro">{citationAnalysis.recentReferences || 0}%</span>
-                  <span className="text-[#C5C2BA] text-sm mt-1">Recent References</span>
-                </div>
-                <div className="flex flex-col items-center p-3 bg-[#111111] rounded-lg">
-                  <span className="text-[#B4916C] text-3xl font-safiro">{citationAnalysis.citationQuality || 0}%</span>
-                  <span className="text-[#C5C2BA] text-sm mt-1">Citation Quality</span>
-                </div>
-              </div>
-
-              {/* Key References */}
-              {citationAnalysis.keyReferences && citationAnalysis.keyReferences.length > 0 && (
-                <div>
-                  <h5 className="text-[#B4916C] font-safiro mb-2">Key References</h5>
-                  <ul className="space-y-1 text-[#F9F6EE] font-borna">
-                    {citationAnalysis.keyReferences.map((reference: string, index: number) => (
-                      <li key={index} className="text-sm">
-                        • {reference}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Research Gaps and Future Work */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Research Gaps */}
-          {researchGaps && researchGaps.length > 0 && (
-            <div className="bg-[#171717] rounded-xl p-4 border border-[#222222]">
-              <h5 className="text-[#B4916C] font-safiro mb-3">Research Gaps</h5>
-              <ul className="space-y-2 text-[#F9F6EE] font-borna">
-                {researchGaps.map((gap: string, index: number) => (
-                  <li key={index} className="flex">
-                    <span className="text-[#B4916C] mr-2">•</span>
-                    <span>{gap}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Future Work Suggestions */}
-          {futureWorkSuggestions && futureWorkSuggestions.length > 0 && (
-            <div className="bg-[#171717] rounded-xl p-4 border border-[#222222]">
-              <h5 className="text-[#B4916C] font-safiro mb-3">Future Research Directions</h5>
-              <ul className="space-y-2 text-[#F9F6EE] font-borna">
-                {futureWorkSuggestions.map((suggestion: string, index: number) => (
-                  <li key={index} className="flex">
-                    <span className="text-[#B4916C] mr-2">•</span>
-                    <span>{suggestion}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-
-        {/* Content Assessment */}
-        {contentAssessment && (
-          <div className="space-y-4">
-            <h4 className="text-lg text-[#F9F6EE] font-safiro border-b border-[#333333] pb-2">
-              Content Assessment
-            </h4>
-            <div className="bg-[#171717] rounded-xl p-4 border border-[#222222]">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-                <div>
-                  <div className="flex justify-between mb-1">
-                    <span className="text-[#F9F6EE] font-borna">Content Clarity</span>
-                    <span className="text-[#B4916C] font-borna">{contentAssessment.clarity || 0}%</span>
-                  </div>
-                  <div className="w-full bg-[#333333] rounded-full h-2.5">
-                    <div 
-                      className="bg-[#B4916C] h-2.5 rounded-full" 
-                      style={{ width: `${contentAssessment.clarity || 0}%` }}
-                    ></div>
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between mb-1">
-                    <span className="text-[#F9F6EE] font-borna">Technical Depth</span>
-                    <span className="text-[#B4916C] font-borna">{contentAssessment.technicalDepth || 0}%</span>
-                  </div>
-                  <div className="w-full bg-[#333333] rounded-full h-2.5">
-                    <div 
-                      className="bg-[#B4916C] h-2.5 rounded-full" 
-                      style={{ width: `${contentAssessment.technicalDepth || 0}%` }}
-                    ></div>
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between mb-1">
-                    <span className="text-[#F9F6EE] font-borna">Graphics Quality</span>
-                    <span className="text-[#B4916C] font-borna">{contentAssessment.graphicsQuality || 0}%</span>
-                  </div>
-                  <div className="w-full bg-[#333333] rounded-full h-2.5">
-                    <div 
-                      className="bg-[#B4916C] h-2.5 rounded-full" 
-                      style={{ width: `${contentAssessment.graphicsQuality || 0}%` }}
-                    ></div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-3 bg-[#111111] rounded-lg">
-                    <div className="text-[#C5C2BA] text-sm mb-1">Audience Level</div>
-                    <div className="text-[#F9F6EE] font-borna">{contentAssessment.audienceLevel || "Academic"}</div>
-                  </div>
-                  <div className="p-3 bg-[#111111] rounded-lg">
-                    <div className="text-[#C5C2BA] text-sm mb-1">Jargon Level</div>
-                    <div className="text-[#F9F6EE] font-borna">{contentAssessment.jargonLevel || "Moderate"}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        </Card>
+        
+        <Card title="Key Points">
+          <List
+            dataSource={analysisResult.keyPoints || []}
+            renderItem={(item: string, index: number) => (
+              <List.Item>
+                <List.Item.Meta
+                  avatar={<Avatar style={{ backgroundColor: index % 2 === 0 ? "#B4916C" : "#333333" }}>{index + 1}</Avatar>}
+                  title={<span className="text-[#F9F6EE]">{item}</span>}
+                />
+              </List.Item>
+            )}
+          />
+        </Card>
       </div>
     );
   };
@@ -1379,17 +1435,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
           />
         </div>
         
-        {selectedDocument && !isSelectedDocumentPdf && (
-          <Alert
-            message="PDF Only"
-            description="This analyzer works with PDF documents only. Please select a PDF document."
-            type="warning"
-            showIcon
-            className="bg-[#3A361F] border border-[#E5D373]/30 text-[#F9F6EE]"
-          />
-        )}
-        
-        {selectedDocument && isSelectedDocumentPdf && (
+        {selectedDocument && (
           <DocumentPurposeSelector
             value={documentPurpose}
             onChange={setDocumentPurpose}
@@ -1399,7 +1445,7 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
         <div className="flex flex-wrap gap-2">
           <button
             onClick={handleAnalyze}
-            disabled={isAnalyzing || !selectedDocumentId || (selectedDocument && !isSelectedDocumentPdf)}
+            disabled={isAnalyzing || !selectedDocumentId}
             className="px-4 py-2 bg-[#333333] text-[#F9F6EE] font-borna rounded-md hover:bg-[#444444] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
           >
             {isAnalyzing ? (
@@ -1488,6 +1534,14 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
                 </TabPane>
               </Tabs>
             </div>
+            
+            {/* Add the feedback component */}
+            {selectedDocumentId && (
+              <AnalysisFeedback 
+                documentId={selectedDocumentId} 
+                analysisType={analysisType}
+              />
+            )}
           </div>
         ) : (
           <EmptyDocumentState />
@@ -1495,4 +1549,5 @@ export default function DocumentAnalyzer({ documents }: DocumentAnalyzerProps) {
       </div>
     </div>
   );
-} 
+}
+  

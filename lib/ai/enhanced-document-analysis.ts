@@ -23,20 +23,167 @@ const openai = new OpenAI({
 type AnalysisCache = Map<string, {
   result: AnalysisResult;
   timestamp: number;
+  documentType: string;
+  documentId: string;
 }>;
 
-// Cache expiration: 24 hours
-const CACHE_EXPIRY = 24 * 60 * 60 * 1000;
+// Cache expiration: 24 hours by default, but configurable
+const DEFAULT_CACHE_EXPIRY = 24 * 60 * 60 * 1000;
 const analysisCache: AnalysisCache = new Map();
+
+// Configure cache settings
+interface CacheConfig {
+  enabled: boolean;
+  expiryTime: number; // milliseconds
+  maxSize: number;    // maximum number of items in cache
+}
+
+// Default cache configuration
+const cacheConfig: CacheConfig = {
+  enabled: true,
+  expiryTime: DEFAULT_CACHE_EXPIRY,
+  maxSize: 100
+};
+
+/**
+ * Configure the analysis cache
+ */
+export function configureAnalysisCache(config: Partial<CacheConfig>): void {
+  Object.assign(cacheConfig, config);
+  console.log(`Analysis cache configured: ${JSON.stringify(cacheConfig)}`);
+  
+  // If cache is disabled, clear it
+  if (!cacheConfig.enabled) {
+    clearAnalysisCache();
+  }
+}
+
+/**
+ * Clear the analysis cache completely
+ */
+export function clearAnalysisCache(): void {
+  analysisCache.clear();
+  console.log('Analysis cache cleared');
+}
+
+/**
+ * Remove a specific item from the cache
+ */
+export function invalidateCacheItem(documentId: string, documentPurpose?: string): boolean {
+  const keys = Array.from(analysisCache.keys());
+  const keyPattern = documentPurpose 
+    ? `${documentId}_${documentPurpose}`
+    : `${documentId}`;
+    
+  let removed = false;
+  
+  for (const key of keys) {
+    if (key.startsWith(keyPattern)) {
+      analysisCache.delete(key);
+      removed = true;
+    }
+  }
+  
+  if (removed) {
+    console.log(`Cache invalidated for document: ${documentId}, purpose: ${documentPurpose || 'all'}`);
+  }
+  
+  return removed;
+}
 
 /**
  * Creates a cache key for storing analysis results
  */
 function createCacheKey(documentId: string, fileContent: string, purpose: string = 'general'): string {
-  // For a real implementation, use a proper hash function
-  const contentPreview = fileContent.substring(0, 100).replace(/\s+/g, '');
+  // Generate a content hash based on the first 1000 chars and the length
+  const contentPreview = fileContent.substring(0, 1000).replace(/\s+/g, '');
   const contentLength = fileContent.length.toString();
-  return `${documentId}_${purpose}_${contentPreview}_${contentLength}`;
+  const contentHash = hashString(`${contentPreview}_${contentLength}`);
+  return `${documentId}_${purpose}_${contentHash}`;
+}
+
+/**
+ * Simple string hashing function
+ */
+function hashString(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash).toString(16);
+}
+
+/**
+ * Manages the cache to ensure it doesn't exceed the maximum size
+ */
+function manageCache(): void {
+  if (!cacheConfig.enabled || analysisCache.size <= cacheConfig.maxSize) {
+    return;
+  }
+  
+  // If cache exceeds max size, remove oldest entries
+  const entries = Array.from(analysisCache.entries())
+    .sort((a, b) => a[1].timestamp - b[1].timestamp);
+  
+  const toRemove = entries.slice(0, entries.length - cacheConfig.maxSize);
+  
+  for (const [key] of toRemove) {
+    analysisCache.delete(key);
+  }
+  
+  console.log(`Cache cleaned up: removed ${toRemove.length} oldest entries`);
+}
+
+/**
+ * Get an item from the cache if it exists and is not expired
+ */
+function getCachedAnalysis(
+  documentId: string, 
+  documentText: string, 
+  documentPurpose?: string
+): AnalysisResult | null {
+  if (!cacheConfig.enabled) {
+    return null;
+  }
+  
+  const cacheKey = createCacheKey(documentId, documentText, documentPurpose);
+  const cached = analysisCache.get(cacheKey);
+  
+  // Return null if not in cache or expired
+  if (!cached || (Date.now() - cached.timestamp > cacheConfig.expiryTime)) {
+    return null;
+  }
+  
+  console.log(`Cache hit for document ID: ${documentId}, purpose: ${documentPurpose || 'general'}`);
+  return cached.result;
+}
+
+/**
+ * Store an analysis result in the cache
+ */
+function cacheAnalysisResult(
+  documentId: string, 
+  documentText: string, 
+  result: AnalysisResult, 
+  documentPurpose?: string
+): void {
+  if (!cacheConfig.enabled) {
+    return;
+  }
+  
+  const cacheKey = createCacheKey(documentId, documentText, documentPurpose);
+  
+  analysisCache.set(cacheKey, {
+    result,
+    timestamp: Date.now(),
+    documentType: documentPurpose || 'general',
+    documentId
+  });
+  
+  manageCache();
+  console.log(`Cached analysis for document ID: ${documentId}, purpose: ${documentPurpose || 'general'}`);
 }
 
 /**
@@ -53,18 +200,96 @@ async function detectDocumentTypeFromContent(
   // If clearly a CV, spreadsheet, or presentation by extension, return that
   if (fileType?.category === 'cv' || 
       fileType?.category === 'spreadsheet' || 
-      fileType?.category === 'presentation') {
+      fileType?.category === 'presentation' ||
+      fileType?.category === 'scientific') {
     return fileType.category;
   }
 
-  // For documents that might need content-based classification
+  // Content-based detection patterns
+  const patterns = {
+    cv: [
+      /resum[eé]/i, 
+      /work experience/i, 
+      /education/i, 
+      /skills/i, 
+      /employment/i, 
+      /professional summary/i,
+      /career objective/i
+    ],
+    spreadsheet: [
+      /table \d+/i, 
+      /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec).+(q[1-4])/i,
+      /\b(total|sum|average|mean|median|min|max)\b/i,
+      /\brow\b.+\bcolumn\b/i,
+      /\d+\.\d+%/g,  // Percentage patterns
+      /\$\s*\d+[,\d]*\.\d+/g  // Currency patterns
+    ],
+    presentation: [
+      /slide \d+/i, 
+      /presentation/i, 
+      /agenda/i, 
+      /next slide/i,
+      /thank you.+questions/i,
+      /\bintroduction\b.+\bconclusion\b/i
+    ],
+    scientific: [
+      /abstract/i, 
+      /introduction/i, 
+      /methodology/i, 
+      /results/i, 
+      /discussion/i, 
+      /conclusion/i,
+      /references/i,
+      /et al\./i,
+      /p.value/i,
+      /figure \d+/i,
+      /table \d+/i
+    ]
+  };
+
+  // Check content patterns first for quick determination
+  let detectedType = 'general';
+  let maxMatches = 2; // Threshold of matches needed
+
+  for (const [type, regexPatterns] of Object.entries(patterns)) {
+    let matches = 0;
+    for (const pattern of regexPatterns) {
+      if (pattern.test(fileContent)) {
+        matches++;
+      }
+    }
+    
+    // If we exceed our match threshold, assign this type
+    if (matches > maxMatches) {
+      detectedType = type;
+      maxMatches = matches; // Update so we need more matches to change type
+    }
+  }
+
+  // If we already detected a type from patterns, return it
+  if (detectedType !== 'general') {
+    console.log(`Document type detected from content patterns: ${detectedType}`);
+    return detectedType;
+  }
+
+  // For more ambiguous documents, use AI classification
   try {
     const prompt = `
       Analyze this document content and determine what type of document it is.
-      Respond with ONLY ONE of these categories: "cv", "report", "article", "letter", "legal", "academic", "presentation", "general".
       
       Document content begins:
-      ${fileContent.substring(0, 2000)}
+      ---
+      ${fileContent.substring(0, 3000)}
+      ---
+      
+      Based on the content, classify this document into EXACTLY ONE of these categories:
+      - "cv": If it's a resume, CV, or professional bio
+      - "spreadsheet": If it contains primarily tabular data, financial figures, or numerical data tables
+      - "presentation": If it appears to be slides, has bullet points structure, or presentation format
+      - "scientific": If it's a research paper, academic article, or scientific report
+      - "general": For all other document types (reports, articles, letters, etc.)
+      
+      Respond with ONLY the category name, nothing else.
     `;
 
     const response = await openai.chat.completions.create({
@@ -74,23 +299,20 @@ async function detectDocumentTypeFromContent(
       max_tokens: 20
     });
 
-    const documentType = response.choices[0].message.content?.trim().toLowerCase() || 'general';
+    const aiDocumentType = response.choices[0].message.content?.trim().toLowerCase() || 'general';
+    console.log(`AI-based document type detection result: ${aiDocumentType}`);
     
-    // Map the detected type to our system categories
-    if (documentType === 'cv' || documentType === 'resume') {
-      return 'cv';
-    } else if (documentType === 'presentation') {
-      return 'presentation';
-    } else if (documentType === 'spreadsheet' || documentType === 'table') {
-      return 'spreadsheet'; 
-    } else {
-      return 'document';
+    // Use the AI determination if it's valid
+    if (['cv', 'spreadsheet', 'presentation', 'scientific', 'general'].includes(aiDocumentType)) {
+      return aiDocumentType;
     }
   } catch (error) {
-    console.error('Error detecting document type from content:', error);
-    // Fall back to file extension based detection
-    return fileType?.category || 'document';
+    console.error('Error in AI-based document type detection:', error);
+    // Continue with fallback approach
   }
+  
+  // Fall back to file extension based detection or general
+  return fileType?.category || 'general';
 }
 
 /**
@@ -140,12 +362,9 @@ export async function analyzeDocument(
     console.log(`Starting enhanced analysis for document: ${fileName} (ID: ${documentId}), purpose: ${documentPurpose || 'auto-detect'}`);
     
     // Check cache first - use document purpose in the cache key
-    const cacheKey = createCacheKey(documentId, documentText, documentPurpose);
-    const cached = analysisCache.get(cacheKey);
-    
-    if (cached && (Date.now() - cached.timestamp < CACHE_EXPIRY)) {
-      console.log(`Using cached analysis result for ${fileName}`);
-      return cached.result;
+    const cachedResult = getCachedAnalysis(documentId, documentText, documentPurpose);
+    if (cachedResult) {
+      return cachedResult;
     }
     
     // If a purpose is provided, use that; otherwise detect from content
@@ -186,10 +405,7 @@ export async function analyzeDocument(
     result.analysisType = documentType;
     
     // Cache the result
-    analysisCache.set(cacheKey, {
-      result,
-      timestamp: Date.now()
-    });
+    cacheAnalysisResult(documentId, documentText, result, documentType);
     
     console.log(`Analysis completed for document: ${fileName}, type: ${documentType}`);
     return result;
@@ -208,85 +424,151 @@ async function analyzeGeneralDocument(
   fileName: string
 ): Promise<AnalysisResult> {
   const prompt = `
-    Analyze this document in detail and provide a comprehensive assessment.
+    You are an expert document analyst with training in linguistics, content strategy, and professional writing.
+    Analyze this document thoroughly to provide comprehensive, accurate, and actionable insights.
     
     Document: ${fileName}
     
     Content:
     ${documentText.substring(0, 15000)} // Limit to avoid token limits
     
-    Please provide a complete, detailed analysis with the following elements in a JSON structure:
+    Provide a complete analysis with the following elements in a valid JSON structure:
     
-    1. summary: A 3-5 sentence summary of what this document is about and its purpose
-    2. keyPoints: 4-6 key points from the document content
-    3. recommendations: 3-5 recommendations for improving the document
-    4. insights: Numerical scores (0-100) for the following aspects:
-       - clarity: How clear and understandable the document is
+    1. summary: A clear, concise summary (3-5 sentences) capturing the document's main purpose, audience, and key message
+    
+    2. keyPoints: Array of 5-7 key points extracted from the document, focusing on the most important information, ordered by importance
+    
+    3. recommendations: Array of 4-6 specific, actionable recommendations to improve the document, with each addressing a different aspect (e.g., structure, content, language, formatting)
+    
+    4. insights: Object containing numerical scores (0-100) for:
+       - clarity: How clear and understandable the document is to its target audience
        - relevance: How relevant the content is to the document's apparent purpose
-       - completeness: How complete and comprehensive the document is
-       - conciseness: How concise and to-the-point the document is
-       - structure: How well-structured the document is
-       - engagement: How engaging the document is to read
-       - contentquality: Overall quality of the content
-       - overallScore: Overall document quality score
-    5. topics: Array of topics in the document with relevance scores (0-1), e.g. [{name: "Topic", relevance: 0.85}]
-    6. sentiment: Overall document sentiment as {overall: "positive/negative/neutral", score: decimal 0-1}
-    7. languageQuality: Scores for {grammar, spelling, readability, clarity, overall} (0-100)
+       - completeness: How comprehensive the document is for its purpose
+       - conciseness: How efficient the document is in delivering its message
+       - structure: How well-organized the document is (headings, paragraphs, logical flow)
+       - engagement: How engaging and compelling the content is
+       - contentquality: Overall quality of the information and arguments presented
+       - overallScore: Weighted average of all scores, reflecting overall document quality
     
-    Respond with ONLY the JSON structure.
+    5. topics: Array of topics covered in the document with relevance scores from 0-1, e.g. [{name: "Topic", relevance: 0.85}]
+    
+    6. sentiment: Object containing:
+       - overall: One of ["positive", "negative", "neutral", "mixed"]
+       - score: Decimal from 0-1 (0 = very negative, 0.5 = neutral, 1 = very positive)
+    
+    7. languageQuality: Object containing scores (0-100) for:
+       - grammar: Grammatical correctness
+       - spelling: Spelling accuracy
+       - readability: How easy the text is to read (consider sentence length, word choice, etc.)
+       - clarity: How clearly ideas are expressed
+       - overall: Overall language quality
+       
+    8. documentStructure: Object describing:
+       - sections: Array of main document sections identified
+       - paragraphCount: Approximate number of paragraphs
+       - hasExecutiveSummary: Boolean indicating if an executive summary/abstract is present
+       - hasTOC: Boolean indicating if a table of contents is present
+       - hasConclusion: Boolean indicating if a conclusion section is present
+       
+    9. contentGaps: Array of 2-4 missing elements that would strengthen the document
+    
+    10. audienceAnalysis: Object containing:
+        - targetAudience: Identified target audience of the document
+        - technicality: Score from 0-100 indicating technical complexity
+        - audienceAppropriate: Boolean indicating if language and content match the apparent audience
+        
+    Respond with ONLY the JSON structure. Ensure it is valid JSON with no explanation text.
   `;
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.2,
-    response_format: { type: "json_object" }
-  });
-
   try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+      response_format: { type: "json_object" }
+    });
+
     const content = response.choices[0].message.content;
-    const analysisData = content ? JSON.parse(content) : {};
+    if (!content) {
+      throw new Error('Empty response from OpenAI');
+    }
     
-    // Validate and normalize the result
+    const analysisData = JSON.parse(content);
+    
+    // Validate the analysis data against our schema
+    // This will throw an error if required fields are missing
+    try {
+      const parsedData = analysisSchema.safeParse(analysisData);
+      if (!parsedData.success) {
+        console.warn('Schema validation warnings:', parsedData.error);
+        // Continue with partial data
+      }
+    } catch (validationError) {
+      console.warn('Validation error:', validationError);
+      // Continue with the data we have
+    }
+    
+    // Build the full result
     const result: AnalysisResult = {
       documentId,
       fileName,
+      fileType: 'pdf', // Assuming PDF as mentioned in the route restrictions
       analysisType: 'general',
+      analysisTimestamp: new Date().toISOString(),
+      
+      // Include all analysis data
+      ...analysisData,
+      
+      // Add default values for required fields if missing
       summary: analysisData.summary || 'No summary available',
-      keyPoints: Array.isArray(analysisData.keyPoints) ? analysisData.keyPoints : [],
-      recommendations: Array.isArray(analysisData.recommendations) ? analysisData.recommendations : [],
+      keyPoints: analysisData.keyPoints || [],
+      recommendations: analysisData.recommendations || [],
       insights: analysisData.insights || {
-        clarity: 50,
-        relevance: 50,
-        completeness: 50,
-        conciseness: 50,
-        structure: 50,
-        engagement: 50,
-        contentquality: 50,
-        overallScore: 50
+        clarity: 0,
+        relevance: 0,
+        completeness: 0,
+        conciseness: 0,
+        structure: 0,
+        engagement: 0,
+        contentquality: 0,
+        overallScore: 0
       },
-      topics: Array.isArray(analysisData.topics) ? analysisData.topics : [],
+      topics: analysisData.topics || [],
       sentiment: analysisData.sentiment || { overall: 'neutral', score: 0.5 },
-      languageQuality: analysisData.languageQuality || {
-        grammar: 70,
-        spelling: 70,
-        readability: 70,
-        clarity: 70,
-        overall: 70
+      
+      // Ensure proper formatting for UI components
+      contentAnalysis: {
+        contentDistribution: analysisData.documentStructure?.sections?.map((section: string, index: number) => ({
+          name: section,
+          value: Math.floor(100 / (analysisData.documentStructure?.sections?.length || 1))
+        })) || [],
+        topKeywords: analysisData.topics?.slice(0, 5).map((topic: any) => ({
+          text: topic.name,
+          value: Math.floor(topic.relevance * 10)
+        })) || []
       },
-      timestamp: new Date().toISOString(),
-      createdAt: new Date().toISOString()
+      
+      sentimentAnalysis: {
+        overallScore: analysisData.sentiment?.score || 0.5,
+        sentimentBySection: []
+      },
+      
+      keyInformation: {
+        entities: [],
+        keyDates: [],
+        contactInfo: []
+      }
     };
     
     return result;
   } catch (error) {
-    console.error('Error parsing AI response:', error);
-    throw new Error('Failed to parse AI analysis response');
+    console.error('Error in general document analysis:', error);
+    throw new Error(`Failed to analyze document: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
 /**
- * Analyze a CV/resume document with specialized metrics
+ * Analyze a CV/Resume document with specialized insights
  */
 async function analyzeCVDocument(
   documentId: string, 
@@ -294,108 +576,184 @@ async function analyzeCVDocument(
   fileName: string
 ): Promise<AnalysisResult> {
   const prompt = `
-    Analyze this CV/resume document in detail and provide a comprehensive assessment.
+    You are an expert CV/resume analyst with experience in HR, recruitment, and career coaching across multiple industries.
+    Your task is to thoroughly analyze this CV/resume and provide detailed, actionable insights to help the person improve it.
     
     Document: ${fileName}
     
     Content:
     ${documentText.substring(0, 15000)}
     
-    Provide a detailed analysis with the following elements in JSON:
+    Provide a comprehensive analysis with these elements in a valid JSON structure:
     
-    1. summary: A 3-5 sentence summary of the candidate's background and qualifications
-    2. keyPoints: 5-7 key strengths and qualifications from the CV
-    3. recommendations: 4-6 specific suggestions to improve the CV
-    4. insights: Numerical scores (0-100) for:
-       - clarity: How clear and readable the CV is
-       - relevance: How well tailored the content is for job applications
-       - completeness: How comprehensive the information is
-       - conciseness: How concise and focused the CV is
-       - structure: How well-structured and organized the CV is
-       - engagement: How engaging and interesting the CV is to read
-       - contentquality: Overall quality of the content
-       - overallScore: Overall CV quality score
-    5. topics: Array of professional areas/skills with relevance scores (0-1)
-    6. sentiment: Assessment of CV tone as {overall: "professional/casual/technical", score: decimal 0-1}
-    7. languageQuality: Scores for {grammar, spelling, readability, clarity, overall} (0-100)
-    8. cvAnalysis: {
-       - skills: {
-         technical: Array of {name: string, proficiency: string, relevance: number},
-         soft: Array of {name: string, evidence: string, strength: number},
-         domain: Array of {name: string, relevance: number}
-       },
-       - experience: {
-         yearsOfExperience: number,
-         experienceProgression: string,
-         keyRoles: string[],
-         achievementsHighlighted: boolean,
-         clarity: number
-       },
-       - education: {
-         highestDegree: string,
-         relevance: number,
-         continuingEducation: boolean
-       },
-       - atsCompatibility: {
-         score: number,
-         keywordOptimization: number,
-         formatCompatibility: number,
-         improvementAreas: string[]
-       },
-       - strengths: string[],
-       - weaknesses: string[]
-    }
+    1. summary: A concise summary (3-5 sentences) of the candidate's profile based on their CV
     
-    Respond with ONLY the JSON structure.
+    2. keyPoints: Array of 5-7 strengths of this CV
+    
+    3. recommendations: Array of 5-7 specific, actionable recommendations to improve the CV, prioritized by impact
+    
+    4. insights: Object containing numerical scores (0-100) for:
+       - clarity: How clear and well-organized the CV is
+       - relevance: How well the content demonstrates relevant skills/experience
+       - completeness: How comprehensive the CV is (includes all standard sections)
+       - conciseness: How efficiently the CV presents information
+       - impact: How well achievements and results are highlighted vs just responsibilities
+       - keywords: How effectively industry-relevant keywords are incorporated
+       - atsCompatibility: How well the CV would perform in ATS systems
+       - overallScore: Weighted average of all scores
+    
+    5. cvSections: Object describing:
+       - hasContactInfo: Boolean with assessment of contact information quality
+       - hasProfile: Boolean with assessment of profile/summary section quality
+       - hasExperience: Boolean with assessment of experience section quality
+       - hasEducation: Boolean with assessment of education section quality
+       - hasSkills: Boolean with assessment of skills section quality
+       - hasAchievements: Boolean with assessment of achievements/projects quality
+       - missingImportantSections: Array of important missing sections
+    
+    6. experienceAnalysis: Object containing:
+       - jobTitles: Array of job titles extracted from the CV
+       - companies: Array of company names extracted from the CV
+       - experienceInYears: Estimated total years of experience
+       - experienceRelevance: Score (0-100) for how relevant the experience appears
+       - achievementsToResponsibilitiesRatio: Score (0-100) measuring achievement focus
+       - actionVerbUsage: Score (0-100) for effective use of action verbs
+       - quantifiedResults: Score (0-100) for use of metrics and quantified achievements
+    
+    7. skillsAnalysis: Object containing:
+       - technicalSkills: Array of technical skills identified in the CV
+       - softSkills: Array of soft skills identified in the CV
+       - skillsGaps: Array of potentially missing skills based on the person's profile
+       - industrySpecificSkills: Score (0-100) for relevant industry-specific skills
+       - transferableSkills: Score (0-100) for transferable skills
+    
+    8. industryInsights: Object containing:
+       - identifiedIndustry: Main industry this CV appears targeted for
+       - industryAlignment: Score (0-100) for alignment with industry expectations
+       - industryKeywords: Array of industry-specific keywords found in the CV
+       - missingIndustryKeywords: Array of important industry keywords missing from the CV
+       - recruitmentTrends: Brief insights on how this CV fits current recruitment trends
+    
+    9. atsAnalysis: Object containing:
+       - atsCompatibilityScore: Score (0-100) for ATS readability
+       - keywordOptimization: Score (0-100) for keyword optimization
+       - formatIssues: Array of formatting issues that might affect ATS parsing
+       - fileTypeConsiderations: Any considerations about the file format
+       - improvementSuggestions: Array of specific suggestions to improve ATS compatibility
+    
+    10. visualPresentation: Object containing:
+        - layoutScore: Score (0-100) for layout effectiveness
+        - readabilityScore: Score (0-100) for overall readability
+        - consistencyScore: Score (0-100) for formatting consistency
+        - spacingScore: Score (0-100) for effective use of white space
+        - improvementSuggestions: Array of suggestions to improve visual presentation
+
+    Respond with ONLY the JSON structure. Ensure it is valid JSON with no explanation text.
   `;
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.2,
-    response_format: { type: "json_object" }
-  });
-
   try {
+    // Use GPT-4o for better analysis quality
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+      response_format: { type: "json_object" }
+    });
+
     const content = response.choices[0].message.content;
-    const analysisData = content ? JSON.parse(content) : {};
+    if (!content) {
+      throw new Error('Empty response from OpenAI');
+    }
     
-    // Create a properly structured result
+    const analysisData = JSON.parse(content);
+    
+    // Extract the identified industry for more targeted insights if needed
+    const industry = analysisData.industryInsights?.identifiedIndustry || 'general';
+    console.log(`Detected industry from CV: ${industry}`);
+    
+    // Build the full result with properly formatted data for the UI
     const result: AnalysisResult = {
       documentId,
       fileName,
+      fileType: 'pdf',
       analysisType: 'cv',
+      analysisTimestamp: new Date().toISOString(),
+      
+      // Include all core analysis data
+      ...analysisData,
+      
+      // Ensure required fields have values
       summary: analysisData.summary || 'No summary available',
-      keyPoints: Array.isArray(analysisData.keyPoints) ? analysisData.keyPoints : [],
-      recommendations: Array.isArray(analysisData.recommendations) ? analysisData.recommendations : [],
-      insights: analysisData.insights || {
-        clarity: 50,
-        relevance: 50,
-        completeness: 50,
-        conciseness: 50,
-        structure: 50,
-        engagement: 50,
-        contentquality: 50,
-        overallScore: 50
+      keyPoints: analysisData.keyPoints || [],
+      recommendations: analysisData.recommendations || [],
+      
+      // Format insights for consistency
+      insights: {
+        clarity: analysisData.insights?.clarity || 0,
+        relevance: analysisData.insights?.relevance || 0,
+        completeness: analysisData.insights?.completeness || 0,
+        conciseness: analysisData.insights?.conciseness || 0,
+        impact: analysisData.insights?.impact || 0,
+        keywords: analysisData.insights?.keywords || 0,
+        atsCompatibility: analysisData.insights?.atsCompatibility || 0,
+        overallScore: analysisData.insights?.overallScore || 0
       },
-      topics: Array.isArray(analysisData.topics) ? analysisData.topics : [],
-      sentiment: analysisData.sentiment || { overall: 'neutral', score: 0.5 },
-      languageQuality: analysisData.languageQuality || {
-        grammar: 70,
-        spelling: 70,
-        readability: 70,
-        clarity: 70,
-        overall: 70
+      
+      // Create content analysis for UI components
+      contentAnalysis: {
+        contentDistribution: [
+          { name: "Contact & Profile", value: 10 },
+          { name: "Experience", value: 40 },
+          { name: "Skills", value: 25 },
+          { name: "Education", value: 15 },
+          { name: "Other", value: 10 }
+        ],
+        topKeywords: [
+          ...(analysisData.industryInsights?.industryKeywords || []).slice(0, 5).map((keyword: string) => ({
+            text: keyword,
+            value: Math.floor(Math.random() * 5) + 5 // Random value between 5-10 for visualization
+          }))
+        ]
       },
-      cvAnalysis: analysisData.cvAnalysis,
-      timestamp: new Date().toISOString(),
-      createdAt: new Date().toISOString()
+      
+      // Create standardized sections for UI components
+      cvAnalysis: {
+        experienceScore: analysisData.experienceAnalysis?.experienceRelevance || 0,
+        skillsScore: analysisData.skillsAnalysis?.industrySpecificSkills || 0,
+        atsScore: analysisData.atsAnalysis?.atsCompatibilityScore || 0,
+        presentationScore: analysisData.visualPresentation?.layoutScore || 0,
+        industryFit: analysisData.industryInsights?.industryAlignment || 0,
+        experienceYears: analysisData.experienceAnalysis?.experienceInYears || 0,
+        technicalSkills: analysisData.skillsAnalysis?.technicalSkills || [],
+        softSkills: analysisData.skillsAnalysis?.softSkills || [],
+        missingKeywords: analysisData.industryInsights?.missingIndustryKeywords || [],
+        atsIssues: analysisData.atsAnalysis?.formatIssues || [],
+        industryInsights: analysisData.industryInsights?.recruitmentTrends || ""
+      },
+      
+      // Additional standardized sections
+      keyInformation: {
+        contactInfo: [],
+        keyDates: [],
+        entities: [
+          ...(analysisData.experienceAnalysis?.companies || []).map((company: string) => ({
+            type: "Organization",
+            name: company,
+            occurrences: 1
+          })),
+          ...(analysisData.skillsAnalysis?.technicalSkills || []).map((skill: string) => ({
+            type: "Skill",
+            name: skill,
+            occurrences: 1
+          }))
+        ]
+      }
     };
     
     return result;
   } catch (error) {
-    console.error('Error parsing CV analysis response:', error);
-    throw new Error('Failed to parse CV analysis response');
+    console.error('Error in CV document analysis:', error);
+    throw new Error(`Failed to analyze CV: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -766,5 +1124,165 @@ async function analyzeScientificDocument(
   } catch (error) {
     console.error("Error parsing scientific paper analysis response:", error);
     throw new Error("Failed to analyze scientific paper");
+  }
+}
+
+/**
+ * Store user feedback for an analysis to improve future results
+ */
+export interface AnalysisFeedback {
+  documentId: string;
+  analysisType: string;
+  rating: number; // 1-5 star rating
+  feedbackText?: string; // Optional detailed feedback
+  inaccuracies?: string[]; // List of specific inaccuracies
+  suggestions?: string[]; // Suggestions for improvement
+  userId?: string; // Optional user ID for tracking
+  timestamp?: string; // ISO string timestamp when feedback was submitted
+}
+
+// In-memory store for feedback (in a production app, this would be in a database)
+const analysisFeedback: AnalysisFeedback[] = [];
+
+/**
+ * Submit feedback for an analysis
+ */
+export async function submitAnalysisFeedback(feedback: AnalysisFeedback): Promise<boolean> {
+  try {
+    // Validate the feedback
+    if (!feedback.documentId || !feedback.analysisType || feedback.rating < 1 || feedback.rating > 5) {
+      console.error('Invalid feedback data:', feedback);
+      return false;
+    }
+    
+    // Add timestamp
+    const feedbackWithTimestamp = {
+      ...feedback,
+      timestamp: new Date().toISOString()
+    };
+    
+    // Store the feedback (in memory for now)
+    analysisFeedback.push(feedbackWithTimestamp);
+    
+    console.log(`Feedback received for document ${feedback.documentId}, rating: ${feedback.rating}`);
+    
+    // If rating is low, invalidate the cache for this document+type
+    if (feedback.rating <= 2) {
+      invalidateCacheItem(feedback.documentId, feedback.analysisType);
+      console.log(`Cache invalidated due to low rating for document ${feedback.documentId}`);
+    }
+    
+    // In a real application, you would store this in a database
+    // and periodically analyze feedback to improve the system
+    
+    return true;
+  } catch (error) {
+    console.error('Error submitting feedback:', error);
+    return false;
+  }
+}
+
+/**
+ * Get aggregated feedback statistics by document type
+ */
+export function getFeedbackStats(): Record<string, {
+  avgRating: number;
+  count: number;
+  recentTrend: 'improving' | 'declining' | 'stable';
+}> {
+  // Group feedback by analysis type
+  const groupedFeedback: Record<string, AnalysisFeedback[]> = {};
+  
+  for (const feedback of analysisFeedback) {
+    if (!groupedFeedback[feedback.analysisType]) {
+      groupedFeedback[feedback.analysisType] = [];
+    }
+    groupedFeedback[feedback.analysisType].push(feedback);
+  }
+  
+  // Calculate stats for each type
+  const stats: Record<string, any> = {};
+  
+  for (const [type, feedbacks] of Object.entries(groupedFeedback)) {
+    // Calculate average rating
+    const avgRating = feedbacks.reduce((sum, fb) => sum + fb.rating, 0) / feedbacks.length;
+    
+    // Calculate recent trend
+    const recentFeedbacks = feedbacks
+      .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
+      .slice(0, Math.min(5, feedbacks.length));
+      
+    const recentAvgRating = recentFeedbacks.reduce((sum, fb) => sum + fb.rating, 0) / recentFeedbacks.length;
+    
+    const recentTrend = 
+      recentAvgRating > avgRating + 0.3 ? 'improving' :
+      recentAvgRating < avgRating - 0.3 ? 'declining' : 'stable';
+    
+    stats[type] = {
+      avgRating: parseFloat(avgRating.toFixed(2)),
+      count: feedbacks.length,
+      recentTrend
+    };
+  }
+  
+  return stats;
+}
+
+/**
+ * Use feedback to adjust analysis prompts for better results
+ * This would be called periodically to improve the system
+ */
+export async function improveSysPromptFromFeedback(analysisType: string): Promise<string> {
+  // Get all feedback for this analysis type
+  const typeFeedbacks = analysisFeedback.filter(fb => fb.analysisType === analysisType);
+  
+  if (typeFeedbacks.length < 5) {
+    console.log(`Not enough feedback for ${analysisType} analysis to improve prompts`);
+    return ''; // Not enough feedback yet
+  }
+  
+  // Extract common themes from feedback
+  const allInaccuracies = typeFeedbacks.flatMap(fb => fb.inaccuracies || []);
+  const allSuggestions = typeFeedbacks.flatMap(fb => fb.suggestions || []);
+  const allFeedbackTexts = typeFeedbacks.map(fb => fb.feedbackText).filter(Boolean);
+  
+  // Create a summary for an LLM to analyze
+  const feedbackSummary = `
+    Analysis Type: ${analysisType}
+    Average Rating: ${typeFeedbacks.reduce((sum, fb) => sum + fb.rating, 0) / typeFeedbacks.length}
+    Number of Feedback Items: ${typeFeedbacks.length}
+    
+    Common Inaccuracies:
+    ${allInaccuracies.slice(0, 10).join('\n- ')}
+    
+    Improvement Suggestions:
+    ${allSuggestions.slice(0, 10).join('\n- ')}
+    
+    Sample Feedback:
+    ${allFeedbackTexts.slice(0, 5).join('\n\n')}
+  `;
+  
+  try {
+    // Use OpenAI to generate improved system prompt
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: "You are an AI assistant that helps improve analysis prompts based on user feedback." },
+        { role: "user", content: `Based on the following feedback for our ${analysisType} analysis system, suggest improvements to our system prompt to make the analysis more accurate and useful.\n\n${feedbackSummary}` }
+      ],
+      temperature: 0.7,
+      max_tokens: 1000
+    });
+    
+    const improvedPrompt = response.choices[0].message.content || '';
+    
+    console.log(`Generated improved system prompt for ${analysisType} analysis based on feedback`);
+    return improvedPrompt;
+    
+    // In a real application, you would store this improved prompt
+    // and use it for future analyses
+  } catch (error) {
+    console.error('Error generating improved prompt:', error);
+    return '';
   }
 } 

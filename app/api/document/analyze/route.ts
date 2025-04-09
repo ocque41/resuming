@@ -478,12 +478,11 @@ export async function POST(req: NextRequest) {
     // Detect file type
     const fileType = fileName ? detectFileType(fileName) : null;
     
-    // Check if this is a PDF file
-    const isPdf = fileName ? fileName.toLowerCase().endsWith('.pdf') : false;
-    
-    if (!isPdf) {
-      return NextResponse.json({ 
-        error: "Only PDF documents are supported for analysis" 
+    // Validate supported file types (more permissive than before)
+    if (fileType && !isSupportedForAnalysis(fileType)) {
+      return NextResponse.json({
+        error: `Unsupported file type for analysis: ${fileType.extension}`,
+        supportedTypes: Object.keys(SUPPORTED_FILE_TYPES)
       }, { status: 400 });
     }
     
@@ -493,51 +492,43 @@ export async function POST(req: NextRequest) {
     console.log(`Starting analysis for document ${documentId}, purpose: ${analysisType}, file: ${fileName || 'unnamed'}`);
 
     try {
-      // Attempt AI analysis based on document purpose (not file type)
-      let analysisResult;
-      
       // Perform analysis based on the specified document purpose
+      const analysisResult = await analyzeDocument(
+        documentId, 
+        documentText, 
+        fileName || 'document.pdf', 
+        documentPurpose
+      );
+      
+      console.log(`Analysis completed, generating response`);
+      
+      // Update the analysis in the database for future reference
       try {
-        analysisResult = await analyzeDocument(
-          documentId, 
-          documentText, 
-          fileName || 'document.pdf', 
-          documentPurpose
-        );
-        
-        console.log(`Analysis completed, generating response`);
-        
-        // Update the analysis in the database for future reference
-        try {
-          await saveDocumentAnalysis(documentId, analysisResult);
-          console.log(`Analysis saved to database for document ID ${documentId}`);
-        } catch (dbError) {
-          console.error(`Error saving analysis to database:`, dbError);
-          // Continue even if save fails - we still want to return the analysis
-        }
-        
-        return NextResponse.json({
-          message: "Document analyzed successfully",
-          analysis: analysisResult
-        });
-      } catch (analysisError) {
-        console.error(`Error in AI analysis: ${analysisError}`);
-        
-        // If AI analysis fails, fall back to mock analysis
-        console.warn(`Falling back to mock analysis for document ${documentId}`);
-        
-        // Generate mock analysis based on document purpose
-        const mockResult = generateMockAnalysisResult(documentId, fileName || 'document.pdf', documentPurpose || 'general');
-        
-        return NextResponse.json({
-          message: "Document analyzed (fallback mode)",
-          analysis: mockResult,
-          _fallback: true
-        });
+        await saveDocumentAnalysis(documentId, analysisResult);
+        console.log(`Analysis saved to database for document ID ${documentId}`);
+      } catch (dbError) {
+        console.error(`Error saving analysis to database:`, dbError);
+        // Continue even if save fails - we still want to return the analysis
       }
-    } catch (error) {
-      console.error(`Error analyzing document:`, error);
-      return NextResponse.json({ error: "Failed to analyze document" }, { status: 500 });
+      
+      return NextResponse.json({
+        message: "Document analyzed successfully",
+        analysis: analysisResult
+      });
+    } catch (analysisError) {
+      console.error(`Error in AI analysis: ${analysisError}`);
+      
+      // If AI analysis fails, fall back to mock analysis
+      console.warn(`Falling back to mock analysis for document ${documentId}`);
+      
+      // Generate mock analysis based on document purpose
+      const mockResult = generateMockAnalysisResult(documentId, fileName || 'document.pdf', documentPurpose || 'general');
+      
+      return NextResponse.json({
+        message: "Document analyzed (fallback mode)",
+        analysis: mockResult,
+        _fallback: true
+      });
     }
   } catch (error) {
     console.error("Error processing analysis request:", error);

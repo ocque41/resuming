@@ -41,10 +41,49 @@ export type PerformanceMetrics = {
   }
 };
 
+// Document analysis feedback types
+export type DocumentFeedback = {
+  id: string;
+  documentId: string;
+  analysisType: string;
+  rating: number;
+  feedbackText?: string;
+  userId: string;
+  createdAt: string;
+};
+
+export type FeedbackStats = {
+  averageRating: number;
+  totalFeedbacks: number;
+  ratingDistribution: {
+    [key: string]: number; // 1, 2, 3, 4, 5 as keys
+  };
+  feedbackByDocumentType: {
+    [key: string]: {
+      count: number;
+      averageRating: number;
+    };
+  };
+  recentFeedbacks: Array<{
+    documentId: string;
+    analysisType: string;
+    rating: number;
+    feedbackText?: string;
+    createdAt: string;
+  }>;
+  monthlyAverageRatings: Array<{
+    month: string; 
+    averageRating: number;
+  }>;
+};
+
 // In-memory storage for events (in production this would be a database)
 const processingEvents: ProcessingEvent[] = [];
 const START_TIMES: Record<string, number> = {};
 const PHASE_START_TIMES: Record<string, Record<string, number>> = {};
+
+// In-memory storage for feedbacks - this would be a database in a real application
+const documentFeedbacks: DocumentFeedback[] = [];
 
 /**
  * Track a CV processing event
@@ -309,4 +348,204 @@ export function clearAnalytics(): void {
   processingEvents.length = 0;
   Object.keys(START_TIMES).forEach(key => delete START_TIMES[key]);
   Object.keys(PHASE_START_TIMES).forEach(key => delete PHASE_START_TIMES[key]);
+}
+
+/**
+ * Add document feedback to the storage
+ */
+export function addDocumentFeedback(feedback: Omit<DocumentFeedback, 'id' | 'createdAt'>): DocumentFeedback {
+  const newFeedback: DocumentFeedback = {
+    ...feedback,
+    id: `feedback_${new Date().getTime()}_${Math.random().toString(36).substring(2, 9)}`,
+    createdAt: new Date().toISOString()
+  };
+  
+  documentFeedbacks.push(newFeedback);
+  return newFeedback;
+}
+
+/**
+ * Get all document feedbacks for a specific user or all users
+ */
+export function getDocumentFeedbacks(userId?: string): DocumentFeedback[] {
+  if (userId) {
+    return documentFeedbacks.filter(feedback => feedback.userId === userId);
+  }
+  return [...documentFeedbacks];
+}
+
+/**
+ * Calculate feedback statistics
+ */
+export function calculateFeedbackStats(): FeedbackStats {
+  if (documentFeedbacks.length === 0) {
+    return {
+      averageRating: 0,
+      totalFeedbacks: 0,
+      ratingDistribution: { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 },
+      feedbackByDocumentType: {},
+      recentFeedbacks: [],
+      monthlyAverageRatings: []
+    };
+  }
+  
+  // Calculate average rating
+  const totalRating = documentFeedbacks.reduce((sum, feedback) => sum + feedback.rating, 0);
+  const averageRating = totalRating / documentFeedbacks.length;
+  
+  // Calculate rating distribution
+  const ratingDistribution = documentFeedbacks.reduce((dist, feedback) => {
+    const rating = feedback.rating.toString();
+    dist[rating] = (dist[rating] || 0) + 1;
+    return dist;
+  }, {} as Record<string, number>);
+  
+  // Ensure all rating keys exist
+  ['1', '2', '3', '4', '5'].forEach(rating => {
+    if (!ratingDistribution[rating]) {
+      ratingDistribution[rating] = 0;
+    }
+  });
+  
+  // Calculate feedback by document type
+  const feedbackByDocumentType = documentFeedbacks.reduce((types, feedback) => {
+    if (!types[feedback.analysisType]) {
+      types[feedback.analysisType] = {
+        count: 0,
+        totalRating: 0
+      };
+    }
+    types[feedback.analysisType].count += 1;
+    types[feedback.analysisType].totalRating += feedback.rating;
+    return types;
+  }, {} as Record<string, { count: number; totalRating: number }>);
+  
+  // Convert to average ratings with proper typing
+  const typedFeedbackByDocumentType: Record<string, { count: number; averageRating: number }> = {};
+  Object.keys(feedbackByDocumentType).forEach(type => {
+    const current = feedbackByDocumentType[type];
+    typedFeedbackByDocumentType[type] = {
+      count: current.count,
+      averageRating: current.totalRating / current.count
+    };
+  });
+  
+  // Get 10 most recent feedbacks
+  const recentFeedbacks = [...documentFeedbacks]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 10)
+    .map(feedback => ({
+      documentId: feedback.documentId,
+      analysisType: feedback.analysisType,
+      rating: feedback.rating,
+      feedbackText: feedback.feedbackText,
+      createdAt: feedback.createdAt
+    }));
+  
+  // Calculate monthly average ratings for the last 6 months
+  const now = new Date();
+  const monthlyData: Record<string, { sum: number; count: number }> = {};
+  
+  // Initialize last 6 months
+  for (let i = 0; i < 6; i++) {
+    const month = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const monthKey = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
+    monthlyData[monthKey] = { sum: 0, count: 0 };
+  }
+  
+  // Populate monthly data
+  documentFeedbacks.forEach(feedback => {
+    const date = new Date(feedback.createdAt);
+    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    
+    if (monthlyData[monthKey]) {
+      monthlyData[monthKey].sum += feedback.rating;
+      monthlyData[monthKey].count += 1;
+    }
+  });
+  
+  // Calculate averages and format for chart
+  const monthlyAverageRatings = Object.entries(monthlyData)
+    .map(([month, data]) => ({
+      month,
+      averageRating: data.count > 0 ? data.sum / data.count : 0
+    }))
+    .sort((a, b) => a.month.localeCompare(b.month)); // Sort chronologically
+  
+  return {
+    averageRating,
+    totalFeedbacks: documentFeedbacks.length,
+    ratingDistribution,
+    feedbackByDocumentType: typedFeedbackByDocumentType,
+    recentFeedbacks,
+    monthlyAverageRatings
+  };
+}
+
+// Document analysis quality metrics types
+export type AnalysisQualityMetrics = {
+  overallAccuracy: number; // Based on user feedback and manual reviews
+  typeSpecificAccuracy: {
+    [documentType: string]: number;
+  };
+  averageAnalysisTime: number; // in seconds
+  successRate: number; // Percentage of successful analyses
+  errorRate: number; // Percentage of analyses with errors
+  modelPerformance: {
+    [modelName: string]: {
+      accuracy: number;
+      averageResponseTime: number;
+      costPerAnalysis: number; // Approximated cost in cents
+    }
+  };
+};
+
+/**
+ * Get document analysis quality metrics
+ * This combines feedback data with processing metrics for a complete picture
+ */
+export function getAnalysisQualityMetrics(): AnalysisQualityMetrics {
+  // Use feedback data to estimate accuracy
+  const feedbackStats = calculateFeedbackStats();
+  
+  // Convert 5-star rating to percentage accuracy (simplistic approach)
+  // 5 stars = 100%, 1 star = 20%
+  const overallAccuracy = (feedbackStats.averageRating / 5) * 100;
+  
+  // Calculate type-specific accuracy from feedback
+  const typeSpecificAccuracy: Record<string, number> = {};
+  Object.entries(feedbackStats.feedbackByDocumentType).forEach(([type, data]) => {
+    typeSpecificAccuracy[type] = (data.averageRating / 5) * 100;
+  });
+  
+  // Get processing metrics for the last 30 days
+  const metrics = calculateMetrics(30 * 24);
+  
+  // Model performance (simulated with fixed data for now)
+  const modelPerformance = {
+    'gpt-4o': {
+      accuracy: 94.5,
+      averageResponseTime: 4.2,
+      costPerAnalysis: 6.3 // cents
+    },
+    'mistral-large': {
+      accuracy: 91.2,
+      averageResponseTime: 2.8,
+      costPerAnalysis: 3.7
+    },
+    'claude-3-opus': {
+      accuracy: 93.8,
+      averageResponseTime: 3.5,
+      costPerAnalysis: 5.9
+    }
+  };
+  
+  return {
+    overallAccuracy,
+    typeSpecificAccuracy,
+    averageAnalysisTime: metrics.averageAnalysisTime,
+    successRate: metrics.successRate * 100,
+    errorRate: metrics.errorRate * 100,
+    modelPerformance
+  };
 } 
