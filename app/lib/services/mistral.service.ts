@@ -713,10 +713,11 @@ IMPORTANT FORMATTING INSTRUCTIONS:
 - Include these sections in order:
   1. Profile/Summary (using keywords from job description)
   2. Objectives (3 specific goals for this role)
-  3. Skills (add 1 critical skill from job requirements)
-  4. Experience
-  5. Education
-  6. Industry Focus (aligned with target job)
+  3. Achievements (highlight relevant accomplishments)
+  4. Skills (add 1 critical skill from job requirements)
+  5. Experience
+  6. Education
+  7. Industry Focus (aligned with target job)
 - Keep overall length similar to original CV
 - Preserve factual information - don't invent qualifications
 
