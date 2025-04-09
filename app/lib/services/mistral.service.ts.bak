@@ -786,13 +786,7 @@ The document MUST start with the person's name and contact information at the to
         // If we get here with a valid result, break the loop
         break;
       } catch (error) {
-        const errorMessage = error instanceof Error 
-          ? error.message 
-          : typeof error === 'string'
-            ? error
-            : 'Unknown error';
-        
-        logger.error(`Error during CV tailoring attempt ${attempt}:`, errorMessage);
+        logger.error(`Error during CV tailoring attempt ${attempt}:`, error);
         
         // Throw on last attempt, otherwise continue to retry
         if (attempt === maxAttempts) {
@@ -849,22 +843,21 @@ The document MUST start with the person's name and contact information at the to
     }
     
     // If the contact info wasn't preserved in the result, add it back
-    if (contactInfo && typeof contactInfo.email === 'string' && contactInfo.email.length > 0) {
-      if (!optimizedText.includes(contactInfo.email)) {
-        // Extract the profile section
-        const profileSection = extractProfileSection(optimizedText);
-        
-        // Create a proper header with contact info
-        const contactHeader = `${contactInfo.name || ""}
-${contactInfo.email}
+    if (contactInfo && !optimizedText.includes(contactInfo.email)) {
+      // Either the optimized text doesn't have the contact info, or it's been modified
+      // Extract the profile section
+      const profileSection = extractProfileSection(optimizedText);
+      
+      // Create a proper header with contact info
+      const contactHeader = `${contactInfo.name || ""}
+${contactInfo.email || ""}
 ${contactInfo.phone || ""}
 ${contactInfo.location || ""}
 ${contactInfo.linkedin || ""}`;
-        
-        // If there's no clear name at the start, add the contact header
-        if (!isNameAtStart(optimizedText) && typeof contactInfo.name === 'string' && contactInfo.name.trim() !== '') {
-          optimizedText = `${contactHeader.trim()}\n\n${optimizedText}`;
-        }
+      
+      // If there's no clear name at the start, add the contact header
+      if (!isNameAtStart(optimizedText) && contactInfo.name) {
+        optimizedText = `${contactHeader.trim()}\n\n${optimizedText}`;
       }
     }
     
@@ -882,7 +875,7 @@ ${contactInfo.linkedin || ""}`;
       analysis
     };
   } catch (error: any) {
-    // Safe error logging
+    // Safely log error with proper type handling
     logger.error('Error in tailorCVForSpecificJob:', error?.message || String(error));
     throw error;
   }
@@ -1020,4 +1013,5 @@ The CV has been tailored for the ${jobTitle} position. Key improvements include:
 The tailored CV maintains your core qualifications while presenting them in a way that directly addresses the job requirements. I've included a Goals section to show career alignment with this position.`;
 
   return analysis;
+} 
 } 

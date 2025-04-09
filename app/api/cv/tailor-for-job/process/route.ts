@@ -43,6 +43,7 @@ interface JobResult {
     processingTime: number;
     model: string;
     timestamp: string;
+    provider: string;
   };
 }
 
@@ -442,9 +443,9 @@ async function processJob(
     if (result && typeof result === 'object') {
       // Convert the result to our expected format
       const resultObj = {
-        optimizedText: (result as any).tailoredContent || '',
-        originalText: (result as any).originalText || '',
-        jobDescription: (result as any).jobDescription || '',
+        optimizedText: (result as any).tailoredContent || (result as any).optimizedText || '',
+        originalText: (result as any).originalText || cvContent,
+        jobDescription: (result as any).jobDescription || params.jobDescription || '',
         analysis: {
           improvements: (result as any).sectionImprovements || {},
           keywords: (result as any).keywords || [],
@@ -452,8 +453,9 @@ async function processJob(
         },
         metadata: {
           processingTime: Math.round((Date.now() - startTime) / 1000),
-          model: 'gpt-4-turbo-preview',
-          timestamp: new Date().toISOString()
+          model: 'mistral-large-latest',
+          timestamp: new Date().toISOString(),
+          provider: 'Mistral AI'
         }
       } as JobResult;
       
