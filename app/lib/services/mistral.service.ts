@@ -2,9 +2,12 @@ import MistralClient from '@mistralai/mistralai';
 import { logger } from '@/lib/logger';
 import { mistralRateLimiter } from './rate-limiter';
 
+// Use a runtime check instead of server-only import
+const isServer = typeof window === 'undefined';
+
 // Function to ensure we're running on the server
 const ensureServer = () => {
-  if (typeof window !== 'undefined') {
+  if (!isServer) {
     throw new Error('This function can only be called from the server');
   }
 };
@@ -12,7 +15,7 @@ const ensureServer = () => {
 // Initialize Mistral client
 const getMistralClient = () => {
   // Only initialize on the server
-  if (typeof window === 'undefined') {
+  if (isServer) {
     const apiKey = process.env.MISTRAL_API_KEY;
     
     if (!apiKey) {
@@ -198,7 +201,7 @@ export interface CVAnalysisResult {
 export async function analyzeCVContent(cvText: string): Promise<CVAnalysisResult> {
   try {
     // Client-side check - redirect to API
-    if (typeof window !== 'undefined') {
+    if (!isServer) {
       const response = await fetch('/api/cv/analyze', {
         method: 'POST',
         headers: {
@@ -253,96 +256,68 @@ export async function analyzeCVContent(cvText: string): Promise<CVAnalysisResult
           temperature: 0.1,
           maxTokens: 2000
         });
-
+        
         try {
-          return JSON.parse(response.choices[0].message.content);
+          // Extract the content from the response
+          const content = response.choices[0].message.content;
+          
+          // Parse the JSON content
+          return JSON.parse(content);
         } catch (parseError) {
-          logger.error('Error parsing Mistral response:', parseError instanceof Error ? parseError.message : String(parseError));
-          throw new Error('Failed to parse CV analysis result');
+          logger.error('Failed to parse JSON response:', parseError instanceof Error ? parseError.message : String(parseError));
+          
+          // Default empty structure if parsing fails
+          return {
+            experience: [],
+            education: [],
+            skills: { technical: [], professional: [] },
+            achievements: [],
+            profile: ''
+          };
         }
       });
     };
     
-    // Function to combine multiple chunk results
-    const combineResults = (results: CVAnalysisResult[]): CVAnalysisResult => {
-      if (results.length === 0) return {
-        experience: [],
-        education: [],
-        skills: { technical: [], professional: [] },
-        achievements: [],
-        profile: ''
-      };
-      
-      if (results.length === 1) return results[0];
-      
-      // Combine all parts
-      const combined: CVAnalysisResult = {
-        experience: [],
-        education: [],
-        skills: { technical: [], professional: [] },
-        achievements: [],
-        profile: results[0].profile // Use the profile from the first chunk
-      };
-      
-      // Merge experience entries (avoiding duplicates by checking title+company)
-      const experienceMap = new Map<string, typeof combined.experience[0]>();
-      results.forEach(result => {
-        result.experience.forEach(exp => {
-          const key = `${exp.title}|${exp.company}`;
-          if (!experienceMap.has(key)) {
-            experienceMap.set(key, exp);
-          }
-        });
-      });
-      combined.experience = Array.from(experienceMap.values());
-      
-      // Merge education entries (avoiding duplicates by checking degree+institution)
-      const educationMap = new Map<string, typeof combined.education[0]>();
-      results.forEach(result => {
-        result.education.forEach(edu => {
-          const key = `${edu.degree}|${edu.institution}`;
-          if (!educationMap.has(key)) {
-            educationMap.set(key, edu);
-          }
-        });
-      });
-      combined.education = Array.from(educationMap.values());
-      
-      // Merge unique skills
-      const technicalSkills = new Set<string>();
-      const professionalSkills = new Set<string>();
-      results.forEach(result => {
-        result.skills.technical.forEach(skill => technicalSkills.add(skill));
-        result.skills.professional.forEach(skill => professionalSkills.add(skill));
-      });
-      combined.skills.technical = Array.from(technicalSkills);
-      combined.skills.professional = Array.from(professionalSkills);
-      
-      // Merge unique achievements
-      const achievements = new Set<string>();
-      results.forEach(result => {
-        result.achievements.forEach(achievement => achievements.add(achievement));
-      });
-      combined.achievements = Array.from(achievements);
-      
-      return combined;
-    };
-    
-    // If CV is short, process directly
-    if (cvText.length < 5000) {
+    // Process in chunks for large CVs
+    if (cvText.length > 10000) {
+      return await processLargeText(
+        cvText,
+        '',
+        processChunk,
+        (results) => {
+          // Combine multiple chunk results into one cohesive result
+          const combined: CVAnalysisResult = {
+            experience: [],
+            education: [],
+            skills: { technical: [], professional: [] },
+            achievements: [],
+            profile: results[0]?.profile || ''
+          };
+          
+          // Merge experiences from all chunks
+          results.forEach(result => {
+            if (result.experience) combined.experience.push(...result.experience);
+            if (result.education) combined.education.push(...result.education);
+            if (result.skills?.technical) combined.skills.technical.push(...result.skills.technical);
+            if (result.skills?.professional) combined.skills.professional.push(...result.skills.professional);
+            if (result.achievements) combined.achievements.push(...result.achievements);
+          });
+          
+          // Remove duplicates
+          combined.skills.technical = [...new Set(combined.skills.technical)];
+          combined.skills.professional = [...new Set(combined.skills.professional)];
+          combined.achievements = [...new Set(combined.achievements)];
+          
+          return combined;
+        }
+      );
+    } else {
+      // Process directly for smaller CVs
       return await processChunk(cvText);
     }
-    
-    // For longer CVs, use the chunk processing mechanism
-    return await processLargeText<CVAnalysisResult>(
-      cvText,
-      '', // Not needed for CV analysis
-      async (chunk, _) => processChunk(chunk),
-      combineResults
-    );
   } catch (error) {
-    logger.error('Error analyzing CV with Mistral AI:', error instanceof Error ? error.message : String(error));
-    throw new Error('Failed to analyze CV content');
+    logger.error('Error analyzing CV content:', error instanceof Error ? error.message : String(error));
+    throw error;
   }
 }
 
@@ -353,8 +328,8 @@ export async function optimizeCVForJob(cvText: string, jobDescription: string): 
 }> {
   try {
     // Client-side check - redirect to API
-    if (typeof window !== 'undefined') {
-      const response = await fetch('/api/cv/optimize-local', {
+    if (!isServer) {
+      const response = await fetch('/api/cv/optimize', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -374,7 +349,7 @@ export async function optimizeCVForJob(cvText: string, jobDescription: string): 
       return data.result;
     }
     
-    // Server-side processing - explicitly ensure we're on the server
+    // Server-side processing
     ensureServer();
     
     const client = getMistralClient();
@@ -517,7 +492,7 @@ export interface JobMatchAnalysisResult {
 export async function analyzeJobMatch(cvText: string, jobDescription: string): Promise<JobMatchAnalysisResult> {
   try {
     // Client-side check - redirect to API
-    if (typeof window !== 'undefined') {
+    if (!isServer) {
       const response = await fetch('/api/cv/job-match-analysis', {
         method: 'POST',
         headers: {
@@ -681,7 +656,7 @@ export async function tailorCVForSpecificJob(cvText: string, jobDescription: str
 }> {
   try {
     // Client-side check - redirect to API
-    if (typeof window !== 'undefined') {
+    if (!isServer) {
       const response = await fetch('/api/cv/tailor-for-job', {
         method: 'POST',
         headers: {

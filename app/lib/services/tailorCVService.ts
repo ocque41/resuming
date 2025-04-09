@@ -1,5 +1,8 @@
 import { logger } from '@/lib/logger';
 
+// Use a runtime check for server-side code
+const isServer = typeof window === 'undefined';
+
 /**
  * Interface for the results returned by the tailor-for-job API
  */
@@ -578,7 +581,7 @@ export async function tailorCVForJob(
     
     try {
       // Use the Mistral service for direct processing when server-side
-      if (typeof window === 'undefined') {
+      if (isServer) {
         logger.info('Using direct Mistral processing for tailoring');
         
         // Import the Mistral service
