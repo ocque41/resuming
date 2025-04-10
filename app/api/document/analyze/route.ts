@@ -463,23 +463,39 @@ function generateMockScientificAnalysis(documentId: string | number, fileName: s
  */
 export async function POST(req: NextRequest) {
   try {
+    console.log("Document analysis API: POST request received");
+    
     // Parse request body
     const { documentId, documentText, fileName, documentPurpose } = await req.json();
+    
+    console.log(`Analyzing document ID: ${documentId}, purpose: ${documentPurpose || 'general'}, filename: ${fileName || 'unnamed'}`);
 
     // Validate required parameters
     if (!documentId) {
+      console.error("Error: Document ID is required");
       return NextResponse.json({ error: "Document ID is required" }, { status: 400 });
     }
 
     if (!documentText || documentText.trim().length === 0) {
+      console.error("Error: Document text is empty or missing");
       return NextResponse.json({ error: "Document text is required for analysis" }, { status: 400 });
     }
+    
+    // Log document text length to aid in debugging
+    console.log(`Document text provided with length: ${documentText.length} characters`);
 
     // Detect file type
     const fileType = fileName ? detectFileType(fileName) : null;
     
+    if (fileType) {
+      console.log(`Detected file type: ${fileType.name} (${fileType.extension}, category: ${fileType.category})`);
+    } else {
+      console.log(`No file type detected from filename: ${fileName || 'unnamed'}, will use generic analysis`);
+    }
+    
     // Validate supported file types (more permissive than before)
     if (fileType && !isSupportedForAnalysis(fileType)) {
+      console.error(`Unsupported file type for analysis: ${fileType.extension}`);
       return NextResponse.json({
         error: `Unsupported file type for analysis: ${fileType.extension}`,
         supportedTypes: Object.keys(SUPPORTED_FILE_TYPES)
@@ -496,11 +512,11 @@ export async function POST(req: NextRequest) {
       const analysisResult = await analyzeDocument(
         documentId, 
         documentText, 
-        fileName || 'document.pdf', 
+        fileName || 'document.txt', 
         documentPurpose
       );
       
-      console.log(`Analysis completed, generating response`);
+      console.log(`Analysis completed successfully, generating response`);
       
       // Update the analysis in the database for future reference
       try {
@@ -516,13 +532,13 @@ export async function POST(req: NextRequest) {
         analysis: analysisResult
       });
     } catch (analysisError) {
-      console.error(`Error in AI analysis: ${analysisError}`);
+      console.error(`Error in AI analysis:`, analysisError);
       
       // If AI analysis fails, fall back to mock analysis
       console.warn(`Falling back to mock analysis for document ${documentId}`);
       
       // Generate mock analysis based on document purpose
-      const mockResult = generateMockAnalysisResult(documentId, fileName || 'document.pdf', documentPurpose || 'general');
+      const mockResult = generateMockAnalysisResult(documentId, fileName || 'document.txt', documentPurpose || 'general');
       
       return NextResponse.json({
         message: "Document analyzed (fallback mode)",
@@ -532,7 +548,10 @@ export async function POST(req: NextRequest) {
     }
   } catch (error) {
     console.error("Error processing analysis request:", error);
-    return NextResponse.json({ error: "Invalid request format" }, { status: 400 });
+    return NextResponse.json({ 
+      error: "Invalid request format or server error", 
+      details: error instanceof Error ? error.message : "Unknown error"
+    }, { status: 400 });
   }
 }
 

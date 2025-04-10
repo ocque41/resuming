@@ -212,16 +212,73 @@ const renderSuggestionItems = (suggestions: Array<{title: string; description: s
 );
 
 const renderCVAnalysis = (analysisData: any) => {
-  const { 
-    relevantJobTitles, 
-    allSkills, 
-    jobSpecificSkills, 
-    resumeKeywords, 
-    missingKeywords,
-    strengthsWeaknesses,
-    improvementSuggestions,
-    overallScore 
-  } = analysisData;
+  // Handle possible format differences in the response
+  const cvAnalysis = analysisData.cvAnalysis || analysisData;
+  const summary = analysisData.summary || {};
+  
+  // Extract fields with fallbacks
+  const relevantJobTitles = 
+    cvAnalysis.marketFit?.targetRoleRecommendations || 
+    summary.marketFit?.targetRoleRecommendations || 
+    ["No job titles available"];
+  
+  const allSkills = 
+    (cvAnalysis.skills?.technical || [])
+      .map((skill: any) => skill.name || skill)
+      .concat(
+        (cvAnalysis.skills?.soft || [])
+          .map((skill: any) => skill.name || skill)
+      )
+      .concat(
+        (cvAnalysis.skills?.domain || [])
+          .map((skill: any) => skill.name || skill)
+      ) || 
+    ["No skills detected"];
+  
+  const jobSpecificSkills = 
+    (cvAnalysis.skills?.domain || [])
+      .filter((skill: any) => (skill.relevance || 0) > 7)
+      .map((skill: any) => skill.name || skill) || 
+    ["No job-specific skills detected"];
+  
+  const resumeKeywords = 
+    (analysisData.contentAnalysis?.topKeywords || [])
+      .map((kw: any) => kw.text || kw) || 
+    ["No keywords detected"];
+  
+  const missingKeywords = 
+    (cvAnalysis.atsCompatibility?.improvementAreas || [])
+      .filter((area: string) => area.toLowerCase().includes('keyword') || area.toLowerCase().includes('term')) || 
+    ["Consider industry-specific terminology"];
+  
+  // Structure strength/weakness data
+  const strengthsWeaknesses = {
+    strengths: (cvAnalysis.strengths || summary.highlights || [])
+      .map((str: string) => ({ 
+        title: str.split(':')[0] || str, 
+        description: str.split(':')[1] || '' 
+      })),
+    weaknesses: (cvAnalysis.weaknesses || [])
+      .map((str: string) => ({ 
+        title: str.split(':')[0] || str, 
+        description: str.split(':')[1] || '' 
+      }))
+  };
+  
+  // Format improvement suggestions
+  const improvementSuggestions = 
+    (summary.suggestions || [])
+      .map((sug: string) => ({ 
+        title: sug.split(':')[0] || sug, 
+        description: sug.split(':')[1] || ''
+      }));
+  
+  // Get score from various possible locations
+  const overallScore = 
+    summary.overallScore || 
+    cvAnalysis.atsCompatibility?.score || 
+    summary.impactScore || 
+    70; // Default fallback score
 
   return (
     <div className="space-y-4">
@@ -339,6 +396,107 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
     setError(null);
 
     try {
+      // Fetch document text - try multiple methods
+      let documentText = '';
+      let fetchSuccess = false;
+      
+      console.log(`Attempting to fetch document ID: ${selectedDocument.id}, fileName: ${selectedDocument.fileName || 'unknown'}`);
+      
+      // Method 1: Try using get-text endpoint first
+      try {
+        console.log("Method 1: Using /api/cv/get-text endpoint");
+        const response = await fetch(`/api/cv/get-text?cvId=${selectedDocument.id}`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.text && data.text.length > 0) {
+            documentText = data.text;
+            fetchSuccess = true;
+            console.log(`Successfully fetched document text using get-text endpoint (${documentText.length} characters)`);
+          }
+        } else {
+          console.warn(`get-text endpoint failed: ${response.status} ${response.statusText}`);
+        }
+      } catch (error) {
+        console.error("Error using get-text endpoint:", error);
+      }
+      
+      // Method 2: If first method failed, try the document details endpoint
+      if (!fetchSuccess) {
+        try {
+          console.log("Method 2: Using /api/cv/get-details endpoint");
+          const response = await fetch(`/api/cv/get-details?cvId=${selectedDocument.id}`);
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.rawText && data.rawText.length > 0) {
+              documentText = data.rawText;
+              fetchSuccess = true;
+              console.log(`Successfully fetched document text using get-details endpoint (${documentText.length} characters)`);
+            }
+          } else {
+            console.warn(`get-details endpoint failed: ${response.status} ${response.statusText}`);
+          }
+        } catch (error) {
+          console.error("Error using get-details endpoint:", error);
+        }
+      }
+      
+      // Method 3: If both methods failed, try the documents endpoint
+      if (!fetchSuccess) {
+        try {
+          console.log("Method 3: Using /api/documents/[id] endpoint");
+          const response = await fetch(`/api/documents/${selectedDocument.id}`);
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.document && data.document.content) {
+              documentText = data.document.content;
+              fetchSuccess = true;
+              console.log(`Successfully fetched document text using documents endpoint (${documentText.length} characters)`);
+            } else if (data.document && data.document.text) {
+              // Alternative field name that might contain the text
+              documentText = data.document.text;
+              fetchSuccess = true;
+              console.log(`Successfully fetched document text (from text field) using documents endpoint (${documentText.length} characters)`);
+            }
+          } else {
+            console.warn(`documents endpoint failed: ${response.status} ${response.statusText}`);
+          }
+        } catch (error) {
+          console.error("Error using documents endpoint:", error);
+        }
+      }
+      
+      // Method 4: Try a generic document content endpoint as last resort
+      if (!fetchSuccess) {
+        try {
+          console.log("Method 4: Using /api/documents/content endpoint");
+          const response = await fetch(`/api/documents/content?id=${selectedDocument.id}`);
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.content && data.content.length > 0) {
+              documentText = data.content;
+              fetchSuccess = true;
+              console.log(`Successfully fetched document text using content endpoint (${documentText.length} characters)`);
+            }
+          } else {
+            console.warn(`document content endpoint failed: ${response.status} ${response.statusText}`);
+          }
+        } catch (error) {
+          console.error("Error using document content endpoint:", error);
+        }
+      }
+      
+      // If all methods failed, throw an error
+      if (!fetchSuccess || !documentText) {
+        throw new Error("Could not retrieve document text content. Please ensure the document has been processed correctly and contains extractable text.");
+      }
+      
+      console.log(`Document text fetched successfully (${documentText.length} characters). Sending for analysis...`);
+      
+      // Send document for analysis
       const response = await fetch("/api/document/analyze", {
         method: "POST",
         headers: {
@@ -346,19 +504,26 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
         },
         body: JSON.stringify({
           documentId: selectedDocument.id,
+          documentText: documentText,
+          fileName: selectedDocument.fileName || 'document',
           documentPurpose: documentPurpose,
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`Analysis failed: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || response.statusText;
+        console.error(`Analysis failed: ${response.status} ${errorMessage}`);
+        throw new Error(`Analysis failed: ${errorMessage}`);
       }
 
       const data = await response.json();
+      console.log("Analysis completed successfully");
       setAnalysisData(data.analysis);
     } catch (err) {
-      console.error("Error analyzing document:", err);
-      setError("Failed to analyze document. Please try again.");
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      console.error("Error analyzing document:", errorMessage);
+      setError(errorMessage || "Failed to analyze document. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -479,6 +644,304 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
     }
   };
 
+  // Helper function to render spreadsheet analysis
+  const renderSpreadsheetAnalysis = (analysisData: any) => {
+    return (
+      <div className="space-y-4">
+        <div className="p-5 border border-[#222222] rounded-lg bg-[#111111]">
+          <h3 className="text-lg font-medium text-[#F9F6EE] mb-3">Spreadsheet Analysis</h3>
+          <p className="text-[#F9F6EE]/70 mb-4">{analysisData.summary || "Analysis of spreadsheet data structure and content."}</p>
+          
+          {/* Data Structure Analysis */}
+          {analysisData.dataStructureAnalysis && (
+            <div className="mt-4">
+              <h4 className="text-[#F9F6EE] font-medium mb-2">Data Structure</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-[#171717] rounded-md">
+                  <p className="text-[#8A8782] text-xs">Tables</p>
+                  <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.dataStructureAnalysis.tableCount || "N/A"}</p>
+                </div>
+                <div className="p-3 bg-[#171717] rounded-md">
+                  <p className="text-[#8A8782] text-xs">Columns</p>
+                  <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.dataStructureAnalysis.columnCount || "N/A"}</p>
+                </div>
+                <div className="p-3 bg-[#171717] rounded-md">
+                  <p className="text-[#8A8782] text-xs">Rows</p>
+                  <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.dataStructureAnalysis.rowCount || "N/A"}</p>
+                </div>
+                <div className="p-3 bg-[#171717] rounded-md">
+                  <p className="text-[#8A8782] text-xs">Data Types</p>
+                  <p className="text-[#F9F6EE] text-lg font-medium">{Array.isArray(analysisData.dataStructureAnalysis.dataTypes) ? analysisData.dataStructureAnalysis.dataTypes.join(", ") : "Various"}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Data Insights */}
+          {analysisData.dataInsights && (
+            <div className="mt-5">
+              <h4 className="text-[#F9F6EE] font-medium mb-2">Key Insights</h4>
+              <div className="space-y-3">
+                {analysisData.dataInsights.trends && analysisData.dataInsights.trends.map((trend: any, index: number) => (
+                  <div key={`trend-${index}`} className="p-3 bg-[#171717] rounded-md">
+                    <div className="flex justify-between">
+                      <p className="text-[#F9F6EE] font-medium">{trend.description}</p>
+                      <span className="px-2 py-0.5 bg-[#B4916C]/20 text-[#B4916C] rounded text-xs">{trend.significance}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Data Quality */}
+          {analysisData.dataQualityAssessment && (
+            <div className="mt-5">
+              <h4 className="text-[#F9F6EE] font-medium mb-2">Data Quality</h4>
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                <div className="p-3 bg-[#171717] rounded-md">
+                  <p className="text-[#8A8782] text-xs">Completeness</p>
+                  <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.dataQualityAssessment.completenessScore || "N/A"}%</p>
+                </div>
+                <div className="p-3 bg-[#171717] rounded-md">
+                  <p className="text-[#8A8782] text-xs">Consistency</p>
+                  <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.dataQualityAssessment.consistencyScore || "N/A"}%</p>
+                </div>
+                <div className="p-3 bg-[#171717] rounded-md">
+                  <p className="text-[#8A8782] text-xs">Accuracy</p>
+                  <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.dataQualityAssessment.accuracyScore || "N/A"}%</p>
+                </div>
+              </div>
+              
+              <h5 className="text-[#F9F6EE]/80 text-sm font-medium mb-2">Quality Issues</h5>
+              <div className="space-y-2">
+                {analysisData.dataQualityAssessment.qualityIssues && analysisData.dataQualityAssessment.qualityIssues.map((issue: any, index: number) => (
+                  <div key={`issue-${index}`} className="p-3 bg-[#171717] rounded-md">
+                    <div className="flex justify-between mb-1">
+                      <p className="text-[#F9F6EE] font-medium">{issue.issue}</p>
+                      <span className={`px-2 py-0.5 rounded text-xs ${issue.severity === 'high' ? 'bg-red-900/20 text-red-400' : issue.severity === 'medium' ? 'bg-yellow-900/20 text-yellow-400' : 'bg-[#222222] text-[#8A8782]'}`}>
+                        {issue.severity}
+                      </span>
+                    </div>
+                    <p className="text-[#8A8782] text-sm">{issue.recommendation}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Helper function to render presentation analysis
+  const renderPresentationAnalysis = (analysisData: any) => {
+    return (
+      <div className="space-y-4">
+        <div className="p-5 border border-[#222222] rounded-lg bg-[#111111]">
+          <h3 className="text-lg font-medium text-[#F9F6EE] mb-3">Presentation Analysis</h3>
+          <p className="text-[#F9F6EE]/70 mb-4">{analysisData.summary || "Analysis of presentation structure, content, and effectiveness."}</p>
+          
+          {/* Key Points */}
+          <div className="mt-4">
+            <h4 className="text-[#F9F6EE] font-medium mb-2">Key Points</h4>
+            <ul className="list-disc list-inside space-y-1 pl-2 text-[#F9F6EE]/80">
+              {(analysisData.keyPoints || ["No key points detected"]).map((point: string, index: number) => (
+                <li key={`point-${index}`}>{point}</li>
+              ))}
+            </ul>
+          </div>
+          
+          {/* Presentation Structure */}
+          {analysisData.presentationStructure && (
+            <div className="mt-5">
+              <h4 className="text-[#F9F6EE] font-medium mb-2">Structure Analysis</h4>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div className="p-3 bg-[#171717] rounded-md">
+                  <p className="text-[#8A8782] text-xs">Estimated Slides</p>
+                  <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.presentationStructure.estimatedSlideCount || "Unknown"}</p>
+                </div>
+                <div className="p-3 bg-[#171717] rounded-md">
+                  <p className="text-[#8A8782] text-xs">Narrative Flow</p>
+                  <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.presentationStructure.narrativeFlow || "N/A"}/100</p>
+                </div>
+                <div className="p-3 bg-[#171717] rounded-md flex items-center">
+                  <div>
+                    <p className="text-[#8A8782] text-xs">Has Introduction</p>
+                    <p className="text-[#F9F6EE] font-medium">
+                      {analysisData.presentationStructure.hasIntroduction ? "Yes" : "No"}
+                    </p>
+                  </div>
+                </div>
+                <div className="p-3 bg-[#171717] rounded-md flex items-center">
+                  <div>
+                    <p className="text-[#8A8782] text-xs">Has Conclusion</p>
+                    <p className="text-[#F9F6EE] font-medium">
+                      {analysisData.presentationStructure.hasConclusion ? "Yes" : "No"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Message Clarity */}
+          {analysisData.messageClarity && (
+            <div className="mt-5">
+              <h4 className="text-[#F9F6EE] font-medium mb-2">Message Clarity</h4>
+              <div className="p-3 bg-[#171717] rounded-md mb-3">
+                <p className="text-[#8A8782] text-xs mb-1">Main Message</p>
+                <p className="text-[#F9F6EE]">{analysisData.messageClarity.mainMessage || "No clear main message detected"}</p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-[#171717] rounded-md">
+                  <p className="text-[#8A8782] text-xs">Clarity Score</p>
+                  <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.messageClarity.clarity || "N/A"}/100</p>
+                </div>
+                <div className="p-3 bg-[#171717] rounded-md">
+                  <p className="text-[#8A8782] text-xs">Target Audience</p>
+                  <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.messageClarity.audienceAlignment || "General"}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Improvement Suggestions */}
+          <div className="mt-5">
+            <h4 className="text-[#F9F6EE] font-medium mb-2">Improvement Suggestions</h4>
+            <div className="space-y-2">
+              {(analysisData.recommendations || analysisData.improvementSuggestions?.content || ["No specific recommendations"]).map((rec: any, index: number) => (
+                <div key={`rec-${index}`} className="p-3 bg-[#171717] rounded-md">
+                  <p className="text-[#F9F6EE]">{typeof rec === 'string' ? rec : rec.title || rec.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Helper function to render scientific document analysis
+  const renderScientificAnalysis = (analysisData: any) => {
+    return (
+      <div className="space-y-4">
+        <div className="p-5 border border-[#222222] rounded-lg bg-[#111111]">
+          <h3 className="text-lg font-medium text-[#F9F6EE] mb-3">Scientific Document Analysis</h3>
+          <p className="text-[#F9F6EE]/70 mb-4">{analysisData.summary || "Analysis of scientific research content and structure."}</p>
+          
+          {/* Research Structure */}
+          {analysisData.researchStructure && (
+            <div className="mt-4">
+              <h4 className="text-[#F9F6EE] font-medium mb-2">Research Structure</h4>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                <div className="p-3 bg-[#171717] rounded-md flex items-center">
+                  <div>
+                    <p className="text-[#8A8782] text-xs">Abstract</p>
+                    <p className="text-[#F9F6EE] font-medium">
+                      {analysisData.researchStructure.hasAbstract ? "Present" : "Missing"}
+                    </p>
+                  </div>
+                </div>
+                <div className="p-3 bg-[#171717] rounded-md flex items-center">
+                  <div>
+                    <p className="text-[#8A8782] text-xs">Methodology</p>
+                    <p className="text-[#F9F6EE] font-medium">
+                      {analysisData.researchStructure.hasMethodology ? "Present" : "Missing"}
+                    </p>
+                  </div>
+                </div>
+                <div className="p-3 bg-[#171717] rounded-md flex items-center">
+                  <div>
+                    <p className="text-[#8A8782] text-xs">Results</p>
+                    <p className="text-[#F9F6EE] font-medium">
+                      {analysisData.researchStructure.hasResults ? "Present" : "Missing"}
+                    </p>
+                  </div>
+                </div>
+                <div className="p-3 bg-[#171717] rounded-md flex items-center">
+                  <div>
+                    <p className="text-[#8A8782] text-xs">References</p>
+                    <p className="text-[#F9F6EE] font-medium">
+                      {analysisData.researchStructure.hasReferences ? "Present" : "Missing"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Key Points */}
+          <div className="mt-5">
+            <h4 className="text-[#F9F6EE] font-medium mb-2">Key Findings</h4>
+            <ul className="list-disc list-inside space-y-1 pl-2 text-[#F9F6EE]/80">
+              {(analysisData.keyPoints || ["No key findings detected"]).map((point: string, index: number) => (
+                <li key={`finding-${index}`}>{point}</li>
+              ))}
+            </ul>
+          </div>
+          
+          {/* Research Quality */}
+          {analysisData.researchQuality && (
+            <div className="mt-5">
+              <h4 className="text-[#F9F6EE] font-medium mb-2">Research Quality</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-[#171717] rounded-md">
+                  <p className="text-[#8A8782] text-xs">Methodology Rigor</p>
+                  <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.researchQuality.methodologyRigor || "N/A"}/100</p>
+                </div>
+                <div className="p-3 bg-[#171717] rounded-md">
+                  <p className="text-[#8A8782] text-xs">Data Quality</p>
+                  <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.researchQuality.dataQuality || "N/A"}/100</p>
+                </div>
+                <div className="p-3 bg-[#171717] rounded-md">
+                  <p className="text-[#8A8782] text-xs">Analysis Depth</p>
+                  <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.researchQuality.analysisDepth || "N/A"}/100</p>
+                </div>
+                <div className="p-3 bg-[#171717] rounded-md">
+                  <p className="text-[#8A8782] text-xs">Originality</p>
+                  <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.researchQuality.originalityScore || "N/A"}/100</p>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Research Gaps */}
+          {analysisData.researchGaps && analysisData.researchGaps.length > 0 && (
+            <div className="mt-5">
+              <h4 className="text-[#F9F6EE] font-medium mb-2">Research Gaps</h4>
+              <ul className="list-disc list-inside space-y-1 pl-2 text-[#F9F6EE]/80">
+                {analysisData.researchGaps.map((gap: string, index: number) => (
+                  <li key={`gap-${index}`}>{gap}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          
+          {/* Topics */}
+          {analysisData.topics && analysisData.topics.length > 0 && (
+            <div className="mt-5">
+              <h4 className="text-[#F9F6EE] font-medium mb-2">Research Topics</h4>
+              <div className="flex flex-wrap gap-2">
+                {analysisData.topics.map((topic: any, index: number) => (
+                  <div key={`topic-${index}`} className="px-3 py-1 bg-[#1A1A1A] text-[#F9F6EE] rounded-full text-xs flex items-center">
+                    {topic.name || topic}
+                    {topic.relevance && (
+                      <span className="ml-1 px-1.5 py-0.5 bg-[#B4916C]/20 text-[#B4916C] rounded-full text-xs">
+                        {Number(topic.relevance * 100).toFixed(0)}%
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="w-full">
       {/* Document Selection & Purpose */}
@@ -551,9 +1014,13 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
           
           <div ref={analysisRef} className="bg-[#111111] text-[#F9F6EE] p-4 rounded-lg">
             {/* Render analysis based on document type */}
-            {documentPurpose === "CV" && renderCVAnalysis(analysisData)}
-            {documentPurpose === "Cover Letter" && renderCoverLetterAnalysis(analysisData)}
-            {documentPurpose === "Job Description" && renderJobDescriptionAnalysis(analysisData)}
+            {documentPurpose.toLowerCase() === "cv" && renderCVAnalysis(analysisData)}
+            {documentPurpose.toLowerCase() === "general" && renderCVAnalysis(analysisData)}
+            {documentPurpose.toLowerCase() === "cover letter" && renderCoverLetterAnalysis(analysisData)}
+            {documentPurpose.toLowerCase() === "job description" && renderJobDescriptionAnalysis(analysisData)}
+            {documentPurpose.toLowerCase() === "spreadsheet" && renderSpreadsheetAnalysis(analysisData)}
+            {documentPurpose.toLowerCase() === "presentation" && renderPresentationAnalysis(analysisData)}
+            {documentPurpose.toLowerCase() === "scientific" && renderScientificAnalysis(analysisData)}
           </div>
           
           {/* Feedback Component */}

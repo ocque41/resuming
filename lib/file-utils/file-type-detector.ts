@@ -44,6 +44,12 @@ export const FILE_TYPES: Record<string, FileTypeInfo> = {
     category: 'document',
     name: 'Rich Text Document'
   },
+  'odt': { // OpenDocument Text
+    extension: 'odt',
+    mimeType: 'application/vnd.oasis.opendocument.text',
+    category: 'document',
+    name: 'OpenDocument Text'
+  },
   
   // Spreadsheets
   'xlsx': {
@@ -64,6 +70,18 @@ export const FILE_TYPES: Record<string, FileTypeInfo> = {
     category: 'spreadsheet',
     name: 'CSV Spreadsheet'
   },
+  'ods': { // OpenDocument Spreadsheet
+    extension: 'ods',
+    mimeType: 'application/vnd.oasis.opendocument.spreadsheet',
+    category: 'spreadsheet',
+    name: 'OpenDocument Spreadsheet'
+  },
+  'tsv': {
+    extension: 'tsv',
+    mimeType: 'text/tab-separated-values',
+    category: 'spreadsheet',
+    name: 'Tab-Separated Values'
+  },
   
   // Presentations
   'pptx': {
@@ -78,10 +96,60 @@ export const FILE_TYPES: Record<string, FileTypeInfo> = {
     category: 'presentation',
     name: 'PowerPoint Presentation'
   },
+  'odp': { // OpenDocument Presentation
+    extension: 'odp',
+    mimeType: 'application/vnd.oasis.opendocument.presentation',
+    category: 'presentation',
+    name: 'OpenDocument Presentation'
+  },
+  'key': { // Apple Keynote
+    extension: 'key',
+    mimeType: 'application/vnd.apple.keynote',
+    category: 'presentation',
+    name: 'Apple Keynote Presentation'
+  },
+  
+  // Additional document formats
+  'md': {
+    extension: 'md',
+    mimeType: 'text/markdown',
+    category: 'document',
+    name: 'Markdown Document'
+  },
+  'html': {
+    extension: 'html',
+    mimeType: 'text/html',
+    category: 'document',
+    name: 'HTML Document'
+  },
+  'htm': {
+    extension: 'htm',
+    mimeType: 'text/html',
+    category: 'document',
+    name: 'HTML Document'
+  },
+  'json': {
+    extension: 'json',
+    mimeType: 'application/json',
+    category: 'document',
+    name: 'JSON Document'
+  },
+  'xml': {
+    extension: 'xml',
+    mimeType: 'application/xml',
+    category: 'document',
+    name: 'XML Document'
+  },
   
   // Images (for completeness)
   'jpg': {
     extension: 'jpg',
+    mimeType: 'image/jpeg',
+    category: 'image',
+    name: 'JPEG Image'
+  },
+  'jpeg': {
+    extension: 'jpeg',
     mimeType: 'image/jpeg',
     category: 'image',
     name: 'JPEG Image'
@@ -91,6 +159,12 @@ export const FILE_TYPES: Record<string, FileTypeInfo> = {
     mimeType: 'image/png',
     category: 'image',
     name: 'PNG Image'
+  },
+  'gif': {
+    extension: 'gif',
+    mimeType: 'image/gif',
+    category: 'image',
+    name: 'GIF Image'
   },
 };
 
@@ -126,10 +200,28 @@ export function detectFileType(fileName: string, mimeType?: string): FileTypeInf
   
   // Then try to match by file extension
   const extension = fileName.split('.').pop()?.toLowerCase();
-  if (!extension) return undefined;
+  if (!extension) {
+    // If no extension found, attempt to provide a generic "document" type
+    console.log(`No file extension found for: ${fileName}, defaulting to generic document`);
+    return {
+      extension: 'txt',
+      mimeType: 'text/plain',
+      category: 'document',
+      name: 'Generic Document'
+    };
+  }
   
   const fileType = FILE_TYPES[extension];
-  if (!fileType) return undefined;
+  if (!fileType) {
+    // If extension not recognized, also provide a generic "document" type
+    console.log(`Unknown file extension: ${extension}, defaulting to generic document`);
+    return {
+      extension: extension,
+      mimeType: 'application/octet-stream',
+      category: 'document',
+      name: 'Unknown Document Type'
+    };
+  }
   
   // Create a copy of the file type that we can modify
   const result = { ...fileType };
@@ -171,6 +263,7 @@ export function isSupportedForAnalysis(fileType: FileTypeInfo | undefined): bool
   if (!fileType) return false;
   
   // Currently we support documents, spreadsheets, presentations, CVs, and scientific papers
+  // We'll be more permissive to ensure better user experience
   return ['document', 'spreadsheet', 'presentation', 'cv', 'scientific'].includes(fileType.category);
 }
 
@@ -208,4 +301,17 @@ export function isPdfFile(fileName: string): boolean {
   const extension = fileName.split('.').pop()?.toLowerCase();
   // Check if the extension is 'pdf'
   return extension === 'pdf';
+}
+
+/**
+ * Gets a fallback mime type for files that don't have one
+ * @param fileName The name of the file
+ * @returns A best-guess MIME type string
+ */
+export function getFallbackMimeType(fileName: string): string {
+  const extension = fileName.split('.').pop()?.toLowerCase();
+  if (!extension) return 'application/octet-stream';
+  
+  const fileType = FILE_TYPES[extension];
+  return fileType?.mimeType || 'application/octet-stream';
 } 
