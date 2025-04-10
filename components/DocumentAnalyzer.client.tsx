@@ -390,18 +390,18 @@ const renderCVAnalysis = (analysisData: any) => {
   return (
     <div className="space-y-6 my-6">
       {/* Summary section */}
-      <Card title="Summary" className="shadow-md border-0" style={{ backgroundColor: '#050505' }}>
+      <Card title={<span className="text-[#F9F6EE]">Summary</span>} className="shadow-md border-0" style={{ backgroundColor: '#050505' }}>
         <div className="mb-4">
-          <p>{cvSummary}</p>
+          <p className="text-[#F9F6EE]">{cvSummary}</p>
         </div>
       </Card>
       
       {/* Skills Analysis */}
-      <Card title="Skills Analysis" className="shadow-md border-0" style={{ backgroundColor: '#050505' }}>
+      <Card title={<span className="text-[#F9F6EE]">Skills Analysis</span>} className="shadow-md border-0" style={{ backgroundColor: '#050505' }}>
         {allSkills.length > 0 ? (
           <div className="space-y-4">
             <div>
-              <h4 className="font-medium mb-2">All Skills</h4>
+              <h4 className="font-medium mb-2 text-[#F9F6EE]">All Skills</h4>
               <div className="flex flex-wrap gap-2">
                 {allSkills.map((skill, index) => (
                   <Tag key={index} color="green">{skill}</Tag>
@@ -411,7 +411,7 @@ const renderCVAnalysis = (analysisData: any) => {
             
             {jobSpecificSkills.length > 0 && (
               <div>
-                <h4 className="font-medium mb-2">Job-Specific Skills</h4>
+                <h4 className="font-medium mb-2 text-[#F9F6EE]">Job-Specific Skills</h4>
                 <div className="flex flex-wrap gap-2">
                   {jobSpecificSkills.map((skill, index) => (
                     <Tag key={index} color="volcano">{skill}</Tag>
@@ -421,16 +421,16 @@ const renderCVAnalysis = (analysisData: any) => {
             )}
           </div>
         ) : (
-          <Empty description="No skills detected" />
+          <Empty description={<span className="text-[#F9F6EE]">No skills detected</span>} />
         )}
       </Card>
   
       {/* Keywords Analysis */}
-      <Card title="Keywords Analysis" className="shadow-md border-0" style={{ backgroundColor: '#050505' }}>
+      <Card title={<span className="text-[#F9F6EE]">Keywords Analysis</span>} className="shadow-md border-0" style={{ backgroundColor: '#050505' }}>
         <div className="space-y-4">
           {resumeKeywords.length > 0 && (
             <div>
-              <h4 className="font-medium mb-2">Present Keywords</h4>
+              <h4 className="font-medium mb-2 text-[#F9F6EE]">Present Keywords</h4>
               <div className="flex flex-wrap gap-2">
                 {resumeKeywords.map((keyword: string, index: number) => (
                   <Tag key={index} color="blue">{keyword}</Tag>
@@ -441,7 +441,7 @@ const renderCVAnalysis = (analysisData: any) => {
           
           {missingKeywords.length > 0 && (
             <div>
-              <h4 className="font-medium mb-2">Missing Keywords</h4>
+              <h4 className="font-medium mb-2 text-[#F9F6EE]">Missing Keywords</h4>
               <div className="flex flex-wrap gap-2">
                 {missingKeywords.map((keyword: string, index: number) => (
                   <Tag key={index} color="red">{keyword}</Tag>
@@ -451,46 +451,48 @@ const renderCVAnalysis = (analysisData: any) => {
           )}
           
           {resumeKeywords.length === 0 && missingKeywords.length === 0 && (
-            <Empty description="No keyword analysis available" />
+            <Empty description={<span className="text-[#F9F6EE]">No keyword analysis available</span>} />
           )}
         </div>
       </Card>
   
       {/* Strengths */}
-      <Card title="Strengths" className="shadow-md border-0" style={{ backgroundColor: '#050505' }}>
+      <Card title={<span className="text-[#F9F6EE]">Strengths</span>} className="shadow-md border-0" style={{ backgroundColor: '#050505' }}>
         {strengthsWeaknesses.strengths.length > 0 ? (
-          <ul className="list-disc pl-5 space-y-2">
+          <ul className="list-disc pl-5 space-y-2 text-[#F9F6EE]">
             {strengthsWeaknesses.strengths.map((strength, index) => (
               <li key={index}>{strength.title} - {strength.description}</li>
             ))}
           </ul>
         ) : (
-          <Empty description="No strengths identified" />
+          <Empty description={<span className="text-[#F9F6EE]">No strengths identified</span>} />
         )}
       </Card>
   
       {/* Areas for Improvement */}
-      <Card title="Areas for Improvement" className="shadow-md border-0" style={{ backgroundColor: '#050505' }}>
+      <Card title={<span className="text-[#F9F6EE]">Areas for Improvement</span>} className="shadow-md border-0" style={{ backgroundColor: '#050505' }}>
         {strengthsWeaknesses.weaknesses.length > 0 ? (
-          <ul className="list-disc pl-5 space-y-2">
+          <ul className="list-disc pl-5 space-y-2 text-[#F9F6EE]">
             {strengthsWeaknesses.weaknesses.map((weakness, index) => (
               <li key={index}>{weakness.title} - {weakness.description}</li>
             ))}
           </ul>
         ) : (
-          <Empty description="No areas for improvement identified" />
+          <Empty description={<span className="text-[#F9F6EE]">No areas for improvement identified</span>} />
         )}
       </Card>
   
       {/* Improvement Suggestions */}
-      <Card title="Improvement Suggestions" className="shadow-md border-0" style={{ backgroundColor: '#050505' }}>
+      <Card title={<span className="text-[#F9F6EE]">Improvement Suggestions</span>} className="shadow-md border-0" style={{ backgroundColor: '#050505' }}>
         {improvementSuggestions.length > 0 ? (
-          <Timeline items={improvementSuggestions.map((suggestion, index) => ({
-            color: 'blue',
-            children: <div className="py-1">{suggestion.title} - {suggestion.description}</div>
-          }))} />
+          <Timeline 
+            items={improvementSuggestions.map((suggestion, index) => ({
+              color: 'blue',
+              children: <div className="py-1 text-[#F9F6EE]">{suggestion.title} - {suggestion.description}</div>
+            }))} 
+          />
         ) : (
-          <Empty description="No improvement suggestions available" />
+          <Empty description={<span className="text-[#F9F6EE]">No improvement suggestions available</span>} />
         )}
       </Card>
     </div>
