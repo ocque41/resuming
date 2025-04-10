@@ -533,18 +533,11 @@ export async function POST(req: NextRequest) {
       });
     } catch (analysisError) {
       console.error(`Error in AI analysis:`, analysisError);
-      
-      // If AI analysis fails, fall back to mock analysis
-      console.warn(`Falling back to mock analysis for document ${documentId}`);
-      
-      // Generate mock analysis based on document purpose
-      const mockResult = generateMockAnalysisResult(documentId, fileName || 'document.txt', documentPurpose || 'general');
-      
-      return NextResponse.json({
-        message: "Document analyzed (fallback mode)",
-        analysis: mockResult,
-        _fallback: true
-      });
+      // Instead of falling back to mock data, return the error to the client
+      return NextResponse.json({ 
+        error: "Document analysis failed", 
+        details: analysisError instanceof Error ? analysisError.message : "Unknown analysis error"
+      }, { status: 500 });
     }
   } catch (error) {
     console.error("Error processing analysis request:", error);

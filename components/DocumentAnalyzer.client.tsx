@@ -272,37 +272,9 @@ const renderCVAnalysis = (analysisData: any) => {
         title: sug.split(':')[0] || sug, 
         description: sug.split(':')[1] || ''
       }));
-  
-  // Get score from various possible locations
-  const overallScore = 
-    summary.overallScore || 
-    cvAnalysis.atsCompatibility?.score || 
-    summary.impactScore || 
-    70; // Default fallback score
 
   return (
     <div className="space-y-4">
-      {/* Overall Score */}
-      <div className="p-5 border border-[#222222] rounded-lg bg-[#111111]">
-        <h3 className="text-lg font-medium text-[#F9F6EE] mb-3">Overall CV Score</h3>
-        <div className="flex items-center justify-between">
-          <div className="text-[#F9F6EE] text-2xl font-bold">{overallScore}/100</div>
-          <div className="w-24 h-24">
-            <CircularProgressbar
-              value={overallScore}
-              text={`${overallScore}%`}
-              styles={buildStyles({
-                textSize: '16px',
-                pathColor: `rgba(180, 145, 108, ${overallScore / 100})`,
-                textColor: '#F9F6EE',
-                trailColor: '#1A1A1A',
-                backgroundColor: '#111111',
-              })}
-            />
-          </div>
-        </div>
-      </div>
-
       {/* Relevant Job Titles */}
       <div className="p-5 border border-[#222222] rounded-lg bg-[#111111]">
         <h3 className="text-lg font-medium text-[#F9F6EE] mb-2">Relevant Job Titles</h3>
@@ -534,11 +506,25 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
     
     setLoading(true);
     try {
-      const canvas = await html2canvas(analysisRef.current, {
+      // Create a wrapper div with full black background to prevent white lines
+      const wrapper = document.createElement('div');
+      wrapper.style.backgroundColor = '#111111';
+      wrapper.style.padding = '20px';
+      wrapper.style.paddingBottom = '40px'; // Extra padding at bottom to prevent white line
+      wrapper.appendChild(analysisRef.current.cloneNode(true));
+      document.body.appendChild(wrapper);
+      
+      const canvas = await html2canvas(wrapper, {
         scale: 2,
         backgroundColor: "#111111",
-        logging: false
+        logging: false,
+        useCORS: true,
+        allowTaint: true,
+        height: wrapper.scrollHeight + 40, // Add extra height to ensure full capture
+        windowHeight: wrapper.scrollHeight + 40
       });
+      
+      document.body.removeChild(wrapper);
       
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
@@ -547,18 +533,25 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
         format: 'a4',
       });
       
+      // Set background color for all pages
+      pdf.setFillColor(17, 17, 17); // #111111
+      
       const imgWidth = 210; // A4 width in mm
       const pageHeight = 297; // A4 height in mm
       const imgHeight = canvas.height * imgWidth / canvas.width;
       let heightLeft = imgHeight;
       let position = 0;
       
+      // Add background rectangle to first page
+      pdf.rect(0, 0, 210, 297, 'F');
       pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
       heightLeft -= pageHeight;
       
       while (heightLeft > 0) {
         position = heightLeft - imgHeight;
         pdf.addPage();
+        // Add background rectangle to each new page
+        pdf.rect(0, 0, 210, 297, 'F');
         pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
         heightLeft -= pageHeight;
       }
@@ -1021,83 +1014,6 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
             {documentPurpose.toLowerCase() === "spreadsheet" && renderSpreadsheetAnalysis(analysisData)}
             {documentPurpose.toLowerCase() === "presentation" && renderPresentationAnalysis(analysisData)}
             {documentPurpose.toLowerCase() === "scientific" && renderScientificAnalysis(analysisData)}
-          </div>
-          
-          {/* Feedback Component */}
-          <div className="mt-4 p-4 border border-[#222222] rounded-lg bg-[#111111]">
-            <h3 className="text-lg font-medium text-[#F9F6EE] mb-2">Analysis Feedback</h3>
-            <p className="text-[#8A8782] text-sm mb-4">Help us improve our analysis by providing feedback.</p>
-            
-            <div className="flex flex-wrap gap-3">
-              <button 
-                onClick={() => handleFeedback('accurate')}
-                className="px-4 py-2 bg-[#1A1A1A] hover:bg-[#222222] text-[#F9F6EE] rounded-md flex items-center"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Accurate
-              </button>
-              
-              <button 
-                onClick={() => handleFeedback('helpful')}
-                className="px-4 py-2 bg-[#1A1A1A] hover:bg-[#222222] text-[#F9F6EE] rounded-md flex items-center"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905a3.61 3.61 0 01-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
-                </svg>
-                Helpful
-              </button>
-              
-              <button 
-                onClick={() => handleFeedback('needs_improvement')}
-                className="px-4 py-2 bg-[#1A1A1A] hover:bg-[#222222] text-[#F9F6EE] rounded-md flex items-center"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                Needs Improvement
-              </button>
-            </div>
-            
-            {/* Feedback Text Input (shown only when needs_improvement is selected) */}
-            {feedbackType === 'needs_improvement' && (
-              <div className="mt-4">
-                <textarea
-                  value={feedbackText}
-                  onChange={(e) => setFeedbackText(e.target.value)}
-                  placeholder="Please tell us how we can improve..."
-                  className="w-full p-3 bg-[#171717] border border-[#222222] rounded-md text-[#F9F6EE] focus:outline-none focus:ring-2 focus:ring-[#B4916C] focus:border-transparent"
-                  rows={3}
-                />
-                <div className="mt-2 flex justify-end">
-                  <button
-                    onClick={submitDetailedFeedback}
-                    disabled={!feedbackText.trim()}
-                    className={`px-4 py-2 rounded-md ${
-                      feedbackText.trim() 
-                        ? 'bg-[#B4916C] text-white hover:bg-[#9A7B5F]' 
-                        : 'bg-[#333333] text-[#8A8782] cursor-not-allowed'
-                    }`}
-                  >
-                    Submit Feedback
-                  </button>
-                </div>
-              </div>
-            )}
-            
-            {/* Feedback Confirmation */}
-            {feedbackSubmitted && (
-              <div className="mt-4 p-3 bg-[#0C3122] text-[#A7F3D0] rounded-md flex items-start">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <div>
-                  <p className="font-medium">Thank you for your feedback!</p>
-                  <p className="text-sm mt-1">Your input helps us improve our document analysis.</p>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
