@@ -702,70 +702,314 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
       // Clone the analysis content
       const contentClone = analysisRef.current.cloneNode(true) as HTMLElement;
       
-      // Increase font size of all text elements for better readability in PDF
-      const textElements = contentClone.querySelectorAll('p, h1, h2, h3, h4, h5, h6, span, li, div');
-      textElements.forEach((el: Element) => {
+      // Improve styling for PDF export
+      const styleForPDF = document.createElement('style');
+      styleForPDF.textContent = `
+        * {
+          font-family: Arial, sans-serif;
+          box-sizing: border-box;
+        }
+        body {
+          background-color: #111111;
+          color: #F9F6EE;
+        }
+        .ant-card {
+          background-color: #050505 !important;
+          margin-bottom: 16px !important;
+          border-radius: 8px !important;
+          border: 1px solid #333333 !important;
+          overflow: hidden !important;
+        }
+        .ant-card-head {
+          background-color: #111111 !important;
+          border-bottom: 1px solid #333333 !important;
+          padding: 12px 16px !important;
+        }
+        .ant-card-head-title, .ant-card-head-title span {
+          color: #F9F6EE !important;
+          font-size: 18px !important;
+          font-weight: bold !important;
+        }
+        .ant-card-body {
+          padding: 16px !important;
+          color: #F9F6EE !important;
+        }
+        h4 {
+          color: #F9F6EE !important;
+          font-size: 16px !important;
+          margin-bottom: 8px !important;
+          font-weight: bold !important;
+        }
+        p {
+          color: #F9F6EE !important;
+          font-size: 14px !important;
+          line-height: 1.5 !important;
+        }
+        ul {
+          margin-left: 20px !important;
+          padding-left: 0 !important;
+          list-style-position: outside !important;
+        }
+        li {
+          color: #F9F6EE !important;
+          font-size: 14px !important;
+          line-height: 1.5 !important;
+          margin-bottom: 8px !important;
+          list-style-type: disc !important;
+          list-style-position: outside !important;
+        }
+        .ant-tag {
+          display: inline-block !important;
+          margin: 4px !important;
+          padding: 4px 8px !important;
+          border-radius: 4px !important;
+          font-size: 12px !important;
+          line-height: 1 !important;
+        }
+        .ant-empty-description {
+          color: #F9F6EE !important;
+        }
+        .ant-timeline-item-content {
+          color: #F9F6EE !important;
+        }
+      `;
+      
+      // Apply specific fixes for different analysis types
+      if (documentPurpose.toLowerCase() === "cv") {
+        // Fix CV analysis specific styling
+        styleForPDF.textContent += `
+          .ant-tag-green {
+            background-color: #389e0d !important;
+            color: white !important;
+            border: none !important;
+          }
+          .ant-tag-volcano {
+            background-color: #d4380d !important;
+            color: white !important;
+            border: none !important;
+          }
+          .ant-tag-blue {
+            background-color: #096dd9 !important;
+            color: white !important;
+            border: none !important;
+          }
+          .ant-tag-red {
+            background-color: #cf1322 !important;
+            color: white !important;
+            border: none !important;
+          }
+          .ant-timeline-item-head-blue {
+            color: #096dd9 !important;
+            border-color: #096dd9 !important;
+          }
+          .ant-timeline-item-tail {
+            border-left: 2px solid #333333 !important;
+          }
+        `;
+      } else if (documentPurpose.toLowerCase() === "spreadsheet") {
+        // Fix spreadsheet analysis specific styling
+        styleForPDF.textContent += `
+          .p-4, .p-5, .p-3 {
+            padding: 16px !important;
+          }
+          .rounded-lg, .rounded-md {
+            border-radius: 8px !important;
+          }
+          .bg-\\[\\#050505\\] {
+            background-color: #050505 !important;
+          }
+          .bg-\\[\\#171717\\] {
+            background-color: #171717 !important;
+          }
+          .text-\\[\\#B4916C\\] {
+            color: #B4916C !important;
+          }
+          .text-\\[\\#8A8782\\] {
+            color: #8A8782 !important;
+          }
+          .border-\\[\\#222222\\] {
+            border: 1px solid #222222 !important;
+          }
+        `;
+      } else if (documentPurpose.toLowerCase() === "presentation" || 
+                documentPurpose.toLowerCase() === "scientific") {
+        // Fix presentation and scientific analysis specific styling
+        styleForPDF.textContent += `
+          .p-4, .p-5, .p-3 {
+            padding: 16px !important;
+          }
+          .rounded-lg, .rounded-md {
+            border-radius: 8px !important;
+          }
+          .bg-\\[\\#171717\\] {
+            background-color: #171717 !important;
+          }
+          .text-\\[\\#F9F6EE\\] {
+            color: #F9F6EE !important;
+          }
+          .text-\\[\\#8A8782\\] {
+            color: #8A8782 !important;
+          }
+          .border-\\[\\#222222\\] {
+            border: 1px solid #222222 !important;
+          }
+          .list-disc {
+            list-style-type: disc !important;
+            padding-left: 20px !important;
+          }
+        `;
+      }
+      
+      // Explicitly fix any bullet point lists
+      const lists = contentClone.querySelectorAll('ul.list-disc');
+      lists.forEach(list => {
+        (list as HTMLElement).style.listStyleType = 'disc';
+        (list as HTMLElement).style.paddingLeft = '20px';
+        
+        // Fix individual list items
+        const items = list.querySelectorAll('li');
+        items.forEach(item => {
+          (item as HTMLElement).style.marginBottom = '8px';
+          (item as HTMLElement).style.color = '#F9F6EE';
+          (item as HTMLElement).style.display = 'list-item';
+        });
+      });
+      
+      // Fix card titles
+      const cardTitles = contentClone.querySelectorAll('.ant-card-head-title, .ant-card-head-title span');
+      cardTitles.forEach(title => {
+        (title as HTMLElement).style.color = '#F9F6EE';
+        (title as HTMLElement).style.fontSize = '18px';
+        (title as HTMLElement).style.fontWeight = 'bold';
+      });
+      
+      // Fix all text elements for visibility
+      const textElements = contentClone.querySelectorAll('p, h3, h4, h5, span, li, div');
+      textElements.forEach(el => {
         const element = el as HTMLElement;
-        // Only increase size if it's not already large
-        const currentSize = parseInt(window.getComputedStyle(element).fontSize);
-        if (currentSize < 16) {
-          element.style.fontSize = `${Math.min(currentSize * 1.2, 16)}px`;
+        const computedStyle = window.getComputedStyle(element);
+        const bgColor = computedStyle.backgroundColor;
+        
+        // Make sure text is visible against background
+        if (bgColor.includes('rgb(5, 5, 5)') || 
+            bgColor.includes('rgb(17, 17, 17)') || 
+            bgColor.includes('#050505') || 
+            bgColor.includes('#111111')) {
+          element.style.color = '#F9F6EE';
+        }
+        
+        // Increase font size for better readability
+        const fontSize = parseInt(computedStyle.fontSize);
+        if (fontSize < 14) {
+          element.style.fontSize = '14px';
         }
       });
       
+      // Fix Tags styling
+      const tags = contentClone.querySelectorAll('.ant-tag');
+      tags.forEach(tag => {
+        (tag as HTMLElement).style.display = 'inline-block';
+        (tag as HTMLElement).style.margin = '4px';
+        (tag as HTMLElement).style.padding = '4px 8px';
+        (tag as HTMLElement).style.borderRadius = '4px';
+        (tag as HTMLElement).style.fontSize = '12px';
+      });
+      
+      // Append style and content to wrapper
+      wrapper.appendChild(styleForPDF);
       wrapper.appendChild(contentClone);
       document.body.appendChild(wrapper);
       
-      // Increase scale for higher resolution and better readability
+      // Apply a scale factor to maintain quality while keeping file size reasonable
+      const scale = 2;
+      
+      // Create canvas with proper settings
       const canvas = await html2canvas(wrapper, {
-        scale: 3, // Increased from 2 to 3 for better resolution
+        scale: scale,
         backgroundColor: "#111111",
         logging: false,
         useCORS: true,
         allowTaint: true,
-        height: wrapper.scrollHeight + 40, // Add extra height to ensure full capture
-        windowHeight: wrapper.scrollHeight + 40
+        height: wrapper.scrollHeight,
+        onclone: (clonedDoc, clonedElement) => {
+          // Additional manipulations to the cloned document if needed
+          const style = clonedDoc.createElement('style');
+          style.textContent = `
+            * { -webkit-print-color-adjust: exact !important; }
+            @page { size: A4; margin: 0; }
+            @media print { body { -webkit-print-color-adjust: exact !important; } }
+          `;
+          clonedDoc.head.appendChild(style);
+        }
       });
       
       document.body.removeChild(wrapper);
       
       const imgData = canvas.toDataURL('image/png');
+      
+      // Create PDF with proper dimensions
+      const imgWidth = 210; // A4 width in mm
+      const pageHeight = 297; // A4 height in mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const heightLeft = imgHeight;
+      
       const pdf = new jsPDF({
-        orientation: 'portrait',
+        orientation: imgHeight > imgWidth ? 'portrait' : 'landscape',
         unit: 'mm',
         format: 'a4',
       });
       
-      // Set background color for all pages
+      // Add custom font to PDF if needed
+      // pdf.addFont('path/to/font.ttf', 'Custom Font', 'normal');
+      // pdf.setFont('Custom Font');
+      
+      // Add first page with background
       pdf.setFillColor(17, 17, 17); // #111111
+      pdf.rect(0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight(), 'F');
       
-      // Adjust image width to leave slight margins
-      const imgWidth = 200; // A4 width is 210mm, leaving 5mm margins on each side
-      const pageHeight = 297; // A4 height in mm
+      // Position the image properly with margins
+      const margin = 10; // mm
+      pdf.addImage(
+        imgData,
+        'PNG',
+        margin,
+        margin,
+        imgWidth - (margin * 2),
+        imgHeight < (pageHeight - margin * 2) ? imgHeight : (pageHeight - margin * 2)
+      );
       
-      // Calculate scaled height maintaining aspect ratio but slightly reduced to fit better
-      const imgHeight = (canvas.height * imgWidth / canvas.width) * 0.95; // 0.95 factor for slight vertical compression
-      let heightLeft = imgHeight;
-      let position = 10; // Start 10mm from the top of the page
-      
-      // Add background rectangle to first page
-      pdf.rect(0, 0, 210, 297, 'F');
-      
-      // Add image with proper positioning to not clip at edges
-      pdf.addImage(imgData, 'PNG', 5, position, imgWidth, imgHeight);
-      heightLeft -= (pageHeight - 20); // Account for 10mm margin at top and bottom
-      
-      // Handle additional pages if needed
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight + 10; // Add 10mm offset at top
-        pdf.addPage();
-        // Add background rectangle to each new page
-        pdf.rect(0, 0, 210, 297, 'F');
-        pdf.addImage(imgData, 'PNG', 5, position, imgWidth, imgHeight);
-        heightLeft -= (pageHeight - 20);
+      // Handle multi-page PDFs if content is long
+      let position = 0;
+      if (imgHeight > pageHeight - margin * 2) {
+        let remainingHeight = imgHeight - (pageHeight - margin * 2);
+        position = -(pageHeight - margin * 2);
+        
+        while (remainingHeight > 0) {
+          position -= pageHeight - margin * 2;
+          
+          // Add a new page with background
+          pdf.addPage();
+          pdf.setFillColor(17, 17, 17); // #111111
+          pdf.rect(0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight(), 'F');
+          
+          // Add image content positioned to show next portion
+          pdf.addImage(
+            imgData,
+            'PNG',
+            margin,
+            position,
+            imgWidth - (margin * 2),
+            imgHeight
+          );
+          
+          remainingHeight -= (pageHeight - margin * 2);
+        }
       }
       
-      pdf.save(`${selectedDocument.name.replace(/\.[^/.]+$/, "")}_analysis.pdf`);
+      // Save PDF
+      const pdfName = `${selectedDocument.name.replace(/\.[^/.]+$/, "")}_analysis.pdf`;
+      pdf.save(pdfName);
+      
     } catch (err) {
       console.error("Error exporting PDF:", err);
       setError("Failed to export PDF");
