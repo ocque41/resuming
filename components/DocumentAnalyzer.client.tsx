@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Tabs, Progress, Empty, List, Avatar, Card } from "antd";
+import { Tabs, Progress, Empty, List, Avatar, Card, Button, Alert } from "antd";
 import { 
   DownloadOutlined, 
   ShareAltOutlined, 
@@ -26,6 +26,7 @@ export interface DocumentWithId {
   name: string;
   fileName: string;
   createdAt: Date;
+  size?: number;
 }
 
 // Define TabPane and Panel using destructuring
@@ -341,6 +342,16 @@ const renderCVAnalysis = (analysisData: any) => {
   );
 };
 
+// Add formatFileSize function before the DocumentAnalyzer component
+const formatFileSize = (bytes?: number): string => {
+  if (!bytes) return '';
+  
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  if (bytes === 0) return '0 Byte';
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return Math.round(bytes / Math.pow(1024, i)) + ' ' + sizes[i];
+};
+
 const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
   const [selectedDocument, setSelectedDocument] = useState<DocumentWithId | null>(null);
   const [loading, setLoading] = useState(false);
@@ -349,9 +360,6 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
   const [documentPurpose, setDocumentPurpose] = useState<string>("");
   const [tabKey, setTabKey] = useState<string>("summary");
   const analysisRef = useRef<HTMLDivElement>(null);
-  const [feedbackType, setFeedbackType] = useState<string | null>(null);
-  const [feedbackText, setFeedbackText] = useState<string>("");
-  const [feedbackSubmitted, setFeedbackSubmitted] = useState<boolean>(false);
   
   const handleAnalyzeDocument = async () => {
     if (!documentPurpose) {
@@ -509,54 +517,166 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
       // Create a wrapper div with full black background to prevent white lines
       const wrapper = document.createElement('div');
       wrapper.style.backgroundColor = '#111111';
-      wrapper.style.padding = '20px';
-      wrapper.style.paddingBottom = '40px'; // Extra padding at bottom to prevent white line
-      wrapper.appendChild(analysisRef.current.cloneNode(true));
+      wrapper.style.padding = '60px'; // More padding for better readability
+      wrapper.style.paddingBottom = '100px'; // Extra padding at bottom to prevent white line
+      
+      // Clone the analysis content
+      const contentClone = analysisRef.current.cloneNode(true) as HTMLElement;
+      
+      // Enhance text styles for PDF readability
+      const headings = contentClone.querySelectorAll('h2, h3, h4');
+      headings.forEach(heading => {
+        (heading as HTMLElement).style.fontSize = '150%';
+        (heading as HTMLElement).style.fontWeight = '800';
+        (heading as HTMLElement).style.marginBottom = '20px';
+        (heading as HTMLElement).style.color = '#FFFFFF'; // Brighter color for better contrast
+        (heading as HTMLElement).style.textShadow = '0px 1px 2px rgba(0,0,0,0.3)'; // Text shadow for better readability
+      });
+      
+      const paragraphs = contentClone.querySelectorAll('p');
+      paragraphs.forEach(paragraph => {
+        (paragraph as HTMLElement).style.fontSize = '120%';
+        (paragraph as HTMLElement).style.lineHeight = '1.8';
+        (paragraph as HTMLElement).style.color = '#FFFFFF'; // Brighter color for better contrast
+        (paragraph as HTMLElement).style.marginBottom = '12px';
+      });
+      
+      const cardContainers = contentClone.querySelectorAll('.rounded-lg, .rounded-md, .bg-\\[\\#111111\\], .bg-\\[\\#171717\\]');
+      cardContainers.forEach(card => {
+        (card as HTMLElement).style.marginBottom = '24px';
+        (card as HTMLElement).style.padding = '24px';
+        (card as HTMLElement).style.border = '1px solid #444444'; // Brighter border for better definition
+        (card as HTMLElement).style.backgroundColor = '#161616'; // Slightly brighter background
+        (card as HTMLElement).style.borderRadius = '8px';
+        (card as HTMLElement).style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)'; // Add shadow for depth
+      });
+      
+      // Enhance data visualization elements
+      const dataElements = contentClone.querySelectorAll('.text-\\[\\#8A8782\\]');
+      dataElements.forEach(element => {
+        (element as HTMLElement).style.color = '#BBBBBB'; // Brighter color for better visibility
+      });
+      
+      // Apply extra styling to keyword chips for better visibility
+      const keywordChips = contentClone.querySelectorAll('.px-3.py-1.bg-\\[\\#1A1A1A\\]');
+      keywordChips.forEach(chip => {
+        (chip as HTMLElement).style.backgroundColor = '#222222';
+        (chip as HTMLElement).style.color = '#FFFFFF';
+        (chip as HTMLElement).style.border = '1px solid #444444';
+        (chip as HTMLElement).style.padding = '8px 12px';
+        (chip as HTMLElement).style.marginRight = '8px';
+        (chip as HTMLElement).style.marginBottom = '8px';
+      });
+      
+      wrapper.appendChild(contentClone);
       document.body.appendChild(wrapper);
       
+      // Add a title at the top of the document
+      const titleElement = document.createElement('h1');
+      titleElement.style.fontSize = '32px';
+      titleElement.style.fontWeight = 'bold';
+      titleElement.style.marginBottom = '30px';
+      titleElement.style.color = '#FFFFFF';
+      titleElement.style.textAlign = 'center';
+      titleElement.style.padding = '10px 0';
+      titleElement.style.borderBottom = '2px solid #444444';
+      titleElement.textContent = `${documentPurpose || 'Document'} Analysis: ${selectedDocument.name}`;
+      // Insert at beginning of wrapper
+      wrapper.prepend(titleElement);
+      
+      // Add date and generated information
+      const dateElement = document.createElement('div');
+      dateElement.style.textAlign = 'center';
+      dateElement.style.margin = '15px 0 40px 0';
+      dateElement.style.color = '#999999';
+      dateElement.style.fontSize = '14px';
+      dateElement.textContent = `Generated by CVOptimizer`;
+      // Insert after the title
+      titleElement.after(dateElement);
+      
       const canvas = await html2canvas(wrapper, {
-        scale: 2,
+        scale: 4, // Higher scale for better quality
         backgroundColor: "#111111",
         logging: false,
         useCORS: true,
         allowTaint: true,
-        height: wrapper.scrollHeight + 40, // Add extra height to ensure full capture
-        windowHeight: wrapper.scrollHeight + 40
+        height: wrapper.scrollHeight + 100,
+        windowHeight: wrapper.scrollHeight + 100,
+        imageTimeout: 15000, // Longer timeout for complex content
+        onclone: (document, element) => {
+          // Additional styling for cloned document if needed
+          element.style.boxShadow = 'none'; // Remove any shadow effects
+        }
       });
       
       document.body.removeChild(wrapper);
       
-      const imgData = canvas.toDataURL('image/png');
+      const imgData = canvas.toDataURL('image/png', 1.0); // Max quality
+      
+      // Use A3 format for more content per page and better readability
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
-        format: 'a4',
+        format: 'a3',
+        compress: true, // Enable compression
+        putOnlyUsedFonts: true, // Optimize font usage
+        hotfixes: ['px_scaling'] // Apply known hotfixes
       });
       
       // Set background color for all pages
       pdf.setFillColor(17, 17, 17); // #111111
       
-      const imgWidth = 210; // A4 width in mm
-      const pageHeight = 297; // A4 height in mm
-      const imgHeight = canvas.height * imgWidth / canvas.width;
+      const imgWidth = 297; // A3 width in mm
+      const pageHeight = 420; // A3 height in mm
+      
+      // Calculate height based on aspect ratio but ensure content fits properly
+      const imgHeight = Math.min(canvas.height * imgWidth / canvas.width, pageHeight * 0.95);
       let heightLeft = imgHeight;
       let position = 0;
       
       // Add background rectangle to first page
-      pdf.rect(0, 0, 210, 297, 'F');
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      pdf.rect(0, 0, 297, 420, 'F');
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
       heightLeft -= pageHeight;
       
+      // Add page numbers
+      pdf.setFont("helvetica", "italic");
+      pdf.setTextColor(150, 150, 150);
+      pdf.setFontSize(10);
+      pdf.text(`Page 1`, 280, 410);
+      
+      let pageNumber = 2;
       while (heightLeft > 0) {
         position = heightLeft - imgHeight;
         pdf.addPage();
         // Add background rectangle to each new page
-        pdf.rect(0, 0, 210, 297, 'F');
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        pdf.rect(0, 0, 297, 420, 'F');
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
+        
+        // Add page number
+        pdf.setFont("helvetica", "italic");
+        pdf.setTextColor(150, 150, 150);
+        pdf.setFontSize(10);
+        pdf.text(`Page ${pageNumber}`, 280, 410);
+        
         heightLeft -= pageHeight;
+        pageNumber++;
       }
       
-      pdf.save(`${selectedDocument.name.replace(/\.[^/.]+$/, "")}_analysis.pdf`);
+      // Create a descriptive filename that includes document type and purpose
+      const docPurposeName = documentPurpose ? `_${documentPurpose.replace(/\s+/g, '_')}` : '';
+      const filename = `${selectedDocument.name.replace(/\.[^/.]+$/, "")}_analysis${docPurposeName}.pdf`;
+      
+      // Set document properties
+      pdf.setProperties({
+        title: `${documentPurpose || 'Document'} Analysis for ${selectedDocument.name}`,
+        subject: 'Document Analysis Report',
+        author: 'CVOptimizer',
+        creator: 'CVOptimizer Document Analyzer',
+        keywords: 'analysis, document, cv, resume, professional'
+      });
+      
+      pdf.save(filename);
     } catch (err) {
       console.error("Error exporting PDF:", err);
       setError("Failed to export PDF");
@@ -587,56 +707,6 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
     );
   };
   
-  const handleFeedback = (type: string) => {
-    setFeedbackType(type);
-    
-    // For quick feedback types (accurate and helpful), submit immediately
-    if (type === 'accurate' || type === 'helpful') {
-      submitFeedback(type, '');
-    }
-  };
-
-  const submitFeedback = async (type: string, feedbackText: string = '') => {
-    if (!analysisData || !selectedDocument) return;
-    
-    try {
-      const response = await fetch('/api/document/analyze/feedback', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          documentId: selectedDocument.id,
-          analysisType: documentPurpose,
-          rating: type === 'accurate' ? 5 : type === 'helpful' ? 4 : 2,
-          feedbackText: feedbackText
-        }),
-      });
-      
-      if (response.ok) {
-        setFeedbackSubmitted(true);
-        // Reset the feedback form after 3 seconds
-        setTimeout(() => {
-          setFeedbackSubmitted(false);
-          setFeedbackType(null);
-          setFeedbackText('');
-        }, 3000);
-      } else {
-        console.error('Failed to submit feedback');
-        setError('Failed to submit feedback');
-      }
-    } catch (err) {
-      console.error('Error submitting feedback:', err);
-      setError('Error submitting feedback');
-    }
-  };
-
-  const submitDetailedFeedback = () => {
-    if (feedbackType === 'needs_improvement' && feedbackText.trim()) {
-      submitFeedback(feedbackType, feedbackText);
-    }
-  };
-
   // Helper function to render spreadsheet analysis
   const renderSpreadsheetAnalysis = (analysisData: any) => {
     return (
@@ -936,84 +1006,95 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
   };
 
   return (
-    <div className="w-full">
-      {/* Document Selection & Purpose */}
-      <div className="mb-6 space-y-4">
-        <DocSelector 
-          documents={documents}
-          value={selectedDocument?.id || null}
-          onChange={(docId) => {
-            const doc = documents.find(d => d.id === docId);
-            setSelectedDocument(doc || null);
-          }}
-        />
+    <div className="w-full max-w-5xl mx-auto flex flex-col gap-10">
+      {/* Top section with document selector and purpose selector */}
+      <div className="flex flex-col md:flex-row gap-4 md:items-end">
+        <div className="flex-1">
+          <DocSelector
+            documents={documents}
+            value={selectedDocument?.id || null}
+            onChange={(docId) => {
+              const doc = documents.find(d => d.id === docId);
+              setSelectedDocument(doc || null);
+            }}
+          />
+        </div>
         
-        {selectedDocument && (
+        <div className="md:w-64">
           <DocumentPurposeSelector
             value={documentPurpose}
             onChange={setDocumentPurpose}
           />
-        )}
+        </div>
         
-        {selectedDocument && (
-          <button
-            onClick={handleAnalyzeDocument}
-            disabled={loading || !documentPurpose}
-            className={`w-full p-3 rounded-lg text-white font-borna flex items-center justify-center ${
-              loading || !documentPurpose
-                ? 'bg-[#333333] cursor-not-allowed'
-                : 'bg-[#B4916C] hover:bg-[#9A7B5F] cursor-pointer'
-            }`}
-          >
-            {loading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                Analyzing...
-              </>
-            ) : (
-              <>Analyze Document</>
-            )}
-          </button>
-        )}
-        
-        {error && (
-          <div className="p-3 mt-3 bg-red-900/20 border border-red-900/30 text-red-400 rounded-lg">
-            {error}
-          </div>
-        )}
+        <Button
+          type="primary"
+          onClick={handleAnalyzeDocument}
+          disabled={!selectedDocument || !documentPurpose || loading}
+          loading={loading}
+          className="h-10"
+        >
+          Analyze
+        </Button>
       </div>
       
-      {loading && !analysisData && (
-        <LoadingSpinner text="Analyzing document. This may take a minute..." />
+      {/* Error message */}
+      {error && (
+        <Alert
+          message="Error"
+          description={error}
+          type="error"
+          showIcon
+          closable
+          onClose={() => setError(null)}
+        />
       )}
       
+      {/* Loading state */}
+      {loading && <LoadingSpinner text="Analyzing document. This may take a minute..." />}
+      
+      {/* Empty state */}
       {!loading && !analysisData && !error && (
         <EmptyDocumentState />
       )}
       
-      {analysisData && (
-        <div className="mt-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-[#F9F6EE]">Analysis Results</h2>
-            <button
-              onClick={handleExportPDF}
-              disabled={loading}
-              className="px-4 py-2 bg-[#B4916C] text-white rounded-lg flex items-center hover:bg-[#9A7B5F] transition-colors"
-            >
-              <FileTextOutlined className="mr-2" />
-              Export as PDF
-            </button>
-          </div>
-          
-          <div ref={analysisRef} className="bg-[#111111] text-[#F9F6EE] p-4 rounded-lg">
-            {/* Render analysis based on document type */}
-            {documentPurpose.toLowerCase() === "cv" && renderCVAnalysis(analysisData)}
-            {documentPurpose.toLowerCase() === "general" && renderCVAnalysis(analysisData)}
-            {documentPurpose.toLowerCase() === "cover letter" && renderCoverLetterAnalysis(analysisData)}
-            {documentPurpose.toLowerCase() === "job description" && renderJobDescriptionAnalysis(analysisData)}
-            {documentPurpose.toLowerCase() === "spreadsheet" && renderSpreadsheetAnalysis(analysisData)}
-            {documentPurpose.toLowerCase() === "presentation" && renderPresentationAnalysis(analysisData)}
-            {documentPurpose.toLowerCase() === "scientific" && renderScientificAnalysis(analysisData)}
+      {/* Analysis results */}
+      {!loading && analysisData && !error && (
+        <div ref={analysisRef} className="mb-10">
+          {/* Analysis content */}
+          <div className="flex flex-col gap-6">
+            {/* Analysis headers and main content */}
+            <div className="flex flex-col gap-4">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold">Document Analysis Results</h2>
+                
+                <Button 
+                  type="primary" 
+                  onClick={handleExportPDF}
+                  icon={<DownloadOutlined />}
+                >
+                  Export as PDF
+                </Button>
+              </div>
+              
+              {/* Document info */}
+              <div className="flex gap-2 items-center">
+                <FileTextOutlined className="text-blue-500" />
+                <span className="font-medium">
+                  {selectedDocument?.name || 'Document'} {selectedDocument?.size && formatFileSize(selectedDocument.size)}
+                </span>
+              </div>
+            </div>
+            
+            {/* Analysis results based on document purpose */}
+            <div className="bg-[#111] p-6 rounded-lg shadow-lg">
+              {documentPurpose === 'CV' && renderCVAnalysis(analysisData)}
+              {documentPurpose === 'Resume' && renderCVAnalysis(analysisData)}
+              {documentPurpose === 'Cover Letter' && renderCoverLetterAnalysis(analysisData)}
+              {documentPurpose === 'Job Description' && renderJobDescriptionAnalysis(analysisData)}
+              {documentPurpose === 'Spreadsheet' && renderSpreadsheetAnalysis(analysisData)}
+              {documentPurpose === 'Presentation' && renderPresentationAnalysis(analysisData)}
+            </div>
           </div>
         </div>
       )}
