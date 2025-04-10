@@ -390,52 +390,14 @@ const renderCVAnalysis = (analysisData: any) => {
   return (
     <div className="space-y-6 my-6">
       {/* Summary section */}
-      <Card title="Summary" className="shadow-md border-0">
+      <Card title="Summary" className="shadow-md border-0" style={{ backgroundColor: '#050505' }}>
         <div className="mb-4">
           <p>{cvSummary}</p>
         </div>
       </Card>
-    
-      {/* ATS Compatibility Score */}
-      <Card title="ATS Compatibility Score" className="shadow-md border-0">
-        <div className="flex flex-col items-center justify-center mb-4">
-          <div 
-            className="text-4xl font-bold mb-2" 
-            style={{ color: atsScoreColor }}
-          >
-            {atsScore}%
-          </div>
-          <Progress 
-            percent={atsScore} 
-            strokeColor={atsScoreColor} 
-            size="small" 
-            className="w-full max-w-xs"
-          />
-          <p className="mt-4 text-sm text-gray-600">
-            {atsScore >= 90 ? 'Excellent! Your CV is highly optimized for ATS systems.' :
-             atsScore >= 80 ? 'Good. Your CV will pass most ATS systems but could be improved.' :
-             'Your CV needs optimization to better pass ATS systems.'}
-          </p>
-        </div>
-      </Card>
-  
-      {/* Relevant job titles */}
-      <Card title="Relevant Job Titles" className="shadow-md border-0">
-        <div className="mb-4">
-          {relevantJobTitles.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {relevantJobTitles.map((title: string, index: number) => (
-                <Tag key={index} color="blue">{title}</Tag>
-              ))}
-            </div>
-          ) : (
-            <Empty description="No job titles available" />
-          )}
-        </div>
-      </Card>
-  
+      
       {/* Skills Analysis */}
-      <Card title="Skills Analysis" className="shadow-md border-0">
+      <Card title="Skills Analysis" className="shadow-md border-0" style={{ backgroundColor: '#050505' }}>
         {allSkills.length > 0 ? (
           <div className="space-y-4">
             <div>
@@ -464,7 +426,7 @@ const renderCVAnalysis = (analysisData: any) => {
       </Card>
   
       {/* Keywords Analysis */}
-      <Card title="Keywords Analysis" className="shadow-md border-0">
+      <Card title="Keywords Analysis" className="shadow-md border-0" style={{ backgroundColor: '#050505' }}>
         <div className="space-y-4">
           {resumeKeywords.length > 0 && (
             <div>
@@ -495,7 +457,7 @@ const renderCVAnalysis = (analysisData: any) => {
       </Card>
   
       {/* Strengths */}
-      <Card title="Strengths" className="shadow-md border-0">
+      <Card title="Strengths" className="shadow-md border-0" style={{ backgroundColor: '#050505' }}>
         {strengthsWeaknesses.strengths.length > 0 ? (
           <ul className="list-disc pl-5 space-y-2">
             {strengthsWeaknesses.strengths.map((strength, index) => (
@@ -508,7 +470,7 @@ const renderCVAnalysis = (analysisData: any) => {
       </Card>
   
       {/* Areas for Improvement */}
-      <Card title="Areas for Improvement" className="shadow-md border-0">
+      <Card title="Areas for Improvement" className="shadow-md border-0" style={{ backgroundColor: '#050505' }}>
         {strengthsWeaknesses.weaknesses.length > 0 ? (
           <ul className="list-disc pl-5 space-y-2">
             {strengthsWeaknesses.weaknesses.map((weakness, index) => (
@@ -521,7 +483,7 @@ const renderCVAnalysis = (analysisData: any) => {
       </Card>
   
       {/* Improvement Suggestions */}
-      <Card title="Improvement Suggestions" className="shadow-md border-0">
+      <Card title="Improvement Suggestions" className="shadow-md border-0" style={{ backgroundColor: '#050505' }}>
         {improvementSuggestions.length > 0 ? (
           <Timeline items={improvementSuggestions.map((suggestion, index) => ({
             color: 'blue',
@@ -889,6 +851,41 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
         <div className="p-5 border border-[#222222] rounded-lg bg-[#111111]">
           <h3 className="text-lg font-medium text-[#F9F6EE] mb-3">Spreadsheet Analysis</h3>
           <p className="text-[#F9F6EE]/70 mb-4">{analysisData.summary || "Analysis of spreadsheet data structure and content."}</p>
+          
+          {/* Areas of Improvement - New Section */}
+          <div className="mt-4 p-4 bg-[#050505] rounded-lg border border-[#222222]">
+            <h4 className="text-[#F9F6EE] font-medium mb-3">Areas of Improvement</h4>
+            <ul className="list-disc pl-5 space-y-2 text-[#F9F6EE]/90">
+              {(analysisData.recommendations || []).slice(0, 3).map((recommendation: any, index: number) => (
+                <li key={`improvement-${index}`} className="pb-2">
+                  <span className="font-medium text-[#B4916C]">
+                    {typeof recommendation === 'string' 
+                      ? recommendation.split(':')[0] || recommendation
+                      : recommendation.title || 'Improvement opportunity'}
+                  </span>
+                  <span className="block mt-1 text-sm">
+                    {typeof recommendation === 'string'
+                      ? recommendation.includes(':') ? recommendation.split(':').slice(1).join(':').trim() : ''
+                      : recommendation.description || ''}
+                  </span>
+                </li>
+              ))}
+              {(!analysisData.recommendations || analysisData.recommendations.length === 0) && [
+                <li key="default-1" className="pb-2">
+                  <span className="font-medium text-[#B4916C]">Improve Data Completeness</span>
+                  <span className="block mt-1 text-sm">Fill in missing values and ensure all required fields have data to enhance analysis quality.</span>
+                </li>,
+                <li key="default-2" className="pb-2">
+                  <span className="font-medium text-[#B4916C]">Standardize Data Formats</span>
+                  <span className="block mt-1 text-sm">Use consistent formats for dates, currencies, and other data types to improve analysis accuracy.</span>
+                </li>,
+                <li key="default-3" className="pb-2">
+                  <span className="font-medium text-[#B4916C]">Add Data Validation Rules</span>
+                  <span className="block mt-1 text-sm">Implement validation rules to prevent incorrect data entry and maintain data integrity.</span>
+                </li>
+              ]}
+            </ul>
+          </div>
           
           {/* Data Structure Analysis */}
           {analysisData.dataStructureAnalysis && (
