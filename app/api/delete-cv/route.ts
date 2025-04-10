@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/drizzle";
-import { cvs, deletedCvMetadata } from "@/lib/db/schema";
+import { cvs, deletedCvMetadata, jobStatus, documentAnalyses } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getUser } from "@/lib/db/queries.server";
+import { deleteFileFromS3 } from "@/lib/s3Storage";
 
 export async function DELETE(request: NextRequest) {
   try {
@@ -62,9 +63,65 @@ export async function DELETE(request: NextRequest) {
 
     console.log(`Stored metadata for deleted CV ${cvRecord.id} in deleted_cv_metadata table`);
 
-    // Delete the CV
-    await db.delete(cvs).where(eq(cvs.id, parseInt(cvId)));
-    console.log(`Successfully deleted CV ${cvRecord.id}`);
+    // Delete all related records in the correct order to handle foreign key constraints
+    
+    // 1. Delete related documentAnalyses records
+    try {
+      await db.delete(documentAnalyses).where(eq(documentAnalyses.cvId, parseInt(cvId)));
+      console.log(`Deleted related document analyses for CV ${cvRecord.id}`);
+    } catch (error) {
+      console.error(`Error deleting document analyses for CV ${cvRecord.id}:`, error);
+      return NextResponse.json(
+        { error: "Failed to delete related document analyses" },
+        { status: 500 }
+      );
+    }
+
+    // 2. Delete related job_status records
+    try {
+      await db.delete(jobStatus).where(eq(jobStatus.cvId, parseInt(cvId)));
+      console.log(`Deleted related job_status records for CV ${cvRecord.id}`);
+    } catch (error) {
+      console.error(`Error deleting related job_status records for CV ${cvRecord.id}:`, error);
+      return NextResponse.json(
+        { error: "Failed to delete related job status records" },
+        { status: 500 }
+      );
+    }
+
+    // 3. Delete the CV file from S3
+    if (cvRecord.filepath) {
+      try {
+        await deleteFileFromS3(cvRecord.filepath);
+        console.log(`Deleted CV file from S3: ${cvRecord.filepath}`);
+      } catch (s3Error) {
+        console.error(`Error deleting CV file from S3: ${cvRecord.filepath}:`, s3Error);
+        // Continue with deletion even if S3 deletion fails
+      }
+    }
+    
+    // 4. Delete optimized DOCX file from S3 if it exists
+    if (cvRecord.optimizedDocxPath) {
+      try {
+        await deleteFileFromS3(cvRecord.optimizedDocxPath);
+        console.log(`Deleted optimized DOCX file from S3: ${cvRecord.optimizedDocxPath}`);
+      } catch (s3Error) {
+        console.error(`Error deleting optimized DOCX from S3: ${cvRecord.optimizedDocxPath}:`, s3Error);
+        // Continue with deletion even if S3 deletion fails
+      }
+    }
+
+    // 5. Finally delete the CV record from the database
+    try {
+      await db.delete(cvs).where(eq(cvs.id, parseInt(cvId)));
+      console.log(`Successfully deleted CV ${cvRecord.id}`);
+    } catch (error) {
+      console.error(`Error deleting CV ${cvRecord.id}:`, error);
+      return NextResponse.json(
+        { error: "Failed to delete CV" },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
