@@ -1128,52 +1128,40 @@ async function analyzeScientificDocument(
 }
 
 /**
- * Store user feedback for an analysis to improve future results
+ * Type for user feedback on document analysis
  */
 export interface AnalysisFeedback {
+  id?: string;
   documentId: string;
+  userId: string;
   analysisType: string;
-  rating: number; // 1-5 star rating
-  feedbackText?: string; // Optional detailed feedback
-  inaccuracies?: string[]; // List of specific inaccuracies
-  suggestions?: string[]; // Suggestions for improvement
-  userId?: string; // Optional user ID for tracking
-  timestamp?: string; // ISO string timestamp when feedback was submitted
+  rating: number; // 1-5 scale
+  feedbackText?: string;
+  createdAt?: string;
 }
 
-// In-memory store for feedback (in a production app, this would be in a database)
-const analysisFeedback: AnalysisFeedback[] = [];
+// In-memory storage for feedback (would be replaced by database in production)
+const feedbackStorage: AnalysisFeedback[] = [];
 
 /**
- * Submit feedback for an analysis
+ * Submit feedback for a document analysis
  */
 export async function submitAnalysisFeedback(feedback: AnalysisFeedback): Promise<boolean> {
   try {
-    // Validate the feedback
-    if (!feedback.documentId || !feedback.analysisType || feedback.rating < 1 || feedback.rating > 5) {
-      console.error('Invalid feedback data:', feedback);
-      return false;
-    }
-    
-    // Add timestamp
-    const feedbackWithTimestamp = {
+    // Add timestamp and ID if not provided
+    const fullFeedback: AnalysisFeedback = {
       ...feedback,
-      timestamp: new Date().toISOString()
+      id: feedback.id || `feedback_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      createdAt: feedback.createdAt || new Date().toISOString()
     };
     
-    // Store the feedback (in memory for now)
-    analysisFeedback.push(feedbackWithTimestamp);
+    // In a real app, save to database
+    feedbackStorage.push(fullFeedback);
     
-    console.log(`Feedback received for document ${feedback.documentId}, rating: ${feedback.rating}`);
+    console.log(`Feedback submitted for document ${feedback.documentId}, type: ${feedback.analysisType}, rating: ${feedback.rating}`);
     
-    // If rating is low, invalidate the cache for this document+type
-    if (feedback.rating <= 2) {
-      invalidateCacheItem(feedback.documentId, feedback.analysisType);
-      console.log(`Cache invalidated due to low rating for document ${feedback.documentId}`);
-    }
-    
-    // In a real application, you would store this in a database
-    // and periodically analyze feedback to improve the system
+    // Use the feedback to improve the AI model (in a real app)
+    // This could involve storing the feedback for later model retraining
     
     return true;
   } catch (error) {
@@ -1183,106 +1171,64 @@ export async function submitAnalysisFeedback(feedback: AnalysisFeedback): Promis
 }
 
 /**
- * Get aggregated feedback statistics by document type
+ * Get feedback statistics
  */
-export function getFeedbackStats(): Record<string, {
-  avgRating: number;
-  count: number;
-  recentTrend: 'improving' | 'declining' | 'stable';
-}> {
+export function getFeedbackStats(): Record<string, {count: number, averageRating: number}> {
   // Group feedback by analysis type
-  const groupedFeedback: Record<string, AnalysisFeedback[]> = {};
+  const statsByType: Record<string, {count: number, totalRating: number}> = {};
   
-  for (const feedback of analysisFeedback) {
-    if (!groupedFeedback[feedback.analysisType]) {
-      groupedFeedback[feedback.analysisType] = [];
+  // Calculate stats
+  for (const feedback of feedbackStorage) {
+    if (!statsByType[feedback.analysisType]) {
+      statsByType[feedback.analysisType] = { count: 0, totalRating: 0 };
     }
-    groupedFeedback[feedback.analysisType].push(feedback);
+    
+    statsByType[feedback.analysisType].count++;
+    statsByType[feedback.analysisType].totalRating += feedback.rating;
   }
   
-  // Calculate stats for each type
-  const stats: Record<string, any> = {};
-  
-  for (const [type, feedbacks] of Object.entries(groupedFeedback)) {
-    // Calculate average rating
-    const avgRating = feedbacks.reduce((sum, fb) => sum + fb.rating, 0) / feedbacks.length;
-    
-    // Calculate recent trend
-    const recentFeedbacks = feedbacks
-      .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
-      .slice(0, Math.min(5, feedbacks.length));
-      
-    const recentAvgRating = recentFeedbacks.reduce((sum, fb) => sum + fb.rating, 0) / recentFeedbacks.length;
-    
-    const recentTrend = 
-      recentAvgRating > avgRating + 0.3 ? 'improving' :
-      recentAvgRating < avgRating - 0.3 ? 'declining' : 'stable';
-    
-    stats[type] = {
-      avgRating: parseFloat(avgRating.toFixed(2)),
-      count: feedbacks.length,
-      recentTrend
+  // Convert to average ratings
+  const result: Record<string, {count: number, averageRating: number}> = {};
+  for (const [type, stats] of Object.entries(statsByType)) {
+    result[type] = {
+      count: stats.count,
+      averageRating: stats.count > 0 ? stats.totalRating / stats.count : 0
     };
   }
   
-  return stats;
+  return result;
 }
 
 /**
- * Use feedback to adjust analysis prompts for better results
- * This would be called periodically to improve the system
+ * Get all feedback for a particular document
  */
-export async function improveSysPromptFromFeedback(analysisType: string): Promise<string> {
-  // Get all feedback for this analysis type
-  const typeFeedbacks = analysisFeedback.filter(fb => fb.analysisType === analysisType);
+export function getDocumentFeedback(documentId: string): AnalysisFeedback[] {
+  return feedbackStorage.filter(feedback => feedback.documentId === documentId);
+}
+
+/**
+ * Use feedback to improve analysis caching
+ * Prioritize caching of high-rated analyses
+ */
+export function improveAnalysisCachingWithFeedback(): void {
+  // Analyze feedback to improve caching strategy
+  const feedbackStats = getFeedbackStats();
   
-  if (typeFeedbacks.length < 5) {
-    console.log(`Not enough feedback for ${analysisType} analysis to improve prompts`);
-    return ''; // Not enough feedback yet
-  }
+  // Example: Adjust cache config based on feedback
+  const avgOverallRating = Object.values(feedbackStats).reduce(
+    (sum, stat) => sum + stat.averageRating * stat.count, 
+    0
+  ) / Math.max(1, feedbackStorage.length);
   
-  // Extract common themes from feedback
-  const allInaccuracies = typeFeedbacks.flatMap(fb => fb.inaccuracies || []);
-  const allSuggestions = typeFeedbacks.flatMap(fb => fb.suggestions || []);
-  const allFeedbackTexts = typeFeedbacks.map(fb => fb.feedbackText).filter(Boolean);
-  
-  // Create a summary for an LLM to analyze
-  const feedbackSummary = `
-    Analysis Type: ${analysisType}
-    Average Rating: ${typeFeedbacks.reduce((sum, fb) => sum + fb.rating, 0) / typeFeedbacks.length}
-    Number of Feedback Items: ${typeFeedbacks.length}
-    
-    Common Inaccuracies:
-    ${allInaccuracies.slice(0, 10).join('\n- ')}
-    
-    Improvement Suggestions:
-    ${allSuggestions.slice(0, 10).join('\n- ')}
-    
-    Sample Feedback:
-    ${allFeedbackTexts.slice(0, 5).join('\n\n')}
-  `;
-  
-  try {
-    // Use OpenAI to generate improved system prompt
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: "You are an AI assistant that helps improve analysis prompts based on user feedback." },
-        { role: "user", content: `Based on the following feedback for our ${analysisType} analysis system, suggest improvements to our system prompt to make the analysis more accurate and useful.\n\n${feedbackSummary}` }
-      ],
-      temperature: 0.7,
-      max_tokens: 1000
-    });
-    
-    const improvedPrompt = response.choices[0].message.content || '';
-    
-    console.log(`Generated improved system prompt for ${analysisType} analysis based on feedback`);
-    return improvedPrompt;
-    
-    // In a real application, you would store this improved prompt
-    // and use it for future analyses
-  } catch (error) {
-    console.error('Error generating improved prompt:', error);
-    return '';
+  // If overall feedback is positive, we can extend cache time
+  if (avgOverallRating >= 4.0) {
+    cacheConfig.expiryTime = 7 * 24 * 60 * 60 * 1000; // 7 days
+    console.log('Cache expiry extended to 7 days based on positive feedback');
+  } else if (avgOverallRating >= 3.0) {
+    cacheConfig.expiryTime = 3 * 24 * 60 * 60 * 1000; // 3 days
+    console.log('Cache expiry set to 3 days based on moderate feedback');
+  } else {
+    cacheConfig.expiryTime = 1 * 24 * 60 * 60 * 1000; // 1 day
+    console.log('Cache expiry reduced to 1 day based on mixed feedback');
   }
 } 
