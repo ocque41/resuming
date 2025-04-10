@@ -341,6 +341,35 @@ const renderCVAnalysis = (analysisData: any) => {
   );
 };
 
+// For general document analysis - simple description and conclusion
+const renderGeneralAnalysis = (analysisData: any) => {
+  // Extract the description and conclusion
+  const description = analysisData.summary?.description || analysisData.summary || "No description available.";
+  const conclusion = analysisData.summary?.conclusion || analysisData.conclusion || "";
+  
+  return (
+    <div className="space-y-4">
+      <div className="p-5 border border-[#222222] rounded-lg bg-[#111111]">
+        <h3 className="text-lg font-medium text-[#F9F6EE] mb-3">Document Analysis</h3>
+        
+        {/* Document Description */}
+        <div className="mt-4">
+          <h4 className="text-[#F9F6EE] font-medium mb-2">Description</h4>
+          <p className="text-[#F9F6EE]/80 mb-4">{description}</p>
+        </div>
+        
+        {/* Document Conclusion (if available) */}
+        {conclusion && (
+          <div className="mt-4">
+            <h4 className="text-[#F9F6EE] font-medium mb-2">Conclusion</h4>
+            <p className="text-[#F9F6EE]/80">{conclusion}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
   const [selectedDocument, setSelectedDocument] = useState<DocumentWithId | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1030,7 +1059,7 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
           <div ref={analysisRef} className="bg-[#111111] text-[#F9F6EE] p-4 rounded-lg">
             {/* Render analysis based on document type */}
             {documentPurpose.toLowerCase() === "cv" && renderCVAnalysis(analysisData)}
-            {documentPurpose.toLowerCase() === "general" && renderCVAnalysis(analysisData)}
+            {documentPurpose.toLowerCase() === "general" && renderGeneralAnalysis(analysisData)}
             {documentPurpose.toLowerCase() === "cover letter" && renderCoverLetterAnalysis(analysisData)}
             {documentPurpose.toLowerCase() === "job description" && renderJobDescriptionAnalysis(analysisData)}
             {documentPurpose.toLowerCase() === "spreadsheet" && renderSpreadsheetAnalysis(analysisData)}
