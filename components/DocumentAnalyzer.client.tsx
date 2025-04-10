@@ -1,14 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Tabs, Progress, Empty, List, Avatar, Card, Button, Alert } from "antd";
+import { Tabs, Progress, Empty, List, Avatar, Card } from "antd";
 import { 
   DownloadOutlined, 
   ShareAltOutlined, 
-  FileTextOutlined,
+  FileTextOutlined, 
   FilePdfOutlined,
-  FileExcelOutlined,
-  FilePptOutlined,
+  FileExcelOutlined, 
+  FilePptOutlined, 
   FileWordOutlined,
   FileUnknownOutlined
 } from "@ant-design/icons";
@@ -26,7 +26,6 @@ export interface DocumentWithId {
   name: string;
   fileName: string;
   createdAt: Date;
-  size?: number;
 }
 
 // Define TabPane and Panel using destructuring
@@ -342,16 +341,6 @@ const renderCVAnalysis = (analysisData: any) => {
   );
 };
 
-// Add formatFileSize function before the DocumentAnalyzer component
-const formatFileSize = (bytes?: number): string => {
-  if (!bytes) return '';
-  
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-  if (bytes === 0) return '0 Byte';
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return Math.round(bytes / Math.pow(1024, i)) + ' ' + sizes[i];
-};
-
 const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
   const [selectedDocument, setSelectedDocument] = useState<DocumentWithId | null>(null);
   const [loading, setLoading] = useState(false);
@@ -360,13 +349,16 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
   const [documentPurpose, setDocumentPurpose] = useState<string>("");
   const [tabKey, setTabKey] = useState<string>("summary");
   const analysisRef = useRef<HTMLDivElement>(null);
+  const [feedbackType, setFeedbackType] = useState<string | null>(null);
+  const [feedbackText, setFeedbackText] = useState<string>("");
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState<boolean>(false);
   
   const handleAnalyzeDocument = async () => {
     if (!documentPurpose) {
       setError("Please select a document purpose");
       return;
     }
-
+    
     if (!selectedDocument) {
       setError("Please select a document");
       return;
@@ -482,7 +474,7 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
+        body: JSON.stringify({ 
           documentId: selectedDocument.id,
           documentText: documentText,
           fileName: selectedDocument.fileName || 'document',
@@ -517,166 +509,76 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
       // Create a wrapper div with full black background to prevent white lines
       const wrapper = document.createElement('div');
       wrapper.style.backgroundColor = '#111111';
-      wrapper.style.padding = '60px'; // More padding for better readability
-      wrapper.style.paddingBottom = '100px'; // Extra padding at bottom to prevent white line
+      wrapper.style.padding = '20px';
+      wrapper.style.paddingBottom = '40px'; // Extra padding at bottom to prevent white line
       
       // Clone the analysis content
       const contentClone = analysisRef.current.cloneNode(true) as HTMLElement;
       
-      // Enhance text styles for PDF readability
-      const headings = contentClone.querySelectorAll('h2, h3, h4');
-      headings.forEach(heading => {
-        (heading as HTMLElement).style.fontSize = '150%';
-        (heading as HTMLElement).style.fontWeight = '800';
-        (heading as HTMLElement).style.marginBottom = '20px';
-        (heading as HTMLElement).style.color = '#FFFFFF'; // Brighter color for better contrast
-        (heading as HTMLElement).style.textShadow = '0px 1px 2px rgba(0,0,0,0.3)'; // Text shadow for better readability
-      });
-      
-      const paragraphs = contentClone.querySelectorAll('p');
-      paragraphs.forEach(paragraph => {
-        (paragraph as HTMLElement).style.fontSize = '120%';
-        (paragraph as HTMLElement).style.lineHeight = '1.8';
-        (paragraph as HTMLElement).style.color = '#FFFFFF'; // Brighter color for better contrast
-        (paragraph as HTMLElement).style.marginBottom = '12px';
-      });
-      
-      const cardContainers = contentClone.querySelectorAll('.rounded-lg, .rounded-md, .bg-\\[\\#111111\\], .bg-\\[\\#171717\\]');
-      cardContainers.forEach(card => {
-        (card as HTMLElement).style.marginBottom = '24px';
-        (card as HTMLElement).style.padding = '24px';
-        (card as HTMLElement).style.border = '1px solid #444444'; // Brighter border for better definition
-        (card as HTMLElement).style.backgroundColor = '#161616'; // Slightly brighter background
-        (card as HTMLElement).style.borderRadius = '8px';
-        (card as HTMLElement).style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)'; // Add shadow for depth
-      });
-      
-      // Enhance data visualization elements
-      const dataElements = contentClone.querySelectorAll('.text-\\[\\#8A8782\\]');
-      dataElements.forEach(element => {
-        (element as HTMLElement).style.color = '#BBBBBB'; // Brighter color for better visibility
-      });
-      
-      // Apply extra styling to keyword chips for better visibility
-      const keywordChips = contentClone.querySelectorAll('.px-3.py-1.bg-\\[\\#1A1A1A\\]');
-      keywordChips.forEach(chip => {
-        (chip as HTMLElement).style.backgroundColor = '#222222';
-        (chip as HTMLElement).style.color = '#FFFFFF';
-        (chip as HTMLElement).style.border = '1px solid #444444';
-        (chip as HTMLElement).style.padding = '8px 12px';
-        (chip as HTMLElement).style.marginRight = '8px';
-        (chip as HTMLElement).style.marginBottom = '8px';
+      // Increase font size of all text elements for better readability in PDF
+      const textElements = contentClone.querySelectorAll('p, h1, h2, h3, h4, h5, h6, span, li, div');
+      textElements.forEach((el: Element) => {
+        const element = el as HTMLElement;
+        // Only increase size if it's not already large
+        const currentSize = parseInt(window.getComputedStyle(element).fontSize);
+        if (currentSize < 16) {
+          element.style.fontSize = `${Math.min(currentSize * 1.2, 16)}px`;
+        }
       });
       
       wrapper.appendChild(contentClone);
       document.body.appendChild(wrapper);
       
-      // Add a title at the top of the document
-      const titleElement = document.createElement('h1');
-      titleElement.style.fontSize = '32px';
-      titleElement.style.fontWeight = 'bold';
-      titleElement.style.marginBottom = '30px';
-      titleElement.style.color = '#FFFFFF';
-      titleElement.style.textAlign = 'center';
-      titleElement.style.padding = '10px 0';
-      titleElement.style.borderBottom = '2px solid #444444';
-      titleElement.textContent = `${documentPurpose || 'Document'} Analysis: ${selectedDocument.name}`;
-      // Insert at beginning of wrapper
-      wrapper.prepend(titleElement);
-      
-      // Add date and generated information
-      const dateElement = document.createElement('div');
-      dateElement.style.textAlign = 'center';
-      dateElement.style.margin = '15px 0 40px 0';
-      dateElement.style.color = '#999999';
-      dateElement.style.fontSize = '14px';
-      dateElement.textContent = `Generated by CVOptimizer`;
-      // Insert after the title
-      titleElement.after(dateElement);
-      
+      // Increase scale for higher resolution and better readability
       const canvas = await html2canvas(wrapper, {
-        scale: 4, // Higher scale for better quality
+        scale: 3, // Increased from 2 to 3 for better resolution
         backgroundColor: "#111111",
         logging: false,
         useCORS: true,
         allowTaint: true,
-        height: wrapper.scrollHeight + 100,
-        windowHeight: wrapper.scrollHeight + 100,
-        imageTimeout: 15000, // Longer timeout for complex content
-        onclone: (document, element) => {
-          // Additional styling for cloned document if needed
-          element.style.boxShadow = 'none'; // Remove any shadow effects
-        }
+        height: wrapper.scrollHeight + 40, // Add extra height to ensure full capture
+        windowHeight: wrapper.scrollHeight + 40
       });
       
       document.body.removeChild(wrapper);
       
-      const imgData = canvas.toDataURL('image/png', 1.0); // Max quality
-      
-      // Use A3 format for more content per page and better readability
+      const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
-        format: 'a3',
-        compress: true, // Enable compression
-        putOnlyUsedFonts: true, // Optimize font usage
-        hotfixes: ['px_scaling'] // Apply known hotfixes
+        format: 'a4',
       });
       
       // Set background color for all pages
       pdf.setFillColor(17, 17, 17); // #111111
       
-      const imgWidth = 297; // A3 width in mm
-      const pageHeight = 420; // A3 height in mm
+      // Adjust image width to leave slight margins
+      const imgWidth = 200; // A4 width is 210mm, leaving 5mm margins on each side
+      const pageHeight = 297; // A4 height in mm
       
-      // Calculate height based on aspect ratio but ensure content fits properly
-      const imgHeight = Math.min(canvas.height * imgWidth / canvas.width, pageHeight * 0.95);
+      // Calculate scaled height maintaining aspect ratio but slightly reduced to fit better
+      const imgHeight = (canvas.height * imgWidth / canvas.width) * 0.95; // 0.95 factor for slight vertical compression
       let heightLeft = imgHeight;
-      let position = 0;
+      let position = 10; // Start 10mm from the top of the page
       
       // Add background rectangle to first page
-      pdf.rect(0, 0, 297, 420, 'F');
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
-      heightLeft -= pageHeight;
+      pdf.rect(0, 0, 210, 297, 'F');
       
-      // Add page numbers
-      pdf.setFont("helvetica", "italic");
-      pdf.setTextColor(150, 150, 150);
-      pdf.setFontSize(10);
-      pdf.text(`Page 1`, 280, 410);
+      // Add image with proper positioning to not clip at edges
+      pdf.addImage(imgData, 'PNG', 5, position, imgWidth, imgHeight);
+      heightLeft -= (pageHeight - 20); // Account for 10mm margin at top and bottom
       
-      let pageNumber = 2;
+      // Handle additional pages if needed
       while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
+        position = heightLeft - imgHeight + 10; // Add 10mm offset at top
         pdf.addPage();
         // Add background rectangle to each new page
-        pdf.rect(0, 0, 297, 420, 'F');
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
-        
-        // Add page number
-        pdf.setFont("helvetica", "italic");
-        pdf.setTextColor(150, 150, 150);
-        pdf.setFontSize(10);
-        pdf.text(`Page ${pageNumber}`, 280, 410);
-        
-        heightLeft -= pageHeight;
-        pageNumber++;
+        pdf.rect(0, 0, 210, 297, 'F');
+        pdf.addImage(imgData, 'PNG', 5, position, imgWidth, imgHeight);
+        heightLeft -= (pageHeight - 20);
       }
       
-      // Create a descriptive filename that includes document type and purpose
-      const docPurposeName = documentPurpose ? `_${documentPurpose.replace(/\s+/g, '_')}` : '';
-      const filename = `${selectedDocument.name.replace(/\.[^/.]+$/, "")}_analysis${docPurposeName}.pdf`;
-      
-      // Set document properties
-      pdf.setProperties({
-        title: `${documentPurpose || 'Document'} Analysis for ${selectedDocument.name}`,
-        subject: 'Document Analysis Report',
-        author: 'CVOptimizer',
-        creator: 'CVOptimizer Document Analyzer',
-        keywords: 'analysis, document, cv, resume, professional'
-      });
-      
-      pdf.save(filename);
+      pdf.save(`${selectedDocument.name.replace(/\.[^/.]+$/, "")}_analysis.pdf`);
     } catch (err) {
       console.error("Error exporting PDF:", err);
       setError("Failed to export PDF");
@@ -707,9 +609,59 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
     );
   };
   
+  const handleFeedback = (type: string) => {
+    setFeedbackType(type);
+    
+    // For quick feedback types (accurate and helpful), submit immediately
+    if (type === 'accurate' || type === 'helpful') {
+      submitFeedback(type, '');
+    }
+  };
+
+  const submitFeedback = async (type: string, feedbackText: string = '') => {
+    if (!analysisData || !selectedDocument) return;
+    
+    try {
+      const response = await fetch('/api/document/analyze/feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          documentId: selectedDocument.id,
+          analysisType: documentPurpose,
+          rating: type === 'accurate' ? 5 : type === 'helpful' ? 4 : 2,
+          feedbackText: feedbackText
+        }),
+      });
+      
+      if (response.ok) {
+        setFeedbackSubmitted(true);
+        // Reset the feedback form after 3 seconds
+        setTimeout(() => {
+          setFeedbackSubmitted(false);
+          setFeedbackType(null);
+          setFeedbackText('');
+        }, 3000);
+      } else {
+        console.error('Failed to submit feedback');
+        setError('Failed to submit feedback');
+      }
+    } catch (err) {
+      console.error('Error submitting feedback:', err);
+      setError('Error submitting feedback');
+    }
+  };
+
+  const submitDetailedFeedback = () => {
+    if (feedbackType === 'needs_improvement' && feedbackText.trim()) {
+      submitFeedback(feedbackType, feedbackText);
+    }
+  };
+
   // Helper function to render spreadsheet analysis
   const renderSpreadsheetAnalysis = (analysisData: any) => {
-    return (
+      return (
       <div className="space-y-4">
         <div className="p-5 border border-[#222222] rounded-lg bg-[#111111]">
           <h3 className="text-lg font-medium text-[#F9F6EE] mb-3">Spreadsheet Analysis</h3>
@@ -723,21 +675,21 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
                 <div className="p-3 bg-[#171717] rounded-md">
                   <p className="text-[#8A8782] text-xs">Tables</p>
                   <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.dataStructureAnalysis.tableCount || "N/A"}</p>
-                </div>
+        </div>
                 <div className="p-3 bg-[#171717] rounded-md">
                   <p className="text-[#8A8782] text-xs">Columns</p>
                   <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.dataStructureAnalysis.columnCount || "N/A"}</p>
-                </div>
+      </div>
                 <div className="p-3 bg-[#171717] rounded-md">
                   <p className="text-[#8A8782] text-xs">Rows</p>
                   <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.dataStructureAnalysis.rowCount || "N/A"}</p>
-                </div>
+          </div>
                 <div className="p-3 bg-[#171717] rounded-md">
                   <p className="text-[#8A8782] text-xs">Data Types</p>
                   <p className="text-[#F9F6EE] text-lg font-medium">{Array.isArray(analysisData.dataStructureAnalysis.dataTypes) ? analysisData.dataStructureAnalysis.dataTypes.join(", ") : "Various"}</p>
-                </div>
-              </div>
             </div>
+            </div>
+          </div>
           )}
           
           {/* Data Insights */}
@@ -750,11 +702,11 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
                     <div className="flex justify-between">
                       <p className="text-[#F9F6EE] font-medium">{trend.description}</p>
                       <span className="px-2 py-0.5 bg-[#B4916C]/20 text-[#B4916C] rounded text-xs">{trend.significance}</span>
-                    </div>
                   </div>
+                </div>
                 ))}
-              </div>
-            </div>
+          </div>
+          </div>
           )}
           
           {/* Data Quality */}
@@ -765,16 +717,16 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
                 <div className="p-3 bg-[#171717] rounded-md">
                   <p className="text-[#8A8782] text-xs">Completeness</p>
                   <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.dataQualityAssessment.completenessScore || "N/A"}%</p>
-                </div>
+      </div>
                 <div className="p-3 bg-[#171717] rounded-md">
                   <p className="text-[#8A8782] text-xs">Consistency</p>
                   <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.dataQualityAssessment.consistencyScore || "N/A"}%</p>
-                </div>
+            </div>
                 <div className="p-3 bg-[#171717] rounded-md">
                   <p className="text-[#8A8782] text-xs">Accuracy</p>
                   <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.dataQualityAssessment.accuracyScore || "N/A"}%</p>
-                </div>
-              </div>
+            </div>
+          </div>
               
               <h5 className="text-[#F9F6EE]/80 text-sm font-medium mb-2">Quality Issues</h5>
               <div className="space-y-2">
@@ -785,22 +737,22 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
                       <span className={`px-2 py-0.5 rounded text-xs ${issue.severity === 'high' ? 'bg-red-900/20 text-red-400' : issue.severity === 'medium' ? 'bg-yellow-900/20 text-yellow-400' : 'bg-[#222222] text-[#8A8782]'}`}>
                         {issue.severity}
                       </span>
-                    </div>
-                    <p className="text-[#8A8782] text-sm">{issue.recommendation}</p>
-                  </div>
-                ))}
-              </div>
             </div>
+                    <p className="text-[#8A8782] text-sm">{issue.recommendation}</p>
+            </div>
+                ))}
+          </div>
+                </div>
           )}
-        </div>
+          </div>
       </div>
     );
   };
-
+  
   // Helper function to render presentation analysis
   const renderPresentationAnalysis = (analysisData: any) => {
     return (
-      <div className="space-y-4">
+        <div className="space-y-4">
         <div className="p-5 border border-[#222222] rounded-lg bg-[#111111]">
           <h3 className="text-lg font-medium text-[#F9F6EE] mb-3">Presentation Analysis</h3>
           <p className="text-[#F9F6EE]/70 mb-4">{analysisData.summary || "Analysis of presentation structure, content, and effectiveness."}</p>
@@ -812,9 +764,9 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
               {(analysisData.keyPoints || ["No key points detected"]).map((point: string, index: number) => (
                 <li key={`point-${index}`}>{point}</li>
               ))}
-            </ul>
-          </div>
-          
+                  </ul>
+            </div>
+
           {/* Presentation Structure */}
           {analysisData.presentationStructure && (
             <div className="mt-5">
@@ -823,11 +775,11 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
                 <div className="p-3 bg-[#171717] rounded-md">
                   <p className="text-[#8A8782] text-xs">Estimated Slides</p>
                   <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.presentationStructure.estimatedSlideCount || "Unknown"}</p>
-                </div>
+                    </div>
                 <div className="p-3 bg-[#171717] rounded-md">
                   <p className="text-[#8A8782] text-xs">Narrative Flow</p>
                   <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.presentationStructure.narrativeFlow || "N/A"}/100</p>
-                </div>
+                    </div>
                 <div className="p-3 bg-[#171717] rounded-md flex items-center">
                   <div>
                     <p className="text-[#8A8782] text-xs">Has Introduction</p>
@@ -842,11 +794,11 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
                     <p className="text-[#F9F6EE] font-medium">
                       {analysisData.presentationStructure.hasConclusion ? "Yes" : "No"}
                     </p>
+                    </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
+              )}
           
           {/* Message Clarity */}
           {analysisData.messageClarity && (
@@ -855,19 +807,19 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
               <div className="p-3 bg-[#171717] rounded-md mb-3">
                 <p className="text-[#8A8782] text-xs mb-1">Main Message</p>
                 <p className="text-[#F9F6EE]">{analysisData.messageClarity.mainMessage || "No clear main message detected"}</p>
-              </div>
-              
+        </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 bg-[#171717] rounded-md">
                   <p className="text-[#8A8782] text-xs">Clarity Score</p>
                   <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.messageClarity.clarity || "N/A"}/100</p>
-                </div>
+                    </div>
                 <div className="p-3 bg-[#171717] rounded-md">
                   <p className="text-[#8A8782] text-xs">Target Audience</p>
                   <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.messageClarity.audienceAlignment || "General"}</p>
-                </div>
-              </div>
-            </div>
+                    </div>
+                  </div>
+                    </div>
           )}
           
           {/* Improvement Suggestions */}
@@ -877,12 +829,12 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
               {(analysisData.recommendations || analysisData.improvementSuggestions?.content || ["No specific recommendations"]).map((rec: any, index: number) => (
                 <div key={`rec-${index}`} className="p-3 bg-[#171717] rounded-md">
                   <p className="text-[#F9F6EE]">{typeof rec === 'string' ? rec : rec.title || rec.description}</p>
-                </div>
+                    </div>
               ))}
-            </div>
-          </div>
-        </div>
-      </div>
+                  </div>
+                    </div>
+                    </div>
+                  </div>
     );
   };
 
@@ -905,24 +857,24 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
                     <p className="text-[#F9F6EE] font-medium">
                       {analysisData.researchStructure.hasAbstract ? "Present" : "Missing"}
                     </p>
-                  </div>
                 </div>
+              </div>
                 <div className="p-3 bg-[#171717] rounded-md flex items-center">
                   <div>
                     <p className="text-[#8A8782] text-xs">Methodology</p>
                     <p className="text-[#F9F6EE] font-medium">
                       {analysisData.researchStructure.hasMethodology ? "Present" : "Missing"}
                     </p>
-                  </div>
-                </div>
+                    </div>
+                    </div>
                 <div className="p-3 bg-[#171717] rounded-md flex items-center">
                   <div>
                     <p className="text-[#8A8782] text-xs">Results</p>
                     <p className="text-[#F9F6EE] font-medium">
                       {analysisData.researchStructure.hasResults ? "Present" : "Missing"}
                     </p>
-                  </div>
-                </div>
+                    </div>
+                    </div>
                 <div className="p-3 bg-[#171717] rounded-md flex items-center">
                   <div>
                     <p className="text-[#8A8782] text-xs">References</p>
@@ -943,8 +895,8 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
                 <li key={`finding-${index}`}>{point}</li>
               ))}
             </ul>
-          </div>
-          
+        </div>
+
           {/* Research Quality */}
           {analysisData.researchQuality && (
             <div className="mt-5">
@@ -965,11 +917,11 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
                 <div className="p-3 bg-[#171717] rounded-md">
                   <p className="text-[#8A8782] text-xs">Originality</p>
                   <p className="text-[#F9F6EE] text-lg font-medium">{analysisData.researchQuality.originalityScore || "N/A"}/100</p>
-                </div>
               </div>
             </div>
-          )}
-          
+          </div>
+        )}
+
           {/* Research Gaps */}
           {analysisData.researchGaps && analysisData.researchGaps.length > 0 && (
             <div className="mt-5">
@@ -981,7 +933,7 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
               </ul>
             </div>
           )}
-          
+
           {/* Topics */}
           {analysisData.topics && analysisData.topics.length > 0 && (
             <div className="mt-5">
@@ -994,110 +946,99 @@ const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
                       <span className="ml-1 px-1.5 py-0.5 bg-[#B4916C]/20 text-[#B4916C] rounded-full text-xs">
                         {Number(topic.relevance * 100).toFixed(0)}%
                       </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
           )}
+        </div>
+                ))}
+            </div>
+          </div>
+        )}
         </div>
       </div>
     );
   };
-
+  
   return (
-    <div className="w-full max-w-5xl mx-auto flex flex-col gap-10">
-      {/* Top section with document selector and purpose selector */}
-      <div className="flex flex-col md:flex-row gap-4 md:items-end">
-        <div className="flex-1">
+    <div className="w-full">
+      {/* Document Selection & Purpose */}
+      <div className="mb-6 space-y-4">
           <DocSelector
             documents={documents}
-            value={selectedDocument?.id || null}
-            onChange={(docId) => {
-              const doc = documents.find(d => d.id === docId);
-              setSelectedDocument(doc || null);
-            }}
-          />
-        </div>
+          value={selectedDocument?.id || null}
+          onChange={(docId) => {
+            const doc = documents.find(d => d.id === docId);
+            setSelectedDocument(doc || null);
+          }}
+        />
         
-        <div className="md:w-64">
+        {selectedDocument && (
           <DocumentPurposeSelector
             value={documentPurpose}
             onChange={setDocumentPurpose}
           />
-        </div>
+        )}
         
-        <Button
-          type="primary"
-          onClick={handleAnalyzeDocument}
-          disabled={!selectedDocument || !documentPurpose || loading}
-          loading={loading}
-          className="h-10"
-        >
-          Analyze
-        </Button>
-      </div>
+        {selectedDocument && (
+          <button
+            onClick={handleAnalyzeDocument}
+            disabled={loading || !documentPurpose}
+            className={`w-full p-3 rounded-lg text-white font-borna flex items-center justify-center ${
+              loading || !documentPurpose
+                ? 'bg-[#333333] cursor-not-allowed'
+                : 'bg-[#B4916C] hover:bg-[#9A7B5F] cursor-pointer'
+            }`}
+          >
+            {loading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                Analyzing...
+              </>
+            ) : (
+              <>Analyze Document</>
+            )}
+          </button>
+        )}
+        
+        {error && (
+          <div className="p-3 mt-3 bg-red-900/20 border border-red-900/30 text-red-400 rounded-lg">
+            {error}
+          </div>
+                )}
+              </div>
       
-      {/* Error message */}
-      {error && (
-        <Alert
-          message="Error"
-          description={error}
-          type="error"
-          showIcon
-          closable
-          onClose={() => setError(null)}
-        />
+      {loading && !analysisData && (
+        <LoadingSpinner text="Analyzing document. This may take a minute..." />
       )}
       
-      {/* Loading state */}
-      {loading && <LoadingSpinner text="Analyzing document. This may take a minute..." />}
-      
-      {/* Empty state */}
       {!loading && !analysisData && !error && (
         <EmptyDocumentState />
       )}
       
-      {/* Analysis results */}
-      {!loading && analysisData && !error && (
-        <div ref={analysisRef} className="mb-10">
-          {/* Analysis content */}
-          <div className="flex flex-col gap-6">
-            {/* Analysis headers and main content */}
-            <div className="flex flex-col gap-4">
-              <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold">Document Analysis Results</h2>
-                
-                <Button 
-                  type="primary" 
-                  onClick={handleExportPDF}
-                  icon={<DownloadOutlined />}
-                >
-                  Export as PDF
-                </Button>
-              </div>
-              
-              {/* Document info */}
-              <div className="flex gap-2 items-center">
-                <FileTextOutlined className="text-blue-500" />
-                <span className="font-medium">
-                  {selectedDocument?.name || 'Document'} {selectedDocument?.size && formatFileSize(selectedDocument.size)}
-                </span>
-              </div>
+      {analysisData && (
+        <div className="mt-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-[#F9F6EE]">Analysis Results</h2>
+            <button
+              onClick={handleExportPDF}
+              disabled={loading}
+              className="px-4 py-2 bg-[#B4916C] text-white rounded-lg flex items-center hover:bg-[#9A7B5F] transition-colors"
+            >
+              <FileTextOutlined className="mr-2" />
+              Export as PDF
+            </button>
             </div>
             
-            {/* Analysis results based on document purpose */}
-            <div className="bg-[#111] p-6 rounded-lg shadow-lg">
-              {documentPurpose === 'CV' && renderCVAnalysis(analysisData)}
-              {documentPurpose === 'Resume' && renderCVAnalysis(analysisData)}
-              {documentPurpose === 'Cover Letter' && renderCoverLetterAnalysis(analysisData)}
-              {documentPurpose === 'Job Description' && renderJobDescriptionAnalysis(analysisData)}
-              {documentPurpose === 'Spreadsheet' && renderSpreadsheetAnalysis(analysisData)}
-              {documentPurpose === 'Presentation' && renderPresentationAnalysis(analysisData)}
+          <div ref={analysisRef} className="bg-[#111111] text-[#F9F6EE] p-4 rounded-lg">
+            {/* Render analysis based on document type */}
+            {documentPurpose.toLowerCase() === "cv" && renderCVAnalysis(analysisData)}
+            {documentPurpose.toLowerCase() === "general" && renderCVAnalysis(analysisData)}
+            {documentPurpose.toLowerCase() === "cover letter" && renderCoverLetterAnalysis(analysisData)}
+            {documentPurpose.toLowerCase() === "job description" && renderJobDescriptionAnalysis(analysisData)}
+            {documentPurpose.toLowerCase() === "spreadsheet" && renderSpreadsheetAnalysis(analysisData)}
+            {documentPurpose.toLowerCase() === "presentation" && renderPresentationAnalysis(analysisData)}
+            {documentPurpose.toLowerCase() === "scientific" && renderScientificAnalysis(analysisData)}
             </div>
           </div>
-        </div>
-      )}
+        )}
     </div>
   );
 };

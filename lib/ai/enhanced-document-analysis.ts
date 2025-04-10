@@ -425,22 +425,20 @@ async function analyzeGeneralDocument(
 ): Promise<AnalysisResult> {
   const prompt = `
     You are an expert document analyst with training in linguistics, content strategy, and professional writing.
-    Your task is to perform a comprehensive, detailed analysis of this document that provides genuine, accurate, and actionable insights.
+    Analyze this document thoroughly to provide comprehensive, accurate, and actionable insights.
     
     Document: ${fileName}
     
     Content:
     ${documentText.substring(0, 15000)} // Limit to avoid token limits
     
-    IMPORTANT: You MUST analyze the ACTUAL CONTENT provided above. DO NOT generate generic placeholder analysis or examples.
-    
     Provide a complete analysis with the following elements in a valid JSON structure:
     
-    1. summary: A detailed, evidence-based summary (4-6 sentences) capturing the document's specific purpose, intended audience, key messages, and notable strengths/weaknesses based on the actual content provided
+    1. summary: A clear, concise summary (3-5 sentences) capturing the document's main purpose, audience, and key message
     
-    2. keyPoints: Array of 5-8 specific key points extracted directly from the document content, focusing on the most important information, ordered by importance. These must reference actual content from the document.
+    2. keyPoints: Array of 5-7 key points extracted from the document, focusing on the most important information, ordered by importance
     
-    3. recommendations: Array of 5-7 specific, actionable recommendations to improve the document, with each addressing a different aspect (structure, content, language, formatting) based on actual deficiencies in the provided content
+    3. recommendations: Array of 4-6 specific, actionable recommendations to improve the document, with each addressing a different aspect (e.g., structure, content, language, formatting)
     
     4. insights: Object containing numerical scores (0-100) for:
        - clarity: How clear and understandable the document is to its target audience
@@ -449,30 +447,46 @@ async function analyzeGeneralDocument(
        - conciseness: How efficient the document is in delivering its message
        - structure: How well-organized the document is (headings, paragraphs, logical flow)
        - engagement: How engaging and compelling the content is
-       - contentquality: Overall quality of the content and information provided
-       - overallScore: Weighted average of the above scores
+       - contentquality: Overall quality of the information and arguments presented
+       - overallScore: Weighted average of all scores, reflecting overall document quality
     
-    5. topics: Array of objects, each with a 'name' (string) representing a main topic in the document and 'relevance' (number 0-1) indicating how central that topic is to the document
+    5. topics: Array of topics covered in the document with relevance scores from 0-1, e.g. [{name: "Topic", relevance: 0.85}]
     
-    6. sentiment: Object with 'overall' (string: positive, negative, neutral, or mixed) and 'score' (number 0-1, higher means more positive)
+    6. sentiment: Object containing:
+       - overall: One of ["positive", "negative", "neutral", "mixed"]
+       - score: Decimal from 0-1 (0 = very negative, 0.5 = neutral, 1 = very positive)
     
-    7. languageQuality: Object with scores (0-100) for:
-       - grammar: Quality of grammar usage
-       - spelling: Accuracy of spelling
-       - readability: How easy it is to read and understand (consider sentence length, jargon, etc.)
+    7. languageQuality: Object containing scores (0-100) for:
+       - grammar: Grammatical correctness
+       - spelling: Spelling accuracy
+       - readability: How easy the text is to read (consider sentence length, word choice, etc.)
        - clarity: How clearly ideas are expressed
        - overall: Overall language quality
+       
+    8. documentStructure: Object describing:
+       - sections: Array of main document sections identified
+       - paragraphCount: Approximate number of paragraphs
+       - hasExecutiveSummary: Boolean indicating if an executive summary/abstract is present
+       - hasTOC: Boolean indicating if a table of contents is present
+       - hasConclusion: Boolean indicating if a conclusion section is present
+       
+    9. contentGaps: Array of 2-4 missing elements that would strengthen the document
     
-    Return ONLY the JSON. Make sure scores accurately reflect the actual content quality. DO NOT give artificially high scores.
+    10. audienceAnalysis: Object containing:
+        - targetAudience: Identified target audience of the document
+        - technicality: Score from 0-100 indicating technical complexity
+        - audienceAppropriate: Boolean indicating if language and content match the apparent audience
+        
+    Respond with ONLY the JSON structure. Ensure it is valid JSON with no explanation text.
   `;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.2,
-      response_format: { type: "json_object" }
-    });
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.2,
+    response_format: { type: "json_object" }
+  });
 
     const content = response.choices[0].message.content;
     if (!content) {
@@ -562,70 +576,89 @@ async function analyzeCVDocument(
   fileName: string
 ): Promise<AnalysisResult> {
   const prompt = `
-    You are an expert CV and resume analyst with specialized training in hiring, recruitment, HR processes, and ATS (Applicant Tracking Systems).
-    Your task is to perform a comprehensive, accurate analysis of this CV that provides genuinely helpful insights.
+    You are an expert CV/resume analyst with experience in HR, recruitment, and career coaching across multiple industries.
+    Your task is to thoroughly analyze this CV/resume and provide detailed, actionable insights to help the person improve it.
     
-    CV Document: ${fileName}
+    Document: ${fileName}
     
     Content:
-    ${documentText.substring(0, 15000)} // Limit to avoid token limits
+    ${documentText.substring(0, 15000)}
     
-    IMPORTANT: You MUST analyze the ACTUAL CV CONTENT provided above. DO NOT generate generic placeholder analysis or examples.
+    Provide a comprehensive analysis with these elements in a valid JSON structure:
     
-    Analyze this CV completely and return a valid JSON with these elements:
+    1. summary: A concise summary (3-5 sentences) of the candidate's profile based on their CV
     
-    1. summary: A detailed, evidence-based summary (4-6 sentences) of the candidate's profile, including experience level, key qualifications, notable strengths/weaknesses, and overall impression based on the actual CV content
+    2. keyPoints: Array of 5-7 strengths of this CV
     
-    2. relevantJobTitles: Array of 4-6 specific job titles this candidate appears qualified for based on their actual experience and skills
+    3. recommendations: Array of 5-7 specific, actionable recommendations to improve the CV, prioritized by impact
     
-    3. atsCompatibility: Object with:
-       - score: Number 0-100 indicating how well this CV would perform in ATS scanning
-       - issues: Array of specific ATS issues found in this exact CV (formatting, keywords, structure issues)
-       - improvements: Array of specific suggestions to improve ATS compatibility
+    4. insights: Object containing numerical scores (0-100) for:
+       - clarity: How clear and well-organized the CV is
+       - relevance: How well the content demonstrates relevant skills/experience
+       - completeness: How comprehensive the CV is (includes all standard sections)
+       - conciseness: How efficiently the CV presents information
+       - impact: How well achievements and results are highlighted vs just responsibilities
+       - keywords: How effectively industry-relevant keywords are incorporated
+       - atsCompatibility: How well the CV would perform in ATS systems
+       - overallScore: Weighted average of all scores
     
-    4. skills: Object with:
-       - technical: Array of all technical skills mentioned in the CV
-       - soft: Array of all soft skills mentioned in the CV
-       - missing: Array of 3-5 relevant skills that are commonly expected but missing from this CV based on their career path
-       - topSkills: Array of 5 most impressive/relevant skills they possess
+    5. cvSections: Object describing:
+       - hasContactInfo: Boolean with assessment of contact information quality
+       - hasProfile: Boolean with assessment of profile/summary section quality
+       - hasExperience: Boolean with assessment of experience section quality
+       - hasEducation: Boolean with assessment of education section quality
+       - hasSkills: Boolean with assessment of skills section quality
+       - hasAchievements: Boolean with assessment of achievements/projects quality
+       - missingImportantSections: Array of important missing sections
     
-    5. keywords: Object with:
-       - present: Array of effective keywords found in the CV
-       - missing: Array of 5-8 specific keywords that should be added based on their career profile
-       - analysis: Short analysis of keyword optimization
+    6. experienceAnalysis: Object containing:
+       - jobTitles: Array of job titles extracted from the CV
+       - companies: Array of company names extracted from the CV
+       - experienceInYears: Estimated total years of experience
+       - experienceRelevance: Score (0-100) for how relevant the experience appears
+       - achievementsToResponsibilitiesRatio: Score (0-100) measuring achievement focus
+       - actionVerbUsage: Score (0-100) for effective use of action verbs
+       - quantifiedResults: Score (0-100) for use of metrics and quantified achievements
     
-    6. experience: Object with:
-       - experienceLevel: String (entry, mid-level, senior, executive)
-       - yearsOfExperience: Number (estimated from content)
-       - gapAnalysis: Analysis of any employment gaps
-       - achievementFocus: Score 0-100 on how well experience focuses on achievements vs duties
-       - improvementSuggestions: Array of specific suggestions to improve experience section
+    7. skillsAnalysis: Object containing:
+       - technicalSkills: Array of technical skills identified in the CV
+       - softSkills: Array of soft skills identified in the CV
+       - skillsGaps: Array of potentially missing skills based on the person's profile
+       - industrySpecificSkills: Score (0-100) for relevant industry-specific skills
+       - transferableSkills: Score (0-100) for transferable skills
     
-    7. strengths: Array of 4-6 specific strengths of this CV, with explanations
+    8. industryInsights: Object containing:
+       - identifiedIndustry: Main industry this CV appears targeted for
+       - industryAlignment: Score (0-100) for alignment with industry expectations
+       - industryKeywords: Array of industry-specific keywords found in the CV
+       - missingIndustryKeywords: Array of important industry keywords missing from the CV
+       - recruitmentTrends: Brief insights on how this CV fits current recruitment trends
     
-    8. weaknesses: Array of 4-6 specific weaknesses of this CV, with explanations
+    9. atsAnalysis: Object containing:
+       - atsCompatibilityScore: Score (0-100) for ATS readability
+       - keywordOptimization: Score (0-100) for keyword optimization
+       - formatIssues: Array of formatting issues that might affect ATS parsing
+       - fileTypeConsiderations: Any considerations about the file format
+       - improvementSuggestions: Array of specific suggestions to improve ATS compatibility
     
-    9. improvementSuggestions: Array of 6-10 specific, actionable suggestions to improve this exact CV, ordered by importance
-    
-    10. format: Object with:
-        - structure: Score 0-100 on CV structure/organization
-        - clarity: Score 0-100 on visual clarity
-        - readability: Score 0-100 on how readable the CV is
-        - improvements: Array of formatting improvement suggestions
-    
-    11. impactScore: Number 0-100 representing the overall impact and effectiveness of this exact CV
-    
-    Return ONLY the JSON with no additional text. Make sure scores accurately reflect the actual content quality. DO NOT give artificially high scores.
+    10. visualPresentation: Object containing:
+        - layoutScore: Score (0-100) for layout effectiveness
+        - readabilityScore: Score (0-100) for overall readability
+        - consistencyScore: Score (0-100) for formatting consistency
+        - spacingScore: Score (0-100) for effective use of white space
+        - improvementSuggestions: Array of suggestions to improve visual presentation
+
+    Respond with ONLY the JSON structure. Ensure it is valid JSON with no explanation text.
   `;
 
   try {
     // Use GPT-4o for better analysis quality
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.2,
-      response_format: { type: "json_object" }
-    });
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.2,
+    response_format: { type: "json_object" }
+  });
 
     const content = response.choices[0].message.content;
     if (!content) {

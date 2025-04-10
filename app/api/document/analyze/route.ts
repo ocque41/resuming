@@ -505,10 +505,13 @@ export async function POST(req: NextRequest) {
     // Use documentPurpose parameter if provided, otherwise infer from file type
     const analysisType = documentPurpose || (fileType ? getAnalysisTypeForFile(fileType) : "general");
     
-    console.log(`Starting analysis for document ${documentId}, purpose: ${analysisType}, file: ${fileName || 'unnamed'}`);
+    console.log(`Starting AI analysis for document ${documentId}, purpose: ${analysisType}, file: ${fileName || 'unnamed'}`);
 
     try {
-      // Perform analysis based on the specified document purpose
+      // Log the start of analysis process
+      console.log(`Performing AI analysis for document ${documentId}`);
+      
+      // Perform analysis using AI - no fallback to mock data
       const analysisResult = await analyzeDocument(
         documentId, 
         documentText, 
@@ -516,7 +519,7 @@ export async function POST(req: NextRequest) {
         documentPurpose
       );
       
-      console.log(`Analysis completed successfully, generating response`);
+      console.log(`AI analysis completed successfully, generating response`);
       
       // Update the analysis in the database for future reference
       try {
@@ -528,14 +531,15 @@ export async function POST(req: NextRequest) {
       }
       
       return NextResponse.json({
-        message: "Document analyzed successfully",
+        message: "Document analyzed successfully with AI",
         analysis: analysisResult
       });
     } catch (analysisError) {
       console.error(`Error in AI analysis:`, analysisError);
-      // Instead of falling back to mock data, return the error to the client
+      
+      // Return the error to the client instead of falling back to mock data
       return NextResponse.json({ 
-        error: "Document analysis failed", 
+        error: "AI document analysis failed", 
         details: analysisError instanceof Error ? analysisError.message : "Unknown analysis error"
       }, { status: 500 });
     }
