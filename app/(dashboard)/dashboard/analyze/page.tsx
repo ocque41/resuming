@@ -8,8 +8,8 @@ import dynamic from "next/dynamic";
 import PremiumPageLayout from "@/components/PremiumPageLayout";
 
 // Dynamically import client components
-const DocumentAnalyzer = dynamic(() => import("@/components/DocumentAnalyzer.client"));
-const ErrorRefreshButton = dynamic(() => import("@/components/ErrorRefreshButton.client"));
+const DocumentAnalyzer: any = dynamic(() => import("@/components/DocumentAnalyzer.client"));
+const ErrorRefreshButton: any = dynamic(() => import("@/components/ErrorRefreshButton.client"));
 
 const NewFeaturesBanner = () => (
   <div className="mb-6 bg-gradient-to-r from-[#161616] to-[#111111] border border-[#B4916C]/20 rounded-lg overflow-hidden">
@@ -92,6 +92,7 @@ export default async function DocumentAnalysisPage() {
     // Map documents to the format needed by the client component
     const mappedDocuments = documents.map(doc => ({
       id: doc.id.toString(),
+      name: doc.fileName,
       fileName: doc.fileName,
       createdAt: doc.createdAt
     }));

@@ -312,7 +312,8 @@ const renderCVAnalysis = (analysisData: any) => {
   );
 };
 
-const DocumentAnalyzer = ({ document }: { document: DocumentWithId }) => {
+const DocumentAnalyzer = ({ documents }: { documents: DocumentWithId[] }) => {
+  const [selectedDocument, setSelectedDocument] = useState<DocumentWithId | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [analysisData, setAnalysisData] = useState<any>(null);
@@ -329,33 +330,42 @@ const DocumentAnalyzer = ({ document }: { document: DocumentWithId }) => {
       return;
     }
 
+    if (!selectedDocument) {
+      setError("Please select a document");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      // ... existing logic ...
-      
       const response = await fetch("/api/document/analyze", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          documentId: document.id,
+          documentId: selectedDocument.id,
           documentPurpose: documentPurpose,
         }),
       });
 
-      // ... rest of analyze logic ...
+      if (!response.ok) {
+        throw new Error(`Analysis failed: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setAnalysisData(data.analysis);
     } catch (err) {
-      // ... error handling ...
+      console.error("Error analyzing document:", err);
+      setError("Failed to analyze document. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleExportPDF = async () => {
-    if (!analysisRef.current || !analysisData) return;
+    if (!analysisRef.current || !analysisData || !selectedDocument) return;
     
     setLoading(true);
     try {
@@ -388,7 +398,7 @@ const DocumentAnalyzer = ({ document }: { document: DocumentWithId }) => {
         heightLeft -= pageHeight;
       }
       
-      pdf.save(`${document.name.replace(/\.[^/.]+$/, "")}_analysis.pdf`);
+      pdf.save(`${selectedDocument.name.replace(/\.[^/.]+$/, "")}_analysis.pdf`);
     } catch (err) {
       console.error("Error exporting PDF:", err);
       setError("Failed to export PDF");
@@ -429,7 +439,7 @@ const DocumentAnalyzer = ({ document }: { document: DocumentWithId }) => {
   };
 
   const submitFeedback = async (type: string, feedbackText: string = '') => {
-    if (!analysisData || !document) return;
+    if (!analysisData || !selectedDocument) return;
     
     try {
       const response = await fetch('/api/document/analyze/feedback', {
@@ -438,7 +448,7 @@ const DocumentAnalyzer = ({ document }: { document: DocumentWithId }) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          documentId: document.id,
+          documentId: selectedDocument.id,
           analysisType: documentPurpose,
           rating: type === 'accurate' ? 5 : type === 'helpful' ? 4 : 2,
           feedbackText: feedbackText
@@ -471,8 +481,59 @@ const DocumentAnalyzer = ({ document }: { document: DocumentWithId }) => {
 
   return (
     <div className="w-full">
-      {/* Document purpose selection */}
-      {/* ... existing code ... */}
+      {/* Document Selection & Purpose */}
+      <div className="mb-6 space-y-4">
+        <DocSelector 
+          documents={documents}
+          value={selectedDocument?.id || null}
+          onChange={(docId) => {
+            const doc = documents.find(d => d.id === docId);
+            setSelectedDocument(doc || null);
+          }}
+        />
+        
+        {selectedDocument && (
+          <DocumentPurposeSelector
+            value={documentPurpose}
+            onChange={setDocumentPurpose}
+          />
+        )}
+        
+        {selectedDocument && (
+          <button
+            onClick={handleAnalyzeDocument}
+            disabled={loading || !documentPurpose}
+            className={`w-full p-3 rounded-lg text-white font-borna flex items-center justify-center ${
+              loading || !documentPurpose
+                ? 'bg-[#333333] cursor-not-allowed'
+                : 'bg-[#B4916C] hover:bg-[#9A7B5F] cursor-pointer'
+            }`}
+          >
+            {loading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                Analyzing...
+              </>
+            ) : (
+              <>Analyze Document</>
+            )}
+          </button>
+        )}
+        
+        {error && (
+          <div className="p-3 mt-3 bg-red-900/20 border border-red-900/30 text-red-400 rounded-lg">
+            {error}
+          </div>
+        )}
+      </div>
+      
+      {loading && !analysisData && (
+        <LoadingSpinner text="Analyzing document. This may take a minute..." />
+      )}
+      
+      {!loading && !analysisData && !error && (
+        <EmptyDocumentState />
+      )}
       
       {analysisData && (
         <div className="mt-6">
@@ -573,9 +634,9 @@ const DocumentAnalyzer = ({ document }: { document: DocumentWithId }) => {
           </div>
         </div>
       )}
-      
-      {/* ... rest of existing code ... */}
     </div>
   );
 };
+
+export default DocumentAnalyzer;
   
