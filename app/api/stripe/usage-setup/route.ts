@@ -78,6 +78,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(absoluteUrl);
   } catch (error) {
     console.error('Error setting up usage-based pricing:', error);
-    return NextResponse.redirect(new URL('/error?message=setup-failed', request.url));
+    const errorUrl = new URL('/error', process.env.BASE_URL || 'http://localhost:3000');
+    errorUrl.searchParams.append('message', 'setup-failed');
+    return NextResponse.redirect(errorUrl);
   }
 } 

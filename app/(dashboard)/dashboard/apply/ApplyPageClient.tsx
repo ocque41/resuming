@@ -17,11 +17,10 @@ export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBase
   const [hasCV, setHasCV] = useState(false);
   const [selectedCV, setSelectedCV] = useState<string | null>(null);
   const [cvOptions, setCvOptions] = useState<Array<{ id: string; name: string }>>([]);
-  const [jobsToApply, setJobsToApply] = useState(25);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [processingPayment, setProcessingPayment] = useState(false);
 
-  // Fetch user's optimized CVs
+  // Fetch user's CVs
   const fetchCVs = async () => {
     setFetchingCVs(true);
     setError(null);
@@ -101,7 +100,6 @@ export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBase
         },
         body: JSON.stringify({
           cvId: selectedCV,
-          jobCount: jobsToApply,
         }),
       });
 
@@ -203,7 +201,7 @@ export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBase
             <CardTitle className="text-xl text-[#F9F6EE] font-safiro">Application Process Started</CardTitle>
           </div>
           <CardDescription className="text-[#C5C2BA] font-borna">
-            Our AI agent is now applying to {jobsToApply} jobs that match your CV. You'll receive an email when the process is complete.
+            Our AI agent is now applying to 25 jobs that match your CV. You'll receive an email when the process is complete.
           </CardDescription>
         </CardHeader>
         <CardFooter>
@@ -267,7 +265,7 @@ export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBase
           <CardTitle className="text-xl text-[#F9F6EE] font-safiro">AI Job Application Agent</CardTitle>
         </div>
         <CardDescription className="text-[#C5C2BA] font-borna">
-          Our AI agent will search LinkedIn for jobs matching your CV, analyze them for fit, and apply to the best matches. 
+          Our AI agent will search LinkedIn for jobs matching your CV, analyze them for fit, and apply to the best 25 matches. 
           Each batch of applications costs $0.99.
         </CardDescription>
       </CardHeader>
@@ -299,29 +297,10 @@ export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBase
             Found {cvOptions.length} CV{cvOptions.length !== 1 ? 's' : ''}
           </p>
         </div>
-
-        <div className="space-y-2">
-          <div className="flex justify-between items-center">
-            <Label htmlFor="jobs-count" className="text-[#F9F6EE] font-borna">Number of jobs to apply for</Label>
-            <span className="text-[#B4916C] font-bold">{jobsToApply}</span>
-          </div>
-          <Slider
-            id="jobs-count"
-            defaultValue={[25]}
-            max={50}
-            min={5}
-            step={5}
-            onValueChange={(values) => setJobsToApply(values[0])}
-            className="w-full"
-          />
-          <p className="text-xs text-[#8A8782] italic mt-1">
-            Adjust the slider to choose how many jobs to apply for (5-50)
-          </p>
-        </div>
       </CardContent>
       <CardFooter className="flex justify-between items-center">
         <div className="text-[#F9F6EE] font-borna">
-          Cost: <span className="text-[#B4916C] font-bold">$0.99</span>
+          <span className="text-[#C5C2BA]">Apply to 25 jobs for</span> <span className="text-[#B4916C] font-bold">$0.99</span>
         </div>
         <Button 
           onClick={handleApplyClick}
