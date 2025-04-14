@@ -19,7 +19,9 @@ export async function POST(request: NextRequest) {
 
     // Parse the request body
     const body = await request.json();
-    const { cvId, jobCount } = body;
+    const { cvId } = body;
+    // Fixed job count at 25
+    const jobCount = 25;
 
     if (!cvId) {
       return NextResponse.json(
@@ -28,17 +30,6 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Validate jobCount - ensure it's between 5 and 50, defaulting to 25 if not provided
-    const validatedJobCount = !jobCount ? 25 : 
-                            Math.min(50, Math.max(5, parseInt(jobCount.toString(), 10)));
-
-    if (isNaN(validatedJobCount)) {
-      return NextResponse.json(
-        { error: 'Invalid job count, must be a number between 5 and 50' },
-        { status: 400 }
-      );
-    }
-
     // Get the user's team
     const userTeam = await db
       .select({
@@ -94,7 +85,7 @@ export async function POST(request: NextRequest) {
         userId: user.id.toString(),
         teamId: team[0].id.toString(),
         cvId: cvId.toString(),
-        jobCount: validatedJobCount.toString(),
+        jobCount: jobCount.toString(),
         type: 'job_application',
       },
     });
@@ -105,9 +96,9 @@ export async function POST(request: NextRequest) {
         user_id, team_id, cv_id, job_count, status, amount_charged, 
         payment_status, payment_intent_id, metadata
       ) VALUES (
-        ${user.id}, ${team[0].id}, ${cvId}, ${validatedJobCount}, 'pending', 99, 
+        ${user.id}, ${team[0].id}, ${cvId}, ${jobCount}, 'pending', 99, 
         'pending', ${paymentIntent.id}, ${JSON.stringify({ 
-          jobCount: validatedJobCount, 
+          jobCount: jobCount, 
           startedAt: new Date().toISOString() 
         })}
       )
@@ -127,12 +118,12 @@ export async function POST(request: NextRequest) {
               updated_at = NOW(),
               payment_status = 'succeeded',
               metadata = ${JSON.stringify({ 
-                jobCount: validatedJobCount, 
+                jobCount: jobCount, 
                 startedAt: new Date().toISOString(),
                 completedAt: new Date().toISOString(),
-                appliedJobs: validatedJobCount,
-                successfulApplications: Math.floor(validatedJobCount * 0.9),
-                failedApplications: Math.floor(validatedJobCount * 0.1),
+                appliedJobs: jobCount,
+                successfulApplications: Math.floor(jobCount * 0.9),
+                failedApplications: Math.floor(jobCount * 0.1),
               })}
           WHERE payment_intent_id = ${paymentIntent.id}
         `;
@@ -149,7 +140,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Job application process started',
-      jobCount: validatedJobCount,
+      jobCount: jobCount,
     });
   } catch (error) {
     console.error('Error starting job application process:', error);
