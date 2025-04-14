@@ -19,12 +19,22 @@ export async function POST(request: NextRequest) {
 
     // Parse the request body
     const body = await request.json();
-    const { cvId, cv, jobCount = 25 } = body;
-    const selectedCvId = cvId || cv;
+    const { cvId, jobCount } = body;
 
-    if (!selectedCvId) {
+    if (!cvId) {
       return NextResponse.json(
         { error: 'CV ID is required' },
+        { status: 400 }
+      );
+    }
+    
+    // Validate jobCount - ensure it's between 5 and 50, defaulting to 25 if not provided
+    const validatedJobCount = !jobCount ? 25 : 
+                            Math.min(50, Math.max(5, parseInt(jobCount.toString(), 10)));
+
+    if (isNaN(validatedJobCount)) {
+      return NextResponse.json(
+        { error: 'Invalid job count, must be a number between 5 and 50' },
         { status: 400 }
       );
     }
@@ -67,17 +77,14 @@ export async function POST(request: NextRequest) {
     
     if (!hasUsageBasedPricing) {
       return NextResponse.json(
-        { error: 'Usage-based pricing not enabled for this team', needsPayment: true },
+        { error: 'Usage-based pricing not enabled for this team' },
         { status: 400 }
       );
     }
 
-    // Calculate the amount based on job count
-    const amount = Math.max(1, Math.ceil(jobCount * 0.99 * 100)); // $0.99 per job in cents
-
-    // Create a payment intent for the job application
+    // Create a payment intent for $0.99
     const paymentIntent = await stripe.paymentIntents.create({
-      amount,
+      amount: 99, // $0.99 in cents
       currency: 'usd',
       customer: team[0].stripeCustomerId || undefined,
       automatic_payment_methods: {
@@ -86,8 +93,8 @@ export async function POST(request: NextRequest) {
       metadata: {
         userId: user.id.toString(),
         teamId: team[0].id.toString(),
-        cvId: selectedCvId.toString(),
-        jobCount: jobCount.toString(),
+        cvId: cvId.toString(),
+        jobCount: validatedJobCount.toString(),
         type: 'job_application',
       },
     });
@@ -98,12 +105,10 @@ export async function POST(request: NextRequest) {
         user_id, team_id, cv_id, job_count, status, amount_charged, 
         payment_status, payment_intent_id, metadata
       ) VALUES (
-        ${user.id}, ${team[0].id}, ${selectedCvId}, ${jobCount}, 'pending', ${amount}, 
+        ${user.id}, ${team[0].id}, ${cvId}, ${validatedJobCount}, 'pending', 99, 
         'pending', ${paymentIntent.id}, ${JSON.stringify({ 
-          jobCount, 
-          startedAt: new Date().toISOString(),
-          amountPerJob: 0.99,
-          totalAmount: (jobCount * 0.99).toFixed(2)
+          jobCount: validatedJobCount, 
+          startedAt: new Date().toISOString() 
         })}
       )
     `;
@@ -122,14 +127,12 @@ export async function POST(request: NextRequest) {
               updated_at = NOW(),
               payment_status = 'succeeded',
               metadata = ${JSON.stringify({ 
-                jobCount, 
+                jobCount: validatedJobCount, 
                 startedAt: new Date().toISOString(),
                 completedAt: new Date().toISOString(),
-                appliedJobs: jobCount,
-                successfulApplications: Math.floor(jobCount * 0.9),
-                failedApplications: Math.floor(jobCount * 0.1),
-                amountPerJob: 0.99,
-                totalAmount: (jobCount * 0.99).toFixed(2)
+                appliedJobs: validatedJobCount,
+                successfulApplications: Math.floor(validatedJobCount * 0.9),
+                failedApplications: Math.floor(validatedJobCount * 0.1),
               })}
           WHERE payment_intent_id = ${paymentIntent.id}
         `;
@@ -146,8 +149,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Job application process started',
-      jobCount,
-      totalAmount: (jobCount * 0.99).toFixed(2)
+      jobCount: validatedJobCount,
     });
   } catch (error) {
     console.error('Error starting job application process:', error);

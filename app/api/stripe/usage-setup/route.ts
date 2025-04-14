@@ -73,22 +73,11 @@ export async function GET(request: NextRequest) {
       WHERE id = ${userTeam[0].teamId}
     `;
 
-    // Log the redirect URL for debugging
-    console.log(`Redirecting to: ${returnTo}`);
-    
-    // Use the current origin for the redirect
-    const origin = new URL(request.url).origin;
-    const redirectUrl = new URL(returnTo, origin);
-    
     // Redirect back to the apply page
-    return NextResponse.redirect(redirectUrl);
+    const absoluteUrl = new URL(returnTo, process.env.BASE_URL || 'http://localhost:3000');
+    return NextResponse.redirect(absoluteUrl);
   } catch (error) {
     console.error('Error setting up usage-based pricing:', error);
-    
-    // Use the current origin for the error redirect
-    const origin = new URL(request.url).origin;
-    const errorUrl = new URL('/error?message=setup-failed', origin);
-    
-    return NextResponse.redirect(errorUrl);
+    return NextResponse.redirect(new URL('/error?message=setup-failed', request.url));
   }
 } 

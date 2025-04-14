@@ -6,10 +6,6 @@ import { eq } from 'drizzle-orm';
 import { getUser } from '@/lib/db/queries.server';
 
 export async function POST(request: NextRequest) {
-  // Get the user's data from the request
-  const data = await request.json();
-  const { jobCount = 25, returnUrl = '/dashboard/apply' } = data;
-
   try {
     // Get the current user
     const user = await getUser();
@@ -21,82 +17,75 @@ export async function POST(request: NextRequest) {
     }
 
     // Get the user's team
-    const userTeamData = await db
+    const userTeam = await db
       .select({
-        id: teams.id,
-        name: teams.name,
-        stripeCustomerId: teams.stripeCustomerId,
+        teamId: teamMembers.teamId,
       })
-      .from(teams)
-      .innerJoin(teamMembers, eq(teams.id, teamMembers.teamId))
+      .from(teamMembers)
       .where(eq(teamMembers.userId, user.id))
       .limit(1);
 
-    if (userTeamData.length === 0) {
+    if (userTeam.length === 0) {
       return NextResponse.json(
         { error: 'User is not associated with any team' },
-        { status: 404 }
+        { status: 400 }
       );
     }
 
-    const team = userTeamData[0];
-    let stripeCustomerId = team.stripeCustomerId;
+    const team = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, userTeam[0].teamId))
+      .limit(1);
 
-    // If the team doesn't have a Stripe customer ID, create one
-    if (!stripeCustomerId) {
+    if (team.length === 0) {
+      return NextResponse.json(
+        { error: 'Team not found' },
+        { status: 400 }
+      );
+    }
+
+    // Parse the request body
+    const body = await request.json();
+    const returnUrl = body.returnUrl || '/dashboard/apply';
+
+    // Create a Stripe customer if one doesn't exist
+    let customerId = team[0].stripeCustomerId;
+    if (!customerId) {
       const customer = await stripe.customers.create({
-        name: team.name,
-        email: user.email,
+        name: user.name || undefined,
+        email: user.email || undefined,
         metadata: {
-          teamId: team.id,
+          teamId: team[0].id.toString(),
+          userId: user.id.toString(),
         },
       });
+      customerId = customer.id;
 
-      stripeCustomerId = customer.id;
-
-      // Update the team with the Stripe customer ID
+      // Update the team with the new customer ID
       await db
         .update(teams)
         .set({
-          stripeCustomerId: customer.id,
+          stripeCustomerId: customerId,
           updatedAt: new Date(),
         })
-        .where(eq(teams.id, team.id));
+        .where(eq(teams.id, team[0].id));
     }
 
-    // Calculate the unit amount based on the job count
-    const unitAmount = 99; // $0.99 in cents
-
-    // Create a checkout session
+    // Create a Stripe checkout session for setting up usage-based billing
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: `Apply to ${jobCount} Jobs`,
-              description: 'LinkedIn job application automation',
-            },
-            unit_amount: unitAmount,
-          },
-          quantity: 1,
-        },
-      ],
-      mode: 'payment',
-      customer: stripeCustomerId,
-      success_url: `${new URL(request.url).origin}${returnUrl}?success=true&jobCount=${jobCount}`,
-      cancel_url: `${new URL(request.url).origin}${returnUrl}?canceled=true`,
-      metadata: {
-        teamId: team.id,
-        userId: user.id,
-        jobCount: jobCount.toString(),
-      },
+      mode: 'setup',
+      customer: customerId,
+      success_url: `${process.env.BASE_URL || 'http://localhost:3000'}/api/stripe/usage-setup?session_id={CHECKOUT_SESSION_ID}&return_to=${encodeURIComponent(returnUrl)}`,
+      cancel_url: `${process.env.BASE_URL || 'http://localhost:3000'}${returnUrl}`,
+      client_reference_id: user.id.toString(),
     });
 
+    // Return the checkout URL
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    console.error('Error creating checkout session:', error);
+    console.error('Error creating usage-based checkout session:', error);
     return NextResponse.json(
       { error: 'Failed to create checkout session' },
       { status: 500 }
