@@ -38,11 +38,24 @@ export default async function DashboardApplyPage() {
     // Check if user has usage-based pricing enabled
     const hasUsageBasedPricing = teamData?.teamMembers?.[0]?.team?.usageBasedPricing || false;
     
+    // Check if this is a development environment
+    const isDev = process.env.NODE_ENV === 'development' || process.env.TESTING_MODE === 'true';
+    
     return (
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-[#F9F6EE] font-safiro mb-6">Apply to Jobs with AI</h1>
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold text-[#F9F6EE] font-safiro">Apply to Jobs with AI</h1>
+          
+          {isDev && (
+            <Link href="/dashboard/apply/test">
+              <Button variant="outline" size="sm" className="flex items-center gap-1 text-amber-400 border-amber-900/50 hover:bg-amber-900/20">
+                Test Mode
+              </Button>
+            </Link>
+          )}
+        </div>
         <p className="text-lg text-[#C5C2BA] font-borna mb-8">
-          Let our AI agent apply to LinkedIn jobs that match your optimized CV. Each application costs $0.99.
+          Let our AI agent apply to LinkedIn jobs that match your CV. Each application costs $0.99.
         </p>
         
         <Suspense fallback={<div className="animate-pulse bg-[#222] h-64 rounded-xl"></div>}>
