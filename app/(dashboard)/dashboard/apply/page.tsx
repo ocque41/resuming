@@ -42,7 +42,7 @@ export default async function DashboardApplyPage() {
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold text-[#F9F6EE] font-safiro mb-6">Apply to Jobs with AI</h1>
         <p className="text-lg text-[#C5C2BA] font-borna mb-8">
-          Let our AI agent apply to LinkedIn jobs that match your optimized CV. Each application costs $0.99.
+          Let our AI agent apply to LinkedIn jobs that match your CV. Each job application costs $0.99.
         </p>
         
         <Suspense fallback={<div className="animate-pulse bg-[#222] h-64 rounded-xl"></div>}>

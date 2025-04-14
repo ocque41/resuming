@@ -19,9 +19,10 @@ export async function POST(request: NextRequest) {
 
     // Parse the request body
     const body = await request.json();
-    const { cvId, jobCount = 25 } = body;
+    const { cvId, cv, jobCount = 25 } = body;
+    const selectedCvId = cvId || cv;
 
-    if (!cvId) {
+    if (!selectedCvId) {
       return NextResponse.json(
         { error: 'CV ID is required' },
         { status: 400 }
@@ -66,14 +67,17 @@ export async function POST(request: NextRequest) {
     
     if (!hasUsageBasedPricing) {
       return NextResponse.json(
-        { error: 'Usage-based pricing not enabled for this team' },
+        { error: 'Usage-based pricing not enabled for this team', needsPayment: true },
         { status: 400 }
       );
     }
 
-    // Create a payment intent for $0.99
+    // Calculate the amount based on job count
+    const amount = Math.max(1, Math.ceil(jobCount * 0.99 * 100)); // $0.99 per job in cents
+
+    // Create a payment intent for the job application
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: 99, // $0.99 in cents
+      amount,
       currency: 'usd',
       customer: team[0].stripeCustomerId || undefined,
       automatic_payment_methods: {
@@ -82,7 +86,7 @@ export async function POST(request: NextRequest) {
       metadata: {
         userId: user.id.toString(),
         teamId: team[0].id.toString(),
-        cvId: cvId.toString(),
+        cvId: selectedCvId.toString(),
         jobCount: jobCount.toString(),
         type: 'job_application',
       },
@@ -94,10 +98,12 @@ export async function POST(request: NextRequest) {
         user_id, team_id, cv_id, job_count, status, amount_charged, 
         payment_status, payment_intent_id, metadata
       ) VALUES (
-        ${user.id}, ${team[0].id}, ${cvId}, ${jobCount}, 'pending', 99, 
+        ${user.id}, ${team[0].id}, ${selectedCvId}, ${jobCount}, 'pending', ${amount}, 
         'pending', ${paymentIntent.id}, ${JSON.stringify({ 
           jobCount, 
-          startedAt: new Date().toISOString() 
+          startedAt: new Date().toISOString(),
+          amountPerJob: 0.99,
+          totalAmount: (jobCount * 0.99).toFixed(2)
         })}
       )
     `;
@@ -122,6 +128,8 @@ export async function POST(request: NextRequest) {
                 appliedJobs: jobCount,
                 successfulApplications: Math.floor(jobCount * 0.9),
                 failedApplications: Math.floor(jobCount * 0.1),
+                amountPerJob: 0.99,
+                totalAmount: (jobCount * 0.99).toFixed(2)
               })}
           WHERE payment_intent_id = ${paymentIntent.id}
         `;
@@ -139,6 +147,7 @@ export async function POST(request: NextRequest) {
       success: true,
       message: 'Job application process started',
       jobCount,
+      totalAmount: (jobCount * 0.99).toFixed(2)
     });
   } catch (error) {
     console.error('Error starting job application process:', error);
