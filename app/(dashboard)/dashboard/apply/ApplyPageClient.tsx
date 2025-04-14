@@ -27,12 +27,12 @@ export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBase
     setError(null);
     
     try {
-      console.log("Fetching optimized CVs...");
+      console.log("Fetching CVs...");
       const response = await fetch('/api/cv/optimized');
       
       if (response.ok) {
         const data = await response.json();
-        console.log("Optimized CVs response:", data);
+        console.log("CVs response:", data);
         
         setCvOptions(data.cvs || []);
         setHasCV(data.cvs && data.cvs.length > 0);
@@ -41,16 +41,16 @@ export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBase
           setSelectedCV(data.cvs[0].id);
         }
       } else {
-        console.error('Error fetching optimized CVs:', response.statusText);
+        console.error('Error fetching CVs:', response.statusText);
         const errorText = await response.text();
         console.error('Error response:', errorText);
         setHasCV(false);
-        setError("Failed to load optimized CVs. Please try again.");
+        setError("Failed to load CVs. Please try again.");
       }
     } catch (err) {
-      console.error('Error fetching optimized CVs:', err);
+      console.error('Error fetching CVs:', err);
       setHasCV(false);
-      setError("Failed to load optimized CVs. Please try again.");
+      setError("Failed to load CVs. Please try again.");
     } finally {
       setFetchingCVs(false);
     }
@@ -137,21 +137,21 @@ export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBase
             <CardTitle className="text-xl text-[#F9F6EE] font-safiro">Loading CVs</CardTitle>
           </div>
           <CardDescription className="text-[#C5C2BA] font-borna">
-            Retrieving your optimized CVs...
+            Retrieving your CVs...
           </CardDescription>
         </CardHeader>
       </Card>
     );
   }
 
-  // If user has no optimized CVs, show message
+  // If user has no CVs, show message
   if (!hasCV) {
     return (
       <Card className="bg-[#0A0A0A] border border-[#333333]">
         <CardHeader>
-          <CardTitle className="text-xl text-[#F9F6EE] font-safiro">No Optimized CVs Found</CardTitle>
+          <CardTitle className="text-xl text-[#F9F6EE] font-safiro">No CVs Found</CardTitle>
           <CardDescription className="text-[#C5C2BA] font-borna">
-            You need to optimize a CV before you can use the job application agent.
+            You need to upload a CV before you can use the job application agent.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -162,10 +162,10 @@ export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBase
           )}
           
           <div className="mt-2 text-sm text-[#8A8782]">
-            <p>If you believe this is an error and you have already optimized CVs, you can:</p>
+            <p>If you believe this is an error and you have already uploaded CVs, you can:</p>
             <ul className="list-disc list-inside mt-2 space-y-1">
               <li>Click the Refresh button below to try again</li>
-              <li>Go to the dashboard and check if your CVs are optimized</li>
+              <li>Go to the dashboard and check if your CVs are visible</li>
               <li>
                 <Link href="/dashboard/apply/debug" className="text-[#B4916C] hover:underline">
                   View technical debug information
@@ -175,9 +175,9 @@ export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBase
           </div>
         </CardContent>
         <CardFooter className="flex gap-3">
-          <Link href="/dashboard/optimize">
+          <Link href="/dashboard">
             <Button className="bg-[#B4916C] hover:bg-[#A3815B] text-[#050505]">
-              Optimize Your CV
+              Upload a CV
             </Button>
           </Link>
           <Button 
@@ -274,7 +274,7 @@ export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBase
       <CardContent className="space-y-6">
         <div className="space-y-2">
           <div className="flex justify-between">
-            <Label htmlFor="cv-select" className="text-[#F9F6EE] font-borna">Select your optimized CV</Label>
+            <Label htmlFor="cv-select" className="text-[#F9F6EE] font-borna">Select your CV</Label>
             <Button 
               variant="ghost" 
               size="sm" 
@@ -296,7 +296,7 @@ export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBase
             ))}
           </select>
           <p className="text-xs text-[#8A8782]">
-            Found {cvOptions.length} optimized CV{cvOptions.length !== 1 ? 's' : ''}
+            Found {cvOptions.length} CV{cvOptions.length !== 1 ? 's' : ''}
           </p>
         </div>
 

@@ -67,14 +67,14 @@ export default function DebugPage() {
 
       <Card className="bg-[#0A0A0A] border border-[#333333]">
         <CardHeader>
-          <CardTitle>Optimized CVs Response</CardTitle>
+          <CardTitle>Available CVs Response</CardTitle>
         </CardHeader>
         <CardContent>
           <pre className="bg-[#111] p-4 rounded-md overflow-auto max-h-[300px] text-xs text-[#F9F6EE]">
             {JSON.stringify(cvData?.optimized, null, 2)}
           </pre>
           <p className="mt-4 text-sm text-[#C5C2BA]">
-            Count: {cvData?.optimized?.cvs?.length || 0} optimized CVs
+            Count: {cvData?.optimized?.cvs?.length || 0} CVs
           </p>
         </CardContent>
       </Card>
