@@ -1,27 +1,51 @@
-import Link from 'next/link';
-import { CircleIcon } from 'lucide-react';
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { AlertTriangle } from "lucide-react";
+import Link from "next/link";
 
 export default function NotFound() {
+  const router = useRouter();
+
+  // Auto-redirect to dashboard after 5 seconds
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      router.push("/dashboard");
+    }, 5000);
+    
+    return () => clearTimeout(timer);
+  }, [router]);
+
   return (
-    <div className="flex items-center justify-center min-h-[100dvh]">
-      <div className="max-w-md space-y-8 p-4 text-center">
-        <div className="flex justify-center">
-          <CircleIcon className="size-12 text-orange-500" />
-        </div>
-        <h1 className="text-4xl font-bold text-gray-900 tracking-tight">
-          Page Not Found
-        </h1>
-        <p className="text-base text-gray-500">
-          The page you are looking for might have been removed, had its name
-          changed, or is temporarily unavailable.
-        </p>
-        <Link
-          href="/"
-          className="max-w-48 mx-auto flex justify-center py-2 px-4 border border-gray-300 rounded-full shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
-        >
-          Back to Home
-        </Link>
-      </div>
+    <div className="min-h-screen flex items-center justify-center bg-[#050505] p-4">
+      <Card className="max-w-md w-full bg-[#0A0A0A] border border-[#333333]">
+        <CardHeader className="text-center">
+          <div className="flex justify-center mb-4">
+            <AlertTriangle className="h-12 w-12 text-[#B4916C]" />
+          </div>
+          <CardTitle className="text-2xl font-safiro text-[#F9F6EE]">
+            Page Not Found
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-[#C5C2BA] text-center mb-4">
+            The page you're looking for doesn't exist or you may have been redirected here after completing a payment.
+          </p>
+          <p className="text-[#8A8782] text-sm text-center">
+            You'll be automatically redirected to the dashboard in 5 seconds.
+          </p>
+        </CardContent>
+        <CardFooter className="flex justify-center">
+          <Link href="/dashboard">
+            <Button className="bg-[#B4916C] hover:bg-[#A3815B] text-[#050505]">
+              Go to Dashboard
+            </Button>
+          </Link>
+        </CardFooter>
+      </Card>
     </div>
   );
 }

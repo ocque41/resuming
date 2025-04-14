@@ -6,7 +6,6 @@ import { Loader2, CheckCircle, AlertTriangle, Briefcase, RefreshCw } from "lucid
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import Link from "next/link";
 
 export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBasedPricing: boolean }) {
@@ -17,10 +16,12 @@ export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBase
   const [hasCV, setHasCV] = useState(false);
   const [selectedCV, setSelectedCV] = useState<string | null>(null);
   const [cvOptions, setCvOptions] = useState<Array<{ id: string; name: string }>>([]);
+  // Fixed job count at 25
+  const jobsToApply = 25;
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [processingPayment, setProcessingPayment] = useState(false);
 
-  // Fetch user's CVs
+  // Fetch user's optimized CVs
   const fetchCVs = async () => {
     setFetchingCVs(true);
     setError(null);
@@ -265,8 +266,8 @@ export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBase
           <CardTitle className="text-xl text-[#F9F6EE] font-safiro">AI Job Application Agent</CardTitle>
         </div>
         <CardDescription className="text-[#C5C2BA] font-borna">
-          Our AI agent will search LinkedIn for jobs matching your CV, analyze them for fit, and apply to the best 25 matches. 
-          Each batch of applications costs $0.99.
+          Our AI agent will search LinkedIn for jobs matching your CV, analyze them for fit, and apply to the best matches. 
+          Each batch costs $0.99 and includes 25 job applications.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -297,11 +298,20 @@ export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBase
             Found {cvOptions.length} CV{cvOptions.length !== 1 ? 's' : ''}
           </p>
         </div>
-      </CardContent>
-      <CardFooter className="flex justify-between items-center">
-        <div className="text-[#F9F6EE] font-borna">
-          <span className="text-[#C5C2BA]">Apply to 25 jobs for</span> <span className="text-[#B4916C] font-bold">$0.99</span>
+
+        <div className="px-4 py-5 bg-[#111] rounded-md">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <span className="text-[#8A8782] font-borna">Number of job applications:</span>
+              <span className="ml-2 text-lg text-[#F9F6EE] font-bold">25</span>
+            </div>
+            <div className="text-[#F9F6EE] font-borna">
+              Cost: <span className="text-[#B4916C] font-bold">$0.99</span>
+            </div>
+          </div>
         </div>
+      </CardContent>
+      <CardFooter className="flex justify-end">
         <Button 
           onClick={handleApplyClick}
           disabled={loading || !selectedCV}

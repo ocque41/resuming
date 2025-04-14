@@ -12,8 +12,23 @@ export async function GET(request: NextRequest) {
   const sessionId = searchParams.get('session_id');
   const returnTo = searchParams.get('return_to') || '/dashboard/apply';
 
+  // Validate returnTo to ensure it's a valid path
+  let validReturnPath = returnTo;
+  
+  // If return path doesn't start with /, add it
+  if (!validReturnPath.startsWith('/')) {
+    validReturnPath = `/${validReturnPath}`;
+  }
+  
+  // Fallback to dashboard if the returnTo is empty or potentially problematic
+  if (!returnTo || returnTo === 'undefined' || returnTo === 'null') {
+    validReturnPath = '/dashboard';
+  }
+
   if (!sessionId) {
-    return NextResponse.redirect(new URL(returnTo, request.url));
+    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    const safeUrl = new URL(validReturnPath, baseUrl);
+    return NextResponse.redirect(safeUrl);
   }
 
   try {
@@ -73,13 +88,18 @@ export async function GET(request: NextRequest) {
       WHERE id = ${userTeam[0].teamId}
     `;
 
-    // Redirect back to the apply page
-    const absoluteUrl = new URL(returnTo, process.env.BASE_URL || 'http://localhost:3000');
+    // Redirect back to the apply page with safe URL construction
+    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    const absoluteUrl = new URL(validReturnPath, baseUrl);
+    
+    // Log the redirect URL for debugging
+    console.log('Redirecting to:', absoluteUrl.toString());
+    
     return NextResponse.redirect(absoluteUrl);
   } catch (error) {
     console.error('Error setting up usage-based pricing:', error);
-    const errorUrl = new URL('/error', process.env.BASE_URL || 'http://localhost:3000');
-    errorUrl.searchParams.append('message', 'setup-failed');
-    return NextResponse.redirect(errorUrl);
+    // Redirect to a generic error page or dashboard on error
+    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    return NextResponse.redirect(new URL('/dashboard', baseUrl));
   }
 } 
