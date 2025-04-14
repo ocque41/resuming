@@ -15,7 +15,7 @@ import ActionsDropdown from "@/components/ActionsDropdown";
 import Link from "next/link";
 import { 
   BarChart2, FileText, Briefcase, Upload, PieChart, TrendingUp, 
-  Search
+  Search, Send
 } from "lucide-react";
 import CVUploader from "@/components/CVUploader.client";
 import PremiumFeatureCard from "@/components/PremiumFeatureCard";
@@ -197,20 +197,32 @@ export default function DashboardClient({
             withElevation
           />
           
+          <PremiumFeatureCard 
+            href="/dashboard/apply"
+            icon={Send}
+            title="Apply to Jobs"
+            description="AI agent applies to matching jobs ($0.99 per batch)"
+            iconBgColor="bg-[#050505]"
+            bgGradient
+            animationDelay={0.15}
+            withElevation
+            badge="New"
+          />
+          
           <PlanRestrictedFeature 
             planName={planName}
             requiredPlan="moonlighting"
             title="Upgrade to Moonlighting"
-            description="Access the Create suite with our most powerful AI 'Remin'"
+            description="Access to advanced AI features and premium capabilities"
           >
             <PremiumFeatureCard 
-              href="/dashboard/enhance"
+              href="/dashboard/documents"
               icon={FileText}
-              title="Create"
-              description="Chat with the powerful employee 'Remin'"
+              title="Document Management"
+              description="Advanced document management tools"
               iconBgColor="bg-[#050505]"
               bgGradient
-              animationDelay={0.15}
+              animationDelay={0.2}
               withElevation
             />
           </PlanRestrictedFeature>
@@ -222,7 +234,7 @@ export default function DashboardClient({
             description="Extract insights & visualize data"
             iconBgColor="bg-[#050505]"
             bgGradient
-            animationDelay={0.2}
+            animationDelay={0.25}
             withElevation
           />
           

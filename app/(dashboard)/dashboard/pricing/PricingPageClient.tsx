@@ -330,7 +330,7 @@ export default function PricingPageClient({
                     
                     <div className="p-6 flex flex-col h-full">
                       <ul className="space-y-4 mb-4">
-                        {["Everything in Pro Plan ⓘ", "Unlimited Access to Create Suite ⓘ", "Access to Remin Agent ⓘ"].map((feature, index) => (
+                        {["Everything in Pro Plan ⓘ", "Access to Advanced AI Features ⓘ", "Premium Document Tools ⓘ"].map((feature, index) => (
                           <li key={index} className="flex items-start group relative">
                             <div className="h-5 w-5 mr-3 rounded-full flex items-center justify-center flex-shrink-0 text-[#B4916C] bg-[#B4916C]/10">
                               <Check className="h-3 w-3" />

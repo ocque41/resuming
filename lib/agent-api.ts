@@ -1,14 +1,8 @@
 /**
  * Agent API connector for the AI Document Agent
  * Handles communication with the backend agent service
+ * This is currently a mock implementation as we transition to a new backend
  */
-
-// API configuration
-const API_URL = process.env.NEXT_PUBLIC_AGENT_API_URL || 'https://api.resuming.ai/agent';
-const API_KEY = process.env.NEXT_PUBLIC_AGENT_API_KEY || 'default-key';
-
-// Enable debug mode for development
-const DEBUG = process.env.NODE_ENV === 'development';
 
 // Types
 export type AgentMode = 'analyze' | 'edit' | 'create';
@@ -80,104 +74,31 @@ function getMockResponse(mode: AgentMode, message: string): string {
   return "I understand. How else can I assist you with your document?";
 }
 
-// Check if we should use mock mode
-const shouldUseMockMode = () => {
-  return process.env.NEXT_PUBLIC_MOCK_BACKEND === 'true' || 
-         process.env.NEXT_PUBLIC_FORCE_MOCK === 'true';
-};
-
 /**
  * Send a message to the agent
  */
 export async function sendMessageToAgent(
   request: AgentRequest
 ): Promise<AgentResponse> {
-  // Use mock mode in development or if configured
-  if (shouldUseMockMode()) {
-    if (DEBUG) console.log('[MOCK MODE] Using mock agent response');
-    
-    // Get the last user message
-    const lastUserMessage = [...request.messages].reverse()
-      .find(msg => msg.role === 'user')?.content || '';
-    
-    // Generate mock response
-    const mockContent = getMockResponse(request.mode, lastUserMessage);
-    
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    return {
-      message: {
-        role: 'assistant',
-        content: mockContent,
-        id: `mock-${Date.now()}`
-      }
-    };
-  }
-
-  try {
-    if (DEBUG) console.log('Sending request to agent API:', request);
-    
-    // Use CORS proxy for development if needed
-    let apiUrl = `${API_URL}/message`;
-    if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_USE_CORS_PROXY === 'true') {
-      apiUrl = `https://cors-anywhere.herokuapp.com/${apiUrl}`;
+  console.log('[MOCK MODE] Using mock agent response');
+  
+  // Get the last user message
+  const lastUserMessage = [...request.messages].reverse()
+    .find(msg => msg.role === 'user')?.content || '';
+  
+  // Generate mock response
+  const mockContent = getMockResponse(request.mode, lastUserMessage);
+  
+  // Simulate network delay
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  return {
+    message: {
+      role: 'assistant',
+      content: mockContent,
+      id: `mock-${Date.now()}`
     }
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': API_KEY,
-      },
-      body: JSON.stringify({
-        messages: request.messages,
-        document_id: request.documentId,
-        instruction: request.instruction,
-        mode: request.mode,
-        stream: false
-      }),
-    });
-
-    if (!response.ok) {
-      let errorMessage = `Agent API error (${response.status}): ${response.statusText}`;
-      try {
-        const errorData = await response.json();
-        errorMessage = `Agent API error (${response.status}): ${
-          errorData.message || errorData.error || errorData.detail || response.statusText
-        }`;
-      } catch (e) {
-        // If JSON parsing fails, use the original error message
-      }
-      throw new Error(errorMessage);
-    }
-
-    return await response.json();
-  } catch (error) {
-    if (DEBUG) console.error('Error sending message to agent:', error);
-    
-    // Fall back to mock mode if configured and an error occurred
-    if (process.env.NEXT_PUBLIC_ENABLE_MOCK_MODE_FALLBACK === 'true') {
-      console.warn('Falling back to mock mode due to API error');
-      
-      // Get the last user message
-      const lastUserMessage = [...request.messages].reverse()
-        .find(msg => msg.role === 'user')?.content || '';
-      
-      // Generate mock response
-      const mockContent = getMockResponse(request.mode, lastUserMessage);
-      
-      return {
-        message: {
-          role: 'assistant',
-          content: mockContent,
-          id: `mock-fallback-${Date.now()}`
-        }
-      };
-    }
-    
-    throw error;
-  }
+  };
 }
 
 /**
@@ -189,174 +110,39 @@ export async function streamMessageFromAgent(
   onComplete: (fullResponse: string) => void,
   onError: (error: Error) => void
 ): Promise<void> {
-  // Use mock mode in development or if configured
-  if (shouldUseMockMode()) {
-    if (DEBUG) console.log('[MOCK MODE] Using mock agent streaming response');
-    
-    // Get the last user message
-    const lastUserMessage = [...request.messages].reverse()
-      .find(msg => msg.role === 'user')?.content || '';
-    
-    // Generate mock response
-    const mockMessage = getMockResponse(request.mode, lastUserMessage);
-    
-    // Simulate streaming by sending chunks of the message
-    const chunkSize = 10;
-    let position = 0;
-    
-    const streamInterval = setInterval(() => {
-      if (position >= mockMessage.length) {
-        clearInterval(streamInterval);
-        onComplete(mockMessage);
-        return;
-      }
-      
-      const chunk = mockMessage.slice(position, position + chunkSize);
-      position += chunkSize;
-      onChunk(chunk);
-    }, 100);
-    
-    return;
-  }
-
-  try {
-    if (DEBUG) console.log('Streaming request to agent API:', request);
-    
-    // Use CORS proxy for development if needed
-    let apiUrl = `${API_URL}/message/stream`;
-    if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_USE_CORS_PROXY === 'true') {
-      apiUrl = `https://cors-anywhere.herokuapp.com/${apiUrl}`;
-    }
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': API_KEY,
-      },
-      body: JSON.stringify({
-        messages: request.messages,
-        document_id: request.documentId,
-        instruction: request.instruction,
-        mode: request.mode,
-        stream: true
-      }),
-    });
-
-    if (!response.ok) {
-      let errorMessage = `Agent API error (${response.status}): ${response.statusText}`;
-      try {
-        const errorData = await response.json();
-        errorMessage = `Agent API error (${response.status}): ${
-          errorData.message || errorData.error || errorData.detail || response.statusText
-        }`;
-      } catch (e) {
-        // If JSON parsing fails, use the original error message
-      }
-      throw new Error(errorMessage);
-    }
-
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let fullResponse = '';
-
-    // Read the stream
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      
-      const chunk = decoder.decode(value, { stream: true });
-      fullResponse += chunk;
-      onChunk(chunk);
-    }
-
-    onComplete(fullResponse);
-  } catch (error) {
-    if (DEBUG) console.error('Error streaming message from agent:', error);
-    
-    // Fall back to mock mode if configured and an error occurred
-    if (process.env.NEXT_PUBLIC_ENABLE_MOCK_MODE_FALLBACK === 'true') {
-      console.warn('Falling back to mock streaming mode due to API error');
-      
-      // Get the last user message
-      const lastUserMessage = [...request.messages].reverse()
-        .find(msg => msg.role === 'user')?.content || '';
-      
-      // Generate mock response
-      const mockMessage = getMockResponse(request.mode, lastUserMessage);
-      
-      // Simulate streaming by sending chunks of the message
-      const chunkSize = 10;
-      let position = 0;
-      
-      const streamInterval = setInterval(() => {
-        if (position >= mockMessage.length) {
-          clearInterval(streamInterval);
-          onComplete(mockMessage);
-          return;
-        }
-        
-        const chunk = mockMessage.slice(position, position + chunkSize);
-        position += chunkSize;
-        onChunk(chunk);
-      }, 100);
-      
+  console.log('[MOCK MODE] Using mock agent streaming response');
+  
+  // Get the last user message
+  const lastUserMessage = [...request.messages].reverse()
+    .find(msg => msg.role === 'user')?.content || '';
+  
+  // Generate mock response
+  const mockMessage = getMockResponse(request.mode, lastUserMessage);
+  
+  // Simulate streaming by sending chunks of the message
+  const chunkSize = 10;
+  let position = 0;
+  
+  const streamInterval = setInterval(() => {
+    if (position >= mockMessage.length) {
+      clearInterval(streamInterval);
+      onComplete(mockMessage);
       return;
     }
     
-    onError(error instanceof Error ? error : new Error(String(error)));
-  }
+    const chunk = mockMessage.slice(position, position + chunkSize);
+    position += chunkSize;
+    onChunk(chunk);
+  }, 100);
+  
+  return;
 }
 
 /**
- * Test the agent connection with a health check
+ * Test the connection to the agent API
  */
 export async function testAgentConnection(): Promise<boolean> {
-  try {
-    if (DEBUG) console.log('Testing connection to agent API...');
-    
-    // If mock mode is enabled, always return true
-    if (shouldUseMockMode()) {
-      if (DEBUG) console.log('[MOCK MODE] Using mock agent - connection test passed');
-      return true;
-    }
-    
-    // First try the health endpoint
-    let apiUrl = `${API_URL}/health`;
-    
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': API_KEY,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Health check failed: ${response.status} ${response.statusText}`);
-    }
-    
-    const data = await response.json();
-    if (DEBUG) console.log('Agent health check response:', data);
-    
-    if (data.status === 'ok') {
-      return true;
-    }
-    
-    return false;
-  } catch (error) {
-    console.error('Agent connection test failed:', error);
-    
-    // Return true if fallback to mock mode is enabled
-    if (process.env.NEXT_PUBLIC_ENABLE_MOCK_MODE_FALLBACK === 'true') {
-      console.warn('Using mock mode fallback due to connection test failure');
-      return true;
-    }
-    
-    return false;
-  }
+  console.log('[MOCK MODE] Agent connection test always returns true');
+  await new Promise(resolve => setTimeout(resolve, 500));
+  return true;
 } 

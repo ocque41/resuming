@@ -19,6 +19,7 @@ interface PremiumFeatureCardProps {
   withShine?: boolean;
   withHoverScale?: boolean;
   withElevation?: boolean;
+  badge?: string;
 }
 
 /**
@@ -38,6 +39,7 @@ export default function PremiumFeatureCard({
   withShine = true,
   withHoverScale = true,
   withElevation = true,
+  badge,
 }: PremiumFeatureCardProps) {
   const containerVariants = {
     hidden: { opacity: 0, y: 20 },
@@ -112,9 +114,16 @@ export default function PremiumFeatureCard({
             <Icon className="h-6 w-6" />
           </div>
           <div>
-            <h3 className="text-base md:text-lg font-safiro font-semibold text-[#F9F6EE] mb-1 tracking-tight">
-              {title}
-            </h3>
+            <div className="flex items-center mb-1">
+              <h3 className="text-base md:text-lg font-safiro font-semibold text-[#F9F6EE] tracking-tight">
+                {title}
+              </h3>
+              {badge && (
+                <span className="ml-2 px-2 py-0.5 text-xs font-medium rounded-full bg-[#B4916C]/20 text-[#B4916C]">
+                  {badge}
+                </span>
+              )}
+            </div>
             <p className="text-sm text-[#C5C2BA] font-borna leading-snug">
               {description}
             </p>

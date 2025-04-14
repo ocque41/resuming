@@ -120,13 +120,13 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
             interval="month"
             features={[
               "Everything in Pro Plan ⓘ",
-              "Unlimited Access to Create Suite ⓘ",
-              "Access to Remin Agent ⓘ"
+              "Access to Advanced AI Features ⓘ",
+              "Access to Premium Document Tools ⓘ"
             ]}
             tooltips={{
               "Everything in Pro Plan ⓘ": "All features from the Pro plan included",
-              "Unlimited Access to Create Suite ⓘ": "Unlimited access to the Create suite for advanced content creation",
-              "Access to Remin Agent ⓘ": "Access the unlimited power of \"Remin\" the most powerful Agent"
+              "Access to Advanced AI Features ⓘ": "Access to premium AI capabilities for enhanced document processing",
+              "Access to Premium Document Tools ⓘ": "Access to premium document processing and enhancement tools"
             }}
             highlight={true}
             priceId={moonlightingPrice?.id}
