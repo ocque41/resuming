@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
-import { ArrowLeft, Loader2, CheckCircle, AlertTriangle, RefreshCw, Briefcase, Code } from "lucide-react";
+import { ArrowLeft, Loader2, CheckCircle, AlertTriangle, RefreshCw, Briefcase, FileText } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function TestApplyPage() {
@@ -199,9 +199,11 @@ export default function TestApplyPage() {
       </div>
       
       <div className="bg-amber-900/20 border border-amber-800/30 rounded-md p-4 text-amber-200">
-        <div className="flex items-center gap-2 mb-2">
-          <Code className="h-5 w-5" />
-          <h3 className="text-lg font-semibold">Testing Environment</h3>
+        <div className="flex items-center space-x-2">
+          <div className="rounded-md bg-primary p-2">
+            <FileText className="h-4 w-4 text-primary-foreground" />
+          </div>
+          <h3 className="font-semibold">Testing Environment</h3>
         </div>
         <p className="text-sm">
           This page allows you to test the job application agent without processing a Stripe payment.
