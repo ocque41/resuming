@@ -70,6 +70,8 @@ export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBase
     setError(null);
     
     try {
+      // Comment out the usage-based pricing check and Stripe checkout
+      /* 
       // First check if user has usage-based pricing enabled
       if (!hasUsageBasedPricing) {
         // Create checkout session for enabling usage-based pricing
@@ -92,9 +94,10 @@ export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBase
         setProcessingPayment(true);
         return;
       }
+      */
 
-      // If user already has usage-based pricing, proceed with job application
-      const applyResponse = await fetch('/api/jobs/apply', {
+      // Use the test endpoint instead of the regular apply endpoint
+      const applyResponse = await fetch('/api/jobs/apply-test', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -106,10 +109,11 @@ export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBase
 
       if (!applyResponse.ok) {
         const errorData = await applyResponse.json();
-        throw new Error(errorData.message || 'Failed to apply to jobs');
+        throw new Error(errorData.message || errorData.error || 'Failed to apply to jobs');
       }
 
       const applyData = await applyResponse.json();
+      console.log("Apply response:", applyData);
       setSuccess(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -199,12 +203,23 @@ export default function ApplyPageClient({ hasUsageBasedPricing }: { hasUsageBase
         <CardHeader>
           <div className="flex items-center">
             <CheckCircle className="h-6 w-6 text-green-500 mr-2" />
-            <CardTitle className="text-xl text-[#F9F6EE] font-safiro">Application Process Started</CardTitle>
+            <CardTitle className="text-xl text-[#F9F6EE] font-safiro">Application Process Started (TEST MODE)</CardTitle>
           </div>
           <CardDescription className="text-[#C5C2BA] font-borna">
-            Our AI agent is now applying to 25 jobs that match your CV. You'll receive an email when the process is complete.
+            Our AI agent is now applying to 25 jobs that match your CV in test mode (no payment required). You'll receive an email when the process is complete.
           </CardDescription>
         </CardHeader>
+        <CardContent>
+          <div className="bg-amber-900/20 border border-amber-800/30 rounded-md p-4 text-amber-200 mb-4">
+            <div className="flex items-center space-x-2 mb-2">
+              <AlertTriangle className="h-4 w-4" />
+              <h3 className="font-semibold">Test Mode Active</h3>
+            </div>
+            <p className="text-sm">
+              The application is running in test mode. Stripe payment has been bypassed, but OpenAI API calls are still being made.
+            </p>
+          </div>
+        </CardContent>
         <CardFooter>
           <Link href="/dashboard">
             <Button className="bg-[#B4916C] hover:bg-[#A3815B] text-[#050505]">
