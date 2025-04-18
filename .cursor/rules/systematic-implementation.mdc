@@ -1,9 +1,4 @@
 ---
-description: 
-globs: 
-alwaysApply: true
----
----
 description: systematic approach for all prompts
 globs: 
 ---
@@ -48,6 +43,33 @@ To finish as the fourth step you have to provide "#next", activate this role:
 - Analyze directory, just implemented plan and current goal implementation.
 - Based on analysis. Recommend next steps for perfecting current overall goal wanted.
 
+# Collection Management Implementation Guidelines
+
+When implementing collection management frontend components, follow these systematic principles:
+
+1. **Component Development Order**:
+   - First build the collection data fetching and state management
+   - Then implement the collection display components
+   - Next add the collection creation interface
+   - Finally implement drag-and-drop organization
+
+2. **Testing Strategy**:
+   - Test API integration before UI components
+   - Verify collection creation before editing functionality
+   - Test hierarchical display with nested collections
+   - Confirm proper error handling for all operations
+
+3. **User Experience Focus**:
+   - Ensure intuitive navigation of collection hierarchy
+   - Provide visual feedback for collection operations
+   - Implement smooth transitions between collection views
+   - Add helpful empty states for collections with no documents
+
+4. **Code Organization**:
+   - Keep collection-related components in dedicated folders
+   - Separate collection state management from UI components
+   - Create reusable hooks for collection operations
+   - Implement proper loading and error states
 
 
 if the user writes to you specifically one of the following commands you provide the process but they are optional just if the user asks for you to:

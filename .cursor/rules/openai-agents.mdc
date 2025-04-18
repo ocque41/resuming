@@ -1,0 +1,45 @@
+---
+description: all openai agents sdk documentation
+globs: app/api/agent/**
+---
+# OpenAI Agents SDK Documentation
+
+When implementing the OpenAI Agents SDK, always consult these key resources:
+
+## Core Concepts
+- **Agents**: LLMs equipped with instructions, tools, and capabilities
+- **Handoffs**: Allow agents to delegate tasks to other agents
+- **Guardrails**: Enable validation of inputs to agents
+- **Tracing**: Built-in functionality to visualize and debug agent flows
+
+## Implementation Guides
+- Install via `pip install openai-agents`
+- Set OpenAI API key via environment variable: `OPENAI_API_KEY`
+- Basic agent creation:
+  ```python
+  from agents import Agent, Runner
+  
+  agent = Agent(
+    name="File Handler",
+    instructions="You create and edit files based on user requests"
+  )
+  
+  result = Runner.run_sync(agent, "Create a new JSON file")
+  ```
+
+## Tools Implementation
+- Function tools: Turn Python functions into tools with automatic schema generation
+- File manipulation tools should be carefully implemented with proper error handling
+- Tools for document creation and editing need clear input validation
+
+## Best Practices
+- Create specialized agents for specific tasks
+- Invest in good prompts that clearly define available tools and parameters
+- Implement proper error handling and recovery mechanisms
+- Utilize tracing for debugging complex agent workflows
+
+## Documentation Links
+- Main documentation: https://openai.github.io/openai-agents-python/
+- Quickstart guide: https://openai.github.io/openai-agents-python/quickstart/
+- Tools reference: https://openai.github.io/openai-agents-python/tools/
+- Multi-agent orchestration: https://openai.github.io/openai-agents-python/multi_agent/ 

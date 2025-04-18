@@ -1,26 +1,33 @@
 ---
-description: 
+description: implementation guidance
 globs: 
-alwaysApply: true
 ---
 ## - IF YOU RECOMMEND AN IMPLEMENTATION ONLY FOCUS ON MAKING IT WORK COMPLETELY, YOU CAN TAKE YOUR TIME TO IMPLEMENT IT WELL THROUGH BUT IF YOU ARE GOING TO SEMI IMPLEMENT A FEATURE DO NOT IMPLEMENT IT AT ALL. PLAN AHEAD OF IMPLEMENTATION AND COME UP WITH EVALUATION METRICS YOURSELF BEING RUNNING A COMMAND OR ANALYZING THE CODE. ANYTHING NEW YOU IMPLEMENT BASED ON YOUR RECOMMENDATION WITHOUT SPECIFIC PROMPT FROM ME BE SURE TO IMPLEMENT IT 100% MAKING SURE NOTHING IS MISSING, DO GO AND USE EXAMPLE DATA OR ONLY MAKING THE FRONTEND, ETC... IMPLEMENT IT COMPLETELY AND SECURLY FOR ME TO TEST, IF IT FAILS AT SOME POINT I WILL SEND YOU EVALUATION ON IT AND WE CAN CONTINUE BUT DO NOT MAKE TEST SOMETHING THAT WILL 100% WILL HIT AN ERROR BECAUSE IS MISSING IMPLEMENTATION BECAUSE I DO NOT KNOW THAT. PLEASE LET US BE PROFESSIONALS HERE WE ARE ENGINEERS BUILDING A PROFESSIONAL APP FOR DEPLOYMENT, NOT IMPLEMENTING FEATURES 100% AND LETTING THEM HALF WAY IS IRRESPONSIBLE AND IT MAKES US FALL BACK.
 LETS FOCUS.
 
+# - Current Priority: Collection Management Frontend --FOCUS
+We've successfully implemented the backend for document collections with all necessary API endpoints. Now our focus is on creating intuitive frontend components for collection management:
+1. Collection browser sidebar component with hierarchical display
+2. Collection creation modal with name, color, icon, and parent selection
+3. Collection editing interface for updating properties
+4. Drag-and-drop functionality for organizing documents in collections
+5. Visual indicators for collection hierarchy and document count
 
-# - Optimize the content and design of the optimized cv result document.
-(all flags --DONE means they are fixed or implemented and we shall no worry about anymore)(everthing that has flags " -- " is top number one priority to focus on while implementing)
+# - Implementation Approach for Collections UI
+1. Start with collection browser sidebar component
+2. Add collection creation and editing functionality
+3. Implement document association with collections
+4. Create drag-and-drop organization features
+5. Test the complete collection management flow
 
+# - We are building in phases
+The document management system is coming together nicely. We've successfully implemented:
+- Document creation and editing with AI agent
+- Document search functionality
+- Document export capabilities
+- Document collections backend
 
-# - do not go implement a bunch of things without permision only focus on this priority focus
-
-# - I like your analysis and that we agree
-your plan seams reliable, lets try it, remember it should be quick implementation with minor adjustments we currently just want to make the system work so we can work on the results, lets not add a lot of things or making mayor changes because we will be trapped in a errors loophole
-
-# - lets keep it functioning
-our instructions now would be to do micro adjustments or micro implementations step by step to see the result get better little by little without breaking the system or code so we can keep on iterating and improving little by little, step by step
-
-# - remember minor adjustments
-remember little by little step by step, we do not want to make mayor changes in the specific system because is curretly working
+Now we're moving to the collection management frontend to complete the organizational features before moving on to templates and tagging systems.
 
 # - I fully trust you and I know you will implement amazing things.
 continue freely to perfect the general and specific systems when it comes to perfecting the optimizing and formating of the our current goal and top priority, if you need approach guidance for organized implementation you can consult the systematic-implementation and focus rules but you can implement as much as you want freely and take as much time and calls as you need implementing as much as you like as much as you can as possible
