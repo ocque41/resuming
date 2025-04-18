@@ -209,23 +209,16 @@ export default function DashboardClient({
             badge="New"
           />
           
-          <PlanRestrictedFeature 
-            planName={planName}
-            requiredPlan="moonlighting"
-            title="Upgrade to Moonlighting"
-            description="Access to advanced AI features and premium capabilities"
-          >
-            <PremiumFeatureCard 
-              href="/dashboard/documents"
-              icon={FileText}
-              title="Document Management"
-              description="Advanced document management tools"
-              iconBgColor="bg-[#050505]"
-              bgGradient
-              animationDelay={0.2}
-              withElevation
-            />
-          </PlanRestrictedFeature>
+          <PremiumFeatureCard 
+            href="/dashboard/documents"
+            icon={FileText}
+            title="Document Management"
+            description="Advanced document management tools"
+            iconBgColor="bg-[#050505]"
+            bgGradient
+            animationDelay={0.2}
+            withElevation
+          />
           
           <PremiumFeatureCard 
             href="/dashboard/analyze"
