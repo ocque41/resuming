@@ -45,11 +45,8 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
   };
 
   // Ensure we have fallbacks for all data
-  const freePlan = products.find((product) => product.name === "Pro") || { id: "free-fallback", name: "Free" };
-  const moonlightingPlan = products.find((product) => product.name === "Moonlighting") || { id: "moonlighting-fallback", name: "Moonlighting" };
-
-  const freePrice = prices.find((price) => price.productId === freePlan?.id) || { unitAmount: 0, id: "price_free", productId: freePlan.id };
-  const moonlightingPrice = prices.find((price) => price.productId === moonlightingPlan?.id) || { unitAmount: 1499, id: "price-moonlighting-fallback", productId: moonlightingPlan.id };
+  const proProduct = products.find((product) => product.name === "Pro") || { id: "pro-fallback", name: "Pro" };
+  const proPrice = prices.find((price) => price.productId === proProduct.id) || { id: "price_free", productId: proProduct.id, unitAmount: 0 };
 
   // Animation variants
   const containerVariants = {
@@ -73,7 +70,7 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
   };
 
   return (
-    <>
+    <div>
       <motion.div 
         className="max-w-5xl mx-auto space-y-16"
         variants={containerVariants}
@@ -95,42 +92,12 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
         <div className="grid md:grid-cols-2 gap-8 justify-center mb-8 max-w-4xl mx-auto">
           <PricingCard
             name="Pro"
-            price={0}
-            interval="month"
-            features={[
-              "Optimize CV ⓘ",
-              "Document Analysis ⓘ",
-              "Job Description Generator ⓘ",
-              "CV to Job Match ⓘ",
-            ]}
-            tooltips={{
-              "Optimize CV ⓘ": "Analyze & optimize for ATS (i)",
-              "Document Analysis ⓘ": "Extract insights & visualize data (i)",
-              "Job Description Generator ⓘ": "Create detailed job descriptions (i)",
-              "CV to Job Match ⓘ": "Analyze CV against job descriptions (i)",
-            }}
+            price={proPrice.unitAmount || 0}
+            interval={proPrice.interval || "month"}
+            features={["Optimize CV", "Document Analysis", "Job Description Generator", "CV to Job Match"]}
             highlight={false}
-            priceId="price_free"
+            priceId={proPrice.id}
             animationDelay={0.2}
-            onCheckout={handleCheckout}
-          />
-          <PricingCard
-            name="Moonlighting"
-            price={1499}
-            interval="month"
-            features={[
-              "Everything in Pro Plan ⓘ",
-              "Access to Advanced AI Features ⓘ",
-              "Access to Premium Document Tools ⓘ"
-            ]}
-            tooltips={{
-              "Everything in Pro Plan ⓘ": "All features from the Pro plan included",
-              "Access to Advanced AI Features ⓘ": "Access to premium AI capabilities for enhanced document processing",
-              "Access to Premium Document Tools ⓘ": "Access to premium document processing and enhancement tools"
-            }}
-            highlight={true}
-            priceId={moonlightingPrice?.id}
-            animationDelay={0.3}
             onCheckout={handleCheckout}
           />
         </div>
@@ -152,7 +119,7 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
           </a>
         </motion.div>
       </motion.div>
-    </>
+    </div>
   );
 }
 

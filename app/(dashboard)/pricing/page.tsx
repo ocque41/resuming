@@ -19,24 +19,13 @@ interface StripeProduct {
   name: string;
 }
 
-// Create fallback data for static rendering
-const fallbackPrices: StripePrice[] = [
-  { id: "price_free", productId: "free-fallback", unitAmount: 0 },
-  { id: "price-moonlighting-fallback", productId: "moonlighting-fallback", unitAmount: 1499 }
-];
-
-const fallbackProducts: StripeProduct[] = [
-  { id: "free-fallback", name: "Free" },
-  { id: "moonlighting-fallback", name: "Moonlighting" }
-];
-
 // Revalidate prices every hour
 export const revalidate = 3600;
 
 export default async function PricingPage() {
   // Safely fetch data with fallbacks
-  let prices: StripePrice[] = fallbackPrices;
-  let products: StripeProduct[] = fallbackProducts;
+  let prices: StripePrice[] = [];
+  let products: StripeProduct[] = [];
   
   try {
     // Attempt to fetch real Stripe data

@@ -141,7 +141,6 @@ export default function DirectPricingStatus() {
           <div className="bg-[#0D0D0D] py-6 px-6 relative">
             <h3 className="text-2xl font-bold text-[#F9F6EE] font-safiro mb-2">Pro Plan</h3>
             <p className="text-3xl font-bold text-[#F9F6EE] font-safiro">FREE</p>
-            
             {currentPlan === "Pro" && (
               <div className="absolute top-0 right-0 mt-2 mr-2">
                 <span className="bg-green-500/20 text-green-400 px-2 py-1 text-xs rounded-full font-borna">
@@ -150,106 +149,36 @@ export default function DirectPricingStatus() {
               </div>
             )}
           </div>
-          
-          <div className="p-6">
-            <ul className="space-y-4 mb-6">
-              {[
-                { name: "Optimize CV", desc: "Analyze & optimize for ATS (i)" },
-                { name: "Document Analysis", desc: "Extract insights & visualize data (i)" },
-                { name: "Job Description Generator", desc: "Create detailed job descriptions (i)" },
-                { name: "CV to Job Match", desc: "Analyze CV against job descriptions (i)" }
-              ].map((feature, i) => (
-                <li key={i} className="flex items-start">
-                  <div className="h-5 w-5 mr-3 rounded-full flex items-center justify-center flex-shrink-0 text-[#8A8782] bg-[#222222] mt-0.5">
-                    <Check className="h-3 w-3" />
-                  </div>
-                  <div>
-                    <span className="text-[#C5C2BA] font-borna text-sm block">{feature.name}</span>
-                    <span className="text-[#8A8782] font-borna text-xs block mt-0.5">{feature.desc}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            
-            {currentPlan === "Moonlighting" ? (
-              <Button 
-                onClick={handleDowngrade}
-                disabled={isDowngrading}
-                variant="outline" 
-                className="w-full font-medium h-12 bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"
-              >
-                {isDowngrading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  "Downgrade to Pro"
-                )}
-              </Button>
-            ) : currentPlan === "Pro" ? (
-              <div className="w-full h-12 bg-[#222222] flex items-center justify-center text-green-400 border border-[#333333] rounded-md">
-                Current Plan
-              </div>
-            ) : (
-              <Button 
-                className="w-full font-medium h-12 bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"
-                disabled
-              >
-                Select Plan
-              </Button>
-            )}
-          </div>
-        </div>
-        
-        {/* Moonlighting Plan Card */}
-        <div className="rounded-xl overflow-hidden border border-[#B4916C] bg-[#0A0A0A]">
-          <div className="bg-gradient-to-r from-[#B4916C]/30 to-[#B4916C]/10 py-6 px-6 relative">
-            <h3 className="text-2xl font-bold text-[#F9F6EE] font-safiro mb-2">Moonlighting Plan</h3>
-            <p className="text-3xl font-bold text-[#F9F6EE] font-safiro">$14.99 <span className="text-xl font-normal text-[#8A8782]">/month</span></p>
-            
-            {currentPlan === "Moonlighting" && (
-              <div className="absolute top-0 right-0 mt-2 mr-2">
-                <span className="bg-green-500/20 text-green-400 px-2 py-1 text-xs rounded-full font-borna">
-                  Current Plan
-                </span>
-              </div>
-            )}
-          </div>
-          
-          <div className="p-6">
-            <ul className="space-y-4 mb-6">
-              {["Everything in Pro Plan", "Access to Advanced AI Features", "Premium Document Tools"].map((feature, i) => (
-                <li key={i} className="flex items-center">
-                  <div className="h-5 w-5 mr-3 rounded-full flex items-center justify-center flex-shrink-0 text-[#B4916C] bg-[#B4916C]/10">
-                    <Check className="h-3 w-3" />
-                  </div>
-                  <span className="text-[#C5C2BA] font-borna text-sm">{feature}</span>
-                </li>
-              ))}
-            </ul>
-            
-            {currentPlan === "Moonlighting" ? (
-              <div className="w-full h-12 bg-[#B4916C]/80 flex items-center justify-center text-[#050505] rounded-md font-bold">
-                Current Plan
-              </div>
-            ) : (
-              <Button 
-                onClick={handleUpgrade}
-                disabled={isLoading}
-                className="w-full h-14 bg-[#B4916C] hover:bg-[#A3815B] text-[#050505] rounded-md flex items-center justify-center font-bold text-lg"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  "UPGRADE NOW"
-                )}
-              </Button>
-            )}
-          </div>
+          <ul className="space-y-4 mb-6">
+            {[
+              { name: "Optimize CV", desc: "Analyze & optimize for ATS (i)" },
+              { name: "Document Analysis", desc: "Extract insights & visualize data (i)" },
+              { name: "Job Description Generator", desc: "Create detailed job descriptions (i)" },
+              { name: "CV to Job Match", desc: "Analyze CV against job descriptions (i)" }
+            ].map((feature, i) => (
+              <li key={i} className="flex items-start">
+                <div className="h-5 w-5 mr-3 rounded-full flex items-center justify-center flex-shrink-0 text-[#8A8782] bg-[#222222] mt-0.5">
+                  <Check className="h-3 w-3" />
+                </div>
+                <div>
+                  <span className="text-[#C5C2BA] font-borna text-sm block">{feature.name}</span>
+                  <span className="text-[#8A8782] font-borna text-xs block mt-0.5">{feature.desc}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {currentPlan === "Pro" ? (
+            <div className="w-full h-12 bg-[#222222] flex items-center justify-center text-green-400 border border-[#333333] rounded-md">
+              Current Plan
+            </div>
+          ) : (
+            <Button 
+              className="w-full font-medium h-12 bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"
+              disabled
+            >
+              Select Plan
+            </Button>
+          )}
         </div>
       </div>
       
